@@ -443,6 +443,9 @@ class _CountingInstance implements TerminalInstance {
   @override
   int? get exitCode => null;
 
+  @override
+  int? get greetingLines => null;
+
   _CountingInstance({
     required this.id,
     required this.title,

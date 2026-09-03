@@ -45,3 +45,25 @@ String _plainText(BufferLine line) {
   }
   return out.toString().trimRight();
 }
+
+/// How many lines of [terminal]'s buffer have anything on them.
+///
+/// The measure behind `shouldDetachOnClose`'s guess at whether a shell has
+/// history worth keeping, and the one behind the greeting a pane records for it
+/// — one function so the two numbers are always counted the same way, because
+/// the rule compares them to each other.
+///
+/// Counts the whole buffer, scrollback included: output that has scrolled off
+/// is still history. [stopAt] gives up once that many lines have been found,
+/// because callers only ever compare the answer against a threshold and a pane
+/// at the 10 000-line scrollback cap must not cost a full walk to close. Pass
+/// nothing to count without a bound.
+int nonBlankLineCount(Terminal terminal, {int? stopAt}) {
+  final lines = terminal.buffer.lines;
+  var count = 0;
+  for (var i = 0; i < lines.length; i++) {
+    if (stopAt != null && count >= stopAt) break;
+    if (!_isBlank(lines[i])) count++;
+  }
+  return count;
+}

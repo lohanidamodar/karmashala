@@ -15,6 +15,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
+import '../data/terminal_grid_text.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_layout_dao.dart';
 import '../domain/agent_pane_launch.dart';
@@ -2236,6 +2237,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// with the pane's own answers to its four questions.
   bool _shouldDetach(TerminalInstance instance) {
     final recorder = instance.commandBlocks;
+    final greeting = instance.greetingLines;
     return shouldDetachOnClose(
       isLive: instance.liveness.value.isLive,
       isAgentSession: instance.agentLaunch != null,
@@ -2245,31 +2247,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       commandRunning: recorder == null
           ? null
           : recorder.tracker.pending?.hasStarted ?? false,
-      nonBlankLines: _nonBlankLines(
-        instance,
-        stopAt: kIdleShellHistoryLines + 1,
+      // One past the threshold the rule will apply, which is all it can
+      // distinguish — so a pane at the scrollback cap still closes in a walk of
+      // a few lines.
+      nonBlankLines: nonBlankLineCount(
+        instance.terminal,
+        stopAt: (greeting ?? 0) + kIdleShellHistoryLines + 1,
       ),
+      greetingLines: greeting,
     );
-  }
-
-  /// Non-blank lines in [instance]'s buffer, giving up at [stopAt].
-  ///
-  /// Bounded because the answer is only ever compared against a threshold, and
-  /// a pane at the 10 000-line scrollback cap must not cost a full walk to
-  /// close.
-  int _nonBlankLines(TerminalInstance instance, {required int stopAt}) {
-    final lines = instance.terminal.buffer.lines;
-    var count = 0;
-    for (var i = 0; i < lines.length && count < stopAt; i++) {
-      final line = lines[i];
-      for (var cell = 0; cell < line.length; cell++) {
-        if (line.getCodePoint(cell) > 32) {
-          count++;
-          break;
-        }
-      }
-    }
-    return count;
   }
 
   /// Disposes the pane [paneId] owns and stops tracking it.

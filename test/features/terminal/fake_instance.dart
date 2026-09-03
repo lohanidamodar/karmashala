@@ -118,6 +118,11 @@ class FakeTerminalInstance
   @override
   int? exitCode;
 
+  /// What the shell had on screen before the user ran anything — settable so a
+  /// test can give a pane the multi-line prompt a real one has.
+  @override
+  int? greetingLines;
+
   /// Ends this pane the way a shell that was typed `exit` at ends: cleanly.
   void exitCleanly() => exitWith(0);
 

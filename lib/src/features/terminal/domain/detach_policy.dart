@@ -16,20 +16,51 @@
 /// testable. The caller supplies the four observations.
 library;
 
-/// Non-blank lines an un-instrumented shell may have before its buffer counts
-/// as history worth keeping.
+/// Non-blank lines of **its own** an un-instrumented shell may have before its
+/// buffer counts as history worth keeping.
 ///
-/// This is the fallback, and — because shell integration is **off by default**
-/// — it is also the common path, so it is deliberately conservative. A fresh
-/// prompt is a banner and a prompt line: PowerShell prints two or three lines
-/// and a prompt, `cmd.exe` two, `bash` usually one. Six covers those with room
-/// to spare and errs towards *keeping*, which is the safe direction: being
-/// wrong that way leaves a session running, and being wrong the other way ends
-/// one somebody wanted.
+/// This is the fallback, and — because shell integration is **off by default**,
+/// and because `shellSupportsIntegration` covers only PowerShell, so a WSL pane
+/// can never have it at all — it is also the common path. So it is deliberately
+/// conservative, and errs towards *keeping*: being wrong that way leaves a
+/// session running, and being wrong the other way ends one somebody wanted.
 ///
-/// A shell with a login MOTD long enough to clear six lines is always kept,
-/// which is the same safe direction. Turning shell integration on replaces this
-/// guess with the shell's own answer.
+/// "Of its own" is the part that was missing, and it is what the owner's report
+/// — *"empty wsl terminal stays in the background instead of just ending"* —
+/// turned out to be about. Six was derived from single-line prompts: PowerShell
+/// prints two or three lines and a prompt, `cmd.exe` two, `bash` usually one.
+/// A **multi-line prompt** breaks that arithmetic, because the shell redraws it
+/// once per command and every redraw is counted as history.
+///
+/// Measured through a real ConPTY against the owner's `archlinux`, whose zsh
+/// runs starship — a blank separator, a directory line and a `>` line, so three
+/// rows per command:
+///
+/// ```txt
+/// idle, untouched          nonBlank=2     released
+/// after 1 silent command   nonBlank=5     released
+/// after 2 silent commands  nonBlank=8     KEPT   <- the bug
+/// after `pwd`              nonBlank=12    kept
+/// after `ls`               nonBlank=106   kept
+/// ```
+///
+/// Two commands that printed **nothing at all** parked a shell in the
+/// background list, where it also survives a restart — the restore path puts
+/// tab-less sessions straight back into it. That is the opposite of what this
+/// file says it does: "a shell that has printed nothing beyond its banner has
+/// nothing anyone would come back for".
+///
+/// The fix is not a bigger number — a five-line prompt would break that one
+/// too. It is to stop guessing the part that can be measured: the pane records
+/// its own greeting (see `TerminalInstance.greetingLines`) and this six is
+/// counted *on top of* it. So the constant keeps its meaning, and gains the
+/// one it was always supposed to have — six lines of history **beyond whatever
+/// this shell greeted you with**.
+///
+/// That also settles a case the old wording conceded it got wrong: a shell
+/// whose login MOTD is longer than six lines used to be kept unconditionally.
+/// Now the MOTD is the greeting, and the pane is kept only for real output past
+/// it.
 const int kIdleShellHistoryLines = 6;
 
 /// Whether closing this pane should detach it rather than end it.
@@ -45,16 +76,24 @@ const int kIdleShellHistoryLines = 6;
 /// * **An un-instrumented shell** — kept only if it has real history, because
 ///   without OSC 133 the buffer is the only evidence there is. A shell that has
 ///   printed nothing beyond its banner has nothing anyone would come back for.
+///
+/// [greetingLines] is what that last case measures "beyond its banner" against:
+/// the lines the shell had put on screen before the user ran anything in it, or
+/// null for a pane nothing was ever run in. See [kIdleShellHistoryLines] for
+/// why it is measured rather than guessed. Null falls back to counting from
+/// zero, which is what this rule did before greetings existed — the safe
+/// direction, since a smaller greeting only ever keeps more.
 bool shouldDetachOnClose({
   required bool isLive,
   required bool isAgentSession,
   required bool? commandRunning,
   required int nonBlankLines,
+  required int? greetingLines,
 }) {
   if (!isLive) return false;
   if (isAgentSession) return true;
   if (commandRunning != null) return commandRunning;
-  return nonBlankLines > kIdleShellHistoryLines;
+  return nonBlankLines > (greetingLines ?? 0) + kIdleShellHistoryLines;
 }
 
 /// Whether a pane that has just exited should close itself.
