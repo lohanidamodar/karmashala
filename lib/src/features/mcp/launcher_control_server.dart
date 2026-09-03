@@ -10,8 +10,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/logging/app_logger.dart';
 import '../../core/process/command_runner_providers.dart';
+import '../agents/application/agent_hook_intake.dart';
 import '../agents/application/agent_providers.dart';
-import '../agents/application/agent_status_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
 import '../agents/domain/agent_hook_endpoint.dart';
 import '../agents/domain/agent_installation.dart';
@@ -26,7 +26,6 @@ import '../fanout/application/comparison_providers.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
-import '../notifications/application/notification_providers.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
@@ -158,18 +157,23 @@ const Duration wslRetryInterval = Duration(seconds: 30);
 /// pipe running failing to exit at all on quit (>120 s), against 322 ms for the
 /// same build without it.
 ///
-/// Agent hooks remain on HTTP, deliberately. The hook command is
-/// `curl -sS -m 2 -X POST … /agent-hook`, written into third-party agents' own
-/// config files and run by whatever `curl` those agents find — including agents
-/// running in WSL or over SSH, for which a Windows socket path is not a
+/// Agent hooks remain on HTTP **for the agents that share this loopback**,
+/// deliberately. The hook command runs a generated script that `curl`s
+/// `/agent-hook`, written into third-party agents' own config files and run by
+/// whatever `curl` those agents find, for which a Windows socket path is not a
 /// reachable name at all. Their token is separate and low-privilege (status
 /// reports only), and is already public to anything that can list process
 /// command lines; that is the threat model above, and moving the route would
 /// not improve it.
 ///
-/// The route answers on **both** doors: loopback for a Windows-native agent,
-/// and the WSL switch address for one inside a distribution, which cannot dial
-/// loopback at all. See [_bindWslInterface].
+/// **An agent inside a WSL distribution does not use this route at all.** It
+/// cannot dial loopback — that is the distribution's own — and the switch
+/// address this server also binds resets every byte on the owner's machine, for
+/// a bare PowerShell listener as readily as for this app. So those hooks report
+/// by writing a file into their own store home, which the app reads over
+/// `\\wsl.localhost`; see `AgentHookEndpoint` and `AgentHookSpoolDrainer`. The
+/// second listener in [_bindWslInterface] stays for `/mcp`, which has no such
+/// alternative today.
 class LauncherControlServer implements SessionMcp {
   LauncherControlServer(
     this._container, {
@@ -513,6 +517,13 @@ class LauncherControlServer implements SessionMcp {
   ///   the deliberately low-privilege half: it can report status and nothing
   ///   else, behind its own separate bearer token.
   ///
+  ///   **It is now a compatibility door rather than the live path.** The
+  ///   installer no longer writes this address into a distribution's endpoint
+  ///   file — those hooks report by spool, because this address is reset for
+  ///   data on the owner's machine — but an endpoint file an earlier build
+  ///   left behind still names it, and answering `401`/`200` there is what
+  ///   keeps such a hook cheap and honest instead of 404ing it.
+  ///
   ///   That is also why this is bound whether or not an MCP credential exists.
   ///   `/agent-hook` fails *open* when hardening fails — the rest of `start`
   ///   says why: an agent that cannot report status is a worse outcome than one
@@ -571,14 +582,13 @@ class LauncherControlServer implements SessionMcp {
       final server = await HttpServer.bind(host, port);
       _wslServer = server;
       _wslHost = host;
-      // The installer writes this address into agents' own config files, so it
-      // has to be the address that was actually bound — published only after
-      // the bind succeeded, never on the strength of the lookup alone.
-      _hookEndpoint = AgentHookEndpoint(
-        port: port,
-        token: _hookEndpoint!.token,
-        wslHost: host.address,
-      );
+      // [_hookEndpoint] is deliberately *not* republished here any more. Hooks
+      // in a distribution no longer dial this address: they write into a spool
+      // directory this app reads over `\\wsl.localhost`, because on the owner's
+      // machine this listener completes the handshake and then resets every
+      // byte — a bare PowerShell `TcpListener` on the same address does too, so
+      // it is the switch and not the server. See `AgentHookEndpoint`. This
+      // second door still serves `/mcp`, which has no other way in.
       server.listen(
         _handleWslInterface,
         onError: (Object e) => _logger.warning('$e'),
@@ -586,8 +596,11 @@ class LauncherControlServer implements SessionMcp {
       _logger.info('MCP also on ${host.address}:$port, for WSL sessions.');
       final wasRetrying = _wslRetry != null;
       _cancelWslRetry();
-      // Hooks were installed at startup, when this address did not exist, so
-      // every WSL store was skipped. Nothing else would ever revisit that.
+      // Kept for the same reason it was added — a launch that started before
+      // WSL did has already run its install sweep — even though the sweep no
+      // longer needs this address to install a WSL store. A distribution that
+      // appears late is a distribution whose stores the first sweep could not
+      // find either.
       if (wasRetrying) onWslInterfaceBound?.call();
     } on Object catch (error, stack) {
       _logger.warning(
@@ -932,42 +945,16 @@ class LauncherControlServer implements SessionMcp {
         return;
       }
       final body = await _readBoundedBody(request);
-      final report = _container
-          .read(agentHookReceiverProvider)
-          .handle(
-            agentId: request.uri.queryParameters['agent'],
-            event: request.uri.queryParameters['event'],
-            body: body,
-          );
-      // A callback naming a session we have no row for may be one the user
-      // started by hand in one of our own panes. Synchronous and O(1) once a
-      // session has been decided about, so a busy agent's stream of hooks costs
-      // a set lookup — and wrapped, because adoption must never be able to fail
-      // the callback and stall the agent that fired it.
-      try {
-        _container
-            .read(sessionAdoptionServiceProvider)
-            .onHookPayload(
-              agentId: report.agentId,
-              sessionId: report.sessionId,
-              body: body,
-            );
-      } on Object catch (error) {
-        _logger.warning('Session adoption from a hook failed: $error');
-      }
-      // The status pipeline's *primary* input. A hook is authoritative and
-      // already in memory, so the registry folds it in here — one map lookup
-      // and a precedence — rather than a poll discovering it up to five seconds
-      // later. Wrapped for the same reason as adoption above.
-      try {
-        reportAgentHook(
-          _container,
-          agentId: report.agentId,
-          sessionId: report.sessionId,
-        );
-      } on Object catch (error) {
-        _logger.warning('Applying a hook report to the registry failed: $error');
-      }
+      // The same three steps a spooled payload goes through — see
+      // [applyAgentHookCallback], which exists so the two transports cannot
+      // come to disagree about what "a hook arrived" means.
+      final report = applyAgentHookCallback(
+        _container,
+        agentId: request.uri.queryParameters['agent'],
+        event: request.uri.queryParameters['event'],
+        body: body,
+        logger: _logger,
+      );
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never block the agent that fired it.
       response.headers.contentType = ContentType.json;

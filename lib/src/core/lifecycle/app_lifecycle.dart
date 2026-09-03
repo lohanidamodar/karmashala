@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/agents/application/agent_hook_installation_service.dart';
+import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
@@ -220,9 +221,19 @@ class AppLifecycle {
             _container
                 .read(agentHookInstallationReportProvider.notifier)
                 .set(report);
+            // The environments that report by file rather than by socket. A
+            // WSL agent cannot reach any address this app binds, so it writes
+            // its payloads into its own store home and this polls for them;
+            // see `AgentHookSpoolDrainer`. An empty list stops the timer, so a
+            // machine with no WSL polls nothing.
+            _container
+                .read(agentHookSpoolDrainerProvider)
+                .watch(report.spoolSources);
             _logger.info(
               'Agent hooks: ${report.installed} installed, '
-              '${results.length - report.installed} skipped.',
+              '${results.length - report.installed} skipped'
+              '${report.spoolSources.isEmpty ? '' : ', '
+                    '${report.spoolSources.length} reporting by spool'}.',
             );
           },
           onError: (Object error, StackTrace stack) =>
@@ -315,6 +326,12 @@ class AppLifecycle {
     //     script costs the agent an `if not exist` and exits zero, which is
     //     cheaper than the `curl -m 2` a stale entry used to cost.
     await _step('agent hook endpoint retirement', watch, () async {
+      // Stop draining first. `retireEndpoints` deletes the spool directories,
+      // and a tick that ran into a directory being removed underneath it would
+      // do no harm but would spend the shutdown budget finding that out.
+      if (_container.exists(agentHookSpoolDrainerProvider)) {
+        _container.read(agentHookSpoolDrainerProvider).dispose();
+      }
       await _container
           .read(agentHookInstallationServiceProvider)
           .retireEndpoints();

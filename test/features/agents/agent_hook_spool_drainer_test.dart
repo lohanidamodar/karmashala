@@ -1,0 +1,233 @@
+import 'dart:io';
+
+import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_spool.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+
+/// The loop that stands in for the `POST` a WSL agent cannot make.
+///
+/// Two things it must get right beyond "reads the files": it must not resurrect
+/// a distribution the user shut down, and it must not stop polling one that
+/// came back.
+void main() {
+  late Directory dir;
+
+  setUp(() => dir = Directory.systemTemp.createTempSync('karmashala_drainer_'));
+  tearDown(() => dir.deleteSync(recursive: true));
+
+  void write(String name, {String event = 'Stop'}) => File(
+    p.join(dir.path, name),
+  ).writeAsStringSync('agent=claudeCode\nevent=$event\n\n{"session_id":"s"}');
+
+  AgentHookSpoolSource source({String? distribution = 'Ubuntu'}) =>
+      AgentHookSpoolSource(
+        environmentId: 'wsl:Ubuntu',
+        directory: dir,
+        wslDistribution: distribution,
+      );
+
+  test('drains what is there, and hands each payload on once', () async {
+    final seen = <AgentHookSpoolEvent>[];
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      runningDistributions: () async => {'Ubuntu'},
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source()]);
+    write('1-0.json');
+
+    await drainer.drainOnce();
+    await drainer.drainOnce();
+
+    expect(seen.map((e) => e.event), ['Stop']);
+  });
+
+  test('a distribution that is not running is not listed at all', () async {
+    // Listing `\\wsl.localhost\<distro>` is served by a daemon *inside* that
+    // distribution, so it starts one that is stopped. An app that quietly
+    // resurrects a distribution every 400 ms after `wsl --shutdown` is a worse
+    // neighbour than one that misses a hook — and it misses nothing, because a
+    // distribution with no processes has no agent to fire one.
+    final seen = <AgentHookSpoolEvent>[];
+    var asked = 0;
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      spool: _RecordingSpool(),
+      runningDistributions: () async {
+        asked++;
+        return {'Debian'};
+      },
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source()]);
+    write('1-0.json');
+
+    await drainer.drainOnce();
+
+    expect(seen, isEmpty);
+    expect(asked, 1);
+    expect(
+      _RecordingSpool.listed,
+      isEmpty,
+      reason: 'not even the listing, which is what would wake it',
+    );
+    expect(
+      File(p.join(dir.path, '1-0.json')).existsSync(),
+      isTrue,
+      reason: 'and the payload is still there when it comes back',
+    );
+  });
+
+  test('a distribution that comes back is drained again', () async {
+    final seen = <AgentHookSpoolEvent>[];
+    // Another distribution is up, so the answer is trusted rather than read as
+    // "the query failed" — see the fail-open case below.
+    var running = {'Debian'};
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      runningDistributions: () async => running,
+      // No caching between the two passes below: the point is the transition,
+      // not the refresh interval, which has its own case.
+      runningRefresh: Duration.zero,
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source()]);
+    write('1-0.json');
+
+    await drainer.drainOnce();
+    expect(seen, isEmpty);
+
+    running = {'Ubuntu'};
+    await drainer.drainOnce();
+
+    expect(seen.map((e) => e.event), ['Stop']);
+  });
+
+  test('the running set is asked for at most once per refresh', () async {
+    // It costs a `wsl.exe`, measured at 188 ms. Asking on every 400 ms tick
+    // would spend half of one.
+    var asked = 0;
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: (_) {},
+      runningDistributions: () async {
+        asked++;
+        return {'Ubuntu'};
+      },
+      runningRefresh: const Duration(minutes: 5),
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source()]);
+
+    await drainer.drainOnce();
+    await drainer.drainOnce();
+    await drainer.drainOnce();
+
+    expect(asked, 1);
+  });
+
+  test('a running set it could not read means poll everything', () async {
+    // Fails open. Polling a stopped distribution costs a wake-up; skipping a
+    // running one costs every status it would have reported.
+    final seen = <AgentHookSpoolEvent>[];
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      runningDistributions: () async => const {},
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source()]);
+    write('1-0.json');
+
+    await drainer.drainOnce();
+
+    expect(seen, hasLength(1));
+  });
+
+  test('a source with no distribution is never gated', () async {
+    // Nothing produces one today — the spool transport is WSL's — but a source
+    // that names no distribution must not be silently skipped by a gate that
+    // cannot answer for it.
+    var asked = 0;
+    final seen = <AgentHookSpoolEvent>[];
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      runningDistributions: () async {
+        asked++;
+        return {'Ubuntu'};
+      },
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source(distribution: null)]);
+    write('1-0.json');
+
+    await drainer.drainOnce();
+
+    expect(seen, hasLength(1));
+    expect(asked, 0, reason: 'and it spends no process finding that out');
+  });
+
+  test('watching nothing runs no timer', () async {
+    var asked = 0;
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: (_) {},
+      interval: const Duration(milliseconds: 5),
+      runningDistributions: () async {
+        asked++;
+        return {'Ubuntu'};
+      },
+    );
+    addTearDown(drainer.dispose);
+
+    drainer.watch(const []);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    expect(asked, 0);
+    expect(drainer.sources, isEmpty);
+  });
+
+  test('the timer picks payloads up without being stepped', () async {
+    final seen = <AgentHookSpoolEvent>[];
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      interval: const Duration(milliseconds: 10),
+      runningDistributions: () async => {'Ubuntu'},
+    );
+    addTearDown(drainer.dispose);
+    drainer.watch([source()]);
+    write('1-0.json');
+
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(seen, hasLength(1));
+  });
+
+  test('disposing stops it, so shutdown is not racing a share', () async {
+    final seen = <AgentHookSpoolEvent>[];
+    final drainer = AgentHookSpoolDrainer(
+      onEvent: seen.add,
+      interval: const Duration(milliseconds: 5),
+      runningDistributions: () async => {'Ubuntu'},
+    );
+    drainer.watch([source()]);
+    drainer.dispose();
+    write('1-0.json');
+
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    expect(seen, isEmpty);
+    expect(drainer.sources, isEmpty);
+  });
+}
+
+/// A spool that records whether the directory was listed at all.
+class _RecordingSpool extends AgentHookSpool {
+  const _RecordingSpool();
+
+  static final listed = <String>[];
+
+  @override
+  List<AgentHookSpoolEvent> drain(Directory directory, {int limit = 64}) {
+    listed.add(directory.path);
+    return super.drain(directory, limit: limit);
+  }
+}

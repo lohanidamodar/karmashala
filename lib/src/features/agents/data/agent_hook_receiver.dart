@@ -40,10 +40,17 @@ class AgentHookReceiver {
   /// Classifies a callback. Never throws: an unknown agent, an unrecognised
   /// event or an unparseable body all resolve to `unknown` rather than an
   /// error, because a hook must never block the agent that fired it.
+  ///
+  /// [observedAt] is when the agent fired, for a transport that knows. The HTTP
+  /// route does not — the callback *is* the arrival — and leaves it null, which
+  /// reads the clock. The spool does: a payload drained now may have been
+  /// written before this app started, and stamping it "now" would announce a
+  /// stale status as news. See `AgentHookSpoolEvent.firedAt`.
   AgentStatusReport handle({
     required String? agentId,
     required String? event,
     required String body,
+    DateTime? observedAt,
   }) {
     final id = agentId ?? '';
     final name = event ?? '';
@@ -76,7 +83,7 @@ class AgentHookReceiver {
       sessionId: sessionId,
       status: status,
       source: AgentStatusSource.hook,
-      observedAt: clock.nowUtc(),
+      observedAt: observedAt ?? clock.nowUtc(),
       detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
       waiting: spec == null

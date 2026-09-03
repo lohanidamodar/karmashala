@@ -327,71 +327,116 @@ void main() {
     expect(configFile().readAsStringSync(), '{"model": "opus"}');
   });
 
-  group('the environment decides the address', () {
-    const reachableWsl = AgentHookEndpoint(
-      port: 4242,
-      token: 'tok',
-      wslHost: '172.18.240.1',
-    );
-
-    test('a WSL agent is given the switch address, not loopback', () async {
+  group('the environment decides the transport', () {
+    test('a WSL agent is given a spool directory, not an address', () async {
       final installed = await installer.install(
         descriptor: claude,
         storeHome: home.path,
-        endpoint: reachableWsl,
+        endpoint: endpoint,
         environment: EnvironmentKind.wsl,
       );
 
       expect(installed, isTrue);
-      // The command names a path, not an address — so the switch address is
-      // asserted where it now lives, in the endpoint file the script reads.
+      // The command names a path, not an address — and now neither does the
+      // endpoint file beside it. `127.0.0.1` inside a distribution is that
+      // distribution's own loopback, and the switch address that used to go
+      // here accepted a connection and reset the first byte after it.
       final command = commandsFor('Stop').single['command'] as String;
       expect(command, 'sh "\$HOME/.claude/$agentHookMarker.sh" Stop');
       final endpointText = endpointFile().readAsStringSync();
-      expect(endpointText, contains('172.18.240.1:4242/agent-hook'));
+      expect(endpointText, contains('spool=$agentHookMarker.spool'));
+      expect(endpointText, contains('agent=claudeCode'));
+      expect(endpointText, isNot(contains('127.0.0.1')));
+      expect(endpointText, isNot(contains('http')));
       expect(
-        endpointText,
-        isNot(contains('127.0.0.1')),
+        Directory(p.join(home.path, '$agentHookMarker.spool')).existsSync(),
+        isTrue,
         reason:
-            "127.0.0.1 inside a distribution is the distribution's own "
-            'loopback, and a hook that cannot arrive is worse than one that '
-            'was skipped — nothing reports the silence',
+            'written before the endpoint file that names it: the script exits '
+            'zero on a directory that is not there, so a half-finished '
+            'install costs the agent nothing',
       );
     });
 
-    test('an unreachable environment is refused, not written', () async {
-      // A WSL host with no switch address and an SSH host are the same case:
-      // nothing this app binds can be dialled from there.
-      for (final (endpoint, kind) in [
-        (const AgentHookEndpoint(port: 4242, token: 'tok'), EnvironmentKind.wsl),
-        (reachableWsl, EnvironmentKind.ssh),
-      ]) {
-        final installed = await installer.install(
-          descriptor: claude,
-          storeHome: home.path,
-          endpoint: endpoint,
-          environment: kind,
-        );
+    test('no token is written where nothing crosses a network', () async {
+      // Not an omission. A bearer token proves to a *receiver* that the sender
+      // is not a stranger who bound the port; there is no port here and no
+      // stranger who could bind one, so carrying one would put a credential at
+      // rest inside somebody's distribution to authenticate nothing.
+      await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: const AgentHookEndpoint(port: 4242, token: 'S3CRET-token'),
+        environment: EnvironmentKind.wsl,
+      );
 
-        expect(installed, isFalse, reason: '$kind');
-        expect(
-          configFile().existsSync(),
-          isFalse,
-          reason: 'a refused install must not so much as create the file',
-        );
-      }
+      final endpointText = endpointFile().readAsStringSync();
+      expect(endpointText, isNot(contains('S3CRET-token')));
+      expect(endpointText, isNot(contains('token=')));
     });
 
-    test('hookCommand says so rather than spelling a dead URL', () {
+    test('an SSH environment is refused, not written', () async {
+      // Another machine: it shares neither a loopback nor a filesystem with
+      // this process, so nothing it could be told would be true.
+      final installed = await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.ssh,
+      );
+
+      expect(installed, isFalse);
+      expect(
+        configFile().existsSync(),
+        isFalse,
+        reason: 'a refused install must not so much as create the file',
+      );
+    });
+
+    test('hookCommand says so rather than spelling a dead command', () {
       expect(
         installer.hookCommand(
           descriptor: claude,
           event: 'Stop',
-          endpoint: const AgentHookEndpoint(port: 4242, token: 'tok'),
-          environment: EnvironmentKind.wsl,
+          endpoint: endpoint,
+          environment: EnvironmentKind.ssh,
         ),
         isNull,
       );
+    });
+
+    test('the spool branch writes whole payloads, and only whole ones', () async {
+      // Three properties of four lines of `sh` that a live run proves and a
+      // string cannot — but that a string can stop somebody undoing.
+      // `live_wsl_hook_test.dart` runs this against a real distribution.
+      await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.wsl,
+      );
+      final script = File(
+        p.join(home.path, '$agentHookMarker.sh'),
+      ).readAsStringSync();
+
+      // 1. The event is saved before the cap re-uses `$@`. Without this the
+      //    payload is stamped with a glob of the spool directory, which is how
+      //    the first draft of this failed.
+      expect(
+        script.indexOf('event="\$1"'),
+        lessThan(script.indexOf(r'set -- "$dir"/*.json')),
+      );
+      // 2. Written as `.part` and renamed, so a reader on the other side of a
+      //    9p share never sees half a payload — the rename is what makes a
+      //    `.json` mean "whole".
+      expect(script, contains(r'> "$dir/$$-$n.part"'));
+      expect(script, contains(r'mv -f "$dir/$$-$n.part" "$dir/$$-$n.json"'));
+      // 3. Bounded, so an app that died without deleting the directory cannot
+      //    have it grow without limit while it is gone.
+      expect(script, contains(r'[ "$#" -lt 2000 ] || exit 0'));
+      // And it exits zero on a directory that is not there: that is what
+      // retiring the spool on the way out costs the agent.
+      expect(script, contains(r'[ -d "$dir" ] || exit 0'));
     });
 
     test('the command survives the distribution\'s shell verbatim', () {
@@ -401,11 +446,7 @@ void main() {
       final command = installer.hookCommand(
         descriptor: claude,
         event: 'Stop',
-        endpoint: const AgentHookEndpoint(
-          port: 4242,
-          token: 'Ab-_9=',
-          wslHost: '172.18.240.1',
-        ),
+        endpoint: const AgentHookEndpoint(port: 4242, token: 'Ab-_9='),
         environment: EnvironmentKind.wsl,
       )!;
 

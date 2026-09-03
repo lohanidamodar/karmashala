@@ -5,9 +5,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_spool.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
@@ -21,36 +23,35 @@ import '../../support/fixtures.dart';
 
 /// The whole WSL hook path, end to end, against a **real** distribution.
 ///
-/// Every other test in this area stands something in: `127.0.0.2` for the
-/// switch address, a temp directory for a distro home, a Dart `HttpClient` for
-/// the agent's `curl`. Each of those is a fair stand-in for one link, and none
-/// of them can tell you whether the chain holds — whether the address a Windows
-/// process binds is dialable from inside the distribution's own network
-/// namespace, and whether the command string this app writes into an agent's
-/// config survives that distribution's shell unaltered. Those are the two
-/// things that were actually broken, and only a real distro answers them.
+/// Every other test in this area stands something in: a temp directory for a
+/// distro home, a Dart `HttpClient` for the agent's `curl`, a fake for the
+/// share. Each of those is a fair stand-in for one link, and none of them can
+/// tell you whether the chain holds — whether the files this app writes across
+/// `\\wsl.localhost` are the files the distribution's own `sh` reads back,
+/// whether the command string survives that shell unaltered, and whether what
+/// the hook writes there is legible from Windows. Those are the things that
+/// were actually broken, and only a real distro answers them.
 ///
 /// So this installs into a **scratch** store home inside WSL (never the user's
 /// own `~/.claude`), reads back the command the installer wrote, runs that exact
-/// string through the distro's `sh`, and asserts the report arrived.
+/// string through the distro's `sh`, drains the spool the way the app does, and
+/// asserts the report arrived.
 ///
-/// Since Loop 71 that string names a generated script rather than spelling a
-/// `curl`, so this now covers three files crossing the `\\wsl.localhost` share
-/// instead of one — the entry, the script, and the endpoint file the script
-/// reads at fire time — and the script's `401` probe as well as its callback.
-/// `HOME` is set to the scratch home for the run, because the command names
-/// `$HOME/.claude/…` and the whole point of naming it that way is that the app
-/// and the agent disagree about how to spell the same directory.
+/// **Why there is no `curl` in any of this any more.** Until now the hook
+/// posted to the host side of the WSL virtual switch, and on this owner's
+/// machine that address completes the TCP handshake and then resets the first
+/// data segment — for our port and for 135 and 445 alike, and for a bare
+/// PowerShell `TcpListener` with no Dart in the picture. Nothing in this
+/// repository could open it. The transport now writes a file instead: measured
+/// at 3.6 ms per hook inside the distribution, against 2008 ms for the `curl`
+/// that then dropped the payload anyway.
 ///
-/// Skips itself where there is no WSL or no `curl` inside it — the same shape
-/// as `live_ssh_test.dart`. It does **not** skip itself when the switch address
-/// is missing or dead: that is the failure it exists to catch, and skipping it
+/// The old measurement is still made, at the bottom, and still reported —
+/// because `/mcp` has no such alternative and still depends on that address.
+///
+/// Skips itself where there is no WSL. It does **not** skip itself when a hook
+/// fails to arrive: that is the failure it exists to catch, and skipping it
 /// would turn the one measurement nobody else can make into silence.
-///
-/// **A failure here is not automatically a bug in this app**, and the messages
-/// below say which it is. See [_verdict]: the door between a Windows-bound
-/// socket and a WSL network namespace is the machine's, and on a machine where
-/// it is shut this test is the thing that says so out loud.
 ///
 /// How to run it: `tool/live_tests.ps1 -Family wsl`, or see CLAUDE.md §18.
 void main() {
@@ -79,11 +80,11 @@ void main() {
       socketDirectory: p.join(tmp.path, 'ipc'),
     );
     // A `$HOME` of our own, so nothing here can touch the user's real agent
-    // configuration — and it has to be a *home*, not just a directory, now
-    // that the installed command names `$HOME/.claude/…` rather than spelling
-    // an address inline. The store home is `.claude` inside it, exactly as
-    // `CliStoreLocator` would build it, and the command below is run with
-    // `HOME` pointed here so the path it expands is this one.
+    // configuration — and it has to be a *home*, not just a directory, because
+    // the installed command names `$HOME/.claude/…`. The store home is
+    // `.claude` inside it, exactly as `CliStoreLocator` would build it, and the
+    // command below is run with `HOME` pointed here so the path it expands is
+    // this one.
     wslHome = await _wsl(['mktemp', '-d', '-t', 'karmashala-hook-XXXXXX']);
     await _wsl(['mkdir', '-p', '$wslHome/.claude']);
     uncHome = await _wsl(['wslpath', '-w', '$wslHome/.claude']);
@@ -98,25 +99,24 @@ void main() {
 
   test('a hook installed in WSL reaches the app', () async {
     final endpoint = server.hookEndpoint!;
-    expect(
-      endpoint.wslHost,
-      isNotNull,
-      reason:
-          'THIS MACHINE, not the app: nothing could be bound on the WSL switch '
-          'interface, so there is no address to write into a hook at all. '
-          'Check that a `vEthernet (WSL...)` adapter exists and holds an '
-          'address (`Get-NetIPAddress`), and that `wslHostAddressAmong` still '
-          'recognises it. Until then WSL agents cannot report status, and the '
-          'app is right to write nothing rather than a URL that cannot answer.',
-    );
+    final claude = AgentRegistry.builtIn.byId('claudeCode')!;
+    const installer = AgentHookInstaller();
 
-    final wrote = await const AgentHookInstaller().install(
-      descriptor: AgentRegistry.builtIn.byId('claudeCode')!,
+    final wrote = await installer.install(
+      descriptor: claude,
       storeHome: uncHome,
       endpoint: endpoint,
       environment: EnvironmentKind.wsl,
     );
-    expect(wrote, isTrue);
+    expect(
+      wrote,
+      isTrue,
+      reason:
+          'THIS MACHINE, not the app: the installer could not write and read '
+          'back its three files across \\\\wsl.localhost. Check that the share '
+          'is reachable and the distro home is writable — this is the one '
+          'link the transport rests on.',
+    );
 
     // Exactly what the agent will run, read back out of the config file the
     // installer wrote rather than rebuilt here.
@@ -129,124 +129,264 @@ void main() {
                     as List)
                 .single
             as Map;
-    // The entry is a constant now, so the address is asserted where it lives:
-    // the endpoint file the generated script reads when the hook fires. Both
-    // of those are written across the `\\wsl.localhost` share and read from
-    // inside the distribution, which is the link this suite exists to test.
+    // The entry is a constant, so what the transport *is* gets asserted where
+    // it lives: the endpoint file the generated script reads when the hook
+    // fires. All three files cross the share, and all three are read from
+    // inside the distribution — which is the link this suite exists to test.
     expect(command['command'], contains(agentHookMarker));
-    expect(command['command'], isNot(contains(endpoint.wslHost!)));
+    final endpointText = File(
+      p.join(uncHome, '$agentHookMarker.endpoint'),
+    ).readAsStringSync();
+    expect(endpointText, contains('spool=$agentHookMarker.spool'));
     expect(
-      File(p.join(uncHome, '$agentHookMarker.endpoint')).readAsStringSync(),
-      contains(endpoint.wslHost!),
+      endpointText,
+      isNot(contains('token=')),
+      reason:
+          'nothing here crosses a network, so nothing here needs a credential '
+          'at rest inside somebody else\'s filesystem',
     );
 
     // `HOME` is the scratch home, so `$HOME/.claude/…` in the command names
     // the store this test installed into and never the owner's own.
     final payload = r'{"session_id":"live-wsl","cwd":"/tmp"}';
     final hook = command['command']! as String;
-    final output = await _wsl([
+    final output = await _wslRaw([
       'sh',
       '-c',
-      "printf %s '$payload' | HOME=$wslHome $hook",
+      "printf %s '$payload' | ${_underHome(wslHome, hook)}; echo \"exit=\$?\"",
     ]);
 
-    // The script discards the endpoint's reply on purpose — a hook that can
-    // decide something reads its own stdout for that decision — so the arrival
-    // is asserted on the registry and not on what came back.
-    expect(output, isEmpty);
+    // A hook must print nothing: an agent that can decide something reads its
+    // own hook's stdout for that decision.
+    expect(
+      output,
+      'exit=0',
+      reason:
+          'THE APP: the distro shell said something back. The command string '
+          'did not survive that shell, which is exactly what this test exists '
+          'to catch.\n\n$output',
+    );
 
-    // The installed command is written to cost the agent nothing when it cannot
-    // deliver — `-s` swallows the diagnostic and `|| true` the exit code — so
-    // its silence carries no diagnosis of its own. If nothing arrived, ask the
-    // same question with the muzzle off and let the exit code say which side is
-    // broken.
-    if (reports.latest('claudeCode', 'live-wsl') == null) {
-      final diagnosis = await _wslRaw([
-        'sh',
-        '-c',
-        "printf %s '$payload' | HOME=$wslHome "
-            "${hook.replaceAll('curl -s ', 'curl -sS ').replaceAll(' || true', '')}"
-            '; echo "exit=\$?"',
-      ]);
-      fail(_verdict(diagnosis, endpoint.wslHost!));
+    // The Windows side, exactly as the app does it: list the spool over the
+    // share, read each payload, delete it, apply it.
+    final spool = Directory(p.join(uncHome, '$agentHookMarker.spool'));
+    final events = const AgentHookSpool().drain(spool);
+    if (events.isEmpty) {
+      fail(_verdict(spool, uncHome, wslHome, hook));
     }
+    for (final event in events) {
+      container
+          .read(agentHookReceiverProvider)
+          .handle(
+            agentId: event.agentId,
+            event: event.event,
+            body: event.body,
+            observedAt: event.firedAt,
+          );
+    }
+
     expect(
       reports.latest('claudeCode', 'live-wsl')?.status,
       AgentActivityStatus.idle,
       reason:
-          'THE APP: the endpoint answered ok, so the door is open and the '
-          'command string survived the distro shell — but the report did not '
-          'land in the registry a Windows callback lands in.',
+          'THE APP: the payload crossed the share intact but the report did '
+          'not land in the registry a Windows callback lands in.',
+    );
+    expect(
+      spool.listSync(),
+      isEmpty,
+      reason: 'a drained payload is a deleted payload, or the spool grows',
     );
   });
 
-  test('the same hook cannot be reached from loopback inside WSL', () async {
-    // The measurement the whole design rests on: `127.0.0.1` inside a
-    // distribution is the distribution's own loopback, so the URL that is right
-    // for a Windows-native pane is refused from here.
+  test('the drainer picks the same payload up on its own', () async {
+    // The loop the app actually runs, rather than one `drain` call: it has to
+    // find this distribution in the running set, list the share, and hand the
+    // payload to the same intake the HTTP route uses.
     final endpoint = server.hookEndpoint!;
-    final result = await Process.run('wsl.exe', [
-      '-e',
+    final claude = AgentRegistry.builtIn.byId('claudeCode')!;
+    expect(
+      await const AgentHookInstaller().install(
+        descriptor: claude,
+        storeHome: uncHome,
+        endpoint: endpoint,
+        environment: EnvironmentKind.wsl,
+      ),
+      isTrue,
+    );
+    final config =
+        jsonDecode(File(p.join(uncHome, 'settings.json')).readAsStringSync())
+            as Map<String, Object?>;
+    final hook =
+        ((((((config['hooks']! as Map)['Stop']! as List).single
+                                as Map)['hooks']!
+                            as List)
+                        .single
+                    as Map)['command']!
+                as String);
+    await _wsl([
       'sh',
       '-c',
-      'curl -sS -m 2 -o /dev/null '
-          'http://127.0.0.1:${endpoint.port}/agent-hook; echo "exit=\$?"',
+      'printf %s \'{"session_id":"live-drainer"}\' | '
+          '${_underHome(wslHome, hook)}',
     ]);
 
+    final spool = Directory(p.join(uncHome, '$agentHookMarker.spool'));
+    final waiting = spool.listSync().map((e) => p.basename(e.path)).toList();
+    final distribution = await _defaultDistribution();
+    final seen = <AgentHookSpoolEvent>[];
+    final drainer = AgentHookSpoolDrainer(onEvent: seen.add);
+    addTearDown(drainer.dispose);
+    drainer.watch([
+      AgentHookSpoolSource(
+        environmentId: 'wsl:live',
+        directory: spool,
+        wslDistribution: distribution,
+      ),
+    ]);
+    await drainer.drainOnce();
+
     expect(
-      '${result.stdout}${result.stderr}',
-      contains('exit=7'),
+      seen.map((e) => (e.agentId, e.event)),
+      [('claudeCode', 'Stop')],
       reason:
-          'if this ever passes from loopback, the whole switch-address design '
-          'is unnecessary and `AgentHookEndpoint` should be revisited',
+          'THE APP: the drainer did not pick the payload up. Either the '
+          'running-distribution gate skipped a distribution that is plainly '
+          'running, or the envelope did not parse.\n'
+          'in the spool before the drain: $waiting\n'
+          'distribution: $distribution\n'
+          'running: ${await wslRunningDistributions()}',
+    );
+    expect(
+      seen.single.firedAt.isAfter(testTime),
+      isTrue,
+      reason:
+          'a spooled payload is timed by its own file, so a backlog drained '
+          'after a crash is discarded as stale rather than announced as news',
+    );
+  });
+
+  test('uninstall leaves nothing of ours in the distribution', () async {
+    const installer = AgentHookInstaller();
+    final claude = AgentRegistry.builtIn.byId('claudeCode')!;
+    await installer.install(
+      descriptor: claude,
+      storeHome: uncHome,
+      endpoint: server.hookEndpoint!,
+      environment: EnvironmentKind.wsl,
+    );
+    // A payload nobody drained, so the removal has to take a non-empty
+    // directory with it.
+    File(
+      p.join(uncHome, '$agentHookMarker.spool', '1-0.json'),
+    ).writeAsStringSync('agent=claudeCode\nevent=Stop\n\n{}');
+
+    await installer.uninstall(descriptor: claude, storeHome: uncHome);
+
+    final left = await _wsl([
+      'sh',
+      '-c',
+      'ls -A $wslHome/.claude | grep $agentHookMarker || true',
+    ]);
+    expect(left, isEmpty, reason: 'left behind in the distribution: $left');
+  });
+
+  test('the WSL switch address is still measured, for /mcp', () async {
+    // Hooks left this address; `/mcp` has not, and a WSL session's tools still
+    // depend on it. So the measurement stays, and it stays named: this is the
+    // number that decides whether an agent in a distribution can drive the app
+    // at all.
+    final port = server.hookEndpoint!.port;
+    final host = server.wslHost?.address;
+    if (host == null) {
+      markTestSkipped(
+        'No WSL switch adapter is bound, so there is nothing to measure. '
+        'WSL sessions get no MCP tools on this machine.',
+      );
+      return;
+    }
+    final probe = await _wslRaw([
+      'sh',
+      '-c',
+      'curl -sS -m 5 -o /dev/null http://$host:$port/mcp; echo "exit=\$?"',
+    ]);
+    final code = RegExp(r'exit=(\d+)').firstMatch(probe)?.group(1) ?? '?';
+
+    // Reported, never asserted. A shut switch is the machine's, and failing
+    // here would say the app is broken when it is not — which is the mistake
+    // that cost a day in the other direction.
+    // ignore: avoid_print
+    print(
+      code == '0'
+          ? 'WSL switch $host:$port answers: MCP works for WSL sessions here.'
+          : 'WSL switch $host:$port does NOT answer from inside the distro '
+                '(curl exit $code). THIS MACHINE, not the app: hooks no longer '
+                'use it, but WSL sessions get no MCP tools until it opens.\n'
+                '$probe',
     );
   });
 }
 
-/// What a failed delivery **means**, read off `curl`'s own exit code.
+/// What a spool that stayed empty **means**.
 ///
-/// The point of running against a real distribution is that it can tell the two
-/// failures apart, and a bare `Expected: contains '"ok":true' / Actual: ''`
-/// cannot. Every branch names which side is at fault, because the wrong
-/// attribution is expensive in both directions: a machine problem filed as a
-/// bug wastes a day, and an app problem waved off as "the machine again" is how
-/// this path silently degraded in the first place.
-String _verdict(String probe, String host) {
-  final code = RegExp(r'exit=(\d+)').firstMatch(probe)?.group(1) ?? '?';
-  final blame = switch (code) {
-    '0' =>
-      'THE APP: curl reached $host and came back clean, but the body was not '
-          '{"ok":true}. The receiver answered something else — read it below.',
-    '7' =>
-      'THIS MACHINE, not the app: connection refused/unreachable to $host from '
-          'inside WSL. The Windows process is listening and the distro cannot '
-          'reach it, which is the Hyper-V firewall or the switch, not a line of '
-          'Dart. Agents in WSL will report no status until it is opened.',
-    '28' =>
-      'THIS MACHINE, not the app: the connection to $host timed out from '
-          'inside WSL — the address answers ARP but carries no data. This is '
-          'the state the app can only refuse to pretend around.',
-    '52' || '56' =>
-      'THIS MACHINE, on the evidence, not the app: $host accepted the '
-          'connection from inside WSL and it was reset before a response could '
-          'be written. Confirm it in half a minute without this app in the '
-          'picture: bind a bare `[System.Net.Sockets.TcpListener]` on $host '
-          'from PowerShell and `curl` it from the distro. Measured on the '
-          "owner's machine that plain listener is reset identically (curl 56, "
-          '"An existing connection was forcibly closed by the remote host" on '
-          'the Windows side), so no Dart is involved — it is the Hyper-V '
-          'firewall or the switch. If a bare listener *does* answer and only '
-          'this app is reset, then it is THE APP.',
-    '127' || '2' =>
-      'THE APP: the distro shell could not run the command this app wrote '
-          '(exit $code — command not found, or an option curl would not '
-          'parse). The command string did not survive quoting, which is '
-          'exactly what this test exists to catch.',
-    _ =>
-      'UNCLASSIFIED (curl exit $code). Read the output below before deciding '
-          'whether this is the machine or the app.',
-  };
-  return '$blame\n\nProbe output:\n$probe';
+/// The point of running against a real distribution is that it can tell the
+/// failures apart, and a bare `Expected: non-empty / Actual: []` cannot. Every
+/// branch names which side is at fault, because the wrong attribution is
+/// expensive in both directions: a machine problem filed as a bug wastes a day,
+/// and an app problem waved off as "the machine again" is how this path
+/// silently degraded in the first place.
+String _verdict(
+  Directory spool,
+  String uncHome,
+  String wslHome,
+  String command,
+) {
+  if (!spool.existsSync()) {
+    return 'THE APP: the installer reported success and there is no spool '
+        'directory at ${spool.path}. `_writeCallbackFiles` is meant to create '
+        'it before the endpoint file that names it.';
+  }
+  final leftovers = spool
+      .listSync()
+      .map((e) => p.basename(e.path))
+      .toList(growable: false);
+  if (leftovers.isNotEmpty) {
+    return 'THE APP: the hook wrote ${leftovers.join(', ')} and the drain read '
+        'none of it. A `.part` left behind means the `mv` did not run; a '
+        '`.json` left behind means the envelope did not parse.';
+  }
+  final endpointFile = File(p.join(uncHome, '$agentHookMarker.endpoint'));
+  if (!endpointFile.existsSync()) {
+    return 'THE APP: there is no endpoint file, so the script exited zero '
+        'without writing. The install said it wrote one.';
+  }
+  return 'THE APP: the script ran, printed nothing, exited zero and left the '
+      'spool empty. It reads its endpoint file relative to \$0, so the usual '
+      'cause is that `HOME=$wslHome` did not put the command\'s '
+      '`\$HOME/.claude` where this test installed.\n\n'
+      'command: $command\n'
+      'endpoint file:\n${endpointFile.readAsStringSync()}';
+}
+
+/// [command] run with `HOME` pointed at [home], **exported first**.
+///
+/// `HOME=x sh "$HOME/…"` does not do this: a prefix assignment applies to the
+/// command's environment, and the argument was already expanded from the
+/// caller's `HOME` by then — so the hook this test installed into a scratch
+/// store went looking in the owner's real one and exited 127. Exporting in a
+/// statement of its own is what makes the second statement see it.
+String _underHome(String home, String command) =>
+    '{ export HOME=$home; $command; }';
+
+/// The distribution `wsl.exe` runs by default — the one everything here uses.
+///
+/// Read through the app's own parse rather than a second copy of it. The
+/// second copy is what failed first: `wsl.exe` answered one of these calls in
+/// UTF-16 and the next in UTF-8, and two parses that disagree about that match
+/// nothing while looking correct.
+Future<String?> _defaultDistribution() async {
+  final running = await wslRunningDistributions();
+  return running.isEmpty ? null : running.first;
 }
 
 /// One command inside the default distribution, **without** throwing on a
@@ -265,10 +405,6 @@ String? _probeWsl() {
     if (hello.exitCode != 0 || !'${hello.stdout}'.contains('ok')) {
       return 'No WSL distribution answered.';
     }
-    final curl = Process.runSync('wsl.exe', ['-e', 'sh', '-c', 'command -v curl']);
-    if (curl.exitCode != 0) {
-      return 'The WSL distribution has no curl, which is what a hook runs.';
-    }
   } on ProcessException {
     return 'wsl.exe is not on this machine.';
   }
@@ -280,8 +416,7 @@ String? _probeWsl() {
 ///
 /// Asynchronous, and that is load-bearing rather than stylistic: the control
 /// server under test serves on this isolate's event loop, so a `runSync` here
-/// blocks the very server the `curl` inside WSL is dialling and the call times
-/// out having connected to nothing that can answer.
+/// blocks the very server the request inside WSL is dialling.
 Future<String> _wsl(List<String> arguments) async {
   final result = await Process.run('wsl.exe', ['-e', ...arguments]);
   if (result.exitCode != 0) {

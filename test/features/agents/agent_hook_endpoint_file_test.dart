@@ -67,12 +67,10 @@ void main() {
   const first = AgentHookEndpoint(
     port: 47821,
     token: 'AAAAtokenFromLaunchOne',
-    wslHost: '172.18.240.1',
   );
   const second = AgentHookEndpoint(
     port: 51099,
     token: 'BBBBtokenFromLaunchTwo',
-    wslHost: '172.30.16.1',
   );
 
   const environments = [
@@ -92,15 +90,15 @@ void main() {
             environment: environment,
           )!;
 
-          // The headline. Two launches that agree about nothing — not the
-          // port, not the token, not even the WSL switch address — write the
-          // same bytes into the user's file.
+          // The headline. Two launches that agree about neither the port nor
+          // the token write the same bytes into the user's file — and so does
+          // a launch that changed the WSL agent's *transport* entirely, which
+          // is what made moving WSL off the network affordable at all.
           expect(commandWith(first), commandWith(second));
           for (final endpoint in [first, second]) {
             final command = commandWith(endpoint);
             expect(command, isNot(contains('${endpoint.port}')));
             expect(command, isNot(contains(endpoint.token)));
-            expect(command, isNot(contains(endpoint.wslHost!)));
             expect(command, contains(agentHookMarker));
           }
         });

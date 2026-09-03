@@ -105,7 +105,7 @@ void main() async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
     expect(announced, 1, reason: 'exactly once, on the transition');
-    expect(server.hookEndpoint!.wslHost, isNotNull);
+    expect(server.wslHost, isNotNull);
   }, skip: skip);
 
   test('a switch present at startup announces nothing', () async {

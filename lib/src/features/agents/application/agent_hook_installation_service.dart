@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
@@ -7,7 +9,8 @@ import '../../environments/domain/environment_kind.dart';
 import '../data/agent_hook_installer.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
-import 'agent_hook_reachability.dart';
+import '../domain/agent_hook_transport.dart';
+import 'agent_hook_spool_drainer.dart';
 import 'agent_providers.dart';
 import 'agent_status_providers.dart';
 
@@ -44,6 +47,22 @@ class AgentHookInstallationReport {
   };
 
   bool get anySkipped => skippedByEnvironment.isNotEmpty;
+
+  /// Every spool directory this sweep installed — one per **agent**, because
+  /// each agent keeps its payloads in its own store home.
+  ///
+  /// This is how `AgentHookSpoolDrainer` learns what to poll without
+  /// re-deriving a generated path, which is the mistake that leaves files
+  /// behind on uninstall.
+  List<AgentHookSpoolSource> get spoolSources => [
+    for (final result in results)
+      if (result.installed && result.spoolDirectory != null)
+        AgentHookSpoolSource(
+          environmentId: result.environmentId,
+          directory: Directory(result.spoolDirectory!),
+          wslDistribution: result.wslDistribution,
+        ),
+  ];
 }
 
 /// Ambient state, written after each sweep by whoever ran it.
@@ -68,6 +87,8 @@ class AgentHookInstallation {
     required this.environmentId,
     required this.installed,
     this.skippedBecause,
+    this.spoolDirectory,
+    this.wslDistribution,
   });
 
   final String agentId;
@@ -77,6 +98,18 @@ class AgentHookInstallation {
   /// Why nothing was written, for an environment or agent we deliberately
   /// skipped. `null` when [installed].
   final String? skippedBecause;
+
+  /// Where this agent's hooks drop their payloads, for an environment that
+  /// reports by file rather than by socket — `null` for every other one.
+  ///
+  /// Carried out of the sweep rather than recomputed by the drainer: the
+  /// installer owns the names of the files it generates, and a second spelling
+  /// of one of them is how an uninstall comes to leave something behind.
+  final String? spoolDirectory;
+
+  /// The distribution [spoolDirectory] lives in, so the drainer can tell
+  /// whether it is worth listing. `null` outside WSL.
+  final String? wslDistribution;
 }
 
 /// Writes Karmashala's status callbacks into the agents' own hook configs at
@@ -110,19 +143,24 @@ class AgentHookInstallation {
 ///   sends nothing until an unauthenticated probe comes back `401`, which is
 ///   what this app answers to a credential-less `GET /agent-hook` and a
 ///   stranger on that port does not.
-/// * **The address depends on where the agent runs, and some agents cannot be
-///   reached at all.** `127.0.0.1` inside a WSL2 distribution is that
-///   distribution's own loopback, so a loopback hook installed there would fire
-///   on every tool call and never arrive. It is the host side of the WSL
-///   virtual switch that works, and [AgentHookEndpoint] carries it. **Having
-///   bound that address is not evidence that it answers**, and the two came
-///   apart on the owner's machine: the switch address reset every byte sent to
-///   it from inside the distribution, while the same process served that same
-///   distribution on the host's other addresses. So a WSL store is installed
-///   only once [AgentHookReachability] has dialled the door from inside it. An
-///   SSH host is on another machine and is always skipped. Skipped environments
-///   fall back to the state-file and terminal-grid sources, which need no
-///   callback.
+/// * **How an agent reports depends on where it runs, and some agents cannot
+///   report at all.** `127.0.0.1` inside a WSL2 distribution is that
+///   distribution's own loopback, and the one address of ours it can name — the
+///   host side of the WSL virtual switch — resets every byte sent to it on the
+///   owner's machine, for a bare PowerShell listener as readily as for this
+///   app. So a WSL agent is not given an address: it is given a spool
+///   directory in its own store home, which this app reads over
+///   `\\wsl.localhost` and drains with [AgentHookSpoolDrainer]. See
+///   [AgentHookEndpoint.transportFor]. An SSH host is on another machine, has
+///   no shared filesystem either, and is still always skipped; skipped
+///   environments fall back to the state-file and terminal-grid sources, which
+///   need no callback.
+///
+///   The `curl`-from-inside-the-distribution probe that used to gate a WSL
+///   install went with the address it was probing. It existed because a bound
+///   socket is not a reachable door, and it was right; what replaced it is
+///   stronger rather than weaker, because `AgentHookInstaller` reads back every
+///   file it writes into that store home and the store home *is* the transport.
 class AgentHookInstallationService {
   AgentHookInstallationService(this._ref, {AppLogger? logger})
     : _log = logger ?? AppLogger.named('agent-hooks');
@@ -220,30 +258,20 @@ class AgentHookInstallationService {
       // An environment we have no row for is treated as unreachable rather than
       // guessed at: the wrong address here is a hook in someone's config that
       // silently never arrives.
-      var reachable = kind != null && (endpoint?.reaches(kind) ?? false);
-      var unreachableBecause = _noAddressBound;
-      // Bound is not the same as reachable. `reaches` says this app bound an
-      // address for this kind of environment; only a round trip *from inside*
-      // it says an agent there can dial it, and on the owner's machine those
-      // two answers disagreed all day. See [AgentHookReachability]. Once per
-      // store, outside the descriptor loop: the door is a property of the
-      // environment, not of the agent.
-      if (reachable && skipUnreachable) {
-        reachable = await _ref
-            .read(agentHookReachabilityProvider)
-            .answersFrom(environment!, endpoint!);
-        if (!reachable) {
-          unreachableBecause =
-              'the callback address ${endpoint.hostFor(kind)} does not '
-              'answer from inside this environment';
-          _log.warning(
-            'Agent hooks for ${store.environmentId} were not installed: '
-            '$unreachableBecause. Nothing this app can bind is reachable from '
-            'there, so status falls back to disk probes and the hook-only '
-            'states (awaiting approval, failed) will not be reported.',
-          );
-        }
-      }
+      // Whether this app has any way at all for an agent there to report.
+      // Once per store, outside the descriptor loop: the answer is a property
+      // of the environment, not of the agent.
+      //
+      // This used to be two questions — *did we bind an address for this kind*
+      // and then *does that address answer from inside it*, one `curl` per WSL
+      // distribution per launch — because a bound socket is not a reachable
+      // door and on the owner's machine those two answers disagreed all day.
+      // It is one question again because the second one is gone rather than
+      // dropped: the only environment whose door had to be dialled now reports
+      // by writing a file into a store home the installer reads back byte for
+      // byte, which is a stronger check than a status line.
+      final reachable = kind != null && (endpoint?.reaches(kind) ?? false);
+      const unreachableBecause = _noAddressBound;
       for (final descriptor in registry.descriptors) {
         if (descriptor.hooks == null) continue;
         final home = store.homesByAgentId[descriptor.id];
@@ -299,11 +327,23 @@ class AgentHookInstallationService {
               'file. Another process rewriting $home is the usual cause.',
             );
           }
+          // Where this agent's payloads will land, for a transport that
+          // reports by file. Asked of the installer rather than rebuilt here,
+          // so the drainer and the uninstall sweep can never disagree about
+          // the path.
+          final spool =
+              applied &&
+                  kind != null &&
+                  endpoint?.transportFor(kind) is AgentHookSpoolTransport
+              ? installer.spoolDirectoryFor(descriptor, home)
+              : null;
           results.add(
             AgentHookInstallation(
               agentId: descriptor.id,
               environmentId: store.environmentId,
               installed: applied,
+              spoolDirectory: spool?.path,
+              wslDistribution: environment?.wslDistribution,
               skippedBecause: applied || endpoint == null
                   ? null
                   : 'the callbacks were written but are not in the config '

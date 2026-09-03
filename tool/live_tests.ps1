@@ -40,8 +40,12 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 function Test-WslReady {
+  # A distribution that answers is the whole prerequisite now: the hook
+  # transport writes a file across the share rather than running `curl`. The
+  # `/mcp` measurement at the end of the hook suite still wants one, and says
+  # so itself when there is none.
   try {
-    $hello = & wsl.exe -e sh -c 'command -v curl >/dev/null && echo ready'
+    $hello = & wsl.exe -e sh -c 'echo ready'
     return ($LASTEXITCODE -eq 0 -and "$hello" -match 'ready')
   } catch {
     return $false
@@ -55,7 +59,7 @@ $wslReady = Test-WslReady
 # prerequisites were absent proved nothing, and that must not look like a pass.
 Write-Host ''
 Write-Host 'Live test prerequisites' -ForegroundColor Cyan
-Write-Host ("  WSL distribution with curl : " + $(if ($wslReady) { 'present' } else { 'ABSENT - the WSL tests will skip themselves' }))
+Write-Host ("  WSL distribution           : " + $(if ($wslReady) { 'present' } else { 'ABSENT - the WSL tests will skip themselves' }))
 Write-Host ("  KARMASHALA_SSH_* set       : " + $(if ($sshReady) { 'yes' } else { 'no - the SSH tests will skip themselves' }))
 Write-Host ''
 

@@ -407,16 +407,17 @@ args = ["blender-mcp"]
       expect(handlersFor('Stop').first['command'], 'mine.sh');
     });
 
-    test('is refused for an environment it cannot call back from', () async {
+    test('is refused for an environment it cannot report from', () async {
       final installed = await installer.install(
         descriptor: codex,
         storeHome: storeHome(),
         endpoint: endpoint,
-        environment: EnvironmentKind.wsl,
+        environment: EnvironmentKind.ssh,
       );
 
-      // No switch address was bound, so a hook installed inside the
-      // distribution would fire on every tool call and never arrive.
+      // Another machine: it shares neither a loopback nor a filesystem with
+      // this process, so a hook installed there would fire on every tool call
+      // and never arrive.
       expect(installed, isFalse);
       expect(hooksFile().existsSync(), isFalse);
       expect(posixScript().existsSync(), isFalse);

@@ -1,29 +1,28 @@
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_transport.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The callback address an agent is told to post to, per environment.
+/// How an agent is told to report, per environment.
 ///
-/// One endpoint cannot serve one URL to everybody: `127.0.0.1` inside a WSL2
-/// distribution is the distribution's own loopback, so the URL that is right
-/// for a Windows-native pane is refused from inside a distro. Measured from
-/// this machine against a two-door server on one port:
+/// One endpoint cannot serve one answer to everybody, and the difference is not
+/// only which address: `127.0.0.1` inside a WSL2 distribution is that
+/// distribution's own loopback, and the one address of ours it *can* name — the
+/// host side of the Hyper-V switch — completed the handshake and reset the
+/// first data segment on the machine this was written for, for our port and for
+/// 135 and 445 alike, and did the same to a bare PowerShell `TcpListener`.
 ///
-/// ```
-/// $ curl … http://127.0.0.1:56566/agent-hook       # from WSL → refused
-/// $ curl … http://172.18.240.1:56566/agent-hook    # from WSL → {"ok":true}
-/// ```
+/// So a WSL agent is not given an address at all. It is given a spool
+/// directory in its own store home, which the app reads over `\\wsl.localhost`.
 void main() {
-  const wslSwitch = '172.18.240.1';
+  const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
 
-  group('the URL a hook is given', () {
-    test('a Windows-native agent keeps loopback', () {
-      const endpoint = AgentHookEndpoint(
-        port: 4242,
-        token: 'tok',
-        wslHost: wslSwitch,
-      );
+  group('the transport a hook is given', () {
+    test('a Windows-native agent posts to loopback', () {
+      final transport = endpoint.transportFor(EnvironmentKind.windowsNative);
 
+      expect(transport, isA<AgentHookHttpTransport>());
+      expect((transport! as AgentHookHttpTransport).authority, '127.0.0.1:4242');
       expect(
         endpoint.uriFor(
           agentId: 'claudeCode',
@@ -34,31 +33,23 @@ void main() {
       );
     });
 
-    test('a WSL agent is given the switch address, on the same port', () {
-      const endpoint = AgentHookEndpoint(
-        port: 4242,
-        token: 'tok',
-        wslHost: wslSwitch,
+    test('a local POSIX agent posts to the same loopback', () {
+      expect(
+        endpoint.transportFor(EnvironmentKind.localPosix),
+        isA<AgentHookHttpTransport>(),
       );
-
-      final uri = endpoint.uriFor(
-        agentId: 'claudeCode',
-        event: 'Stop',
-        environment: EnvironmentKind.wsl,
-      )!;
-
-      expect(uri.host, wslSwitch);
-      // One server, two doors: a second port would need a second bind and a
-      // second thing to keep in step.
-      expect(uri.port, 4242);
-      expect(uri.path, '/agent-hook');
     });
 
-    test('a WSL agent on a host with no switch is given nothing', () {
-      // Not loopback, which the distribution refuses. An installed hook that
-      // cannot arrive is worse than no hook at all, because nothing reports it.
-      const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
-
+    test('a WSL agent spools, and is given no URL to get wrong', () {
+      expect(
+        endpoint.transportFor(EnvironmentKind.wsl),
+        isA<AgentHookSpoolTransport>(),
+      );
+      // Not loopback, which the distribution refuses; and not the switch
+      // address either, which accepts a connection and then resets it. An
+      // installed hook that cannot arrive is worse than no hook at all,
+      // because nothing reports it.
+      expect(endpoint.hostFor(EnvironmentKind.wsl), isNull);
       expect(
         endpoint.uriFor(
           agentId: 'claudeCode',
@@ -67,25 +58,13 @@ void main() {
         ),
         isNull,
       );
-      expect(
-        endpoint.uriFor(
-          agentId: 'claudeCode',
-          event: 'Stop',
-          environment: EnvironmentKind.windowsNative,
-        ),
-        isNotNull,
-      );
     });
 
-    test('an SSH agent is given nothing, switch address or not', () {
-      // Every address this app binds is local to the machine, and reaching a
-      // remote host would mean binding an interface the LAN can see.
-      const endpoint = AgentHookEndpoint(
-        port: 4242,
-        token: 'tok',
-        wslHost: wslSwitch,
-      );
-
+    test('an SSH agent is given nothing at all', () {
+      // Another machine: it shares neither a loopback nor a filesystem with
+      // this process, and reaching it would mean binding an interface the LAN
+      // can see.
+      expect(endpoint.transportFor(EnvironmentKind.ssh), isNull);
       expect(
         endpoint.uriFor(
           agentId: 'claudeCode',
@@ -99,31 +78,39 @@ void main() {
 
   group('reaches', () {
     test('answers for every environment kind', () {
-      const withSwitch = AgentHookEndpoint(
-        port: 1,
-        token: 't',
-        wslHost: wslSwitch,
-      );
-      const withoutSwitch = AgentHookEndpoint(port: 1, token: 't');
+      expect(endpoint.reaches(EnvironmentKind.windowsNative), isTrue);
+      expect(endpoint.reaches(EnvironmentKind.localPosix), isTrue);
+      expect(endpoint.reaches(EnvironmentKind.wsl), isTrue);
+      expect(endpoint.reaches(EnvironmentKind.ssh), isFalse);
+    });
 
-      expect(withSwitch.reaches(EnvironmentKind.windowsNative), isTrue);
-      expect(withSwitch.reaches(EnvironmentKind.wsl), isTrue);
-      expect(withSwitch.reaches(EnvironmentKind.ssh), isFalse);
-      expect(withoutSwitch.reaches(EnvironmentKind.windowsNative), isTrue);
-      expect(withoutSwitch.reaches(EnvironmentKind.wsl), isFalse);
+    test('WSL no longer depends on anything this app managed to bind', () {
+      // The headline of the change. Every field this type has is about the
+      // loopback listener, and a WSL agent's answer does not read one of them —
+      // which is why a launch that never saw a switch address still installs
+      // WSL hooks that work.
+      const other = AgentHookEndpoint(port: 1, token: 'x');
+
+      expect(
+        other.transportFor(EnvironmentKind.wsl),
+        isA<AgentHookSpoolTransport>(),
+      );
     });
   });
 
-  test('the WSL address is carried in, never reached for', () {
-    // `agents/` must not depend on `mcp/`: the installer is what writes this
-    // into an agent's own config, and the address is resolved by whoever bound
-    // the socket. Constructing one with a plain string is the whole contract.
-    const endpoint = AgentHookEndpoint(
-      port: 9,
-      token: 't',
-      wslHost: '10.0.0.1',
-    );
+  test('the token belongs to the networked transport and nothing else', () {
+    // Stated as a test because it is a security property, not a detail: the
+    // spool never crosses a network, so it carries no credential to leave at
+    // rest inside somebody's distribution.
+    final http =
+        endpoint.transportFor(EnvironmentKind.windowsNative)!
+            as AgentHookHttpTransport;
 
-    expect(endpoint.wslHost, '10.0.0.1');
+    expect(http.token, 'tok');
+    expect(endpoint.transportFor(EnvironmentKind.wsl), isA<AgentHookTransport>());
+    expect(
+      endpoint.transportFor(EnvironmentKind.wsl),
+      isNot(isA<AgentHookHttpTransport>()),
+    );
   });
 }

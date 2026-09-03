@@ -8,6 +8,7 @@ import '../../../core/util/json_object_splice.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
+import '../domain/agent_hook_transport.dart';
 import '../domain/agent_status.dart';
 
 /// Marks the hook entries Karmashala owns, so uninstall can remove exactly
@@ -59,9 +60,19 @@ const List<String> legacyAgentHookConfigKeys = <String>['chitragupta'];
 ///     and then recognised and left alone on every later launch;
 ///  2. the **callback script**, `karmashala-agent-hook.{cmd,sh}` in the store
 ///     home — also a constant, and therefore also written once;
-///  3. the **endpoint file**, `karmashala-agent-hook.endpoint` beside it — the
-///     address and the bearer token, rewritten on every launch and deleted on
-///     the way out ([retireEndpoint]).
+///  3. the **endpoint file**, `karmashala-agent-hook.endpoint` beside it — how
+///     to report and where, rewritten on every launch and deleted on the way
+///     out ([retireEndpoint]);
+///  4. for a spooling environment only, the **spool directory**,
+///     `karmashala-agent-hook.spool/` beside them, which the script writes
+///     payloads into and this app drains. Volatile like (3) and removed with
+///     it.
+///
+/// **The endpoint file is also what chooses the transport.** A WSL agent cannot
+/// reach any address this app binds (see [AgentHookEndpoint]), so it is given a
+/// spool directory instead of a URL — and because that choice lives in (3)
+/// rather than in (1), the constant in the user's config did not have to change
+/// when it did.
 ///
 /// That split is the whole design, and [hookCommand] carries the argument for
 /// it: until Loop 71 the port and a per-launch token were spelled into (1),
@@ -292,16 +303,33 @@ class AgentHookInstaller {
     required String storeHome,
   }) {
     if (descriptor.hooks == null) return false;
+    var removed = false;
     final file = _endpointFile(descriptor, storeHome);
-    if (file == null || !file.existsSync()) return false;
-    try {
-      file.deleteSync();
-      return true;
-    } on FileSystemException {
-      // Someone else's directory. The script fails closed on a token it cannot
-      // authenticate with anyway, so this is hygiene rather than a hole.
-      return false;
+    if (file != null && file.existsSync()) {
+      try {
+        file.deleteSync();
+        removed = true;
+      } on FileSystemException {
+        // Someone else's directory. The script fails closed on a token it
+        // cannot authenticate with anyway, so this is hygiene rather than a
+        // hole.
+      }
     }
+    // The spool goes with it, and for the same reason: what it holds is this
+    // launch's undelivered payloads, and there is no launch any more. Leaving
+    // it would also leave the script a directory to keep writing into if the
+    // endpoint file ever came back without one.
+    final spool = spoolDirectoryFor(descriptor, storeHome);
+    if (spool != null && spool.existsSync()) {
+      try {
+        spool.deleteSync(recursive: true);
+        removed = true;
+      } on FileSystemException {
+        // Same answer: the script exits zero on a directory it cannot see, and
+        // a directory it can see holds nothing but its own payloads.
+      }
+    }
+    return removed;
   }
 
   /// The command line an agent runs for [event]: run the generated callback
@@ -394,6 +422,34 @@ class AgentHookInstaller {
   /// this app and the agent can name, which is the same reason
   /// [_scriptCommand] spells the home directory as a variable.
   static const String _endpointFileName = '$_scriptBaseName.endpoint';
+
+  /// The directory a spooling agent drops its payloads into, beside the script
+  /// and the endpoint file that name it.
+  ///
+  /// Only ever written by an agent inside a WSL distribution, and only ever
+  /// read from the Windows side over `\\wsl.localhost` — the one place both
+  /// sides can name the same bytes, which is the same argument
+  /// [_endpointFileName] is kept in the store home for.
+  ///
+  /// Volatile, like the endpoint file: the payloads in it belong to a launch,
+  /// so [retireEndpoint] takes the whole directory with it. What survives an
+  /// unclean exit is bounded by the script, which stops writing once the
+  /// directory holds 2000 files, and is harmless when it is finally drained
+  /// because each payload is timed by its own file's mtime rather than by when
+  /// this app got round to reading it.
+  static const String _spoolDirectoryName = '$_scriptBaseName.spool';
+
+  /// Where [descriptor]'s spooled payloads land under [storeHome], as **this
+  /// app** sees it — the Windows-side `\\wsl.localhost\…` spelling for a WSL
+  /// store. `null` for an agent with no store of its own.
+  ///
+  /// Public because the drainer needs it and must not re-derive the name: a
+  /// second spelling of a generated path is how an uninstall comes to leave
+  /// something behind.
+  Directory? spoolDirectoryFor(AgentDescriptor descriptor, String storeHome) =>
+      descriptor.store == null
+      ? null
+      : Directory(p.join(storeHome, _spoolDirectoryName));
 
   /// The generated script's file name in [environment].
   ///
@@ -499,12 +555,8 @@ class AgentHookInstaller {
     required AgentHookEndpoint endpoint,
     required EnvironmentKind environment,
   }) async {
-    final uri = endpoint.uriFor(
-      agentId: descriptor.id,
-      event: '',
-      environment: environment,
-    );
-    if (uri == null) return false;
+    final transport = endpoint.transportFor(environment);
+    if (transport == null) return false;
     final script = _callbackScriptFile(descriptor, storeHome, environment);
     final endpointFile = _endpointFile(descriptor, storeHome);
     if (script == null || endpointFile == null) return false;
@@ -519,24 +571,59 @@ class AgentHookInstaller {
       return false;
     }
 
-    // The address, with the event left to the script's own argument. Built by
-    // hand rather than through `Uri.replace` because the `$1` / `%~1` that
-    // stands in for it is not a legal query value and would be escaped.
-    final base =
-        '${uri.origin}${uri.path}'
-        '?agent=${Uri.encodeQueryComponent(descriptor.id)}'
-        '&marker=${Uri.encodeQueryComponent(agentHookMarker)}'
-        '&event=';
-    return _writeIfChanged(
-      endpointFile,
-      storeHome,
-      _endpointFileContents(
-        base: base,
-        token: endpoint.token,
-        newline: environment == EnvironmentKind.windowsNative ? '\r\n' : '\n',
-      ),
-      harden: (staged) => restrict(staged, environment),
-    );
+    switch (transport) {
+      case AgentHookHttpTransport():
+        final uri = endpoint.uriFor(
+          agentId: descriptor.id,
+          event: '',
+          environment: environment,
+        );
+        if (uri == null) return false;
+        // The address, with the event left to the script's own argument. Built
+        // by hand rather than through `Uri.replace` because the `$event` /
+        // `%~1` that stands in for it is not a legal query value and would be
+        // escaped.
+        final base =
+            '${uri.origin}${uri.path}'
+            '?agent=${Uri.encodeQueryComponent(descriptor.id)}'
+            '&marker=${Uri.encodeQueryComponent(agentHookMarker)}'
+            '&event=';
+        return _writeIfChanged(
+          endpointFile,
+          storeHome,
+          _httpEndpointFileContents(
+            base: base,
+            token: transport.token,
+            newline: environment == EnvironmentKind.windowsNative
+                ? '\r\n'
+                : '\n',
+          ),
+          harden: (staged) => restrict(staged, environment),
+        );
+      case AgentHookSpoolTransport():
+        // The directory the script drops payloads into, made **before** the
+        // endpoint file that names it — the same ordering argument as
+        // everything else here: the script exits zero on a directory that is
+        // not there, so a half-finished install costs the agent nothing.
+        final spool = spoolDirectoryFor(descriptor, storeHome);
+        if (spool == null) return false;
+        try {
+          if (!spool.existsSync()) await spool.create(recursive: true);
+        } on FileSystemException {
+          return false;
+        }
+        // No `harden`: there is no credential in this file. See
+        // [AgentHookSpoolTransport] for why the token is dropped rather than
+        // carried for symmetry.
+        return _writeIfChanged(
+          endpointFile,
+          storeHome,
+          _spoolEndpointFileContents(
+            agentId: descriptor.id,
+            spool: _spoolDirectoryName,
+          ),
+        );
+    }
   }
 
   /// Writes [contents] to [file] unless it already holds exactly that, and
@@ -584,7 +671,7 @@ class AgentHookInstaller {
   ///
   /// [newline] is the environment's, not this process's: `for /f` is handed a
   /// CRLF file and `read` an LF one, so neither reader has to strip anything.
-  static String _endpointFileContents({
+  static String _httpEndpointFileContents({
     required String base,
     required String token,
     required String newline,
@@ -598,6 +685,36 @@ class AgentHookInstaller {
     'url=$base',
     'token=$token',
   ].map((line) => '$line$newline').join();
+
+  /// The endpoint file for [AgentHookSpoolTransport]: a directory to write
+  /// into, the agent's own id, and **no credential**.
+  ///
+  /// The two keys the HTTP form carries are both absent, and their absence is
+  /// what the script reads to choose this transport. `agent=` is here because
+  /// the query string that used to carry it is gone: a spooled payload has to
+  /// name its own agent, and this file is the only constant beside the script
+  /// that knows which agent's store it sits in.
+  ///
+  /// Always LF. Only a distribution's `sh` ever reads this form — Windows and
+  /// the local POSIX host both share a loopback with this process and take the
+  /// HTTP one.
+  static String _spoolEndpointFileContents({
+    required String agentId,
+    required String spool,
+  }) => <String>[
+    '# Karmashala agent status callback endpoint.',
+    '#',
+    '# Generated on every launch and deleted when the app exits. The script',
+    '# beside this file reads it each time a hook fires, which is what lets the',
+    '# command in your agent\'s own config stay a constant. Editing this file',
+    '# changes nothing past the current launch.',
+    '#',
+    '# There is no token here and that is deliberate: this environment reports',
+    '# by writing a file that Karmashala reads over the WSL share, so nothing',
+    '# is sent over a network and there is no listener for an impostor to bind.',
+    'spool=$spool',
+    'agent=$agentId',
+  ].map((line) => '$line\n').join();
 
   /// The `sh` body. `$1` is the hook event name, supplied by the command.
   ///
@@ -616,10 +733,9 @@ class AgentHookInstaller {
   /// somebody else by now — the hazard `AgentHookInstallationService` documents
   /// as *"hands its bearer token to whatever binds that port next"*. So nothing
   /// is sent until an **unauthenticated** probe comes back `401`: no token, no
-  /// payload, just a status line. `AgentHookReachability` already establishes
-  /// what that probe means — *"any HTTP status line coming back proves the
+  /// payload, just a status line. Any HTTP status line coming back proves the
   /// door, and a `401` proves it as well as a `200` does, so the probe carries
-  /// no credential"* — and this one is stricter on purpose. A squatter proves
+  /// no credential — and this one is stricter on purpose. A squatter proves
   /// nothing by accepting a connection; ours is the only listener on that port
   /// that answers `401` to a `GET /agent-hook` with no credential, because that
   /// is what `LauncherControlServer._handleAgentHook` does before it looks at
@@ -648,24 +764,60 @@ class AgentHookInstaller {
   /// that let its own status through could start refusing the user's tool calls
   /// and blaming curl for it. Every other non-zero exit, and a timeout, are
   /// already neutral; 2 is the one that is not, and `exit 0` closes it.
+  /// **Two transports, one constant script, and the endpoint file picks.**
+  /// `spool=` selects [AgentHookSpoolTransport] and `url=`/`token=` select
+  /// [AgentHookHttpTransport]; the script does not know which environment it is
+  /// in and does not need to. That is what keeps the *command* in the user's
+  /// config a constant even though the transport for their WSL agent changed:
+  /// the entry names this script, the script asks the file, and the file is the
+  /// only thing a launch rewrites.
+  ///
+  /// The spool branch is three syscalls and two forks and cannot fail slowly:
+  /// measured at **3.6 ms per hook** inside the owner's distribution, against
+  /// 2008 ms for the `curl` branch on the same machine, where the probe times
+  /// out and the payload is then dropped. The event name is saved into `event`
+  /// **before** anything else, because the cap below re-uses `$@`.
   static const String _posixScript =
       '#!/bin/sh\n'
       '# Karmashala agent status callback. Generated; edits will not survive.\n'
       '#\n'
-      '# This file is a constant: the address and the token live in the\n'
-      '# endpoint file beside it and are read here, every time a hook fires.\n'
-      '# Nothing is sent until an unauthenticated probe proves the port still\n'
+      '# This file is a constant: where to report and how live in the endpoint\n'
+      '# file beside it and are read here, every time a hook fires. A file\n'
+      '# naming a spool directory is written to; one naming a url is posted to,\n'
+      '# and then only once an unauthenticated probe proves the port still\n'
       '# belongs to Karmashala.\n'
-      'endpoint="\${0%/*}/$_endpointFileName"\n'
+      'event="\$1"\n'
+      'here="\${0%/*}"\n'
+      'endpoint="\$here/$_endpointFileName"\n'
       '[ -f "\$endpoint" ] || exit 0\n'
       "url=''\n"
       "token=''\n"
+      "spool=''\n"
+      "agent=''\n"
       'while IFS= read -r line; do\n'
       '  case "\$line" in\n'
       '    url=*) url="\${line#url=}" ;;\n'
       '    token=*) token="\${line#token=}" ;;\n'
+      '    spool=*) spool="\${line#spool=}" ;;\n'
+      '    agent=*) agent="\${line#agent=}" ;;\n'
       '  esac\n'
       'done < "\$endpoint"\n'
+      'if [ -n "\$spool" ]; then\n'
+      '  dir="\$here/\$spool"\n'
+      '  [ -d "\$dir" ] || exit 0\n'
+      '  set -- "\$dir"/*.json\n'
+      '  [ "\$#" -lt 2000 ] || exit 0\n'
+      '  n=0\n'
+      '  while [ -e "\$dir/\$\$-\$n.json" ] || [ -e "\$dir/\$\$-\$n.part" ]; '
+      'do\n'
+      '    n=\$((n+1))\n'
+      '    [ "\$n" -lt 64 ] || exit 0\n'
+      '  done\n'
+      "  { printf 'agent=%s\\nevent=%s\\n\\n' \"\$agent\" \"\$event\"; cat; } "
+      '> "\$dir/\$\$-\$n.part" 2>/dev/null || exit 0\n'
+      '  mv -f "\$dir/\$\$-\$n.part" "\$dir/\$\$-\$n.json" 2>/dev/null\n'
+      '  exit 0\n'
+      'fi\n'
       '[ -n "\$url" ] && [ -n "\$token" ] || exit 0\n'
       "code=\$(curl -s -o /dev/null -m 2 -w '%{http_code}' \"\$url\" "
       '2>/dev/null)\n'
@@ -673,7 +825,7 @@ class AgentHookInstaller {
       'curl -s -o /dev/null -m 2 -X POST \\\n'
       '  -H "Authorization: Bearer \$token" \\\n'
       '  --data-binary @- \\\n'
-      '  "\$url\$1" 2>/dev/null\n'
+      '  "\$url\$event" 2>/dev/null\n'
       'exit 0\n';
 
   /// The `cmd.exe` body. `%~1` is the hook event name, unquoted.

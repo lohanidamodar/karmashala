@@ -5,6 +5,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_transport.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -170,11 +171,7 @@ void main() async {
         );
         expect(
           (await post(
-            closed.hookEndpoint!.uriFor(
-              agentId: 'claudeCode',
-              event: 'Stop',
-              environment: EnvironmentKind.wsl,
-            )!,
+            _switchHookUri(wslStandIn.address, port),
             const {'session_id': 's1'},
             token: closed.hookEndpoint!.token,
           )).status,
@@ -223,19 +220,16 @@ void main() async {
       }
     });
 
-    test('answers /agent-hook, which is the point of installing one', () async {
-      // Without this the second door 404s the callback and a WSL hook is
-      // installed, fires on every tool call, and reports nothing — the one
-      // outcome worse than skipping the store.
+    test('still answers /agent-hook, for a hook an older build left', () async {
+      // The installer no longer writes this address into a distribution's
+      // endpoint file — those hooks report by spool — but one written by an
+      // earlier build still names it, and a 404 there would be a hook firing
+      // on every tool call and reporting nothing.
       server = await startServer(wslHostAddress: () async => wslStandIn);
       final endpoint = server.hookEndpoint!;
 
       final response = await post(
-        endpoint.uriFor(
-          agentId: 'claudeCode',
-          event: 'Stop',
-          environment: EnvironmentKind.wsl,
-        )!,
+        _switchHookUri(wslStandIn.address, endpoint.port),
         const {'session_id': 's1'},
         token: endpoint.token,
       );
@@ -248,11 +242,7 @@ void main() async {
       final endpoint = server.hookEndpoint!;
 
       final response = await post(
-        endpoint.uriFor(
-          agentId: 'claudeCode',
-          event: 'Stop',
-          environment: EnvironmentKind.wsl,
-        )!,
+        _switchHookUri(wslStandIn.address, endpoint.port),
         const {'session_id': 's1'},
         token: 'not-the-token',
       );
@@ -261,11 +251,19 @@ void main() async {
     });
   }, skip: skip);
 
-  group('the address the hook endpoint hands to the installer', () {
-    test('is the switch address once that interface is bound', () async {
+  group('what the hook endpoint hands the installer for WSL', () {
+    test('is a transport, and never this address', () async {
+      // The switch address answers here — this is a stand-in loopback — and it
+      // still must not be handed to a WSL agent, because on the machine this
+      // was written for the real one completes the handshake and resets every
+      // byte after it. A WSL hook writes a file instead.
       server = await startServer(wslHostAddress: () async => wslStandIn);
 
-      expect(server.hookEndpoint!.wslHost, wslStandIn.address);
+      expect(server.hookEndpoint!.hostFor(EnvironmentKind.wsl), isNull);
+      expect(
+        server.hookEndpoint!.transportFor(EnvironmentKind.wsl),
+        isA<AgentHookSpoolTransport>(),
+      );
       expect(
         server.hookEndpoint!.reaches(EnvironmentKind.wsl),
         isTrue,
@@ -273,15 +271,17 @@ void main() async {
       );
     });
 
-    test('is absent on a host with no switch, so WSL stays skipped', () async {
+    test('does not depend on the switch being bound at all', () async {
+      // The whole point of the change: a host where the switch never came up
+      // used to lose every WSL hook, and the file transport does not care.
       server = await startServer(wslHostAddress: () async => null);
 
-      expect(server.hookEndpoint!.wslHost, isNull);
-      expect(server.hookEndpoint!.reaches(EnvironmentKind.wsl), isFalse);
+      expect(server.hookEndpoint!.reaches(EnvironmentKind.wsl), isTrue);
       expect(
         server.hookEndpoint!.reaches(EnvironmentKind.windowsNative),
         isTrue,
       );
+      expect(server.hookEndpoint!.reaches(EnvironmentKind.ssh), isFalse);
     });
 
     test(
@@ -328,6 +328,12 @@ Future<({int status, String body})> post(
     client.close(force: true);
   }
 }
+
+/// The `/agent-hook` URL on the switch listener, spelled out here because the
+/// endpoint no longer builds one: a WSL agent is given a spool directory, and
+/// this door survives only for a hook an earlier build installed.
+Uri _switchHookUri(String host, int port) =>
+    Uri.parse('http://$host:$port/agent-hook?agent=claudeCode&event=Stop');
 
 /// Hardening that never applies, so nothing privileged is minted or served.
 class _RefusingPermissions extends HandshakePermissions {

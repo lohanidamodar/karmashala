@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
-import 'package:karmashala/src/features/agents/application/agent_hook_reachability.dart';
+
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -39,41 +39,16 @@ class _StubLocator implements CliStoreLocator {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-/// A door that answers, or does not, without dialling anything.
-class _StubReachability implements AgentHookReachability {
-  const _StubReachability(this.answers);
-
-  final bool answers;
-
-  /// Every environment asked about, so a case can assert the probe ran once
-  /// per store rather than once per agent.
-  static final asked = <String>[];
-
-  @override
-  Future<bool> answersFrom(
-    ExecutionEnvironment environment,
-    AgentHookEndpoint endpoint,
-  ) async {
-    asked.add(environment.id);
-    return answers;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 void main() {
   late AppDatabase db;
   late Directory claudeHome;
 
-  // No switch address: the machine has no WSL adapter, or nothing was bound
-  // on it. WSL is unreachable for this endpoint and must stay skipped.
+  // Everything this endpoint has is about the loopback listener, and that is
+  // the point: a WSL agent's transport does not read one of these fields, so a
+  // launch that never saw a WSL switch address still installs WSL hooks that
+  // work. SSH is the environment that gets nothing, and it is not a matter of
+  // which addresses came up.
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
-  const reachable = AgentHookEndpoint(
-    port: 4242,
-    token: 'tok',
-    wslHost: '172.18.240.1',
-  );
 
   setUp(() {
     db = AppDatabase.memory();
@@ -89,23 +64,17 @@ void main() {
   File endpointFile() =>
       File(p.join(claudeHome.path, '$agentHookMarker.endpoint'));
 
-  /// The container the service runs in, with the door answering by default.
+  /// The container the service runs in.
   ///
-  /// Reachability is stubbed rather than left live because the real probe runs
-  /// `curl` inside a distribution: unstubbed, every WSL case here would depend
-  /// on the machine running the suite having WSL. [doorAnswers] is the one
-  /// thing these cases vary.
-  ProviderContainer containerWith(
-    _StubLocator locator, {
-    bool doorAnswers = true,
-  }) {
+  /// Nothing is stubbed but the store locator. There used to be a reachability
+  /// probe here as well, standing in for a `curl` run inside a distribution;
+  /// the transport it was probing is gone, and with it the need for any WSL
+  /// case in this file to depend on the suite's machine having WSL.
+  ProviderContainer containerWith(_StubLocator locator) {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         cliStoreLocatorProvider.overrideWithValue(locator),
-        agentHookReachabilityProvider.overrideWithValue(
-          _StubReachability(doorAnswers),
-        ),
       ],
     );
     addTearDown(container.dispose);
@@ -187,11 +156,12 @@ void main() {
   });
 
   test('install clears what it cannot deliver to, without adding one', () async {
-    // WSL is unreachable over loopback, so nothing of ours may be written
-    // here. This used to assert the file came back *byte-identical*, which
-    // sounded like restraint and was actually the bug: an entry an older
-    // build left behind survived every launch, and only an explicit
-    // uninstall could clear it. Meanwhile it fired on every prompt.
+    // An SSH host shares neither a loopback nor a filesystem with this
+    // process, so nothing of ours may be written there. This used to assert
+    // the file came back *byte-identical*, which sounded like restraint and
+    // was actually the bug: an entry an older build left behind survived every
+    // launch, and only an explicit uninstall could clear it. Meanwhile it
+    // fired on every prompt.
     //
     // The guarantee that mattered is intact — install adds no hook to a
     // config it cannot deliver to — and the stale one no longer outlives it.
@@ -208,11 +178,11 @@ void main() {
         },
       }),
     );
-    final wsl = wslEnv();
-    ExecutionEnvironmentDao(db).upsert(wsl);
+    final ssh = sshEnvFixture();
+    ExecutionEnvironmentDao(db).upsert(ssh);
     final locator = _StubLocator([
       CliStore(
-        environmentId: wsl.id,
+        environmentId: ssh.id,
         homesByAgentId: {'claudeCode': claudeHome.path},
       ),
     ]);
@@ -239,7 +209,7 @@ void main() {
     expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
   });
 
-  group('a WSL store the endpoint can reach', () {
+  group('what each kind of store gets', () {
     /// A store in [wsl], pointed at the same temp home. Only the environment
     /// kind is under test; the file is a fixture either way.
     (_StubLocator, ExecutionEnvironment) wslStore() {
@@ -256,88 +226,31 @@ void main() {
       );
     }
 
-    test('is installed, at the switch address', () async {
-      final (locator, wsl) = wslStore();
-      final service = containerWith(
-        locator,
-      ).read(agentHookInstallationServiceProvider);
-
-      final results = await service.installAll(reachable);
-
-      final claude = results.singleWhere((r) => r.environmentId == wsl.id);
-      expect(claude.installed, isTrue);
-      expect(claude.skippedBecause, isNull);
-      // The config names a script; the switch address is in the endpoint file
-      // beside it, which is the only thing a relaunch rewrites.
-      expect(settings().readAsStringSync(), contains(agentHookMarker));
-      final endpointText = endpointFile().readAsStringSync();
-      expect(endpointText, contains('172.18.240.1:4242/agent-hook'));
-      expect(endpointText, isNot(contains('127.0.0.1')));
-    });
-
-    test('is skipped when the switch address is bound but dead', () async {
-      // The failure this was written for. The app bound 172.18.240.1:47821 and
-      // answered on it from Windows, so `reaches(wsl)` was true and four hooks
-      // went into four configs — while from inside the distribution every
-      // connection to that address completed its handshake and had its first
-      // data segment reset. The log read `4 installed, 0 skipped` and
-      // `notifications.status` read `0 by hook` for the rest of the day.
-      //
-      // A bind is a fact about the host. Only the round trip is a fact about
-      // the agent, and an install that cannot arrive must report a skip.
-      final (locator, wsl) = wslStore();
-      final service = containerWith(
-        locator,
-        doorAnswers: false,
-      ).read(agentHookInstallationServiceProvider);
-
-      final results = await service.installAll(reachable);
-
-      final claude = results.singleWhere((r) => r.environmentId == wsl.id);
-      expect(claude.installed, isFalse);
-      expect(
-        claude.skippedBecause,
-        contains('172.18.240.1:4242'),
-        reason: 'the reason has to name the address that did not answer',
+    /// The same store, on a host that is somewhere else entirely — the one
+    /// environment this app still has no way to hear from.
+    (_StubLocator, ExecutionEnvironment) sshStore() {
+      final ssh = sshEnvFixture();
+      ExecutionEnvironmentDao(db).upsert(ssh);
+      return (
+        _StubLocator([
+          CliStore(
+            environmentId: ssh.id,
+            homesByAgentId: {'claudeCode': claudeHome.path},
+          ),
+        ]),
+        ssh,
       );
-      expect(claude.skippedBecause, contains('does not answer'));
-      expect(
-        settings().existsSync() && settings().readAsStringSync().contains(agentHookMarker),
-        isFalse,
-        reason: 'a callback that cannot arrive has no business in the config',
-      );
-    });
+    }
 
-    test('the door is dialled once per store, not once per agent', () async {
-      _StubReachability.asked.clear();
-      final (locator, wsl) = wslStore();
+    Directory spoolDir() =>
+        Directory(p.join(claudeHome.path, '$agentHookMarker.spool'));
 
-      await containerWith(
-        locator,
-      ).read(agentHookInstallationServiceProvider).installAll(reachable);
-
-      expect(_StubReachability.asked, [wsl.id]);
-    });
-
-    test('uninstall never dials: the sweep has to visit every store', () async {
-      _StubReachability.asked.clear();
-      final (locator, _) = wslStore();
-
-      await containerWith(
-        locator,
-        doorAnswers: false,
-      ).read(agentHookInstallationServiceProvider).uninstallAll();
-
-      expect(
-        _StubReachability.asked,
-        isEmpty,
-        reason:
-            'a store whose door is dead is exactly the one holding an entry '
-            'that needs removing',
-      );
-    });
-
-    test('is skipped, truthfully, when there is no switch address', () async {
+    test('is installed, and reports by spool rather than by address', () async {
+      // The change this group exists for. The app used to write the WSL switch
+      // address here; on the owner's machine that address completes the TCP
+      // handshake and resets the first data segment — for a bare PowerShell
+      // `TcpListener` as readily as for this app — so every hook fired, cost
+      // the agent two seconds, and arrived nowhere.
       final (locator, wsl) = wslStore();
       final service = containerWith(
         locator,
@@ -346,21 +259,65 @@ void main() {
       final results = await service.installAll(endpoint);
 
       final claude = results.singleWhere((r) => r.environmentId == wsl.id);
-      expect(claude.installed, isFalse);
-      expect(claude.skippedBecause, contains('no callback address this app binds is reachable'));
-      expect(claude.skippedBecause, contains('state file'));
-      expect(settings().existsSync(), isFalse);
+      expect(claude.installed, isTrue);
+      expect(claude.skippedBecause, isNull);
+      expect(settings().readAsStringSync(), contains(agentHookMarker));
+      final endpointText = endpointFile().readAsStringSync();
+      expect(endpointText, contains('spool=$agentHookMarker.spool'));
+      expect(endpointText, contains('agent=claudeCode'));
+      expect(spoolDir().existsSync(), isTrue);
+      // No address of any kind, and — the security half of the same fact — no
+      // credential at rest inside somebody's distribution. There is no
+      // listener here for an impostor to bind, so there is nothing to prove.
+      expect(endpointText, isNot(contains('127.0.0.1')));
+      expect(endpointText, isNot(contains('url=')));
+      expect(endpointText, isNot(contains('token=')));
+    });
+
+    test('is what the drainer is told to poll', () async {
+      final (locator, wsl) = wslStore();
+      final service = containerWith(
+        locator,
+      ).read(agentHookInstallationServiceProvider);
+
+      final report = AgentHookInstallationReport(
+        await service.installAll(endpoint),
+      );
+
+      expect(report.spoolSources, hasLength(1));
+      expect(report.spoolSources.single.environmentId, wsl.id);
+      expect(report.spoolSources.single.directory.path, spoolDir().path);
+      expect(
+        report.spoolSources.single.wslDistribution,
+        wsl.wslDistribution,
+        reason: 'so the drainer can skip a distribution that is not running',
+      );
+    });
+
+    test('a local store is not polled: it has a socket', () async {
+      final service = containerWith(
+        localStore(),
+      ).read(agentHookInstallationServiceProvider);
+
+      final report = AgentHookInstallationReport(
+        await service.installAll(endpoint),
+      );
+
+      expect(report.spoolSources, isEmpty);
+      expect(spoolDir().existsSync(), isFalse);
     });
 
     test('a hook left by an earlier run is removed, not left to fail', () async {
-      // The owner upgraded, and every prompt in their WSL session printed
+      // The owner upgraded, and every prompt in their session printed
       // `curl: (52) Empty reply from server` followed by a failed hook. The
       // entry was written by an older build — a noisier command, and an
       // address that no longer answers — and skipping only ever decided what
       // *not* to write, so nothing in the app could reach in and clear it.
       // An unreachable environment must end this sweep with none of our hooks
-      // in it, not with a stale one nobody can remove.
-      final (locator, wsl) = wslStore();
+      // in it, not with a stale one nobody can remove. SSH is what
+      // unreachable means now: another machine, no loopback and no shared
+      // filesystem either.
+      final (locator, ssh) = sshStore();
       settings().writeAsStringSync(
         jsonEncode({
           'hooks': {
@@ -392,7 +349,7 @@ void main() {
         locator,
       ).read(agentHookInstallationServiceProvider).installAll(endpoint);
 
-      final claude = results.singleWhere((r) => r.environmentId == wsl.id);
+      final claude = results.singleWhere((r) => r.environmentId == ssh.id);
       expect(claude.installed, isFalse);
       expect(
         claude.skippedBecause,
@@ -418,8 +375,8 @@ void main() {
       // both: an entry an earlier run left is a hook that fires and never
       // arrives, and a script left beside it is a bearer token in somebody's
       // home directory answering to nobody.
-      final wsl = wslEnv();
-      ExecutionEnvironmentDao(db).upsert(wsl);
+      final ssh = sshEnvFixture();
+      ExecutionEnvironmentDao(db).upsert(ssh);
       final codexHome = Directory(p.join(claudeHome.path, '.codex'))
         ..createSync(recursive: true);
       final script = File(p.join(codexHome.path, '$agentHookMarker.sh'))
@@ -428,7 +385,7 @@ void main() {
       final results = await containerWith(
         _StubLocator([
           CliStore(
-            environmentId: wsl.id,
+            environmentId: ssh.id,
             homesByAgentId: {'codex': codexHome.path},
           ),
         ]),
@@ -448,7 +405,7 @@ void main() {
       // The common case, and the one that must not start writing files: no
       // entry of ours means nothing to clean, and a config we never touched
       // stays untouched.
-      final (locator, _) = wslStore();
+      final (locator, _) = sshStore();
 
       await containerWith(
         locator,
@@ -457,70 +414,67 @@ void main() {
       expect(settings().existsSync(), isFalse);
     });
 
-    test('an SSH store is still skipped, switch address or not', () async {
-      // Another machine entirely: nothing this app binds can be dialled from
-      // there, and binding something that could would put the whole tool
-      // surface on the network.
-      final ssh = sshEnvFixture();
-      ExecutionEnvironmentDao(db).upsert(ssh);
+    test('an SSH store is skipped, and says so', () async {
+      // Another machine entirely: it shares neither a loopback nor a
+      // filesystem with this process, and binding something the LAN could see
+      // would put the whole tool surface on the network. The skip has to stay
+      // visible — a session reporting `unknown` for a whole run with nothing
+      // saying why is the failure this field exists for.
+      final (locator, _) = sshStore();
       final service = containerWith(
-        _StubLocator([
-          CliStore(
-            environmentId: ssh.id,
-            homesByAgentId: {'claudeCode': claudeHome.path},
-          ),
-        ]),
+        locator,
       ).read(agentHookInstallationServiceProvider);
 
-      final results = await service.installAll(reachable);
+      final results = await service.installAll(endpoint);
 
       expect(results.single.installed, isFalse);
-      expect(results.single.skippedBecause, contains('no callback address this app binds is reachable'));
+      expect(
+        results.single.skippedBecause,
+        contains('no callback address this app binds is reachable'),
+      );
+      expect(results.single.skippedBecause, contains('state file'));
       expect(settings().existsSync(), isFalse);
     });
 
-    test('uninstall sweeps it after the switch address changes', () async {
-      // The port is ephemeral and the switch address can move between boots, so
-      // the sweep must match on what we *marked*, not on what we wrote.
+    test('uninstall sweeps a WSL store, spool and all', () async {
+      // The port is ephemeral and the transport itself has changed under a
+      // user before now, so the sweep must match on what we *marked*, not on
+      // what we wrote.
       final (locator, _) = wslStore();
       final service = containerWith(
         locator,
       ).read(agentHookInstallationServiceProvider);
-      await service.installAll(reachable);
+      await service.installAll(endpoint);
       final entry = settings().readAsStringSync();
-      expect(endpointFile().readAsStringSync(), contains('172.18.240.1'));
+      expect(spoolDir().existsSync(), isTrue);
+      // A payload that was written but never drained, so the removal has to
+      // take a non-empty directory with it.
+      File(p.join(spoolDir().path, '1234-0.json')).writeAsStringSync(
+        'agent=claudeCode\nevent=Stop\n\n{"session_id":"s"}',
+      );
 
       await service.installAll(
-        const AgentHookEndpoint(
-          port: 5555,
-          token: 'tok2',
-          wslHost: '172.30.16.1',
-        ),
+        const AgentHookEndpoint(port: 5555, token: 'tok2'),
       );
-      // The address moved and the config did not: only the endpoint file did.
-      expect(settings().readAsStringSync(), entry);
-      expect(endpointFile().readAsStringSync(), contains('172.30.16.1'));
-      expect(endpointFile().readAsStringSync(), isNot(contains('172.18.240.1')));
+      expect(
+        settings().readAsStringSync(),
+        entry,
+        reason: 'a new port rewrites nothing in the config',
+      );
 
       await service.uninstallAll();
 
       expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
       expect(endpointFile().existsSync(), isFalse);
-    });
-
-    test('uninstall sweeps it when the switch address has gone', () async {
-      // Next launch, no WSL adapter: install skips this store, and the sweep
-      // still has to take out what the previous launch wrote.
-      final (locator, _) = wslStore();
-      final service = containerWith(
-        locator,
-      ).read(agentHookInstallationServiceProvider);
-      await service.installAll(reachable);
-
-      await service.installAll(endpoint);
-      await service.uninstallAll();
-
-      expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
+      expect(
+        spoolDir().existsSync(),
+        isFalse,
+        reason: 'uninstall has to leave nothing behind, undrained or not',
+      );
+      expect(
+        File(p.join(claudeHome.path, '$agentHookMarker.sh')).existsSync(),
+        isFalse,
+      );
     });
 
     test('ten launches leave exactly one entry per event', () async {
@@ -546,11 +500,7 @@ void main() {
       for (var launch = 0; launch < 10; launch++) {
         // A fresh ephemeral port each time, as a real relaunch gets.
         await service.installAll(
-          AgentHookEndpoint(
-            port: 40000 + launch,
-            token: 'tok$launch',
-            wslHost: '172.18.240.1',
-          ),
+          AgentHookEndpoint(port: 40000 + launch, token: 'tok$launch'),
         );
       }
 
@@ -573,9 +523,15 @@ void main() {
         expect(ours.single, isNot(contains('tok')));
       }
       expect(settings().readAsStringSync(), contains('mine.sh'));
-      // The tenth launch's address is where it belongs, and nowhere else.
-      expect(endpointFile().readAsStringSync(), contains(':40009/agent-hook'));
-      expect(endpointFile().readAsStringSync(), contains('token=tok9'));
+      // And ten ports later this store still names a directory rather than an
+      // address, because its transport does not depend on either.
+      expect(
+        endpointFile().readAsStringSync(),
+        contains('spool=$agentHookMarker.spool'),
+      );
+      for (var launch = 0; launch < 10; launch++) {
+        expect(endpointFile().readAsStringSync(), isNot(contains('tok$launch')));
+      }
     });
 
     test('the config is written once across ten launches', () async {
@@ -583,16 +539,12 @@ void main() {
       final service = containerWith(
         locator,
       ).read(agentHookInstallationServiceProvider);
-      await service.installAll(reachable);
+      await service.installAll(endpoint);
       final afterFirst = settings().readAsStringSync();
 
       for (var launch = 1; launch < 10; launch++) {
         await service.installAll(
-          AgentHookEndpoint(
-            port: 40000 + launch,
-            token: 'tok$launch',
-            wslHost: '172.18.240.1',
-          ),
+          AgentHookEndpoint(port: 40000 + launch, token: 'tok$launch'),
         );
       }
 
@@ -606,22 +558,33 @@ void main() {
     });
 
     test('retiring the endpoint leaves the entry where it is', () async {
-      // The exit path. What dies with the process is the address and the
-      // token, and only they are taken out — the entry is a constant with
-      // nothing stale in it, and a config we do not rewrite is a config we
-      // cannot lose the race for.
+      // The exit path. What dies with the process is the volatile half — how
+      // to report, and anything not yet reported — and only that is taken out.
+      // The entry is a constant with nothing stale in it, and a config we do
+      // not rewrite is a config we cannot lose the race for.
       final (locator, _) = wslStore();
       final service = containerWith(
         locator,
       ).read(agentHookInstallationServiceProvider);
-      await service.installAll(reachable);
+      await service.installAll(endpoint);
       final entry = settings().readAsStringSync();
       expect(endpointFile().existsSync(), isTrue);
+      File(
+        p.join(spoolDir().path, '99-0.json'),
+      ).writeAsStringSync('agent=claudeCode\nevent=Stop\n\n{}');
 
       final retired = await service.retireEndpoints();
 
       expect(retired.where((r) => r.installed), isNotEmpty);
       expect(endpointFile().existsSync(), isFalse);
+      expect(
+        spoolDir().existsSync(),
+        isFalse,
+        reason:
+            'the payloads in it belong to a launch, and there is no launch '
+            'any more; with the directory gone the script costs the agent one '
+            'test and exits zero',
+      );
       expect(settings().readAsStringSync(), entry);
       expect(
         File(p.join(claudeHome.path, '$agentHookMarker.sh')).existsSync(),
@@ -633,24 +596,19 @@ void main() {
 
   test('no token reaches a log line', () async {
     // The sweep logs an agent id, an environment id and a reason, and it has to
-    // keep doing exactly that. The **address** is deliberately in there — the
-    // skip reason has to name the door that did not answer, and a test above
-    // asserts it — but the token never may be, and the token is now the only
-    // thing this feature holds that a diagnostic could not honestly print.
+    // keep doing exactly that. The token never may be in one, and it is the
+    // only thing this feature holds that a diagnostic could not honestly print.
     //
-    // The unreachable branch is the one exercised on purpose: it is the path
-    // that builds a message out of the endpoint, so it is where a future
-    // `'$endpoint'` would land first.
+    // The failing branch is the one exercised on purpose: a config that cannot
+    // be parsed is the path that builds a message out of what went wrong, so
+    // it is where a future `'$endpoint'` would land first.
     final records = <LogRecord>[];
     AppLogger.initialize(level: Level.ALL, onRecord: records.add);
     addTearDown(AppLogger.initialize);
-    const secret = AgentHookEndpoint(
-      port: 4242,
-      token: 'S3CRET-hook-token',
-      wslHost: '172.18.240.1',
-    );
+    const secret = AgentHookEndpoint(port: 4242, token: 'S3CRET-hook-token');
     final wsl = wslEnv();
     ExecutionEnvironmentDao(db).upsert(wsl);
+    settings().writeAsStringSync('{ not json');
     final service = containerWith(
       _StubLocator([
         CliStore(
@@ -658,7 +616,6 @@ void main() {
           homesByAgentId: {'claudeCode': claudeHome.path},
         ),
       ]),
-      doorAnswers: false,
     ).read(agentHookInstallationServiceProvider);
 
     await service.installAll(secret);
@@ -668,8 +625,8 @@ void main() {
     expect(records, isNotEmpty, reason: 'otherwise this proves nothing');
     expect(
       records.map((r) => r.message),
-      contains(contains('172.18.240.1:4242')),
-      reason: 'the address is the part that has to be said out loud',
+      contains(contains('claudeCode')),
+      reason: 'what failed and where is the part that has to be said out loud',
     );
     for (final record in records) {
       expect(
@@ -703,7 +660,7 @@ void main() {
       ]),
     ).read(agentHookInstallationServiceProvider);
 
-    final results = await service.installAll(reachable);
+    final results = await service.installAll(endpoint);
 
     expect(brokenConfig.readAsStringSync(), '{ not json');
     expect(
