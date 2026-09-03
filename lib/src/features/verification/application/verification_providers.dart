@@ -25,6 +25,13 @@ final verificationDaoProvider = Provider<VerificationDao>(
 /// Resolved once and cached, because the store is created synchronously by the
 /// service provider and asking the platform on every call would make every
 /// write a future for no reason.
+///
+/// **Read it late, or not at all.** Until [resolveVerificationRoot] has been
+/// awaited this throws, and Riverpod caches the throw for the life of the
+/// process — so anything that touches it early is broken for the whole session,
+/// not just for that frame. `main()` resolves it during bootstrap for exactly
+/// that reason; the pane waits on [verificationRootReadyProvider] rather than
+/// assume so; and nothing that merely *reads* the record may reach it at all.
 final verificationRootProvider = Provider<Directory>((ref) {
   final root = _resolvedRoot;
   if (root == null) {
@@ -60,6 +67,28 @@ final verificationArtifactStoreProvider = Provider<VerificationArtifactStore>(
   (ref) => VerificationArtifactStore(ref.watch(verificationRootProvider)),
 );
 
+/// The "a run started, stepped or finished" signal.
+///
+/// **Depends on nothing.** It used to be [VerificationService]'s own
+/// controller, which made hearing about a change require an artifact root —
+/// and the root is resolved from disk, so on the warm-up frame it is not there
+/// yet. `_DeliveryStripState` watches [sessionVerdictProvider] on every session
+/// view; through the old revision stream that reached
+/// [verificationRootProvider], which threw, and Riverpod caches a provider that
+/// threw **for the life of the process**. The strip itself survived — a
+/// `StreamProvider` turns a failed build into `AsyncValue.error` — but
+/// [verificationServiceProvider] and the store under it were left errored, so
+/// the verification pane and every MCP verification tool threw
+/// `ProviderException` from then on, whatever resolved the root afterwards.
+///
+/// Owning the signal here breaks that: being told something changed is now free
+/// of the filesystem, which is what [sessionVerdictProvider] always claimed.
+final verificationChangesProvider = Provider<VerificationChangeSignal>((ref) {
+  final signal = VerificationChangeSignal();
+  ref.onDispose(signal.dispose);
+  return signal;
+});
+
 /// The one recorder. Long-lived: it installs sinks on the app's single browser
 /// and adb services, and disposing it mid-run would leave them installed.
 final verificationServiceProvider = Provider<VerificationService>((ref) {
@@ -68,6 +97,7 @@ final verificationServiceProvider = Provider<VerificationService>((ref) {
     ref.watch(verificationArtifactStoreProvider),
     browserOf: () => ref.read(browserServiceProvider),
     adbOf: () => ref.read(adbServiceProvider),
+    changes: ref.watch(verificationChangesProvider),
   );
   ref.onDispose(service.dispose);
   return service;
@@ -75,7 +105,7 @@ final verificationServiceProvider = Provider<VerificationService>((ref) {
 
 /// Bumped whenever a run starts, steps or finishes, so the pane rebuilds.
 final verificationRevisionProvider = StreamProvider<void>(
-  (ref) => ref.watch(verificationServiceProvider).changes,
+  (ref) => ref.watch(verificationChangesProvider).stream,
 );
 
 /// Runs newest first, for the pane's list.
@@ -103,10 +133,12 @@ final verificationRunProvider = Provider.family<VerificationRun?, String>((
 /// session pane with it.
 ///
 /// [verificationRevisionProvider] is watched for its *notifications* rather
-/// than its value, so a run that starts or finishes redraws the strip. It is
-/// read as an `AsyncValue`, which is what makes the paragraph above hold: a
-/// container with no artifact root gets an error state and no live updates
-/// instead of an exception.
+/// than its value, so a run that starts or finishes redraws the strip. That
+/// watch used to make the paragraph above false: the revision stream came off
+/// [verificationServiceProvider], so a strip drawn before the root was resolved
+/// did reach the filesystem, and the error it cached there took the pane and
+/// the MCP tools with it. The signal is [verificationChangesProvider]'s now,
+/// and it depends on nothing.
 final sessionVerdictProvider = Provider.family<SessionVerdict, String>((
   ref,
   sessionId,

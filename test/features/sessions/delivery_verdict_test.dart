@@ -118,7 +118,7 @@ void main() {
 
     // The one that matters: an empty record is a gap in the record, and a
     // strip that drew nothing here would read as "checked, and fine".
-    expect(find.text('No check recorded'), findsOneWidget);
+    expect(find.text('Not checked'), findsOneWidget);
   });
 
   testWidgets('a run still going is not a verdict', (tester) async {
@@ -127,7 +127,7 @@ void main() {
     await pump(tester);
 
     expect(find.text('Checking…'), findsOneWidget);
-    expect(find.text('No check recorded'), findsNothing);
+    expect(find.text('Not checked'), findsNothing);
   });
 
   testWidgets('a run nobody finished reads as unfinished once the session '

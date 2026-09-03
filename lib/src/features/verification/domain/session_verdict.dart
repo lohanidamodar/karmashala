@@ -13,7 +13,16 @@ enum SessionVerdictState {
   /// Nothing ever checked this session. A gap in the record, not a finding
   /// about the work — the same reading `VerificationResidue.none` refuses to
   /// turn into a notice.
-  notRecorded('No check recorded'),
+  ///
+  /// **"Not checked", not "No check recorded".** The owner read the old wording
+  /// as *"Karmashala failed to record the checks you ran"* and asked why it
+  /// never changed while `flutter analyze` and `flutter test` were being run all
+  /// day. They cannot change it: a gate run in a terminal reports to nothing,
+  /// and a run only exists when an agent wraps its work in `verification_start`
+  /// and `verification_finish`. So the label names the state of the *work*
+  /// rather than the state of a filing cabinet, and [explanation] says what
+  /// would fill it.
+  notRecorded('Not checked'),
 
   /// A run is open and the session is still live, so it is being recorded.
   inProgress('Checking…'),
@@ -47,7 +56,10 @@ enum SessionVerdictState {
   String get explanation => switch (this) {
     notRecorded =>
       'No verification run names this session. That is a gap in the record, '
-          'not a verdict about the work.',
+          'not a verdict about the work. Only an agent records one — '
+          'verification_start around the work, verification_finish with a '
+          'verdict; a build or a test suite run in a terminal reports to '
+          'nothing on its own.',
     inProgress => 'A run is open and this session is still live, so it is '
         'being recorded now.',
     unfinished => 'A run was started and nothing ever finished it. The '

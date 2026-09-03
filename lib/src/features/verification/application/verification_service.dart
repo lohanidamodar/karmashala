@@ -27,6 +27,29 @@ class VerificationException implements Exception {
   String toString() => message;
 }
 
+/// "A run started, stepped or finished" — nothing more.
+///
+/// **Owned apart from [VerificationService] on purpose.** The service holds a
+/// [VerificationArtifactStore], and therefore a resolved artifact root; a
+/// surface that only wants to be *told* something changed must not be made to
+/// depend on the filesystem to hear it. When the signal hung off the service,
+/// the delivery strip — which every session view draws, on the warm-up frame —
+/// reached the root through it and left the whole feature errored underneath
+/// itself. See `verificationChangesProvider`.
+class VerificationChangeSignal {
+  final _controller = StreamController<void>.broadcast();
+
+  /// Fires whenever a run starts, is stepped or finishes, so a pane can follow
+  /// along without polling.
+  Stream<void> get stream => _controller.stream;
+
+  void bump() {
+    if (!_controller.isClosed) _controller.add(null);
+  }
+
+  Future<void> dispose() => _controller.close();
+}
+
 /// Starts, records and finishes verification runs.
 ///
 /// **One run at a time, deliberately.** The evidence is collected by installing
@@ -39,9 +62,12 @@ class VerificationService {
     this._store, {
     required this.browserOf,
     required this.adbOf,
+    VerificationChangeSignal? changes,
     String Function()? newId,
     DateTime Function()? now,
-  }) : _newId = newId ?? _timestampId,
+  }) : _changes = changes ?? VerificationChangeSignal(),
+       _ownsChanges = changes == null,
+       _newId = newId ?? _timestampId,
        _now = now ?? _utcNow;
 
   final VerificationDao _dao;
@@ -70,11 +96,13 @@ class VerificationService {
   /// Fires whenever a run starts, is stepped or finishes, so a pane can follow
   /// along without polling.
   Stream<void> get changes => _changes.stream;
-  final _changes = StreamController<void>.broadcast();
+  final VerificationChangeSignal _changes;
 
-  void _changed() {
-    if (!_changes.isClosed) _changes.add(null);
-  }
+  /// Whether [dispose] should close the signal. False when one was handed in:
+  /// the signal outlives any single service, which is the point of it.
+  final bool _ownsChanges;
+
+  void _changed() => _changes.bump();
 
   // --- Lifecycle -------------------------------------------------------------
 
@@ -443,7 +471,7 @@ class VerificationService {
 
   Future<void> dispose() async {
     await abandon();
-    await _changes.close();
+    if (_ownsChanges) await _changes.dispose();
   }
 
   // --- Helpers ---------------------------------------------------------------

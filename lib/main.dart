@@ -26,6 +26,7 @@ import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
+import 'src/features/verification/application/verification_providers.dart';
 
 /// Application entry point.
 ///
@@ -71,6 +72,21 @@ Future<void> main() async {
   await attachDefaultLogFile(Diagnostics.instance);
   final database = await AppDatabase.open();
   bootstrapMetadata(database, logger: logger);
+
+  // The verification artifact root, before the first frame. `path_provider` has
+  // already been asked twice above, so this costs a `mkdir`.
+  //
+  // Awaited here because `verificationRootProvider` throws until it is, and a
+  // Riverpod provider that threw stays errored for the life of the process: one
+  // surface reading it a frame too early used to break the verification pane and
+  // every MCP verification tool until the app was restarted. Best-effort — a
+  // root that cannot be created is a feature that says so when it is opened,
+  // not a launch that fails.
+  try {
+    await resolveVerificationRoot();
+  } catch (error, stack) {
+    logger.warning('Verification artifact root unavailable.', error, stack);
+  }
 
   // Ensure the Windows environment exists immediately, then discover and persist
   // all execution environments (Windows host + installed WSL distributions),
