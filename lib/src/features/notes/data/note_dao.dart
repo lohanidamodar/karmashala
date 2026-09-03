@@ -11,13 +11,14 @@ class NoteDao {
   void insert(Note note) {
     _db.execute(
       'INSERT INTO notes '
-      '(id, title, body, source_session_id, source_repository_id, '
+      '(id, title, body, project_id, source_session_id, source_repository_id, '
       'source_message_ordinal, source_message_role, created_at, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         note.id,
         note.title,
         note.body,
+        note.projectId,
         note.sourceSessionId,
         note.sourceRepositoryId,
         note.sourceMessageOrdinal,
@@ -30,18 +31,30 @@ class NoteDao {
 
   /// Rewrites what the user changed. The origin columns are never touched: a
   /// note may be edited into something new, but where it was taken from is a
-  /// fact about the past and stays what it was.
+  /// fact about the past and stays what it was. Its *filing* is not — that is
+  /// the user's, so it is here.
   void update(
     String id, {
     required String body,
     required String? title,
+    required String? projectId,
     required DateTime updatedAt,
   }) {
     _db.execute(
-      'UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ?;',
-      [title, body, isoFromDate(updatedAt), id],
+      'UPDATE notes SET title = ?, body = ?, project_id = ?, updated_at = ? '
+      'WHERE id = ?;',
+      [title, body, projectId, isoFromDate(updatedAt), id],
     );
   }
+
+  /// Files [id] under [projectId], or unfiles it when that is null.
+  ///
+  /// Its own statement rather than a read-modify-[update], for `ProjectDao`'s
+  /// reason: re-filing a note must not be able to rewrite its text on the way.
+  void setProject(String id, String? projectId) => _db.execute(
+    'UPDATE notes SET project_id = ? WHERE id = ?;',
+    [projectId, id],
+  );
 
   void delete(String id) =>
       _db.execute('DELETE FROM notes WHERE id = ?;', [id]);
@@ -68,6 +81,7 @@ class NoteDao {
     id: row['id']! as String,
     title: row['title'] as String?,
     body: row['body']! as String,
+    projectId: row['project_id'] as String?,
     sourceSessionId: row['source_session_id'] as String?,
     sourceRepositoryId: row['source_repository_id'] as String?,
     sourceMessageOrdinal: row['source_message_ordinal'] as int?,

@@ -1,6 +1,8 @@
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/data/note_dao.dart';
 import 'package:karmashala/src/features/notes/domain/note.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -11,6 +13,10 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    // A project to file notes under: `notes.project_id` is a real foreign key,
+    // unlike the origin columns beside it.
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    ProjectDao(db).insert(project());
     dao = NoteDao(db);
   });
   tearDown(() => db.close());
@@ -61,7 +67,7 @@ void main() {
     expect(dao.list(sessionId: 's1').map((n) => n.id), ['new', 'old']);
   });
 
-  test('an edit rewrites the text and stamps it, and leaves the origin', () {
+  test('an edit rewrites the text, the filing and the stamp, not the origin', () {
     dao.insert(noteFixture());
     final later = testTime.add(const Duration(days: 2));
 
@@ -69,12 +75,23 @@ void main() {
       'n1',
       body: 'Compact mode, but only for the tab strip',
       title: 'Tab strip density',
+      projectId: 'p1',
       updatedAt: later,
     );
 
     final stored = dao.getById('n1')!;
     expect(stored.body, 'Compact mode, but only for the tab strip');
     expect(stored.title, 'Tab strip density');
+    // Filing is the user's, so an edit can change it — and can clear it.
+    expect(stored.projectId, 'p1');
+    dao.update(
+      'n1',
+      body: stored.body,
+      title: stored.title,
+      projectId: null,
+      updatedAt: later,
+    );
+    expect(dao.getById('n1')!.projectId, isNull);
     expect(stored.updatedAt, later);
     expect(stored.createdAt, testTime, reason: 'when it was kept is a fact');
     // Where it came from is a fact about the past and is not editable.

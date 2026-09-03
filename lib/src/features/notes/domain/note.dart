@@ -17,6 +17,7 @@ class Note {
     required this.createdAt,
     required this.updatedAt,
     this.title,
+    this.projectId,
     this.sourceSessionId,
     this.sourceRepositoryId,
     this.sourceMessageOrdinal,
@@ -31,6 +32,17 @@ class Note {
 
   /// The note itself: the prompt this will become when it is sent back.
   final String body;
+
+  /// The project this note is filed under, or null for a note that belongs to
+  /// no project — an ordinary note, not one waiting to be sorted.
+  ///
+  /// Distinct from [sourceRepositoryId], which says where the note *came
+  /// from*: filing is the user's and can be changed, origin is a fact about
+  /// the past and cannot. A note captured from a session starts filed under
+  /// that session's project because the database already knows which one that
+  /// is, and the v32 backfill applied the same rule to every note taken before
+  /// this column existed.
+  final String? projectId;
 
   /// The session the note was taken from, or null when it was written from
   /// nowhere in particular. Not a foreign key in the schema and not a promise
@@ -54,6 +66,9 @@ class Note {
   /// Whether this note remembers a conversation it came from.
   bool get hasSource => sourceSessionId != null;
 
+  /// Whether this note is filed under a project at all.
+  bool get isFiled => projectId != null;
+
   /// What to call it in a list: the user's title, else the first non-empty line
   /// of the body, trimmed to something a narrow panel can show.
   String get displayTitle {
@@ -72,11 +87,14 @@ class Note {
     String? title,
     bool clearTitle = false,
     String? body,
+    String? projectId,
+    bool clearProjectId = false,
     DateTime? updatedAt,
   }) => Note(
     id: id,
     title: clearTitle ? null : (title ?? this.title),
     body: body ?? this.body,
+    projectId: clearProjectId ? null : (projectId ?? this.projectId),
     sourceSessionId: sourceSessionId,
     sourceRepositoryId: sourceRepositoryId,
     sourceMessageOrdinal: sourceMessageOrdinal,
@@ -91,6 +109,7 @@ class Note {
       other.id == id &&
       other.title == title &&
       other.body == body &&
+      other.projectId == projectId &&
       other.sourceSessionId == sourceSessionId &&
       other.sourceRepositoryId == sourceRepositoryId &&
       other.sourceMessageOrdinal == sourceMessageOrdinal &&
@@ -103,6 +122,7 @@ class Note {
     id,
     title,
     body,
+    projectId,
     sourceSessionId,
     sourceRepositoryId,
     sourceMessageOrdinal,

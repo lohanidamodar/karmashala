@@ -60,6 +60,7 @@ import 'session_mcp.dart';
 import 'session_tools.dart';
 import 'terminal_tools.dart';
 import 'tmux_orchestration.dart';
+import 'todo_tools.dart';
 import 'workspace_tools.dart';
 import 'worktree_tools.dart';
 import 'wsl_host_address.dart';
@@ -1130,6 +1131,14 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // The list a person and an agent both write to. Separate from the notes
+      // above because a todo is ticked off rather than sent back, and because
+      // an unfiled one has to stay as easy to write as a filed one.
+      case final String name when TodoControlTools.handles(name):
+        return TodoControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // What was decided, as opposed to what was said. The one write path into
       // the decision record that is not attached to some other act.
       case final String name when DecisionControlTools.handles(name):
@@ -1526,6 +1535,7 @@ class LauncherControlServer implements SessionMcp {
     ...worktreeControlToolSchemas,
     ...deviceControlToolSchemas,
     ...attentionControlToolSchemas,
+    ...todoControlToolSchemas,
     ...decisionControlToolSchemas,
     ...reviewThreadToolSchemas,
     ...browserToolSchemas,

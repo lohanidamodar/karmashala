@@ -139,6 +139,17 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // see which argument was passed.
       'terminal_close': McpToolAnnotations(destructive: true),
 
+      // Todos: the one list a person and an agent both write to.
+      'todos_list': McpToolAnnotations.read,
+      'todo_add': McpToolAnnotations(),
+      // Sets one field and only that field. Idempotent — finishing a finished
+      // todo leaves the same todo. **Not** destructive: the row is still there
+      // afterwards, and `done: false` puts it back, which is exactly the undo
+      // `destructiveHint` says does not exist. Same call as
+      // `review_thread_status`.
+      'todo_done': McpToolAnnotations(idempotent: true),
+      'todo_delete': McpToolAnnotations(destructive: true),
+
       // Notes and the inbox.
       'notes_list': McpToolAnnotations.read,
       'inbox_list': McpToolAnnotations.read,
