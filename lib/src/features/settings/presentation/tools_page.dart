@@ -11,9 +11,14 @@ import '../../agents/application/agent_hook_installation_service.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import '../../browser/domain/browser_consent.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../environments/application/system_health.dart';
+import '../../environments/application/system_health_service.dart';
+import '../../environments/presentation/environment_health_dialog.dart'
+    show healthColor, healthIcon;
 import '../../mcp/control_server_status.dart';
 import '../../mcp/launcher_control_server.dart';
-import '../../mcp/launcher_mcp.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../projects/application/projects_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../application/settings_controller.dart';
@@ -282,8 +287,8 @@ class McpBridgeSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final bridge = const LauncherMcp().bridgeExecutable();
-    final available = bridge != null;
+    final report = ref.watch(systemHealthProvider);
+    final bridge = report.checkFor(SystemCheckId.mcpBridge);
     final control = ref.watch(controlServerStatusProvider);
     final hooks = ref.watch(agentHookInstallationReportProvider);
     return SettingsSection(
@@ -309,57 +314,15 @@ class McpBridgeSection extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: Insets.sm),
-          Row(
-            children: [
-              Icon(
-                available ? AppIcons.checkCircle : AppIcons.warningCircle,
-                size: Chrome.icon,
-                color: available
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.error,
-              ),
-              const SizedBox(width: Insets.xs),
-              Expanded(
-                child: Text(
-                  available
-                      ? 'Tools available — the MCP bridge is installed.'
-                      : 'Tools unavailable — the MCP bridge (karmashala_mcp) '
-                            'was not found next to the app.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
-          // What the bridge's absence costs a session *inside WSL*, which is
-          // not obvious from the line above and is the case where it actually
-          // decides something. A distribution has no address of this app it can
-          // dial — `127.0.0.1` there is its own, and the WSL switch address is
-          // reset for data on some machines — so a WSL session is normally
-          // pointed at the bridge over interop. Without one it falls back to
-          // that switch URL, which is the behaviour that shipped and which
-          // silently gives a WSL agent no tools wherever the switch is shut.
-          if (!available) ...[
-            const SizedBox(height: Insets.xs),
-            Row(
-              children: [
-                Icon(
-                  AppIcons.warningCircle,
-                  size: Chrome.icon,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(width: Insets.xs),
-                Expanded(
-                  child: Text(
-                    'Sessions inside WSL fall back to the WSL switch address '
-                    'for tools. Where that address is blocked — a Hyper-V '
-                    'firewall or endpoint security resets it on some machines '
-                    '— those sessions get no Karmashala tools at all.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-          ],
+          // **This used to read "Tools available — the MCP bridge is
+          // installed" whenever the file existed.** On 2026-09-03 it said so
+          // for over an hour while every agent session on this machine had no
+          // Karmashala tools at all: WSL's interop handler had gone, and the
+          // perfectly good file could not be spawned by the process that
+          // needed it. So the claim is now a measurement or it is nothing —
+          // the bridge is started and made to complete an MCP handshake, and
+          // until that has happened this says it has not.
+          _BridgeVerdict(check: bridge, report: report),
           // The other half of "can an agent drive this app": the bridge being
           // installed says nothing about whether the app is willing to answer
           // it. When hardening fails the server withholds privileged RPC
@@ -432,6 +395,104 @@ class McpBridgeSection extends ConsumerWidget {
   }
 }
 
+
+/// The MCP bridge's verdict on the settings page, from the same reading the
+/// System health panel shows.
+///
+/// One source deliberately: two surfaces each running their own probe could
+/// report different things about one file, which is a smaller copy of the bug
+/// that made this feature necessary.
+class _BridgeVerdict extends ConsumerWidget {
+  const _BridgeVerdict({required this.check, required this.report});
+
+  final SystemCheck? check;
+  final SystemHealthReport report;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
+    final current = check;
+    final checkedAt = report.checkedAt;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: report.running
+                  ? const SizedBox(
+                      width: Chrome.icon,
+                      height: Chrome.icon,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      current == null
+                          ? AppIcons.question
+                          : healthIcon(current.level),
+                      size: Chrome.icon,
+                      color: current == null
+                          ? semantic.neutral
+                          : healthColor(context, current.level),
+                    ),
+            ),
+            const SizedBox(width: Insets.xs),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    current?.summary ??
+                        'Not checked. Whether the bridge works is a question '
+                            'about a process, not a file, so answering it '
+                            'means starting one — which happens when you '
+                            'ask.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (current != null && checkedAt != null)
+                    Text(
+                      'Checked ${describeAge(
+                        ref.read(clockProvider).nowUtc().difference(checkedAt),
+                      )}.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: semantic.neutral,
+                      ),
+                    ),
+                  if (current?.detail case final detail?
+                      when detail.trim().isNotEmpty)
+                    Text(detail, style: MonoStyles.small),
+                  if (current?.remedy case final remedy?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Insets.xs),
+                      child: Text(
+                        remedy,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Insets.xs),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: report.running
+                ? null
+                : () => ref.read(systemHealthProvider.notifier).refresh(),
+            icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
+            label: Text(current == null ? 'Check the bridge' : 'Check again'),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// An example path in the shape this host actually uses.
 ///
