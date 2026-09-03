@@ -213,6 +213,56 @@ whether to confirm cannot see which argument you passed.
 ''',
   ),
   McpGuide(
+    topic: 'snippets',
+    summary:
+        'Why snippet_insert types a command and stops, and when that is what '
+        'you want instead of terminal_run.',
+    prefixes: <String>['snippet'],
+    body: '''
+**`snippet_insert` puts a command in front of the user. It does not run it.**
+
+That is the whole difference from `terminal_run`, and it is a difference in
+*who decides*, not in capability. `terminal_run` composes a command now, runs
+it, waits, and reports. A snippet was written weeks ago by the person you are
+working with, it is picked from a fuzzy-matched list where the row above is one
+arrow key away, and a saved-command library is exactly where the irreversible
+one-liners collect. So the command lands at the prompt as text, the caret sits
+after it, and the human presses Enter.
+
+Use `snippet_insert` when the point is that the user reviews the line — "here
+is the command, it is ready". Use `terminal_run` when the point is that
+something runs and you read the result. Reaching for `snippet_insert` and then
+polling for output is a mistake: nothing ran.
+
+**You cannot make a snippet run.** There is no `submit` argument on
+`snippet_insert`. The one exception is a snippet the *user* saved with
+`submit: true`, which types and presses Enter; the result says `submitted:
+true` when that happened. It is annotated destructive for that case alone — the
+annotation describes the worst the tool can do, and a client deciding whether
+to confirm cannot see which snippet you named. `snippet_add` defaults
+`submit` to false and should be left there unless the user asked for a command
+that runs itself.
+
+Two refusals worth knowing before you hit them:
+
+* A snippet tagged for a different shell than the pane is running is refused
+  rather than typed. A WSL one-liner in a PowerShell pane is not a smaller
+  version of the same thing — the same reason `terminal_open` refuses an
+  unknown profile instead of substituting one.
+* A pane running an agent CLI is typed into but **never** submitted, whatever
+  the snippet says. A carriage return there takes a turn in somebody's live
+  session as if the user had pressed it.
+
+`snippets_list` is also worth reading before you invent a command line:
+it is how this person actually runs their tests, builds and tools. It lists
+everything and marks each row `fitsPane`, rather than hiding the ones that do
+not fit — a filtered-away snippet looks like one that was never saved.
+
+There is no `snippet_delete`. Removing commands somebody curated buys nothing
+an agent needs, and no undo covers it.
+''',
+  ),
+  McpGuide(
     topic: 'checkpoints',
     summary:
         'The one tool that can overwrite uncommitted work, and why it is '

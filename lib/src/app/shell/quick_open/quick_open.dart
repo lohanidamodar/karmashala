@@ -527,7 +527,8 @@ class _Footer extends StatelessWidget {
             // ellipsise rather than push the result count off the row.
             const Flexible(
               child: Text(
-                '>  commands   ·   #  sessions   ·   /  files',
+                r'>  commands   ·   #  sessions   ·   /  files   ·   '
+                r'$  snippets',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

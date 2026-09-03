@@ -1191,6 +1191,12 @@ String? _whereabouts(
   return parts.isEmpty ? null : parts.join(' · ');
 }
 
+/// The narrowest rail that can still draw both paging chevrons beside a tab.
+///
+/// One tab at its floor ([kMinTabWidth]) plus the two 30px icon buttons. Below
+/// this the chevrons are dropped — see [_TabRailState.build].
+const double _chevronsFitFrom = kMinTabWidth + 60;
+
 /// The scrolling part of the strip, and the affordances for what will not fit.
 class _TabRail extends StatefulWidget {
   const _TabRail({
@@ -1315,11 +1321,25 @@ class _TabRailState extends State<_TabRail> {
       itemBuilder: (context, index) => widget.tabs[index].chip(),
     );
     if (!metrics.overflowing) return list;
+    // The chevrons are the first thing to go when the rail itself runs out of
+    // room, and this is not a preference — it is the only arrangement that
+    // fits. Their own doc says they earn their place "while the overflow is
+    // mild"; below [_chevronsFitFrom] the overflow is not mild, it is the rail
+    // being squeezed to less than one tab by whatever shares the strip with it,
+    // and a row of `chevron + Expanded + chevron + picker` needs ~100px of
+    // chrome to draw. Built anyway it overflowed by 8.8px in a 640-wide window
+    // — a striped bar across the tab strip, from adding one control at the
+    // other end of the row.
+    //
+    // The picker stays at every width: it is "the only affordance here that
+    // still works at a hundred", and the chevrons only page a list it can
+    // filter.
+    final chevrons = widget.width >= _chevronsFitFrom;
     return Row(
       children: [
-        _chevron(forward: false),
+        if (chevrons) _chevron(forward: false),
         Expanded(child: list),
-        _chevron(forward: true),
+        if (chevrons) _chevron(forward: true),
         _OverflowButton(count: widget.tabs.length),
       ],
     );

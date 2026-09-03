@@ -139,6 +139,17 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // see which argument was passed.
       'terminal_close': McpToolAnnotations(destructive: true),
 
+      // Saved command snippets.
+      'snippets_list': McpToolAnnotations.read,
+      // Appends a row to the user's own library. Not idempotent: twice is two
+      // snippets.
+      'snippet_add': McpToolAnnotations(),
+      // Types a saved command into a live shell. Read-only it is not, and the
+      // annotation describes the worst it does — the same rule `terminal_close`
+      // states: a snippet the user saved with submit=true runs on insertion,
+      // and a client deciding whether to confirm cannot see which one this is.
+      'snippet_insert': McpToolAnnotations(destructive: true),
+
       // Notes and the inbox.
       'notes_list': McpToolAnnotations.read,
       'inbox_list': McpToolAnnotations.read,

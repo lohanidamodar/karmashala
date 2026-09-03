@@ -61,6 +61,9 @@ typedef MigrationStep = void Function(Database db);
 ///   four unrelated contexts can be narrowed to the one being worked in.
 /// * **v32** — what a context is *for*, in the user's own words: the one thing
 ///   a bare name in a picker cannot carry.
+/// * **v33** — saved command snippets: the commands the user keeps, each
+///   optionally tagged with the shell it is written for, so a WSL one-liner is
+///   never offered in a PowerShell pane.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -94,6 +97,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   30: _migrateToV30,
   31: _migrateToV31,
   32: _migrateToV32,
+  33: _migrateToV33,
 };
 
 /// Was this pane running when its row was written?
@@ -1360,4 +1364,40 @@ void _migrateToV31(Database db) {
 /// empty, which is exactly what it knows.
 void _migrateToV32(Database db) {
   db.execute('ALTER TABLE workspaces ADD COLUMN description TEXT;');
+}
+
+/// Saved command snippets: the commands the user keeps instead of retyping.
+///
+/// **One table, no foreign keys, nothing seeded.** A snippet belongs to the
+/// person, not to a project, a repository or a session — the whole point is
+/// that the same `flutter test --exclude-tags=live-ssh` is reachable from every
+/// pane in the app — so there is nothing here to reference and nothing to
+/// cascade. And nothing is seeded: a starter library is a guess about somebody
+/// else's commands, and a palette that opens full of commands the user never
+/// wrote is a palette they learn to ignore.
+///
+/// **`shell` is nullable, and nullable is the common case.** It names the shell
+/// the snippet is written for (`powerShell`, `commandPrompt`, `wsl`, `posix`),
+/// and NULL means "fits any pane". Stored as the enum's own name rather than an
+/// integer so a row is readable in `sqlite3` and so an unrecognised tag stays
+/// legible instead of becoming an out-of-range ordinal; `CommandSnippet`
+/// compares it as a string, which is what makes an unknown tag match *no* pane
+/// rather than every pane.
+///
+/// **`submit` is `NOT NULL DEFAULT 0`.** The default is the safe act — type the
+/// command at the prompt and stop — and a column that defaults to running
+/// somebody's saved `rm -rf` is the one mistake this schema could make that no
+/// later code could undo.
+void _migrateToV33(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS command_snippets (
+      id         TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      command    TEXT NOT NULL,
+      shell      TEXT,
+      submit     INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  ''');
 }

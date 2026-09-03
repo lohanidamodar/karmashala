@@ -58,6 +58,7 @@ import 'mcp_session_token_reaper.dart';
 import 'mcp_tool_catalogue.dart';
 import 'session_mcp.dart';
 import 'session_tools.dart';
+import 'snippet_tools.dart';
 import 'terminal_tools.dart';
 import 'tmux_orchestration.dart';
 import 'workspace_tools.dart';
@@ -1164,6 +1165,11 @@ class LauncherControlServer implements SessionMcp {
       // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
         return TerminalControlTools(_container).call(name, args);
+      // The commands the user keeps. Beside the terminal tools because that is
+      // where they land — and separate from them because typing a line for
+      // somebody to read is a different act from running one.
+      case final String name when SnippetControlTools.handles(name):
+        return SnippetControlTools(_container).call(name, args);
       // The guides. Reads a table compiled into this binary, so it needs
       // neither the container nor the caller's identity — and answers even
       // when everything it describes is unavailable, which is exactly when an
@@ -1522,6 +1528,7 @@ class LauncherControlServer implements SessionMcp {
     ...instructionsToolSchemas,
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
+    ...snippetControlToolSchemas,
     ...workspaceControlToolSchemas,
     ...worktreeControlToolSchemas,
     ...deviceControlToolSchemas,
