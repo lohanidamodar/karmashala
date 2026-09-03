@@ -254,4 +254,130 @@ void main() {
       );
     }
   });
+
+  testWidgets('a pane a program resized is put back into its own box', (
+    tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    resizeWindow(tester, windows.first);
+    final container = panelContainer();
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await pumpPanel(tester, container);
+
+    final terminal = container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(
+          container
+              .read(terminalSessionsControllerProvider)
+              .activeTab!
+              .layout
+              .panes
+              .single,
+        )!
+        .terminal;
+    final view = find.byType(TerminalView);
+    final box = drawnGrid(tester, view);
+    expect(toldGrid(terminal), box);
+
+    // `CSI 8 ; rows ; cols t` — XTWINOPS, "set the window size in characters".
+    // A program in the pane can send it, and this is the one path that changes
+    // the terminal's grid without the render object being the one that did it.
+    // The box still decides, so the pane has to be put back.
+    terminal.write('\x1b[8;10;40t');
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      toldGrid(terminal),
+      box,
+      reason:
+          'a program moved the grid out from under the widget and nothing put '
+          'it back: the pane is drawn in one grid and believes another, and '
+          'stays that way until the box changes by a whole cell',
+    );
+  });
+
+  testWidgets('the invariant holds through interleaved resizes and switches', (
+    tester,
+  ) async {
+    // The owner's last word was "only happening randomly when i resize the
+    // window", which is the shape of a race rather than of a size. So: drive
+    // the things that can interleave with a resize — a tab switch, a pane
+    // coming forward out of a region, a program setting the grid itself, and
+    // sub-cell window steps that change the box without changing the grid —
+    // and check the invariant after every one of them rather than at the end.
+    addTearDown(tester.view.reset);
+    resizeWindow(tester, const Size(1200, 800));
+    final container = panelContainer();
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final first = controller.openTab(TerminalProfile.powerShell);
+    await pumpPanel(tester, container);
+    controller.splitPaneWith(SplitAxis.vertical, TerminalProfile.commandPrompt);
+    await tester.pump();
+    final second = controller.openTab(TerminalProfile.commandPrompt);
+    await tester.pump();
+
+    void checkEveryVisiblePane(String step) {
+      final views = find.byType(TerminalView);
+      final panes = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .visiblePanes
+          .toList();
+      expect(
+        tester.widgetList(views),
+        hasLength(panes.length),
+        reason: 'after $step',
+      );
+      for (var i = 0; i < panes.length; i++) {
+        expect(
+          toldGrid(controller.instanceFor(panes[i])!.terminal),
+          drawnGrid(tester, views.at(i)),
+          reason: 'after $step, pane $i believes a grid it is not drawn in',
+        );
+      }
+    }
+
+    Future<void> step(String label, void Function() act) async {
+      act();
+      await tester.pump();
+      await tester.pump();
+      checkEveryVisiblePane(label);
+    }
+
+    await step('a resize', () => resizeWindow(tester, const Size(1000, 640)));
+    await step('a tab switch', () => controller.activateTab(first));
+    // Sub-cell: the box moves, the grid mostly does not, and the render object
+    // takes its "nothing changed" path — which is where a stale grid hides.
+    for (var i = 1; i <= 6; i++) {
+      await step(
+        'a $i px nudge',
+        () => resizeWindow(tester, Size(1000 + i.toDouble(), 640 + i.toDouble())),
+      );
+    }
+    await step(
+      'a program setting the grid',
+      () => controller
+          .instanceFor(
+            container
+                .read(terminalSessionsControllerProvider)
+                .activeTab!
+                .layout
+                .visiblePanes
+                .first,
+          )!
+          .terminal
+          .write('\x1b[8;12;44t'),
+    );
+    await step('a resize straight after it', () {
+      resizeWindow(tester, const Size(1440, 560));
+    });
+    await step('switching back', () => controller.activateTab(second));
+    await step('and back again', () => controller.activateTab(first));
+  });
 }
