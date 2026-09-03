@@ -18,6 +18,7 @@ enum QuickOpenGroup {
   branches('Branches'),
   github('GitHub'),
   agents('Agents'),
+  snippets('Command snippets'),
   commands('Commands');
 
   const QuickOpenGroup(this.label);
@@ -25,10 +26,15 @@ enum QuickOpenGroup {
   final String label;
 
   /// The sigil that restricts quick open to this group, if it has one.
+  ///
+  /// `$` for snippets because that is what a prompt looks like, and because it
+  /// is the one character on the list that a shell user already reads as "a
+  /// command follows".
   String? get sigil => switch (this) {
     QuickOpenGroup.commands => '>',
     QuickOpenGroup.sessions => '#',
     QuickOpenGroup.files => '/',
+    QuickOpenGroup.snippets => r'$',
     _ => null,
   };
 }

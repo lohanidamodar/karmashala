@@ -24,6 +24,7 @@ import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
+import '../../../app/shell/quick_open/quick_open.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/shell/tab_picker.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
@@ -647,8 +648,18 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
 class TerminalToolbar extends ConsumerWidget {
   const TerminalToolbar({super.key});
 
+  /// Builds of this widget, for `snippet_button_cost_test.dart`.
+  ///
+  /// The same seam `ShellStatusBar.debugItemBuildCount` and
+  /// `ModelChip.debugBuildCount` use, and here for the same reason: this row
+  /// sits above a terminal somebody types into all day, and the only way to
+  /// keep proving it does not wake for a character is to count it.
+  @visibleForTesting
+  static int debugBuildCount = 0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    debugBuildCount++;
     final actions = TerminalActions(ref);
     final backgroundCount = ref.watch(
       terminalSessionsControllerProvider.select((s) => s.detached.length),
@@ -682,6 +693,21 @@ class TerminalToolbar extends ConsumerWidget {
             icon: const Icon(AppIcons.clockCounterClockwise, size: Chrome.icon),
             onPressed: () => actions.showCommands(context),
           ),
+        // The saved commands, for whichever pane is in front. Deliberately
+        // **unconditional**: it never asks how many snippets there are, so the
+        // strip takes out no subscription that a write to the library — or
+        // anything else happening while somebody types — could wake. The empty
+        // case is answered inside the picker, which always offers "New command
+        // snippet…". See `snippet_button_cost_test.dart`.
+        IconButton(
+          tooltip:
+              'Command snippets'
+              '${_chord(_snippetChord())}',
+          icon: const Icon(AppIcons.bookBookmark, size: Chrome.icon),
+          onPressed: hasTabs
+              ? () => QuickOpen.show(context, initialQuery: r'$')
+              : null,
+        ),
         IconButton(
           tooltip:
               'Find in scrollback'
@@ -780,6 +806,12 @@ String _chord(String? label) => label == null ? '' : ' ($label)';
 /// the axis is what tells `Ctrl+Shift+D` from `Ctrl+Shift+E`.
 String? _splitChord(SplitAxis axis) =>
     shellChordLabel<SplitTerminalPaneIntent>(where: (i) => i.axis == axis);
+
+/// The chord that opens quick open already filtered to snippets. Four chords
+/// share [OpenQuickOpenIntent], so the seeded query is what tells them apart —
+/// the same narrowing the two split chords need.
+String? _snippetChord() =>
+    shellChordLabel<OpenQuickOpenIntent>(where: (i) => i.query == r'$');
 
 /// A bulk close, named the way VS Code names it.
 ///

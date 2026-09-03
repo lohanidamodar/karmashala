@@ -226,6 +226,7 @@ class ShellChord {
 /// | `Ctrl+\` | focus mode — the workbench takes the window | app |
 /// | `Ctrl+K` / `Ctrl+P` | quick open | app |
 /// | `Ctrl+Shift+P` | quick open, already filtered to commands | app |
+/// | `Ctrl+Shift+S` | quick open, already filtered to command snippets | app |
 /// | `Ctrl+Shift+A` | the attention inbox — open it, or close it again | app |
 /// | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | terminal font size up / down / reset | app |
 /// | `Ctrl+Shift+D` / `Ctrl+Shift+E` | split the pane right / down | app |
@@ -419,6 +420,18 @@ List<ShellChord> _buildChords() => [
     intent: OpenQuickOpenIntent(query: '>'),
     label: _commandLabel('P', shift: true),
     does: 'Quick open, filtered to commands',
+    skipsShell: true,
+  ),
+  // And straight into the saved commands. The same shape as the line above and
+  // for the same reason: the snippets are a group of quick open's, not a
+  // second palette, so the chord seeds the sigil rather than opening anything
+  // new. `Shift` keeps it out of the contested set — a terminal cannot encode
+  // `Ctrl+Shift+<letter>`, so this costs the shell nothing.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyS, shift: true),
+    intent: OpenQuickOpenIntent(query: r'$'),
+    label: _commandLabel('S', shift: true),
+    does: 'Quick open, filtered to command snippets',
     skipsShell: true,
   ),
   ShellChord(
@@ -833,7 +846,8 @@ bool handleAppChordFromTerminal(
 /// `Ctrl+Shift+A` was chosen against the whole existing map: the terminal owns
 /// `Ctrl+Shift+D/E/W/F/T` and `Ctrl+Shift+↑/↓`, the shell owns `Ctrl+1/2/3`,
 /// `Ctrl+B`, `` Ctrl+` ``, `Ctrl+\`, `Ctrl+N`, `Ctrl+Shift+N` and quick open's
-/// three. `A` for attention was free in every one of them.
+/// four (`Ctrl+K`, `Ctrl+P`, `Ctrl+Shift+P`, `Ctrl+Shift+S`). `A` for attention
+/// was free in every one of them.
 ///
 /// `` Ctrl+` `` was "show/hide the terminal dock" until Loop 47. There is no
 /// dock to hide now, so it does the thing the user actually wanted from it: put

@@ -23,6 +23,10 @@ import '../../../features/sessions/presentation/new_session_dialog.dart';
 import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/settings/presentation/settings_screen.dart';
+import '../../../features/snippets/application/snippet_insertion.dart';
+import '../../../features/snippets/application/snippet_providers.dart';
+import '../../../features/snippets/domain/command_snippet.dart';
+import '../../../features/snippets/presentation/snippet_dialogs.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../../features/terminal/presentation/pane_group_strip.dart';
@@ -47,6 +51,16 @@ const _githubWeight = 10.0;
 const _branchWeight = 8.0;
 const _agentWeight = 4.0;
 const _commandWeight = 2.0;
+
+/// A snippet is the user's own text, so it outranks an app verb by a hair on an
+/// empty query — but only by a hair, for the reason above: a large prior would
+/// let a weakly-matched snippet beat an exactly-matched command.
+const _snippetWeight = 3.0;
+
+/// Below every snippet, so `$` lists the library first and the two ways to
+/// *manage* it last. They live in the snippets group rather than under Commands
+/// precisely so that `$` on an empty library still offers somewhere to go.
+const _snippetAdminWeight = 0.5;
 
 /// Below a session, above a project: a shell tab is a place you are already
 /// working, but it is not a piece of work in its own right.
@@ -90,6 +104,7 @@ class QuickOpenSources {
     ..._files(files, changedPaths),
     ..._repoFacts(),
     ..._agents(),
+    ..._snippets(),
   ];
 
   // --- commands -----------------------------------------------------------
@@ -605,5 +620,114 @@ class QuickOpenSources {
           ),
         ),
     ];
+  }
+
+  // --- command snippets ----------------------------------------------------
+
+  /// The saved commands that fit the terminal the user is in, plus the two ways
+  /// to manage the library.
+  ///
+  /// **The pane is resolved here, once, while the palette is being built** —
+  /// see [resolveSnippetTarget]. That is the whole of "the active terminal":
+  /// the palette is a dialog, so by the time a row is activated the keyboard is
+  /// in a search field, but `activeTab.focusedPaneId` is controller state that a
+  /// dialog never touches. Capturing it at build rather than re-reading it at
+  /// select means a pane that dies under the open palette cannot silently
+  /// redirect the command into whichever pane the controller refocused; the
+  /// captured id is checked again by `insertSnippet` and reported if it has
+  /// gone.
+  ///
+  /// **Filtered to the pane's own shell**, not to the host platform: a WSL
+  /// one-liner is absent from a PowerShell pane on the very same machine, and
+  /// an untagged snippet is everywhere. There is no SSH case because there is
+  /// no SSH pane — `terminalProfilesFor` only ever produces PowerShell, Command
+  /// Prompt, a WSL distribution or a POSIX shell, and `EnvironmentKind.ssh`
+  /// belongs to sessions and commands rather than to a PTY. Someone who types
+  /// `ssh` *inside* a pane has changed what the far end is in a way nothing here
+  /// can observe, which is precisely when an untagged snippet is the honest
+  /// answer.
+  List<QuickOpenItem> _snippets() {
+    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+    final state = ref.read(terminalSessionsControllerProvider);
+    final target = resolveSnippetTarget(terminals, state);
+    final all = ref.read(commandSnippetsProvider);
+    final fitting = target == null ? all : target.filter(all);
+    return [
+      for (final snippet in fitting)
+        QuickOpenItem(
+          id: 'snippet/${snippet.id}',
+          group: QuickOpenGroup.snippets,
+          title: snippet.label,
+          subtitle: snippet.command,
+          // The one thing worth a badge: a snippet that will press Enter has
+          // to say so *before* it is picked, not afterwards.
+          detail: snippet.submit ? 'runs' : null,
+          icon: AppIcons.bookBookmark,
+          keywords: [
+            snippet.command,
+            'snippet',
+            ?snippet.shellId,
+            if (snippet.submit) 'run',
+          ],
+          weight: _snippetWeight,
+          onSelect: () => dismiss(() => _insert(snippet, target)),
+        ),
+      QuickOpenItem(
+        id: 'snippet/new',
+        group: QuickOpenGroup.snippets,
+        title: 'New command snippet…',
+        subtitle: 'Keep a command so you can pick it instead of retyping it',
+        icon: AppIcons.plus,
+        keywords: const ['snippet', 'command', 'save', 'add'],
+        weight: _snippetAdminWeight,
+        onSelect: () => dismiss(() => _newSnippet(target)),
+      ),
+      QuickOpenItem(
+        id: 'snippet/manage',
+        group: QuickOpenGroup.snippets,
+        title: 'Manage command snippets…',
+        subtitle: 'Edit or remove what you have saved',
+        icon: AppIcons.bookBookmark,
+        keywords: const ['snippet', 'library', 'edit', 'delete'],
+        weight: _snippetAdminWeight,
+        onSelect: () => dismiss(
+          () => SnippetLibraryDialog.show(
+            context,
+            suggestedShellId: target?.shellId,
+          ),
+        ),
+      ),
+    ];
+  }
+
+  void _insert(CommandSnippet snippet, SnippetTarget? target) {
+    final message = target == null
+        ? 'Open a terminal to type a snippet into.'
+        : insertSnippet(
+            terminals: ref.read(terminalSessionsControllerProvider.notifier),
+            state: ref.read(terminalSessionsControllerProvider),
+            snippet: snippet,
+            paneId: target.paneId,
+          ).message;
+    if (message == null || !context.mounted) return;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _newSnippet(SnippetTarget? target) async {
+    final draft = await SnippetEditorDialog.show(
+      context,
+      suggestedShellId: target?.shellId,
+    );
+    if (draft == null) return;
+    ref
+        .read(commandSnippetsProvider.notifier)
+        .add(
+          label: draft.label,
+          command: draft.command,
+          shellId: draft.shellId,
+          submit: draft.submit,
+        );
   }
 }
