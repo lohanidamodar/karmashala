@@ -102,9 +102,45 @@ class WdaBackend implements SimulatorBackend {
       ),
     );
 
-    await _awaitReady();
+    try {
+      await _awaitReady();
+    } on CommandException catch (error) {
+      // The runner is a *built binary* pinned to one version, so a simulator
+      // whose runtime predates it is a real and ordinary way for this to fail —
+      // and the timeout alone says only that nothing answered, which reads like
+      // a hung machine. Naming the runtime is what turns a runtime swap from a
+      // guess into the obvious next step. Looked up only here, on a path that
+      // has already spent a minute failing.
+      throw CommandException('${error.message}${await _runtimeAdvice(udid)}');
+    }
     _attached = udid;
     _logger.info('WebDriverAgent ready for $udid');
+  }
+
+  /// A sentence naming the simulator's runtime and the runner's version, or
+  /// empty when the runtime cannot be determined — a guess here would send
+  /// somebody after the wrong problem.
+  Future<String> _runtimeAdvice(String udid) async {
+    String? runtimeName;
+    try {
+      for (final simulator in await simctl.listSimulators()) {
+        if (simulator.udid == udid) {
+          runtimeName = simulator.runtimeName;
+          break;
+        }
+      }
+    } on Object {
+      return '';
+    }
+    if (runtimeName == null) return '';
+    final version = locator.locate()?.version;
+    return '. That simulator runs $runtimeName, and the vendored '
+        'WebDriverAgent${version == null ? '' : ' ($version)'} is a built '
+        'binary that does not support every runtime — a simulator on an older '
+        'iOS is the usual cause. Boot a newer one, or re-run '
+        'tool/vendor/fetch_wda.sh to refresh the runner. Booting, screenshots '
+        'and app launches do not need WebDriverAgent and keep working either '
+        'way.';
   }
 
   /// Waits for `/status` to say it is ready.
@@ -297,7 +333,10 @@ class WdaBackend implements SimulatorBackend {
   Future<void> setLocked(String udid, {required bool locked}) async {
     await attach(udid);
     final session = await _session();
-    await _post('/session/$session/wda/${locked ? 'lock' : 'unlock'}', const {});
+    await _post(
+      '/session/$session/wda/${locked ? 'lock' : 'unlock'}',
+      const {},
+    );
   }
 
   @override

@@ -130,3 +130,38 @@ List<UiNode> interestingNodes(UiHierarchy hierarchy) => [
   for (final node in hierarchy.allNodes)
     if (node.isInteresting) node,
 ];
+
+/// A leaf big enough to be the screen that reports no text at all.
+///
+/// The accessibility tree describes *widgets*; a surface that is painted rather
+/// than composed of them — Flutter's `CustomPaint`, a canvas game, an embedded
+/// terminal — appears as one empty `View` and its content is simply absent.
+/// A dump that says "5 of 17 nodes" then reads like a successful dump rather
+/// than a blind spot, and the honest answer is to take a screenshot.
+///
+/// Returns the offending node so the caller can point at it, or null.
+///
+/// Leaf and textless are the load-bearing conditions; the size threshold only
+/// keeps ordinary empty spacers and dividers out. A false positive costs one
+/// advisory line, so it is deliberately generous.
+UiNode? canvasLikeNode(UiHierarchy hierarchy, DeviceScreenSize? screen) {
+  if (screen == null) return null;
+  final area = screen.width * screen.height;
+  if (area <= 0) return null;
+  UiNode? biggest;
+  var biggestArea = 0;
+  for (final node in hierarchy.allNodes) {
+    if (node.children.isNotEmpty) continue;
+    if (node.text.trim().isNotEmpty) continue;
+    if (node.contentDescription.trim().isNotEmpty) continue;
+    final bounds = node.bounds;
+    if (bounds == null || bounds.isEmpty) continue;
+    final nodeArea = bounds.width * bounds.height;
+    if (nodeArea * 4 < area) continue; // under a quarter of the screen
+    if (nodeArea > biggestArea) {
+      biggest = node;
+      biggestArea = nodeArea;
+    }
+  }
+  return biggest;
+}

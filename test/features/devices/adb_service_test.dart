@@ -28,6 +28,8 @@ List<String> _argv(FakeCommandRunner runner, int index) =>
     runner.requests[index].arguments;
 
 void main() {
+  _installSpaceTests();
+
   group('encodeInputText', () {
     test('encodes spaces as %s, which is what Android input expects', () {
       expect(encodeInputText('hello world'), 'hello%sworld');
@@ -274,14 +276,7 @@ void main() {
         await AdbService(runner: runner, sdk: _sdk()).isNightMode('S1'),
         isTrue,
       );
-      expect(_argv(runner, 0), [
-        '-s',
-        'S1',
-        'shell',
-        'cmd',
-        'uimode',
-        'night',
-      ]);
+      expect(_argv(runner, 0), ['-s', 'S1', 'shell', 'cmd', 'uimode', 'night']);
     });
 
     test('a device that will not answer says so instead of guessing', () async {
@@ -306,8 +301,10 @@ void main() {
       );
 
       expect(
-        () => AdbService(runner: runner, sdk: _sdk())
-            .setNightMode('S1', dark: true),
+        () => AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).setNightMode('S1', dark: true),
         throwsStateError,
       );
     });
@@ -334,29 +331,32 @@ void main() {
       ]);
     });
 
-    test('a link nothing can handle is a failure, exit code notwithstanding', () async {
-      // Measured against an API 34 emulator: `am start` exits **0** when the
-      // intent resolves to nothing and complains on stderr instead. Trusting
-      // the exit code would report success for the single most likely mistake
-      // anyone makes here — a scheme no installed app registers.
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 0,
-          stdout: 'Starting: Intent { act=android.intent.action.VIEW }\n',
-          stderr:
-              'Error: Activity not started, unable to resolve Intent '
-              '{ act=android.intent.action.VIEW dat=nosuchapp://x }\n',
-        ),
-      );
+    test(
+      'a link nothing can handle is a failure, exit code notwithstanding',
+      () async {
+        // Measured against an API 34 emulator: `am start` exits **0** when the
+        // intent resolves to nothing and complains on stderr instead. Trusting
+        // the exit code would report success for the single most likely mistake
+        // anyone makes here — a scheme no installed app registers.
+        final runner = FakeCommandRunner(
+          responder: (_) => const CommandResult(
+            exitCode: 0,
+            stdout: 'Starting: Intent { act=android.intent.action.VIEW }\n',
+            stderr:
+                'Error: Activity not started, unable to resolve Intent '
+                '{ act=android.intent.action.VIEW dat=nosuchapp://x }\n',
+          ),
+        );
 
-      expect(
-        () => AdbService(
-          runner: runner,
-          sdk: _sdk(),
-        ).openUrl('S1', 'nosuchapp://x'),
-        throwsStateError,
-      );
-    });
+        expect(
+          () => AdbService(
+            runner: runner,
+            sdk: _sdk(),
+          ).openUrl('S1', 'nosuchapp://x'),
+          throwsStateError,
+        );
+      },
+    );
 
     test('an ordinary start is not treated as a failure', () async {
       // `am start` narrates every launch on stdout; only the stderr complaint
@@ -1057,5 +1057,52 @@ void main() {
         expect(_argv(runner, 0), ['forward', '--list']);
       },
     );
+  });
+}
+
+/// Turning "not enough space" into a number and a remedy.
+///
+/// `adb install` on a full emulator reports
+/// `IOException: Requested internal only, but not enough space`, which names
+/// neither the partition nor what to do. From the field report: it happened
+/// twice and cost a full re-run each time.
+void _installSpaceTests() {
+  group('install failures about space', () {
+    test('are recognised across the wordings different API levels use', () {
+      expect(
+        installFailedForSpace(
+          'android.os.ParcelableException: java.io.IOException: '
+          'Requested internal only, but not enough space',
+        ),
+        isTrue,
+      );
+      expect(
+        installFailedForSpace('Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]'),
+        isTrue,
+      );
+      expect(installFailedForSpace('No space left on device'), isTrue);
+    });
+
+    test('and an ordinary install failure is not mistaken for one', () {
+      // The remedy for this one is a different APK, not free space; saying
+      // "run pm trim-caches" here would send somebody the wrong way.
+      expect(
+        installFailedForSpace('Failure [INSTALL_FAILED_ALREADY_EXISTS]'),
+        isFalse,
+      );
+    });
+
+    test('df names how full /data is', () {
+      const df =
+          'Filesystem      1K-blocks    Used Available Use% Mounted on\n'
+          '/dev/block/dm-5   6033792 5348940    668852  89% /data\n';
+      expect(dataPartitionUse(df), '89%');
+    });
+
+    test('and says nothing rather than guessing at an unfamiliar layout', () {
+      // A wrong percentage in an error message is worse than no percentage.
+      expect(dataPartitionUse('df: /data: Permission denied'), isNull);
+      expect(dataPartitionUse(''), isNull);
+    });
   });
 }
