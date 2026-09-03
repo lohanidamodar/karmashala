@@ -143,7 +143,7 @@ void main() {
         final pane = controller.instanceFor(
           _panesOfTab(container, id).single,
         )!;
-        (pane as FakeTerminalInstance).exitCleanly();
+        (pane as FakeTerminalInstance).exitWith(1);
       }).single;
 
       final next = fakeTerminalContainer(database: db);
@@ -163,7 +163,7 @@ void main() {
         final id = controller.openTab(TerminalProfile.powerShell);
         (controller.instanceFor(_panesOfTab(container, id).single)!
                 as FakeTerminalInstance)
-            .exitCleanly();
+            .exitWith(1);
       }).single;
 
       // ...and that dormant pane's own save must not claim it was running,
@@ -482,7 +482,7 @@ void _restoreOnActivateTests() {
         tabId = controller.openTab(TerminalProfile.powerShell);
         pane = _panesOfTab(container, tabId).single;
         // Left as a record on purpose: nothing was running here at close.
-        (controller.instanceFor(pane)! as FakeTerminalInstance).exitCleanly();
+        (controller.instanceFor(pane)! as FakeTerminalInstance).exitWith(1);
         controller.openTab(TerminalProfile.commandPrompt);
       });
 

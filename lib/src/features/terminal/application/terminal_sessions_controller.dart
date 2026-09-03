@@ -2060,12 +2060,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           _shouldCollapse(paneId, instance)) {
         // Not inline: this runs from inside the notifier's own callback, and
         // closing the pane disposes that notifier. One turn later it is a
-        // plain call — and the decision is taken **again** there, because two
-        // panes exiting in the same task would queue two collapses while the
-        // tab still had both, and the second would find itself alone and take
-        // the whole tab with it. Re-asking also covers the pane simply having
-        // gone, in which case the liveness change still has to be published or
-        // nothing repaints.
+        // plain call — and the decision is re-asked there, because by then the
+        // pane may not be in a tab at all: two panes exiting in the same task
+        // queue two collapses, and the first one's close can take the tab (and
+        // so the second pane) with it. Re-asking covers that, and the published
+        // liveness change is what repaints when the answer has become no.
         Future.microtask(() {
           if (!_shouldCollapse(paneId, instance)) {
             _publish();
@@ -2181,24 +2180,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// Whether the pane that just exited should take itself off the screen.
   ///
-  /// See [shouldCollapseOnExit] for the rule; this is only the part that has to
-  /// read the layout to answer it.
+  /// See [shouldCollapseOnExit] for the rule. All that is left here is the one
+  /// thing the pure rule cannot know: whether this pane is still in a tab at
+  /// all. It may not be — the decision is re-asked a microtask later, by which
+  /// time another pane's collapse may already have taken the tab.
   bool _shouldCollapse(String paneId, TerminalInstance instance) {
-    final tab = _tabContaining(paneId);
-    if (tab == null) return false;
+    if (_tabContaining(paneId) == null) return false;
     return shouldCollapseOnExit(
-      // Panes with something in them, not regions. The rule's "last pane in a
-      // tab stays" exception is about output somebody may still be reading, and
-      // an empty region is not another pane to read it in — counting one would
-      // take the tab, and the scrollback with it, the moment a shell beside a
-      // cleared region exited.
-      //
-      // A pane stacked behind another in the same region counts, and should:
-      // the exception is "there is nowhere else in this tab to look", and a
-      // second tab in the header is somewhere else to look. It is also what
-      // every other terminal does — typing `exit` closes the tab you typed it
-      // in and shows the one behind it.
-      isSplit: _occupiedPanes(tab) > 1,
       isAgentSession: instance.agentLaunch != null,
       exitCode: instance.exitCode,
     );

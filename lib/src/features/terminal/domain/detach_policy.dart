@@ -57,28 +57,42 @@ bool shouldDetachOnClose({
   return nonBlankLines > kIdleShellHistoryLines;
 }
 
-/// Whether a pane that has just exited should close itself and collapse.
+/// Whether a pane that has just exited should close itself.
 ///
-/// The report: "how to close the split — even after terminal was exit with exit
-/// command the split pane was still there". Typing `exit` is a request to be
-/// done with that shell, and a pane in a split is a working surface rather than
-/// a record of one.
+/// Two reports, a release apart, are the same request at two scopes. The first:
+/// "how to close the split — even after terminal was exit with exit command the
+/// split pane was still there". The second, once splits closed themselves:
+/// *"typing exit on terminal tab, should also close the tab right"*.
 ///
-/// The exceptions are the ones this file already argues for, plus the one every
-/// other terminal has learned the hard way:
+/// They are the same because the reasoning never depended on the split. Typing
+/// `exit` — or pressing Ctrl+D — is a **request to be done with that shell**,
+/// and honouring a request is not the same as throwing something away. A pane
+/// is a working surface rather than a record of one, at whatever scope it
+/// happens to occupy, so the surface goes when the work in it is dismissed;
+/// closing the last pane in a tab closes the tab, and closing the last tab
+/// leaves the empty workspace that *Close all* already reaches.
+///
+/// So [isSplit] is gone rather than defaulted, because a condition that no
+/// longer decides anything should not be left where a reader can mistake it for
+/// one. What remains are the two exceptions this file argues for — and they are
+/// the whole safety story, so neither is negotiable:
 ///
 /// * **an agent session stays** — its scrollback is the point of the session,
-///   and an ended agent is exactly what [shouldDetachOnClose] keeps;
-/// * **the last pane in a tab stays** — it is where the output of the thing
-///   that just finished still is, the tab already marks itself as not running,
-///   and closing it would take a window away from under someone reading it;
+///   and an ended agent is exactly what [shouldDetachOnClose] keeps. Ending one
+///   may have cost real money; a dead shell is just a dead shell.
 /// * **a failure stays** — a pane that exited non-zero is holding the error
-///   somebody split the window to watch for, and closing it would throw away
-///   the one thing they wanted. Only a clean exit is a shell being dismissed.
-///   An exit status we never learned counts as "not clean", which errs towards
-///   keeping.
+///   somebody opened the terminal to read, and closing it would throw away the
+///   one thing they wanted. Only a clean exit is a shell being *dismissed*; a
+///   crash is **evidence**, and evidence is not dismissed by the thing that
+///   produced it. An exit status we never learned counts as "not clean", which
+///   errs towards keeping.
+///
+/// That split is also why this is not behind a setting. The dangerous half of
+/// "close on exit" is losing output nobody has read yet, and the exit code
+/// already separates it out: what closes is a shell the user personally told to
+/// end, and what stays is everything that ended some other way. A preference
+/// here would only ask people to predict which of those they meant.
 bool shouldCollapseOnExit({
-  required bool isSplit,
   required bool isAgentSession,
   required int? exitCode,
-}) => isSplit && !isAgentSession && exitCode == 0;
+}) => !isAgentSession && exitCode == 0;

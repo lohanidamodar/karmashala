@@ -119,8 +119,18 @@ class FakeTerminalInstance
   int? exitCode;
 
   /// Ends this pane the way a shell that was typed `exit` at ends: cleanly.
-  void exitCleanly() {
-    exitCode = 0;
+  void exitCleanly() => exitWith(0);
+
+  /// Ends the process with [code].
+  ///
+  /// Reach for `exitWith(1)` — not [exitCleanly] — whenever a test just needs a
+  /// pane that is **no longer running**, which is most of them. A *clean* exit
+  /// means the user typed `exit`, and `shouldCollapseOnExit` answers that by
+  /// closing the pane and its tab; a test that wanted a dead pane to still be
+  /// there would find nothing left to assert on. A non-zero exit is evidence
+  /// somebody may still be reading, so it stays exactly where it was.
+  void exitWith(int code) {
+    exitCode = code;
     livenessNotifier.value = PaneLiveness.exited;
   }
 

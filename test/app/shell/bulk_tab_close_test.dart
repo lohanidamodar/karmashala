@@ -65,11 +65,16 @@ void main() {
 
   /// Ends every pane's process, so the set a bulk close would take has nothing
   /// live in it and there is no question to ask.
+  ///
+  /// **Non-zero on purpose.** The confirmation is about panes that are still
+  /// *running*, so any exit satisfies what this fixture is for — but a clean
+  /// one now means "the user typed `exit`" and `shouldCollapseOnExit` closes
+  /// the tab for it. Exiting every pane with 0 would leave no tabs for the
+  /// bulk close to act on, which is a different test than this one.
   void exitEveryPane() {
     for (final tab in container.read(terminalSessionsControllerProvider).tabs) {
       for (final paneId in tab.layout.panes) {
-        (terminals().instanceFor(paneId)! as FakeTerminalInstance)
-            .exitCleanly();
+        (terminals().instanceFor(paneId)! as FakeTerminalInstance).exitWith(1);
       }
     }
   }

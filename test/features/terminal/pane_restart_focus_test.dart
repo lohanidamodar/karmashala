@@ -84,7 +84,7 @@ void main() {
 
     final died = controller.instanceFor(paneId)! as FakeTerminalInstance;
     expect(died.focusNode.hasFocus, isTrue, reason: 'it had the keyboard');
-    died.exitCleanly();
+    died.exitWith(1);
     await tester.pump();
 
     // The Start button's path, and the one `_restoreLivePanesIn` takes.
@@ -126,7 +126,7 @@ void main() {
     // and not only as a stale buffer.
     died.scrollController.jumpTo(0);
     await tester.pump();
-    died.exitCleanly();
+    died.exitWith(1);
     await tester.pump();
 
     controller.startPane(paneId);
@@ -250,7 +250,7 @@ void main() {
     await tester.pump();
     expect(field.hasFocus, isTrue);
 
-    (controller.instanceFor(paneId)! as FakeTerminalInstance).exitCleanly();
+    (controller.instanceFor(paneId)! as FakeTerminalInstance).exitWith(1);
     await tester.pump();
     controller.startPane(paneId);
     await tester.pump();
