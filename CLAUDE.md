@@ -552,10 +552,12 @@ ordinary suite depend on any of that would be a worse bug than the ones they
 catch.
 
 But an excluded test is only a comment until somebody runs it, and these exist
-for the failures **no stand-in can see** — above all whether an endpoint a
-Windows process binds is reachable *for data* from inside a WSL network
-namespace. That link is what silently degrades agent status when it breaks, and
-nothing but a real distribution can measure it.
+for the failures **no stand-in can see** — above all whether the files this app
+writes across `\\wsl.localhost` are the files a distribution's own `sh` reads
+back, and whether an endpoint a Windows process binds is reachable *for data*
+from inside a WSL network namespace. Those links are what silently degrade
+agent status and agent tooling when they break, and nothing but a real
+distribution can measure them.
 
 ### Running them
 
@@ -578,30 +580,37 @@ things outside this app.
 
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
-| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart` | Windows + a WSL distro with `curl`; `flutter_pty` for the pane test | there is no WSL, or no `curl` in it |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the pane test | there is no WSL |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
 
 ### A failure is not automatically a bug
 
-`live_wsl_hook_test.dart` deliberately does **not** skip itself when the WSL
-switch address is missing or dead — that is the failure it exists to catch. Its
-messages classify themselves, and the two need opposite responses:
+`live_wsl_hook_test.dart` deliberately does **not** skip itself when a hook
+fails to arrive — that is the failure it exists to catch. Its messages classify
+themselves, and the two need opposite responses:
 
-- **`THIS MACHINE, not the app`** — no switch address bound, or `curl` from
-  inside the distro cannot reach it (exit 7, 28, 52 or 56). The Hyper-V firewall
-  or the WSL switch is shut. Nothing in this repository will fix it, and the app
-  is right to write no hook rather than a URL that cannot answer.
-- **`THE APP`** — the endpoint answered but the report never landed, or the
-  distro's shell could not run the command the installer wrote (exit 127/2, a
-  quoting failure). That is a bug here.
-- **`UNCLASSIFIED`** — read the probe output printed under the verdict before
-  deciding.
+- **`THIS MACHINE, not the app`** — the installer could not write and read back
+  its three files across `\\wsl.localhost`. The share is unreachable, or the
+  distro home is not writable. Nothing in this repository will fix it.
+- **`THE APP`** — the distro's shell could not run the command the installer
+  wrote, or the payload crossed the share and the drain read none of it. That is
+  a bug here, and the verdict names which of the two it is.
 
-**As of 2026-09-03 the WSL hook test fails on the owner's machine with the first
-verdict.** `curl` exit 56 — `172.18.240.1` accepts the connection and it is
-reset before a byte comes back. Do not "fix" it in the app.
+**As of 2026-09-03 all four cases pass on the owner's machine.** They did not
+before. The hook used to post to the host side of the WSL virtual switch, and
+that address here completes the TCP handshake and then resets the first data
+segment. So the hook transport left the network: a WSL agent writes its payload
+into a spool directory in its own store home and the app drains it over the
+share.
+
+**The switch is still shut, and the fourth case still says so.** It *reports*
+rather than asserts, because a shut switch is the machine's and failing on it
+would blame the app. Since Loop 72 that report is about `/mcp` only, and even
+there it is no longer fatal: a WSL session is pointed at the stdio bridge over
+WSL interop instead, and falls back to the switch URL only when
+`karmashala_mcp.exe` is not beside the app.
 
 The discriminator, which takes half a minute and needs no Karmashala at all:
 
@@ -618,5 +627,34 @@ curl -sS -m 5 http://172.18.240.1:47999/    # from inside the distro
 Measured on 2026-09-03: the bare listener is reset the same way — curl reports
 `(56) Recv failure: Connection reset by peer` and PowerShell reports *"An
 existing connection was forcibly closed by the remote host"*. No Dart is
-involved. If that bare listener ever *does* answer while the app's endpoint is
-still reset, the verdict flips to `THE APP` and it is a bug here.
+involved.
+
+### What actually crosses, measured
+
+Re-measured 2026-09-03 from inside the owner's `archlinux` distribution against
+the running app, and worth knowing before designing anything else that has to
+cross. **The breakage is directional**: Windows → WSL is fine, WSL → Windows
+over the switch is not, and WSL interop is not a network path at all.
+
+| direction | mechanism | result |
+| --- | --- | --- |
+| WSL → Windows | `curl` at the switch address | **reset** (curl 52 / 56) |
+| WSL → Windows | a *Windows* program over WSL interop, at Windows' own loopback | works, ~72 ms per process spawn |
+| WSL → Windows | the compiled `karmashala_mcp.exe` over interop, on the owner-only socket | works — 75 tools, ~42 ms per call |
+| WSL → Windows | write a file the app reads over `\\wsl.localhost` | works, **<1 ms** |
+| Windows → WSL | a listener inside the distro on `127.0.0.1`, via `localhostForwarding` | works, 30/30 across three fresh ports |
+| Windows → WSL | `\\wsl.localhost` listing | works, 0.79 ms warm |
+| either | `Directory.watch` on `\\wsl.localhost` | subscribes, **never fires** |
+
+That table is why the two consumers use two transports. Hooks fire twice per
+tool call, so interop's ~72 ms would be ~144 ms of the user's turn per tool and
+the spool's <1 ms wins outright. MCP is one long-lived process per session, so
+interop's spawn cost is paid once and every call after it is a socket round
+trip — and a poll would put latency on every tool call instead.
+
+**None of it applies off Windows.** `EnvironmentKind.wsl` rows are only created
+when the host is Windows (`EnvironmentDiscoveryService`), and both transports
+are selected by `EnvironmentKind` rather than by a platform check, so a macOS or
+Linux build never reaches a spool, a share or an interop spawn. The absence case
+is pinned by tests rather than assumed — see "a machine with no WSL is untouched
+by any of this" in `agent_hook_installation_service_test.dart`.
