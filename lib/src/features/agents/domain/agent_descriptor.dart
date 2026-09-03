@@ -1,6 +1,7 @@
 import '../../environments/domain/environment_kind.dart';
 import '../../settings/domain/permission_mode.dart';
 import 'agent_kind.dart';
+import 'agent_permission_support.dart';
 import 'agent_status.dart';
 
 /// How an agent CLI expresses "continue this session".
@@ -703,6 +704,7 @@ class AgentLaunchSpec {
   const AgentLaunchSpec({
     this.baseArguments = const [],
     this.permissionModes = const {},
+    this.permission = const AgentPermissionSupport.unknown(),
     this.resume = const AgentResume.unsupported(),
     this.interactiveResume = const AgentResume.unsupported(),
     this.resumeLocality = const AgentResumeLocality.launchDirectory(),
@@ -725,7 +727,21 @@ class AgentLaunchSpec {
   /// **A mode this agent cannot be put into is omitted**, never mapped to an
   /// empty list — see [PermissionModeMapping]. Everything the UI offers comes
   /// from the keys of this map.
+  ///
+  /// **Being replaced by [permission].** A shared three-value mode cannot say
+  /// that Claude Code has six, that Codex's approval policy and sandbox are
+  /// separate dimensions, or that one of Codex's approval values exists in
+  /// 0.145.0 and not in 0.151.0. It is still what the launch path reads while
+  /// the call sites move over.
   final Map<PermissionMode, PermissionModeMapping> permissionModes;
+
+  /// This agent's own permission vocabulary, in its own words.
+  ///
+  /// Declared per agent because the three do not share a shape — see
+  /// [AgentPermissionSupport]. Defaults to
+  /// [AgentPermissionSupport.unknown], so an agent nobody has established
+  /// offers nothing rather than a guess.
+  final AgentPermissionSupport permission;
 
   final AgentResume resume;
   final AgentResume interactiveResume;
