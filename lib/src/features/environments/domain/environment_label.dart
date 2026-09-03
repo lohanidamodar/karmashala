@@ -1,5 +1,6 @@
 import 'environment_kind.dart';
 import 'execution_environment.dart';
+import 'local_environment.dart';
 
 /// How an execution environment is named wherever a user has to tell two of
 /// them apart — the desktop's New project dropdown, and the environment each
@@ -48,3 +49,20 @@ String? _qualified(String kind, List<String?> candidates) {
 /// The interpunct is a visual separator; spoken, it is either silence or the
 /// words "middle dot". A comma is the pause the eye already reads it as.
 String spokenEnvironmentLabel(String label) => label.replaceAll(' · ', ', ');
+
+/// How an environment *id* should be shown when only the id is in hand.
+///
+/// The local host's id is the literal `windows` on every platform — an opaque
+/// database key (see [localHostEnvironmentId]) that predates the app running
+/// anywhere else. Interpolating it into a sentence is not merely unhelpful, it
+/// is false: a Mac's Agent dropdown offered `codex · windows`, and the hook
+/// installer warned that it could not install hooks "in windows".
+///
+/// For anything holding a full [ExecutionEnvironment], prefer
+/// [environmentLabel]; for widgets with a `ref`, prefer
+/// `environmentLabelForIdProvider`, which can name SSH and WSL rows too. This
+/// is the last resort for services, exceptions and log lines that have neither.
+String describeEnvironmentId(String environmentId) =>
+    environmentId == localHostEnvironmentId
+    ? localHostEnvironmentName
+    : environmentId;

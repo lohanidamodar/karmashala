@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../environments/application/environments_controller.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
@@ -171,7 +172,8 @@ class _SessionTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        '$cliLabel · ${session.environmentId}'
+        '$cliLabel · '
+        '${ref.watch(environmentLabelForIdProvider(session.environmentId))}'
         '${session.entrypoint == null ? '' : ' · ${session.entrypoint}'}',
         style: theme.textTheme.bodySmall,
       ),

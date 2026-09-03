@@ -13,6 +13,7 @@ import '../domain/agent_hook_transport.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_providers.dart';
 import 'agent_status_providers.dart';
+import '../../environments/domain/environment_label.dart';
 
 /// No address this app bound serves this kind of environment at all.
 const String _noAddressBound =
@@ -294,7 +295,7 @@ class AgentHookInstallationService {
           } catch (error, stack) {
             _log.warning(
               'Could not remove unreachable ${descriptor.id} hooks in '
-              '${store.environmentId}; leaving the config untouched.',
+              '${describeEnvironmentId(store.environmentId)}; leaving the config untouched.',
               error,
               stack,
             );
@@ -322,7 +323,7 @@ class AgentHookInstallationService {
             // notice. Silence here is what let the owner's app report
             // "1 installed" all day with nothing in any config home.
             _log.warning(
-              'Wrote ${descriptor.id} hooks in ${store.environmentId} but the '
+              'Wrote ${descriptor.id} hooks in ${describeEnvironmentId(store.environmentId)} but the '
               'config does not carry them; status falls back to the state '
               'file. Another process rewriting $home is the usual cause.',
             );
@@ -356,7 +357,7 @@ class AgentHookInstallationService {
           // observe is a much smaller problem than a rewritten settings file.
           _log.warning(
             'Could not $verb ${descriptor.id} hooks in '
-            '${store.environmentId}; leaving the config untouched.',
+            '${describeEnvironmentId(store.environmentId)}; leaving the config untouched.',
             error,
             stack,
           );
