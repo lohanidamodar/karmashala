@@ -654,10 +654,18 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
       textScaler: TextScaler.noScaling,
       padding: const EdgeInsets.all(Insets.sm),
       autofocus: widget.focused,
-      // Desktop uses the physical keyboard; this also avoids xterm opening a
-      // software text-input client, which on Windows fails with "Could not set
-      // client, view ID is null" and blanks the terminal.
-      hardwareKeyboardOnly: true,
+      // **The text-input client is what dictation talks to.** `true` here swaps
+      // `CustomTextEdit` for `CustomKeyboardListener`, which never calls
+      // `TextInput.attach` — so a hardware key still arrives and anything
+      // injected through the platform's text input service silently does not.
+      // Every dictation and IME tool is the second kind, which is why one could
+      // type into quick open but not into a pane.
+      //
+      // It was `true` to dodge "Could not set client, view ID is null", which
+      // blanked the terminal on Windows. xterm2 fixed that at the source by
+      // passing an explicit `viewId` from `PlatformDispatcher.implicitView`, so
+      // the workaround now costs more than the bug it avoided.
+      hardwareKeyboardOnly: false,
       onKeyEvent: _onKeyEvent,
       // xterm's own shortcut manager runs after `onKeyEvent` and before
       // `Terminal.keyInput`; its Windows defaults quietly took Ctrl+A and
