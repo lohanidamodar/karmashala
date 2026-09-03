@@ -253,7 +253,7 @@ class SidePanelWorktrees extends ConsumerWidget {
 
     final selected = ref.watch(selectedCheckoutProvider);
     final rows = {
-      for (final checkout in ref.watch(projectCheckoutsProvider))
+      for (final checkout in ref.watch(projectCheckoutRowsProvider))
         Checkout(checkout.path): checkout,
     };
     final theme = Theme.of(context);

@@ -481,4 +481,49 @@ void main() {
       ['other'],
     );
   });
+
+  testWidgets('a worktree chip selects the checkout it names', (tester) async {
+    // The chips listed real worktrees but resolved them in the parents-only
+    // list, so every one rendered greyed out and tapping it did nothing.
+    insertAllCheckouts();
+    final container = makeContainer();
+    container.read(selectedRepositoryIdProvider.notifier).select('app');
+    // The picker classifies checkouts lazily, so the chips only break once
+    // something else has loaded the labels — which is the state the app is in.
+    final sub = container.listen(checkoutLabelsProvider('p1'), (_, _) {});
+    addTearDown(sub.close);
+    await container.read(checkoutLabelsProvider('p1').future);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: SidePanelWorktrees())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('dual-relay'));
+    await tester.pumpAndSettle();
+    expect(container.read(selectedCheckoutProvider)?.id, 'relay');
+  });
+
+  test('the worktree rows the picker filters out stay resolvable', () async {
+    // `SidePanelWorktrees` turns a worktree path back into its row to decide
+    // where its chip points. It looked that up in the parents-only list, so
+    // every lookup missed and no chip was ever selectable.
+    insertAllCheckouts();
+    final container = makeContainer();
+    container.read(selectedRepositoryIdProvider.notifier).select('app');
+    final sub = container.listen(checkoutLabelsProvider('p1'), (_, _) {});
+    addTearDown(sub.close);
+    await container.read(checkoutLabelsProvider('p1').future);
+
+    expect(
+      container.read(projectCheckoutsProvider).map((r) => r.id),
+      isNot(anyOf(contains('relay'), contains('inbox'))),
+    );
+    expect(
+      container.read(projectCheckoutRowsProvider).map((r) => r.id),
+      containsAll(['app', 'relay', 'inbox']),
+    );
+  });
 }

@@ -129,6 +129,17 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
   return [...leading, ...rest.where((r) => !led.contains(r.id) && isParent(r))];
 });
 
+/// Every repository row of the selected checkout's project, worktrees included.
+///
+/// [projectCheckoutsProvider] lists only parents, so anything resolving a
+/// worktree path back to the row behind it must come here instead.
+final projectCheckoutRowsProvider = Provider<List<Repository>>((ref) {
+  ref.watchSessionKinds(const {SessionChangeKind.workspace});
+  final selected = ref.watch(selectedCheckoutProvider);
+  if (selected == null) return const [];
+  return ref.read(repositoryDaoProvider).getByProject(selected.projectId);
+});
+
 /// Level two: the linked worktrees of the repository the picker has selected,
 /// for the panel body to list underneath it.
 ///
