@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
@@ -16,6 +17,11 @@ final todoDaoProvider = Provider<TodoDao>(
 /// `NotesController`'s reason: todos are few and small, and a panel that
 /// re-reads the table on every frame of a resize is a panel that reads the
 /// table for no reason.
+///
+/// **The cost of holding it in memory is [refresh].** In-memory state is only
+/// right while this controller is the only writer, and the `todos` table has
+/// one writer it cannot see: whatever else has the database file open. See
+/// [refresh] for who asks, and when.
 class TodosController extends Notifier<List<Todo>> {
   @override
   List<Todo> build() => ref.watch(todoDaoProvider).list();
@@ -104,6 +110,34 @@ class TodosController extends Notifier<List<Todo>> {
   /// order is the one thing allowed to decide it. Patching in memory would be
   /// a second implementation of the `ORDER BY`, drifting.
   void _reload() => state = _dao.list();
+
+  /// Re-reads the table for a change **this controller did not make**.
+  ///
+  /// Every method above ends in [_reload], so the panel is never behind its own
+  /// writes — and `todo_add`, `todo_done` and `todo_delete` all come through
+  /// those methods, so an agent's writes are not the problem either. What is
+  /// invisible is a write to `karmashala.sqlite` from outside this process.
+  /// The owner hit it exactly: two todos ticked off by writing to the file
+  /// while the app's MCP server was unreachable, and the panel went on drawing
+  /// them open — *"you said marked done but i don't see the change"* — until
+  /// the app was restarted.
+  ///
+  /// **Nothing polls for it, and nothing can.** SQLite has no cross-process
+  /// change notification a reader can subscribe to; the only way to ask is to
+  /// ask, and a surface that asks on a timer is the thing the class comment
+  /// above rules out. So [TodosView] asks at the two moments somebody is about
+  /// to *read* the list — when the panel turns to Todos, and when the window
+  /// regains focus while it is already showing them. That is the same signal
+  /// and the same reasoning as `FileListingRefreshController`, which re-lists a
+  /// directory on focus because the change that prompted it was made from a
+  /// shell outside the app, where no in-app signal was ever going to report it.
+  ///
+  /// Publishes only a difference, so coming back to a window over a list that
+  /// has not moved costs one small `SELECT` and no rebuild at all.
+  void refresh() {
+    final rows = _dao.list();
+    if (!listEquals(rows, state)) state = rows;
+  }
 
   /// Unique within a run and sortable, like `NotesController._newId`: a
   /// counter rides along with the clock because two adds in the same
