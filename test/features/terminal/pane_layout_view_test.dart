@@ -199,4 +199,102 @@ void main() {
     expect(resizes, isNotEmpty);
     expect(resizes.first, ('s1', 0));
   });
+
+  /// The report was "resizing doesn't work as expected", with a wide, short
+  /// pane. `PaneLayout.resize` takes a share of **one split**, so the pixels
+  /// the pointer moved mean nothing until they are divided by the extent that
+  /// split was given — along the axis it divides, and no other. Dividing by
+  /// anything else makes the divider trail the pointer by exactly the ratio of
+  /// the two, which in a 1440x560 window is a top/bottom divider moving 36 px
+  /// for every 100 the mouse does.
+  group('a divider drag is a share of its own split', () {
+    testWidgets('a horizontal split measures across, not down', (tester) async {
+      final deltas = <double>[];
+
+      await tester.pumpWidget(
+        sized(
+          PaneLayoutView(
+            layout: PaneLayout.single(
+              'a',
+            ).split('a', SplitAxis.horizontal, 'b', 's1'),
+            regionBuilder: (group) =>
+                SizedBox.expand(key: ValueKey(group.activePaneId)),
+            onResize: (splitId, index, delta) => deltas.add(delta),
+          ),
+        ),
+      );
+
+      await tester.drag(find.byType(PaneDivider), const Offset(40, 0));
+      await tester.pump();
+
+      // 800 wide, less the one divider the two panes share.
+      expect(
+        deltas.fold(0.0, (sum, delta) => sum + delta),
+        closeTo(40 / (800 - kPaneDividerThickness), 1e-3),
+      );
+    });
+
+    testWidgets('a vertical split measures down, not across', (tester) async {
+      final deltas = <double>[];
+
+      await tester.pumpWidget(
+        sized(
+          PaneLayoutView(
+            layout: PaneLayout.single(
+              'a',
+            ).split('a', SplitAxis.vertical, 'b', 's1'),
+            regionBuilder: (group) =>
+                SizedBox.expand(key: ValueKey(group.activePaneId)),
+            onResize: (splitId, index, delta) => deltas.add(delta),
+          ),
+        ),
+      );
+
+      await tester.drag(find.byType(PaneDivider), const Offset(0, 40));
+      await tester.pump();
+
+      // 400 tall — the box's *short* side, which is the whole point.
+      expect(
+        deltas.fold(0.0, (sum, delta) => sum + delta),
+        closeTo(40 / (400 - kPaneDividerThickness), 1e-3),
+      );
+    });
+
+    testWidgets('a nested split measures its own room, not the whole view', (
+      tester,
+    ) async {
+      final deltas = <double>[];
+      // 's3' divides the bottom-right quarter, so it is 396 wide inside a view
+      // that is 800 wide: half of the width, and the half is what counts.
+      final layout = PaneLayout.single('a')
+          .split('a', SplitAxis.horizontal, 'b', 's1')
+          .split('b', SplitAxis.vertical, 'c', 's2')
+          .split('c', SplitAxis.horizontal, 'd', 's3');
+
+      await tester.pumpWidget(
+        sized(
+          PaneLayoutView(
+            layout: layout,
+            regionBuilder: (group) =>
+                SizedBox.expand(key: ValueKey(group.activePaneId)),
+            onResize: (splitId, index, delta) {
+              if (splitId == 's3') deltas.add(delta);
+            },
+          ),
+        ),
+      );
+
+      final inner = find.byWidgetPredicate(
+        (widget) => widget is PaneDivider && widget.axis == SplitAxis.horizontal,
+      );
+      await tester.drag(inner.last, const Offset(40, 0));
+      await tester.pump();
+
+      const room = (800 - kPaneDividerThickness) / 2 - kPaneDividerThickness;
+      expect(
+        deltas.fold(0.0, (sum, delta) => sum + delta),
+        closeTo(40 / room, 1e-3),
+      );
+    });
+  });
 }

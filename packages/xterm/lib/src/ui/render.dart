@@ -387,10 +387,32 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
       _viewportHeight ~/ _painter.cellSize.height,
     );
 
-    if (_viewportSize != viewportSize) {
-      _viewportSize = viewportSize;
+    final moved = _viewportSize != viewportSize;
+    _viewportSize = viewportSize;
+    // DIVERGENCE (Karmashala): reconcile, rather than only remember.
+    // `_viewportSize` records what this render object last *sent*;
+    // `_terminal`'s own grid is what the buffer is drawn against and what the
+    // PTY was told. The two can part company —
+    // `CSI 8 ; rows ; cols t` lets a program in the pane set the grid itself,
+    // and the parser calls `Terminal.resize` without going through here — and
+    // once they have, a cache that says "already sent that" never puts it back.
+    // The pane is then drawn in one grid while believing another, for as long
+    // as its box does not change by a whole cell.
+    if (moved || !_terminalHasViewportSize) {
       _resizeTerminalIfNeeded();
     }
+  }
+
+  /// Whether the terminal already holds [_viewportSize].
+  ///
+  /// Compared against what `Terminal.resize` would have *stored*, not what it
+  /// was handed: it floors at one row and one column, so a box with no room for
+  /// a whole cell must not read as a disagreement and be resized every layout.
+  bool get _terminalHasViewportSize {
+    final viewportSize = _viewportSize;
+    if (viewportSize == null) return true;
+    return _terminal.viewWidth == max(viewportSize.width, 1) &&
+        _terminal.viewHeight == max(viewportSize.height, 1);
   }
 
   /// Notify the underlying terminal that the viewport size has changed.

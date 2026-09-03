@@ -580,10 +580,25 @@ things outside this app.
 
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
-| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the pane test | there is no WSL |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_pane_resize_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the two pane tests | there is no WSL, or no `flutter_pty.dll` to spawn a ConPTY with |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
+
+`live_pane_resize_test.dart` answers one question nothing above the PTY can:
+**does the process in a pane learn the size the app resized it to?** Everything
+higher up is pinned by `test/features/terminal/window_resize_test.dart`, which
+proves the grid a pane is *told* is the grid it is *drawn* in at every window
+size; what it cannot see is whether a resize written into a Windows ConPTY
+becomes a `TIOCSWINSZ` on the far end — and for a WSL pane the far end is two
+relays away, through `cmd.exe /c wsl.exe -d <distro>`. So it asks the process:
+`[Console]::WindowWidth` in PowerShell, `stty size` in the distro.
+
+**Measured 2026-09-03, all three cases pass.** A native pane and a WSL pane both
+follow every resize, and so does a burst of 60 at a drag's cadence — the last
+one is the one the process ends up on, so nothing here debounces badly or lands
+a size behind. That is the evidence that ruled the PTY out of the "resizing
+doesn't work as expected" report.
 
 ### A failure is not automatically a bug
 
