@@ -245,6 +245,7 @@ class AgentStatusWatcher {
       from: previous,
       to: report.status,
       source: report.source,
+      waiting: report.waiting,
     );
 
     // What happened, before anything about whether to interrupt. The inbox
@@ -271,6 +272,7 @@ class AgentStatusWatcher {
           session: session,
           reason: decision.reason!,
           evidence: report.evidence,
+          waiting: report.waiting,
         ),
       );
     }

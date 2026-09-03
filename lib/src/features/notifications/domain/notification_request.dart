@@ -1,3 +1,4 @@
+import '../../agents/domain/agent_status.dart';
 import 'evidence_line.dart';
 import 'notification_policy.dart';
 import 'watched_session.dart';
@@ -8,10 +9,16 @@ class PendingNotification {
     required this.session,
     required this.reason,
     this.evidence = const [],
+    this.waiting = AgentWaitKind.unrecorded,
   });
 
   final WatchedSession session;
   final NotificationReason reason;
+
+  /// What the agent is waiting *on*. See [AgentStatusTransition.waiting]: the
+  /// reason says the user is held up, this says whether anything is actually
+  /// there to confirm.
+  final AgentWaitKind waiting;
 
   /// The agent's own words, when the source that reported this carried any.
   /// Empty is the normal case — see [AgentStatusReport.evidence].
@@ -93,7 +100,7 @@ class NotificationCoalescer {
     if (unique.length == 1) {
       final only = unique.single;
       return NotificationRequest(
-        title: _headline(only.reason),
+        title: _headline(only.reason, only.waiting),
         body: _body(only),
         payload: NotificationPayload(
           openId: only.session.openId,
@@ -131,9 +138,22 @@ class NotificationCoalescer {
         : '${event.session.label} — $quoted';
   }
 
-  String _headline(NotificationReason reason) => switch (reason) {
+  /// **`needsInput` is two different sentences.** Claude Code's `Notification`
+  /// hook fires for a permission prompt *and* for its 60-second idle nudge, and
+  /// both are honestly `awaitingApproval` — the user is held up either way.
+  /// Only the wait kind separates them, and saying "needs your approval" for
+  /// the nudge sent the owner back to look for a button that was never drawn:
+  /// *"I come back and there's nothing to approve."*
+  ///
+  /// An unrecorded wait kind takes the weaker sentence. A surface that cannot
+  /// tell must not be the one to claim there is a decision waiting.
+  String _headline(NotificationReason reason, AgentWaitKind waiting) =>
+      switch (reason) {
     NotificationReason.finished => 'Agent finished',
-    NotificationReason.needsInput => 'Agent needs your approval',
+    NotificationReason.needsInput =>
+      waiting == AgentWaitKind.approval
+          ? 'Agent needs your approval'
+          : 'Agent is waiting for you',
     NotificationReason.failed => 'Agent failed',
     NotificationReason.checksFailed => 'Checks failed',
     NotificationReason.changesRequested => 'Changes requested',
