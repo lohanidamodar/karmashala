@@ -7,10 +7,13 @@ import '../../../core/process/process_handle.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/android_device.dart';
 import '../domain/device_action.dart';
+import '../domain/device_driver.dart';
+import '../domain/device_files.dart';
 import '../domain/device_input.dart';
 import '../domain/logcat_entry.dart';
 import '../domain/ui_node.dart';
 import '../domain/ui_summary.dart';
+import 'adb_file_parsing.dart';
 import 'adb_output_parsing.dart';
 import 'uiautomator_parsing.dart';
 
@@ -910,6 +913,323 @@ class AdbService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Files
+  //
+  // Every path that reaches the device's own shell goes through [shellQuote];
+  // every path handed to `adb pull`/`adb push` deliberately does **not**,
+  // because those use adb's sync service and never see a shell. Getting that
+  // backwards quotes the quotes into the filename.
+  // ---------------------------------------------------------------------------
+
+  /// Lists one directory on the device.
+  ///
+  /// **A directory that cannot be read throws rather than coming back empty.**
+  /// That is the whole reason this returns a listing and not a `List` — an
+  /// empty folder and a refusal look identical in a file browser, and this
+  /// codebase has been bitten by that class of silence more than once.
+  ///
+  /// The trailing slash is load-bearing. `/sdcard` is a symlink on every
+  /// Android device, and `ls -l /sdcard` prints *the link*, one row, rather
+  /// than what is inside it — measured on the owner's handset, which answered
+  /// `lrw-r--r-- … /sdcard -> /storage/self/primary` and nothing else. A
+  /// trailing slash dereferences the argument alone, which `-L` would not: that
+  /// dereferences every entry in the listing too, and a browser would then show
+  /// `/system/bin` as a directory the user cannot navigate back out of by the
+  /// name they clicked.
+  Future<DeviceDirectoryListing> listDirectory(
+    String serial,
+    String path,
+  ) async {
+    final directory = path.endsWith('/') ? path : '$path/';
+    final read = await _readDeviceText(
+      serial,
+      'ls -la ${shellQuote(directory)}',
+    );
+    final failure = classifyLsFailure(read.combined, ok: read.ok);
+    if (failure != null) {
+      throw DeviceRefusal(_lsRefusal(failure, serial: serial, path: path));
+    }
+    final listing = parseLsLong(
+      read.text,
+      directory: _withoutTrailingSlash(path),
+    );
+    return read.note == null
+        ? listing
+        : DeviceDirectoryListing(
+            path: listing.path,
+            entries: listing.entries,
+            skipped: listing.skipped,
+            note: read.note,
+          );
+  }
+
+  /// What [path] is, or null when nothing is there.
+  ///
+  /// `ls -lad`: `-d` reports the entry itself rather than a directory's
+  /// contents, and no trailing slash, so a symlink is reported as a symlink.
+  /// A missing path is null; a path that exists but cannot be reached throws,
+  /// because the two lead to opposite next moves.
+  Future<DeviceFileEntry?> statPath(String serial, String path) async {
+    final read = await _readDeviceText(serial, 'ls -lad ${shellQuote(path)}');
+    final failure = classifyLsFailure(read.combined, ok: read.ok);
+    if (failure == LsFailure.missing) return null;
+    if (failure != null) {
+      throw DeviceRefusal(_lsRefusal(failure, serial: serial, path: path));
+    }
+    final listing = parseLsLong(
+      read.text,
+      directory: devicePathParent(path) ?? '/',
+    );
+    return listing.entries.firstOrNull;
+  }
+
+  /// Runs a device command **whose output contains filenames**, and gets those
+  /// filenames back intact.
+  ///
+  /// The problem this exists for is real and was measured, not anticipated. A
+  /// device's filesystem is UTF-8; `CommandRunner` decodes a process's output
+  /// with `SystemEncoding`, which on Windows is the machine's ANSI code page.
+  /// So a file the emulator lists as `my file नेपाली.txt` arrived here as
+  /// `my file à¤¨à¥‡à¤ªà¤¾à¤²à¥€.txt` — a name that cannot be clicked, cannot
+  /// be pulled, and looks like the device is broken rather than the pipe.
+  /// Every non-Latin filename on the machine of the developer this app is
+  /// written for would have come out that way.
+  ///
+  /// The fix is to make the wire ASCII: `… | base64` on the device, decoded
+  /// here. base64 is in toybox and is present on every device this app
+  /// supports — checked on an Android 11 handset and an Android 14 emulator —
+  /// and it costs no extra round trip, because the pipe runs inside the one
+  /// `adb shell` that was happening anyway.
+  ///
+  /// Two fallbacks, because a device without `base64` must still list its
+  /// files: if the shell says it has no such command, or if what comes back is
+  /// not base64 at all, the plain output is used and [_DeviceText.note] says
+  /// the names may be wrong. Wrong-and-labelled beats a directory that refuses
+  /// to open.
+  ///
+  /// **Not fixed globally**, deliberately. `LocalCommandRunner`'s
+  /// `SystemEncoding` is what several Windows tools need — `wsl.exe` emits
+  /// UTF-16 — and changing it would reach every process this app runs for the
+  /// sake of one surface.
+  Future<_DeviceText> _readDeviceText(String serial, String command) async {
+    final encoded = await runner.run(
+      _forDevice(serial, ['shell', '$command | base64']),
+    );
+    final combined = '${encoded.stdout}\n${encoded.stderr}';
+    if (!_base64Missing(combined)) {
+      final decoded = _decodeBase64(encoded.stdout);
+      if (decoded != null) {
+        return _DeviceText(text: decoded, combined: combined, ok: encoded.ok);
+      }
+      // Output that is neither an error nor base64. Nothing seen does this,
+      // but reporting "cannot read" for a directory that listed fine would be
+      // a worse answer than showing it with a warning.
+      if (encoded.stdout.trim().isEmpty) {
+        return _DeviceText(text: '', combined: combined, ok: encoded.ok);
+      }
+    }
+    final plain = await runner.run(_forDevice(serial, ['shell', command]));
+    return _DeviceText(
+      text: plain.stdout,
+      combined: '${plain.stdout}\n${plain.stderr}',
+      ok: plain.ok,
+      note:
+          'This device has no `base64`, so names came back in this computer\'s '
+          'console encoding. Anything not plain ASCII may be spelled wrong '
+          'here — and a wrongly-spelled name will not open or copy.',
+    );
+  }
+
+  static bool _base64Missing(String output) => RegExp(
+    r'base64[^\n]*(not found|inaccessible|No such file|Permission denied)',
+    caseSensitive: false,
+  ).hasMatch(output);
+
+  /// Decodes base64 that a shell wrapped at 76 columns, or null when the text
+  /// is not base64 at all.
+  static String? _decodeBase64(String output) {
+    final packed = output.replaceAll(RegExp(r'\s+'), '');
+    if (packed.isEmpty) return null;
+    try {
+      return utf8.decode(base64.decode(packed), allowMalformed: true);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Copies a file off the device.
+  ///
+  /// No progress is reported, and that is measured rather than lazy: adb draws
+  /// its `[ 47%]` bar only when stdout is a terminal, and here it is a pipe, so
+  /// there is nothing to read until the transfer finishes. Inventing a
+  /// percentage from the file size would be a bar that is wrong for the whole
+  /// of a slow pull. Callers show that a transfer is running and how big it is;
+  /// [DeviceFileTransfer.bytes] is what adb actually moved.
+  Future<DeviceFileTransfer> pullFile(
+    String serial, {
+    required String devicePath,
+    required String hostPath,
+  }) async {
+    final result = await runner.run(
+      _forDevice(serial, ['pull', devicePath, hostPath]),
+    );
+    // The summary lands on **stderr with exit code 0** — measured against a
+    // real device. Reading only stdout sees an empty string and concludes
+    // nothing moved; treating stderr as failure reports a good pull as broken.
+    final combined = '${result.stdout}\n${result.stderr}';
+    if (!result.ok || !transferSucceeded(combined)) {
+      final error = DeviceRefusal(
+        'Could not copy $devicePath off $serial: ${cleanAdbError(combined)}',
+      );
+      _report(
+        DeviceAction(
+          verb: 'pullFile',
+          serial: serial,
+          summary: 'Copy $devicePath to this computer',
+        ).failed(error),
+      );
+      throw error;
+    }
+    final bytes = parseTransferredBytes(combined);
+    _report(
+      DeviceAction(
+        verb: 'pullFile',
+        serial: serial,
+        summary:
+            'Copied $devicePath to $hostPath'
+            '${bytes == null ? '' : ' ($bytes bytes)'}',
+      ),
+    );
+    return DeviceFileTransfer(
+      devicePath: devicePath,
+      hostPath: hostPath,
+      bytes: bytes,
+    );
+  }
+
+  /// Copies a file onto the device. Overwrites whatever is at [devicePath] —
+  /// the *decision* not to belongs one layer up, in the driver, which is where
+  /// the destination is checked and where the refusal is worded.
+  Future<DeviceFileTransfer> pushFile(
+    String serial, {
+    required String hostPath,
+    required String devicePath,
+  }) async {
+    final result = await runner.run(
+      _forDevice(serial, ['push', hostPath, devicePath]),
+    );
+    final combined = '${result.stdout}\n${result.stderr}';
+    if (!result.ok || !transferSucceeded(combined)) {
+      final error = DeviceRefusal(
+        'Could not copy $hostPath onto $serial: ${cleanAdbError(combined)}',
+      );
+      _report(
+        DeviceAction(
+          verb: 'pushFile',
+          serial: serial,
+          summary: 'Copy $hostPath to $devicePath',
+        ).failed(error),
+      );
+      throw error;
+    }
+    final bytes = parseTransferredBytes(combined);
+    _report(
+      DeviceAction(
+        verb: 'pushFile',
+        serial: serial,
+        summary:
+            'Copied $hostPath to $devicePath on $serial'
+            '${bytes == null ? '' : ' ($bytes bytes)'}',
+      ),
+    );
+    return DeviceFileTransfer(
+      devicePath: devicePath,
+      hostPath: hostPath,
+      bytes: bytes,
+    );
+  }
+
+  /// Removes a path on the device. There is no undo on the other side of this.
+  ///
+  /// `rm` without `-f`, so a path that is not there is an error rather than a
+  /// silent success: a delete that reports "done" for a path it never found
+  /// tells the user their file is gone when it is somewhere else.
+  Future<void> removePath(
+    String serial,
+    String path, {
+    bool recursive = false,
+  }) async {
+    final flags = recursive ? '-r' : '';
+    final result = await runner.run(
+      _forDevice(serial, [
+        'shell',
+        'rm $flags ${shellQuote(path)}'.replaceAll('  ', ' '),
+      ]),
+    );
+    final combined = '${result.stdout}\n${result.stderr}'.trim();
+    // `rm` says nothing when it works, so any output at all is the failure —
+    // which is just as well, because a device from before Android 7 does not
+    // forward the exit code.
+    if (!result.ok || combined.isNotEmpty) {
+      final error = DeviceRefusal(
+        'Could not delete $path on $serial: '
+        '${combined.isEmpty ? 'rm exited ${result.exitCode}.' : cleanAdbError(combined)}',
+      );
+      _report(
+        DeviceAction(
+          verb: 'deletePath',
+          serial: serial,
+          summary: 'Delete $path',
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(
+      DeviceAction(
+        verb: 'deletePath',
+        serial: serial,
+        summary: 'Deleted $path on $serial',
+      ),
+    );
+  }
+
+  String _lsRefusal(
+    LsFailure failure, {
+    required String serial,
+    required String path,
+  }) => switch (failure) {
+    LsFailure.permissionDenied => _appPrivate(path)
+        // The one refusal worth explaining rather than reporting, because the
+        // path looks like it should work and the reason it does not is a
+        // property of the *build on the device*, not of this app.
+        ? '$path is an app\'s own directory, and adb\'s shell user cannot read '
+              'one. Reaching it needs `run-as <package>`, which only works on a '
+              'debuggable build of that app — this build does not do it. '
+              'Everything under /sdcard is readable, and so is '
+              '/data/local/tmp.'
+        : '$path is not readable on $serial. Most of /data needs root, which '
+              'an ordinary device does not give adb. /sdcard and '
+              '/data/local/tmp are readable.',
+    LsFailure.missing => 'There is nothing at $path on $serial.',
+    LsFailure.notADirectory => '$path on $serial is a file, not a directory.',
+    LsFailure.unknown =>
+      '$serial would not list $path, and did not say why in a way this build '
+          'recognises.',
+  };
+
+  /// Whether a path is inside some app's private storage — the case where
+  /// "permission denied" has a specific explanation rather than a general one.
+  static bool _appPrivate(String path) =>
+      path.startsWith('/data/data/') ||
+      path.startsWith('/data/user/') ||
+      path.startsWith('/data/user_de/');
+
+  static String _withoutTrailingSlash(String path) =>
+      path.length > 1 && path.endsWith('/')
+      ? path.substring(0, path.length - 1)
+      : path;
+
   /// Sends SIGKILL to [pids] on the device. Best effort: a pid that has already
   /// gone is not an error.
   Future<void> killPids(String serial, List<int> pids) async {
@@ -976,4 +1296,27 @@ String? dataPartitionUse(String dfOutput) {
     }
   }
   return null;
+}
+
+/// Device output that has been brought back to UTF-8, with what it cost.
+///
+/// [combined] is stdout *and* stderr of whichever attempt produced [text], and
+/// exists because every failure decision in this file is made on the output
+/// rather than the exit status — `adb shell` did not forward a remote exit code
+/// before Android 7, and a pipe replaces it with the last command's anyway.
+class _DeviceText {
+  const _DeviceText({
+    required this.text,
+    required this.combined,
+    required this.ok,
+    this.note,
+  });
+
+  final String text;
+  final String combined;
+  final bool ok;
+
+  /// What the caller should tell the user about how this was read, or null
+  /// when nothing had to be worked around.
+  final String? note;
 }

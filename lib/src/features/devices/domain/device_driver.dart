@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'device_files.dart';
 import 'device_input.dart';
 import 'device_target.dart';
 import 'ui_node.dart';
@@ -43,6 +44,18 @@ enum DeviceCapability {
   /// Shutting the device down. Virtual devices only: nothing here turns off
   /// somebody's physical phone.
   powerOff,
+
+  /// Reaching the device's storage: listing what is there, and moving files
+  /// both ways.
+  ///
+  /// **One capability for six methods, on purpose**, and the same reasoning as
+  /// [uiTree]: support breaks along this line and not a finer one. A driver
+  /// that can list a directory can pull from it, because both are the same
+  /// transport — adb's sync service on Android, a usbmuxd client on iOS — and a
+  /// build that has neither loses all of it together. `files` being present is
+  /// not a promise that every path is readable, which is a per-path question
+  /// [DeviceRefusal] answers; it is the promise that asking is meaningful.
+  files,
 }
 
 /// A device refusing, by name, with the reason.
@@ -266,4 +279,70 @@ abstract interface class DeviceDriver {
   /// platforms differ in a way that matters: an emulator loses anything not in
   /// a snapshot, a simulator keeps its apps and data.
   Future<String> powerOff();
+
+  // ---------------------------------------------------------------------------
+  // Files — see `domain/device_files.dart` for why this is a list of roots
+  // rather than one filesystem.
+  // ---------------------------------------------------------------------------
+
+  /// The places on this device a browser can start from.
+  ///
+  /// **Not "the root"**, and that is the whole design. Read
+  /// `device_files.dart`'s library comment before changing this signature: a
+  /// real iPhone has no root to return, and an interface that asked for one
+  /// would make the iOS driver invent it.
+  ///
+  /// A driver without [DeviceCapability.files] throws [DeviceRefusal] here
+  /// rather than returning an empty list — no roots and "I cannot do this" are
+  /// different answers, and the empty list is the one that reads as "there is
+  /// nothing on this phone".
+  Future<List<DeviceFileRoot>> fileRoots();
+
+  /// Lists one directory.
+  ///
+  /// Throws [DeviceRefusal] when the directory cannot be read — permission,
+  /// absence, or a path that is not a directory — and **never returns an empty
+  /// listing for a refusal**. An empty folder that is really a refusal is the
+  /// silent failure this whole interface exists to prevent.
+  ///
+  /// Rows the device printed but this build could not parse come back in
+  /// [DeviceDirectoryListing.skipped] with a reason, so a listing is never
+  /// quietly short.
+  Future<DeviceDirectoryListing> listDirectory(String path);
+
+  /// What [path] is, or null when nothing is there.
+  ///
+  /// Null means *absent*; a path that exists but cannot be read throws. The
+  /// two are told apart because the callers act on them oppositely: absent is
+  /// what makes a push safe, unreadable is what makes it hopeless.
+  Future<DeviceFileEntry?> stat(String path);
+
+  /// Copies a file off the device onto this computer.
+  Future<DeviceFileTransfer> pullFile({
+    required String devicePath,
+    required String hostPath,
+  });
+
+  /// Copies a file from this computer onto the device.
+  ///
+  /// [devicePath] is the destination *file* path. When it names an existing
+  /// directory the file lands inside it under its own name, and the returned
+  /// [DeviceFileTransfer.note] says so rather than leaving the caller to guess
+  /// where it went.
+  ///
+  /// **[overwrite] defaults to false and a refusal is the default answer.**
+  /// There is no undo on the other side of the wire, and a push that silently
+  /// replaced somebody's file would be indistinguishable from one that worked.
+  Future<DeviceFileTransfer> pushFile({
+    required String hostPath,
+    required String devicePath,
+    bool overwrite,
+  });
+
+  /// Removes a file or directory. Not undoable, anywhere, ever.
+  ///
+  /// [recursive] is required for a non-empty directory and is refused rather
+  /// than assumed: `rm -rf` on a path typed one character wrong is the single
+  /// most expensive mistake this surface can make.
+  Future<void> deletePath(String path, {bool recursive});
 }
