@@ -42,10 +42,17 @@ void main() {
   late Uri relayUri;
   RemoteHostService? service;
   late Map<String, String> phoneDisk;
+  // Every port makeScout's dialer was pointed at, in order. Carried into the
+  // stranger assertion's failure message: "Expected 1, Actual 2" alone cost two
+  // days, because it cannot say whether the second dial went to the same
+  // stranger (a probe forward) or to a foreign one (another suite's beacon
+  // leaking in).
+  final dialledPorts = <int>[];
   late SecureCompanionStore store;
   final gateways = <RemoteCompanionGateway>[];
 
   setUp(() async {
+    dialledPorts.clear();
     lanPort = await freeBeaconPort();
     db = AppDatabase.memory();
     dao = PairedDeviceDao(db);
@@ -144,12 +151,15 @@ void main() {
     // The beacon's source address is whatever interface multicast rode in
     // on; this suite's listeners sit on loopback, so dial there. Production
     // keeps the datagram's own address.
-    dialer: (host, port) => LanTransport.dial(
-      host: '127.0.0.1',
-      port: port,
-      connectTimeout: const Duration(milliseconds: 800),
-      backoff: fastBackoff(),
-    ),
+    dialer: (host, port) {
+      dialledPorts.add(port);
+      return LanTransport.dial(
+        host: '127.0.0.1',
+        port: port,
+        connectTimeout: const Duration(milliseconds: 800),
+        backoff: fastBackoff(),
+      );
+    },
   );
 
   Future<void> awaitLink(
@@ -781,10 +791,23 @@ void main() {
     // A stranger advertising a socket that accepts and answers nothing. It
     // holds no paired key, so it can never produce the sealed host.status.
     final rogue = await ServerSocket.bind('127.0.0.1', 0);
-    rogue.listen((socket) {
-      // Accept and stay silent — a stranger reading whatever arrives.
+    // What it accepts is HELD, and that is the whole difference between a
+    // stranger that stays silent and one that hangs up. A `Socket` nobody
+    // references is closed by the VM's finaliser the next time the GC runs,
+    // and the phone reads that clean FIN as the far end letting go — which
+    // `_dialLan` is right to treat as "a host one generation ahead", so it
+    // probes forward and dials a second time. That is the second
+    // `lan attempt failed` the assertion below used to trip over: six
+    // sightings across 2026-09-02/03, always on a loaded machine, because a
+    // busy machine is one that collects inside the 800ms hello window.
+    final accepted = <Socket>[];
+    rogue.listen(accepted.add);
+    addTearDown(() {
+      for (final socket in accepted) {
+        socket.destroy();
+      }
+      return rogue.close();
     });
-    addTearDown(() => rogue.close());
     final beacon = await LanBeacon.advertise(
       port: rogue.port,
       tag: 'rogue00000000001',
@@ -829,7 +852,10 @@ void main() {
     expect(
       strangerDials(),
       1,
-      reason: 'the stranger is in cooldown, not in a dial loop',
+      reason:
+          'the stranger is in cooldown, not in a dial loop; '
+          'beacon group $_lanGroup port $lanPort, stranger port ${rogue.port}, '
+          'dialled $dialledPorts, log $log',
     );
 
     await eventually(
