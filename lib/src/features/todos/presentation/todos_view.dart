@@ -5,6 +5,7 @@ import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
+import '../../notifications/application/notification_providers.dart';
 import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
 import '../domain/todo.dart';
@@ -79,6 +80,18 @@ class _TodosViewState extends ConsumerState<TodosView> {
   final _composerFocus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    // The panel has just turned to Todos, so the list is about to be read.
+    // After the frame, because this may replace the state the build below is
+    // already using — see [TodosController.refresh] for why anything has to
+    // ask at all.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(todosProvider.notifier).refresh();
+    });
+  }
+
+  @override
   void dispose() {
     _composer.dispose();
     _composerFocus.dispose();
@@ -95,6 +108,19 @@ class _TodosViewState extends ConsumerState<TodosView> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _composerFocus.requestFocus();
       });
+    });
+    // The other moment the list is about to be read: the user has come back to
+    // the window, over a panel that never went away. `initState` above cannot
+    // see that, and it is the case the owner actually hit.
+    //
+    // The listener lives here rather than in the controller so that it exists
+    // only while this surface does: a closed panel costs nothing, and neither
+    // does a focus regain over a list that has not changed. Only a *genuine*
+    // regain counts — the window must have been seen to lose focus first, which
+    // is the guard `FileListingRefreshController` uses for the same signal.
+    ref.listen(windowFocusedProvider, (previous, next) {
+      if (!next || previous != false) return;
+      ref.read(todosProvider.notifier).refresh();
     });
     final scope = ref.watch(todoScopeProvider);
     final all = ref.watch(todosProvider);
