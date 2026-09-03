@@ -83,12 +83,25 @@ final sessionCheckoutsProvider = Provider<List<Repository>>((ref) {
 /// *adds* repositories leaves the projects and the selection equal, so the
 /// picker would keep listing yesterday's clones.
 final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
-  ref.watchSessionKinds(const {SessionChangeKind.workspace});
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected == null) return const [];
+  return ref.watch(checkoutsInProjectProvider(selected.projectId));
+});
 
-  final labels = ref.exists(checkoutLabelsProvider(selected.projectId))
-      ? ref.watch(checkoutLabelsProvider(selected.projectId)).asData?.value
+/// [projectCheckoutsProvider] for a project the app is **not** pointed at.
+///
+/// The same two-level rule, asked of a named project rather than of the
+/// selection — which is what a surface that offers a *destination* needs: the
+/// New session dialog lets you start somewhere without moving the Explorer
+/// there first, so it has to be able to ask "what are the parent checkouts of
+/// that project" about a project nothing is selected in.
+final checkoutsInProjectProvider = Provider.family<List<Repository>, String>((
+  ref,
+  projectId,
+) {
+  ref.watchSessionKinds(const {SessionChangeKind.workspace});
+  final labels = ref.exists(checkoutLabelsProvider(projectId))
+      ? ref.watch(checkoutLabelsProvider(projectId)).asData?.value
       : null;
   // Unclassified is kept: "we have not asked git yet" is not "this is a
   // worktree", and hiding a clone would leave the user unable to reach it.
@@ -96,8 +109,9 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
       labels?[repository.id]?.isWorktree != true;
 
   final byId = {
-    for (final repository
-        in ref.read(repositoryDaoProvider).getByProject(selected.projectId))
+    for (final repository in ref.read(repositoryDaoProvider).getByProject(
+      projectId,
+    ))
       repository.id: repository,
   };
 
@@ -118,7 +132,7 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
   final leading = <Repository>[];
   final led = <String>{};
   for (final checkout in ref.watch(sessionCheckoutsProvider)) {
-    if (checkout.projectId != selected.projectId) continue;
+    if (checkout.projectId != projectId) continue;
     final parent = parentOf(checkout);
     if (parent == null || !led.add(parent.id)) continue;
     leading.add(parent);
@@ -134,11 +148,22 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
 /// [projectCheckoutsProvider] lists only parents, so anything resolving a
 /// worktree path back to the row behind it must come here instead.
 final projectCheckoutRowsProvider = Provider<List<Repository>>((ref) {
-  ref.watchSessionKinds(const {SessionChangeKind.workspace});
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected == null) return const [];
-  return ref.read(repositoryDaoProvider).getByProject(selected.projectId);
+  return ref.watch(checkoutRowsInProjectProvider(selected.projectId));
 });
+
+/// [projectCheckoutRowsProvider] for a named project, worktrees included.
+///
+/// The second half of what a destination picker needs: the parents come from
+/// [checkoutsInProjectProvider], and the worktrees hanging off the one you
+/// chose are these rows minus those.
+final checkoutRowsInProjectProvider = Provider.family<List<Repository>, String>(
+  (ref, projectId) {
+    ref.watchSessionKinds(const {SessionChangeKind.workspace});
+    return ref.read(repositoryDaoProvider).getByProject(projectId);
+  },
+);
 
 /// Level two: the linked worktrees of the repository the picker has selected,
 /// for the panel body to list underneath it.

@@ -1,3 +1,5 @@
+import '../../agents/domain/agent_status.dart';
+import 'evidence_line.dart';
 import 'notification_policy.dart';
 import 'watched_session.dart';
 
@@ -7,10 +9,16 @@ class PendingNotification {
     required this.session,
     required this.reason,
     this.evidence = const [],
+    this.waiting = AgentWaitKind.unrecorded,
   });
 
   final WatchedSession session;
   final NotificationReason reason;
+
+  /// What the agent is waiting *on*. See [AgentStatusTransition.waiting]: the
+  /// reason says the user is held up, this says whether anything is actually
+  /// there to confirm.
+  final AgentWaitKind waiting;
 
   /// The agent's own words, when the source that reported this carried any.
   /// Empty is the normal case — see [AgentStatusReport.evidence].
@@ -92,7 +100,7 @@ class NotificationCoalescer {
     if (unique.length == 1) {
       final only = unique.single;
       return NotificationRequest(
-        title: _headline(only.reason),
+        title: _headline(only.reason, only.waiting),
         body: _body(only),
         payload: NotificationPayload(
           openId: only.session.openId,
@@ -121,30 +129,31 @@ class NotificationCoalescer {
 
   /// The session, and what the agent said about it when it said anything.
   ///
-  /// Quoted in screen order and never picked apart: deciding which row is "the
-  /// question" would be guessing at a TUI's layout, and a wrong guess
-  /// misdescribes what the user is about to authorise. A clip at the end is
-  /// honest about being a clip; choosing a middle is not.
-  ///
   /// No evidence means the label alone, exactly as before. A toast that
   /// invented a description would be worse than one that admits it has none.
   String _body(PendingNotification event) {
-    final quoted = event.evidence
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .join(' · ');
-    if (quoted.isEmpty) return event.session.label;
-    // Runes, not code units: clipping mid-surrogate would emit a broken glyph.
-    final runes = quoted.runes.toList();
-    final clipped = runes.length > maxQuoted
-        ? '${String.fromCharCodes(runes.take(maxQuoted)).trimRight()}…'
-        : quoted;
-    return '${event.session.label} — $clipped';
+    final quoted = evidenceLine(event.evidence, max: maxQuoted);
+    return quoted == null
+        ? event.session.label
+        : '${event.session.label} — $quoted';
   }
 
-  String _headline(NotificationReason reason) => switch (reason) {
+  /// **`needsInput` is two different sentences.** Claude Code's `Notification`
+  /// hook fires for a permission prompt *and* for its 60-second idle nudge, and
+  /// both are honestly `awaitingApproval` — the user is held up either way.
+  /// Only the wait kind separates them, and saying "needs your approval" for
+  /// the nudge sent the owner back to look for a button that was never drawn:
+  /// *"I come back and there's nothing to approve."*
+  ///
+  /// An unrecorded wait kind takes the weaker sentence. A surface that cannot
+  /// tell must not be the one to claim there is a decision waiting.
+  String _headline(NotificationReason reason, AgentWaitKind waiting) =>
+      switch (reason) {
     NotificationReason.finished => 'Agent finished',
-    NotificationReason.needsInput => 'Agent needs your approval',
+    NotificationReason.needsInput =>
+      waiting == AgentWaitKind.approval
+          ? 'Agent needs your approval'
+          : 'Agent is waiting for you',
     NotificationReason.failed => 'Agent failed',
     NotificationReason.checksFailed => 'Checks failed',
     NotificationReason.changesRequested => 'Changes requested',

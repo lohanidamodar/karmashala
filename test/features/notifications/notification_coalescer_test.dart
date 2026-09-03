@@ -2,6 +2,7 @@ import 'package:karmashala/src/features/notifications/domain/agent_session_key.d
 import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
 import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
 import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _coalescer = NotificationCoalescer();
@@ -12,6 +13,7 @@ PendingNotification _event(
   String? label,
   bool imported = true,
   List<String> evidence = const [],
+  AgentWaitKind waiting = AgentWaitKind.unrecorded,
 }) => PendingNotification(
   session: WatchedSession(
     key: AgentSessionKey('claudeCode', id),
@@ -21,6 +23,7 @@ PendingNotification _event(
   ),
   reason: reason,
   evidence: evidence,
+  waiting: waiting,
 );
 
 void main() {
@@ -30,7 +33,12 @@ void main() {
 
   test('one event names the session and carries where to open it', () {
     final request = _coalescer.summarize([
-      _event('a', NotificationReason.needsInput, label: 'Fix login'),
+      _event(
+        'a',
+        NotificationReason.needsInput,
+        label: 'Fix login',
+        waiting: AgentWaitKind.approval,
+      ),
     ])!;
 
     expect(request.title, 'Agent needs your approval');
@@ -56,6 +64,44 @@ void main() {
       request.body,
       'Fix login \u2014 Claude needs your permission to use Bash',
     );
+  });
+
+  test('an idle nudge does not claim there is something to approve', () {
+    // Claude Code's `Notification` fires for a permission prompt *and* for its
+    // 60-second idle nudge. Both are honestly `awaitingApproval` — the user is
+    // held up either way — so only the wait kind separates them. Saying
+    // "needs your approval" for the nudge sent the owner looking for a button
+    // that was never drawn.
+    final nudge = _coalescer.summarize([
+      _event(
+        'a',
+        NotificationReason.needsInput,
+        label: 'Fix login',
+        waiting: AgentWaitKind.input,
+        evidence: const ['Claude is waiting for your input'],
+      ),
+    ])!;
+    expect(nudge.title, 'Agent is waiting for you');
+
+    final approval = _coalescer.summarize([
+      _event(
+        'b',
+        NotificationReason.needsInput,
+        label: 'Fix login',
+        waiting: AgentWaitKind.approval,
+        evidence: const ['Claude needs your permission to use Bash'],
+      ),
+    ])!;
+    expect(approval.title, 'Agent needs your approval');
+  });
+
+  test('a wait kind nobody recorded takes the weaker sentence', () {
+    // A surface that cannot tell must not be the one to claim a decision is
+    // waiting.
+    final request = _coalescer.summarize([
+      _event('a', NotificationReason.needsInput, label: 'Fix login'),
+    ])!;
+    expect(request.title, 'Agent is waiting for you');
   });
 
   test('a quoted screen keeps its own order and is never picked apart', () {
@@ -147,7 +193,12 @@ void main() {
     () {
       final request = _coalescer.summarize([
         _event('a', NotificationReason.finished, label: 'Only'),
-        _event('a', NotificationReason.needsInput, label: 'Only'),
+        _event(
+          'a',
+          NotificationReason.needsInput,
+          label: 'Only',
+          waiting: AgentWaitKind.approval,
+        ),
       ])!;
 
       expect(request.title, 'Agent needs your approval');

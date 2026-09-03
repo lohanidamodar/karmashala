@@ -148,20 +148,24 @@ class QuickOpenSources {
         shortcut: 'Ctrl+Shift+N',
         onSelect: () => NewProjectDialog.show(context),
       ),
-      if (ref.read(selectedRepositoryIdProvider) != null) ...[
-        _command(
-          'New session…',
-          icon: AppIcons.chatCircleDots,
-          shortcut: 'Ctrl+N',
-          onSelect: () => NewSessionDialog.show(context),
-        ),
+      // Ungated. The dialog picks its own destination now — a project and a
+      // checkout inside it — so "nothing is selected" is no longer a reason to
+      // hide the command, and neither is an empty workspace: with no projects
+      // at all the dialog says so and offers the one thing that would help,
+      // which teaches more than a command that silently is not there.
+      _command(
+        'New session…',
+        icon: AppIcons.chatCircleDots,
+        shortcut: 'Ctrl+N',
+        onSelect: () => NewSessionDialog.show(context),
+      ),
+      if (ref.read(selectedRepositoryIdProvider) != null)
         _command(
           'Fan out prompt…',
           subtitle: 'Run multiple agents in isolated worktrees',
           icon: AppIcons.gitBranch,
           onSelect: () => FanOutDialog.show(context),
         ),
-      ],
       // The two things you write for yourself, listed as **verbs**.
       //
       // Both surfaces were already here as places — "Notes  ·  Side panel" —

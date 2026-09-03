@@ -227,7 +227,7 @@ void main() {
       expect(find.byTooltip('Folder actions'), findsNothing);
 
       // The verb a row exists for stays put: only the overflow is on demand.
-      expect(find.byTooltip('New session in this project'), findsOneWidget);
+      expect(find.byTooltip('Start a session here with the default agent'), findsOneWidget);
     });
 
     testWidgets('a pointer on the row reveals it, and leaving hides it again', (
