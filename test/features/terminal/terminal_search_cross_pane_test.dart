@@ -24,8 +24,11 @@ void main() {
 
   String pane(int index) => layout.panes[index];
 
-  int highlightsIn(int index) =>
-      layout.sessions.instanceFor(pane(index))!.controller.highlights.length;
+  int highlightsIn(int index) => layout.sessions
+      .instanceFor(pane(index))!
+      .controller
+      .searchHighlights
+      .length;
 
   test('cross-pane is off by default, and only the open pane is searched', () {
     layout.write(pane(1), 'shared-needle\r\n');

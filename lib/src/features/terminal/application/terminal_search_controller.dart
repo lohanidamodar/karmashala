@@ -11,26 +11,6 @@ import 'scrollback_autosave.dart';
 import 'terminal_scroll.dart';
 import 'terminal_sessions_controller.dart';
 
-/// Colours for search hits. Defaults to the vendored theme's own values; the
-/// panel overrides this with the theme it actually paints with.
-class TerminalSearchColors {
-  const TerminalSearchColors({required this.hit, required this.current});
-
-  final Color hit;
-  final Color current;
-}
-
-final terminalSearchColorsProvider = Provider<TerminalSearchColors>(
-  (ref) => TerminalSearchColors(
-    // Translucent so the text underneath stays readable — the highlight is
-    // painted over the glyphs, not behind them.
-    hit: TerminalThemes.defaultTheme.searchHitBackground.withValues(alpha: 0.4),
-    current: TerminalThemes.defaultTheme.searchHitBackgroundCurrent.withValues(
-      alpha: 0.5,
-    ),
-  ),
-);
-
 /// How the cross-pane sweep is scheduled.
 ///
 /// Injected for the same two reasons the autosave's scheduler is: a real
@@ -226,7 +206,13 @@ class TerminalSearchState {
 /// any number of open panes. Scanning 100 panes' full scrollback on every
 /// keypress would have been a million.
 class TerminalSearchController extends Notifier<TerminalSearchState> {
-  final List<TerminalHighlight> _highlights = [];
+  /// The controller currently holding this search's highlights, so they can be
+  /// dropped when the selection moves to another pane or the bar closes.
+  ///
+  /// One reference is the whole of the painting bookkeeping: xterm2 owns the
+  /// anchors, gives the current match its own colour from the theme, and
+  /// replaces the whole set in a single controller update.
+  TerminalController? _highlighted;
 
   /// Every hit, the open pane's first and each swept pane's appended after —
   /// so a sweep landing does not shift the hit the user already has selected.
@@ -611,35 +597,65 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   /// Paints up to [kMaxSearchHighlights] hits **in the pane holding the current
   /// match**, that one in its own colour.
   ///
-  /// Only that pane: `RenderTerminal._paintHighlights` walks every highlight on
-  /// every frame, so highlighting all 100 panes at once would put the whole
-  /// result set into every pane's frame budget. It is also the only pane whose
-  /// buffer the anchors can safely address — a `CellAnchor` resolves its row
-  /// against its own buffer.
+  /// The colours, the anchors and the "which one is current" are xterm2's:
+  /// `setSearchHighlights` takes plain ranges, anchors them to the buffer
+  /// itself, paints every hit in `searchHitBackground` with the selected one in
+  /// `searchHitBackgroundCurrent`, and repaints the text over both in
+  /// `searchHitForeground` so it stays readable. Nothing here has to be
+  /// disposed one hit at a time.
+  ///
+  /// What stays ours is which pane and which hits. Only the pane holding the
+  /// current match: `RenderTerminal` walks every search highlight on every
+  /// frame, so highlighting all 100 panes at once would put the whole result
+  /// set into every pane's frame budget. And only [kMaxSearchHighlights] of
+  /// them, in a window that **slides to keep the selected hit inside it** —
+  /// stepping past the cap must not leave the one hit the user is looking at
+  /// the only one with nothing on it.
   void _applyHighlights() {
-    _clearHighlights();
     final match = _currentMatch();
-    if (match == null) return;
-    final target = _instanceFor(match.paneId);
-    if (target == null) return;
+    final target = match == null ? null : _instanceFor(match.paneId);
+    if (match == null || target == null) return _clearHighlights();
 
-    final colors = ref.read(terminalSearchColorsProvider);
+    // A `CellAnchor` resolves its row against its own buffer, so a hit past the
+    // end of this one is dropped rather than anchored somewhere it is not.
     final buffer = target.terminal.buffer;
-    var painted = 0;
-    for (var i = 0; i < _matches.length; i++) {
-      if (painted >= kMaxSearchHighlights) break;
-      final candidate = _matches[i];
-      if (candidate.paneId != match.paneId) continue;
-      if (candidate.at.line >= buffer.lines.length) continue;
-      painted++;
-      _highlights.add(
-        target.controller.highlight(
-          p1: buffer.createAnchor(candidate.at.startColumn, candidate.at.line),
-          p2: buffer.createAnchor(candidate.at.endColumn, candidate.at.line),
-          color: i == state.currentIndex ? colors.current : colors.hit,
+    bool paintable(PaneSearchMatch candidate) =>
+        candidate.paneId == match.paneId &&
+        candidate.at.line < buffer.lines.length;
+
+    // Where the selected hit sits among its own pane's paintable ones, and so
+    // how many the window has to skip to still reach it.
+    var before = 0;
+    for (var i = 0; i < state.currentIndex; i++) {
+      if (paintable(_matches[i])) before++;
+    }
+    final skip = before < kMaxSearchHighlights
+        ? 0
+        : before - kMaxSearchHighlights + 1;
+
+    final ranges = <BufferRangeLine>[];
+    var seen = 0;
+    for (final candidate in _matches) {
+      if (!paintable(candidate)) continue;
+      if (seen++ < skip) continue;
+      ranges.add(
+        BufferRangeLine(
+          CellOffset(candidate.at.startColumn, candidate.at.line),
+          CellOffset(candidate.at.endColumn, candidate.at.line),
         ),
       );
+      if (ranges.length >= kMaxSearchHighlights) break;
     }
+
+    // Only when the last pane painted is a different one: `setSearchHighlights`
+    // already replaces what this controller holds, in one update.
+    if (!identical(_highlighted, target.controller)) _clearHighlights();
+    _highlighted = target.controller;
+    target.controller.setSearchHighlights(
+      buffer,
+      ranges,
+      currentIndex: before - skip,
+    );
   }
 
   /// How many hits are in the scrollback behind a full-screen program.
@@ -689,10 +705,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   }
 
   void _clearHighlights() {
-    for (final highlight in _highlights) {
-      highlight.dispose();
-    }
-    _highlights.clear();
+    _highlighted?.clearSearchHighlights();
+    _highlighted = null;
   }
 
   /// Centres the current match in **its own** pane, using the same
