@@ -4,7 +4,6 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
-import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_ids.dart';
 import 'streaming_agent_session.dart';
@@ -25,13 +24,10 @@ List<String> antigravityLaunchArgs(AgentLaunch launch) => [
   // `--print --input-format stream-json` mode, but the parser below reads plain
   // text, so claiming that protocol would pair a JSON transport with a reader
   // that does not speak it.
-  ...switch (launch.permissionMode) {
-    // Prompting is what an unflagged `agy` does, which is why "ask" adds
-    // nothing rather than being unsupported.
-    PermissionMode.ask => const <String>[],
-    PermissionMode.acceptEdits => const ['--mode', 'accept-edits'],
-    PermissionMode.bypass => const ['--dangerously-skip-permissions'],
-  },
+  // Resolved from the descriptor. Prompting is what an unflagged `agy` does,
+  // so its "ask" contributes nothing — which is a declared mode with an empty
+  // argument list, not an absent one.
+  ...launch.permission.arguments,
   if (launch.resumeSessionId != null) ...[
     '--conversation',
     launch.resumeSessionId!,

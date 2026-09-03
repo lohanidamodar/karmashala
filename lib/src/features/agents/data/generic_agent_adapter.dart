@@ -11,7 +11,7 @@ import 'streaming_agent_session.dart';
 /// this permission mode, then its declared resume convention.
 List<String> genericLaunchArgs(AgentLaunchSpec spec, AgentLaunch launch) => [
   ...spec.baseArguments,
-  ...spec.permissionArgumentsFor(launch.permissionMode),
+  ...launch.permission.arguments,
   if (launch.resumeSessionId != null)
     ...spec.resume.argumentsFor(launch.resumeSessionId!),
 ];

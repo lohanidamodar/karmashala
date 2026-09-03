@@ -5,6 +5,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -73,6 +74,7 @@ void main() {
         repository: repository(),
         installation: agentInstallation(),
         title: 'Work',
+        permission: ResolvedPermission.none,
       );
       expect(engine.isActive(session.id), isTrue);
       final done = engine.whenDone(session.id)!;
@@ -93,6 +95,7 @@ void main() {
         repository: repository(),
         installation: agentInstallation(),
         title: 'Work',
+        permission: ResolvedPermission.none,
       );
       final eventsBefore = eventDao.countForSession(session.id);
 
@@ -113,6 +116,7 @@ void main() {
         repository: repository(),
         installation: agentInstallation(),
         title: 'Work',
+        permission: ResolvedPermission.none,
       );
 
       await Future.wait([engine.dispose(), engine.dispose()]);
@@ -137,6 +141,7 @@ void main() {
         repository: repository(),
         installation: agentInstallation(),
         title: 'Work',
+        permission: ResolvedPermission.none,
       );
       final lifecycle = AppLifecycle(container);
 

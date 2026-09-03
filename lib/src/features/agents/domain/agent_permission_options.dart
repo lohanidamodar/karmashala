@@ -1,77 +1,179 @@
-import '../../settings/domain/permission_mode.dart';
 import 'agent_descriptor.dart';
+import 'agent_permission_support.dart';
 
-/// One row of a permission control: a mode, how faithfully it reaches this
-/// agent, and the words for saying so.
+/// One row of a permission control: a value the agent really has, and the words
+/// for saying what picking it does.
 ///
-/// Pulled out of the widget because the *wording* is the feature. A control that
-/// offers "Accept edits" for Codex without saying that Codex has no such mode is
-/// the silent no-op Loop 31 §4 described, just with a nicer font.
+/// Pulled out of the widget because the *wording* is the feature — and because
+/// two controls draw these (the composer chip and the launcher's picker), and a
+/// row that read differently in the two would be two answers to one question.
 class AgentPermissionOption {
   const AgentPermissionOption({
-    required this.mode,
-    required this.fit,
+    required this.axisId,
+    required this.value,
     required this.agentName,
-    this.note,
+    this.disabledReason,
   });
 
-  final PermissionMode mode;
-  final PermissionModeFit fit;
+  final String axisId;
+  final AgentPermissionValue value;
 
-  /// The agent's display name, so every sentence below names who is or is not
+  /// The agent's display name, so every sentence names who is or is not
   /// honouring the choice rather than blaming "the app".
   final String agentName;
 
-  /// The descriptor's own words about this mode, when it has any.
-  final String? note;
-
-  /// Whether the user may choose this mode.
+  /// Why this row cannot be picked, or null when it can.
   ///
-  /// This is Loop 31's option C: a mode the descriptor cannot express is not
-  /// selectable, so the request that would have been silently dropped cannot be
-  /// made. It is still *shown*, disabled and explained — hiding it would leave
-  /// the user wondering where the safe option went, which is a different kind of
-  /// silence.
-  bool get isSelectable => fit != PermissionModeFit.none;
+  /// The affordance that survived from the shared-enum design: a row the user
+  /// cannot choose is **shown, disabled and explained**, never hidden. Hiding
+  /// it leaves them wondering where the option went, which is a different kind
+  /// of silence. What changed is what puts a row here — a mode the agent cannot
+  /// express is no longer possible, because every row *is* one of the agent's
+  /// own modes, so the live case is a value another axis has superseded.
+  final String? disabledReason;
 
-  /// One sentence about what picking this mode actually does to this agent.
-  String get summary => switch (fit) {
-    PermissionModeFit.exact =>
-      note ?? '$agentName supports this mode and is told to use it.',
-    PermissionModeFit.approximate => 'Approximate. ${note ?? ''}'.trim(),
-    PermissionModeFit.none =>
-      '$agentName takes no flag for this, so its own default applies and '
-          'Karmashala cannot enforce the choice.',
-  };
+  bool get isSelectable => disabledReason == null;
 
-  /// A two-or-three word badge for the same fact, for the chip and the menu row.
-  String get fitLabel => switch (fit) {
-    PermissionModeFit.exact => 'exact',
-    PermissionModeFit.approximate => 'approximate',
-    PermissionModeFit.none => 'not enforced',
-  };
+  String get id => value.id;
+  String get label => value.label;
+  String get shortLabel => value.shortLabel;
+  bool get isDangerous => value.isDangerous;
+
+  /// One sentence about what picking this actually does to this agent.
+  String get summary => disabledReason ?? value.description;
 }
 
-/// Every [PermissionMode] paired with how it maps onto [descriptor], in the
-/// enum's own order (safest first).
+/// One axis of one agent, with its rows — what a picker draws.
+class AgentPermissionAxisOptions {
+  const AgentPermissionAxisOptions({
+    required this.id,
+    required this.label,
+    required this.description,
+    required this.options,
+    required this.selectedId,
+  });
+
+  final String id;
+  final String label;
+  final String description;
+
+  /// Safest first, in the axis's declared order.
+  final List<AgentPermissionOption> options;
+
+  /// The row currently in force on this axis.
+  final String selectedId;
+
+  AgentPermissionOption get selected =>
+      options.firstWhere((o) => o.id == selectedId, orElse: () => options.first);
+}
+
+/// The agent's axes with every row, and the given [selection] marked.
 ///
-/// A null [descriptor] — the unknown-agent shape from Loop 31 §4 — yields
-/// [PermissionModeFit.none] for every mode, through exactly the same code as a
-/// known agent that omits one. The two shapes were separate bugs and get one
-/// answer.
-List<AgentPermissionOption> permissionOptionsFor(
+/// An agent whose modes have never been established yields an **empty list**,
+/// which is what draws the single disabled row saying so — see
+/// [unknownAgentReason]. That is deliberate and is the honest shape: a menu of
+/// guesses is worse than no menu, and an empty menu with no explanation is
+/// worse than both.
+List<AgentPermissionAxisOptions> permissionAxisOptionsFor(
   AgentDescriptor? descriptor, {
+  PermissionSelection? selection,
   String? agentName,
 }) {
   final name = agentName ?? descriptor?.displayName ?? 'This agent';
+  final support = descriptor?.launch.permission;
+  if (support == null || !support.isKnown) return const [];
+  final resolved = support.normalise(selection ?? support.defaultSelection);
+  final superseded = support.supersededBy(resolved);
   return [
-    for (final mode in PermissionMode.values)
-      AgentPermissionOption(
-        mode: mode,
-        fit:
-            descriptor?.launch.permissionFitFor(mode) ?? PermissionModeFit.none,
-        note: descriptor?.launch.permissionNoteFor(mode),
-        agentName: name,
+    for (final axis in support.axes)
+      AgentPermissionAxisOptions(
+        id: axis.id,
+        label: axis.label,
+        description: axis.description,
+        selectedId: resolved.valueFor(axis.id) ?? axis.defaultValueId,
+        options: [
+          for (final value in axis.values)
+            AgentPermissionOption(
+              axisId: axis.id,
+              value: value,
+              agentName: name,
+              disabledReason: superseded.contains(axis.id)
+                  ? _supersededReason(support, resolved, axis.id)
+                  : null,
+            ),
+        ],
       ),
   ];
+}
+
+/// Why a whole axis is greyed out: something on another axis overrode it.
+String? _supersededReason(
+  AgentPermissionSupport support,
+  PermissionSelection selection,
+  String axisId,
+) {
+  for (final axis in support.axes) {
+    final value = axis.valueFor(selection.valueFor(axis.id));
+    if (value != null && value.supersedes.contains(axisId)) {
+      return '"${value.label}" replaces this, so nothing set here is passed.';
+    }
+  }
+  return null;
+}
+
+/// What a control says instead of a menu when the agent's modes are unknown.
+///
+/// Named rather than inlined so the composer chip, the launcher picker and the
+/// phone all say the same thing.
+String unknownAgentReason(String agentName) =>
+    'Karmashala has not established which permission modes $agentName has, so '
+    'it starts under its own default and nothing here can govern it.';
+
+/// The agent's own name for a selection: the chosen values, joined.
+///
+/// One axis gives "Plan mode"; two give "Read-only · Never ask". Superseded
+/// axes are left out, because they contribute nothing to what will run.
+String describeSelection(
+  AgentPermissionSupport support,
+  PermissionSelection? selection,
+) {
+  if (!support.isKnown) return '';
+  final resolved = support.normalise(selection);
+  final superseded = support.supersededBy(resolved);
+  return [
+    for (final axis in support.axes)
+      if (!superseded.contains(axis.id))
+        axis.valueFor(resolved.valueFor(axis.id))?.label,
+  ].whereType<String>().join(' · ');
+}
+
+/// The same, in short labels, for a chip with a third of a window to live in.
+String describeSelectionShort(
+  AgentPermissionSupport support,
+  PermissionSelection? selection,
+) {
+  if (!support.isKnown) return '';
+  final resolved = support.normalise(selection);
+  final superseded = support.supersededBy(resolved);
+  return [
+    for (final axis in support.axes)
+      if (!superseded.contains(axis.id))
+        axis.valueFor(resolved.valueFor(axis.id))?.shortLabel,
+  ].whereType<String>().join(' · ');
+}
+
+/// What the chosen values say they do, joined into one sentence.
+String? describeSelectionDetail(
+  AgentPermissionSupport support,
+  PermissionSelection? selection,
+) {
+  if (!support.isKnown) return null;
+  final resolved = support.normalise(selection);
+  final superseded = support.supersededBy(resolved);
+  final parts = [
+    for (final axis in support.axes)
+      if (!superseded.contains(axis.id))
+        axis.valueFor(resolved.valueFor(axis.id))?.description,
+  ].whereType<String>().toList();
+  return parts.isEmpty ? null : parts.join(' ');
 }

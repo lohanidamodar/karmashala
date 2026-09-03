@@ -36,7 +36,9 @@ import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session.dart';
 import '../sessions/domain/session_launch.dart';
 import '../sessions/domain/session_lineage.dart';
-import '../settings/domain/permission_mode.dart';
+import '../agents/domain/agent_permission_support.dart';
+import '../agents/domain/permission_carry.dart';
+import '../settings/domain/permission_risk.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/data/system_terminal_service.dart';
 import '../verification/application/verification_providers.dart';
@@ -1319,12 +1321,15 @@ class LauncherControlServer implements SessionMcp {
           },
           'permissionMode': {
             'type': 'string',
-            'enum': ['ask', 'acceptEdits', 'bypass'],
+            'enum': permissionRiskNames,
             'description':
-                'How much the new agent may do without asking. Omit to use '
-                'the mode configured in Settings, which is what the '
-                'New-session dialog does. "bypass" skips every prompt and is '
-                'never a default; ask the user before choosing it for them.',
+                'How much the new agent may do without asking, on the scale '
+                'every agent shares. The chosen agent is given the closest '
+                'mode it really has, never one it does not — Codex, for '
+                'instance, has nothing at "ask". Omit to use the mode '
+                'configured in Settings, which is what the New-session dialog '
+                'does. "bypass" skips every prompt and is never a default; ask '
+                'the user before choosing it for them.',
           },
         },
         'required': ['projectId'],
@@ -1772,21 +1777,38 @@ class LauncherControlServer implements SessionMcp {
     ];
   }
 
-  /// The permission mode named by a caller, or null to let the setting decide.
+  /// The permission named by a caller, or null to let the setting decide.
   ///
-  /// Refuses an unknown name rather than falling back to the default. The
-  /// modes are already decided in `permission_carry.dart`, and a typo silently
-  /// becoming "ask" would look like the tool worked; a typo silently becoming
-  /// anything else would be worse.
-  PermissionMode? _parsePermissionMode(String? raw) {
+  /// This is the one **agent-agnostic** permission surface left: an MCP tool's
+  /// schema is fixed when the server starts and cannot name one agent's
+  /// vocabulary. So it takes a [PermissionRisk] rung — the cross-agent scale —
+  /// and the caller's chosen agent decides what that means, through the same
+  /// carry rule a handoff uses. A caller that knows the exact mode may name it
+  /// instead, and gets it verbatim.
+  ///
+  /// Refuses an unknown name rather than falling back to a default: a typo
+  /// silently becoming "ask" would look like the tool worked, and a typo
+  /// silently becoming anything else would be worse.
+  PermissionSelection? _parsePermissionMode(String? raw, String agentId) {
     if (raw == null || raw.trim().isEmpty) return null;
     final wanted = raw.trim();
-    for (final mode in PermissionMode.values) {
-      if (mode.name == wanted) return mode;
+    final descriptor = _container.read(agentRegistryProvider).byId(agentId);
+    final support = descriptor?.launch.permission;
+    final risk = PermissionRisk.byName(wanted);
+    if (risk != null) {
+      return carryPermission(risk, descriptor).selection;
+    }
+    // An exact mode in this agent's own vocabulary.
+    if (support != null && support.isKnown) {
+      for (final selection in support.selections()) {
+        if (selection.canonical == wanted) return selection;
+      }
     }
     throw ArgumentError(
-      'Unknown permissionMode "$raw". One of: '
-      '${PermissionMode.values.map((m) => m.name).join(', ')}.',
+      'Unknown permissionMode "$raw" for $agentId. One of: '
+      '${PermissionRisk.values.map((m) => m.name).join(', ')}'
+      '${support != null && support.isKnown ? ', or one of '
+          '${support.selections().map((s) => s.canonical).join(', ')}' : ''}.',
     );
   }
 
@@ -1881,7 +1903,10 @@ class LauncherControlServer implements SessionMcp {
           useWorktree: useWorktree,
           firstMessage: prompt,
           parentSessionId: callerSessionId,
-          permissionOverride: _parsePermissionMode(permissionMode),
+          permissionOverride: _parsePermissionMode(
+            permissionMode,
+            install.agentId,
+          ),
         ),
       );
       return {
@@ -1891,7 +1916,7 @@ class LauncherControlServer implements SessionMcp {
         'repository': repo.name,
         'environmentId': repo.path.environmentId,
         'depth': launcher.depthForChildOf(callerSessionId).depth,
-        'permissionMode': launched.session.permissionMode?.name ?? 'not recorded',
+        'permissionMode': launched.session.permissionMode ?? 'not recorded',
         if (launched.session.worktree != null)
           'worktree': launched.session.worktree!.path,
       };
@@ -1947,7 +1972,7 @@ class LauncherControlServer implements SessionMcp {
       return {
         'preview': true,
         'target': target.agentName,
-        'permissionMode': target.permission.mode.name,
+        'permissionMode': target.permission.selection.canonical,
         'permission': target.permission.summary,
         'packet': packet.render(),
       };
@@ -1966,7 +1991,7 @@ class LauncherControlServer implements SessionMcp {
       'target': target.agentName,
       'parentSessionId': sessionId,
       'link': SessionLink.handoff.name,
-      'permissionMode': target.permission.mode.name,
+      'permissionMode': target.permission.selection.canonical,
       'permission': target.permission.summary,
       if (launched.session.worktree != null)
         'worktree': launched.session.worktree!.path,
@@ -2120,7 +2145,7 @@ class LauncherControlServer implements SessionMcp {
       externalId: session.externalId,
       environment: env,
       cwd: repo.path,
-      permissionMode: _permissionFor(session.cli),
+      permission: _permissionFor(session.cli),
       registry: _container.read(agentRegistryProvider),
     );
     await _container
@@ -2310,8 +2335,8 @@ class LauncherControlServer implements SessionMcp {
 
   /// Both callers are resuming a conversation the agent already has, so both
   /// ask for the existing-session mode — through the launcher, which is the one
-  /// place that turns a purpose into a [PermissionMode].
-  PermissionMode _permissionFor(String agentId) => _container
+  /// place that turns a purpose into a selection.
+  PermissionSelection _permissionFor(String agentId) => _container
       .read(sessionLauncherProvider)
       .permissionFor(agentId, SessionPurpose.existingSession);
 }

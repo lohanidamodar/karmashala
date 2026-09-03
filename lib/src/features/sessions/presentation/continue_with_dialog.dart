@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../agents/domain/agent_descriptor.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../../agents/domain/permission_carry.dart';
 import '../../agents/presentation/permission_mode_picker.dart';
-import '../../settings/domain/permission_mode.dart';
 import '../application/session_handoff_service.dart';
 import '../domain/session_fork.dart';
 
@@ -69,7 +70,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   /// the resolution depends on the agent and the agent is still changeable:
   /// [resolveContinuationPermission] is re-run on every build and again by the
   /// service at launch, from this one value, so the two cannot disagree.
-  PermissionMode? _chosenMode;
+  PermissionSelection? _chosenMode;
 
   bool _newWorktree = false;
   bool _busy = false;
@@ -169,7 +170,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   /// dialog needs nothing else to ask this question of any target in the list.
   ContinuationPermission _permissionFor(HandoffTarget target) =>
       resolveContinuationPermission(
-        sessionMode: target.permission.requested,
+        sessionRisk: target.permission.requested,
         target: target.descriptor,
         chosen: _chosenMode,
         targetName: target.agentName,
@@ -247,6 +248,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                 const SizedBox(height: Insets.sm),
                 _PermissionRow(
                   permission: permission,
+                  descriptor: focus.descriptor,
                   followsDefault: focus.followsDefault,
                   agentName: focus.agentName,
                   onChanged: (mode) => setState(() => _chosenMode = mode),
@@ -443,6 +445,7 @@ class _TargetPicker extends StatelessWidget {
 class _PermissionRow extends StatelessWidget {
   const _PermissionRow({
     required this.permission,
+    required this.descriptor,
     required this.followsDefault,
     required this.agentName,
     required this.onChanged,
@@ -450,13 +453,18 @@ class _PermissionRow extends StatelessWidget {
 
   final ContinuationPermission permission;
 
+  /// The target agent, so the picker can draw *its* axes. The dialog re-runs
+  /// this whenever the agent changes, which is what keeps a pick made for one
+  /// CLI from being shown against another's vocabulary.
+  final AgentDescriptor? descriptor;
+
   /// Whether the mode on offer is the Settings default rather than anything
   /// this session or this user decided. See [HandoffTarget.followsDefault].
   final bool followsDefault;
 
   final String agentName;
 
-  final ValueChanged<PermissionMode> onChanged;
+  final ValueChanged<PermissionSelection> onChanged;
 
   /// Where this mode came from, in the one case [ContinuationPermission] cannot
   /// know about: nobody chose it, here or upstream.
@@ -480,10 +488,15 @@ class _PermissionRow extends StatelessWidget {
           children: [
             Text('Runs under', style: theme.textTheme.labelSmall),
             const SizedBox(width: Insets.sm),
-            PermissionModePicker(
-              options: permission.options,
-              selected: permission.mode,
-              onChanged: onChanged,
+            // Flexible: Codex's label is a pair ("Workspace · On request"),
+            // which is wider than the three short words this row used to hold.
+            Flexible(
+              child: PermissionModePicker(
+                descriptor: descriptor,
+                selection: permission.selection,
+                onChanged: onChanged,
+                agentName: agentName,
+              ),
             ),
           ],
         ),

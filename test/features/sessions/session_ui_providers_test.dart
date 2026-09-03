@@ -4,6 +4,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/data/fake_agent_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -58,6 +59,7 @@ void main() {
           repository: repository(),
           installation: agentInstallation(),
           title: 'Work',
+          permission: ResolvedPermission.none,
         );
     container.read(sessionsRevisionProvider.notifier).bump();
 

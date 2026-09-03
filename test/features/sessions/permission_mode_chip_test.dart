@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_notice_line.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,27 +35,28 @@ class _StaticSettings extends SettingsController {
   Settings build() => _settings;
 }
 
-/// An agent whose only expressible mode is the most dangerous one.
+/// An agent nobody has established the modes of.
 ///
-/// Antigravity used to have this shape and no longer does — reading `agy
-/// --help` showed all three modes map exactly — so the two tests about a mode
-/// the descriptor *cannot* express need a descriptor written for them rather
-/// than whichever shipped agent is least understood.
-const _bypassOnly = AgentDescriptor(
-  id: 'bypassOnly',
-  displayName: 'Bypass-only CLI',
-  binaries: AgentBinaries(windows: ['b'], posix: ['b']),
-  launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
-    },
-  ),
+/// The shape the chip has to answer honestly rather than with a menu of
+/// guesses. No shipped agent has it, so it needs a descriptor written for it
+/// rather than whichever CLI happens to be least understood.
+const _unestablished = AgentDescriptor(
+  id: 'unestablished',
+  displayName: 'Unestablished CLI',
+  binaries: AgentBinaries(windows: ['u'], posix: ['u']),
+  launch: AgentLaunchSpec(),
 );
+
+// Claude Code's own ids, which is what a session row holds after v35.
+const _ask = 'mode=manual';
+const _acceptEdits = 'mode=acceptEdits';
+const _bypass = 'mode=bypassPermissions';
+const _bypassLabel = 'Bypass (full autonomy)';
 
 /// A session row for [agentId], carrying [mode] (null = inherit).
 ({AppDatabase db, ProviderScope app}) harness({
   required String agentId,
-  PermissionMode? mode,
+  String? mode,
   Settings settings = const Settings(),
   AgentRegistry registry = AgentRegistry.builtIn,
   String? externalSessionId,
@@ -148,10 +148,10 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.acceptEdits,
+      mode: _acceptEdits,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
-        const AgentPermissions(existingSessions: PermissionMode.bypass),
+        const AgentPermissions(existingSessions: _bypass),
       ),
     );
     addTearDown(h.db.close);
@@ -165,42 +165,41 @@ void main() {
     expect(find.textContaining('· '), findsNothing);
   });
 
-  testWidgets('marks an approximate mapping on the chip itself', (
-    tester,
-  ) async {
+  testWidgets('draws both of Codex\'s axes on the chip', (tester) async {
+    // The old chip said "Accept edits · approximate" here, because a shared
+    // three-value mode had to stand in for two independent flags. There is no
+    // approximation left to mark: the chip names what Codex will actually be
+    // told, on both axes.
     final h = harness(
       agentId: AgentIds.codex,
-      mode: PermissionMode.acceptEdits,
+      mode: 'approval=on-request;sandbox=workspace-write',
     );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
-    // Not only in the tooltip: "Accept edits" that is really Codex's
-    // sandbox mode has to look different from one that really is accept-edits.
-    expect(find.text('Accept edits'), findsOneWidget);
-    expect(find.text('· approximate'), findsOneWidget);
+    expect(find.text('Workspace · On request'), findsOneWidget);
+    expect(find.textContaining('approximate'), findsNothing);
   });
 
-  testWidgets('says so when the agent cannot be told at all', (tester) async {
-    final h = harness(
-      agentId: _bypassOnly.id,
-      mode: PermissionMode.ask,
-      registry: const AgentRegistry([_bypassOnly]),
-    );
-    addTearDown(h.db.close);
-    await tester.pumpWidget(h.app);
-
-    expect(find.text('Ask'), findsOneWidget);
-    expect(find.text('· not enforced'), findsOneWidget);
-  });
-
-  testWidgets('offers only the modes the descriptor can express', (
+  testWidgets('says so when the agent\'s modes are not established', (
     tester,
   ) async {
     final h = harness(
-      agentId: _bypassOnly.id,
-      mode: PermissionMode.ask,
-      registry: const AgentRegistry([_bypassOnly]),
+      agentId: _unestablished.id,
+      registry: const AgentRegistry([_unestablished]),
+    );
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    expect(find.text('Not established'), findsOneWidget);
+  });
+
+  testWidgets('an agent with no established modes offers one explained row', (
+    tester,
+  ) async {
+    final h = harness(
+      agentId: _unestablished.id,
+      registry: const AgentRegistry([_unestablished]),
     );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
@@ -208,36 +207,76 @@ void main() {
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
 
-    // All three are listed — hiding them would leave the user wondering where
-    // the safe option went — but only bypass can be chosen.
-    for (final mode in PermissionMode.values) {
-      expect(find.text(mode.label), findsOneWidget, reason: mode.name);
-    }
-    DesktopMenuDetailItem<PermissionChoice> item(PermissionMode mode) => tester
-        .widgetList<DesktopMenuDetailItem<PermissionChoice>>(
-          find.byType(DesktopMenuDetailItem<PermissionChoice>),
-        )
-        .firstWhere((w) => w.value?.mode == mode);
+    // The disabled-with-a-reason affordance, in the shape that survives when
+    // the *list itself* is unknown: one row saying so, rather than an empty
+    // menu or a set of guesses.
+    expect(find.text('No permission modes established'), findsOneWidget);
+    expect(find.textContaining('Unestablished CLI'), findsWidgets);
+    final row = tester.widget<DesktopMenuDetailItem<PermissionChoice>>(
+      find.widgetWithText(
+        DesktopMenuDetailItem<PermissionChoice>,
+        'No permission modes established',
+      ),
+    );
+    expect(row.enabled, isFalse);
+  });
 
-    expect(item(PermissionMode.ask).enabled, isFalse);
-    expect(item(PermissionMode.acceptEdits).enabled, isFalse);
-    expect(item(PermissionMode.bypass).enabled, isTrue);
+  testWidgets('a superseded axis is listed, disabled, and says why', (
+    tester,
+  ) async {
+    // Codex's bypass flag replaces the approval policy outright, so those rows
+    // are shown greyed rather than hidden — the same rule, now doing its work
+    // on an axis instead of on a mode the CLI never had.
+    final h = harness(
+      agentId: AgentIds.codex,
+      mode: 'approval=on-request;sandbox=bypass-all',
+    );
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    await tester.tap(find.byType(PermissionModeChip));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('nothing set here is passed'), findsWidgets);
+    final row = tester.widget<DesktopMenuDetailItem<PermissionChoice>>(
+      find.widgetWithText(DesktopMenuDetailItem<PermissionChoice>, 'Never ask'),
+    );
+    expect(row.enabled, isFalse);
+  });
+
+  testWidgets('a mode this build does not name is flagged, not shown as ours', (
+    tester,
+  ) async {
+    // A row written by a newer build. `resolveStored` substitutes the agent's
+    // default, which is the only thing it can do — but the chip must not draw
+    // the substitute as if the user had picked it.
+    final h = harness(agentId: AgentIds.claudeCode, mode: 'mode=somethingNewer');
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    expect(find.text('Ask'), findsOneWidget);
+    expect(find.text('· unrecognised'), findsOneWidget);
+    final tooltip = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .firstWhere((t) => (t.message ?? '').isNotEmpty);
+    expect(tooltip.message, contains('does not name'));
   });
 
   testWidgets('the menu draws the house two-line row', (tester) async {
     // Its rows were a `Row`/`Column` of their own inside a plain
     // `PopupMenuItem`; the Explorer's menus a pane away were `DesktopMenuItem`.
-    final h = harness(agentId: AgentIds.claudeCode, mode: PermissionMode.ask);
+    final h = harness(agentId: AgentIds.claudeCode, mode: _ask);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
 
-    // Every mode, plus the "follow the default" row above the divider.
+    // Claude Code's six modes, plus the "follow the default" row above the
+    // divider.
     expect(
       find.byType(DesktopMenuDetailItem<PermissionChoice>),
-      findsNWidgets(PermissionMode.values.length + 1),
+      findsNWidgets(7),
     );
     expect(find.byType(DesktopMenuDivider), findsOneWidget);
     expect(
@@ -264,18 +303,18 @@ void main() {
   testWidgets('choosing a mode writes the row and says when it applies', (
     tester,
   ) async {
-    final h = harness(agentId: AgentIds.claudeCode, mode: PermissionMode.ask);
+    final h = harness(agentId: AgentIds.claudeCode, mode: _ask);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.acceptEdits.label));
+    await tester.tap(find.text('Accept edits'));
     await tester.pumpAndSettle();
 
     expect(
       SessionDao(h.db).getById('s1')!.permissionMode,
-      PermissionMode.acceptEdits,
+      _acceptEdits,
     );
     // Never claims the running agent changed: it was started with the old
     // flags and no CLI here can be re-governed mid-session.
@@ -290,7 +329,7 @@ void main() {
       agentId: AgentIds.claudeCode,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
-        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+        const AgentPermissions(existingSessions: _acceptEdits),
       ),
     );
     addTearDown(h.db.close);
@@ -315,7 +354,7 @@ void main() {
       agentId: AgentIds.claudeCode,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
-        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+        const AgentPermissions(existingSessions: _acceptEdits),
       ),
     );
     addTearDown(h.db.close);
@@ -331,10 +370,10 @@ void main() {
   testWidgets('a chosen mode is not labelled as the default', (tester) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.acceptEdits,
+      mode: _acceptEdits,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
-        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+        const AgentPermissions(existingSessions: _acceptEdits),
       ),
     );
     addTearDown(h.db.close);
@@ -348,10 +387,10 @@ void main() {
   testWidgets('the menu offers the way back to the default', (tester) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.bypass,
+      mode: _bypass,
       settings: const Settings().withPermissions(
         AgentIds.claudeCode,
-        const AgentPermissions(existingSessions: PermissionMode.ask),
+        const AgentPermissions(existingSessions: _ask),
       ),
     );
     addTearDown(h.db.close);
@@ -377,7 +416,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.ask,
+      mode: _ask,
       externalSessionId: 'ext-1',
     );
     addTearDown(h.db.close);
@@ -386,10 +425,10 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.bypass.label));
+    await tester.tap(find.text(_bypassLabel));
     await tester.pumpAndSettle();
 
-    expect(find.text('${PermissionMode.bypass.label}?'), findsOneWidget);
+    expect(find.text('$_bypassLabel?'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
@@ -397,7 +436,7 @@ void main() {
     // row first and offering to undo would be a weaker promise: the mode would
     // already be recorded, and any other surface resuming this session would
     // honour it.
-    expect(SessionDao(h.db).getById('s1')!.permissionMode, PermissionMode.ask);
+    expect(SessionDao(h.db).getById('s1')!.permissionMode, _ask);
     expect(SessionDao(h.db).getById('s1')!.paneId, pane);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(PermissionModeChip)),
@@ -415,7 +454,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.ask,
+      mode: _ask,
       externalSessionId: 'ext-1',
     );
     addTearDown(h.db.close);
@@ -424,7 +463,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.bypass.label));
+    await tester.tap(find.text(_bypassLabel));
     await tester.pumpAndSettle();
 
     // The prompts, which the chip's colour already hints at.
@@ -442,7 +481,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.ask,
+      mode: _ask,
       externalSessionId: 'ext-1',
     );
     addTearDown(h.db.close);
@@ -451,14 +490,14 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.bypass.label));
+    await tester.tap(find.text(_bypassLabel));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Restart in bypass'));
+    await tester.tap(find.text('Restart in $_bypassLabel'));
     await tester.pumpAndSettle();
 
     expect(
       SessionDao(h.db).getById('s1')!.permissionMode,
-      PermissionMode.bypass,
+      _bypass,
     );
 
     // A second process, on the same conversation, carrying the flags the first
@@ -482,7 +521,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.ask,
+      mode: _ask,
       externalSessionId: 'ext-1',
     );
     addTearDown(h.db.close);
@@ -491,7 +530,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.acceptEdits.label));
+    await tester.tap(find.text('Accept edits'));
     await tester.pumpAndSettle();
 
     // Nothing was ended. Accept-edits is not dangerous, so it earns no dialog
@@ -514,7 +553,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.ask,
+      mode: _ask,
       externalSessionId: 'ext-1',
     );
     addTearDown(h.db.close);
@@ -523,7 +562,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.acceptEdits.label));
+    await tester.tap(find.text('Accept edits'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();
@@ -545,7 +584,7 @@ void main() {
   ) async {
     final h = harness(
       agentId: AgentIds.claudeCode,
-      mode: PermissionMode.ask,
+      mode: _ask,
       externalSessionId: 'ext-1',
     );
     addTearDown(h.db.close);
@@ -553,7 +592,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.acceptEdits.label));
+    await tester.tap(find.text('Accept edits'));
     await tester.pumpAndSettle();
 
     // "Applies when this session next runs" is already the whole truth here,
@@ -565,14 +604,14 @@ void main() {
   testWidgets('a session the CLI has never named refuses the restart', (
     tester,
   ) async {
-    final h = harness(agentId: AgentIds.claudeCode, mode: PermissionMode.ask);
+    final h = harness(agentId: AgentIds.claudeCode, mode: _ask);
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
     final pane = startAgent(tester, h.db);
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(PermissionMode.acceptEdits.label));
+    await tester.tap(find.text('Accept edits'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();
@@ -594,7 +633,7 @@ void main() {
     );
     expect(
       SessionDao(h.db).getById('s1')!.permissionMode,
-      PermissionMode.acceptEdits,
+      _acceptEdits,
     );
     expect(find.textContaining('new conversation'), findsOneWidget);
     expect(find.textContaining('is saved'), findsOneWidget);

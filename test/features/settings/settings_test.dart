@@ -4,10 +4,12 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/permission_fixtures.dart';
 
 void main() {
   group('simulator slimming', _simulatorSlimmingTests);
@@ -143,16 +145,21 @@ void main() {
   });
 
   group('Settings model', () {
-    test('defaults to ask permissions and no default agent', () {
+    test('defaults to no stored permission and no default agent', () {
       const s = Settings();
       expect(s.defaultAgent, isNull);
+      // There is no shared mode left to preset, and presetting one agent's
+      // word here would be a guess about every other agent. Null means
+      // "nobody chose", and the agent's own declared default applies.
       expect(
         s.permissionsFor(AgentIds.claudeCode).newSessions,
-        PermissionMode.ask,
+        isNull,
+        reason: 'a fresh install imposes no mode of its own',
       );
       expect(
         s.permissionsFor(AgentIds.claudeCode).existingSessions,
-        PermissionMode.ask,
+        isNull,
+        reason: 'a fresh install imposes no mode of its own',
       );
     });
 
@@ -160,19 +167,19 @@ void main() {
       final s = const Settings(defaultAgent: AgentIds.codex).withPermissions(
         AgentIds.claudeCode,
         const AgentPermissions(
-          newSessions: PermissionMode.acceptEdits,
-          existingSessions: PermissionMode.bypass,
+          newSessions: claudeAcceptEditsStored,
+          existingSessions: claudeBypassStored,
         ),
       );
       final restored = Settings.fromJson(s.toJson());
       expect(restored.defaultAgent, AgentIds.codex);
       expect(
         restored.permissionsFor(AgentIds.claudeCode).newSessions,
-        PermissionMode.acceptEdits,
+        claudeAcceptEditsStored,
       );
       expect(
         restored.permissionsFor(AgentIds.claudeCode).existingSessions,
-        PermissionMode.bypass,
+        claudeBypassStored,
       );
       expect(restored, s);
     });
@@ -180,16 +187,14 @@ void main() {
     test('permissions for an agent with no AgentKind survive a round-trip', () {
       final s = const Settings().withPermissions(
         'roverCli',
-        const AgentPermissions(newSessions: PermissionMode.bypass),
+        const AgentPermissions(newSessions: bypassStored),
       );
       final restored = Settings.fromJson(s.toJson());
-      expect(
-        restored.permissionsFor('roverCli').newSessions,
-        PermissionMode.bypass,
-      );
+      expect(restored.permissionsFor('roverCli').newSessions, bypassStored);
       expect(
         restored.permissionsFor('roverCli').existingSessions,
-        PermissionMode.ask,
+        isNull,
+        reason: 'the half that was never set stays unset',
       );
     });
 
@@ -198,10 +203,12 @@ void main() {
       expect(Settings.fromJson(s.toJson()).defaultAgent, 'roverCli');
     });
 
-    test('bypass is the only dangerous mode', () {
-      expect(PermissionMode.ask.isDangerous, isFalse);
-      expect(PermissionMode.acceptEdits.isDangerous, isFalse);
-      expect(PermissionMode.bypass.isDangerous, isTrue);
+    test('bypass is the only dangerous rung', () {
+      expect(PermissionRisk.readOnly.isDangerous, isFalse);
+      expect(PermissionRisk.ask.isDangerous, isFalse);
+      expect(PermissionRisk.acceptEdits.isDangerous, isFalse);
+      expect(PermissionRisk.autoRun.isDangerous, isFalse);
+      expect(PermissionRisk.bypass.isDangerous, isTrue);
     });
   });
 
@@ -345,20 +352,20 @@ void main() {
 
     test('setting a permission persists per agent and session kind', () {
       container.read(settingsControllerProvider.notifier)
-        ..setNewSessionPermission(AgentIds.claudeCode, PermissionMode.bypass)
+        ..setNewSessionPermission(AgentIds.claudeCode, claudeBypassStored)
         ..setExistingSessionPermission(
           AgentIds.claudeCode,
-          PermissionMode.acceptEdits,
+          claudeAcceptEditsStored,
         );
 
       final loaded = SettingsRepository(db).load();
       expect(
         loaded.permissionsFor(AgentIds.claudeCode).newSessions,
-        PermissionMode.bypass,
+        claudeBypassStored,
       );
       expect(
         loaded.permissionsFor(AgentIds.claudeCode).existingSessions,
-        PermissionMode.acceptEdits,
+        claudeAcceptEditsStored,
       );
     });
   });

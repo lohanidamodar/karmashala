@@ -1,44 +1,56 @@
-import '../../settings/domain/permission_mode.dart';
+import '../../settings/domain/permission_risk.dart';
 import 'agent_descriptor.dart';
 import 'agent_permission_options.dart';
+import 'agent_permission_support.dart';
 
-/// What happens to a session's permission mode when the work moves to a
-/// different agent.
+/// What happens to a session's permission when the work moves to a different
+/// agent.
 ///
-/// A handoff crosses a boundary Loop 49 never had to: the mode was resolved for
-/// **one** agent, and the agent receiving it may not have that mode at all.
-/// Loop 49's answer for a single agent was option C — do not offer what cannot
-/// happen — but that answer is not available here, because the user is not
-/// picking a mode, they are picking an *agent*, and the mode has to go
-/// somewhere.
+/// A handoff crosses the one boundary the per-agent model cannot remove: the
+/// mode was chosen in **one CLI's vocabulary**, and the agent receiving it does
+/// not speak that vocabulary at all. `mode=acceptEdits` means nothing to Codex.
+/// So the two are compared on the only thing they share — [PermissionRisk], how
+/// permissive the mode is — and the target is given the closest thing it really
+/// has.
 ///
-/// So the rule is: **carry it if it maps, otherwise fall back downwards, and
-/// never silently upwards.**
+/// The rule: **carry it if the target reaches that rung, otherwise fall
+/// downwards, and never upwards.**
 class CarriedPermission {
   const CarriedPermission({
     required this.requested,
-    required this.mode,
+    required this.selection,
+    required this.risk,
     required this.fit,
     required this.targetAgentName,
+    this.label = '',
     this.note,
   });
 
-  /// The mode the source session runs under.
-  final PermissionMode requested;
+  /// How permissive the source session is.
+  final PermissionRisk requested;
 
-  /// The mode the target will actually be launched with.
-  final PermissionMode mode;
+  /// What the target will actually be launched with, in its own vocabulary.
+  /// Empty for an agent with no declared modes.
+  final PermissionSelection selection;
 
-  /// How faithfully [mode] reaches the target agent.
+  /// How permissive [selection] actually is, or null when the target declares
+  /// nothing and there is therefore nothing to measure.
+  final PermissionRisk? risk;
+
+  /// How faithfully the rung survived the move.
   final PermissionModeFit fit;
 
   final String targetAgentName;
 
-  /// The target descriptor's own words about [mode], when it has any.
+  /// The target's own name for [selection] — "Plan mode", "Read-only ·
+  /// Never ask".
+  final String label;
+
+  /// The target's own words about what it will do.
   final String? note;
 
-  /// Whether the mode had to change to survive the move.
-  bool get changed => mode != requested;
+  /// Whether the rung had to change to survive the move.
+  bool get changed => risk != null && risk != requested;
 
   /// Whether the target can be told anything at all about this.
   bool get enforced => fit != PermissionModeFit.none;
@@ -46,92 +58,108 @@ class CarriedPermission {
   /// One sentence for the confirmation step, so the user reads what will
   /// happen **before** anything is launched rather than discovering it after.
   ///
-  /// Every branch names the agent. "Karmashala cannot enforce this" invites
-  /// the reader to blame the app for a limit that belongs to the CLI, and the
+  /// Every branch names the agent. "Karmashala cannot enforce this" invites the
+  /// reader to blame the app for a limit that belongs to the CLI, and the
   /// user's next decision — go ahead, or pick a different agent — depends on
   /// knowing which.
   String get summary {
     if (!enforced) {
-      return '$targetAgentName takes no flag for ${requested.label.toLowerCase()} '
-          'and nothing safer that it does understand, so it will start under '
-          'its own default and Karmashala cannot govern it.';
+      return '$targetAgentName takes no mode as careful as '
+          '${requested.label.toLowerCase()}, and nothing safer that it does '
+          'understand, so it will start under its own default and Karmashala '
+          'cannot govern it.';
     }
-    final about = switch (fit) {
-      PermissionModeFit.exact => '$targetAgentName is told to use it.',
-      PermissionModeFit.approximate =>
-        'Approximate for $targetAgentName. ${note ?? ''}'.trim(),
-      PermissionModeFit.none => '',
-    };
-    if (!changed) return '${mode.label} — $about';
+    if (!changed) return '$label — $targetAgentName is told to use it.';
     return '${requested.label} is not something $targetAgentName can be put '
-        'into, so it starts under the safest mode it does express, which is '
-        'no more permissive than what you asked for: ${mode.label}. $about';
+        'into, so it starts under the closest mode it does have, which is no '
+        'more permissive than what you asked for: $label.'
+        '${note == null ? '' : ' $note'}';
   }
 }
 
 /// Resolves [requested] against [target].
 ///
-/// 1. If the target expresses [requested], carry it unchanged — exactly or
-///    approximately, and say which.
-/// 2. Otherwise take the **safest** mode the target does express, and only if
-///    it is no more permissive than [requested]. `PermissionMode.values` is
-///    ordered safest-first, which is what makes "no more permissive" an index
-///    comparison rather than a table.
-/// 3. Otherwise carry [requested] with [PermissionModeFit.none] and say the
-///    agent's own default applies.
+/// 1. The **most permissive** selection the target has whose rung is no more
+///    permissive than [requested]. Equal rung is an [PermissionModeFit.exact]
+///    carry; anything lower is [PermissionModeFit.approximate] and says so.
+/// 2. If the target has nothing at or below [requested] — every mode it owns is
+///    *more* permissive — **nothing is passed** and the agent's own default
+///    applies, reported as [PermissionModeFit.none] and said out loud. Handing
+///    over even the target's safest mode would still exceed what the user
+///    asked for.
+/// 3. A target with no declared modes likewise carries nothing and says so.
 ///
-/// Step 2's *downwards only* clause is the whole safety property, and
-/// Antigravity is exactly why it is written this way rather than as "the
-/// nearest mode": its only expressible mode is `bypass`. A rule that reached
-/// for the nearest available mode would answer a handoff of a careful `ask`
-/// session by launching the next agent with `--yolo` — turning the user's
-/// safest choice into the most dangerous one as a side effect of changing
-/// provider. Under this rule that case falls to step 3, which passes no flag
-/// and says so.
+/// The downwards-only clause in step 1 is the whole safety property, and
+/// Antigravity is why it is written this way rather than as "the nearest mode":
+/// a rule that reached for the nearest available rung could answer a handoff of
+/// a careful ask-every-time session by launching the next agent in a bypass —
+/// turning the user's safest choice into the most dangerous one as a side
+/// effect of changing provider.
 CarriedPermission carryPermission(
-  PermissionMode requested,
+  PermissionRisk requested,
   AgentDescriptor? target, {
   String? targetName,
 }) {
   final name = targetName ?? target?.displayName ?? 'This agent';
-  final launch = target?.launch;
-  final fit = launch?.permissionFitFor(requested) ?? PermissionModeFit.none;
-  if (fit != PermissionModeFit.none) {
+  final support = target?.launch.permission;
+  if (support == null || !support.isKnown) {
     return CarriedPermission(
       requested: requested,
-      mode: requested,
-      fit: fit,
+      selection: PermissionSelection.empty,
+      risk: null,
+      fit: PermissionModeFit.none,
       targetAgentName: name,
-      note: launch?.permissionNoteFor(requested),
     );
   }
 
-  final ceiling = PermissionMode.values.indexOf(requested);
-  for (final candidate in PermissionMode.values) {
-    if (PermissionMode.values.indexOf(candidate) > ceiling) break;
-    final candidateFit =
-        launch?.permissionFitFor(candidate) ?? PermissionModeFit.none;
-    if (candidateFit == PermissionModeFit.none) continue;
+  // Safest-first, so the last one at or below the ceiling is the most
+  // permissive the target can be given without exceeding what was asked for.
+  final selections = support.selections();
+  PermissionSelection? best;
+  for (final candidate in selections) {
+    final risk = support.riskOf(candidate);
+    if (risk != null && risk.isAtMost(requested)) best = candidate;
+  }
+
+  if (best == null) {
+    // Everything this agent has is **more permissive** than what was asked
+    // for, so nothing is passed and the agent's own default applies.
+    //
+    // This is the one place the per-agent model deliberately does pass no
+    // flag, and it is the lesser of two evils rather than an oversight.
+    // Handing over the agent's *safest* mode would still be more permissive
+    // than the user asked for — for an agent whose only mode is a bypass, it
+    // would answer the handoff of a careful session by launching the next
+    // agent with nothing in the way. Turning the user's safest choice into
+    // the most dangerous one as a side effect of changing provider is the
+    // exact failure this rule exists to prevent, so the honest answer is to
+    // enforce nothing and say so.
     return CarriedPermission(
       requested: requested,
-      mode: candidate,
-      fit: candidateFit,
+      selection: PermissionSelection.empty,
+      risk: null,
+      fit: PermissionModeFit.none,
       targetAgentName: name,
-      note: launch?.permissionNoteFor(candidate),
     );
   }
 
+  final risk = support.riskOf(best);
   return CarriedPermission(
     requested: requested,
-    mode: requested,
-    fit: PermissionModeFit.none,
+    selection: best,
+    risk: risk,
+    fit: risk == requested
+        ? PermissionModeFit.exact
+        : PermissionModeFit.approximate,
     targetAgentName: name,
+    label: describeSelection(support, best),
+    note: describeSelectionDetail(support, best),
   );
 }
 
 /// Where the mode a continuation launches under came from.
 enum PermissionChoiceOrigin {
-  /// Nobody picked one: the source session's mode, put through
+  /// Nobody picked one: the source session's rung, put through
   /// [carryPermission].
   carried,
 
@@ -142,45 +170,37 @@ enum PermissionChoiceOrigin {
 /// The permission decision for one continuation target: the modes that agent
 /// can be put into, the one it will launch under, and where that came from.
 ///
-/// One value rather than a mode sitting beside a list in the dialog's state,
-/// because all three answers change together the moment the user picks a
+/// One value rather than a selection sitting beside a list in the dialog's
+/// state, because all of it changes together the moment the user picks a
 /// different agent — a selection that outlived the agent it was made for is
 /// exactly the bug this shape makes unrepresentable.
 class ContinuationPermission {
   const ContinuationPermission({
     required this.carried,
-    required this.options,
+    required this.axes,
     required this.origin,
   });
 
-  /// How the selected mode reaches the target: the same [carryPermission]
-  /// answer the target row shows, re-run against whatever the user picked.
+  /// How the selected mode reaches the target.
   final CarriedPermission carried;
 
-  /// Every mode with how it maps onto this agent, safest first. A mode the
-  /// descriptor cannot express is present and **not selectable** — a picker
-  /// changes nothing about Loop 31 §4 option C.
-  final List<AgentPermissionOption> options;
+  /// The target's own axes, each with its rows — what a picker draws. Empty for
+  /// an agent whose modes have never been established, which draws the single
+  /// disabled row that says so.
+  final List<AgentPermissionAxisOptions> axes;
 
   final PermissionChoiceOrigin origin;
 
-  /// The mode the launch will request.
-  PermissionMode get mode => carried.mode;
+  /// The selection the launch will request.
+  PermissionSelection get selection => carried.selection;
 
   bool get wasChosen => origin == PermissionChoiceOrigin.chosen;
-
-  /// The selected mode's own row, so a control renders the selection through
-  /// the same option the menu offers rather than a second description of it.
-  AgentPermissionOption get selected =>
-      options.firstWhere((option) => option.mode == mode);
 
   /// The line under the picker: where this mode came from, and what it does to
   /// this agent.
   ///
   /// Only the default needs its origin stated. A mode the user picked is not a
-  /// surprise to them; the default is one they never made, so it says so —
-  /// including when the carry rule had to change it, which
-  /// [CarriedPermission.summary] already explains in the agent's own terms.
+  /// surprise to them; the default is one they never made.
   String get explanation => switch (origin) {
     PermissionChoiceOrigin.chosen => carried.summary,
     PermissionChoiceOrigin.carried =>
@@ -188,117 +208,105 @@ class ContinuationPermission {
   };
 }
 
-/// What continuing a session that runs under [sessionMode] in [target] will
-/// launch under, given whatever the user picked for that agent.
+/// What continuing a session that runs at [sessionRisk] in [target] will launch
+/// under, given whatever the user picked for that agent.
 ///
-/// [chosen] does not step around [carryPermission], it **replaces its input**.
-/// A pick is a request like any other and gets the same downwards-only
-/// treatment, so offering a picker cannot become a way around the one rule
-/// this file exists for. It is also what makes changing the agent safe: a mode
-/// picked while one agent was selected falls to the safest thing the next agent
-/// does express, rather than staying selected and being silently dropped at
-/// launch.
+/// [chosen] is a selection in the **target's** vocabulary — the user picked it
+/// from the target's own axes, so it needs no carrying and is used as-is. The
+/// carry rule only applies when nobody has picked, which is the case it exists
+/// for: moving a decision made for one CLI onto another.
 ContinuationPermission resolveContinuationPermission({
-  required PermissionMode sessionMode,
+  required PermissionRisk sessionRisk,
   required AgentDescriptor? target,
-  PermissionMode? chosen,
+  PermissionSelection? chosen,
   String? targetName,
 }) {
   final name = targetName ?? target?.displayName ?? 'This agent';
+  final support = target?.launch.permission;
+  final carried = chosen == null || support == null || !support.isKnown
+      ? carryPermission(sessionRisk, target, targetName: name)
+      : CarriedPermission(
+          requested: sessionRisk,
+          selection: support.normalise(chosen),
+          risk: support.riskOf(chosen),
+          fit: PermissionModeFit.exact,
+          targetAgentName: name,
+          label: describeSelection(support, chosen),
+          note: describeSelectionDetail(support, chosen),
+        );
   return ContinuationPermission(
-    carried: carryPermission(chosen ?? sessionMode, target, targetName: name),
-    options: permissionOptionsFor(target, agentName: name),
+    carried: carried,
+    axes: permissionAxisOptionsFor(target, agentName: name),
     origin: chosen == null
         ? PermissionChoiceOrigin.carried
         : PermissionChoiceOrigin.chosen,
   );
 }
 
-/// The most a session started to **review** someone else's work may be
-/// trusted with.
+/// The most a session started to **review** someone else's work may be trusted
+/// with.
 ///
-/// [PermissionMode.ask] is not a conservative preference here, it is the only
-/// mode left once "a reviewer must not write" is taken seriously:
-/// [PermissionMode.acceptEdits] auto-approves file edits and
-/// [PermissionMode.bypass] auto-approves everything, so both hand the reviewer
-/// the ability to quietly repair what it was asked to judge — and a review that
-/// fixed the thing it graded is not evidence of anything.
+/// [PermissionRisk.ask] is not a conservative preference here, it is the cap
+/// that follows from "a reviewer must not write": every rung above it
+/// auto-approves edits, and a review that fixed the thing it graded is not
+/// evidence of anything.
 ///
-/// The gap this leaves is real and is stated rather than hidden: no mode in
-/// [PermissionMode] separates *running* a command from *writing* a file, so a
-/// reviewer that wants to run the tests asks first. That is the wrong friction
-/// in the right direction, and closing it needs a new mode rather than a
-/// looser cap here.
-const PermissionMode reviewPermissionCeiling = PermissionMode.ask;
+/// **[PermissionRisk.readOnly] would now be expressible**, and would be the
+/// better cap — it separates *running* a command from *writing* a file, which
+/// the old three-value enum could not and which this comment used to name as
+/// the gap. It is not taken yet because what Claude Code's plan mode permits a
+/// reviewer to *run* has not been measured. See docs/BACKLOG.md.
+const PermissionRisk reviewPermissionCeiling = PermissionRisk.ask;
 
 /// What a review session will actually launch under, and whether the session it
 /// reviews was more autonomous than that.
-///
-/// A wrapper around [CarriedPermission] rather than a replacement for it,
-/// because the two answer different questions and the user needs both: the
-/// carry says how faithfully a mode reaches *this agent*, and this says why
-/// that mode is the one being carried at all.
 class ReviewCarry {
-  const ReviewCarry({required this.carried, required this.sessionMode});
+  const ReviewCarry({required this.carried, required this.sessionRisk});
 
   /// The ordinary carry, run against the ceiling rather than against the
-  /// reviewed session's own mode.
+  /// reviewed session's own rung.
   final CarriedPermission carried;
 
-  /// The mode the session under review runs under. Recorded so the cap can say
+  /// How permissive the session under review is. Recorded so the cap can say
   /// what it reduced, which is the only part of this a user cannot see
   /// elsewhere.
-  final PermissionMode sessionMode;
+  final PermissionRisk sessionRisk;
 
-  /// The mode the review will be launched with.
-  PermissionMode get mode => carried.mode;
+  /// The selection the review will be launched with.
+  PermissionSelection get selection => carried.selection;
 
   /// Whether the reviewed session runs under something the ceiling refused to
   /// carry across.
-  bool get wasCapped =>
-      PermissionMode.values.indexOf(sessionMode) >
-      PermissionMode.values.indexOf(reviewPermissionCeiling);
+  bool get wasCapped => !sessionRisk.isAtMost(reviewPermissionCeiling);
 
   /// One sentence for the control that starts the review.
-  ///
-  /// Unlike a handoff, this never needs to be read *before* the launch to keep
-  /// the user safe — a cap can only ever reduce what the next agent may do —
-  /// so it is written to sit in a tooltip rather than a confirmation step.
   String get summary {
     final cap = wasCapped
-        ? 'That session runs under ${sessionMode.label}; a review is capped at '
-              '${reviewPermissionCeiling.label.toLowerCase()}, because an '
-              'agent that may write is not reviewing the change, it is '
-              'changing it. '
+        ? 'That session runs at ${sessionRisk.label.toLowerCase()}; a review is '
+              'capped at ${reviewPermissionCeiling.label.toLowerCase()}, '
+              'because an agent that may write is not reviewing the change, it '
+              'is changing it. '
         : 'A review may read and run, never write. ';
     return '$cap${carried.summary}';
   }
 }
 
-/// The permission a review of a session running under [sessionMode] gets in
-/// [target].
+/// The permission a review of a session at [sessionRisk] gets in [target].
 ///
 /// Two rules compose here and the order matters. The ceiling is applied
 /// **first**, to the request, so what reaches [carryPermission] is already no
 /// more than a reviewer may have; [carryPermission] then applies its own
-/// downwards-only rule to fit that onto the agent. Capping afterwards would be
-/// the same answer today and the wrong shape: it would let an agent's mapping
-/// be consulted for a mode no reviewer is allowed to ask for.
+/// downwards-only rule to fit that onto the agent.
 ReviewCarry carryReviewPermission({
-  required PermissionMode sessionMode,
+  required PermissionRisk sessionRisk,
   required AgentDescriptor? target,
   String? targetName,
 }) {
-  // min(), spelled as an index comparison for the same reason
-  // [carryPermission] spells "no more permissive" that way: the enum's order is
-  // the safety order, and nothing else defines it.
-  final requested =
-      PermissionMode.values.indexOf(sessionMode) <
-          PermissionMode.values.indexOf(reviewPermissionCeiling)
-      ? sessionMode
+  final requested = sessionRisk.isAtMost(reviewPermissionCeiling)
+      ? sessionRisk
       : reviewPermissionCeiling;
   return ReviewCarry(
     carried: carryPermission(requested, target, targetName: targetName),
-    sessionMode: sessionMode,
+    sessionRisk: sessionRisk,
   );
 }

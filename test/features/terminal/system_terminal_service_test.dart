@@ -2,12 +2,26 @@ import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
+
+/// The modes these command lines are built for, in each CLI's own vocabulary.
+/// There is no shared enum left to name them with: "ask" is
+/// `--permission-mode manual` to Claude Code, an unflagged run to Antigravity,
+/// and a sandbox plus an approval policy to Codex.
+final _claudeAsk = PermissionSelection.parse(claudeAskStored)!;
+final _claudeAcceptEdits = PermissionSelection.parse(claudeAcceptEditsStored)!;
+final _claudeBypass = PermissionSelection.parse(claudeBypassStored)!;
+final _codexDefault = PermissionSelection.parse(codexDefaultStored)!;
+final _codexBypass = PermissionSelection.parse(codexBypassStored)!;
+final _antigravityAsk = PermissionSelection.parse(antigravityAskStored)!;
+final _antigravityBypass = PermissionSelection.parse(antigravityBypassStored)!;
+const _antigravityAcceptEdits = PermissionSelection({'mode': 'accept-edits'});
 
 void main() {
   group('across hosts', _crossPlatformTests);
@@ -35,7 +49,7 @@ void main() {
         externalId: 'abc',
         environment: windowsEnv(),
         cwd: cwd,
-        permissionMode: PermissionMode.bypass,
+        permission: _claudeBypass,
       );
       expect(cmd, [
         'claude',
@@ -62,6 +76,8 @@ void main() {
         '/home/me/app',
         '--',
         'codex',
+        '--sandbox',
+        'workspace-write',
         '--ask-for-approval',
         'on-request',
         'resume',
@@ -144,11 +160,21 @@ void main() {
       // wrong or may mean something else entirely; an agent the registry has never heard of
       // gets no arguments at all rather than another agent's flags
       // puts that on the wrong side of "safety by default".
-      for (final mode in PermissionMode.values) {
+      // Every real selection the three shipped CLIs have, plus "nothing
+      // chosen": none of them may put a flag on a binary we have never read.
+      for (final selection in [
+        null,
+        _claudeAsk,
+        _claudeBypass,
+        _codexDefault,
+        _codexBypass,
+        _antigravityAsk,
+        _antigravityBypass,
+      ]) {
         expect(
-          permissionArgsFor('someAgentWeHaveNeverHeardOf', mode),
+          permissionArgsFor('someAgentWeHaveNeverHeardOf', selection),
           isEmpty,
-          reason: mode.name,
+          reason: selection?.canonical ?? 'nothing chosen',
         );
       }
     });
@@ -157,33 +183,31 @@ void main() {
       // `ask` was `isEmpty` here until a real CLI contradicted it: an unflagged
       // Claude Code session starts in `auto` on a Pro/Max/Team account, so
       // passing nothing was not the safe mode it looked like.
-      expect(permissionArgsFor('claudeCode', PermissionMode.ask), [
+      expect(permissionArgsFor('claudeCode', _claudeAsk), [
         '--permission-mode',
         'manual',
       ]);
-      expect(permissionArgsFor('claudeCode', PermissionMode.acceptEdits), [
+      expect(permissionArgsFor('claudeCode', _claudeAcceptEdits), [
         '--permission-mode',
         'acceptEdits',
       ]);
-      expect(permissionArgsFor('claudeCode', PermissionMode.bypass), [
+      expect(permissionArgsFor('claudeCode', _claudeBypass), [
         '--permission-mode',
         'bypassPermissions',
       ]);
 
-      expect(permissionArgsFor('codex', PermissionMode.ask), [
-        '--ask-for-approval',
-        'on-request',
-      ]);
+      // Codex has two axes and both reach the command line, sandbox first.
       // Not `on-failure` and no longer `untrusted`: codex-cli rejects both
       // outright and refuses to start (0.145.0 and 0.151.0 respectively). See
       // built_in_agents.dart for the transcripts.
-      expect(permissionArgsFor('codex', PermissionMode.acceptEdits), [
+      expect(permissionArgsFor('codex', _codexDefault), [
         '--sandbox',
         'workspace-write',
         '--ask-for-approval',
         'on-request',
       ]);
-      expect(permissionArgsFor('codex', PermissionMode.bypass), [
+      // The bypass flag supersedes the approval axis, so it arrives alone.
+      expect(permissionArgsFor('codex', _codexBypass), [
         '--dangerously-bypass-approvals-and-sandbox',
       ]);
 
@@ -191,12 +215,12 @@ void main() {
       // `agy` does — an exact mapping that needs no flag, not a mode we
       // cannot express. The other two are the flags `agy --help` documents;
       // `--yolo`, which this used to assert, is not a flag the CLI has.
-      expect(permissionArgsFor('antigravity', PermissionMode.ask), isEmpty);
-      expect(permissionArgsFor('antigravity', PermissionMode.acceptEdits), [
+      expect(permissionArgsFor('antigravity', _antigravityAsk), isEmpty);
+      expect(permissionArgsFor('antigravity', _antigravityAcceptEdits), [
         '--mode',
         'accept-edits',
       ]);
-      expect(permissionArgsFor('antigravity', PermissionMode.bypass), [
+      expect(permissionArgsFor('antigravity', _antigravityBypass), [
         '--dangerously-skip-permissions',
       ]);
     });
@@ -231,7 +255,7 @@ void main() {
           agentExecutable: 'agy',
           cli: 'antigravity',
           externalId: 'conv-1',
-          permissionMode: PermissionMode.ask,
+          permission: _antigravityAsk,
           cwd: r'C:\ws\app',
           environment: EnvironmentKind.windowsNative,
         ),
@@ -266,7 +290,7 @@ void main() {
           agentExecutable: 'claude',
           cli: 'claudeCode',
           externalId: 'abc',
-          permissionMode: PermissionMode.ask,
+          permission: _claudeAsk,
           cwd: '/home/me/app',
           environment: EnvironmentKind.wsl,
         ),
@@ -277,7 +301,7 @@ void main() {
           agentExecutable: 'codex',
           cli: 'codex',
           externalId: 'sid',
-          permissionMode: PermissionMode.bypass,
+          permission: _codexBypass,
           cwd: '/home/me/app',
           environment: EnvironmentKind.wsl,
         ),
@@ -291,7 +315,7 @@ void main() {
         shellCommandLine(
           agentExecutable: 'agy',
           cli: 'antigravity',
-          permissionMode: PermissionMode.ask,
+          permission: _antigravityAsk,
           cwd: r'C:\ws\app',
           environment: EnvironmentKind.windowsNative,
         ),
@@ -314,7 +338,7 @@ void main() {
       agentExecutable: cwd.startsWith('/') ? 'codex' : r'C:\bin\codex.exe',
       cli: 'codex',
       externalId: 'sid',
-      permissionMode: PermissionMode.bypass,
+      permission: _codexBypass,
       cwd: cwd,
       environment: environment,
     );
@@ -364,7 +388,7 @@ void main() {
         shellCommandLine(
           agentExecutable: r"C:\Program Files\o'brien\codex.exe",
           cli: 'mysteryAgent',
-          permissionMode: PermissionMode.ask,
+          permission: _claudeAsk,
           cwd: r"C:\Users\me\$dev\it's here",
           environment: EnvironmentKind.windowsNative,
         ),
@@ -382,7 +406,7 @@ void main() {
         shellCommandLine(
           agentExecutable: 'agent',
           cli: 'mysteryAgent',
-          permissionMode: PermissionMode.ask,
+          permission: _claudeAsk,
           cwd: r'/home/me/odd\dir',
           environment: EnvironmentKind.wsl,
         ),

@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
@@ -34,6 +34,17 @@ import 'package:integration_test/integration_test.dart';
 ///
 /// See `tool/verification/README.md` for what a real regression test of this
 /// behaviour would need.
+/// Codex's own selections, in its own vocabulary — the probe drives Codex and
+/// nothing else, so there is no shared mode left to name here.
+const _codexReadOnly = PermissionSelection({
+  'sandbox': 'read-only',
+  'approval': 'on-request',
+});
+const _codexWorkspace = PermissionSelection({
+  'sandbox': 'workspace-write',
+  'approval': 'on-request',
+});
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -174,7 +185,7 @@ void main() {
           executable: 'codex',
           arguments: agentPaneArguments(
             AgentRegistry.builtIn.byId(AgentIds.codex),
-            PermissionMode.ask,
+            _codexReadOnly,
             prompt: 'Reply with exactly the word PONG and nothing else.',
           ),
           workingDirectory: '/tmp',
@@ -211,7 +222,7 @@ void main() {
           executable: 'codex',
           arguments: agentPaneArguments(
             AgentRegistry.builtIn.byId(AgentIds.codex),
-            PermissionMode.ask,
+            _codexReadOnly,
             resumeSessionId: id,
           ),
           workingDirectory: '/tmp',
@@ -251,7 +262,7 @@ void main() {
           executable: 'claude',
           arguments: agentPaneArguments(
             AgentRegistry.builtIn.byId(AgentIds.claudeCode),
-            PermissionMode.acceptEdits,
+            _codexWorkspace,
             sessionId: id,
             prompt: 'Reply with exactly the word PONG and nothing else.',
           ),
@@ -282,7 +293,7 @@ void main() {
           executable: 'claude',
           arguments: agentPaneArguments(
             AgentRegistry.builtIn.byId(AgentIds.claudeCode),
-            PermissionMode.acceptEdits,
+            _codexWorkspace,
             resumeSessionId: id,
           ),
           workingDirectory: '/tmp',

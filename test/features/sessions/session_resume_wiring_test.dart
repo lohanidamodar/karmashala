@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_resume.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -29,6 +28,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
 /// Stand-ins for the two verified behaviours, so the tests exercise the
@@ -42,9 +42,7 @@ const _sharing = AgentDescriptor(
   displayName: 'Sharing Agent',
   binaries: AgentBinaries(windows: ['sharing'], posix: ['sharing']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--resume'),
     allowsConcurrentResume: true,
   ),
@@ -55,9 +53,7 @@ const _exclusive = AgentDescriptor(
   displayName: 'Exclusive Agent',
   binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.subcommand('resume'),
     // Left at the default — the point of the default.
   ),
@@ -356,7 +352,7 @@ void main() {
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(second.paneId!)!
           .agentLaunch!;
-      expect(launch.arguments, ['--ask', '--resume', 'ext-1']);
+      expect(launch.arguments, ['--mode', 'ask', '--resume', 'ext-1']);
     });
 
     test('refuses a forbidden one before anything is written', () async {

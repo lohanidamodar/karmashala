@@ -22,18 +22,18 @@ import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
 
-/// An agent whose CLI takes an opening message and understands two of the
-/// three modes — so "not selectable" is a real row rather than a hypothesis.
+/// An agent whose CLI takes an opening message and declares three modes of its
+/// own — so the phone is offered a real vocabulary rather than a hypothesis.
 const _rover = AgentDescriptor(
   id: 'roverCli',
   displayName: 'Rover CLI',
@@ -41,10 +41,7 @@ const _rover = AgentDescriptor(
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
     prompt: AgentPromptSupport.positional(),
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
+    permission: testPermissionSupport,
   ),
 );
 
@@ -147,28 +144,52 @@ void main() {
       );
     });
 
-    test('offers every mode, and marks the ones the agent cannot take', () async {
+    test('offers the agent own modes, safest first, and marks the dangerous '
+        'one', () async {
       final agent = (await workspace()).single.checkouts.single.agents.single;
 
+      // The agent's own selections, in the agent's own vocabulary. There is
+      // no shared three-mode menu left to offer, so nothing here is a mode
+      // this agent cannot be put into.
       expect(agent.permissionModes.map((m) => m.mode), [
-        'ask',
-        'acceptEdits',
-        'bypass',
+        askStored,
+        acceptEditsStored,
+        bypassStored,
       ]);
+      expect(agent.permissionModes.every((m) => m.selectable), isTrue);
       final accept = agent.permissionModes[1];
-      expect(accept.selectable, isFalse);
+      expect(accept.label, 'Accept edits');
       expect(
         accept.summary,
-        contains('Rover CLI'),
-        reason: 'the agent is named, so the limit is not blamed on the app',
+        contains('Auto-approves edits'),
+        reason: "the agent's own words about the mode reach the phone",
       );
       expect(agent.permissionModes.last.dangerous, isTrue);
+    });
+
+    test('an agent whose modes are unknown sends one row that says so',
+        () async {
+      // Installed, but nothing in the registry declares what it can be put
+      // into. The phone gets one unselectable row rather than an empty menu.
+      AgentInstallationDao(db).insert(
+        agentInstallation(id: 'a2', agentId: 'mysteryCli'),
+      );
+
+      final agents = (await workspace()).single.checkouts.single.agents;
+      final mystery = agents.firstWhere((a) => a.installationId == 'a2');
+
+      expect(mystery.permissionModes.single.selectable, isFalse);
+      expect(
+        mystery.permissionModes.single.summary,
+        contains('mysteryCli'),
+        reason: 'the agent is named, so the limit is not blamed on the app',
+      );
     });
 
     test('preselects the desktop own new-session mode, never one of its own', () async {
       final agent = (await workspace()).single.checkouts.single.agents.single;
 
-      expect(agent.defaultMode, PermissionMode.ask.name);
+      expect(agent.defaultMode, askStored);
     });
 
     test('names the environment each checkout lives in', () async {
@@ -231,7 +252,7 @@ void main() {
       String requestId = 'k1',
       String repositoryId = 'r1',
       String installationId = 'a1',
-      String permissionMode = 'ask',
+      String permissionMode = askStored,
       String? title,
       String? message,
     }) => request(
@@ -258,22 +279,27 @@ void main() {
       expect(session.agentInstallationId, 'a1');
       expect(
         session.permissionMode,
-        PermissionMode.ask,
+        askStored,
         reason: 'the launcher stamps the mode, and the answer reports it',
       );
-      expect(started.permissionMode, 'ask');
+      expect(started.permissionMode, askStored);
     });
 
     test('starts under the mode the phone was told to pick', () async {
-      await start(permissionMode: 'bypass');
+      await start(permissionMode: bypassStored);
 
       final started = RemoteSessionStarted.fromJson(sent.last.payload);
-      expect(SessionDao(db).getById(started.sessionId)!.permissionMode,
-          PermissionMode.bypass);
+      expect(
+        SessionDao(db).getById(started.sessionId)!.permissionMode,
+        bypassStored,
+      );
     });
 
     test('refuses a mode this agent cannot be put into', () async {
-      await start(permissionMode: 'acceptEdits');
+      // A real mode — Claude Code's bypass — but not one Rover has. A mode
+      // spelled in another CLI's vocabulary is refused in this agent's own
+      // terms rather than launched under its default.
+      await start(permissionMode: claudeBypassStored);
 
       expect(sent.last.type, FrameType.error);
       expect(sent.last.payload['code'], ErrorCode.badRequest.wire);

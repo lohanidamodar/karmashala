@@ -1,28 +1,34 @@
 import '../../settings/domain/settings.dart';
-import '../../settings/domain/permission_mode.dart';
 import 'session_launch.dart';
 
 /// The mode a session runs in, and whether that was its own decision.
 ///
 /// Two states, not one value: a session that carries an explicit mode and a
-/// session following the global default can be showing the same
-/// [PermissionMode] today and must behave differently tomorrow — the first must
-/// not move when the setting changes, the second must.
+/// session following the per-agent default can be showing the same selection
+/// today and must behave differently tomorrow — the first must not move when
+/// the setting changes, the second must.
 class SessionPermission {
-  const SessionPermission({required this.mode, required this.chosen});
+  const SessionPermission({required this.stored, required this.chosen});
 
-  /// What the agent will actually be launched with.
-  final PermissionMode mode;
+  /// The selection to launch under, as it is stored — a canonical
+  /// `PermissionSelection` in the agent's own vocabulary, one of the three
+  /// pre-v35 names, or null for "this agent's declared default".
+  ///
+  /// Resolving it into real arguments needs the agent's descriptor, which this
+  /// layer deliberately does not have: the precedence rule below is the same
+  /// for every agent, and the vocabulary is not.
+  final String? stored;
 
-  /// Whether [mode] was chosen **for this session**, rather than read from the
-  /// per-agent default in Settings.
+  /// Whether [stored] was chosen **for this session**, rather than read from
+  /// the per-agent default in Settings.
   final bool chosen;
 
-  /// Whether this session tracks the global default live.
+  /// Whether this session tracks the per-agent default live.
   bool get followsDefault => !chosen;
 }
 
-/// **The** precedence rule: a session's own mode outranks the global default.
+/// **The** precedence rule: a session's own mode outranks the per-agent
+/// default.
 ///
 /// The owner's request, in their words: "existing session permission mode
 /// should be overridable in each session. but settings is taking precedence, it
@@ -39,22 +45,26 @@ class SessionPermission {
 /// * **Null** — nobody ever chose, so the per-agent default for [purpose] is
 ///   the answer, read *live*. Changing the setting moves this session, which is
 ///   exactly what a default is for. Rows written before schema v11 also land
-///   here, and get the same honest answer rather than a fabricated `ask`.
+///   here, and get the same honest answer rather than a fabricated mode.
+///
+/// A null answer at the end of all of it is still not "pass no flags": it means
+/// "use the mode the agent itself declares as its default", which
+/// `AgentPermissionSupport.resolveStored` turns into real arguments.
 ///
 /// Lives in the domain, with no `Ref` in sight, so the one rule can be stated
 /// once and read by the launcher, the composer chip and the handoff alike
 /// rather than re-derived per call site — which is how the resume path came to
 /// disagree with every other one.
 SessionPermission resolveSessionPermission({
-  required PermissionMode? sessionMode,
+  required String? sessionMode,
   required AgentPermissions defaults,
   required SessionPurpose purpose,
 }) {
-  if (sessionMode != null) {
-    return SessionPermission(mode: sessionMode, chosen: true);
+  if (sessionMode != null && sessionMode.isNotEmpty) {
+    return SessionPermission(stored: sessionMode, chosen: true);
   }
   return SessionPermission(
-    mode: switch (purpose) {
+    stored: switch (purpose) {
       SessionPurpose.newSession => defaults.newSessions,
       SessionPurpose.existingSession => defaults.existingSessions,
     },

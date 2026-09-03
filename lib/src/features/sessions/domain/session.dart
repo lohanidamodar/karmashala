@@ -1,5 +1,4 @@
 import '../../environments/domain/environment_path.dart';
-import '../../settings/domain/permission_mode.dart';
 import 'session_launch.dart';
 import 'session_lineage.dart';
 import 'session_status.dart';
@@ -118,8 +117,15 @@ class Session {
   /// * **Null** — no choice was made, so the session follows the per-agent
   ///   default *live* and moves with it. Rows written before schema v11 are
   ///   also null and get the same treatment, which is honest: half of them were
-  ///   launched under something other than [PermissionMode.ask], and a
-  ///   defaulted value here would be a claim about them we cannot make.
+  ///   launched under something other than "ask", and a defaulted value here
+  ///   would be a claim about them we cannot make.
+  ///
+  /// Since v35 this is a canonical `PermissionSelection` in **the agent's own
+  /// vocabulary** (`mode=plan`, `approval=never;sandbox=read-only`), because
+  /// the three shared modes could not express what any of these CLIs really
+  /// offers. It is resolved against the agent's declared axes rather than
+  /// parsed against an enum, so a value this build does not name is reported
+  /// rather than silently swapped.
   ///
   /// A launch deliberately does **not** stamp the resolved default here. Doing
   /// so made every session read as having chosen, froze it at whatever Settings
@@ -127,7 +133,7 @@ class Session {
   /// from the setting — quietly discarded the choices that had really been
   /// made. Both halves of the owner's report: "existing session permission mode
   /// should be overridable in each session. but settings is taking precedence."
-  final PermissionMode? permissionMode;
+  final String? permissionMode;
 
   /// The model **chosen for this session**, as the CLI's own id, or null when
   /// nobody ever chose one.
@@ -178,7 +184,7 @@ class Session {
     String? paneId,
     SessionSurface? surface,
     SessionView? view,
-    PermissionMode? permissionMode,
+    String? permissionMode,
     String? modelId,
     DateTime? archivedAt,
     bool? titleByUser,

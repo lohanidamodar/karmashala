@@ -16,7 +16,6 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -25,6 +24,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
 /// Every surface that hands a user a "continue this conversation" command must
@@ -50,9 +50,7 @@ const _conversational = AgentDescriptor(
   displayName: 'Conversational Agent',
   binaries: AgentBinaries(windows: ['conv'], posix: ['conv']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--conversation'),
     allowsConcurrentResume: true,
   ),
@@ -65,9 +63,7 @@ const _silent = AgentDescriptor(
   displayName: 'Silent Agent',
   binaries: AgentBinaries(windows: ['silent'], posix: ['silent']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     // interactiveResume left at its default: unsupported.
   ),
 );

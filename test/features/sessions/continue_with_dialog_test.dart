@@ -1,5 +1,6 @@
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/permission_carry.dart';
 import 'package:karmashala/src/features/agents/presentation/permission_mode_picker.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
@@ -8,7 +9,7 @@ import 'package:karmashala/src/features/sessions/domain/handoff_packet.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/continue_with_dialog.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,14 +17,75 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 
+/// One mode and no more — the agent a pick made elsewhere cannot survive onto.
+///
+/// Local rather than the shared `testPermissionSupport`, which has all three
+/// rungs: an agent that expresses everything cannot show what the picker does
+/// with a mode it does not have, which is what half of this file is about.
+const _askOnly = AgentPermissionSupport.axes(
+  evidence: 'test fixture — not a real CLI',
+  axes: [
+    AgentPermissionAxis(
+      id: 'mode',
+      label: 'Permission mode',
+      description: 'How much Prompting CLI may do without asking.',
+      defaultValueId: 'ask',
+      values: [
+        AgentPermissionValue(
+          id: 'ask',
+          label: 'Ask every time',
+          shortLabel: 'Ask',
+          description: 'Prompts before edits and commands.',
+          arguments: ['--careful'],
+          permits: PermissionRisk.ask,
+          evidence: 'test fixture',
+        ),
+      ],
+    ),
+  ],
+);
+
+/// Two modes, which is what makes the picker's rules visible: one the source
+/// session is already on, and one it is not.
+const _askOrBypass = AgentPermissionSupport.axes(
+  evidence: 'test fixture — not a real CLI',
+  axes: [
+    AgentPermissionAxis(
+      id: 'mode',
+      label: 'Permission mode',
+      description: 'How much Flexible CLI may do without asking.',
+      defaultValueId: 'ask',
+      values: [
+        AgentPermissionValue(
+          id: 'ask',
+          label: 'Ask every time',
+          shortLabel: 'Ask',
+          description: 'Prompts before edits and commands.',
+          arguments: ['--careful'],
+          permits: PermissionRisk.ask,
+          evidence: 'test fixture',
+        ),
+        AgentPermissionValue(
+          id: 'bypass',
+          label: 'Bypass (full autonomy)',
+          shortLabel: 'Bypass',
+          description: 'No prompts and no sandbox.',
+          arguments: ['--trust-me'],
+          permits: PermissionRisk.bypass,
+          isDangerous: true,
+          evidence: 'test fixture',
+        ),
+      ],
+    ),
+  ],
+);
+
 const _prompting = AgentDescriptor(
   id: 'prompting',
   displayName: 'Prompting CLI',
   binaries: AgentBinaries(windows: ['p'], posix: ['p']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-    },
+    permission: _askOnly,
     prompt: AgentPromptSupport.positional(),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
@@ -39,10 +101,7 @@ const _flexible = AgentDescriptor(
   displayName: 'Flexible CLI',
   binaries: AgentBinaries(windows: ['f'], posix: ['f']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
+    permission: _askOrBypass,
     prompt: AgentPromptSupport.positional(),
   ),
 );
@@ -69,7 +128,7 @@ HandoffTarget _target(
   installation: _install(id, descriptor.id),
   descriptor: descriptor,
   agentName: descriptor.displayName,
-  permission: carryPermission(PermissionMode.ask, descriptor),
+  permission: carryPermission(PermissionRisk.ask, descriptor),
   isSameAgent: isSameAgent,
   followsDefault: followsDefault,
   refusal: descriptor.launch.acceptsPromptArgument
@@ -86,9 +145,9 @@ class _RecordingService extends SessionHandoffService {
   String? packetInstruction;
   bool packetWasFork = false;
   String? handedOffTo;
-  PermissionMode? handedOffUnder;
+  PermissionSelection? handedOffUnder;
   bool forked = false;
-  PermissionMode? forkedUnder;
+  PermissionSelection? forkedUnder;
 
   @override
   Future<SessionLaunchResult> handoffTo({
@@ -97,7 +156,7 @@ class _RecordingService extends SessionHandoffService {
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) async {
     handedOffTo = targetInstallationId;
     handedOffUnder = permissionMode;
@@ -110,7 +169,7 @@ class _RecordingService extends SessionHandoffService {
     String instruction = '',
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) async {
     forked = true;
     forkedUnder = permissionMode;
@@ -254,17 +313,22 @@ void main() {
 
     await tester.tap(find.byType(PermissionModePicker));
     await tester.pumpAndSettle();
-    // Prompting CLI has only `ask`, so the rest are listed and unselectable.
+    // Prompting CLI has only `ask`. Every row *is* one of the agent's own
+    // modes now, so a mode it lacks is absent rather than disabled — the
+    // disabled row is reserved for one axis superseding another.
     expect(
-      tester
-          .widget<DesktopMenuDetailItem<PermissionMode>>(
-            find.widgetWithText(
-              DesktopMenuDetailItem<PermissionMode>,
-              'Bypass (full autonomy)',
-            ),
-          )
-          .enabled,
-      isFalse,
+      find.widgetWithText(
+        DesktopMenuDetailItem<PermissionAxisChoice>,
+        'Ask every time',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(
+        DesktopMenuDetailItem<PermissionAxisChoice>,
+        'Bypass (full autonomy)',
+      ),
+      findsNothing,
     );
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
@@ -276,9 +340,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<DesktopMenuDetailItem<PermissionMode>>(
+          .widget<DesktopMenuDetailItem<PermissionAxisChoice>>(
             find.widgetWithText(
-              DesktopMenuDetailItem<PermissionMode>,
+              DesktopMenuDetailItem<PermissionAxisChoice>,
               'Bypass (full autonomy)',
             ),
           )
@@ -300,12 +364,15 @@ void main() {
 
     // Prompting CLI has no bypass, and nothing more permissive may be
     // substituted, so the selection falls to the safest mode it does have —
-    // and says that it did.
+    // and the row says what this agent will actually be told.
     await tester.tap(find.text('Prompting CLI'));
     await tester.pumpAndSettle();
     expect(find.text('Bypass'), findsNothing);
     expect(find.text('Ask'), findsOneWidget);
-    expect(find.textContaining('no more permissive'), findsWidgets);
+    expect(
+      find.textContaining('Ask every time — Prompting CLI is told to use it'),
+      findsWidgets,
+    );
   });
 
   testWidgets('hands off under the mode picked for the chosen agent', (
@@ -326,7 +393,7 @@ void main() {
     await tester.tap(find.text('Hand off'));
     await tester.pumpAndSettle();
     expect(service!.handedOffTo, 'a3');
-    expect(service!.handedOffUnder, PermissionMode.bypass);
+    expect(service!.handedOffUnder, const PermissionSelection({'mode': 'bypass'}));
   });
 
   testWidgets('a fork runs under the mode picked for the same agent', (
@@ -346,7 +413,7 @@ void main() {
     await tester.tap(find.text('Fork'));
     await tester.pumpAndSettle();
     expect(service!.forked, isTrue);
-    expect(service!.forkedUnder, PermissionMode.ask);
+    expect(service!.forkedUnder, const PermissionSelection({'mode': 'ask'}));
   });
 
   testWidgets('will not start until the user has written an instruction', (

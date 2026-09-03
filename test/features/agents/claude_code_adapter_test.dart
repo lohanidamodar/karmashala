@@ -3,12 +3,22 @@ import 'dart:async';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/claude_code_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+
+/// What a session that has chosen nothing runs under: this agent's declared
+/// default, resolved through the registry the launcher would have used.
+final _support = AgentRegistry.builtIn.byId('claudeCode')!.launch.permission;
+final _defaultPermission = ResolvedPermission.of(
+  _support,
+  _support.defaultSelection,
+);
 
 void main() {
   group('parseClaudeMessage', () {
@@ -104,6 +114,10 @@ void main() {
       adapter.start(
         AgentLaunch(
           workingDirectory: repository().path,
+          // Resolved by the caller now, not defaulted by the adapter: the
+          // adapters hold no flag table of their own any more, so a launch
+          // that names no permission passes none.
+          permission: _defaultPermission,
           installation: agentInstallation(path: r'C:\bin\claude.exe'),
         ),
       );

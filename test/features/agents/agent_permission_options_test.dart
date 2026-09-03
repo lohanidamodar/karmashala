@@ -1,142 +1,160 @@
+import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_permission_options.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
-import 'package:flutter_test/flutter_test.dart';
 
-/// What the permission control is allowed to offer, per agent.
+/// What a permission control is allowed to offer, per agent.
 ///
-/// Loop 31 §4 recommended option C — "offer only the modes the descriptor can
-/// express" — and deferred it until a per-session control existed. These are the
-/// assertions that say it landed.
+/// The old rule — "offer only the modes the descriptor can express" — is now
+/// true by construction: every row *is* one of the agent's own modes, so there
+/// is nothing left to filter. What these assertions protect is the property
+/// that survived it: **a row the user cannot pick is shown, disabled, and says
+/// why**, and an agent nobody has established says that rather than showing an
+/// empty menu.
 void main() {
   const registry = AgentRegistry.builtIn;
-  List<AgentPermissionOption> optionsFor(String id) =>
-      permissionOptionsFor(registry.byId(id));
-  AgentPermissionOption option(String id, PermissionMode mode) =>
-      optionsFor(id).firstWhere((o) => o.mode == mode);
 
-  test('every mode is listed, in the enum order, for every agent', () {
-    // Listed, not necessarily selectable. Hiding a mode entirely would leave
-    // the user wondering where the safe option went, which is its own silence.
+  test('every agent offers its own axes, safest-first', () {
     for (final descriptor in registry.descriptors) {
-      expect(
-        permissionOptionsFor(descriptor).map((o) => o.mode),
-        PermissionMode.values,
-        reason: descriptor.id,
-      );
+      final axes = permissionAxisOptionsFor(descriptor);
+      expect(axes, isNotEmpty, reason: descriptor.id);
+      for (final axis in axes) {
+        final declared = descriptor.launch.permission
+            .axisFor(axis.id)!
+            .values
+            .map((v) => v.id);
+        // The control and the launcher must not be able to disagree about
+        // which modes exist: both read the same declared axes.
+        expect(axis.options.map((o) => o.id), declared, reason: axis.id);
+      }
     }
   });
 
-  test('an unknown agent can express nothing', () {
-    // The first of Loop 31's two shapes: `AgentRegistry.byId` returns null. It
-    // must not silently offer `ask` — for an unregistered agent `ask` adds no
-    // flag at all, so the agent's own unverified default applies.
-    final options = permissionOptionsFor(null);
-    expect(options.every((o) => o.fit == PermissionModeFit.none), isTrue);
-    expect(options.every((o) => o.isSelectable), isFalse);
-    expect(options.first.summary, contains('cannot enforce'));
+  test('Claude Code offers six modes in one axis', () {
+    final axes = permissionAxisOptionsFor(registry.byId(AgentIds.claudeCode));
+    expect(axes, hasLength(1));
+    expect(axes.single.options.map((o) => o.id), [
+      'plan',
+      'dontAsk',
+      'manual',
+      'acceptEdits',
+      'auto',
+      'bypassPermissions',
+    ]);
+    // All selectable: nothing here is a mode the CLI lacks.
+    expect(axes.single.options.every((o) => o.isSelectable), isTrue);
+    // And the default is named rather than left to the CLI, which on a
+    // Pro/Max/Team account starts unflagged sessions in `auto`.
+    expect(axes.single.selectedId, 'manual');
   });
 
-  test('Claude Code expresses all three exactly', () {
-    for (final mode in PermissionMode.values) {
-      expect(
-        option(AgentIds.claudeCode, mode).fit,
-        PermissionModeFit.exact,
-        reason: mode.name,
-      );
-      expect(option(AgentIds.claudeCode, mode).isSelectable, isTrue);
-    }
-    // And `ask` is enforced by naming the mode, not by hoping the CLI's own
-    // default prompts — which, on a Pro/Max/Team account, it does not.
-    expect(
-      registry
-          .byId(AgentIds.claudeCode)!
-          .launch
-          .permissionArgumentsFor(PermissionMode.ask),
-      ['--permission-mode', 'manual'],
-    );
+  test('Codex offers two axes, not one flattened list', () {
+    final axes = permissionAxisOptionsFor(registry.byId(AgentIds.codex));
+    expect(axes.map((a) => a.id), ['sandbox', 'approval']);
+    expect(axes[0].options.map((o) => o.id), [
+      'read-only',
+      'workspace-write',
+      'danger-full-access',
+      'bypass-all',
+    ]);
+    expect(axes[1].options.map((o) => o.id), ['on-request', 'never']);
   });
 
-  test('Codex accept-edits is offered, and admits it is an approximation', () {
-    final acceptEdits = option(AgentIds.codex, PermissionMode.acceptEdits);
-    expect(acceptEdits.fit, PermissionModeFit.approximate);
-    // Selectable — it is the nearest thing Codex has and refusing it would
-    // block a real choice — but it must never read as plain "Accept edits".
-    expect(acceptEdits.isSelectable, isTrue);
-    expect(acceptEdits.fitLabel, 'approximate');
-    expect(acceptEdits.summary, startsWith('Approximate.'));
-    expect(acceptEdits.summary, contains('without asking'));
-
-    expect(
-      option(AgentIds.codex, PermissionMode.ask).fit,
-      PermissionModeFit.exact,
-    );
-    expect(
-      option(AgentIds.codex, PermissionMode.bypass).fit,
-      PermissionModeFit.exact,
-    );
-  });
-
-  test('Antigravity offers all three, now that the CLI has been read', () {
-    // This test used to be the sharpest example of Loop 31 §4's second shape: a
-    // registered agent whose descriptor omitted the *safe* modes, leaving
-    // bypass as the only selectable one. That was an artefact of never having
-    // run the CLI. `agy --help` documents `--mode accept-edits` and
-    // `--dangerously-skip-permissions`, and prompting is what it does unflagged,
-    // so all three map exactly and all three are selectable.
-    for (final mode in PermissionMode.values) {
-      final offered = option(AgentIds.antigravity, mode);
-      expect(offered.fit, PermissionModeFit.exact, reason: mode.name);
-      expect(offered.isSelectable, isTrue, reason: mode.name);
-    }
-  });
-
-  test('a mode the descriptor omits is listed, unselectable, and explained', () {
-    // The rule itself, which no shipped agent exercises any more. Antigravity
-    // was standing in for it; pinning it to whichever agent happened to be
-    // least understood made the test a fact about our research rather than
-    // about the rule.
-    const bypassOnly = AgentDescriptor(
-      id: 'bypassOnly',
-      displayName: 'Bypass-only CLI',
-      binaries: AgentBinaries(windows: ['b'], posix: ['b']),
-      launch: AgentLaunchSpec(
-        permissionModes: {
-          PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
-        },
-      ),
-    );
-    final options = permissionOptionsFor(bypassOnly);
-    final ask = options.firstWhere((o) => o.mode == PermissionMode.ask);
-
-    expect(ask.fit, PermissionModeFit.none);
-    expect(ask.isSelectable, isFalse);
-    expect(ask.fitLabel, 'not enforced');
-    // The sentence names the agent, so the user reads it as a property of that
-    // CLI rather than as Karmashala being broken.
-    expect(ask.summary, contains('Bypass-only CLI'));
-    expect(ask.summary, contains('own default applies'));
-    // Listed but not choosable — hiding it would leave the user wondering where
-    // the safe option went.
-    expect(options.map((o) => o.mode), PermissionMode.values);
-    expect(options.where((o) => o.isSelectable).map((o) => o.mode), [
-      PermissionMode.bypass,
+  test('Antigravity offers plan mode, which the old model could not', () {
+    final axes = permissionAxisOptionsFor(registry.byId(AgentIds.antigravity));
+    expect(axes.single.options.map((o) => o.id), [
+      'plan',
+      'prompt',
+      'accept-edits',
+      'skip-permissions',
     ]);
   });
 
-  test('selectable is exactly what the descriptor declares', () {
-    // The control and the launcher must not be able to disagree about which
-    // modes exist: both sides read the same declared map.
-    for (final descriptor in registry.descriptors) {
-      expect(
-        permissionOptionsFor(
-          descriptor,
-        ).where((o) => o.isSelectable).map((o) => o.mode).toList(),
-        descriptor.launch.expressiblePermissionModes,
-        reason: descriptor.id,
-      );
+  test('a superseded axis is shown, disabled, and says what replaced it', () {
+    // The live case of the disabled-with-a-reason rule. Codex's bypass flag
+    // replaces the approval policy outright, so every row on that axis is
+    // greyed — shown rather than hidden, because a picker that silently
+    // emptied itself would be a different kind of silence.
+    final axes = permissionAxisOptionsFor(
+      registry.byId(AgentIds.codex),
+      selection: const PermissionSelection({
+        'sandbox': 'bypass-all',
+        'approval': 'on-request',
+      }),
+    );
+    final approval = axes.firstWhere((a) => a.id == 'approval');
+    expect(approval.options.every((o) => o.isSelectable), isFalse);
+    for (final option in approval.options) {
+      expect(option.summary, contains('Bypass approvals and sandbox'));
+      expect(option.summary, contains('nothing set here is passed'));
     }
+    // The sandbox axis itself stays selectable — it is the one that decided.
+    final sandbox = axes.firstWhere((a) => a.id == 'sandbox');
+    expect(sandbox.options.every((o) => o.isSelectable), isTrue);
+  });
+
+  test('an agent nobody has established offers nothing, and says why', () {
+    // Two shapes, one answer: an agent missing from the registry, and one
+    // present but with no declared modes. Both draw the single explained row
+    // rather than a menu of guesses.
+    const unestablished = AgentDescriptor(
+      id: 'mystery',
+      displayName: 'Mystery CLI',
+      binaries: AgentBinaries(windows: ['m'], posix: ['m']),
+      launch: AgentLaunchSpec(),
+    );
+    expect(permissionAxisOptionsFor(null), isEmpty);
+    expect(permissionAxisOptionsFor(unestablished), isEmpty);
+
+    final reason = unknownAgentReason('Mystery CLI');
+    // The sentence names the agent, so the user reads it as a property of that
+    // CLI rather than as Karmashala being broken.
+    expect(reason, contains('Mystery CLI'));
+    expect(reason, contains('its own default'));
+    expect(reason, contains('nothing here can govern it'));
+  });
+
+  group('what a control calls a selection', () {
+    test('one axis is the mode name; two are joined', () {
+      final claude = registry.byId(AgentIds.claudeCode)!.launch.permission;
+      expect(
+        describeSelection(claude, const PermissionSelection({'mode': 'plan'})),
+        'Plan mode',
+      );
+      final codex = registry.byId(AgentIds.codex)!.launch.permission;
+      expect(
+        describeSelection(
+          codex,
+          const PermissionSelection({
+            'sandbox': 'read-only',
+            'approval': 'never',
+          }),
+        ),
+        'Read-only · Never ask',
+      );
+      // The chip's shorter form, for a control with a third of a window.
+      expect(
+        describeSelectionShort(
+          codex,
+          const PermissionSelection({
+            'sandbox': 'read-only',
+            'approval': 'never',
+          }),
+        ),
+        'Read-only · Never ask',
+      );
+    });
+
+    test('a superseded axis is left out of the name and the detail', () {
+      final codex = registry.byId(AgentIds.codex)!.launch.permission;
+      const bypass = PermissionSelection({
+        'sandbox': 'bypass-all',
+        'approval': 'never',
+      });
+      expect(describeSelection(codex, bypass), 'Bypass approvals and sandbox');
+      expect(describeSelectionDetail(codex, bypass), isNot(contains('Never')));
+    });
   });
 }

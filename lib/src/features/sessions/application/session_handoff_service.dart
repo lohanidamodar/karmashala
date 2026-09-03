@@ -11,7 +11,8 @@ import '../../git/application/changes_providers.dart';
 import '../../git/domain/file_change.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
+import '../../settings/domain/permission_risk.dart';
 import '../domain/handoff_packet.dart';
 import '../domain/session.dart';
 import '../domain/session_fork.dart';
@@ -120,7 +121,7 @@ class SessionHandoffService {
           descriptor: descriptor,
           agentName: name,
           permission: carryPermission(
-            starting.mode,
+            starting.risk,
             descriptor,
             targetName: name,
           ),
@@ -390,7 +391,7 @@ class SessionHandoffService {
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) => _continue(
     sessionId: sessionId,
     targetInstallationId: targetInstallationId,
@@ -412,7 +413,7 @@ class SessionHandoffService {
     String instruction = '',
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -481,7 +482,7 @@ class SessionHandoffService {
     required bool intoNewWorktree,
     required SessionLink link,
     bool isFork = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -520,7 +521,7 @@ class SessionHandoffService {
       '${context.installation.agentId} ($targetName): '
       'packet=${rendered.length} chars '
       'worktree=${intoNewWorktree ? 'new' : 'shared'} '
-      'mode=${carried.override?.name ?? 'default'}',
+      'mode=${carried.override?.canonical ?? 'default'}',
     );
 
     return _ref
@@ -557,19 +558,27 @@ class SessionHandoffService {
   /// under if it is left following the default too. Reading the source agent's
   /// existing-session default here instead would put a mode in the handoff
   /// dialog that the launch would never use.
-  ({PermissionMode mode, bool chosen}) _startingMode(
+  ({PermissionRisk risk, bool chosen}) _startingMode(
     String sessionId,
     String targetAgentId,
   ) {
     final launcher = _ref.read(sessionLauncherProvider);
     final source = launcher.effectivePermissionFor(sessionId);
     if (source != null && !source.inherited) {
-      return (mode: source.mode, chosen: true);
+      // The source agent's own mode, measured on the one scale the target also
+      // understands. Its *vocabulary* cannot cross — `mode=acceptEdits` means
+      // nothing to Codex — but how permissive it is can.
+      final risk = source.descriptor?.launch.permission.riskOf(
+        source.selection,
+      );
+      if (risk != null) return (risk: risk, chosen: true);
     }
-    return (
-      mode: launcher.permissionFor(targetAgentId, SessionPurpose.newSession),
-      chosen: false,
+    final target = _ref.read(agentRegistryProvider).byId(targetAgentId);
+    final support = target?.launch.permission;
+    final fallback = support?.riskOf(
+      launcher.permissionFor(targetAgentId, SessionPurpose.newSession),
     );
+    return (risk: fallback ?? reviewPermissionCeiling, chosen: false);
   }
 
   /// The mode a continuation of [sessionId] into [descriptor] will run under,
@@ -590,17 +599,17 @@ class SessionHandoffService {
   /// the carry rule had to change it to fit this agent. The last matters most:
   /// a reduction left unrecorded would climb back to the unexpressible mode on
   /// the branch's next resume.
-  ({ContinuationPermission permission, PermissionMode? override})
+  ({ContinuationPermission permission, PermissionSelection? override})
   _resolvePermission({
     required String sessionId,
     required AgentDescriptor? descriptor,
     required String targetAgentId,
     required String targetName,
-    required PermissionMode? chosen,
+    required PermissionSelection? chosen,
   }) {
     final starting = _startingMode(sessionId, targetAgentId);
     final permission = resolveContinuationPermission(
-      sessionMode: starting.mode,
+      sessionRisk: starting.risk,
       target: descriptor,
       chosen: chosen,
       targetName: targetName,
@@ -609,7 +618,7 @@ class SessionHandoffService {
       permission: permission,
       override:
           starting.chosen || permission.wasChosen || permission.carried.changed
-          ? permission.mode
+          ? permission.selection
           : null,
     );
   }

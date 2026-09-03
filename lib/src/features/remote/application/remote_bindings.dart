@@ -33,7 +33,6 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/permission_mode.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_chat_source.dart';
@@ -386,18 +385,39 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       defaultMode: ref
           .read(sessionLauncherProvider)
           .permissionFor(installation.agentId, SessionPurpose.newSession)
-          .name,
+          .canonical,
       acceptsOpeningMessage: descriptor?.launch.acceptsPromptArgument ?? false,
-      permissionModes: [
-        for (final option in permissionOptionsFor(descriptor, agentName: name))
-          RemotePermissionOption(
-            mode: option.mode.name,
-            label: option.mode.label,
-            summary: option.summary,
-            selectable: option.isSelectable,
-            dangerous: option.mode.isDangerous,
-          ),
-      ],
+      // The phone gets the agent's real selections, flattened. It cannot draw
+      // two pickers today, and the wire has always carried an opaque mode id
+      // with the host's own words beside it — so a phone one release behind
+      // shows Claude Code's six modes and Codex's seven combinations without
+      // knowing anything new. An agent whose modes are unknown sends one
+      // unselectable row that says so, rather than an empty menu.
+      permissionModes: () {
+        final support = descriptor?.launch.permission;
+        if (support == null || !support.isKnown) {
+          return [
+            RemotePermissionOption(
+              mode: '',
+              label: 'Not established',
+              summary: unknownAgentReason(name),
+              selectable: false,
+            ),
+          ];
+        }
+        return [
+          for (final selection in support.selections())
+            RemotePermissionOption(
+              mode: selection.canonical,
+              label: describeSelection(support, selection),
+              summary:
+                  describeSelectionDetail(support, selection) ??
+                  describeSelection(support, selection),
+              selectable: true,
+              dangerous: support.isDangerous(selection),
+            ),
+        ];
+      }(),
     );
   }
 
@@ -849,30 +869,33 @@ Future<RemoteSessionStarted> _startSession(
     );
   }
 
-  final mode = PermissionMode.values.asNameMap()[request.permissionMode];
-  if (mode == null) {
-    throw RemoteApiRefusal(
-      ErrorCode.badRequest,
-      'this desktop has no permission mode called '
-      '"${request.permissionMode}"',
-    );
-  }
-  // Loop 31 §4 option C, enforced and not merely offered: `workspace.list`
-  // already told the phone which modes this agent can be put into, so asking
-  // for another one is asking for something the desktop said does not exist.
-  // Refusing in the option's own words beats launching under the agent's
-  // default and reporting the mode the user picked.
+  // Enforced and not merely offered: `workspace.list` already told the phone
+  // which modes this agent has, so asking for another one is asking for
+  // something the desktop said does not exist. Refusing in the agent's own
+  // terms beats launching under its default and reporting the mode the user
+  // picked.
   //
   // Deliberately not `carryPermission`: nothing is being carried here. That
   // rule exists to move a mode from one agent to another when the user is
   // choosing an *agent*; this user is choosing a mode, for one agent, and the
   // safe answer to an impossible one is to say so.
-  final option = permissionOptionsFor(
-    descriptor,
-    agentName: agentName,
-  ).firstWhere((option) => option.mode == mode);
-  if (!option.isSelectable) {
-    throw RemoteApiRefusal(ErrorCode.badRequest, option.summary);
+  final support = descriptor?.launch.permission;
+  if (support == null || !support.isKnown) {
+    throw RemoteApiRefusal(
+      ErrorCode.badRequest,
+      unknownAgentReason(agentName),
+    );
+  }
+  final mode = support
+      .selections()
+      .where((s) => s.canonical == request.permissionMode)
+      .firstOrNull;
+  if (mode == null) {
+    throw RemoteApiRefusal(
+      ErrorCode.badRequest,
+      '$agentName has no permission mode called '
+      '"${request.permissionMode}"',
+    );
   }
 
   try {
@@ -894,7 +917,7 @@ Future<RemoteSessionStarted> _startSession(
       sessionId: launched.session.id,
       title: launched.session.title,
       // What the row was actually stamped with, read back rather than echoed.
-      permissionMode: launched.session.permissionMode?.name,
+      permissionMode: launched.session.permissionMode,
     );
   } on RemoteApiRefusal {
     rethrow;

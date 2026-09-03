@@ -24,7 +24,6 @@ import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -39,6 +38,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 
 /// **What the owner does**, not what a unit test does.
 ///
@@ -65,9 +65,7 @@ const _resumable = AgentDescriptor(
   displayName: 'Resumable Agent',
   binaries: AgentBinaries(windows: ['resumable'], posix: ['resumable']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--resume'),
     allowsConcurrentResume: true,
   ),

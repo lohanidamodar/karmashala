@@ -15,7 +15,6 @@ import '../../sessions/domain/handoff_packet.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/session_lineage.dart';
-import '../../settings/domain/permission_mode.dart';
 import '../domain/review_brief.dart';
 
 /// One installation that could check another session's work.
@@ -139,10 +138,14 @@ class ReviewSessionService {
     final ownName = own == null
         ? 'the agent that ran it'
         : registry.displayNameFor(own.agentId);
-    final mode = _ref
+    final effective = _ref
         .read(sessionLauncherProvider)
-        .effectivePermissionFor(sessionId)
-        ?.mode;
+        .effectivePermissionFor(sessionId);
+    // How permissive the reviewed session is, on the one scale every agent
+    // shares. Its own vocabulary cannot cross to another CLI; the rung can.
+    final risk = effective?.descriptor?.launch.permission.riskOf(
+      effective.selection,
+    );
 
     final targets = <ReviewTarget>[];
     for (final installation in installations.getByEnvironment(
@@ -161,7 +164,7 @@ class ReviewSessionService {
           descriptor: descriptor,
           agentName: name,
           permission: carryReviewPermission(
-            sessionMode: mode ?? PermissionMode.ask,
+            sessionRisk: risk ?? reviewPermissionCeiling,
             target: descriptor,
             targetName: name,
           ),
@@ -310,13 +313,13 @@ class ReviewSessionService {
     final refusal = _refusalFor(descriptor, name);
     if (refusal != null) throw StateError(refusal);
 
+    final source = _ref
+        .read(sessionLauncherProvider)
+        .effectivePermissionFor(sessionId);
     final permission = carryReviewPermission(
-      sessionMode:
-          _ref
-              .read(sessionLauncherProvider)
-              .effectivePermissionFor(sessionId)
-              ?.mode ??
-          PermissionMode.ask,
+      sessionRisk:
+          source?.descriptor?.launch.permission.riskOf(source.selection) ??
+          reviewPermissionCeiling,
       target: descriptor,
       targetName: name,
     );
@@ -345,7 +348,7 @@ class ReviewSessionService {
             // review of different code.
             existingWorktree: session.worktree,
             workingDirectory: session.workingDirectory,
-            permissionOverride: permission.mode,
+            permissionOverride: permission.selection,
           ),
         );
   }

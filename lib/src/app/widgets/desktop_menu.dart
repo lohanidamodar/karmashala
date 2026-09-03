@@ -230,6 +230,41 @@ class DesktopMenuDivider extends PopupMenuDivider {
   const DesktopMenuDivider({super.key}) : super(height: 7);
 }
 
+/// A section heading inside a menu: not selectable, and not a row.
+///
+/// Added for the permission picker, where one menu holds **two** questions —
+/// Codex's sandbox and its approval policy are separate axes and a flat list
+/// would silently imply they are one. `enabled: false` rather than a custom
+/// entry so keyboard traversal skips it, which is the whole difference between
+/// a heading and a disabled option.
+class DesktopMenuHeader<T> extends PopupMenuItem<T> {
+  DesktopMenuHeader(String label, {super.key})
+    : super(
+        enabled: false,
+        height: Chrome.menuRow,
+        padding: _menuRowPadding,
+        child: _HeaderLabel(label),
+      );
+}
+
+class _HeaderLabel extends StatelessWidget {
+  const _HeaderLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      label.toUpperCase(),
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        letterSpacing: 0.6,
+      ),
+    );
+  }
+}
+
 /// Right-click support, shared by every row that has a menu.
 ///
 /// Lives beside [DesktopMenuItem] rather than in the Explorer because the Files

@@ -19,7 +19,6 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -28,6 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
 /// A resumable agent. Codex is the one that actually refuses a second writer,
@@ -38,9 +38,7 @@ const _codexish = AgentDescriptor(
   displayName: 'Codexish',
   binaries: AgentBinaries(windows: ['codexish'], posix: ['codexish']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.subcommand('resume'),
   ),
 );
@@ -53,9 +51,7 @@ const _shareable = AgentDescriptor(
   displayName: 'Sharish',
   binaries: AgentBinaries(windows: ['sharish'], posix: ['sharish']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--resume'),
     allowsConcurrentResume: true,
   ),
@@ -219,7 +215,7 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(row.paneId!)!
         .agentLaunch!;
-    expect(launch.arguments, ['--ask', 'resume', 'ext-1']);
+    expect(launch.arguments, ['--mode', 'ask', 'resume', 'ext-1']);
   });
 
   test(

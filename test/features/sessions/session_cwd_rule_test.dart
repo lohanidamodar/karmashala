@@ -26,7 +26,6 @@ import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:path/path.dart' as p;
@@ -34,6 +33,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
 /// Does resuming a conversation depend on the directory you resume it from?
@@ -347,9 +347,7 @@ void main() {
       displayName: 'Rover CLI',
       binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
       launch: AgentLaunchSpec(
-        permissionModes: {
-          PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-        },
+        permission: testPermissionSupport,
         resume: AgentResume.flag('--resume'),
         interactiveResume: AgentResume.flag('--resume'),
         fork: AgentForkSupport.native(
@@ -364,9 +362,7 @@ void main() {
       displayName: 'Rover CLI',
       binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
       launch: AgentLaunchSpec(
-        permissionModes: {
-          PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-        },
+        permission: testPermissionSupport,
         resume: AgentResume.flag('--resume'),
         interactiveResume: AgentResume.flag('--resume'),
         resumeLocality: AgentResumeLocality.anyDirectory(

@@ -1,6 +1,7 @@
-import '../../settings/domain/permission_mode.dart';
+import '../../settings/domain/permission_risk.dart';
 import 'agent_descriptor.dart';
 import 'agent_kind.dart';
+import 'agent_permission_support.dart';
 import 'agent_status.dart';
 
 /// The agents Karmashala ships knowledge of.
@@ -41,39 +42,113 @@ const _claudeCode = AgentDescriptor(
       'stream-json',
       '--verbose',
     ],
-    permissionModes: {
-      // `manual` — the CLI's alias for the config value `default` — is the
-      // mode that stops and asks before edits, commands and network access.
-      //
-      // **Passing nothing is not the same thing.** Which mode an unflagged
-      // session starts in depends on the account: Claude Code 2.1.228+ starts
-      // Pro/Max/Team sessions in `auto`, where a classifier reviews each action
-      // instead of prompting, and only falls back to `default` for Enterprise,
-      // API-key, `-p` and cloud-platform sessions.
-      //
-      // So the previous empty mapping was Loop 31 §4's worst case made real:
-      // the user picked the *safest* mode, we passed no flag, and a Pro account
-      // silently ran under `auto`. Naming the mode costs one flag and makes the
-      // choice true for every account.
-      //
-      //   $ claude --permission-mode manual -p 'reply with the single word OK'
-      //   OK
-      //
-      // Verified against 2.1.251, which also rejects an unknown value outright,
-      // so this is a name the CLI really has.
-      PermissionMode.ask: PermissionModeMapping.exact([
-        '--permission-mode',
-        'manual',
-      ]),
-      PermissionMode.acceptEdits: PermissionModeMapping.exact([
-        '--permission-mode',
-        'acceptEdits',
-      ]),
-      PermissionMode.bypass: PermissionModeMapping.exact([
-        '--permission-mode',
-        'bypassPermissions',
-      ]),
-    },
+    // Claude Code has **six** permission modes, not three, and the CLI enforces
+    // the list at parse time — so this is the whole set rather than a sample.
+    //
+    //   $ claude --permission-mode bogus --help
+    //   error: option '--permission-mode <mode>' argument 'bogus' is invalid.
+    //     Allowed choices are acceptEdits, auto, bypassPermissions, manual,
+    //     dontAsk, plan.
+    //
+    // Identical on both installations on this machine: 2.1.245 (the Windows
+    // `.local\bin\claude.exe`) and 2.1.259 (the WSL one). Each description
+    // below is the binary's own label for that mode, read out of 2.1.245's
+    // string table where the six sit as consecutive strings.
+    permission: AgentPermissionSupport.axes(
+      evidence:
+          'claude --permission-mode bogus --help on 2.1.245 and 2.1.259: '
+          '"Allowed choices are acceptEdits, auto, bypassPermissions, manual, '
+          'dontAsk, plan"; descriptions from the 2.1.245 mode-cycler string '
+          'table',
+      legacyAliases: {
+        'ask': 'mode=manual',
+        'acceptEdits': 'mode=acceptEdits',
+        'bypass': 'mode=bypassPermissions',
+      },
+      axes: [
+        AgentPermissionAxis(
+          id: 'mode',
+          label: 'Permission mode',
+          description: 'How much Claude Code may do without asking.',
+          defaultValueId: 'manual',
+          values: [
+            AgentPermissionValue(
+              id: 'plan',
+              label: 'Plan mode',
+              shortLabel: 'Plan',
+              description:
+                  'Research and propose changes without making them.',
+              arguments: ['--permission-mode', 'plan'],
+              permits: PermissionRisk.readOnly,
+              evidence:
+                  '2.1.245 string table: "plan mode (research and propose '
+                  'changes without making them)"',
+            ),
+            AgentPermissionValue(
+              id: 'dontAsk',
+              label: "Don't ask",
+              shortLabel: "Don't ask",
+              description: 'Auto-deny anything that would prompt.',
+              arguments: ['--permission-mode', 'dontAsk'],
+              permits: PermissionRisk.readOnly,
+              evidence:
+                  '2.1.245 string table: "don\'t ask (auto-deny anything that '
+                  'would prompt)"; the binary also classifies it as '
+                  '"restricts" beside permissions.defaultMode',
+            ),
+            AgentPermissionValue(
+              id: 'manual',
+              label: 'Ask every time',
+              shortLabel: 'Ask',
+              description: 'Ask each time, before edits and commands.',
+              arguments: ['--permission-mode', 'manual'],
+              permits: PermissionRisk.ask,
+              evidence:
+                  '2.1.245 string table: "default (ask each time)". `manual` '
+                  'is the flag spelling of the config value `default`. Passing '
+                  'no flag is NOT this: 2.1.228+ starts Pro/Max/Team sessions '
+                  'in `auto`.',
+            ),
+            AgentPermissionValue(
+              id: 'acceptEdits',
+              label: 'Accept edits',
+              shortLabel: 'Accept edits',
+              description:
+                  'Auto-approve file edits and common file commands.',
+              arguments: ['--permission-mode', 'acceptEdits'],
+              permits: PermissionRisk.acceptEdits,
+              evidence:
+                  '2.1.245 string table: "accept edits (auto-approve file '
+                  'edits and common file commands)"',
+            ),
+            AgentPermissionValue(
+              id: 'auto',
+              label: 'Automatic',
+              shortLabel: 'Automatic',
+              description:
+                  'No routine prompts; a reviewer model screens actions.',
+              arguments: ['--permission-mode', 'auto'],
+              permits: PermissionRisk.autoRun,
+              evidence:
+                  '2.1.245 string table: "auto (no routine prompts; a '
+                  'reviewer model screens actions)"',
+            ),
+            AgentPermissionValue(
+              id: 'bypassPermissions',
+              label: 'Bypass (full autonomy)',
+              shortLabel: 'Bypass',
+              description: 'No further prompts of any kind.',
+              arguments: ['--permission-mode', 'bypassPermissions'],
+              permits: PermissionRisk.bypass,
+              isDangerous: true,
+              evidence:
+                  '2.1.245 string table: "BYPASS PERMISSIONS (no further '
+                  'prompts)"; the binary classifies it as "bypass"',
+            ),
+          ],
+        ),
+      ],
+    ),
     resume: AgentResume.flag('--resume'),
     interactiveResume: AgentResume.flag('--resume'),
     // **The store is cwd-keyed and the resume is not**, and the gap between
@@ -440,52 +515,151 @@ const _codex = AgentDescriptor(
   ),
   launch: AgentLaunchSpec(
     baseArguments: ['app-server'],
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact([
-        '--ask-for-approval',
-        'on-request',
-      ]),
-      // Codex has no accept-edits mode. It splits the question in two — a
-      // *sandbox* decides what may be written, an *approval policy* decides
-      // what must be asked — so the nearest thing takes one flag from each:
-      // `workspace-write` lets it edit files in the working tree without
-      // asking, and the approval policy still escalates commands.
-      //
-      // **This value has now been wrong twice, on two different CLI versions,
-      // and both times the symptom was the agent refusing to launch.** Loop 49
-      // replaced `on-failure` (rejected by 0.145.0) with `untrusted`; 0.151.0
-      // has since removed `untrusted` too:
-      //
-      //   $ codex --sandbox workspace-write --ask-for-approval untrusted \
-      //       exec 'reply with the single word PONG'
-      //   error: invalid value 'untrusted' for '--ask-for-approval <APPROVAL_POLICY>'
-      //     [possible values: on-request, never]
-      //
-      // `on-request` is the only remaining value that is not *more* permissive
-      // than accept-edits (`never` asks for nothing at all, which is the wrong
-      // direction for a mode the user picked to stay in control of commands).
-      // Verified to launch on 0.151.0:
-      //
-      //   $ codex --sandbox workspace-write --ask-for-approval on-request \
-      //       exec --skip-git-repo-check 'reply with the single word PONG'
-      //   sandbox: workspace-write [workdir, /tmp, $TMPDIR]
-      //   codex
-      //   PONG
-      //
-      // The lesson Loop 49 drew still holds and is worth restating: no unit
-      // test can catch this, because the flag is asserted against a string
-      // literal that is itself the mistake. Only running the CLI can.
-      PermissionMode.acceptEdits: PermissionModeMapping.approximate(
-        ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
-        note:
-            'Codex has no accept-edits mode. The nearest lets it write inside '
-            'the working tree without asking, and leaves commands under the '
-            'same on-request approval policy as "Ask every time".',
-      ),
-      PermissionMode.bypass: PermissionModeMapping.exact([
-        '--dangerously-bypass-approvals-and-sandbox',
-      ]),
-    },
+    // **Codex is two axes, not one**, and squeezing them into a single picker
+    // is what made "accept edits" an approximation with an apology attached. A
+    // *sandbox* decides what may be written; an *approval policy* decides what
+    // must be asked. They are independent flags and they compose.
+    //
+    //   $ codex --help
+    //     -s, --sandbox <SANDBOX_MODE>
+    //          [possible values: read-only, workspace-write, danger-full-access]
+    //     -a, --ask-for-approval <APPROVAL_POLICY>
+    //          - untrusted:  Only run "trusted" commands … escalate …
+    //          - on-request: The model decides when to ask the user for approval
+    //          - never:      Never ask for user approval …
+    //
+    // **Declared from the latest Codex only**, which is also the set both
+    // installations on this machine accept:
+    //
+    //   Windows 0.145.0  $ codex --ask-for-approval on-failure --help
+    //     [possible values: untrusted, on-request, never]
+    //   WSL     0.151.0  $ codex --ask-for-approval on-failure --help
+    //     [possible values: on-request, never]
+    //
+    // `untrusted` is deliberately **not** declared. It exists on 0.145.0 and
+    // 0.151.0 rejects it, and offering a value the installed binary refuses is
+    // how a launch fails outright — which has now happened twice to this one
+    // flag (`on-failure` on 0.145.0, `untrusted` on 0.151.0). The latest set is
+    // a subset of the older one, so declaring it is safe on both.
+    //
+    // The cost is stated rather than hidden: **Codex has no "ask before
+    // anything" left**. Nothing here reaches `PermissionRisk.ask`, and a
+    // handoff of an ask-every-time session onto Codex therefore falls to a
+    // read-only sandbox and says so, instead of pretending.
+    //
+    // `permits` is a **cap**, and the axes compose by `min`: `on-request` and
+    // `never` impose no guaranteed cap of their own (the model may simply not
+    // ask), so the sandbox is what bounds them — which is why read-only+never
+    // is readOnly and danger-full-access+on-request is a bypass.
+    permission: AgentPermissionSupport.axes(
+      evidence:
+          'codex --help and the rejection messages of '
+          '`--sandbox bogus` / `--ask-for-approval on-failure` on 0.145.0 '
+          '(Windows) and 0.151.0 (WSL)',
+      legacyAliases: {
+        'ask': 'approval=on-request;sandbox=workspace-write',
+        'acceptEdits': 'approval=on-request;sandbox=workspace-write',
+        'bypass': 'approval=on-request;sandbox=bypass-all',
+      },
+      axes: [
+        AgentPermissionAxis(
+          id: 'sandbox',
+          label: 'Sandbox',
+          description: 'What Codex may write without escalating.',
+          defaultValueId: 'workspace-write',
+          values: [
+            AgentPermissionValue(
+              id: 'read-only',
+              label: 'Read-only',
+              shortLabel: 'Read-only',
+              description: 'Codex cannot write. It reads and proposes.',
+              arguments: ['--sandbox', 'read-only'],
+              permits: PermissionRisk.readOnly,
+              evidence:
+                  'codex --sandbox bogus --help: "[possible values: '
+                  'read-only, workspace-write, danger-full-access]"',
+            ),
+            AgentPermissionValue(
+              id: 'workspace-write',
+              label: 'Write in the workspace',
+              shortLabel: 'Workspace',
+              description:
+                  'Codex may write inside the working tree without asking.',
+              arguments: ['--sandbox', 'workspace-write'],
+              permits: PermissionRisk.acceptEdits,
+              evidence:
+                  'codex --sandbox bogus --help: "[possible values: '
+                  'read-only, workspace-write, danger-full-access]"',
+            ),
+            AgentPermissionValue(
+              id: 'danger-full-access',
+              label: 'No sandbox',
+              shortLabel: 'No sandbox',
+              description:
+                  'Codex may write anywhere. Only the approval policy is '
+                  'left between it and the machine.',
+              arguments: ['--sandbox', 'danger-full-access'],
+              permits: PermissionRisk.bypass,
+              evidence:
+                  'codex --sandbox bogus --help: "[possible values: '
+                  'read-only, workspace-write, danger-full-access]"',
+            ),
+            AgentPermissionValue(
+              id: 'bypass-all',
+              label: 'Bypass approvals and sandbox',
+              shortLabel: 'Bypass',
+              description:
+                  'Skip all confirmation prompts and execute commands '
+                  'without sandboxing. Codex calls this EXTREMELY DANGEROUS.',
+              arguments: ['--dangerously-bypass-approvals-and-sandbox'],
+              permits: PermissionRisk.bypass,
+              isDangerous: true,
+              // One flag replaces both, so the approval picker has nothing left
+              // to say and contributes no arguments.
+              supersedes: ['approval'],
+              evidence:
+                  'codex --help: "--dangerously-bypass-approvals-and-sandbox  '
+                  'Skip all confirmation prompts and execute commands without '
+                  'sandboxing. EXTREMELY DANGEROUS."',
+            ),
+          ],
+        ),
+        AgentPermissionAxis(
+          id: 'approval',
+          label: 'Approval policy',
+          description: 'When Codex stops to ask.',
+          defaultValueId: 'on-request',
+          values: [
+            AgentPermissionValue(
+              id: 'on-request',
+              label: 'Codex decides when to ask',
+              shortLabel: 'On request',
+              description:
+                  'The model decides when to ask. The sandbox, not this, is '
+                  'what bounds it.',
+              arguments: ['--ask-for-approval', 'on-request'],
+              permits: PermissionRisk.bypass,
+              evidence:
+                  'codex --help: "on-request: The model decides when to ask '
+                  'the user for approval"',
+            ),
+            AgentPermissionValue(
+              id: 'never',
+              label: 'Never ask',
+              shortLabel: 'Never ask',
+              description:
+                  'Never ask. Execution failures go straight back to the '
+                  'model. The sandbox is the only thing left.',
+              arguments: ['--ask-for-approval', 'never'],
+              permits: PermissionRisk.bypass,
+              evidence:
+                  'codex --help: "never: Never ask for user approval '
+                  'Execution failures are immediately returned to the model"',
+            ),
+          ],
+        ),
+      ],
+    ),
     resume: AgentResume.flag('--resume'),
     // Interactively Codex resumes with a subcommand, not a flag.
     interactiveResume: AgentResume.subcommand('resume'),
@@ -885,30 +1059,97 @@ const _antigravity = AgentDescriptor(
     // This replaces a single `bypass: ['--yolo']` mapping. `--yolo` is not a
     // flag this CLI has, so the one mode Antigravity claimed to support was the
     // one that would have failed — and it was the dangerous one.
-    permissionModes: {
-      // No flag, and unlike the old empty mappings this one is *exact* rather
-      // than absent. `--dangerously-skip-permissions` is documented as the way
-      // to stop the CLI prompting, which makes prompting the unflagged
-      // behaviour in the CLI's own words.
-      //
-      // Claude Code's entry above warns that "passing nothing" can quietly mean
-      // something else per account, and that warning is why this note exists
-      // rather than a bare `exact([])`: what is verified is the help text, not
-      // an observed session.
-      PermissionMode.ask: PermissionModeMapping.exact(
-        [],
-        note:
-            'Antigravity prompts before tool use unless it is told not to, so '
-            '"Ask every time" is its own default and needs no flag.',
-      ),
-      PermissionMode.acceptEdits: PermissionModeMapping.exact([
-        '--mode',
-        'accept-edits',
-      ]),
-      PermissionMode.bypass: PermissionModeMapping.exact([
-        '--dangerously-skip-permissions',
-      ]),
-    },
+    // `agy` 1.1.24 has **plan mode too**, and its `--help` names the values:
+    //
+    //   --mode                          Set the agent execution mode for this
+    //                                   session (accept-edits, plan)
+    //   --dangerously-skip-permissions  Auto-approve all tool permission
+    //                                   requests without prompting
+    //
+    // That last line is also the evidence for the unflagged value: prompting is
+    // what `agy` does unless it is told not to. The long-standing note that
+    // "Antigravity's acceptEdits was empty because we have no idea how to ask"
+    // is retired by the first line.
+    //
+    // **`agy` does not validate `--mode` at parse time** (Go's `flag` package
+    // prints help and carries on), so only the two values its help names are
+    // declared — an unknown one has never been run and would not announce
+    // itself.
+    //
+    // `--sandbox` ("Run in a sandbox with terminal restrictions enabled") is a
+    // real second axis and is deliberately **not** declared: that one line is
+    // the only description that exists and nothing here has run it. See
+    // docs/BACKLOG.md.
+    permission: AgentPermissionSupport.axes(
+      evidence: 'agy 1.1.24 --help (WSL ~/.local/bin/agy)',
+      legacyAliases: {
+        'ask': 'mode=prompt',
+        'acceptEdits': 'mode=accept-edits',
+        'bypass': 'mode=skip-permissions',
+      },
+      axes: [
+        AgentPermissionAxis(
+          id: 'mode',
+          label: 'Execution mode',
+          description: 'How much Antigravity may do without asking.',
+          defaultValueId: 'prompt',
+          values: [
+            AgentPermissionValue(
+              id: 'plan',
+              label: 'Plan mode',
+              shortLabel: 'Plan',
+              description: 'Plan the work rather than carry it out.',
+              arguments: ['--mode', 'plan'],
+              permits: PermissionRisk.readOnly,
+              evidence:
+                  'agy 1.1.24 --help: "--mode  Set the agent execution mode '
+                  'for this session (accept-edits, plan)"',
+            ),
+            AgentPermissionValue(
+              id: 'prompt',
+              label: 'Ask every time',
+              shortLabel: 'Ask',
+              description:
+                  'Antigravity prompts before tool use. This is what an '
+                  'unflagged session does, so it needs no flag.',
+              arguments: [],
+              permits: PermissionRisk.ask,
+              evidence:
+                  'agy 1.1.24 --help: "--dangerously-skip-permissions  '
+                  'Auto-approve all tool permission requests without '
+                  'prompting" — which makes prompting the unflagged behaviour '
+                  "in the CLI's own words",
+            ),
+            AgentPermissionValue(
+              id: 'accept-edits',
+              label: 'Accept edits',
+              shortLabel: 'Accept edits',
+              description: 'Apply edits without asking.',
+              arguments: ['--mode', 'accept-edits'],
+              permits: PermissionRisk.acceptEdits,
+              evidence:
+                  'agy 1.1.24 --help: "--mode  Set the agent execution mode '
+                  'for this session (accept-edits, plan)"',
+            ),
+            AgentPermissionValue(
+              id: 'skip-permissions',
+              label: 'Bypass (full autonomy)',
+              shortLabel: 'Bypass',
+              description:
+                  'Auto-approve all tool permission requests without '
+                  'prompting.',
+              arguments: ['--dangerously-skip-permissions'],
+              permits: PermissionRisk.bypass,
+              isDangerous: true,
+              evidence:
+                  'agy 1.1.24 --help: "--dangerously-skip-permissions  '
+                  'Auto-approve all tool permission requests without '
+                  'prompting"',
+            ),
+          ],
+        ),
+      ],
+    ),
     // `--conversation  Resume a previous conversation by ID`. One convention
     // for both launches: unlike Codex there is no separate subcommand form, so
     // the headless and interactive resumes are the same flag.

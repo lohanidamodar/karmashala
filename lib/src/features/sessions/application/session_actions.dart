@@ -20,7 +20,7 @@ import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../domain/session_event.dart';
@@ -408,7 +408,7 @@ class SessionActions {
       }
       final permission = _ref
           .read(sessionLauncherProvider)
-          .permissionFor(
+          .resolvedPermissionFor(
             installation.agentId,
             SessionPurpose.existingSession,
             // The session's own mode, when it has one: a resume runs under what
@@ -428,7 +428,7 @@ class SessionActions {
           fallback: repo.path,
         ).directory,
         installation: installation,
-        permissionMode: permission,
+        permission: permission,
         resumeSessionId: session.externalSessionId,
       );
       _bump();
@@ -478,7 +478,7 @@ class SessionActions {
     required Repository repo,
     required AgentInstallation installation,
     required SystemTerminal terminal,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
     String? title,
   }) async {
     // Now goes through the one launcher, which means it **records a session**.
@@ -526,7 +526,7 @@ class SessionActions {
       agentExecutable: exe,
       cli: session.cli,
       externalId: session.externalId,
-      permissionMode: _ref
+      permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
       cwd: repo.path.path,
@@ -568,7 +568,7 @@ class SessionActions {
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
       externalId: session.externalSessionId,
-      permissionMode: _ref
+      permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(
             installation.agentId,
@@ -618,7 +618,7 @@ class SessionActions {
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
-      permissionMode: _ref
+      permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(installation.agentId, SessionPurpose.newSession),
       cwd: repo.path.path,
@@ -675,7 +675,7 @@ class SessionActions {
       externalId: session.externalId,
       environment: env,
       cwd: repo.path,
-      permissionMode: _ref
+      permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
       registry: _ref.read(agentRegistryProvider),
@@ -785,7 +785,7 @@ class SessionActions {
       externalId: externalId,
       environment: env,
       cwd: directory,
-      permissionMode: _ref
+      permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(
             installation.agentId,

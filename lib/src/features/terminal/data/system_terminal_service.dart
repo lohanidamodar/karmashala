@@ -8,7 +8,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../agents/domain/agent_registry.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../domain/launch_context.dart';
 import 'pty_launch.dart';
 
@@ -391,7 +391,7 @@ class SystemTerminalService {
   String _quoteCmd(String value) => '"${value.replaceAll('"', '""')}"';
 }
 
-/// The agent CLI flags for a [permissionMode], read from the agent registry so
+/// The agent CLI flags for [selection], read from the agent registry so
 /// terminal launches honour the same per-agent permission setting as the in-app
 /// adapters.
 ///
@@ -401,12 +401,12 @@ class SystemTerminalService {
 /// there, or may mean something else — which is the wrong side of the design note/// principle 5, "dangerous permission-bypass options are never the default".
 List<String> permissionArgsFor(
   String cli,
-  PermissionMode permissionMode, {
+  PermissionSelection? selection, {
   AgentRegistry registry = AgentRegistry.builtIn,
 }) {
-  final descriptor = registry.byId(cli);
-  return descriptor?.launch.permissionArgumentsFor(permissionMode) ??
-      const <String>[];
+  final support = registry.byId(cli)?.launch.permission;
+  if (support == null || !support.isKnown) return const <String>[];
+  return support.argumentsFor(selection);
 }
 
 /// The arguments that continue [cli]'s conversation [externalId] **in a
@@ -545,7 +545,7 @@ String _withoutTrailingSeparators(String path) {
 ///
 /// Used by the "copy command" buttons — the user pastes it into whichever shell
 /// the session lives in (so it is NOT wsl-wrapped). When [externalId] is null it
-/// is a fresh-session command. [permissionMode] adds the per-agent flags.
+/// is a fresh-session command. [permission] adds the per-agent flags.
 ///
 /// [environment] is required rather than defaulted, because one syntax for every
 /// environment is exactly the defect it closes: this used to return
@@ -557,14 +557,14 @@ String shellCommandLine({
   required String agentExecutable,
   required String cli,
   String? externalId,
-  required PermissionMode permissionMode,
+  required PermissionSelection? permission,
   required String cwd,
   required EnvironmentKind environment,
   AgentRegistry registry = AgentRegistry.builtIn,
 }) {
   final parts = [
     agentExecutable,
-    ...permissionArgsFor(cli, permissionMode, registry: registry),
+    ...permissionArgsFor(cli, permission, registry: registry),
     ...resumeArgsFor(cli, externalId, registry: registry),
   ];
   if (isPosixShell(environment)) {
@@ -590,21 +590,21 @@ String _shQuote(String value) =>
 
 /// Builds the host command line that resumes [cli]'s session [externalId] using
 /// agent executable [agentExecutable], wrapping in `wsl.exe` when the session
-/// lives in a WSL [environment]. [permissionMode] adds the per-agent permission
-/// flags (e.g. bypass).
+/// lives in a WSL [environment]. [permission] adds the per-agent permission
+/// flags (e.g. a bypass).
 List<String> resumeCommandLine({
   required String agentExecutable,
   required String cli,
   required String externalId,
   required ExecutionEnvironment environment,
   required EnvironmentPath cwd,
-  PermissionMode permissionMode = PermissionMode.ask,
+  PermissionSelection? permission,
   AgentRegistry registry = AgentRegistry.builtIn,
 }) {
   // Permission flags before the resume subcommand/args (global flags first).
   final base = [
     agentExecutable,
-    ...permissionArgsFor(cli, permissionMode, registry: registry),
+    ...permissionArgsFor(cli, permission, registry: registry),
     ...resumeArgsFor(cli, externalId, registry: registry),
   ];
   // The environment decides the wrapper, in the one place that decides it for

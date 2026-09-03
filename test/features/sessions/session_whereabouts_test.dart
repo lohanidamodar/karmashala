@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/sessions/application/session_resume_prov
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
@@ -23,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -50,9 +50,7 @@ const _exclusive = AgentDescriptor(
   displayName: 'Exclusive Agent',
   binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.subcommand('resume'),
     resumeConflict: AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],

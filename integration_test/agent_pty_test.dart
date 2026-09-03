@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:karmashala/src/features/agents/data/terminal_grid_status_source.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
@@ -23,6 +23,17 @@ import 'package:integration_test/integration_test.dart';
 ///
 /// Skipped automatically when the agent is not installed, so the suite stays
 /// green on a machine without it — a skipped test says so, which is the point.
+/// The selections these tests launch under, in each CLI's own words.
+///
+/// Codex's two axes together are what the old shared `ask` and `acceptEdits`
+/// both meant for it; Claude's `manual` is its prompting mode.
+const _codexWorkspaceWrite = PermissionSelection({
+  'sandbox': 'workspace-write',
+  'approval': 'on-request',
+});
+const _claudeManual = PermissionSelection({'mode': 'manual'});
+const _claudeAcceptEdits = PermissionSelection({'mode': 'acceptEdits'});
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -169,13 +180,13 @@ void main() {
       'the prompt is quoted from the screen and its declared key clears it',
       (_) async {
         final descriptor = AgentRegistry.builtIn.byId(AgentIds.codex)!;
-        // The mode the user picked reaches the process. `acceptEdits` is the
-        // mapping a real codex rejected until this loop, so launching under it
-        // is itself the regression test: a bad flag never reaches a trust
-        // modal, it exits.
+        // The mode the user picked reaches the process. Writing-in-the-workspace
+        // is the mapping a real codex rejected until this loop, so launching
+        // under it is itself the regression test: a bad flag never reaches a
+        // trust modal, it exits.
         final arguments = agentPaneArguments(
           descriptor,
-          PermissionMode.acceptEdits,
+          _codexWorkspaceWrite,
           prompt: 'Reply with exactly the word PONG and nothing else.',
         );
         expect(
@@ -283,7 +294,7 @@ void main() {
           executable: 'codex.exe',
           arguments: agentPaneArguments(
             AgentRegistry.builtIn.byId(AgentIds.codex),
-            PermissionMode.ask,
+            _codexWorkspaceWrite,
             prompt: 'Reply with exactly the word PONG and nothing else.',
           ),
           workingDirectory: work.path,
@@ -334,7 +345,7 @@ void main() {
         final descriptor = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
         final arguments = agentPaneArguments(
           descriptor,
-          PermissionMode.ask,
+          _claudeManual,
           prompt: 'Reply with exactly the word PONG and nothing else.',
         );
         // `ask` used to add nothing here, which silently left a Pro/Max/Team
@@ -388,7 +399,7 @@ void main() {
           executable: 'claude',
           arguments: agentPaneArguments(
             AgentRegistry.builtIn.byId(AgentIds.claudeCode),
-            PermissionMode.acceptEdits,
+            _claudeAcceptEdits,
             prompt: 'Reply with exactly the word PONG and nothing else.',
           ),
           // A Linux-side path: the launch is wrapped in `wsl.exe --cd`, and the

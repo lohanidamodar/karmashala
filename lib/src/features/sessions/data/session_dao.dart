@@ -5,7 +5,6 @@ import '../domain/session.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_lineage.dart';
 import '../domain/session_status.dart';
-import '../../settings/domain/permission_mode.dart';
 
 /// Data-access for [Session] rows. Hand-written SQL, no codegen.
 class SessionDao {
@@ -41,7 +40,7 @@ class SessionDao {
         session.paneId,
         session.surface.name,
         session.view.name,
-        session.permissionMode?.name,
+        session.permissionMode,
         session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
         intFromBool(session.titleByUser),
@@ -137,9 +136,9 @@ class SessionDao {
   /// never chose one for this session" is the state the owner's request turns
   /// on ("it should be highest priority to sessions own permission"), and a
   /// user who picks a mode must be able to go back to it.
-  void updatePermissionMode(String id, PermissionMode? mode) {
+  void updatePermissionMode(String id, String? mode) {
     _db.execute('UPDATE sessions SET permission_mode = ? WHERE id = ?;', [
-      mode?.name,
+      mode,
       id,
     ]);
   }
@@ -295,18 +294,6 @@ class SessionDao {
     return SessionView.terminal;
   }
 
-  /// Null-preserving, unlike [_surfaceFrom] and [_viewFrom], because null is a
-  /// meaningful value here: a row written before schema v11 never recorded a
-  /// mode, and falling back to `ask` would claim it ran under a policy it may
-  /// well not have. The caller resolves that from the settings instead.
-  static PermissionMode? _permissionFrom(String? value) {
-    if (value == null) return null;
-    for (final mode in PermissionMode.values) {
-      if (mode.name == value) return mode;
-    }
-    return null;
-  }
-
   Session _fromRow(Map<String, Object?> row) {
     final worktreeEnv = row['worktree_environment_id'] as String?;
     final worktreePath = row['worktree_path'] as String?;
@@ -337,7 +324,12 @@ class SessionDao {
       // fourth agent's rows unreadable (Loop 30).
       surface: _surfaceFrom(row['surface'] as String?),
       view: _viewFrom(row['view'] as String?),
-      permissionMode: _permissionFrom(row['permission_mode'] as String?),
+      // Kept verbatim rather than parsed against a fixed set. Since v35 this
+      // is a selection in the agent's own vocabulary, and only the agent's
+      // descriptor can say what it means — a DAO that "validated" it would
+      // have to know every agent, and would answer an unrecognised value by
+      // throwing the row away.
+      permissionMode: row['permission_mode'] as String?,
       modelId: row['model_id'] as String?,
       archivedAt: row['archived_at'] == null
           ? null

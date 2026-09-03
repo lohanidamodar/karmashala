@@ -8,7 +8,7 @@ import '../../agents/domain/agent_installation.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../git/application/worktree_service.dart';
 import '../../repositories/domain/repository.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../data/session_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_repository_dao.dart';
@@ -71,7 +71,7 @@ class SessionEngine {
     required String title,
     bool useWorktree = false,
     List<Repository> additionalRepositories = const [],
-    PermissionMode permissionMode = PermissionMode.ask,
+    required ResolvedPermission permission,
     String? resumeSessionId,
   }) async {
     final id = ids.newId();
@@ -114,7 +114,7 @@ class SessionEngine {
       title: title,
       workingDirectory: workingDirectory,
       installation: installation,
-      permissionMode: permissionMode,
+      permission: permission,
       resumeSessionId: resumeSessionId,
     );
 
@@ -128,7 +128,7 @@ class SessionEngine {
     required Session session,
     required EnvironmentPath workingDirectory,
     required AgentInstallation installation,
-    PermissionMode permissionMode = PermissionMode.ask,
+    required ResolvedPermission permission,
     String? resumeSessionId,
   }) async {
     if (_runtimes.containsKey(session.id)) return;
@@ -138,7 +138,7 @@ class SessionEngine {
       title: session.title,
       workingDirectory: workingDirectory,
       installation: installation,
-      permissionMode: permissionMode,
+      permission: permission,
       resumeSessionId: resumeSessionId,
     );
   }
@@ -149,7 +149,7 @@ class SessionEngine {
     required String title,
     required EnvironmentPath workingDirectory,
     required AgentInstallation installation,
-    required PermissionMode permissionMode,
+    required ResolvedPermission permission,
     String? resumeSessionId,
   }) {
     final controller = StreamController<SessionEvent>.broadcast();
@@ -164,7 +164,7 @@ class SessionEngine {
       AgentLaunch(
         workingDirectory: workingDirectory,
         installation: installation,
-        permissionMode: permissionMode,
+        permission: permission,
         resumeSessionId: resumeSessionId,
       ),
     );

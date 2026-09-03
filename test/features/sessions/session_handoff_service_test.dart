@@ -11,6 +11,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
@@ -27,7 +28,7 @@ import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,6 +39,70 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
+
+/// Forker's own vocabulary. Deliberately **has no accept-edits**: the carry
+/// rule's downwards-only clause is only visible against an agent that cannot
+/// express what it is handed, so the shared `testPermissionSupport` (which has
+/// all three rungs) would hide exactly what these tests are for.
+const _forkerModes = AgentPermissionSupport.axes(
+  evidence: 'test fixture — not a real CLI',
+  axes: [
+    AgentPermissionAxis(
+      id: 'mode',
+      label: 'Permission mode',
+      description: 'How much Forker may do without asking.',
+      defaultValueId: 'ask',
+      values: [
+        AgentPermissionValue(
+          id: 'ask',
+          label: 'Ask every time',
+          shortLabel: 'Ask',
+          description: 'Prompts before edits and commands.',
+          arguments: ['--careful'],
+          permits: PermissionRisk.ask,
+          evidence: 'test fixture',
+        ),
+        AgentPermissionValue(
+          id: 'bypass',
+          label: 'Bypass',
+          shortLabel: 'Bypass',
+          description: 'Skips every prompt.',
+          arguments: ['--trust-me'],
+          permits: PermissionRisk.bypass,
+          isDangerous: true,
+          evidence: 'test fixture',
+        ),
+      ],
+    ),
+  ],
+);
+
+/// Mute's only expressible mode is a bypass — the shape that makes the carry
+/// rule refuse rather than escalate a careful session onto it.
+const _muteModes = AgentPermissionSupport.axes(
+  evidence: 'test fixture — not a real CLI',
+  axes: [
+    AgentPermissionAxis(
+      id: 'mode',
+      label: 'Permission mode',
+      description: 'The only thing Mute can be told.',
+      defaultValueId: 'bypass',
+      values: [
+        AgentPermissionValue(
+          id: 'bypass',
+          label: 'Bypass',
+          shortLabel: 'Bypass',
+          description: 'Skips every prompt.',
+          arguments: ['--yolo'],
+          permits: PermissionRisk.bypass,
+          isDangerous: true,
+          evidence: 'test fixture',
+        ),
+      ],
+    ),
+  ],
+);
 
 /// Two agents that differ in exactly the ways the handoff cares about: one
 /// forks natively and takes a prompt, the other cannot be told anything.
@@ -46,10 +111,7 @@ const _forker = AgentDescriptor(
   displayName: 'Forker CLI',
   binaries: AgentBinaries(windows: ['forker'], posix: ['forker']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
+    permission: _forkerModes,
     interactiveResume: AgentResume.flag('--resume'),
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
     prompt: AgentPromptSupport.positional(),
@@ -71,9 +133,7 @@ const _mute = AgentDescriptor(
   binaries: AgentBinaries(windows: ['mute'], posix: ['mute']),
   // Takes no prompt argument and declares no fork: the shape Antigravity has.
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
-    },
+    permission: _muteModes,
   ),
 );
 
@@ -195,7 +255,7 @@ void seedSession(
   String installationId = 'a1',
   String? externalSessionId = 'cli-1',
   EnvironmentPath? workingDirectory,
-  PermissionMode? mode = PermissionMode.ask,
+  String? mode = askStored,
 }) {
   SessionDao(db).insert(
     session(
@@ -252,7 +312,8 @@ void main() {
           .targetsFor('src')
           .firstWhere((t) => t.agentName == 'Mute CLI');
       // Mute's only expressible mode is bypass, and the session is on `ask`.
-      expect(mute.permission.mode, PermissionMode.ask);
+      expect(mute.permission.requested, PermissionRisk.ask);
+      expect(mute.permission.selection, PermissionSelection.empty);
       expect(mute.permission.enforced, isFalse);
     });
 
@@ -262,13 +323,13 @@ void main() {
             .withPermissions(
               'forker',
               const AgentPermissions(
-                newSessions: PermissionMode.ask,
-                existingSessions: PermissionMode.bypass,
+                newSessions: askStored,
+                existingSessions: bypassStored,
               ),
             )
             .withPermissions(
               'mute',
-              const AgentPermissions(newSessions: PermissionMode.bypass),
+              const AgentPermissions(newSessions: bypassStored),
             ),
       );
       addTearDown(h.db.close);
@@ -283,8 +344,8 @@ void main() {
       // mode that target will actually start under if the new session is left
       // following the default — the **target's** new-session default, not the
       // source agent's existing-session one, which the launch would never use.
-      expect(targets.first.permission.requested, PermissionMode.ask);
-      expect(targets.last.permission.mode, PermissionMode.bypass);
+      expect(targets.first.permission.requested, PermissionRisk.ask);
+      expect(targets.last.permission.selection, bypassSelection);
       expect(targets.last.permission.enforced, isTrue);
     });
 
@@ -550,7 +611,7 @@ void main() {
             sessionId: 'src',
             targetInstallationId: 'a1',
             instruction: 'Take it from here.',
-            permissionMode: PermissionMode.bypass,
+            permissionMode: bypassSelection,
           );
 
       final launch = h.container
@@ -564,7 +625,7 @@ void main() {
       // And it is stamped on the row, so the next resume runs under it too.
       expect(
         SessionDao(h.db).getById(result.session.id)!.permissionMode,
-        PermissionMode.bypass,
+        bypassStored,
       );
     });
 
@@ -574,7 +635,7 @@ void main() {
         transcriptPath: path,
         settings: const Settings().withPermissions(
           'forker',
-          const AgentPermissions(newSessions: PermissionMode.bypass),
+          const AgentPermissions(newSessions: bypassStored),
         ),
       );
       addTearDown(h.db.close);
@@ -616,7 +677,7 @@ void main() {
             sessionId: 'src',
             targetInstallationId: 'a1',
             instruction: 'Take it from here.',
-            permissionMode: PermissionMode.acceptEdits,
+            permissionMode: acceptEditsSelection,
           );
 
       final launch = h.container
@@ -627,7 +688,7 @@ void main() {
       expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
         SessionDao(h.db).getById(result.session.id)!.permissionMode,
-        PermissionMode.ask,
+        askStored,
       );
     });
 
@@ -724,7 +785,7 @@ void main() {
 
       final result = await h.container
           .read(sessionHandoffServiceProvider)
-          .forkSession(sessionId: 'src', permissionMode: PermissionMode.bypass);
+          .forkSession(sessionId: 'src', permissionMode: bypassSelection);
 
       final launch = h.container
           .read(terminalSessionsControllerProvider.notifier)
@@ -736,7 +797,7 @@ void main() {
       // left on its own.
       expect(
         SessionDao(h.db).getById('src')!.permissionMode,
-        PermissionMode.ask,
+        askStored,
       );
     });
 
@@ -744,7 +805,7 @@ void main() {
       final h = harness(
         settings: const Settings().withPermissions(
           'forker',
-          const AgentPermissions(newSessions: PermissionMode.bypass),
+          const AgentPermissions(newSessions: bypassStored),
         ),
       );
       addTearDown(h.db.close);
@@ -769,33 +830,38 @@ void main() {
       );
     });
 
-    test('a fork stamps a mode the carry rule had to change', () async {
-      final h = harness(
-        settings: const Settings().withPermissions(
-          'forker',
-          const AgentPermissions(newSessions: PermissionMode.acceptEdits),
-        ),
-      );
+    test('a fork stamps a mode that had to be reduced to fit the agent', () async {
+      final h = harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      seedSession(h.db, mode: null);
+      // A row naming a mode this build of Forker does not have — what a newer
+      // build, or a row written before a mode was withdrawn, leaves behind.
+      //
+      // Before per-agent modes this reduction came from the *carry rule*, with
+      // a shared `acceptEdits` the agent's flag table had no entry for. It
+      // cannot come from there any more: a same-agent fork measures the source
+      // against a selection already normalised into that agent's vocabulary, so
+      // the carry is always exact. An unrecognised stored value is what is left
+      // — and the property under test is unchanged.
+      seedSession(h.db, mode: acceptEditsStored);
 
       final result = await h.container
           .read(sessionHandoffServiceProvider)
           .forkSession(sessionId: 'src');
 
-      // Forker has no accept-edits, so the carry falls to the safest mode it
-      // does express. That reduction is a decision this branch must keep — left
-      // following the default it would silently climb back to accept-edits on
-      // its next resume.
+      // Forker has no accept-edits, so the resolution falls to the safest mode
+      // it does express. That reduction is a decision this branch must keep —
+      // recorded as the mode it actually ran under rather than as a name
+      // nothing here understands.
       final launch = h.container
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(result.paneId!)!
           .agentLaunch!;
       expect(launch.arguments, contains('--careful'));
+      expect(launch.arguments, isNot(contains('--trust-me')));
       expect(
         SessionDao(h.db).getById(result.session.id)!.permissionMode,
-        PermissionMode.ask,
+        askStored,
       );
     });
 
