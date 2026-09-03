@@ -10,7 +10,40 @@ import '../domain/project_scope.dart';
 import '../domain/todo.dart';
 import 'project_menu.dart';
 
+/// The resting height of either text field, in lines. Both start at one, which
+/// is how the panel has always looked when there is nothing in it.
+const _minLines = 1;
+
+/// The most the composer grows to before it scrolls inside itself instead.
+///
+/// Four rather than unbounded because this field is *pinned* above the list:
+/// every line it takes is a line of todos it hides, and a paste of something
+/// enormous must not swallow the panel. The row editor has no such cap — see
+/// there for why.
+const _composerMaxLines = 4;
+
 /// The Todos surface: a line of text, done or not, in the order you put it in.
+///
+/// ## What Enter does, and why there is no line break
+///
+/// **A todo is a single paragraph.** Enter files a new one and commits an edit;
+/// nothing here inserts a newline, and both fields declare
+/// `TextInputType.text` so that no platform inserts one behind our back.
+///
+/// The alternative was `MessageComposer`'s contract — Enter sends, Shift+Enter
+/// breaks the line — and it is the wrong one here. That field writes a
+/// *prompt*, which really is multi-paragraph, and it buys the break with a
+/// `FocusNode.onKeyEvent` that swallows Return before the engine sees it. A
+/// todo wants none of that: the row draws it as one run of text, the list gives
+/// it one position, `todo_add` takes one `body`, and a second paragraph would
+/// have nowhere to be read. Buying a break we do not want would also cost the
+/// thing we do: on the companion's soft keyboard the return key would become a
+/// newline and there would be no way left to save at all.
+///
+/// What the fields *are* is wrapping. A single-line `TextField` scrolls
+/// `AxisDirection.right`, so a 200-character todo — an ordinary one here — had
+/// to be dragged sideways to be re-read while typing it. Both fields now grow
+/// downwards instead.
 ///
 /// ## How this differs from the attention inbox
 ///
@@ -191,6 +224,21 @@ class _Composer extends ConsumerWidget {
       child: TextField(
         controller: controller,
         focusNode: focusNode,
+        // Grows down instead of scrolling sideways. A single-line field
+        // scrolls `AxisDirection.right`, and a real todo is a sentence: the
+        // owner's longest runs to 200 characters, so the *normal* case was a
+        // box you had to drag horizontally to re-read what you had typed.
+        // Capped at four lines because the composer is pinned above the list
+        // and must not grow until it has eaten it; past that it scrolls.
+        minLines: _minLines,
+        maxLines: _composerMaxLines,
+        // A todo is one paragraph, so Enter files it rather than breaking the
+        // line — see [TodosView]. `TextInputType.text` is the
+        // half of that contract the *platform* reads: left to itself a
+        // multi-line field asks for `TextInputType.multiline`, and both the
+        // Windows key handler and a soft keyboard would then turn Return into
+        // a newline and never deliver the action.
+        keyboardType: TextInputType.text,
         textInputAction: TextInputAction.done,
         onSubmitted: onSubmit,
         style: Theme.of(context).textTheme.bodyMedium,
@@ -299,6 +347,16 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                     TextField(
                       controller: editor,
                       autofocus: true,
+                      // Unbounded, unlike the composer: the row this replaces
+                      // already draws the whole body wrapped, so a field that
+                      // grows to exactly the same height means tapping to edit
+                      // never makes the line you were reading jump or shrink.
+                      // A tall row is only a tall row — the list scrolls.
+                      minLines: _minLines,
+                      maxLines: null,
+                      // Same contract as the composer, for the same reason.
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
                       style: theme.textTheme.bodyMedium,
                       decoration: const InputDecoration(
                         isDense: true,

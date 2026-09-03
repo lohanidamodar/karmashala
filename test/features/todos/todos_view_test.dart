@@ -12,6 +12,14 @@ import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
+/// A todo at the length the owner’s own list actually runs to: past 200
+/// characters. Long is the normal case on this surface, not an edge one, which
+/// is why every field here wraps.
+const longTodo =
+    'Rework the tab strip so a session that has been renamed still shows the '
+    'branch it is on, and make the overflow menu list the panes that no '
+    'longer fit rather than silently dropping them off the end of the row.';
+
 void main() {
   /// The panel this lives in, at the width it actually gets on a desktop, with
   /// two projects so "which one" is a real question.
@@ -231,6 +239,160 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(todosProvider), isEmpty);
+  });
+
+  group('a todo is a sentence, so nothing here scrolls sideways', () {
+    testWidgets('the composer grows down as the line runs long', (
+      tester,
+    ) async {
+      await pump(tester);
+      final composer = find.byType(TextField).first;
+      final empty = tester.getSize(composer);
+
+      await tester.enterText(composer, longTodo);
+      await tester.pumpAndSettle();
+
+      final filled = tester.getSize(composer);
+      expect(
+        filled.height,
+        greaterThan(empty.height),
+        reason:
+            'a single-line field scrolls AxisDirection.right, and a todo this '
+            'long is the ordinary case here, not an edge one',
+      );
+      expect(
+        filled.width,
+        empty.width,
+        reason: 'it grows downwards; the panel does not get wider',
+      );
+      // Pinned above the list, so it stops rather than eating the panel.
+      expect(tester.widget<TextField>(composer).maxLines, 4);
+      expect(tester.widget<TextField>(composer).minLines, 1);
+    });
+
+    testWidgets('Enter files the todo, and never breaks the line', (
+      tester,
+    ) async {
+      final container = await pump(tester);
+
+      await write(tester, longTodo);
+
+      // The whole sentence, in one piece: Enter committed rather than
+      // inserting a newline nobody could then get rid of.
+      expect(container.read(todosProvider).single.body, longTodo);
+      expect(container.read(todosProvider).single.body, isNot(contains('\n')));
+
+      // The half of that contract the *platform* reads. Left to itself a
+      // multi-line field asks for TextInputType.multiline, and both the
+      // Windows key handler and a soft keyboard would then turn Return into a
+      // newline and never deliver the action — which on a phone would leave
+      // no way to save at all.
+      final composer = tester.widget<TextField>(find.byType(TextField).first);
+      expect(composer.keyboardType, TextInputType.text);
+      expect(composer.textInputAction, TextInputAction.done);
+    });
+
+    testWidgets('the row editor wraps too, and Enter commits it', (
+      tester,
+    ) async {
+      final container = await pump(tester);
+      final todos = container.read(todosProvider.notifier);
+      todos.add(body: 'short');
+      todos.add(body: longTodo);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('short'));
+      await tester.pumpAndSettle();
+      final oneLine = tester.getSize(find.byType(TextField).last).height;
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(longTodo));
+      await tester.pumpAndSettle();
+      final editor = find.byType(TextField).last;
+      expect(
+        tester.getSize(editor).height,
+        greaterThan(oneLine),
+        reason: 'editing a long todo must not mean dragging it sideways',
+      );
+      // Uncapped, unlike the composer: the row it replaces already draws the
+      // whole body, so the line being read never jumps or shrinks.
+      final field = tester.widget<TextField>(editor);
+      expect(field.maxLines, isNull);
+      expect(field.keyboardType, TextInputType.text);
+      expect(field.textInputAction, TextInputAction.done);
+
+      await tester.enterText(editor, '$longTodo, twice over');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final edited = container
+          .read(todosProvider)
+          .firstWhere((todo) => todo.body != 'short');
+      expect(edited.body, '$longTodo, twice over');
+      expect(edited.body, isNot(contains('\n')));
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('the list draws the whole todo, wrapped', (tester) async {
+      final container = await pump(tester);
+      final todos = container.read(todosProvider.notifier);
+      todos.add(body: 'short');
+      todos.add(body: longTodo);
+      await tester.pumpAndSettle();
+
+      final short = tester.getSize(find.text('short'));
+      final long = tester.getSize(find.text(longTodo));
+
+      expect(
+        long.height,
+        greaterThan(short.height * 3),
+        reason: 'a todo you cannot read is as bad as one you cannot type',
+      );
+      expect(long.width, lessThanOrEqualTo(short.width + 320));
+      // Nothing truncates it: no maxLines, no ellipsis.
+      final text = tester.widget<Text>(find.text(longTodo));
+      expect(text.maxLines, isNull);
+      expect(text.overflow, isNull);
+    });
+
+    testWidgets('a long todo fits at a phone width and a desktop one', (
+      tester,
+    ) async {
+      // The panel is 240px at its narrowest, which is narrower than any phone;
+      // this pumps the surface at the full window width instead, so the two
+      // form factors CLAUDE.md asks about are both actually measured.
+      await expectSurvivesWindowMatrix(
+        tester,
+        matrix: const [
+          WindowCell('400x800 (phone-like)', Size(400, 800)),
+          desktopWindow,
+        ],
+        because:
+            'a 200-character todo is the owner’s ordinary case, and it '
+            'has to wrap rather than clip at either width',
+        build: () {
+          final db = AppDatabase.memory();
+          addTearDown(db.close);
+          ExecutionEnvironmentDao(db).upsert(windowsEnv());
+          ProjectDao(db).insert(project());
+          final container = ProviderContainer(
+            overrides: [databaseProvider.overrideWithValue(db)],
+          );
+          addTearDown(container.dispose);
+          container.read(todosProvider.notifier).add(
+            body: longTodo,
+            projectId: 'p1',
+          );
+          return UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: TodosView()),
+            ),
+          );
+        },
+      );
+    });
   });
 
   testWidgets('survives the window matrix', (tester) async {
