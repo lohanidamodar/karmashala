@@ -11,6 +11,7 @@ import '../../../features/environments/presentation/environment_health_dialog.da
 import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/notes/application/notes_providers.dart';
+import '../../../features/notes/presentation/note_edit_dialog.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
@@ -26,6 +27,7 @@ import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../../features/terminal/presentation/pane_group_strip.dart';
+import '../../../features/todos/application/todos_providers.dart';
 import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
 import '../../theme/app_icons.dart';
@@ -144,6 +146,51 @@ class QuickOpenSources {
           onSelect: () => FanOutDialog.show(context),
         ),
       ],
+      // The two things you write for yourself, listed as **verbs**.
+      //
+      // Both surfaces were already here as places — "Notes  ·  Side panel" —
+      // and the owner still asked *"how to add notes, where can we add
+      // notes?"*, then *"it's not intuitive"*. A place only answers the
+      // question if you already know its name; "New note" is what somebody
+      // types when they do not. Each one opens its surface on the way, so the
+      // palette teaches where the thing lives instead of only doing it once.
+      if (ref.read(notesEnabledProvider))
+        _command(
+          'New note…',
+          subtitle: 'Keep an idea without acting on it',
+          icon: AppIcons.notePencil,
+          keywords: const [
+            'note',
+            'notes',
+            'write',
+            'idea',
+            'remember',
+            'save for later',
+            'scratchpad',
+          ],
+          onSelect: () {
+            panel.select(SidePanelSurface.notes);
+            showNewNoteDialog(context, ref);
+          },
+        ),
+      _command(
+        'New todo',
+        subtitle: 'One line, done or not, in your own order',
+        icon: AppIcons.listChecks,
+        keywords: const [
+          'todo',
+          'todos',
+          'to-do',
+          'task',
+          'tasks',
+          'checklist',
+          'remind',
+        ],
+        onSelect: () {
+          panel.select(SidePanelSurface.todos);
+          ref.read(todoComposerFocusProvider.notifier).request();
+        },
+      ),
       _command(
         'Terminal view',
         subtitle: 'Show the terminal in the workbench',

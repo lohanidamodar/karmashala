@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../todos/presentation/project_menu.dart';
@@ -59,11 +58,11 @@ class NotesView extends ConsumerWidget {
               ),
             ),
             IconButton(
-              tooltip: 'New note',
+              tooltip: 'New note  ·  write one here',
               iconSize: Chrome.icon,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.plus),
-              onPressed: () => _newNote(context, ref),
+              onPressed: () => showNewNoteDialog(context, ref),
             ),
           ],
         ),
@@ -81,29 +80,6 @@ class NotesView extends ConsumerWidget {
     );
   }
 
-  Future<void> _newNote(BuildContext context, WidgetRef ref) async {
-    final now = ref.read(clockProvider).nowUtc();
-    final edit = await NoteEditDialog.show(
-      context,
-      // Pre-filed under whatever the panel is showing, so writing a note while
-      // looking at one project files it there without a second decision.
-      Note(
-        id: '',
-        body: '',
-        projectId: ref.read(noteScopeProvider).projectForNewItems,
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-    if (edit == null) return;
-    ref
-        .read(notesProvider.notifier)
-        .capture(
-          body: edit.body,
-          title: edit.title,
-          projectId: edit.projectId,
-        );
-  }
 }
 
 /// What an empty Notes panel says.
@@ -111,7 +87,7 @@ class NotesView extends ConsumerWidget {
 /// The feature is invisible until someone taps a glyph they have no reason to
 /// try, so the empty state is where it is taught: what a note is for, how one
 /// is made, and what happens to it afterwards.
-class _EmptyNotes extends StatelessWidget {
+class _EmptyNotes extends ConsumerWidget {
   const _EmptyNotes({required this.filtered});
 
   /// Whether the list is empty because of the project filter rather than
@@ -120,7 +96,7 @@ class _EmptyNotes extends StatelessWidget {
   final bool filtered;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     if (filtered) {
@@ -167,6 +143,17 @@ class _EmptyNotes extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: Insets.md),
+            // The way out of the empty state, named. The panel had only an
+            // icon-only **+** in its header and three paragraphs pointing at a
+            // glyph somewhere else, which is how the owner ended up asking
+            // "how to add notes, where can we add notes?" while looking at
+            // the feature.
+            FilledButton.icon(
+              onPressed: () => showNewNoteDialog(context, ref),
+              icon: const Icon(AppIcons.notePencil, size: Chrome.icon),
+              label: const Text('Write a note'),
             ),
           ],
         ),

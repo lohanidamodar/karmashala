@@ -43,15 +43,26 @@ class TodosView extends ConsumerStatefulWidget {
 
 class _TodosViewState extends ConsumerState<TodosView> {
   final _composer = TextEditingController();
+  final _composerFocus = FocusNode();
 
   @override
   void dispose() {
     _composer.dispose();
+    _composerFocus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // "New todo" in the palette opens this surface and asks for the cursor, so
+    // somebody who could not find the panel can keep typing the todo they came
+    // to write. Only on a *change*, so merely showing the panel never takes
+    // the keyboard away from the terminal.
+    ref.listen(todoComposerFocusProvider, (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _composerFocus.requestFocus();
+      });
+    });
     final scope = ref.watch(todoScopeProvider);
     final all = ref.watch(todosProvider);
     final shown = [
@@ -87,7 +98,12 @@ class _TodosViewState extends ConsumerState<TodosView> {
               ),
           ],
         ),
-        _Composer(controller: _composer, scope: scope, onSubmit: _add),
+        _Composer(
+          controller: _composer,
+          focusNode: _composerFocus,
+          scope: scope,
+          onSubmit: _add,
+        ),
         Expanded(
           child: shown.isEmpty
               ? _EmptyTodos(scope: scope, hasAny: all.isNotEmpty)
@@ -147,11 +163,13 @@ class _TodosViewState extends ConsumerState<TodosView> {
 class _Composer extends ConsumerWidget {
   const _Composer({
     required this.controller,
+    required this.focusNode,
     required this.scope,
     required this.onSubmit,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final ProjectScope scope;
   final ValueChanged<String> onSubmit;
 
@@ -172,6 +190,7 @@ class _Composer extends ConsumerWidget {
       ),
       child: TextField(
         controller: controller,
+        focusNode: focusNode,
         textInputAction: TextInputAction.done,
         onSubmitted: onSubmit,
         style: Theme.of(context).textTheme.bodyMedium,

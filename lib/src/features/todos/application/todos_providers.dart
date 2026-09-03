@@ -132,3 +132,26 @@ class TodoScopeController extends Notifier<ProjectScope> {
 final todoScopeProvider = NotifierProvider<TodoScopeController, ProjectScope>(
   TodoScopeController.new,
 );
+
+/// A ticket for "put the cursor in the todo composer".
+///
+/// The palette's **New todo** has to be a verb, not a place: somebody who
+/// cannot find the panel types "todo", presses Enter, and must be able to keep
+/// typing the todo. So the command opens the surface and bumps this counter,
+/// and the panel focuses its field when the number changes.
+///
+/// A counter rather than a flag because two invocations in a row are two
+/// requests, and a flag that is already `true` would silently swallow the
+/// second. Nothing here focuses anything when the panel opens by itself — a
+/// panel that steals the keyboard from the terminal every time it is shown is
+/// worse than one you have to click into.
+class TodoComposerFocus extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void request() => state = state + 1;
+}
+
+final todoComposerFocusProvider = NotifierProvider<TodoComposerFocus, int>(
+  TodoComposerFocus.new,
+);
