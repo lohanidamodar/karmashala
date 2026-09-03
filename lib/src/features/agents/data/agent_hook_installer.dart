@@ -129,6 +129,13 @@ class AgentHookInstaller {
   /// which is the point: a rewrite that changes nothing is still a write to
   /// somebody else's config, and every write is another chance to lose the
   /// race above.
+  /// Whether this agent's store exists in [storeHome] at all.
+  ///
+  /// The one reason [install] can answer `false` that is not a fault: there is
+  /// no agent here to hook. Exposed so a caller can tell that apart from "the
+  /// write did not land", which reads as a defect and is reported as one.
+  bool storeIsPresent(String storeHome) => Directory(storeHome).existsSync();
+
   Future<bool> install({
     required AgentDescriptor descriptor,
     required String storeHome,

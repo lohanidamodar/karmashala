@@ -29,10 +29,10 @@
 /// `\r\n` the package emits under line-feed mode — because this only intervenes
 /// when a modifier is actually held.
 ///
-/// Like [KarmashalaMouseHandler], this lives here rather than in the vendored
-/// package: `Terminal.inputHandler` is injectable, so correcting the encoding
-/// costs no divergence. Everything that is not a modified `Enter` is delegated
-/// straight back to the package's own handler.
+/// This lives here rather than in the package: `Terminal.inputHandler` is
+/// injectable, so correcting the encoding costs no divergence. Everything that
+/// is not a modified `Enter` is delegated straight back to the package's own
+/// handler.
 ///
 /// **Not implemented, deliberately:** honouring `modifyOtherKeys`
 /// (`CSI > 4 ; 2 m`) or the kitty protocol (`CSI > 1 u`) so the *program* chooses

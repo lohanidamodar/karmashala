@@ -296,6 +296,89 @@ void main() {
     });
   });
 
+  group('OSC 8', () {
+    /// `OSC 8 ; params ; uri ST`, the sequence a program writes to say that the
+    /// cells after it are a link, closed by the same sequence with no URI.
+    String osc8(String uri, String label) =>
+        '\x1b]8;;$uri\x1b\\$label\x1b]8;;\x1b\\';
+
+    Terminal wrote(String text, {int width = 120}) =>
+        Terminal(maxLines: 1000)
+          ..resize(width, 24)
+          ..write(text);
+
+    test('a label that is not the URL is still the URL', () {
+      // The case the text scan cannot reach: there is nothing link-shaped on
+      // the screen to find, only the word `docs`.
+      final terminal = wrote('see ${osc8('https://example.com/a', 'docs')}!');
+
+      final link = osc8LinkAt(terminal, 0, 5)!;
+      expect(url(link).url, 'https://example.com/a');
+      expect(link.startColumn, 4, reason: 'the run of hyperlinked cells');
+      expect(link.endColumn, 8);
+      expect(link.startRow, 0);
+      expect(link.endRow, 0);
+    });
+
+    test('the cells around it are not part of it', () {
+      final terminal = wrote('see ${osc8('https://example.com/a', 'docs')}!');
+
+      expect(osc8LinkAt(terminal, 0, 3), isNull, reason: 'the space before');
+      expect(osc8LinkAt(terminal, 0, 8), isNull, reason: 'the "!" after');
+    });
+
+    test('every cell of the label answers with the same span', () {
+      final terminal = wrote('see ${osc8('https://example.com/a', 'docs')}!');
+
+      expect(osc8LinkAt(terminal, 0, 4), osc8LinkAt(terminal, 0, 7));
+    });
+
+    test('plain output carries none', () {
+      expect(osc8LinkAt(wrote('see https://example.com/a'), 0, 6), isNull);
+    });
+
+    test('only http and https are offered', () {
+      // Same rule as the text scan, and for the same reason: the URI is
+      // written by whatever the program was piping.
+      for (final uri in [
+        'file:///etc/passwd',
+        'mailto:me@example.com',
+        'vscode://file/etc/passwd',
+        'not a uri',
+      ]) {
+        expect(
+          osc8LinkAt(wrote(osc8(uri, 'click me')), 0, 2),
+          isNull,
+          reason: '$uri must not become a click',
+        );
+      }
+    });
+
+    test('a run that wrapped is one link across both rows', () {
+      final terminal = wrote(
+        osc8('https://example.com/a', 'a label long enough to wrap the row'),
+        width: 20,
+      );
+
+      final link = osc8LinkAt(terminal, 1, 2)!;
+      expect(link.startRow, 0);
+      expect(link.startColumn, 0);
+      expect(link.endRow, 1);
+      expect(link.contains(0, 5), isTrue);
+      expect(link.contains(1, 2), isTrue);
+    });
+
+    test('two links on one line stay two', () {
+      final terminal = wrote(
+        '${osc8('http://a.test', 'one')} ${osc8('http://b.test', 'two')}',
+      );
+
+      expect(url(osc8LinkAt(terminal, 0, 1)!).url, 'http://a.test');
+      expect(url(osc8LinkAt(terminal, 0, 5)!).url, 'http://b.test');
+      expect(osc8LinkAt(terminal, 0, 3), isNull, reason: 'the space between');
+    });
+  });
+
   group('hit testing', () {
     test('a column inside the link finds it, one outside does not', () {
       final flat = line('see https://example.com/a for more');

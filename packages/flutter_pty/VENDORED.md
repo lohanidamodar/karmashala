@@ -84,8 +84,16 @@ the reader and waiter threads start *after* the spawn, and the POSIX half of
 this plugin sleeps nowhere. `test/tooling/pty_spawn_latency_test.dart` is a
 source guard against a re-vendor putting it back.
 
-**`lib/flutter_pty.dart`** — `Pty.destroy()`, idempotent, closing both receive
-ports (`_onExitCode` only runs when the child actually exited, which is not the
+**`lib/flutter_pty.dart`** — the exit port is read with `listen` rather than
+upstream's `first`. `Stream.first` completes with `StateError('No element')`
+when its stream closes without emitting, and `destroy()` closes that port
+exactly when the child has *not* exited — so upstream's form turned every pane
+torn down while its process was alive into
+`Unhandled Exception: Bad state: No element`. `_onExitCode` also guards against
+completing twice, which `listen` makes possible where a single-shot `first`
+could not. Covered by `test/tooling/pty_exit_port_test.dart`.
+
+`Pty.destroy()`, idempotent, closing both receive ports (`_onExitCode` only runs when the child actually exited, which is not the
 case this exists for). `write`/`resize`/`ackRead` no-op afterwards, and `pid` is
 memoised so `kill` still answers once the handle is gone.
 

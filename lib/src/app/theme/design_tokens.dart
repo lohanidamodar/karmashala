@@ -215,10 +215,18 @@ class Touch {
 /// pane is routinely narrower than the compact breakpoint on a 1440px desktop,
 /// and a widget test hosts a card in a 300px box; inferring density from
 /// whatever `MediaQuery` reports would make both of those touch surfaces. The
-/// root that *knows* what it is — the companion app — installs the scope,
-/// computing it from its own width via [UiDensity.forWidth]. Anything with no
-/// scope above it is [UiDensity.pointer], which is exactly what the desktop
-/// has always drawn.
+/// root that *knows* what it is — the companion app — installs the scope via
+/// [UiDensity.wrap]. Anything with no scope above it is [UiDensity.pointer],
+/// which is exactly what the desktop has always drawn.
+///
+/// **The question is what is driving the app, not how wide the window is.**
+/// This used to be `width < 600 ? touch : pointer`, and that made a 10-inch
+/// tablet — 800–1200px, held in a hand — draw 26px rows and 11px labels for a
+/// mouse it does not have. Width was standing in for input modality, and the
+/// two are not the same thing: a desktop window dragged narrow is still a
+/// mouse, and a tablet in landscape is still a thumb. Either rule keyed on
+/// width alone gets one of those wrong. See [UiDensity.forPlatform] for the
+/// signal used instead, and why it is the only honest one available.
 enum UiDensity {
   /// A mouse aims: dense rows, 11–13px glyphs, no target floor.
   pointer,
@@ -227,11 +235,56 @@ enum UiDensity {
   touch;
 
   /// The Material compact breakpoint (CLAUDE.md §6).
+  ///
+  /// A **width** class, and since density stopped keying on width, only that:
+  /// it is what `companionReadableWidth` caps a column of prose at. Measure is
+  /// a width question; modality is not.
   static const compactWidth = 600.0;
 
-  /// The density a surface [width] logical pixels wide calls for.
-  static UiDensity forWidth(double width) =>
-      width < compactWidth ? UiDensity.touch : UiDensity.pointer;
+  /// The density [platform] calls for: what its owner holds it with.
+  ///
+  /// Android, iOS and Fuchsia are driven by a finger at every size — a folded
+  /// phone at 350px and a tablet at 1280px are both thumbs. Windows, macOS and
+  /// Linux are driven by a mouse at every size, including a window dragged
+  /// under the compact breakpoint. So the platform answers this and the
+  /// viewport does not.
+  ///
+  /// This is the one platform branch the responsive contract allows
+  /// (CLAUDE.md §6: *platform checks only for platform capabilities*). Density
+  /// is not layout — it decides hit area and the floor under a glyph, and the
+  /// input device those are sized for is a property of the machine, not of the
+  /// window. Layout still branches on width, and still should.
+  ///
+  /// **What was ruled out**, because none of it is a modality signal we can
+  /// trust:
+  ///
+  /// - `MediaQueryData.navigationMode` names a *keyboard* mode — whether arrow
+  ///   keys traverse or edit ([NavigationMode.directional] is for a TV remote).
+  ///   The engine never sets it from the input hardware; it is
+  ///   [NavigationMode.traditional] on a phone and on a desktop alike.
+  /// - `MouseTracker.mouseIsConnected` is real, but it is false until a mouse
+  ///   has actually hovered the window, so every desktop launch would start at
+  ///   touch and snap to pointer on the first mouse move — the whole app
+  ///   relaying out under the cursor. It also cannot say which device was used
+  ///   *last*: an iPad with a Magic Keyboard reports a mouse and is still held
+  ///   in a hand, and Apple keeps 44pt targets there for exactly that reason.
+  /// - A touchscreen on a Windows laptop is invisible to us and deliberately
+  ///   so. It is a mouse surface while the user is on the mouse, which is
+  ///   nearly always; shrinking every target because the panel *could* be
+  ///   poked would be the same error in the other direction.
+  ///
+  /// The known cost: Android in a desktop shell — DeX, a Chromebook with a
+  /// mouse — is drawn for a thumb. That is the conservative half of the
+  /// trade. A finger on a 26px row misses; a mouse on a 48dp row merely has
+  /// room to spare.
+  static UiDensity forPlatform(TargetPlatform platform) => switch (platform) {
+    TargetPlatform.android ||
+    TargetPlatform.fuchsia ||
+    TargetPlatform.iOS => UiDensity.touch,
+    TargetPlatform.linux ||
+    TargetPlatform.macOS ||
+    TargetPlatform.windows => UiDensity.pointer,
+  };
 
   /// The density in effect for [context]; [UiDensity.pointer] with no scope.
   static UiDensity of(BuildContext context) =>
@@ -373,16 +426,22 @@ enum UiDensity {
     );
   }
 
-  /// Installs the density for [child] — computed from the ambient width, so a
-  /// phone in a fold-out or a tablet in landscape gets the right one — and
-  /// re-tunes the inherited theme to match.
+  /// Installs the density for [child] — taken from the platform the ambient
+  /// theme adapts to, so a folded phone and a landscape tablet both get a
+  /// thumb — and re-tunes the inherited theme to match.
   ///
-  /// The one call a root makes; nothing below it decides for itself.
+  /// The one call a root makes; nothing below it decides for itself. Read
+  /// through `ThemeData.platform` rather than [defaultTargetPlatform] because
+  /// that is Flutter's own seam for "which platform's interaction is this
+  /// subtree adapting to": it defaults to the real one, and a test — or a
+  /// preview of the phone shell on a desktop — can name the other without a
+  /// debug-only global.
   static Widget wrap(BuildContext context, Widget child) {
-    final density = UiDensity.forWidth(MediaQuery.sizeOf(context).width);
+    final theme = Theme.of(context);
+    final density = UiDensity.forPlatform(theme.platform);
     return UiDensityScope(
       density: density,
-      child: Theme(data: density.themeFor(Theme.of(context)), child: child),
+      child: Theme(data: density.themeFor(theme), child: child),
     );
   }
 }

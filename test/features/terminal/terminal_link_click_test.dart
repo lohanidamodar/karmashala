@@ -381,6 +381,145 @@ void main() {
     });
   });
 
+  group('OSC 8', () {
+    /// `OSC 8 ; params ; uri ST label OSC 8 ; ; ST` — a program saying outright
+    /// that these cells are a link, rather than leaving it to be recognised.
+    String osc8(String uri, String label) =>
+        '\x1b]8;;$uri\x1b\\$label\x1b]8;;\x1b\\';
+
+    /// The hyperlink xterm2 is painting as active, which is the affordance for
+    /// an `OSC 8` link — this side deliberately draws no rule of its own.
+    int? activeHyperlink(WidgetTester tester) => tester
+        .state<TerminalViewState>(find.byType(TerminalView))
+        .renderTerminal
+        .activeHyperlinkId;
+
+    testWidgets('a label that is not the URL is offered and opens', (
+      tester,
+    ) async {
+      // The case the text scan cannot reach at all: the only thing printed is
+      // the word `docs`.
+      await pumpWithOutput(
+        tester,
+        'see ${osc8('https://example.com/a', 'docs')} for more',
+      );
+      final target = centreOfCell(tester, 5, 0);
+      final mouse = await hover(tester, target);
+
+      await pressCtrl(tester);
+
+      expect(cursor(tester), SystemMouseCursors.click);
+      expect(
+        find.textContaining('https://example.com/a'),
+        findsOneWidget,
+        reason: 'the hint names the URL, which the screen does not',
+      );
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.openedUrls, ['https://example.com/a']);
+      expect(actions.probed, isEmpty, reason: 'a URL is never stat’d');
+    });
+
+    testWidgets('the affordance is xterm2’s, not a second one beside it', (
+      tester,
+    ) async {
+      final instance = await pumpWithOutput(
+        tester,
+        'see ${osc8('https://example.com/a', 'docs')} for more',
+      );
+      await hover(tester, centreOfCell(tester, 5, 0));
+
+      await pressCtrl(tester);
+
+      expect(
+        activeHyperlink(tester),
+        isNotNull,
+        reason: 'the painter underlines the run it already knows about',
+      );
+      expect(
+        instance.controller.underlines,
+        isEmpty,
+        reason: 'so nothing here anchors a second rule over the same text',
+      );
+    });
+
+    testWidgets('with Ctrl up it is inert like everything else', (tester) async {
+      await pumpWithOutput(
+        tester,
+        'see ${osc8('https://example.com/a', 'docs')} for more',
+      );
+      final target = centreOfCell(tester, 5, 0);
+      final mouse = await hover(tester, target);
+
+      expect(cursor(tester), SystemMouseCursors.text);
+      expect(find.textContaining('click to'), findsNothing);
+
+      await ctrlClick(tester, mouse, target);
+
+      expect(actions.openedUrls, isEmpty);
+    });
+
+    testWidgets('a scheme that is not http(s) is not made clickable', (
+      tester,
+    ) async {
+      // Terminal output is untrusted, and an `OSC 8` URI is as untrusted as
+      // the rest of it.
+      await pumpWithOutput(tester, 'see ${osc8('vscode://file/c', 'open')}!');
+      final target = centreOfCell(tester, 5, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      expect(cursor(tester), SystemMouseCursors.text);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.openedUrls, isEmpty);
+      expect(actions.opened, isEmpty);
+    });
+
+    testWidgets('a hyperlinked path still opens as a path', (tester) async {
+      // `ls --hyperlink` labels the path with itself, so the text scan finds
+      // it — and the scan is what resolves it against the pane's directory,
+      // which a `file://` URI could not be trusted to do for a WSL or SSH
+      // pane. So the two coexist: the id is not http(s), the text is a path.
+      await pumpWithOutput(
+        tester,
+        'edit ${osc8('file:///c/src/app/lib/main.dart', 'lib/main.dart')} now',
+      );
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      final target = centreOfCell(tester, 8, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.opened, [
+        (resolvedMain, TerminalPathKind.file, null, null),
+      ]);
+      expect(actions.openedUrls, isEmpty);
+    });
+
+    testWidgets('moving off it clears the offer', (tester) async {
+      await pumpWithOutput(
+        tester,
+        'see ${osc8('https://example.com/a', 'docs')} for more',
+      );
+      final mouse = await hover(tester, centreOfCell(tester, 5, 0));
+      await pressCtrl(tester);
+      expect(cursor(tester), SystemMouseCursors.click);
+
+      await mouse.moveTo(centreOfCell(tester, 1, 0));
+      await tester.pumpAndSettle();
+
+      expect(cursor(tester), SystemMouseCursors.text);
+      expect(find.textContaining('click to'), findsNothing);
+    });
+  });
+
   testWidgets('one candidate is probed once, however far you slide along it', (
     tester,
   ) async {
