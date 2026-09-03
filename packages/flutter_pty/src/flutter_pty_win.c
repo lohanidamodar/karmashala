@@ -378,15 +378,27 @@ FFI_PLUGIN_EXPORT PtyHandle *pty_create(PtyOptions *options)
     PROCESS_INFORMATION processInfo;
     ZeroMemory(&processInfo, sizeof(processInfo));
 
-    // Upstream 0.4.2 slept for a full second here, unconditionally, before
-    // every spawn. `pty_create` is a synchronous FFI call, so on Windows that
-    // second was spent on whichever isolate asked for the pty -- for this app
-    // the UI isolate, inside the button's onPressed, which is what "starting a
-    // session lags for a while" was. Nothing needs it: `CreatePseudoConsole`
-    // has already returned a valid HPCON, `UpdateProcThreadAttribute` has
-    // already bound it to the attribute list, the reader and waiter threads are
-    // started *after* this call so there is no race for it to hide, and the
-    // POSIX half of this plugin sleeps nowhere at all.
+    // DIVERGENCE (Karmashala): upstream 0.4.2's `Sleep(1000)`, restored after it
+    // was removed and shipped in 1.10.0. Removing it froze the app hard enough
+    // to need Task Manager, and the mechanism is not the spawn -- it is the
+    // *resize*. `terminal.onResize` calls `pty_resize` -> `ResizePseudoConsole`
+    // synchronously on the UI isolate, and the first one fires as soon as the
+    // pane lays out. Against a conhost that has not finished coming up that
+    // call does not return, so the isolate never produces another frame.
+    //
+    // So the second is not protecting the spawn, which is why removing it
+    // looked safe: `CreatePseudoConsole` really has returned a valid HPCON and
+    // the reader threads really do start later. It is protecting every
+    // *subsequent* ConPTY call from reaching an uninitialised conhost, and a
+    // blind sleep is a bad way to do that. The honest fix is to stop making
+    // blocking ConPTY calls from the UI isolate at all, or to gate the first
+    // resize on evidence the child is actually up; until one of those exists
+    // and is verified against a real ConPTY, the second stays.
+    //
+    // Verify with `powershell tool/live_tests.ps1 -Family wsl` before touching
+    // this again -- `live_pane_resize_test.dart` is the case that matters.
+    Sleep(1000);
+
     ok = CreateProcessW(NULL,
                         command,
                         NULL,
