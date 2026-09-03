@@ -7,6 +7,7 @@ import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
 import '../../notes/presentation/notes_settings_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
+import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
 import 'agents_pages.dart';
@@ -159,6 +160,7 @@ class _SectionContent extends StatelessWidget {
     SettingsSectionId.appearance => const AppearancePage(),
     SettingsSectionId.system => const SystemPage(),
     SettingsSectionId.terminal => const TerminalPage(),
+    SettingsSectionId.snippets => const SnippetsSettingsPage(),
     SettingsSectionId.tools => const ToolsPage(),
     SettingsSectionId.agents => const AgentsPage(),
     SettingsSectionId.permissions => const PermissionsPage(),

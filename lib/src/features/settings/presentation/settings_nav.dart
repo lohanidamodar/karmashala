@@ -41,6 +41,19 @@ enum SettingsSectionId {
     'keys',
     'integration',
   ]),
+  // Its own row rather than a block under Terminal: the library is a list the
+  // user curates, like Notes and the SSH hosts, and the complaint that put it
+  // here was that it "doesn't live anywhere" — which a section three scrolls
+  // down inside Terminal would not answer. Next to Terminal, though, because a
+  // snippet is a line typed into one.
+  snippets('Snippets', AppIcons.bookBookmark, [
+    'snippet',
+    'snippets',
+    'command',
+    'commands',
+    'saved command',
+    'library',
+  ]),
   tools('Tools', AppIcons.code, [
     'editor',
     'vs code',
