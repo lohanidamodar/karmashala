@@ -580,10 +580,38 @@ things outside this app.
 
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
-| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_pane_resize_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the two pane tests | there is no WSL, or no `flutter_pty.dll` to spawn a ConPTY with |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the three pane tests | there is no WSL, or no `flutter_pty.dll` to spawn a ConPTY with |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
+
+`live_wsl_detach_test.dart` answers a question no *unit* test can: whether
+closing an **empty** WSL shell ends it. `shouldDetachOnClose` has to guess
+whether a shell holds history worth keeping, and it guesses by counting
+non-blank lines — so the answer turns on how many rows a real prompt paints per
+command, which is a property of the user's shell and of nothing in this
+repository. WSL is where it matters most, because `shellSupportsIntegration`
+covers PowerShell alone: a WSL pane can never be instrumented, so the line count
+is the only rule it ever gets.
+
+**Measured 2026-09-03 against `archlinux`,** whose zsh runs starship at three
+rows per command — a blank separator, a directory line and a prompt line:
+
+```txt
+idle, untouched          nonBlank=2     released
+after 1 silent command   nonBlank=5     released
+after 2 silent commands  nonBlank=8     PARKED   <- the reported bug
+after `pwd`              nonBlank=12    parked
+after `ls`               nonBlank=106   parked
+```
+
+That was the owner's *"empty wsl terminal stays in the background instead of
+just ending"*: two commands that printed nothing crossed a threshold derived
+from single-line prompts. A pane now records the greeting its shell painted
+before anything was run, and the threshold is counted on top of it. The test
+asserts **relationships** rather than those numbers, so a one-line prompt on
+another machine proves the same rule. Worth running after any change to the
+detach policy, the WSL launch path, or what a pane does with user input.
 
 `live_pane_resize_test.dart` answers one question nothing above the PTY can:
 **does the process in a pane learn the size the app resized it to?** Everything
