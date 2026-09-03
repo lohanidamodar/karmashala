@@ -74,6 +74,16 @@ what unblocks the reader, then the pipe handles); `read_loop` and
 `wait_exit_thread` free their options; both `CreateThread` handles are
 `CloseHandle`d, the Win32 counterpart of `pthread_detach`.
 
+Also: the bare **`Sleep(1000)`** between `CreatePseudoConsole` and
+`CreateProcessW` is gone. `pty_create` is a synchronous FFI call, so upstream
+spent that second on whichever isolate called `Pty.start` — for this app the UI
+isolate, inside the Start button's `onPressed` — and it is two orders of
+magnitude more than everything else the start path does put together. Nothing
+needs it: the HPCON is already valid and already bound to the attribute list,
+the reader and waiter threads start *after* the spawn, and the POSIX half of
+this plugin sleeps nowhere. `test/tooling/pty_spawn_latency_test.dart` is a
+source guard against a re-vendor putting it back.
+
 **`lib/flutter_pty.dart`** — `Pty.destroy()`, idempotent, closing both receive
 ports (`_onExitCode` only runs when the child actually exited, which is not the
 case this exists for). `write`/`resize`/`ackRead` no-op afterwards, and `pid` is
@@ -100,6 +110,11 @@ control, and an unused path is not worth that risk.
 ## Verifying
 
     flutter test test/tooling/pty_fd_lifecycle_test.dart
+    flutter test test/tooling/pty_spawn_latency_test.dart
 
 The harness is POSIX-only. The Windows changes are the same shape but are not
-exercised by it, and have not been run on Windows hardware.
+exercised by it, and have not been run on Windows hardware — including the
+removed `Sleep`, which needs a Windows build and
+`pwsh tool/live_tests.ps1 -Family wsl` (a real ConPTY, in
+`live_wsl_pane_test.dart` and `live_pane_resize_test.dart`) to confirm the
+spawn and the first output still arrive.

@@ -378,8 +378,15 @@ FFI_PLUGIN_EXPORT PtyHandle *pty_create(PtyOptions *options)
     PROCESS_INFORMATION processInfo;
     ZeroMemory(&processInfo, sizeof(processInfo));
 
-    Sleep(1000);
-
+    // Upstream 0.4.2 slept for a full second here, unconditionally, before
+    // every spawn. `pty_create` is a synchronous FFI call, so on Windows that
+    // second was spent on whichever isolate asked for the pty -- for this app
+    // the UI isolate, inside the button's onPressed, which is what "starting a
+    // session lags for a while" was. Nothing needs it: `CreatePseudoConsole`
+    // has already returned a valid HPCON, `UpdateProcThreadAttribute` has
+    // already bound it to the attribute list, the reader and waiter threads are
+    // started *after* this call so there is no race for it to hide, and the
+    // POSIX half of this plugin sleeps nowhere at all.
     ok = CreateProcessW(NULL,
                         command,
                         NULL,
