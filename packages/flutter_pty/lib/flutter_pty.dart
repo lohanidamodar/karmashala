@@ -85,19 +85,19 @@ class Pty {
 
     // build argv
     final argv = calloc<Pointer<Utf8>>(arguments.length + 2);
-    argv.elementAt(0).value = executable.toNativeUtf8();
+    (argv + 0).value = executable.toNativeUtf8();
     for (var i = 0; i < arguments.length; i++) {
-      argv.elementAt(i + 1).value = arguments[i].toNativeUtf8();
+      (argv + i + 1).value = arguments[i].toNativeUtf8();
     }
-    argv.elementAt(arguments.length + 1).value = nullptr;
+    (argv + arguments.length + 1).value = nullptr;
 
     //build env
     final envp = calloc<Pointer<Utf8>>(effectiveEnv.length + 1);
     for (var i = 0; i < effectiveEnv.length; i++) {
       final entry = effectiveEnv.entries.elementAt(i);
-      envp.elementAt(i).value = '${entry.key}=${entry.value}'.toNativeUtf8();
+      (envp + i).value = '${entry.key}=${entry.value}'.toNativeUtf8();
     }
-    envp.elementAt(effectiveEnv.length).value = nullptr;
+    (envp + effectiveEnv.length).value = nullptr;
 
     final options = calloc<PtyOptions>();
     options.ref.rows = rows;
