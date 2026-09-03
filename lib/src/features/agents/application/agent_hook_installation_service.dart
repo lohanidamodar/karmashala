@@ -315,7 +315,14 @@ class AgentHookInstallationService {
         }
         try {
           final applied = await act(installer, descriptor, home, kind);
-          if (!applied && endpoint != null) {
+          // An agent that is not installed in this environment has no store
+          // and nothing to hook. That is the one `false` which is not a
+          // defect, and it must not be reported as one: a Mac with the
+          // Antigravity IDE but not its CLI logged "wrote the hooks but the
+          // config does not carry them" on every launch, which reads as a
+          // config being rewritten under us.
+          final absent = !installer.storeIsPresent(home);
+          if (!applied && !absent && endpoint != null) {
             // An install that did not land. [AgentHookInstaller.install] now
             // reads the file back, so this is a fact about disk rather than
             // about our intent — and it has to say so, because the count it
@@ -347,6 +354,8 @@ class AgentHookInstallationService {
               wslDistribution: environment?.wslDistribution,
               skippedBecause: applied || endpoint == null
                   ? null
+                  : absent
+                  ? 'the agent is not installed in this environment'
                   : 'the callbacks were written but are not in the config '
                         'file; something else rewrote it',
             ),
