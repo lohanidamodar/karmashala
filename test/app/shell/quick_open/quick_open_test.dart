@@ -120,6 +120,27 @@ void main() {
     expect(find.text('Open Settings'), findsOneWidget);
   });
 
+  testWidgets('New session is offered with nothing selected', (tester) async {
+    // It used to be hidden here, because the dialog it opens could only create
+    // a session for the selected repository. The dialog picks its own
+    // destination now — so the command is always available, and in a workspace
+    // with no projects at all it is the dialog that says so.
+    await open(
+      tester,
+      before: (container) {
+        container.read(selectedRepositoryIdProvider.notifier).select(null);
+        container.read(selectedProjectIdProvider.notifier).select(null);
+      },
+    );
+
+    await type(tester, 'new session');
+
+    expect(find.text('New session…'), findsOneWidget);
+    // Fan out still needs one: it launches several agents into worktrees of a
+    // repository, and it has no picker of its own yet.
+    expect(find.text('Fan out prompt…'), findsNothing);
+  });
+
   testWidgets('Enter opens the session the query ranked first', (tester) async {
     final container = await open(tester);
 

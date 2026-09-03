@@ -369,7 +369,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       installations: installations,
     );
 
-    final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final syncing = ref.watch(sessionSyncingProvider) > 0;
     // Only whether the mode is on, never the ticked set: this panel builds
     // every row of every expanded project, so watching the selection itself
@@ -446,13 +445,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               onPressed: _showDetected,
             ),
             IconButton(
-              tooltip: selectedRepoId == null
-                  ? 'Select a repository first'
-                  : 'New session',
+              // The dialog asks where; nothing has to be selected for it to.
+              tooltip: 'New session',
               icon: const Icon(AppIcons.chatCircleDots),
-              onPressed: selectedRepoId == null
-                  ? null
-                  : () => NewSessionDialog.show(context),
+              onPressed: () => NewSessionDialog.show(context),
             ),
             IconButton(
               tooltip: 'New project',

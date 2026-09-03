@@ -216,7 +216,20 @@ void main() {
         tester,
         build: () => app(container, const NewSessionDialog()),
         warmUp: (tester) async {
+          // Scrolled to, then scrolled back. The destination picker put a
+          // project and a checkout above this toggle, so at 720x560 with text
+          // at 1.3x it is below the fold of a dialog that is deliberately
+          // `scrollable: true`. Reaching it is a scroll for the user too — but
+          // the state worth measuring is the dialog as it is *met*, so the
+          // warm-up returns it to the top: a forward Tab scrolls a stop below
+          // the fold into view, and one left above it does not come back.
+          await tester.ensureVisible(find.text('External terminal'));
+          await tester.pumpAndSettle();
           await tester.tap(find.text('External terminal'));
+          await tester.pumpAndSettle();
+          // All the way back: the dialog's own Close button is the first thing
+          // in its scroll view, so this leaves the surface at offset zero.
+          await tester.ensureVisible(find.byTooltip('Close'));
         },
       );
     });

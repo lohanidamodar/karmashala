@@ -8,17 +8,34 @@ import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../git/application/changes_providers.dart';
-import '../../repositories/application/repository_providers.dart';
-import '../../settings/application/settings_controller.dart';
+import '../../explorer/application/explorer_actions.dart';
+import '../../projects/application/projects_controller.dart';
+import '../../projects/presentation/new_project_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
+import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
-import '../application/session_ui_providers.dart';
 import '../domain/session_launch.dart';
+import 'session_destination_picker.dart';
 
-/// Creates a session for the selected repository: pick an agent installation, a
-/// title, and whether to run in a dedicated Git worktree.
+/// Creates a session **where you say**: pick a project and a checkout inside
+/// it, an agent, a title, and whether to run in a dedicated Git worktree.
+///
+/// It used to create a session for whatever the app happened to be pointed at,
+/// which meant starting one somewhere else cost a trip to the Explorer to move
+/// the selection first — and left it moved afterwards.
+/// [SessionDestinationPicker] is that trip, folded into the dialog.
+///
+/// **Choosing a destination here does not move the app's selection.** Opening
+/// this dialog, browsing the projects in it and pressing Cancel leaves
+/// everything exactly as it was: saying *"start one over there"* is not the
+/// same as saying *"I work over there now"*, and relocating the Explorer under
+/// a user who was only looking would be a worse bug than the friction being
+/// fixed. **Pressing Start does move it**, because by then it is no longer a
+/// guess: the app follows the session it just created to where it runs, exactly
+/// as clicking that session's row would — otherwise the pane in front of you
+/// and the Changes, GitHub and Repository panels beside it would be describing
+/// two different checkouts.
 class NewSessionDialog extends ConsumerStatefulWidget {
   const NewSessionDialog({super.key});
 
@@ -32,8 +49,12 @@ class NewSessionDialog extends ConsumerStatefulWidget {
 }
 
 class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
-  final _titleController = TextEditingController(text: 'New session');
+  final _titleController = TextEditingController(text: defaultSessionTitle);
   AgentInstallation? _installation;
+
+  /// Null until the first build resolves it, and null *after* that only when
+  /// the workspace has no projects at all.
+  SessionDestination? _destination;
   bool _useWorktree = false;
   bool _external = false;
   SystemTerminal? _terminal;
@@ -60,11 +81,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   }
 
   Future<void> _create() async {
-    final repoId = ref.read(selectedRepositoryIdProvider);
+    final repo = _destination?.checkout;
     final installation = _installation;
-    if (repoId == null || installation == null) return;
-    final repo = ref.read(repositoryDaoProvider).getById(repoId);
-    if (repo == null) return;
+    if (repo == null || installation == null) return;
 
     setState(() {
       _busy = true;
@@ -94,7 +113,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               externalTerminal: _terminal,
             ),
           );
-      ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
+      // Now — and only now — the app follows. `selectNative` is the same rule
+      // the Explorer uses when a session row is clicked; the project is set
+      // beside it, and only when it differs, because selecting one starts a
+      // CLI-store scan.
+      if (ref.read(selectedProjectIdProvider) != repo.projectId) {
+        ref.read(selectedProjectIdProvider.notifier).select(repo.projectId);
+      }
+      ref.read(explorerActionsProvider).selectNative(launched.session);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = 'Could not start session: $e');
@@ -142,19 +168,55 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     );
   }
 
+  /// The workspace has nothing to run a session in, and says so instead of
+  /// offering an empty dropdown.
+  Widget _noProjects() => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'There are no projects yet, so there is nowhere to start a session. '
+        'Add a project first — a folder with your Git checkouts in it.',
+      ),
+      const SizedBox(height: Insets.md),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.tonalIcon(
+          onPressed: () => NewProjectDialog.show(context),
+          icon: const Icon(AppIcons.folderPlus, size: Chrome.iconAction),
+          label: const Text('Add project…'),
+        ),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
-    final installations = ref.watch(agentInstallationsControllerProvider);
-    if (_installation == null && installations.isNotEmpty) {
-      // Prefer the configured default installation, else the default kind,
-      // else the first installation.
-      final settings = ref.read(settingsControllerProvider);
+    // `??=`, so the picker's own choice is never overwritten — but still
+    // watched, so a project added from the empty state below (or a selection
+    // that moves behind the dialog before anything is chosen) is picked up.
+    _destination ??= ref.watch(defaultSessionDestinationProvider);
+    final destination = _destination;
+    final checkout = destination?.checkout;
+
+    // Only the agents installed **where the session will run**. An agent
+    // discovered on Windows is a Windows executable path, and launching it
+    // against a WSL checkout would put a path the distribution cannot resolve
+    // on its command line. This is the same list the Explorer's "…with" menu
+    // offers for a row.
+    final installations = checkout == null
+        ? const <AgentInstallation>[]
+        : [
+            for (final i in ref.watch(agentInstallationsControllerProvider))
+              if (i.environmentId == checkout.path.environmentId) i,
+          ];
+    if (checkout != null &&
+        installations.isNotEmpty &&
+        (_installation == null || !installations.contains(_installation))) {
+      // The one definition of "which agent, here" — shared with the `+` button
+      // in the Explorer, which runs it without asking.
       _installation =
-          resolveDefaultInstallation(
-            installations,
-            defaultInstallationId: settings.defaultAgentInstallationId,
-            defaultAgentId: settings.defaultAgent,
-          ) ??
+          ref.read(sessionDefaultsProvider).forCheckout(checkout).installation ??
           installations.first;
     }
 
@@ -167,86 +229,117 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
-            ),
-            const SizedBox(height: 12),
-            if (installations.isEmpty)
-              Row(
+        child: destination == null
+            ? _noProjects()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Expanded(
-                    child: Text('No agent installations found yet.'),
+                  SessionDestinationPicker(
+                    destination: destination,
+                    enabled: !_busy,
+                    onChanged: (picked) => setState(() {
+                      _destination = picked;
+                      // The agent belongs to the environment we are leaving.
+                      // Cleared rather than carried, so the block above
+                      // re-resolves the default for where we are going.
+                      _installation = null;
+                    }),
                   ),
-                  TextButton(
-                    onPressed: _busy ? null : _discoverAgents,
-                    child: const Text('Discover agents'),
+                  const SizedBox(height: Insets.md),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(labelText: 'Title'),
                   ),
-                ],
-              )
-            else
-              DropdownButtonFormField<AgentInstallation>(
-                initialValue: _installation,
-                // Expanded and ellipsised: the label carries an id, an
-                // environment and a version, which is wider than the field once
-                // the user scales text up.
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Agent'),
-                items: [
-                  for (final i in installations)
-                    DropdownMenuItem(
-                      value: i,
-                      child: Text(
-                        '${i.agentId} · '
-                        // Not the raw id: it is the literal `windows` on every
-                        // platform, so this dropdown offered `codex · windows`
-                        // on a Mac.
-                        '${ref.watch(environmentLabelForIdProvider(i.environmentId))}'
-                        '${i.version == null ? '' : ' (${i.version})'}',
-                        overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 12),
+                  if (installations.isEmpty)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            checkout == null
+                                ? 'No agent installations found yet.'
+                                : 'No agent is installed in '
+                                      '${ref.watch(environmentLabelForIdProvider(checkout.path.environmentId))} yet.',
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _busy ? null : _discoverAgents,
+                          child: const Text('Discover agents'),
+                        ),
+                      ],
+                    )
+                  else
+                    DropdownButtonFormField<AgentInstallation>(
+                      // Keyed by environment for the reason the checkout
+                      // dropdown is keyed by project: the items change with the
+                      // destination, and a `FormField` holding the old value
+                      // would assert rather than merely look wrong.
+                      key: ValueKey(
+                        'agent-in-${checkout?.path.environmentId ?? ''}',
                       ),
+                      initialValue: _installation,
+                      // Expanded and ellipsised: the label carries an id, an
+                      // environment and a version, which is wider than the field
+                      // once the user scales text up.
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Agent'),
+                      items: [
+                        for (final i in installations)
+                          DropdownMenuItem(
+                            value: i,
+                            child: Text(
+                              '${i.agentId} · '
+                              // Not the raw id: it is the literal `windows` on
+                              // every platform, so this dropdown offered
+                              // `codex · windows` on a Mac.
+                              '${ref.watch(environmentLabelForIdProvider(i.environmentId))}'
+                              '${i.version == null ? '' : ' (${i.version})'}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _installation = v),
                     ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<bool>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        icon: Icon(AppIcons.chat, size: Chrome.iconAction),
+                        label: Text('In-app'),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        icon: Icon(
+                          AppIcons.arrowSquareOut,
+                          size: Chrome.iconAction,
+                        ),
+                        label: Text('External terminal'),
+                      ),
+                    ],
+                    selected: {_external},
+                    onSelectionChanged: (s) =>
+                        setState(() => _external = s.first),
+                  ),
+                  if (_external) _terminalPicker(),
+                  // Offered for both surfaces now: the worktree is created
+                  // before the agent starts, so where the agent's window
+                  // happens to be makes no difference to it. It used to be
+                  // reachable from one path of nine.
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _useWorktree,
+                    onChanged: (v) => setState(() => _useWorktree = v ?? false),
+                    title: const Text('Run in a dedicated Git worktree'),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    DesktopErrorBanner(_error!),
+                  ],
                 ],
-                onChanged: (v) => setState(() => _installation = v),
               ),
-            const SizedBox(height: 12),
-            SegmentedButton<bool>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(AppIcons.chat, size: Chrome.iconAction),
-                  label: Text('In-app'),
-                ),
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
-                  label: Text('External terminal'),
-                ),
-              ],
-              selected: {_external},
-              onSelectionChanged: (s) => setState(() => _external = s.first),
-            ),
-            if (_external) _terminalPicker(),
-            // Offered for both surfaces now: the worktree is created before the
-            // agent starts, so where the agent's window happens to be makes no
-            // difference to it. It used to be reachable from one path of nine.
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _useWorktree,
-              onChanged: (v) => setState(() => _useWorktree = v ?? false),
-              title: const Text('Run in a dedicated Git worktree'),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              DesktopErrorBanner(_error!),
-            ],
-          ],
-        ),
       ),
       actions: [
         TextButton(
@@ -254,7 +347,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: (_busy || _installation == null) ? null : _create,
+          onPressed: (_busy || checkout == null || _installation == null)
+              ? null
+              : _create,
           child: _busy
               ? const SizedBox(
                   width: 16,
