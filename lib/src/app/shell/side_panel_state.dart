@@ -28,6 +28,15 @@ enum SidePanelSurface {
   /// the branch and worktree list nobody could find lives in here.
   repository('Repository', scopedToRepository: true),
 
+  /// The user's own list: a line of text, done or not, filed under a project
+  /// or under nothing.
+  ///
+  /// Next to Notes because both are the user's writing rather than the app's
+  /// observations, and **not gated** the way Notes is: the Notes switch exists
+  /// to take the capture affordance out of the transcript, and a todo list
+  /// that disappeared because somebody turned that off would be broken.
+  todos('Todos', drawsOwnHeader: true),
+
   /// Ideas kept out of a conversation instead of acted on, and sent back to an
   /// agent when the user is ready for them. Hidden when Notes is switched off.
   notes('Notes', drawsOwnHeader: true, requiresNotes: true),

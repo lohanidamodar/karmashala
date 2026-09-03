@@ -7,6 +7,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../todos/presentation/project_menu.dart';
 import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
@@ -32,7 +33,14 @@ class NotesView extends ConsumerWidget {
     // and handed to every card, so switching session repainted the whole list
     // — including every note that was captured from a session of its own and
     // never looks at the selection at all.
-    final notes = ref.watch(notesProvider);
+    //
+    // The scope is watched **here and not in a card**, for the same reason: it
+    // decides which cards exist, not what any card says.
+    final scope = ref.watch(noteScopeProvider);
+    final notes = [
+      for (final note in ref.watch(notesProvider))
+        if (scope.contains(note.projectId)) note,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -41,6 +49,15 @@ class NotesView extends ConsumerWidget {
           icon: AppIcons.note,
           title: notes.isEmpty ? 'Notes' : 'Notes  ·  ${notes.length}',
           actions: [
+            // Flexible, as PaneHeader asks of anything that gives way with the
+            // title: a project name can be longer than the panel.
+            Flexible(
+              child: ProjectScopeButton(
+                scope: scope,
+                onSelected: (next) =>
+                    ref.read(noteScopeProvider.notifier).select(next),
+              ),
+            ),
             IconButton(
               tooltip: 'New note',
               iconSize: Chrome.icon,
@@ -52,7 +69,7 @@ class NotesView extends ConsumerWidget {
         ),
         Expanded(
           child: notes.isEmpty
-              ? const _EmptyNotes()
+              ? _EmptyNotes(filtered: !scope.isAll)
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: Insets.xs),
                   itemCount: notes.length,
@@ -68,12 +85,24 @@ class NotesView extends ConsumerWidget {
     final now = ref.read(clockProvider).nowUtc();
     final edit = await NoteEditDialog.show(
       context,
-      Note(id: '', body: '', createdAt: now, updatedAt: now),
+      // Pre-filed under whatever the panel is showing, so writing a note while
+      // looking at one project files it there without a second decision.
+      Note(
+        id: '',
+        body: '',
+        projectId: ref.read(noteScopeProvider).projectForNewItems,
+        createdAt: now,
+        updatedAt: now,
+      ),
     );
     if (edit == null) return;
     ref
         .read(notesProvider.notifier)
-        .capture(body: edit.body, title: edit.title);
+        .capture(
+          body: edit.body,
+          title: edit.title,
+          projectId: edit.projectId,
+        );
   }
 }
 
@@ -83,12 +112,25 @@ class NotesView extends ConsumerWidget {
 /// try, so the empty state is where it is taught: what a note is for, how one
 /// is made, and what happens to it afterwards.
 class _EmptyNotes extends StatelessWidget {
-  const _EmptyNotes();
+  const _EmptyNotes({required this.filtered});
+
+  /// Whether the list is empty because of the project filter rather than
+  /// because there are no notes. Saying "no notes yet" over a filter that is
+  /// hiding forty of them is the one thing an empty state must not do.
+  final bool filtered;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    if (filtered) {
+      return PanePlaceholder(
+        icon: AppIcons.note,
+        message:
+            'No notes under this project. Choose “All projects” in the header '
+            'to see the rest.',
+      );
+    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(Insets.xl),
@@ -192,7 +234,12 @@ class _NoteCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    _origin(source?.title),
+                    _origin(
+                      source?.title,
+                      note.projectId == null
+                          ? null
+                          : projectNameById(ref, note.projectId!),
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelSmall?.copyWith(
@@ -228,10 +275,20 @@ class _NoteCard extends ConsumerWidget {
     );
   }
 
-  /// Where the note came from, in the words of what is still true. A session
-  /// that has since been deleted is said to be gone rather than quietly
-  /// dropped — "what were we discussing?" has an honest answer either way.
-  String _origin(String? sessionTitle) {
+  /// Where the note is filed and where it came from, in the words of what is
+  /// still true. A session that has since been deleted is said to be gone
+  /// rather than quietly dropped — "what were we discussing?" has an honest
+  /// answer either way.
+  ///
+  /// The project leads because it is what the header's filter acts on, and a
+  /// note whose project no longer resolves simply does not name one: the
+  /// column is `ON DELETE SET NULL`, so it is about to be unfiled anyway.
+  String _origin(String? sessionTitle, String? projectName) => <String>[
+    ?projectName,
+    _provenance(sessionTitle),
+  ].join('  ·  ');
+
+  String _provenance(String? sessionTitle) {
     if (note.sourceSessionId == null) return 'Written here';
     final role = switch (note.sourceMessageRole) {
       'user' => 'your message',
@@ -262,7 +319,12 @@ class _NoteCard extends ConsumerWidget {
     if (edit == null) return;
     ref
         .read(notesProvider.notifier)
-        .edit(note.id, body: edit.body, title: edit.title);
+        .edit(
+          note.id,
+          body: edit.body,
+          title: edit.title,
+          projectId: edit.projectId,
+        );
   }
 }
 

@@ -1,0 +1,440 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/shell/pane_scaffold.dart';
+import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
+import '../application/todos_providers.dart';
+import '../domain/project_scope.dart';
+import '../domain/todo.dart';
+import 'project_menu.dart';
+
+/// The Todos surface: a line of text, done or not, in the order you put it in.
+///
+/// ## How this differs from the attention inbox
+///
+/// The inbox and this panel both list things that want doing, and only one of
+/// them is a list *you* wrote. The inbox is **observed**: the app notices an
+/// agent waiting on approval, a turn that failed, a build that went red, and it
+/// files and un-files those rows itself as the conditions change. Nothing a
+/// person types can put a row there, and a row leaves when the app decides it
+/// has. A todo is the opposite in every one of those respects — it is written,
+/// by a person or by an agent through `todo_add`, it never appears on its own,
+/// and nothing but a tick or a delete takes it away. That is also why this
+/// rail glyph carries **no badge**: a count here would make a hand-written list
+/// look like an alert queue, which is the inbox's job and not this panel's.
+///
+/// ## Why a surface of its own rather than a section of Notes
+///
+/// They are the same *kind* of thing — the user's own writing, filed to a
+/// project or to nothing — and sharing one panel was the obvious move. What
+/// rules it out is `Settings → Notes`: that switch really does hide the Notes
+/// surface, and a todo list that vanishes because somebody turned off a
+/// different feature is a broken todo list. The two also want opposite verbs (a
+/// note is *sent back* to an agent, a todo is *ticked off*) and opposite
+/// orders, so a shared panel would have shared nothing but the frame.
+class TodosView extends ConsumerStatefulWidget {
+  const TodosView({super.key});
+
+  @override
+  ConsumerState<TodosView> createState() => _TodosViewState();
+}
+
+class _TodosViewState extends ConsumerState<TodosView> {
+  final _composer = TextEditingController();
+
+  @override
+  void dispose() {
+    _composer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ref.watch(todoScopeProvider);
+    final all = ref.watch(todosProvider);
+    final shown = [
+      for (final todo in all)
+        if (scope.contains(todo.projectId)) todo,
+    ];
+    final open = shown.where((todo) => !todo.isDone).length;
+    final done = shown.length - open;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PaneHeader(
+          icon: AppIcons.listChecks,
+          title: open == 0 ? 'Todos' : 'Todos  ·  $open',
+          actions: [
+            // Flexible, as PaneHeader asks of anything that has to give way
+            // with the title: a project name can be longer than the panel.
+            Flexible(
+              child: ProjectScopeButton(
+                scope: scope,
+                onSelected: (next) =>
+                    ref.read(todoScopeProvider.notifier).select(next),
+              ),
+            ),
+            if (done > 0)
+              IconButton(
+                tooltip: 'Clear $done finished todo${done == 1 ? '' : 's'}',
+                iconSize: Chrome.icon,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(AppIcons.trash),
+                onPressed: () => _clearDone(context),
+              ),
+          ],
+        ),
+        _Composer(controller: _composer, scope: scope, onSubmit: _add),
+        Expanded(
+          child: shown.isEmpty
+              ? _EmptyTodos(scope: scope, hasAny: all.isNotEmpty)
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: Insets.sm),
+                  itemCount: shown.length,
+                  itemBuilder: (context, index) {
+                    final todo = shown[index];
+                    // The one divider in the list: everything under it is
+                    // finished, so a tick never makes a row disappear.
+                    final startsDone =
+                        todo.isDone && (index == 0 || !shown[index - 1].isDone);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (startsDone) const _DoneDivider(),
+                        // The project is named under the line only while the
+                        // panel is showing more than one, where it is the
+                        // answer to "why is this in my list"; under a filter
+                        // it would repeat the header on every row.
+                        _TodoRow(todo: todo, showProject: scope.isAll),
+                      ],
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _add(String text) {
+    if (text.trim().isEmpty) return;
+    ref
+        .read(todosProvider.notifier)
+        .add(
+          body: text,
+          projectId: ref.read(todoScopeProvider).projectForNewItems,
+        );
+    _composer.clear();
+  }
+
+  void _clearDone(BuildContext context) {
+    final removed = ref.read(todosProvider.notifier).clearDone();
+    if (removed == 0) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Cleared $removed finished todo${removed == 1 ? '' : 's'}.',
+        ),
+      ),
+    );
+  }
+}
+
+/// The one field that makes a todo. Deliberately the first thing under the
+/// header: writing one has to cost less than deciding where to put it.
+class _Composer extends ConsumerWidget {
+  const _Composer({
+    required this.controller,
+    required this.scope,
+    required this.onSubmit,
+  });
+
+  final TextEditingController controller;
+  final ProjectScope scope;
+  final ValueChanged<String> onSubmit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // What the hint promises is exactly what `add` does: a todo written while
+    // looking at everything is filed under nothing, which is a real answer
+    // rather than a default nobody chose.
+    final hint = scope.projectId == null
+        ? 'New todo'
+        : 'New todo in ${projectScopeLabel(scope, ref)}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Insets.sm,
+        Insets.sm,
+        Insets.sm,
+        Insets.xs,
+      ),
+      child: TextField(
+        controller: controller,
+        textInputAction: TextInputAction.done,
+        onSubmitted: onSubmit,
+        style: Theme.of(context).textTheme.bodyMedium,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: hint,
+          prefixIcon: const Icon(AppIcons.plus, size: Chrome.iconSmall),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: Chrome.control,
+            minHeight: Chrome.control,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DoneDivider extends StatelessWidget {
+  const _DoneDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.md, Insets.md, 2),
+      child: Text(
+        'DONE',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// One todo: a tick, the line, and the menu that moves, files or removes it.
+class _TodoRow extends ConsumerStatefulWidget {
+  const _TodoRow({required this.todo, required this.showProject});
+
+  final Todo todo;
+
+  /// Whether to name the project under the line.
+  final bool showProject;
+
+  @override
+  ConsumerState<_TodoRow> createState() => _TodoRowState();
+}
+
+class _TodoRowState extends ConsumerState<_TodoRow> {
+  TextEditingController? _editor;
+
+  @override
+  void dispose() {
+    _editor?.dispose();
+    super.dispose();
+  }
+
+  void _startEditing() {
+    if (_editor != null) return;
+    setState(() => _editor = TextEditingController(text: widget.todo.body));
+  }
+
+  void _commitEditing() {
+    final editor = _editor;
+    if (editor == null) return;
+    final text = editor.text;
+    setState(() {
+      editor.dispose();
+      _editor = null;
+    });
+    ref.read(todosProvider.notifier).edit(widget.todo.id, text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final todo = widget.todo;
+    final project = todo.projectId == null
+        ? null
+        : projectNameById(ref, todo.projectId!);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Checkbox(
+            value: todo.isDone,
+            semanticLabel: todo.isDone
+                ? 'Reopen “${todo.body}”'
+                : 'Finish “${todo.body}”',
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onChanged: (next) => ref
+                .read(todosProvider.notifier)
+                .setDone(todo.id, next ?? false),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_editor case final editor?)
+                    TextField(
+                      controller: editor,
+                      autofocus: true,
+                      style: theme.textTheme.bodyMedium,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onSubmitted: (_) => _commitEditing(),
+                      // Clicking away keeps the edit rather than dropping it:
+                      // the user finished typing and looked elsewhere, which
+                      // is not the same as asking to undo.
+                      onTapOutside: (_) => _commitEditing(),
+                    )
+                  else
+                    // A tap edits. There is nowhere else for a tap on a todo
+                    // to go, and a one-line thing whose typo you cannot fix is
+                    // a thing you delete and retype.
+                    InkWell(
+                      onTap: _startEditing,
+                      child: Text(
+                        todo.body,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: todo.isDone ? scheme.onSurfaceVariant : null,
+                          decoration: todo.isDone
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                      ),
+                    ),
+                  if (project != null && widget.showProject)
+                    Text(
+                      project,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          _RowMenu(todo: todo),
+        ],
+      ),
+    );
+  }
+}
+
+class _RowMenu extends ConsumerWidget {
+  const _RowMenu({required this.todo});
+
+  final Todo todo;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => PopupMenuButton<String>(
+    tooltip: 'Actions for “${todo.body}”',
+    position: PopupMenuPosition.under,
+    iconSize: Chrome.iconAction,
+    padding: EdgeInsets.zero,
+    constraints: const BoxConstraints(minWidth: 180),
+    icon: const Icon(AppIcons.dotsThreeVertical),
+    onSelected: (value) => _act(context, ref, value),
+    itemBuilder: (context) => [
+      if (!todo.isDone) ...[
+        DesktopMenuItem(value: 'up', label: 'Move up', icon: AppIcons.arrowUp),
+        DesktopMenuItem(
+          value: 'down',
+          label: 'Move down',
+          icon: AppIcons.arrowDown,
+        ),
+        const DesktopMenuDivider(),
+      ],
+      DesktopMenuItem(
+        value: 'file',
+        label: 'File under…',
+        icon: AppIcons.folder,
+      ),
+      const DesktopMenuDivider(),
+      DesktopMenuItem(
+        value: 'delete',
+        label: 'Delete',
+        icon: AppIcons.trash,
+        destructive: true,
+      ),
+    ],
+  );
+
+  Future<void> _act(BuildContext context, WidgetRef ref, String value) async {
+    final todos = ref.read(todosProvider.notifier);
+    switch (value) {
+      case 'up':
+        todos.move(todo.id, up: true);
+      case 'down':
+        todos.move(todo.id, up: false);
+      case 'delete':
+        todos.delete(todo.id);
+      case 'file':
+        await _file(context, ref);
+    }
+  }
+
+  /// The "file under…" picker, opened where the row is rather than as a
+  /// dialog: moving a todo between projects is a menu choice, not a form.
+  Future<void> _file(BuildContext context, WidgetRef ref) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final chosen = await showMenu<ProjectScope>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy + box.size.height,
+        overlay.size.width - origin.dx - box.size.width,
+        0,
+      ),
+      items: projectPickerMenuItems(ref, selected: todo.projectId),
+    );
+    if (chosen == null) return;
+    ref.read(todosProvider.notifier).setProject(todo.id, chosen.projectId);
+  }
+}
+
+/// What an empty Todos panel says.
+///
+/// Two different emptinesses, because they need two different answers: an empty
+/// *filter* is not an empty list, and saying "no todos yet" while eleven of
+/// them sit under another project is a lie the panel can easily avoid.
+class _EmptyTodos extends StatelessWidget {
+  const _EmptyTodos({required this.scope, required this.hasAny});
+
+  final ProjectScope scope;
+  final bool hasAny;
+
+  @override
+  Widget build(BuildContext context) {
+    if (hasAny) {
+      return PanePlaceholder(
+        icon: AppIcons.listChecks,
+        message: scope.unfiledOnly
+            ? 'No todos outside a project. Everything you have written is '
+                  'filed under one.'
+            : 'Nothing here yet. A todo written while this project is '
+                  'showing is filed under it.',
+      );
+    }
+    return const PanePlaceholder(
+      icon: AppIcons.listChecks,
+      message:
+          'No todos yet. Type one in the box above — it belongs to whichever '
+          'project the header names, or to no project at all.\n\n'
+          'This is your list, not the app’s: nothing appears here on its own '
+          'and nothing leaves until you tick it off. What the app noticed for '
+          'you is in the Inbox.',
+    );
+  }
+}
