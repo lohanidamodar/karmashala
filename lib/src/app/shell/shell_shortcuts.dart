@@ -5,7 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/projects/presentation/new_project_dialog.dart';
+import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/settings/application/settings_controller.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
@@ -50,6 +53,21 @@ class OpenQuickOpenIntent extends Intent {
 /// Intent: show the attention inbox.
 class OpenAttentionInboxIntent extends Intent {
   const OpenAttentionInboxIntent();
+}
+
+/// Intent: start a session, through the dialog that picks where it runs.
+class NewSessionIntent extends Intent {
+  const NewSessionIntent();
+}
+
+/// Intent: add a project to the workspace.
+class NewProjectIntent extends Intent {
+  const NewProjectIntent();
+}
+
+/// Intent: open Settings.
+class OpenSettingsIntent extends Intent {
+  const OpenSettingsIntent();
 }
 
 /// Intent: change the terminal grid's font size.
@@ -228,6 +246,9 @@ class ShellChord {
 /// | `Ctrl+Shift+P` | quick open, already filtered to commands | app |
 /// | `Ctrl+Shift+S` | quick open, already filtered to command snippets | app |
 /// | `Ctrl+Shift+A` | the attention inbox — open it, or close it again | app |
+/// | `Ctrl+N` | new session | app |
+/// | `Ctrl+Shift+N` | new project | app |
+/// | `Ctrl+,` | Settings | app |
 /// | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | terminal font size up / down / reset | app |
 /// | `Ctrl+Shift+D` / `Ctrl+Shift+E` | split the pane right / down | app |
 /// | `Ctrl+Shift+F` | find in the scrollback | app |
@@ -291,9 +312,23 @@ class ShellChord {
 ///   are *not* typing is one nobody reaches for. `Ctrl+U` still kills the line
 ///   before the cursor, and VS Code makes the same trade for `Ctrl+P`.
 ///
+/// * `Ctrl+N` — readline `next-history`, the exact mirror of the `Ctrl+P` above
+///   it and answered the same way: `Down` does the same thing.
+///
 /// Everything else in the list means nothing to a shell: a terminal cannot even
-/// encode `Ctrl+Shift+<letter>`, and `Ctrl+1/2/3` and `` Ctrl+` `` have no
-/// readline or tmux binding to lose.
+/// encode `Ctrl+Shift+<letter>`, and `Ctrl+1/2/3`, `` Ctrl+` `` and `Ctrl+,`
+/// have no readline or tmux binding to lose.
+///
+/// ## `Ctrl+Q` is not in the table, and that is the decision
+///
+/// It is XON — the key that resumes output after `Ctrl+S` paused it. Binding
+/// Quit to it would take it from every shell in the app *and* quit at the
+/// moment somebody was unsticking a paused pane, which is the worst possible
+/// pairing of the two meanings. macOS reaches Quit with ⌘Q, which is not a
+/// terminal control key at all, and already does so without passing through
+/// here — `MainFlutterWindow.performKeyEquivalent` catches it ahead of the
+/// engine. So Quit is bound on the one platform where it is free and nowhere
+/// else, and the menu labels it to match.
 ///
 /// [terminalPaneShortcutsFor] adds one more, and it is in the table too:
 /// `Ctrl+V` pastes, costing readline's `quoted-insert` (`^V`). Copy is on
@@ -439,6 +474,37 @@ List<ShellChord> _buildChords() => [
     intent: OpenAttentionInboxIntent(),
     label: _commandLabel('A', shift: true),
     does: 'Open or close the attention inbox',
+    skipsShell: true,
+  ),
+  // The three the menu bar had been drawing beside these items for loops
+  // without any of them working. `MenuItemButton.shortcut` only *labels* —
+  // Flutter is explicit that a menu never registers what it displays — so
+  // until they were declared here the menu was teaching three keystrokes that
+  // did nothing, which is worse than teaching none.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyN, shift: true),
+    intent: NewProjectIntent(),
+    label: _commandLabel('N', shift: true),
+    does: 'New project',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyN),
+    intent: NewSessionIntent(),
+    label: _commandLabel('N'),
+    does: 'New session',
+    skipsShell: true,
+    shellCost: 'readline next-history (^N) — Down does the same thing',
+  ),
+  // The settings chord on every platform, and one of the very few unshifted
+  // command combinations that costs a terminal nothing at all: there is no
+  // `^,` for a shell to lose, so this is claimed with none of the argument
+  // `Ctrl+K` and `Ctrl+N` needed.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.comma),
+    intent: OpenSettingsIntent(),
+    label: _commandLabel(','),
+    does: 'Open Settings',
     skipsShell: true,
   ),
   // The zoom chords every browser and editor taught. Contested (no Shift), so
@@ -961,6 +1027,27 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
               ref
                   .read(sidePanelProvider.notifier)
                   .select(SidePanelSurface.inbox);
+              return null;
+            },
+          ),
+          // The same three calls the Workspace and Tools menus make, so the
+          // chord and the menu item are one behaviour rather than two that
+          // have to be kept in step.
+          NewSessionIntent: CallbackAction<NewSessionIntent>(
+            onInvoke: (intent) {
+              NewSessionDialog.show(context);
+              return null;
+            },
+          ),
+          NewProjectIntent: CallbackAction<NewProjectIntent>(
+            onInvoke: (intent) {
+              NewProjectDialog.show(context);
+              return null;
+            },
+          ),
+          OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
+            onInvoke: (intent) {
+              SettingsScreen.show(context);
               return null;
             },
           ),

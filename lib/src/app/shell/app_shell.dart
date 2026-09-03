@@ -497,17 +497,44 @@ class _DesktopMenuBar extends ConsumerWidget {
               // `globe` is the Browser surface; scanning the CLI stores for
               // sessions is a search, not the web.
               leadingIcon: const Icon(AppIcons.listMagnifyingGlass),
+              // No chord, deliberately: this is the scan you run after working
+              // in the CLI somewhere else, which is a handful of times in a
+              // workspace's life. Every chord left is one a shell can use, and
+              // spending one here would buy a key nobody's fingers would ever
+              // learn.
               onPressed: () => _showDetected(context, ref),
               child: const Text('Detect CLI sessions'),
             ),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.arrowsClockwise),
+              // Unbound on purpose, and not for the reason above: this drops
+              // the workspace's projects and builds them again from the CLI
+              // stores. Rare *and* half destructive is exactly the shape of
+              // thing that should cost a deliberate trip through a menu rather
+              // than be one slip of a finger away.
               onPressed: () => _clearAndReimport(context, ref),
               child: const Text('Clear projects and re-import'),
             ),
             const Divider(height: 1),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.power),
+              // ⌘Q on macOS only, and written out rather than reached through
+              // `commandActivator`, because this is the one chord that must
+              // *not* become Ctrl+Q off a Mac: Ctrl+Q is XON, the key that
+              // resumes output after Ctrl+S paused it. Binding it would take it
+              // from every shell in the app and quit at the moment somebody was
+              // unsticking a paused pane.
+              //
+              // The Mac keystroke already works, and not from Dart:
+              // `MainFlutterWindow.performKeyEquivalent` catches ⌘Q ahead of
+              // the Flutter view, because a terminal pane keeps a hidden text
+              // field focused and the engine's text-input plugin would
+              // otherwise answer for the whole window. So this is a label for
+              // something the platform genuinely does, which is why it is shown
+              // there and shown nowhere else.
+              shortcut: commandKeyIsMeta
+                  ? const SingleActivator(LogicalKeyboardKey.keyQ, meta: true)
+                  : null,
               // The real exit, whatever close-to-tray does to the window: the
               // tray's own Quit, so shutdown runs in order either way.
               onPressed: () {
@@ -552,6 +579,19 @@ class _DesktopMenuBar extends ConsumerWidget {
             ))
               MenuItemButton(
                 leadingIcon: Icon(SidePanel.iconFor(surface)),
+                // The inbox already had this chord; the menu simply never said
+                // so. `OpenAttentionInboxIntent` invokes the same `select` this
+                // item does, so nothing new is claimed here — a keystroke that
+                // worked and was undiscoverable is now drawn where people look
+                // for it.
+                //
+                // The other surfaces stay bare on purpose. There are a dozen of
+                // them, and a dozen more chords is a dozen more keys taken from
+                // every shell in the app for a panel the rail already switches
+                // with one click.
+                shortcut: surface == SidePanelSurface.inbox
+                    ? commandActivator(LogicalKeyboardKey.keyA, shift: true)
+                    : null,
                 onPressed: () =>
                     ref.read(sidePanelProvider.notifier).select(surface),
                 child: Text(surface.label),
@@ -583,6 +623,9 @@ class _DesktopMenuBar extends ConsumerWidget {
             const Divider(height: 1),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.info),
+              // No chord: this is a dialog you open once, to copy a build line
+              // into a bug report. A key nobody presses twice is not worth one
+              // a shell could be using.
               onPressed: () => KarmashalaAboutDialog.show(context),
               child: const Text('About Karmashala'),
             ),
