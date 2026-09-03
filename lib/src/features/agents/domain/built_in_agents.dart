@@ -1076,9 +1076,43 @@ const _antigravity = AgentDescriptor(
     // declared — an unknown one has never been run and would not announce
     // itself.
     //
-    // `--sandbox` ("Run in a sandbox with terminal restrictions enabled") is a
-    // real second axis and is deliberately **not** declared: that one line is
-    // the only description that exists and nothing here has run it. See
+    // **`--sandbox` is still not declared, and now for a measured reason
+    // rather than an absent one.** It was run on 2026-09-03, which is what the
+    // note here used to ask for, and on this machine it does not restrict the
+    // terminal — it removes it.
+    //
+    // What it is *meant* to do is well documented inside the binary. The
+    // bundled `run_command` instructions say: "**Standard Sandbox Mode
+    // (BypassSandbox: false)**: By default has read/write access to your
+    // workspace, but no network access and no access to files outside the
+    // workspace unless added explicitly by the user… The main purpose of the
+    // sandbox is to auto-run commands without needing the user's approval",
+    // with an escape hatch ("**Bypass Sandbox Mode (BypassSandbox: true)**:
+    // Disables isolation, allowing network and full filesystem access.
+    // **Requires manual user approval.**") whose prompt is "Allow sandbox
+    // bypass for command execution?". The bundled product docs call the same
+    // setting "**Terminal Sandbox**: Run agent commands inside a restricted
+    // sandbox environment for added security". It is a real Linux jail —
+    // `google3/devtools/ai/sandbox/exebox`, with `loadSeccompFilter`,
+    // `pivotroot` and its own loopback.
+    //
+    // What it actually did here, both headless and in a PTY:
+    //
+    //   $ agy --sandbox --dangerously-skip-permissions -p '…'
+    //   Encountered error in tool execution: connecting to sandbox server:
+    //   read unix @->@: recvmsg: connection reset by peer
+    //
+    // for **every** command, because the jail aborts while setting itself up —
+    // the log carries `--sandbox: enabling terminal sandbox for this session`
+    // (`overrides.go:70`; print mode logs it from `session.go:76`) followed by
+    // `sbox: installing certificate: open /etc/ssl/cert.pem: read-only file
+    // system`. Without `--dangerously-skip-permissions` the same run never got
+    // that far: headless auto-denied the "command" permission, so `--sandbox`
+    // is not an auto-run policy of its own either.
+    //
+    // A rung is a promise about what the agent may do. Declaring this one would
+    // promise "auto-run, screened by a sandbox" and deliver an agent that
+    // cannot run anything, on the platform half our sessions launch into. See
     // docs/BACKLOG.md.
     permission: AgentPermissionSupport.axes(
       evidence: 'agy 1.1.24 --help (WSL ~/.local/bin/agy)',
