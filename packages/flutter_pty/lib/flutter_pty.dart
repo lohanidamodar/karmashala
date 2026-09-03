@@ -123,7 +123,13 @@ class Pty {
       throw StateError('Failed to create PTY: ${_getPtyError()}');
     }
 
-    _exitPort.first.then(_onExitCode);
+    // `listen`, not `first`: a `Stream.first` whose stream closes without ever
+    // emitting completes with `StateError('No element')`, and nothing is
+    // awaiting that future, so it surfaces as an unhandled exception. `destroy`
+    // closes this port exactly when the child has *not* exited, which is the
+    // case it exists for — so upstream's `first` turned every torn-down pane
+    // into a crash report. A closed port simply ends a `listen`.
+    _exitPort.listen(_onExitCode);
   }
 
   final _stdoutPort = ReceivePort();
@@ -222,7 +228,10 @@ class Pty {
     _pid ??= _bindings.pty_getpid(_handle);
     _destroyed = true;
     // Closes the ports even when the child never exited, which is the case
-    // this exists for: `_onExitCode` only runs when it did.
+    // this exists for: `_onExitCode` only runs when it did. [exitCode] is left
+    // pending in that case rather than completed with an invented code — a
+    // caller must reap the process before destroying the pty, which is the
+    // order `TerminalInstance.dispose` uses.
     _stdoutPort.close();
     _exitPort.close();
     _bindings.pty_destroy(_handle);
@@ -231,6 +240,9 @@ class Pty {
   bool _destroyed = false;
 
   void _onExitCode(dynamic exitCode) {
+    // A `listen` can in principle deliver more than once, and completing twice
+    // throws where the first `first` could not.
+    if (_exitCodeCompleter.isCompleted) return;
     _stdoutPort.close();
     _exitPort.close();
     _exitCodeCompleter.complete(exitCode);
