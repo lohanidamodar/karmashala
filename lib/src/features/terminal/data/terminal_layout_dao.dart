@@ -100,6 +100,17 @@ class StoredTerminalLayout {
 /// would orphan the timestamp already on disk.
 const kTerminalLayoutBackupAtKey = 'terminal.workspace_backup_at';
 
+/// The `app_metadata` key holding the grid the app last drew a terminal pane
+/// at.
+///
+/// Kept because the panes that most need it are built before anything has been
+/// laid out. A restored layout mounts up to `kMountedTabBudget` tabs on the
+/// launch frame and every one of them parses its stored scrollback during
+/// `build`, which is *before* the layout pass that would have told the first of
+/// them how wide a pane is — so without a value carried over from the last run
+/// there is nothing for them to parse into. See `TerminalGridHint`.
+const kTerminalPaneGridKey = 'terminal.pane_grid';
+
 /// Reads and writes the terminal layout (schema v7, backup tables v11) with
 /// hand-written SQL.
 ///
@@ -429,6 +440,26 @@ class TerminalLayoutDao {
     );
     _db.writeMetadata(kTerminalLayoutBackupAtKey, now);
   }
+
+  /// The grid the app last drew a terminal pane at, or null when it has never
+  /// recorded one — a first run, or a store written before this was kept.
+  ///
+  /// Forgiving in the same way [loadLayout] is: a value this cannot parse is
+  /// no value, never an exception. It is a hint, and being without one costs
+  /// only what every run used to cost.
+  ({int columns, int rows})? loadPaneGrid() {
+    final raw = _db.readMetadata(kTerminalPaneGridKey);
+    if (raw == null) return null;
+    final parts = raw.split('x');
+    if (parts.length != 2) return null;
+    final columns = int.tryParse(parts.first);
+    final rows = int.tryParse(parts.last);
+    if (columns == null || rows == null || columns < 1 || rows < 1) return null;
+    return (columns: columns, rows: rows);
+  }
+
+  void savePaneGrid(({int columns, int rows}) grid) =>
+      _db.writeMetadata(kTerminalPaneGridKey, '${grid.columns}x${grid.rows}');
 
   StoredTerminalLayout loadLayout() {
     final layout = _load('terminal_tabs', 'terminal_panes');

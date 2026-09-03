@@ -249,6 +249,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// has run — reported as "not recorded" rather than as zero.
   ScrollbackWrite? _lastWrite;
 
+  /// Shared by every restored pane so they can tell each other how wide the
+  /// workbench draws a pane, rather than each parsing its history at xterm's
+  /// default 80 columns and being reflowed. See [TerminalGridHint].
+  ///
+  /// Seeded from the store, because the panes that most need it are the ones a
+  /// restore builds: the launch frame parses every mounted tab's history during
+  /// `build`, before the layout pass that would have measured the first pane.
+  final TerminalGridHint _gridHint = TerminalGridHint();
+
+  /// The grid last written to the store, so a save that would write the same
+  /// value writes nothing.
+  ({int columns, int rows})? _writtenGrid;
+
   /// The last encoding written for each pane.
   ///
   /// A pane that is not in [_dirty] has not touched its buffer since this was
@@ -1497,6 +1510,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final dao = _dao();
     if (dao == null) return;
     try {
+      // Independent of the layout, and written before the guards below can
+      // decline to write one: a hint for the next launch is not layout data
+      // and losing it to a refused save would be a silent regression.
+      final grid = _gridHint.grid;
+      if (grid != null && grid != _writtenGrid) {
+        dao.savePaneGrid(grid);
+        _writtenGrid = grid;
+      }
       final rows = [
         for (final tab in _tabs) _storedTab(tab, refresh: refreshScrollback),
         for (final session in _detached)
@@ -1818,6 +1839,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (dao == null) return;
 
     try {
+      _gridHint.grid = dao.loadPaneGrid();
+      _writtenGrid = _gridHint.grid;
       final stored = dao.loadLayout();
       // Which tab counts as "the active tab" has to be decided before any pane
       // is built, and the same way the fallback below decides it: a layout
@@ -1915,6 +1938,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         // Remembered so opening this tab later can start what was running in
         // it — the launch rule only ever covers the tab left in front.
         wasLive: pane.wasLive,
+        gridHint: _gridHint,
       ),
     );
     return true;
