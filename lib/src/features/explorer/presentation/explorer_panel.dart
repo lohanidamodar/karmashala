@@ -33,6 +33,7 @@ import '../application/session_forest.dart';
 import '../application/session_selection.dart';
 import 'explorer_row.dart';
 import 'project_card.dart';
+import '../application/explorer_sections.dart';
 import 'explorer_sections_view.dart';
 import 'session_rows.dart';
 import 'session_selection_bar.dart';
@@ -420,6 +421,21 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       installations: installations,
     );
 
+    // Selected rather than watched whole: this rebuilds the whole tree, and
+    // an unrelated settings write — a pane width, a theme — must not.
+    final hidingEmptySections = ref.watch(
+      settingsControllerProvider.select((s) => s.hideEmptySections),
+    );
+    // Watched only under the condition the sections are actually drawn under,
+    // because watching it is what pays for the empty filter — see
+    // [explorerSectionLayoutProvider]. A search narrows the tree to the
+    // projects you named, and a set of saved groups above two results is the
+    // answer to a question nobody asked, so neither the groups nor their
+    // filter exist while the box has something in it.
+    final layout = query.isEmpty && projects.isNotEmpty
+        ? ref.watch(explorerSectionLayoutProvider)
+        : null;
+
     final syncing = ref.watch(sessionSyncingProvider) > 0;
     // Only whether the mode is on, never the ticked set: this panel builds
     // every row of every expanded project, so watching the selection itself
@@ -474,6 +490,26 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                   dimension: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+              ),
+            // The filter's only entrance, and the one thing that keeps hiding
+            // an empty section honest: a group folded away for holding
+            // nothing is invisible, so a user who has never had a red build
+            // would otherwise have no way to learn that "Checks failing"
+            // exists. The tooltip says how many are being held back, so the
+            // sidebar admits to filtering rather than simply looking empty.
+            if (layout != null)
+              IconButton(
+                tooltip: hidingEmptySections
+                    ? layout.hidden == 0
+                          ? 'Showing every section'
+                          : 'Show ${layout.hidden} empty '
+                                'section${layout.hidden == 1 ? '' : 's'}'
+                    : 'Hide empty sections',
+                isSelected: hidingEmptySections,
+                icon: const Icon(AppIcons.funnel),
+                onPressed: () => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setHideEmptySections(!hidingEmptySections),
               ),
             IconButton(
               // The mode's only entrance, and one of its two exits. A toggle
