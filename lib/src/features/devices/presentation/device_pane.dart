@@ -1304,6 +1304,12 @@ class _LiveView extends ConsumerWidget {
                           controller: controller,
                           fit: BoxFit.fill,
                           controls: NoVideoControls,
+                          // media_kit defaults to `low`, which is a plain
+                          // bilinear sample. The stream is captured smaller
+                          // than the pane draws it, so this upscale is on
+                          // every frame and `low` makes a soft picture blocky
+                          // as well. Costs nothing on the wire.
+                          filterQuality: FilterQuality.medium,
                         ),
                       )
                     else
@@ -1313,6 +1319,12 @@ class _LiveView extends ConsumerWidget {
                           controller: controller,
                           fit: BoxFit.fill,
                           controls: NoVideoControls,
+                          // media_kit defaults to `low`, which is a plain
+                          // bilinear sample. The stream is captured smaller
+                          // than the pane draws it, so this upscale is on
+                          // every frame and `low` makes a soft picture blocky
+                          // as well. Costs nothing on the wire.
+                          filterQuality: FilterQuality.medium,
                         ),
                       ),
                     // A device with nothing new to show is not a fault, so it

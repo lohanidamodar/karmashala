@@ -732,13 +732,25 @@ class DeviceStreamService {
   ///
   /// A physical device encodes in hardware and keeps up at 60, so it queues
   /// nothing and can have the full resolution.
+  ///
+  /// The emulator profile takes the **1024/10** row rather than 640/20. Both
+  /// arrive in the same time — 70 ms against 71 ms at p50, which is what an
+  /// interaction feels — and the encoder's limit is pixels per second, so the
+  /// choice between them is only ever sharpness against smoothness. 640 was
+  /// the wrong side of that: `max_size` caps the **long** edge, so a
+  /// 1344x2992 emulator was being shown at 288x640, scaled 4.7x on each axis
+  /// to fill a pane on a Retina display. Reading a UI beats animating it
+  /// smoothly when the whole point is watching an agent work.
+  ///
+  /// The cost is real and bounded: 18.5 fps drops to 10, and p90 arrival goes
+  /// 176 ms -> 219 ms.
   static const ({int maxSize, int maxFps}) _hardwareEncoder = (
     maxSize: 1024,
     maxFps: 60,
   );
   static const ({int maxSize, int maxFps}) _softwareEncoder = (
-    maxSize: 640,
-    maxFps: 20,
+    maxSize: 1024,
+    maxFps: 10,
   );
 
   /// Emulators run a software encoder; adb names them `emulator-<port>`.
