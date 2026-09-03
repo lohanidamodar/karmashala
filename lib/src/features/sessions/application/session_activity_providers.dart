@@ -199,9 +199,17 @@ final sessionOutstandingCallsProvider = Provider.autoDispose
     });
 
 /// Whether the row itself says this session has finished, one way or another.
+///
+/// [SessionStatus.unknown] is not finished: it is the row saying we lost sight
+/// of the session, and losing sight of one is not an ending — the strip's other
+/// three gates decide it anyway, and the middle one (`the agent is working`)
+/// cannot hold for a session nothing can see.
 bool _isOver(SessionStatus status) => switch (status) {
   SessionStatus.completed ||
   SessionStatus.failed ||
   SessionStatus.cancelled => true,
-  SessionStatus.created || SessionStatus.running || SessionStatus.idle => false,
+  SessionStatus.created ||
+  SessionStatus.running ||
+  SessionStatus.idle ||
+  SessionStatus.unknown => false,
 };

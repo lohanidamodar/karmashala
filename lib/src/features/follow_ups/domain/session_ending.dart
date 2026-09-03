@@ -70,11 +70,24 @@ enum SessionEnding {
 ///
 /// [SessionStatus.idle] is **live**, not ended. It is the state an agent sits
 /// in between turns.
+///
+/// [SessionStatus.unknown] is **not** an ending either, and it is the one worth
+/// spelling out: it is the row saying we lost sight of the session, which is the
+/// durable spelling of the same thing [SessionEnding.lostTrack] means — and that
+/// is already the value `NotificationSuppression.lostTrack` answers with
+/// silence. A restart turns every row that was still `running` into that word at
+/// once, so reading it as an ending would raise a follow-up for every session
+/// open when the app last closed, on launch, which is precisely the "reading it
+/// as a crash would raise a follow-up on launch for every session that broke
+/// last week" that [endingOfTransition] refuses below.
 SessionEnding? endingOfStatus(SessionStatus status) => switch (status) {
   SessionStatus.completed => SessionEnding.completed,
   SessionStatus.failed => SessionEnding.failed,
   SessionStatus.cancelled => SessionEnding.cancelled,
-  SessionStatus.created || SessionStatus.running || SessionStatus.idle => null,
+  SessionStatus.created ||
+  SessionStatus.running ||
+  SessionStatus.idle ||
+  SessionStatus.unknown => null,
 };
 
 /// The ending an observed status change amounts to, or null when it is not an

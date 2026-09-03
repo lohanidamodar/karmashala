@@ -276,6 +276,12 @@ class NativeSessionRow extends ConsumerWidget {
 
   /// The session's lifecycle, as a glyph and a semantic colour. Returned as a
   /// record rather than a widget because the card draws it at its own size.
+  ///
+  /// [SessionStatus.unknown] gets its own arm rather than falling into the
+  /// default: the same question mark and the same neutral that
+  /// `agentStatusAppearance` gives `AgentActivityStatus.unknown`, because it is
+  /// the same admission about the same session. A row that has lost its process
+  /// must not be able to look like one that never started.
   (IconData, Color) _status(SessionStatus status, BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final semantic = SemanticColors.of(context);
@@ -284,6 +290,7 @@ class NativeSessionRow extends ConsumerWidget {
       SessionStatus.completed => (AppIcons.checkCircle, semantic.idle),
       SessionStatus.failed => (AppIcons.warningCircle, semantic.failure),
       SessionStatus.cancelled => (AppIcons.xCircle, scheme.outline),
+      SessionStatus.unknown => (AppIcons.question, semantic.neutral),
       _ => (AppIcons.circle, scheme.outline),
     };
   }

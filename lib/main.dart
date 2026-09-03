@@ -24,6 +24,8 @@ import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/env_secrets/application/env_secrets_controller.dart';
 import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/sessions/application/session_liveness_reconciler.dart';
+import 'src/features/sessions/data/session_dao.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
@@ -72,6 +74,18 @@ Future<void> main() async {
   await attachDefaultLogFile(Diagnostics.instance);
   final database = await AppDatabase.open();
   bootstrapMetadata(database, logger: logger);
+
+  // Nothing this process started is running yet, so no row may still claim to
+  // be. Rows only ever moved *into* `running`, so before this every session
+  // that was open when the app last closed went on drawing a play glyph in the
+  // Explorer for ever — and went on being subscribed to, and kept the CLI-store
+  // sweep permanently armed. Here rather than in a provider because it is a
+  // statement about the process: there are no panes at all at this point, which
+  // is what makes it true. See `SessionLivenessReconciler`.
+  final lost = markSessionsLostOnLaunch(SessionDao(database));
+  if (lost > 0) {
+    logger.info('$lost session(s) were still marked live from a previous run.');
+  }
 
   // The verification artifact root, before the first frame. `path_provider` has
   // already been asked twice above, so this costs a `mkdir`.

@@ -25,6 +25,7 @@ import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/system/system_integration_service.dart';
+import '../../features/sessions/application/session_liveness_reconciler.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
@@ -89,6 +90,11 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final shell = ref.watch(shellControllerProvider);
+    // Watched, not read: Riverpod 3 pauses a provider's own subscriptions while
+    // nothing listens to it, so a reconciler nobody watches would never hear a
+    // pane stop. Its value is `void` and never changes, so this costs the shell
+    // one build and nothing after it. See [sessionLivenessReconcilerProvider].
+    ref.watch(sessionLivenessReconcilerProvider);
     // Focus mode: the workbench takes the window. The provider is the old
     // "maximize the dock" flag, which is the same intent now that the dock is
     // gone — everything but the work gets out of the way.

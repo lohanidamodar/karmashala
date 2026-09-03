@@ -208,6 +208,30 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// Every row whose status still claims something is running, oldest first.
+  ///
+  /// What `SessionLivenessReconciler` sweeps. Filtered in SQL rather than by
+  /// reading the table and discarding most of it: this runs on launch, when a
+  /// workspace with hundreds of finished sessions normally has none of these,
+  /// and the whole point is that the answer is usually empty.
+  ///
+  /// The words are taken from [SessionStatus.claimsLive] rather than spelled
+  /// into the SQL, so a seventh status that claims to be live is swept without
+  /// anybody remembering this query exists.
+  List<Session> getClaimingLive() {
+    final names = [
+      for (final status in SessionStatus.values)
+        if (status.claimsLive) status.name,
+    ];
+    final placeholders = List.filled(names.length, '?').join(', ');
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE status IN ($placeholders) '
+      'ORDER BY created_at, id;',
+      names,
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   /// Every row recording the CLI conversation [externalSessionId], **newest
   /// first**.
   ///
@@ -294,6 +318,23 @@ class SessionDao {
     return SessionView.terminal;
   }
 
+  /// The row's lifecycle word, or [SessionStatus.unknown] for one this build
+  /// cannot read.
+  ///
+  /// The last `values.byName` in [_fromRow], and the last place a single
+  /// unreadable word could throw a whole `SELECT * FROM sessions` away — the
+  /// Loop 30 failure its neighbours were hardened against. The fallback is not
+  /// a guess: a status we cannot read is exactly the state
+  /// [SessionStatus.unknown] names, so an older build's row, a newer build's
+  /// row and a hand-edited one all land on the same honest answer instead of on
+  /// an exception.
+  static SessionStatus _statusFrom(String? value) {
+    for (final status in SessionStatus.values) {
+      if (status.name == value) return status;
+    }
+    return SessionStatus.unknown;
+  }
+
   Session _fromRow(Map<String, Object?> row) {
     final worktreeEnv = row['worktree_environment_id'] as String?;
     final worktreePath = row['worktree_path'] as String?;
@@ -313,7 +354,7 @@ class SessionDao {
       workingDirectory: (cwdEnv != null && cwdPath != null)
           ? EnvironmentPath(environmentId: cwdEnv, path: cwdPath)
           : null,
-      status: SessionStatus.values.byName(row['status']! as String),
+      status: _statusFrom(row['status'] as String?),
       createdAt: dateFromIso(row['created_at']),
       externalSessionId: row['external_session_id'] as String?,
       parentSessionId: row['parent_session_id'] as String?,
