@@ -649,6 +649,111 @@ void main() {
       );
     });
 
+    test('a pane restarted at launch is not encoded back out again', () {
+      // The active tab's panes come back **running**, replaying their stored
+      // scrollback into a live buffer. The controller's encoding cache used to
+      // know nothing about them, so the first structural save of the run
+      // encoded each one in full — the whole durable window, on the UI
+      // isolate — only to rediscover the text the restore had just read out.
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      TerminalLayoutDao(db).saveLayout([
+        tab('t0', wasLive: true),
+        tab('t1', wasLive: true),
+      ], activeTabId: 't0');
+
+      final container = fakeTerminalContainer(database: db);
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      db.reset();
+
+      controller.persistStructure();
+
+      expect(
+        db.scrollbackWrites,
+        0,
+        reason: 'the store already holds every line either pane came back with',
+      );
+      // Deferred, not dropped: the restarted pane's buffer will move past what
+      // the store has, so it still owes a write and the autosave still makes
+      // it.
+      expect(controller.hasDirtyScrollback, isTrue);
+      controller.saveDirtyScrollback(budget: const Duration(minutes: 1));
+      expect(
+        TerminalLayoutDao(db).loadLayout().tabs.first.panes.single.scrollback,
+        contains('some output'),
+      );
+    });
+
+    test('resuming a restored session writes no history back', () {
+      // The Start press itself. The pane hands its buffer to the pane that
+      // replaces it, and the save that follows must not encode that buffer to
+      // find out it is holding the history the store already stored.
+      const launch = AgentPaneLaunch(
+        agentId: 'claude',
+        executable: 'claude',
+        workingDirectory: r'C:\ws',
+        sessionId: 'sess-1',
+      );
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      TerminalLayoutDao(db).saveLayout([
+        StoredTerminalTab(
+          id: 't0',
+          layout: PaneLayout.single('t0-p1'),
+          focusedPaneId: 't0-p1',
+          panes: [
+            StoredTerminalPane(
+              id: 't0-p1',
+              tabId: 't0',
+              profileId: 'agent:claude',
+              title: 'claude',
+              workingDirectory: r'C:\ws',
+              scrollback: 'a conversation the user wants back\r\n',
+              agentLaunch: launch,
+              wasLive: true,
+            ),
+          ],
+        ),
+      ], activeTabId: 't0');
+
+      final container = fakeTerminalContainer(database: db);
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      // What the workbench does when it draws the pane, and what makes the
+      // buffer adoptable.
+      controller.instanceFor('t0-p1')!.terminal;
+      db.reset();
+
+      controller.startAgentInPane(
+        't0-p1',
+        const AgentPaneLaunch(
+          agentId: 'claude',
+          executable: 'claude',
+          arguments: ['--resume', 'ext-1'],
+          workingDirectory: r'C:\ws',
+          sessionId: 'sess-1',
+        ),
+      );
+
+      expect(
+        db.scrollbackWrites,
+        0,
+        reason: 'the resumed pane is holding the buffer it was already showing',
+      );
+      expect(db.layoutWrites, 1, reason: 'the pane row, for its new command');
+      expect(controller.hasDirtyScrollback, isTrue);
+      controller.saveDirtyScrollback(budget: const Duration(minutes: 1));
+      expect(
+        TerminalLayoutDao(db).loadLayout().tabs.single.panes.single.scrollback,
+        contains('a conversation the user wants back'),
+      );
+    });
+
     test('closing a tab writes only the delete it is', () {
       final (:db, :controller, :container) = restored(20);
       final tabs = container.read(terminalSessionsControllerProvider).tabs;

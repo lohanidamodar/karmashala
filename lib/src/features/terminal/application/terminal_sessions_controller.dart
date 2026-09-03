@@ -1292,6 +1292,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         ? null
         : _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
     final workingDirectory = existing.workingDirectory;
+    // Taken before the release, which drops it: this is the history the new
+    // pane starts from, and handing it on is what stops the save below
+    // encoding it back out again. See [_seedEncoding].
+    final carried = scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
 
     _releasePane(paneId);
     _adopt(
@@ -1306,6 +1310,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         adoptTerminal: adopt,
       ),
     );
+    _seedEncoding(paneId, carried);
     _publish();
     persistStructure();
     _focusActivePane();
@@ -1365,6 +1370,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final scrollback = adopt != null
         ? null
         : _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
+    // As in [startPane], and for the same reason: the history the resumed
+    // pane starts from is history the store already holds.
+    final carried = scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
     _releasePane(paneId);
     _adopt(
       paneId,
@@ -1378,6 +1386,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         adoptTerminal: adopt,
       ),
     );
+    _seedEncoding(paneId, carried);
     final tabId = _showPane(paneId);
     _publish();
     persistStructure();
@@ -1532,6 +1541,39 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _markClean(String paneId) {
     _dirty.remove(paneId);
     _dirtySince.remove(paneId);
+  }
+
+  /// Records that a pane's buffer has moved past what [_encoded] holds.
+  ///
+  /// `Set.add`'s return value is the clean→dirty transition, so the clock is
+  /// read once per dirty spell rather than once per notification — see
+  /// [_dirtySince].
+  void _markDirty(String paneId) {
+    if (_dirty.add(paneId)) _dirtySince[paneId] = _uptime.elapsed;
+  }
+
+  /// Gives a pane the encoding of the history it starts from, and records that
+  /// it owes a fresh one.
+  ///
+  /// The pane a start or a restore has just built holds text the store already
+  /// has — the buffer it adopted, or the scrollback it replayed — plus a
+  /// restore marker and whatever the process has printed since. Without this,
+  /// [_encoded] has no entry for it and the structural save that follows
+  /// re-encodes the *whole* buffer to discover what the store is already
+  /// holding: measured at 2.9-5.8 ms for one pane at a full durable window,
+  /// on the UI isolate, inside the button's `onPressed`.
+  ///
+  /// Seeding it is the trade [persistStructure] already documents and no other
+  /// one: the shape is written now, the text the save writes is the text the
+  /// pane already had, and the pane stays **dirty** so the autosave refreshes
+  /// it on its catch-up cadence about a second later. What is deferred is the
+  /// restore marker and a second of output, against the 20 s the autosave's
+  /// idle interval already bounds; what is not deferred is anything
+  /// structural.
+  void _seedEncoding(String paneId, String? scrollback) {
+    if (scrollback == null) return;
+    _encoded[paneId] = scrollback;
+    _markDirty(paneId);
   }
 
   /// What persistence currently owes, and what the last write cost.
@@ -1913,6 +1955,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       return false;
     }
     _adopt(pane.id, instance);
+    // The buffer this pane came back with *is* the stored scrollback, replayed.
+    // Without seeding, the first structural save of the run — the one that
+    // follows the user's first click — encodes every restarted pane in full to
+    // learn what the store already read out to it. See [_seedEncoding].
+    _seedEncoding(pane.id, pane.scrollback);
     return true;
   }
 
@@ -1973,11 +2020,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // buffer cannot change and there is nothing to track — and reaching for
     // `terminal` here would build the very buffer the restore is avoiding.
     if (instance is! DormantTerminalInstance) {
-      // `add` answers whether this is the transition, so the clock is read once
-      // per dirty spell rather than once per notification.
-      void markDirty() {
-        if (_dirty.add(paneId)) _dirtySince[paneId] = _uptime.elapsed;
-      }
+      void markDirty() => _markDirty(paneId);
       _dirtyListeners[paneId] = markDirty;
       instance.terminal.addListener(markDirty);
     }
