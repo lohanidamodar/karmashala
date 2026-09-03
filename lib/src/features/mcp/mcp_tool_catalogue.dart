@@ -212,6 +212,15 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'device_logcat': McpToolAnnotations.readOutside,
       'device_ui_dump': McpToolAnnotations.readOutside,
       'device_find_elements': McpToolAnnotations.readOutside,
+      'device_files_list': McpToolAnnotations.readOutside,
+      // Reading the device, writing this computer — so not `readOnly`, even
+      // though nothing on the phone changes.
+      'device_file_pull': McpToolAnnotations(openWorld: true),
+      // Writing someone's device. Not marked destructive because it refuses
+      // rather than replacing unless `overwrite` is asked for, and a new file
+      // where there was none is not a loss — but `overwrite: true` is a
+      // deliberate one, which is why it has to be asked for by name.
+      'device_file_push': McpToolAnnotations(openWorld: true),
       // A tap lands wherever it lands. On someone's own phone that includes
       // "confirm delete", and there is no undo on the other side of the wire.
       'device_tap': McpToolAnnotations(destructive: true, openWorld: true),
