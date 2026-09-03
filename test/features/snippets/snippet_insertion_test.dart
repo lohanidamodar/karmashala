@@ -170,7 +170,7 @@ void main() {
     test('a pane whose process exited is reported, not typed', () {
       final target = pane();
       (controller().instanceFor(target.paneId)! as FakeTerminalInstance)
-          .exitCleanly();
+          .exitWith(1);
 
       final result = insert(target.paneId, snippet());
 

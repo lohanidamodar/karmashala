@@ -24,6 +24,7 @@ void main() {
           isAgentSession: false,
           commandRunning: true,
           nonBlankLines: 1000,
+          greetingLines: null,
         ),
         isFalse,
       );
@@ -38,6 +39,7 @@ void main() {
           isAgentSession: true,
           commandRunning: false,
           nonBlankLines: 0,
+          greetingLines: null,
         ),
         isTrue,
       );
@@ -50,6 +52,7 @@ void main() {
           isAgentSession: false,
           commandRunning: true,
           nonBlankLines: 0,
+          greetingLines: null,
         ),
         isTrue,
       );
@@ -64,22 +67,85 @@ void main() {
           isAgentSession: false,
           commandRunning: false,
           nonBlankLines: 5000,
+          greetingLines: null,
         ),
         isFalse,
       );
     });
 
     test('an un-instrumented shell is kept only if it has history', () {
-      bool detach(int lines) => shouldDetachOnClose(
+      bool detach(int lines, {int? greeting}) => shouldDetachOnClose(
         isLive: true,
         isAgentSession: false,
         commandRunning: null,
         nonBlankLines: lines,
+        greetingLines: greeting,
       );
 
       expect(detach(0), isFalse, reason: 'opened it, typed nothing');
       expect(detach(kIdleShellHistoryLines), isFalse, reason: 'a banner');
       expect(detach(kIdleShellHistoryLines + 1), isTrue, reason: 'used');
+    });
+
+    test('the history it counts is the shell\'s own, not its prompt', () {
+      // The owner's report — "empty wsl terminal stays in the background
+      // instead of just ending" — measured through a real ConPTY against
+      // archlinux/zsh/starship, whose prompt is three rows per command:
+      //
+      //   idle, untouched          2      <- the greeting
+      //   after 1 silent command   5
+      //   after 2 silent commands  8      <- used to be kept
+      //   after `pwd`             12
+      //   after `ls`             106
+      //
+      // Two commands that printed nothing parked a shell in the background
+      // list, where a restart puts it straight back. Counting from the
+      // greeting instead of from zero is what tells the redraws apart from
+      // output.
+      bool detach(int lines) => shouldDetachOnClose(
+        isLive: true,
+        isAgentSession: false,
+        commandRunning: null,
+        nonBlankLines: lines,
+        greetingLines: 2,
+      );
+
+      expect(detach(2), isFalse, reason: 'the greeting alone');
+      expect(detach(5), isFalse, reason: 'one command that printed nothing');
+      expect(detach(8), isFalse, reason: 'two of them — the reported bug');
+      expect(detach(12), isTrue, reason: 'output past the prompts');
+      expect(detach(106), isTrue, reason: 'an `ls`');
+    });
+
+    test('a long MOTD is a greeting, not history', () {
+      // The case the old fixed six conceded it got wrong: a login banner
+      // longer than the threshold used to keep every such shell for ever.
+      bool detach(int lines) => shouldDetachOnClose(
+        isLive: true,
+        isAgentSession: false,
+        commandRunning: null,
+        nonBlankLines: lines,
+        greetingLines: 40,
+      );
+
+      expect(detach(40), isFalse, reason: 'the banner is not history');
+      expect(detach(40 + kIdleShellHistoryLines), isFalse);
+      expect(detach(40 + kIdleShellHistoryLines + 1), isTrue, reason: 'used');
+    });
+
+    test('no greeting counts from zero, as it did before greetings', () {
+      // A pane the user never ran anything in has none to record, and the
+      // smaller reading only ever keeps more — the safe direction.
+      expect(
+        shouldDetachOnClose(
+          isLive: true,
+          isAgentSession: false,
+          commandRunning: null,
+          nonBlankLines: kIdleShellHistoryLines + 1,
+          greetingLines: null,
+        ),
+        isTrue,
+      );
     });
   });
 
@@ -154,6 +220,45 @@ void main() {
         container.read(terminalSessionsControllerProvider).detached.single
             .paneId,
         opened.paneId,
+      );
+    });
+
+    test('a shell with a multi-line prompt is not parked by its redraws', () {
+      // End to end, in the shape the ConPTY measurement found: a two-row
+      // greeting, then two commands that printed nothing, each leaving another
+      // prompt behind. Eight non-blank lines and not one of them is output.
+      final pane = openPane();
+      final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
+      instance.greetingLines = 2;
+      instance.terminal.write('~\r\n> true\r\n' * 4);
+
+      controller.closeTab(
+        container.read(terminalSessionsControllerProvider).activeTabId!,
+      );
+
+      expect(
+        container.read(terminalSessionsControllerProvider).detached,
+        isEmpty,
+        reason: 'the owner closed an empty terminal; it should just end',
+      );
+      expect(controller.instanceFor(pane), isNull);
+    });
+
+    test('and is still parked once it has printed something', () {
+      final pane = openPane();
+      final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
+      instance.greetingLines = 2;
+      instance.terminal.write('~\r\n> true\r\n' * 4);
+      instance.terminal.write('a long build\r\n' * 8);
+
+      controller.closeTab(
+        container.read(terminalSessionsControllerProvider).activeTabId!,
+      );
+
+      expect(
+        container.read(terminalSessionsControllerProvider).detached.single
+            .paneId,
+        pane,
       );
     });
 

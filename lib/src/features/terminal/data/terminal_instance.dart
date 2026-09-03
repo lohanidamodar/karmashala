@@ -22,6 +22,7 @@ import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
+import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
@@ -73,6 +74,17 @@ abstract class TerminalInstance {
   /// clean exit is a shell being dismissed, a failure is output someone is
   /// about to read.
   int? get exitCode => null;
+
+  /// Non-blank lines this shell had printed **before the user ran anything in
+  /// it** — its banner, its MOTD and its first prompt.
+  ///
+  /// Null until the user submits a line, and null forever for a pane nothing
+  /// was ever run in. Read by `shouldDetachOnClose`, which needs to tell a
+  /// shell's own greeting apart from history somebody would come back for; the
+  /// argument for measuring it rather than guessing is on
+  /// `kIdleShellHistoryLines`. Only a pane with a real process can have one,
+  /// which is why the default lives here.
+  int? get greetingLines => null;
 
   /// Drives selection/scroll for the view — read to copy the current selection.
   TerminalController get controller;
@@ -360,6 +372,7 @@ class PtyTerminalInstance
 
     terminal.onOutput = (data) {
       if (_disposed) return;
+      _recordGreeting(data);
       try {
         _pty.write(const Utf8Encoder().convert(data));
       } catch (_) {
@@ -415,6 +428,32 @@ class PtyTerminalInstance
 
   @override
   int? get exitCode => _exitCode;
+
+  int? _greetingLines;
+
+  @override
+  int? get greetingLines => _greetingLines;
+
+  /// Records the greeting the first time the user **submits a line**.
+  ///
+  /// Keyed on a carriage return rather than on the first byte out of the
+  /// terminal, because the terminal answers for itself: measured against a real
+  /// WSL ConPTY, `onOutput` fires 8 ms in with `ESC[I` — a focus report, with
+  /// the buffer still empty — and cursor-position and device-attribute replies
+  /// arrive the same way. None of those contain a `\r`, and none of them means
+  /// the user did anything.
+  ///
+  /// Counted *before* the bytes are forwarded, which is what makes a paste
+  /// harmless: whatever is being submitted has not been echoed yet, so the
+  /// buffer still holds only what the shell put there. Unbounded on purpose —
+  /// this runs once per pane, at a moment when the buffer is a banner and a
+  /// prompt, and a greeting that came back short would lower the bar for
+  /// keeping the session rather than raise it.
+  void _recordGreeting(String data) {
+    if (_greetingLines != null || !data.contains('\r')) return;
+    _greetingLines = nonBlankLineCount(terminal);
+  }
+
   final _liveness = ValueNotifier(PaneLiveness.live);
 
   late final Pty _pty;
@@ -670,6 +709,10 @@ class ErrorTerminalInstance implements TerminalInstance {
   @override
   int? get exitCode => null;
 
+  // Nothing ever ran here, so there is no greeting to have measured.
+  @override
+  int? get greetingLines => null;
+
   /// Nothing is running: the spawn failed. The pane therefore offers the same
   /// "start it" affordance a restored pane does, which doubles as a retry.
   @override
@@ -864,6 +907,10 @@ class DormantTerminalInstance
   /// Nothing ran here, so nothing exited.
   @override
   int? get exitCode => null;
+
+  // Nothing ever ran here, so there is no greeting to have measured.
+  @override
+  int? get greetingLines => null;
 
   @override
   final ValueListenable<PaneLiveness> liveness = const _Constant(

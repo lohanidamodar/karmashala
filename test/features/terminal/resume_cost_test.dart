@@ -366,6 +366,9 @@ class _CountingInstance
   int? exitCode;
 
   @override
+  int? greetingLines;
+
+  @override
   ValueListenable<PaneLiveness> get liveness => _liveness;
   final _liveness = ValueNotifier(PaneLiveness.live);
 
