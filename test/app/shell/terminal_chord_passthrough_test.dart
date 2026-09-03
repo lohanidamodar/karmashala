@@ -394,6 +394,12 @@ void main() {
       'Ctrl+\\',
       'Ctrl+K',
       'Ctrl+P',
+      // New session, and the exact mirror of the `Ctrl+P` above it: ^N is
+      // readline's next-history the way ^P is previous-history, and `Down`
+      // answers it the way `Up` answers that one. The menu had been drawing
+      // this chord for loops before anything was bound to it, so the cost is
+      // new here only in the sense that it is finally being paid honestly.
+      'Ctrl+N',
       'Ctrl+-',
       // The tab chords, which a shell and a full-screen program do read.
       'Ctrl+T',
