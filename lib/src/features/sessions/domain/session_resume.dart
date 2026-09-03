@@ -1,3 +1,4 @@
+import '../../agents/domain/agent_status.dart';
 import 'session_launch.dart';
 
 /// What "open this conversation again" should actually do.
@@ -80,6 +81,7 @@ class SessionWhereabouts {
     this.external = false,
     this.refusedResume = false,
     this.conversationMissing = false,
+    this.rejectedValue,
     this.lastSeen,
   });
 
@@ -101,6 +103,19 @@ class SessionWhereabouts {
   /// agent's own words about its own store. It is the honest end of a resume
   /// the store probe could not predict — see `AgentMissingConversationRules`.
   final bool conversationMissing;
+
+  /// The agent refused a **command-line value we chose for it** and exited
+  /// before starting, and we read the refusal off the pane. Null when it said
+  /// no such thing.
+  ///
+  /// **Certain**, like the two above, and the odd one out among them: those are
+  /// facts about the user's conversations, this is a fact about Karmashala
+  /// being wrong. A permission mode is declared from the newest CLI that has
+  /// been read, and mode support belongs to the *installation* — so a machine
+  /// whose Codex is older or newer than that one gets a flag it will not take,
+  /// and used to get a pane that flashed the raw `error: invalid value …` and
+  /// died. See `AgentRejectedValueRules`.
+  final RejectedValue? rejectedValue;
 
   /// When the newest evidence about this session was **produced** — not when we
   /// last looked. Today that is the modification time of the agent's own
@@ -128,6 +143,13 @@ class SessionWhereabouts {
   /// worth saying. Phrased as what we know, not as what we suspect.
   String? get note {
     if (hostedLive) return 'running here';
+    // Ahead of the two resume answers because it happened earlier than either
+    // could: the CLI exited while reading its command line, so it never got as
+    // far as having an opinion about the conversation.
+    final rejected = rejectedValue;
+    if (rejected != null) {
+      return "would not start — no '${rejected.value}' in this build";
+    }
     if (refusedResume) return 'open in another process';
     if (conversationMissing) return 'no conversation to resume';
     if (external) return 'opened in an external terminal';
@@ -137,6 +159,8 @@ class SessionWhereabouts {
   /// The longer form, for a tooltip.
   String? get explanation {
     if (hostedLive) return 'Running in a terminal pane in this window.';
+    final rejected = rejectedValue;
+    if (rejected != null) return rejectedValueMessage(rejected);
     if (refusedResume) {
       return 'The agent refused to resume this conversation because another '
           'process is already writing to it.';
@@ -211,3 +235,24 @@ String resumeMissingConversationMessage(String agentName) =>
     'wrote a transcript for it — which is what a session nothing was ever said '
     'in looks like, and what a launch that failed leaves behind. No work has '
     'been lost. Start a new session in this repository.';
+
+/// The plain words for a launch the CLI refused while reading its command line.
+///
+/// Shown instead of the agent's own `error: invalid value 'untrusted' for
+/// '--ask-for-approval &lt;APPROVAL_POLICY&gt;'`, which is accurate, complete
+/// and still leaves the reader with an investigation: it names a flag they
+/// never typed, for a mode they picked from a list this app drew.
+///
+/// So the sentence says the three things that turn it back into a decision:
+/// which of *their* choices was refused, what this installation has instead,
+/// and that the disagreement is between the app's list and their binary rather
+/// than anything they did. The values are quoted from the CLI's own refusal —
+/// it names the whole valid set, which is what makes a readable message
+/// possible at all.
+String rejectedValueMessage(RejectedValue rejected) =>
+    "This installation of the agent has no '${rejected.value}' for "
+    "'${rejected.flag}', so it refused the command line and stopped before "
+    'starting. It offers ${rejected.alternativesLabel}. Karmashala lists the '
+    'modes it has read off the newest build of each CLI, and this one does not '
+    'agree — choose one of the modes above and the session will start. Nothing '
+    'was lost: the agent exited before it opened anything.';

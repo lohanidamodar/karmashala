@@ -87,27 +87,35 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
 
-      // The pane is dead. Its last words are still in the buffer, and for a
-      // launch that was a resume they may be the agent explaining that somebody
-      // else holds the conversation — or that there is no conversation. Both
-      // are read from one tail: the screen is scanned once, at whichever
-      // window is larger, so a second question costs no second read.
+      // The pane is dead. Its last words are still in the buffer, and they may
+      // be the agent explaining that somebody else holds the conversation, that
+      // there is no conversation, or — for a launch that never got past its own
+      // command line — that this installation does not have a mode we asked it
+      // for. All three are read from one tail: the screen is scanned once, at
+      // whichever window is largest, so a further question costs no further
+      // read.
       final descriptor = sessionDescriptor(ref, session.agentInstallationId);
       final conflict =
           descriptor?.launch.resumeConflict ?? const AgentResumeConflictRules();
       final missing =
           descriptor?.launch.missingConversation ??
           const AgentMissingConversationRules();
+      final rejected =
+          descriptor?.launch.rejectedValue ??
+          const AgentRejectedValueRules.none();
       final tail = terminalTailLines(
         instance.terminal,
-        lines: conflict.scanLines > missing.scanLines
-            ? conflict.scanLines
-            : missing.scanLines,
+        lines: [
+          conflict.scanLines,
+          missing.scanLines,
+          rejected.scanLines,
+        ].reduce((a, b) => a > b ? a : b),
       );
       return SessionWhereabouts(
         external: external,
         refusedResume: showsResumeConflict(descriptor, tail),
         conversationMissing: missing.matchedBy(tail),
+        rejectedValue: rejected.matchedBy(tail),
         lastSeen: lastSeen,
       );
     });

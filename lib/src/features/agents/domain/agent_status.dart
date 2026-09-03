@@ -605,6 +605,115 @@ class AgentMissingConversationRules {
   }
 }
 
+/// One flag value an installed CLI refused, and what it offered instead.
+///
+/// Read off the agent's own refusal, so every field is the CLI's own word for
+/// itself — no part of this is Karmashala's opinion about what the agent
+/// should have.
+class RejectedValue {
+  const RejectedValue({
+    required this.value,
+    required this.flag,
+    required this.alternatives,
+  });
+
+  /// The value that was refused — `untrusted`.
+  final String value;
+
+  /// The flag it was given to — `--ask-for-approval`.
+  final String flag;
+
+  /// The set the CLI named instead, in its own order. Never empty: a refusal
+  /// that named nothing is not matched at all, because "this build does not
+  /// have it and here is nothing" is no more useful than the raw stderr.
+  final List<String> alternatives;
+
+  /// `on-request, never` — for a sentence, not for a command line.
+  String get alternativesLabel => alternatives.join(', ');
+}
+
+/// What an agent prints when it is handed a flag value **this installation**
+/// does not have.
+///
+/// The third post-mortem read off a dead pane, beside [AgentResumeConflictRules]
+/// and [AgentMissingConversationRules], and the only one whose cause is on our
+/// side of the line: the other two are facts about the user's conversations,
+/// this one is the registry being wrong about the binary in front of it.
+///
+/// **Mode support is a property of the installation, not of the agent.** The
+/// two Codex builds on the machine this was written on disagreed —  0.145.0
+/// had `untrusted`, 0.151.0 dropped it — and only the newest set is declared,
+/// on the argument that the newest is a subset of the older. That argument is
+/// right until it is not, and this is what happens on the day it is not: the
+/// CLI refuses at parse time, exits before drawing anything, and the user is
+/// left with a pane that flashed and died. The refusal itself is generous — it
+/// names the whole valid set — so the only thing missing was somebody reading
+/// it.
+///
+/// [pattern] is a regular expression with **three capturing groups, in order**:
+/// the refused value, the flag, and the comma-separated set the CLI named
+/// instead. It is matched case-insensitively against the screen with **all
+/// whitespace removed**, exactly as the other two post-mortems are matched and
+/// for the same reason: the refusal is two lines that hard-wrap at whatever
+/// width the pane happens to be, and the wrap can land inside a word.
+///
+/// Empty for an agent whose refusal nobody has seen, which resolves to "we
+/// cannot explain this" rather than to a guess.
+class AgentRejectedValueRules {
+  const AgentRejectedValueRules.pattern({
+    required this.pattern,
+    required this.evidence,
+    this.scanLines = 30,
+  });
+
+  /// Nobody has seen this agent refuse a value. The default.
+  const AgentRejectedValueRules.none()
+    : pattern = '',
+      evidence = '',
+      scanLines = 30;
+
+  final String pattern;
+
+  /// The command and the output it was read off, so a future CLI version can be
+  /// re-checked rather than trusted.
+  final String evidence;
+
+  /// How many rows up from the bottom to read. The same window as the other two
+  /// post-mortems, and for the same reason: the agent has exited and its last
+  /// words may sit above whatever the shell printed afterwards.
+  final int scanLines;
+
+  bool get isEmpty => pattern.isEmpty;
+
+  /// The refusal [tailLines] show, or null when they show none.
+  ///
+  /// **The last match wins**, like `AgentSessionIdAnnouncement.idIn`: a pane
+  /// can hold more than one dead launch, and the newest is the one that
+  /// describes the attempt the user just made.
+  RejectedValue? matchedBy(List<String> tailLines) {
+    if (isEmpty || tailLines.isEmpty) return null;
+    // Case is preserved here, unlike [_squeezed]: these captures are quoted
+    // back to the user as the CLI's own words, and a lower-cased flag would be
+    // a command line that does not exist.
+    final screen = tailLines.join(' ').replaceAll(RegExp(r'\s+'), '');
+    final matches = RegExp(pattern, caseSensitive: false).allMatches(screen);
+    if (matches.isEmpty) return null;
+    final match = matches.last;
+    final value = match.group(1) ?? '';
+    final flag = match.group(2) ?? '';
+    final alternatives = [
+      for (final one in (match.group(3) ?? '').split(','))
+        if (one.trim().isNotEmpty) one.trim(),
+    ];
+    if (value.isEmpty || flag.isEmpty || alternatives.isEmpty) return null;
+    return RejectedValue(
+      value: value,
+      flag: flag,
+      alternatives: alternatives,
+    );
+  }
+}
+
 /// Lower-cased with every whitespace character dropped.
 String _squeezed(String value) =>
     value.toLowerCase().replaceAll(RegExp(r'\s+'), '');

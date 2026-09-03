@@ -695,6 +695,49 @@ const _codex = AgentDescriptor(
     resumeConflict: AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],
     ),
+    // **The safety net for the axes above being wrong about this binary.**
+    // Mode support is a property of the *installation*, and the two Codex
+    // builds on this machine disagree: 0.145.0 offers `untrusted`, 0.151.0 does
+    // not. Only the newest set is declared, which is right until the day an
+    // installation is older or newer than the one that was read — and on that
+    // day the launch dies at argv-parse time, before Codex draws anything.
+    //
+    // It refuses generously, naming the whole valid set, and identically on
+    // both versions:
+    //
+    //   $ codex --ask-for-approval on-failure --help          # 0.151.0, WSL
+    //   error: invalid value 'on-failure' for '--ask-for-approval
+    //     <APPROVAL_POLICY>'
+    //     [possible values: on-request, never]
+    //
+    //   $ codex --sandbox bogus --help
+    //   error: invalid value 'bogus' for '--sandbox <SANDBOX_MODE>'
+    //     [possible values: read-only, workspace-write, danger-full-access]
+    //
+    // Three groups: the refused value, the flag, the set offered instead. The
+    // `[^\]]*` between the flag and the bracket is what steps over clap's
+    // `<APPROVAL_POLICY>` placeholder and the closing quote, and the whole
+    // thing is matched against the screen with the whitespace taken out, so the
+    // two lines may wrap anywhere.
+    //
+    // **Claude Code's equivalent is deliberately not declared.** Its refusal
+    // has a different shape — `error: option '--permission-mode <mode>'
+    // argument 'bogus' is invalid. Allowed choices are …` — and, unlike Codex,
+    // both installations here enforce the *same* six modes, so nothing has ever
+    // been seen to disagree with what is declared for it. A pattern with no
+    // observed failure behind it is a guess with a regular expression in it.
+    rejectedValue: AgentRejectedValueRules.pattern(
+      pattern:
+          r"invalidvalue'([^']+)'for'(-{1,2}[A-Za-z0-9][A-Za-z0-9-]*)"
+          r"[^\]]*\[possiblevalues:([^\]]+)\]",
+      evidence:
+          "codex 0.151.0: `codex --ask-for-approval on-failure --help` prints "
+          "\"error: invalid value 'on-failure' for '--ask-for-approval "
+          "<APPROVAL_POLICY>'\\n  [possible values: on-request, never]\"; "
+          '`codex --sandbox bogus --help` prints the same shape for '
+          '`--sandbox`. 0.145.0 (Windows) prints it identically, with '
+          '`untrusted` still in the set.',
+    ),
     // **Codex can fork**, contrary to the assumption this feature was designed
     // under. 0.151.0 has a `fork` subcommand alongside `resume`, taking the
     // same `[SESSION_ID] [PROMPT]` arguments, so the fork is expressed exactly
