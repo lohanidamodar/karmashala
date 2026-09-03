@@ -5,6 +5,7 @@ import 'package:xterm2/xterm.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../agents/domain/agent_status.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../explorer/application/explorer_actions.dart';
@@ -1001,11 +1002,25 @@ class TerminalTabChip extends StatelessWidget {
     required this.onClose,
     required this.onEnd,
     required this.onBulkClose,
+    this.agentStatus,
     super.key,
   });
 
+  /// How many of these have been built. The seam a cost test counts through:
+  /// a status change must redraw the one chip it is about, not the strip.
+  @visibleForTesting
+  static int debugBuildCount = 0;
+
   final String title;
   final PaneLiveness liveness;
+
+  /// What the agent in this tab holds is doing, or null when the tab holds no
+  /// live agent session — a plain shell, or history with nothing behind it.
+  ///
+  /// Handed in rather than watched, exactly as [liveness] is: the chip is a
+  /// dumb view of one tab and `_TabChip` is what subscribes.
+  final AgentActivityStatus? agentStatus;
+
   final bool selected;
 
   /// Where this tab sits in the strip, and how many there are.
@@ -1033,11 +1048,17 @@ class TerminalTabChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugBuildCount++;
+    final status = agentStatus;
     return WorkbenchTabChip(
       selected: selected,
       onTap: onTap,
       onSecondaryTapDown: (details) => _menu(context, details.globalPosition),
-      leading: TabLivenessDot(liveness: liveness),
+      // One slot, never two glyphs: a tab running an agent says what the agent
+      // is doing, and one that is not says whether anything is running at all.
+      leading: status == null
+          ? TabLivenessDot(liveness: liveness)
+          : TabAgentStatusDot(status: status),
       label: title,
       trailing: IconButton(
         tooltip: liveness.isLive

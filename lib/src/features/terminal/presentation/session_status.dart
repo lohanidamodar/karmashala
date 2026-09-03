@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../agents/domain/agent_status.dart';
+import '../../sessions/presentation/agent_status_badge.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../domain/pane_liveness.dart';
 
@@ -114,6 +116,60 @@ class TabLivenessDot extends StatelessWidget {
           restored ? AppIcons.clockCounterClockwise : AppIcons.circle,
           size: 11,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
+          semanticLabel: message,
+        ),
+      ),
+    );
+  }
+}
+
+/// **The marker on a tab whose pane is running an agent**: what that agent is
+/// doing, in the same glyphs the session card's badge uses.
+///
+/// The owner: *"in the terminals with an active session, can we add an icon or
+/// something that shows whether the session is actually running, or waiting for
+/// something, or done?"* — three states the app already distinguishes and had
+/// never drawn on a tab. The tab strip is where you look when you are running
+/// several agents at once, and it was the one place that could only say whether
+/// a *process* existed.
+///
+/// Drawn **instead of** [TabLivenessDot], never beside it: a pane with no
+/// process has no agent activity to report, so [paneAgentActivityProvider]
+/// answers null there and the liveness marker takes the slot back. One glyph,
+/// one meaning, one place.
+///
+/// It reuses [agentStatusAppearance] rather than inventing a second vocabulary
+/// — the same icon, the same word and the same semantic colour the Explorer
+/// card, the tray and the notifications all read. Colour is deliberately not
+/// the only carrier, which is both this repo's accessibility rule and the rule
+/// [TabLivenessDot] states above: each state has its own **shape**, its own
+/// tooltip and its own semantic label, and the chip's own text is never tinted.
+/// The colour is on an 11px glyph only, and `AgentStatusBadge` already argues
+/// why agent status is the app's clearest case of colour meaning something.
+///
+/// [AgentActivityStatus.unknown] is drawn, not hidden. A live agent nothing can
+/// read is a different fact from a plain shell tab, and hiding it would make
+/// the absence of a marker mean both.
+class TabAgentStatusDot extends StatelessWidget {
+  const TabAgentStatusDot({required this.status, super.key});
+
+  final AgentActivityStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = agentStatusAppearance(status);
+    final message = 'Agent: ${appearance.label}';
+    return Padding(
+      padding: const EdgeInsets.only(right: Insets.xs),
+      child: Tooltip(
+        message: message,
+        // The same 11 px [TabLivenessDot] measured for this row: it shares a
+        // Chrome.tabStrip row with a Chrome.tabLabel title and must not crowd
+        // it.
+        child: Icon(
+          appearance.icon,
+          size: 11,
+          color: appearance.colour(SemanticColors.of(context)),
           semanticLabel: message,
         ),
       ),

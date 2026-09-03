@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
+import '../../features/agents/domain/agent_status.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/detail/presentation/workbench_session_view.dart';
 import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/session_providers.dart';
+import '../../features/sessions/application/session_status_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/sessions/presentation/session_notice_line.dart';
@@ -907,6 +909,7 @@ class _TabChip extends ConsumerWidget {
     final chip = TerminalTabChip(
       title: title,
       liveness: _liveness(ref),
+      agentStatus: _agentActivity(ref),
       selected: selected,
       index: index,
       tabCount: tabCount,
@@ -998,6 +1001,23 @@ class _TabChip extends ConsumerWidget {
     }
     return strongest;
   }
+
+  /// What the agent in this tab is doing, or null when it holds none.
+  ///
+  /// Pane by pane for [_liveness]'s reason — the subscription set has to be the
+  /// whole tab — and folded by [mostUrgentAgentActivity], which is where the
+  /// choice between several agents in one tab is argued.
+  ///
+  /// Each of these watches is already narrowed twice over:
+  /// [paneAgentActivityProvider] selects one key out of the shared
+  /// paneId → sessionId map and then selects the status word out of the
+  /// registry's report, so a 1.2 s cycle that reconfirms what a pane was
+  /// already doing reaches no chip at all, and a cycle that changes one pane
+  /// reaches one.
+  AgentActivityStatus? _agentActivity(WidgetRef ref) => mostUrgentAgentActivity([
+    for (final paneId in tab.layout.panes)
+      ref.watch(paneAgentActivityProvider(paneId)),
+  ]);
 }
 
 /// What a dragged tab looks like under the pointer.

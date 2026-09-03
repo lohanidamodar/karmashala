@@ -208,6 +208,28 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// paneId → the session standing in it, for every placed row at once.
+  ///
+  /// One statement over the pane index for the whole workspace rather than one
+  /// indexed lookup per drawn chip: the tab strip asks this question once per
+  /// tab, and a map plus a `select` on one key is what keeps an answer that
+  /// changed for one pane from waking the others. Only two columns are read —
+  /// nothing here decodes a session.
+  ///
+  /// Oldest wins where two rows name one pane, which is the row
+  /// [getByPaneIds]'s callers already take.
+  Map<String, String> paneSessionIds() {
+    final rows = _db.query(
+      'SELECT id, pane_id FROM sessions WHERE pane_id IS NOT NULL '
+      'ORDER BY created_at, id;',
+    );
+    final byPane = <String, String>{};
+    for (final row in rows) {
+      byPane.putIfAbsent(row['pane_id']! as String, () => row['id']! as String);
+    }
+    return byPane;
+  }
+
   /// Every row whose status still claims something is running, oldest first.
   ///
   /// What `SessionLivenessReconciler` sweeps. Filtered in SQL rather than by

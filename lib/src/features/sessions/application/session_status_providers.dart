@@ -6,6 +6,8 @@ import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../domain/session.dart';
+import 'session_providers.dart';
+import 'session_signals.dart';
 
 /// What one session's agent is doing.
 ///
@@ -64,6 +66,96 @@ final sessionActivityLookupProvider =
                   ?.status ??
               AgentActivityStatus.unknown,
     );
+
+/// paneId → the session standing in it, for the whole workspace.
+///
+/// One shared producer rather than a lookup per chip. Both tab strips draw one
+/// chip per tab or per pane and each of them wants this answer, so a family
+/// keyed by pane would run one indexed query per drawn chip on every placement
+/// change; this runs [SessionDao.paneSessionIds] once and every chip reads its
+/// own key out of the map with a `select`.
+///
+/// Watched on **placement alone**. That is the concern that names where a row
+/// lives, and it is carried by every change that could move this map:
+/// `SessionChange.created` and `.removed` both include it, and so does the
+/// `.moved` adoption publishes when it binds or releases a pane. A rename — the
+/// most frequent session change in the app, published on the CLI store sweep's
+/// own timer — is not on the list and therefore never wakes a tab.
+final placedSessionIdsProvider = Provider<Map<String, String>>((ref) {
+  ref.watchSessionKinds(const {SessionChangeKind.placement});
+  return ref.read(sessionDaoProvider).paneSessionIds();
+});
+
+/// **What the agent in pane [paneId] is doing**, or null when that is not a
+/// question about this pane.
+///
+/// Null in three cases, and they are one case: there is no agent to report on.
+/// A pane with no process (a shell that exited, restored history), a plain
+/// shell, and a pane whose row has gone. A tab chip draws its liveness marker
+/// instead — [TabLivenessDot] — so the two never appear at once and the strip
+/// never shows a status read off a screen nothing is writing to.
+///
+/// [AgentActivityStatus.unknown] is a real answer here and is drawn as one: a
+/// live agent pane whose status no source can read is different from a shell
+/// tab, and collapsing them would make the marker's absence mean two things.
+///
+/// The session id comes from the **row**, not from the pane's `agentLaunch`,
+/// and that is the whole reason this reaches the sessions the owner asked
+/// about: a hand-started `claude` in an ordinary shell pane has no
+/// `AgentPaneLaunch` at all, and `SessionAdoptionService` binds it by writing
+/// the pane id onto a row.
+///
+/// Costs nothing per tick. `agentSessionStatusProvider` is a projection of the
+/// one registry the whole app shares — no timer, no disk, no store scan — and
+/// the `select` here narrows it to the status word, so a cycle that reconfirms
+/// what a pane was already doing rebuilds nothing.
+final paneAgentActivityProvider = Provider.autoDispose
+    .family<AgentActivityStatus?, String>((ref, paneId) {
+      if (!ref.watch(terminalPaneLivenessProvider(paneId)).isLive) return null;
+      final sessionId = ref.watch(
+        placedSessionIdsProvider.select((byPane) => byPane[paneId]),
+      );
+      if (sessionId == null) return null;
+      return ref.watch(
+            agentSessionStatusProvider(
+              sessionId,
+            ).select((report) => report.value?.status),
+          ) ??
+          AgentActivityStatus.unknown;
+    });
+
+/// The one status a chip standing for several panes shows.
+///
+/// Ordered by **what the user has to do about it**, which is not the order
+/// `AgentGridRules` reads a single screen in. There the question is "which of
+/// these matchers describes this agent", and a failure wins because an error
+/// printed under a spinner is the newer fact. Here the question is "which of
+/// these panes should this one glyph be about", and a session holding the user
+/// up outranks one that has already stopped: the first still wants something,
+/// the second is waiting to be read.
+///
+/// Null when no pane in the group has an agent, which is what a tab of plain
+/// shells is.
+AgentActivityStatus? mostUrgentAgentActivity(
+  Iterable<AgentActivityStatus?> statuses,
+) {
+  AgentActivityStatus? strongest;
+  for (final status in statuses) {
+    if (status == null) continue;
+    if (strongest == null || _urgency(status) > _urgency(strongest)) {
+      strongest = status;
+    }
+  }
+  return strongest;
+}
+
+int _urgency(AgentActivityStatus status) => switch (status) {
+  AgentActivityStatus.awaitingApproval => 4,
+  AgentActivityStatus.failed => 3,
+  AgentActivityStatus.working => 2,
+  AgentActivityStatus.idle => 1,
+  AgentActivityStatus.unknown => 0,
+};
 
 /// The bottom rows of the pane [session] runs in, or nothing.
 ///

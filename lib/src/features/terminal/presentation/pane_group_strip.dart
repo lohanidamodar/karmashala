@@ -8,6 +8,7 @@ import '../../../app/shell/workbench_tab_chip.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
+import '../../sessions/application/session_status_providers.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../domain/pane_layout.dart';
 import '../domain/terminal_drag.dart';
@@ -142,13 +143,24 @@ class PaneTabChip extends ConsumerWidget {
   /// Whether it is also the pane the keyboard is in.
   final bool accented;
 
+  /// How many of these have been built. The seam a cost test counts through:
+  /// a status change must redraw the one chip it is about, not the header.
+  @visibleForTesting
+  static int debugBuildCount = 0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    debugBuildCount++;
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     // Per pane, not per layout: a process dying redraws its own chip and
     // leaves the rest of the header alone — the rule the workbench strip
     // already follows.
     final liveness = ref.watch(terminalPaneLivenessProvider(paneId));
+    // The other half of the same per-pane rule: what the agent in this pane is
+    // doing, narrowed to the status word so a registry cycle that reconfirms it
+    // redraws nothing. Null for a pane with no live agent session, which is
+    // when the liveness marker takes the slot back.
+    final activity = ref.watch(paneAgentActivityProvider(paneId));
     final title = sessions.titleForPane(paneId);
 
     final chip = WorkbenchTabChip(
@@ -157,7 +169,9 @@ class PaneTabChip extends ConsumerWidget {
       onTap: () => sessions.focusPane(paneId),
       onSecondaryTapDown: (details) =>
           _menu(context, sessions, details.globalPosition),
-      leading: TabLivenessDot(liveness: liveness),
+      leading: activity == null
+          ? TabLivenessDot(liveness: liveness)
+          : TabAgentStatusDot(status: activity),
       label: title,
       tooltip: title,
       trailing: IconButton(

@@ -1087,6 +1087,11 @@ void main() {
       // session had stopped for the user. Nothing that *finds* an approval for
       // you ever read it — the ambient pipeline reads the pane's own screen —
       // and this is what says so, end to end, for a pane-surface session.
+      //
+      // The app-wide projection is set to agree with the pane the local
+      // registry below reads, so the tab strip's own answer can be asserted in
+      // the same breath as the tray's.
+      agentStatus = AgentActivityStatus.awaitingApproval;
       final paneId = seedSessionInAPane();
       // Elsewhere, which is the case the inbox exists for: an approval that
       // lands while the window is behind something else.
@@ -1155,14 +1160,23 @@ void main() {
         registry.reportForOpenId('s1')?.status,
         AgentActivityStatus.awaitingApproval,
       );
-      // The tab's dot is about the pane's *process*, which nothing here
-      // touched: still live, so it still draws nothing. It never carried an
-      // approval, before this change or after it.
+      // And the tab says so. The strip used to be able to report only whether
+      // a *process* existed — which is all [TabLivenessDot] is, and it says it
+      // by being absent — so an approval nobody was looking at was invisible in
+      // the one place you look when several agents are running. The pane is
+      // still live, so liveness has nothing to say and yields its slot to the
+      // agent's own status, read from the same projection the badge draws.
       expect(
         container.read(terminalPaneLivenessProvider(paneId)),
         PaneLiveness.live,
       );
-      expect(tester.getSize(find.byType(TabLivenessDot)).height, 0);
+      expect(find.byType(TabLivenessDot), findsNothing);
+      expect(
+        tester
+            .widget<TabAgentStatusDot>(find.byType(TabAgentStatusDot))
+            .status,
+        AgentActivityStatus.awaitingApproval,
+      );
     },
   );
 
