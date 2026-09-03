@@ -839,6 +839,14 @@ class _TabStrip extends ConsumerWidget {
                   tabs: tabs,
                   width: constraints.maxWidth,
                   activeIndex: tabs.indexWhere((tab) => tab.active),
+                  // The toolbar's own verb, reached the way the toolbar reaches
+                  // it. A second way to make a tab would be a second place for
+                  // the default profile and the selected repository's directory
+                  // to be decided.
+                  onNewTab: () {
+                    final terminal = TerminalActions(ref);
+                    terminal.open(terminal.defaultProfile());
+                  },
                 ),
               ),
             ),
@@ -877,6 +885,13 @@ class _TabStrip extends ConsumerWidget {
     ];
   }
 }
+
+/// The part of the tab strip no chip covers, so a test can aim at it.
+///
+/// Named rather than found by geometry because "the empty space" is the whole
+/// subject of the gesture: a test that computed the coordinate itself would
+/// stop testing the rule the moment the rule changed.
+const kTabStripEmptySpace = Key('tab-strip/empty-space');
 
 /// One tab's chip, holding the strip's only watch on what happens *inside* a
 /// tab.
@@ -1223,6 +1238,7 @@ class _TabRail extends StatefulWidget {
     required this.tabs,
     required this.width,
     required this.activeIndex,
+    required this.onNewTab,
   });
 
   final List<_StripTab> tabs;
@@ -1233,6 +1249,9 @@ class _TabRail extends StatefulWidget {
   final double width;
 
   final int activeIndex;
+
+  /// Opens a terminal, for the gesture over the room the tabs did not use.
+  final VoidCallback onNewTab;
 
   @override
   State<_TabRail> createState() => _TabRailState();
@@ -1340,7 +1359,7 @@ class _TabRailState extends State<_TabRail> {
       itemCount: widget.tabs.length,
       itemBuilder: (context, index) => widget.tabs[index].chip(),
     );
-    if (!metrics.overflowing) return list;
+    if (!metrics.overflowing) return _overEmptySpace(list, metrics.extent);
     // The chevrons are the first thing to go when the rail itself runs out of
     // room, and this is not a preference — it is the only arrangement that
     // fits. Their own doc says they earn their place "while the overflow is
@@ -1361,6 +1380,51 @@ class _TabRailState extends State<_TabRail> {
         Expanded(child: list),
         if (chevrons) _chevron(forward: true),
         _OverflowButton(count: widget.tabs.length),
+      ],
+    );
+  }
+
+  /// [list], with the strip's oldest unwritten gesture laid over whatever room
+  /// the tabs did not use: **double-click the empty space to open a tab**, as
+  /// VS Code, every browser and most terminals do.
+  ///
+  /// A sibling over the leftover pixels, and deliberately **not** a detector
+  /// wrapped around the rail. An ancestor `onDoubleTap` joins the gesture arena
+  /// for every pointer that lands on a chip, and it breaks the chip twice over:
+  /// a double-click on a tab would open a new one instead of activating it,
+  /// and — worse, because it is silent — every *single* click on a tab would
+  /// wait out the 300 ms double-tap window before the chip's own `onTap` could
+  /// win the arena. Here it covers only pixels no chip occupies, which is
+  /// exactly the target the gesture is about.
+  ///
+  /// `Stack` hit-tests its children topmost-first and stops at the first that
+  /// answers, so the list keeps every pointer over a chip and this keeps the
+  /// rest. The `DragTarget` around the whole strip is an *ancestor* and stays
+  /// on the hit-test path either way, so dropping a pane on the empty space
+  /// still turns it into a tab.
+  ///
+  /// Only reached when the tabs fit. An overflowing rail has no empty space by
+  /// definition, and the arm above returns the row of chevrons instead.
+  Widget _overEmptySpace(Widget list, double extent) {
+    final free = widget.width - extent * widget.tabs.length;
+    // Half a pixel of slack: a rail whose tabs exactly fill it has no target,
+    // and a zero-width one would be a control nobody can hit.
+    if (free <= 0.5) return list;
+    return Stack(
+      children: [
+        list,
+        Positioned(
+          key: kTabStripEmptySpace,
+          left: widget.width - free,
+          top: 0,
+          bottom: 0,
+          right: 0,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onDoubleTap: widget.onNewTab,
+            child: const SizedBox.expand(),
+          ),
+        ),
       ],
     );
   }
