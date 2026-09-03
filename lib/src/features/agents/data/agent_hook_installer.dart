@@ -646,8 +646,24 @@ class AgentHookInstaller {
         // Unreadable but present — rewritten below rather than trusted.
       }
     }
+    if (!Directory(storeHome).existsSync()) {
+      // The agent is not installed in this environment, so there is nothing to
+      // hook. Returning rather than writing, because both other outcomes are
+      // wrong: the callback script lives *inside* the store home, so the
+      // create-parent below could not help it — the guard read "create the
+      // store home if the store home exists" — and `_writeAtomically` then
+      // threw `PathNotFoundException` on every launch. A Mac with the
+      // Antigravity IDE (`~/.gemini/antigravity`) but not its CLI
+      // (`~/.gemini/antigravity-cli`) logged that warning at every start.
+      // Creating the directory instead would leave an empty agent home in
+      // somebody's `~` for a tool they never installed.
+      return false;
+    }
     final parent = file.parent;
-    if (!parent.existsSync() && Directory(storeHome).existsSync()) {
+    if (!parent.existsSync()) {
+      // The config need not live in the store home — `~/.gemini/config` sits
+      // beside `~/.gemini/antigravity-cli` — so its directory can still be one
+      // the CLI has not created yet.
       await parent.create(recursive: true);
     }
     await _writeAtomically(file, contents, harden: harden);
