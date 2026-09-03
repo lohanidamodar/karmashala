@@ -87,9 +87,16 @@ void main() {
     ],
   );
 
-  Widget host(Widget child) => MaterialApp(
-    theme: AppTheme.light(),
-    // Exactly what a root does: measure the width, install the density.
+  /// [platform] is what actually decides the density — a mouse or a thumb —
+  /// and it defaults to the desktop because the Explorer is the desktop's own
+  /// surface. Named rather than inferred from [size]: a window dragged narrow
+  /// is still a mouse, which is the bug this used to have.
+  Widget host(
+    Widget child, {
+    TargetPlatform platform = TargetPlatform.windows,
+  }) => MaterialApp(
+    theme: AppTheme.light().copyWith(platform: platform),
+    // Exactly what a root does: ask the platform, install the density.
     builder: (context, inner) => UiDensity.wrap(context, inner!),
     home: Scaffold(body: SingleChildScrollView(child: child)),
   );
@@ -98,13 +105,16 @@ void main() {
     WidgetTester tester, {
     Size size = desktop,
     bool selected = false,
+    TargetPlatform platform = TargetPlatform.windows,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     picked.clear();
-    await tester.pumpWidget(host(rows(selected: selected)));
+    await tester.pumpWidget(
+      host(rows(selected: selected), platform: platform),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -373,21 +383,29 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('a touch-width surface draws it at rest', (tester) async {
+    testWidgets('a touch surface draws it at rest', (tester) async {
       // A thumb has neither a hover nor a right-click, so hiding it there would
-      // put the menu out of reach entirely. Width, not the operating system.
-      await pump(tester, size: phone);
+      // put the menu out of reach entirely. The density, not the width: this
+      // row draws at rest on a tablet too, and a narrow desktop window keeps
+      // the hover rule.
+      await pump(tester, size: phone, platform: TargetPlatform.android);
       expect(find.byTooltip('Session actions'), findsWidgets);
       expect(find.byTooltip('Project actions'), findsOneWidget);
     });
   });
 
   group('at both form factors', () {
-    for (final size in [desktop, phone]) {
+    // Each width with the density it really comes with: the desktop window is
+    // a mouse, the phone is a thumb. Pumping the phone size at pointer density
+    // would test a surface nobody has.
+    for (final (size, platform) in [
+      (desktop, TargetPlatform.windows),
+      (phone, TargetPlatform.android),
+    ]) {
       testWidgets('nothing overflows at ${size.width.toInt()}px', (
         tester,
       ) async {
-        await pump(tester, size: size);
+        await pump(tester, size: size, platform: platform);
         expect(tester.takeException(), isNull);
       });
     }

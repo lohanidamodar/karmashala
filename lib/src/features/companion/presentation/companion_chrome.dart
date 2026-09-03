@@ -14,7 +14,8 @@
 /// roles. The **geometry** is the phone's: heights come from [Touch] and
 /// [UiDensity], never from [Chrome], because a pointer's 30px row is not a
 /// target. Where a companion widget can also be hosted at pointer density —
-/// a fold-out, a landscape tablet — the density is asked rather than assumed.
+/// the shell previewed on a desktop — the density is asked rather than
+/// assumed.
 ///
 /// Width is the same kind of decision, taken here for the same reason: past
 /// the compact breakpoint every companion list would otherwise run its rows
@@ -50,8 +51,10 @@ const double companionReadableWidth = UiDensity.compactWidth;
 /// The room left either side of that column on this surface, or zero on a
 /// phone.
 ///
-/// Measured from the viewport, the same question [UiDensity.wrap] asks when it
-/// decides the density — one notion of "how wide is this surface", not two.
+/// Measured from the viewport, and the only thing here that is: width decides
+/// *measure* — how long a line of prose may run — and [UiDensity] decides how
+/// big a target must be. A tablet is wide and is still held in a hand, so it
+/// gets the gutter and keeps the 48dp rows.
 double companionGutterOf(BuildContext context) {
   final width = MediaQuery.sizeOf(context).width;
   return width <= companionReadableWidth
