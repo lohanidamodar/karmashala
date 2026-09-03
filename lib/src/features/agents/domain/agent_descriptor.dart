@@ -674,6 +674,7 @@ class AgentLaunchSpec {
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.missingConversation = const AgentMissingConversationRules(),
+    this.rejectedValue = const AgentRejectedValueRules.none(),
     this.fork = const AgentForkSupport.unsupported(),
     this.mcp = const AgentMcpSupport.unsupported(),
     this.model = const AgentModelSupport.unsupported(),
@@ -728,6 +729,12 @@ class AgentLaunchSpec {
   /// record of. Empty for an agent whose answer we have never seen, which
   /// resolves to "no explanation" rather than a guessed one.
   final AgentMissingConversationRules missingConversation;
+
+  /// What this agent prints when it is handed a flag value the **installed**
+  /// build does not have — the one post-mortem whose cause is a claim of ours
+  /// rather than a fact about the user's conversations. See
+  /// [AgentRejectedValueRules]. Empty by default.
+  final AgentRejectedValueRules rejectedValue;
 
   /// Whether this agent can start a new conversation from an existing one's
   /// history, and how. Defaults to [AgentForkStyle.unsupported].

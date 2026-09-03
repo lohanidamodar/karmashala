@@ -251,11 +251,34 @@ ContinuationPermission resolveContinuationPermission({
 /// auto-approves edits, and a review that fixed the thing it graded is not
 /// evidence of anything.
 ///
-/// **[PermissionRisk.readOnly] would now be expressible**, and would be the
-/// better cap — it separates *running* a command from *writing* a file, which
-/// the old three-value enum could not and which this comment used to name as
-/// the gap. It is not taken yet because what Claude Code's plan mode permits a
-/// reviewer to *run* has not been measured. See docs/BACKLOG.md.
+/// **[PermissionRisk.readOnly] is expressible, and it was measured, and it is
+/// not the better cap.** Claude Code 2.1.259 was asked directly, because the
+/// hoped-for property was that plan mode separates *running* a command from
+/// *writing* a file:
+///
+/// * `claude -p --permission-mode plan` ran `cat a.txt` with no prompt. In
+///   print mode an "ask" is a refusal, so that is a real allow.
+/// * The same run under `--permission-mode manual` allowed the same command,
+///   and both modes refused `touch` identically, with the same
+///   working-directory message. Plan is not the reason either way.
+/// * Asked to run a test script, plan answered *"blocked by the current
+///   session (This command requires approval)"* and manual answered *"requires
+///   your approval"*. The same answer in the same words.
+/// * In the 2.1.259 binary, **every** plan-mode permission decision is
+///   `behavior:"ask"` — file writes, memory saves, SendFile and non-read-only
+///   MCP tools — and none of the four is Bash. Plan mode never denies, and it
+///   holds no Bash gate at all. Its "no non-readonly tools" is a line in the
+///   system reminder: *"Plan mode is active… you MUST NOT make any edits, run
+///   any non-readonly tools… or otherwise make any changes to the system."*
+///
+/// So plan mode is not "read and run, never write"; at the enforcement layer it
+/// is [PermissionRisk.ask] with a prompt asking the model to behave, plus a
+/// workflow that ends in a plan for approval. Lowering the ceiling would buy no
+/// enforcement and would swap a reviewer for a planner — and, through the
+/// carry rule's "most permissive at or below", it would select `mode=plan` on
+/// Claude Code and `mode=plan` on Antigravity, not the `dontAsk` rung, whose
+/// auto-deny is the "reviewer that cannot run what it needs" failure outright.
+/// The gap this comment used to name is real; this rung does not close it.
 const PermissionRisk reviewPermissionCeiling = PermissionRisk.ask;
 
 /// What a review session will actually launch under, and whether the session it

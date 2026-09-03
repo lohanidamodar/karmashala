@@ -4,6 +4,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -45,19 +46,46 @@ const _noSuchConversation =
     'No conversation found with session ID: '
     '4b13c55e-ec74-4c0b-ac63-44747861aabd';
 
-const _exclusive = AgentDescriptor(
+/// Captured from codex-cli 0.151.0 on 2026-09-03 by running
+/// `codex --ask-for-approval untrusted --help`. `untrusted` is the value this
+/// really happened to: 0.145.0 has it, 0.151.0 does not, and only the newest
+/// set is declared — so an older machine gets a flag its binary refuses.
+///
+/// Two lines, verbatim, because the second one is where the whole message
+/// lives: the CLI names the entire valid set, which is what makes a readable
+/// answer possible at all.
+const _rejectedValueLines = [
+  "error: invalid value 'untrusted' for '--ask-for-approval "
+      "<APPROVAL_POLICY>'",
+  '  [possible values: on-request, never]',
+];
+
+/// The same refusal for the other axis, from `codex --sandbox bogus --help`.
+const _rejectedSandboxLines = [
+  "error: invalid value 'bogus' for '--sandbox <SANDBOX_MODE>'",
+  '  [possible values: read-only, workspace-write, danger-full-access]',
+];
+
+/// **The pattern the app actually ships**, not a copy of it. A test that
+/// declared its own regular expression would keep passing on the day the
+/// declared one stopped matching, which is the only day it matters.
+final _codexRejectedValue =
+    AgentRegistry.builtIn.byId(AgentIds.codex)!.launch.rejectedValue;
+
+final _exclusive = AgentDescriptor(
   id: 'exclusive',
   displayName: 'Exclusive Agent',
-  binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
+  binaries: const AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
   launch: AgentLaunchSpec(
     permission: testPermissionSupport,
-    interactiveResume: AgentResume.subcommand('resume'),
-    resumeConflict: AgentResumeConflictRules(
+    interactiveResume: const AgentResume.subcommand('resume'),
+    resumeConflict: const AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],
     ),
-    missingConversation: AgentMissingConversationRules(
+    missingConversation: const AgentMissingConversationRules(
       markers: [GridMatcher('No conversation found with session ID')],
     ),
+    rejectedValue: _codexRejectedValue,
   ),
 );
 
@@ -81,7 +109,7 @@ class _StaticSettings extends SettingsController {
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
-        const AgentRegistry([_exclusive]),
+        AgentRegistry([_exclusive]),
       ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
@@ -359,6 +387,106 @@ void main() {
     final where = h.container.read(sessionWhereaboutsProvider(id));
     expect(where.conversationMissing, isFalse);
     expect(where.refusedResume, isFalse);
+  });
+
+  group('a refused command-line value becomes a sentence', () {
+    test("the shipped pattern reads Codex's own refusal, wrapped or not", () {
+      // Unwrapped first, so a failure here is about the pattern rather than
+      // about the wrapping rule.
+      final plain = _codexRejectedValue.matchedBy(_rejectedValueLines)!;
+      expect(plain.value, 'untrusted');
+      expect(plain.flag, '--ask-for-approval');
+      expect(plain.alternatives, ['on-request', 'never']);
+      expect(plain.alternativesLabel, 'on-request, never');
+
+      // And as a narrow pane renders it: every line hard-wrapped at 24
+      // columns, so the wrap falls inside `--ask-for-approval` and inside
+      // `on-request`. This is the case the whitespace rule exists for, and the
+      // one a per-line match cannot see.
+      final wrapped = _codexRejectedValue.matchedBy([
+        for (final line in _rejectedValueLines) _wrapped(line, 24),
+      ])!;
+      expect(wrapped.value, 'untrusted');
+      expect(wrapped.flag, '--ask-for-approval');
+      expect(wrapped.alternatives, ['on-request', 'never']);
+    });
+
+    test('the other axis refuses in the same shape', () {
+      final sandbox = _codexRejectedValue.matchedBy(_rejectedSandboxLines)!;
+      expect(sandbox.value, 'bogus');
+      expect(sandbox.flag, '--sandbox');
+      expect(sandbox.alternatives, [
+        'read-only',
+        'workspace-write',
+        'danger-full-access',
+      ]);
+    });
+
+    test('the newest refusal wins, and ordinary output is not one', () {
+      // A pane can hold more than one dead launch. The one the user just made
+      // is the last, and it is the one the row has to describe.
+      final twice = _codexRejectedValue.matchedBy([
+        ..._rejectedSandboxLines,
+        '[process exited with code 2]',
+        ..._rejectedValueLines,
+      ])!;
+      expect(twice.value, 'untrusted');
+      expect(twice.flag, '--ask-for-approval');
+
+      expect(_codexRejectedValue.matchedBy(const []), isNull);
+      expect(
+        _codexRejectedValue.matchedBy(const [
+          'error: invalid value',
+          'Done. Bye!',
+        ]),
+        isNull,
+      );
+    });
+
+    test('an agent whose refusal nobody has read explains nothing', () {
+      // Claude Code's refusal has a different shape, and no installation here
+      // has ever been seen to disagree with what is declared for it. An
+      // undeclared pattern is "we cannot explain this", never a guess.
+      final claude =
+          AgentRegistry.builtIn.byId(AgentIds.claudeCode)!.launch.rejectedValue;
+      expect(claude.isEmpty, isTrue);
+      expect(claude.matchedBy(_rejectedValueLines), isNull);
+    });
+
+    test('a dead pane that never started says so, in the CLI\'s own '
+        'vocabulary', () async {
+      // The safety net for the permission axes being wrong about *this*
+      // binary: mode support belongs to the installation, and the app declares
+      // the newest set it has read. The user used to see the raw
+      // `error: invalid value …` and an agent that would not start.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final id = await launch(h.container);
+      final paneId = SessionDao(h.db).getById(id)!.paneId!;
+      writeToPane(
+        h.container,
+        paneId,
+        '${[for (final line in _rejectedValueLines) _wrapped(line, 24)].join()}'
+        '[process exited with code 2]\r\n',
+      );
+      killProcess(h.container, paneId);
+      h.container.invalidate(sessionWhereaboutsProvider(id));
+
+      final where = h.container.read(sessionWhereaboutsProvider(id));
+      expect(where.rejectedValue?.value, 'untrusted');
+      expect(where.note, "would not start — no 'untrusted' in this build");
+      // The two things the raw stderr never told the user: which of their
+      // choices was refused, and what this installation has instead.
+      expect(where.explanation, contains("'untrusted'"));
+      expect(where.explanation, contains('on-request, never'));
+      // It died reading its command line, so it never had an opinion about the
+      // conversation. Neither resume answer may be claimed from this pane.
+      expect(where.refusedResume, isFalse);
+      expect(where.conversationMissing, isFalse);
+      expect(where.knownHeldElsewhere, isFalse);
+    });
   });
 
   test('a status with no source contributes no age', () {
