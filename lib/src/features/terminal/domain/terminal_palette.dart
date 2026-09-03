@@ -1,5 +1,5 @@
 import 'package:flutter/painting.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// The 16 ANSI slots, in the order every terminal theme format numbers them.
 const kAnsiPaletteSize = 16;

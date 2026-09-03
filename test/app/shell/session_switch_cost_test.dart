@@ -28,7 +28,7 @@ import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';

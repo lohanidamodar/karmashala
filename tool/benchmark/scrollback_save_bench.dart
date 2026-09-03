@@ -3,7 +3,7 @@ import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../test/terminal/perf/corpora.dart';
 

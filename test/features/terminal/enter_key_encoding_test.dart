@@ -1,6 +1,6 @@
 import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/core.dart';
+import 'package:xterm2/core.dart';
 
 /// What a modified `Enter` actually puts on the wire.
 ///
@@ -129,10 +129,12 @@ void main() {
 
 /// A modifier-reporting *request* is not a colour change.
 ///
-/// `CSI > 4 ; 2 m` (xterm's `modifyOtherKeys`) reached the vendored parser's SGR
-/// handler, which ignored the `>` prefix and applied SGR 4 and SGR 2. Any
-/// program that asked whether it could have real modifiers left the pane
-/// underlined and faint. See `packages/xterm/VENDORED.md`.
+/// `CSI > 4 ; 2 m` (xterm's `modifyOtherKeys`) used to reach the old vendored
+/// parser's SGR handler, which ignored the `>` prefix and applied SGR 4 and
+/// SGR 2. Any program that asked whether it could have real modifiers left the
+/// pane underlined and faint. xterm2 routes prefixed CSI sequences away from
+/// SGR itself, so this is now a gate on the dependency rather than on a
+/// divergence of ours.
 void _prefixedSgrIsNotSgr() {
   test('a prefixed CSI m does not change the graphic rendition', () {
     for (final probe in ['\x1b[>4;2m', '\x1b[>4m', '\x1b[>1m', '\x1b[?4m']) {

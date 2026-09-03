@@ -1,4 +1,4 @@
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Plain text of the **bottom** [lines] rows of what is currently on screen.
 ///

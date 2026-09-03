@@ -1,4 +1,4 @@
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../domain/command_blocks.dart';
 import '../domain/osc_router.dart';

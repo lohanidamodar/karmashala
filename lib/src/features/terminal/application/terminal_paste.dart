@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// What `Ctrl+V` sends when there is nothing to paste: the key itself.
 const String kPasteKeyToProgram = '\x16';

@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../test/features/terminal/fake_instance.dart';
 import '../../test/terminal/perf/corpora.dart';

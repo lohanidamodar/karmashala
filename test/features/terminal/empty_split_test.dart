@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
 

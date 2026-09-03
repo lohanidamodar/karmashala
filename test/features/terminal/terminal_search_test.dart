@@ -1,6 +1,6 @@
 import 'package:karmashala/src/features/terminal/domain/terminal_search.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 Terminal terminalWith(String data, {int width = 40}) {
   final terminal = Terminal(maxLines: 100)..resize(width, 10);

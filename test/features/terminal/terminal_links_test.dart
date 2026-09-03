@@ -1,6 +1,6 @@
 import 'package:karmashala/src/features/terminal/domain/terminal_links.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Link detection in terminal output.
 ///

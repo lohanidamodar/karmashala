@@ -1,7 +1,7 @@
 import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
 import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 Terminal blank({int width = 40, int height = 10}) =>
     Terminal(maxLines: 5000)..resize(width, height);

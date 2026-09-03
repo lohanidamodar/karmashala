@@ -1,7 +1,7 @@
 import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
 import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Parking is what makes a detached pane cost the screen rather than the whole
 /// scrollback. It has to give the memory back for real, and it has to give the

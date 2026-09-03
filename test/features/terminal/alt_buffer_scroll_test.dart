@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/domain/mouse_wheel_reporter.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Switch to the alternate screen buffer, which is where tmux, vim, less and
 /// htop all live. It has no scrollback, so a wheel event has to become

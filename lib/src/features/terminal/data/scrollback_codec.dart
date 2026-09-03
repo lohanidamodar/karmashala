@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../domain/scrollback_limits.dart';
 

@@ -1,4 +1,4 @@
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// The viewport the budgets in the spec are stated against: a maximised
 /// terminal on a 1440p display.

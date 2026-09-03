@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// What the VT parser must make of a stream of code points, pinned character by
 /// character.
@@ -14,10 +14,18 @@ import 'package:xterm/xterm.dart';
 /// cut in half by a chunk boundary.
 ///
 /// Every expectation here was captured against the `String.runes`
-/// implementation first and is unchanged by the rewrite — including the two
-/// cases where the old behaviour is merely *defined* rather than ideal (a
-/// surrogate pair split across two writes stays split), because a performance
-/// change is not the place to alter what the terminal displays.
+/// implementation first and was unchanged by that rewrite — including the two
+/// cases where the old behaviour was merely *defined* rather than ideal,
+/// because a performance change is not the place to alter what the terminal
+/// displays.
+///
+/// Moving off the vendored xterm 4.0.0 onto xterm2 *is* such a place, and it
+/// fixed both of them: a surrogate pair split across two writes is now rejoined
+/// into the one character it spells, and a combining mark now attaches to the
+/// character it modifies instead of consuming a column of its own. Both
+/// assertions below were rewritten to the new answers, which are the ones a
+/// terminal is supposed to give; each says what it used to give and why the new
+/// one is better.
 void main() {
   // `maxLines` above the 24-row default a `Terminal` starts at: the `Buffer` is
   // built from the view height it finds at construction, and a ring smaller
@@ -73,33 +81,44 @@ void main() {
       ]);
     });
 
-    test('a lead surrogate at the very end of a chunk is not held back', () {
-      // The halves arrive in different writes, so neither one can see the
-      // other. Both implementations emit two lone surrogates rather than
-      // buffering the first — the app's own chunked UTF-8 decoder is what stops
-      // a character being split here in the first place.
+    test('a surrogate pair split across two writes is put back together', () {
+      // The halves arrive in different writes. The vendored xterm 4.0.0 emitted
+      // two lone surrogates in two cells; xterm2 carries the lead over to the
+      // next chunk, so the pane shows the one character that was sent rather
+      // than two replacement glyphs. (The app's own chunked UTF-8 decoder
+      // already made this rare — it is the parser's last line of defence.)
       final t = terminal()
         ..write('a${String.fromCharCode(0xD83D)}')
         ..write('${String.fromCharCode(0xDE00)}b');
       expect(codePoints(t), [
         'a'.codeUnitAt(0),
-        0xD83D,
-        0xDE00,
+        0x1F600,
+        // Two columns wide, exactly as when it is written whole.
+        0,
         'b'.codeUnitAt(0),
         0,
         0,
       ]);
     });
 
-    test('a combining mark keeps its own cell', () {
+    test('a combining mark joins the cell it modifies', () {
+      // The vendored xterm 4.0.0 gave U+0301 a column of its own, which pushed
+      // every character after it one cell right of where the emitting program
+      // put it. xterm2 attaches it to the base character, so `f` lands in
+      // column 1 and the mark is still in the text.
       final t = terminal()..write('e\u0301f');
       expect(codePoints(t), [
         'e'.codeUnitAt(0),
-        0x0301,
         'f'.codeUnitAt(0),
         0,
         0,
         0,
+        0,
+      ]);
+      expect(t.buffer.lines[0].getText(0, 2).runes, [
+        'e'.codeUnitAt(0),
+        0x0301,
+        'f'.codeUnitAt(0),
       ]);
     });
 

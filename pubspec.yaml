@@ -65,9 +65,13 @@ dependencies:
   # The relay client transport for the mobile companion.
   web_socket_channel: ^3.0.3
   window_manager: ^0.5.1
-  # Vendored fork — see packages/xterm/VENDORED.md.
-  xterm:
-    path: packages/xterm
+  # Our fork of xterm2 — see https://github.com/lohanidamodar/xterm2 (branch
+  # `karmashala`), whose KARMASHALA.md documents every divergence from upstream
+  # and how to rebase them. Pinned to a commit, not the branch: the branch moves.
+  xterm2:
+    git:
+      url: https://github.com/lohanidamodar/xterm2.git
+      ref: d6a3ca67687258a6c130c400a604e2dc0ff0940a
   yaml: ^3.1.4
 
 # Dart-only stand-ins for the two Windows plugin implementations, whose C++

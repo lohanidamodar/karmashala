@@ -37,7 +37,7 @@ import 'package:karmashala/src/features/terminal/data/system_terminal_service.da
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:path/path.dart' as p;
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';

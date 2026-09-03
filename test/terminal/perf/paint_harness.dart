@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/painting.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'counting_canvas.dart';
 
@@ -14,8 +14,9 @@ TerminalPainter makePainter() => TerminalPainter(
 
 /// Paints every visible line of [terminal] once onto [canvas].
 ///
-/// With [perCell] the original one-draw-call-per-cell loop is used; otherwise
-/// the run-batched [TerminalPainter.paintLine].
+/// With [perCell] the painter's run batching is switched off, so
+/// [TerminalPainter.paintLine] falls back to the original
+/// one-draw-call-per-cell loop; otherwise the run-batched path is used.
 void paintViewport(
   TerminalPainter painter,
   Canvas canvas,
@@ -24,17 +25,17 @@ void paintViewport(
 }) {
   painter.beginFrame();
   final lines = terminal.buffer.lines;
+  // `cellSize` first: the font probe is lazy, and probing is what sets
+  // `runBatchingEnabled`, so writing it before this read would be overwritten.
   final height = painter.cellSize.height;
+  // xterm2 has no separate `paintLinePerCell`; turning run batching off makes
+  // `paintLine` take the same one-draw-call-per-cell path.
+  if (perCell) painter.runBatchingEnabled = false;
   final count = terminal.viewHeight < lines.length
       ? terminal.viewHeight
       : lines.length;
   for (var i = 0; i < count; i++) {
-    final offset = Offset(0, i * height);
-    if (perCell) {
-      painter.paintLinePerCell(canvas, offset, lines[i]);
-    } else {
-      painter.paintLine(canvas, offset, lines[i]);
-    }
+    painter.paintLine(canvas, Offset(0, i * height), lines[i]);
   }
 }
 
@@ -42,7 +43,7 @@ void paintViewport(
 /// background on the line first, then every glyph.
 ///
 /// This is the reference the batched painter is actually held to, and the
-/// distinction is not a technicality. `paintLinePerCell` interleaves — cell 0's
+/// distinction is not a technicality. The per-cell path interleaves — cell 0's
 /// background, cell 0's glyph, cell 1's background, cell 1's glyph — so each
 /// cell's background rect paints over whatever the *previous* glyph spilled
 /// past its cell. The batched painter cannot interleave: merging a run of

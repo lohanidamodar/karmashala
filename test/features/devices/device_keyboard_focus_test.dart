@@ -23,7 +23,7 @@ import 'package:karmashala/src/core/widgets/keyboard_capture.dart';
 import 'package:karmashala/src/features/devices/data/device_keyboard_sink.dart';
 import 'package:karmashala/src/features/devices/domain/device_keyboard.dart';
 import 'package:karmashala/src/features/devices/presentation/device_keyboard_surface.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 class _RecordingSink implements DeviceKeyboardSink {
   final List<DeviceKeyIntent> sent = [];

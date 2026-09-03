@@ -3,7 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../core/util/clock_provider.dart';
@@ -96,19 +96,18 @@ import '../domain/terminal_links.dart';
 /// without running a regex at all. Reading the transcript is a *click's* cost;
 /// no hover ever pays it.
 ///
-/// The underline itself is xterm's own [TerminalController.highlight], the same
-/// mechanism find-in-scrollback uses: it is anchored to the buffer, so it stays
-/// on its text as output scrolls, and there is at most one of them.
+/// The underline itself is xterm's own [TerminalController.underline]: it is
+/// anchored to the buffer, so it stays on its text as output scrolls, and there
+/// is at most one of them.
 ///
 /// ## OSC 8 is not honoured yet
 ///
-/// The vendored fork drops `OSC 8` hyperlinks at `unknownOSC` — the escape is
-/// consumed, so the label still renders, but no link is recorded. Honouring it
-/// means carrying a hyperlink id on every cell, which changes `BufferLine`'s
-/// packed stride and everything that walks it (reflow, snapshot, the batched
-/// painter and its pixel goldens). Out of proportion to the gain here: an agent
-/// that emits `OSC 8` almost always uses the URL itself as the label, and that
-/// is detected by the text scan below.
+/// xterm2 does record `OSC 8` hyperlinks — the parser calls `setHyperlink` and
+/// the painter takes an `activeHyperlinkId` — but nothing here reads them yet,
+/// so a hyperlinked label is still found only by the text scan below. That is a
+/// gap to close rather than a limitation of the dependency; it costs nothing in
+/// practice today, because an agent that emits `OSC 8` almost always uses the
+/// URL itself as the label.
 class TerminalPaneView extends ConsumerStatefulWidget {
   const TerminalPaneView({
     required this.instance,
@@ -219,7 +218,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   _ImageRefSpan? _imageRef;
 
   CellOffset? _lastCell;
-  TerminalHighlight? _highlight;
+  TerminalUnderline? _highlight;
 
   /// Whether the link modifier is down. Detection does nothing until it is.
   bool _modifier = false;
@@ -476,13 +475,14 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   void _highlightSpan(int startRow, int startColumn, int endRow, int endColumn) {
     _highlight?.dispose();
     final buffer = widget.instance.terminal.buffer;
-    _highlight = widget.instance.controller.highlight(
+    // A rule under the text, not a wash over it: the link has to stay as
+    // readable as the output around it. `underline` is xterm2's own API for
+    // exactly that; the vendored fork got there by bolting a flag onto
+    // `highlight`.
+    _highlight = widget.instance.controller.underline(
       p1: buffer.createAnchor(startColumn, startRow),
       p2: buffer.createAnchor(endColumn, endRow),
-      // A rule under the text, not a wash over it: the link has to stay as
-      // readable as the output around it.
       color: Theme.of(context).colorScheme.primary,
-      underline: true,
     );
   }
 

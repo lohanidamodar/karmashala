@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/core.dart';
+import 'package:xterm2/core.dart';
 
 /// Benchmark — NOT part of `flutter test`'s default run. It lives under `tool/`
 /// so discovery never picks it up. Run it on demand:

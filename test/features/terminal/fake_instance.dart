@@ -22,7 +22,7 @@ import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_profiles.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
@@ -49,6 +49,9 @@ class FakeTerminalInstance
     // slot and fans it out, so a test can write OSC 7 and OSC 133 at the same
     // buffer and have both land.
     terminal.onPrivateOSC = _osc.dispatch;
+    // ...including the second door OSC 7 now comes through: xterm2 consumes it
+    // rather than reporting it as an unknown OSC.
+    terminal.onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
     _osc.add(_cwd.handleOsc);
     // Attached on the same condition a real pane attaches it, so a test can
     // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —

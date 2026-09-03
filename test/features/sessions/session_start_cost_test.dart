@@ -25,7 +25,7 @@ import 'package:karmashala/src/features/environments/domain/environment_path.dar
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

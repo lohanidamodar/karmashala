@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../domain/agent_pane_launch.dart';
 import '../domain/enter_key_encoding.dart';
@@ -281,8 +281,9 @@ class PtyTerminalInstance
     // one. Handlers are set either way rather than only on the fresh path: the
     // two are the same values, and a branch here is a branch that can drift.
     terminal = (adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines))
-      // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
-      // tmux (and anything else reading the modifier bits) from scrolling.
+      // The wheel's button ids, which stock xterm 4.0.0 got wrong badly enough
+      // to stop tmux scrolling — see [KarmashalaMouseHandler], which xterm2 now
+      // agrees with rather than needing.
       ..mouseHandler = const KarmashalaMouseHandler()
       // ...and encodes every modified Enter as a bare CR, so Shift+Enter is
       // indistinguishable from submit.
@@ -291,7 +292,15 @@ class PtyTerminalInstance
       // out, because two unrelated things read it — OSC 133 command blocks,
       // which exist only with shell integration on, and the OSC 7 working
       // directory, which must work either way.
-      ..onPrivateOSC = _osc.dispatch;
+      ..onPrivateOSC = _osc.dispatch
+      // xterm2 consumes OSC 7 itself rather than passing it on as an unknown
+      // OSC, so the directory arrives here instead. Re-shaped into the pair the
+      // router already carries — the payload is what `_osc.sublist(1)` would
+      // have joined to — so nothing downstream has to know which door it came
+      // through. (`OSC 9 ; 9` lands here too, carrying a bare path rather than
+      // a `file:` URI; `workingDirectoryFromOsc` declines it, which leaves the
+      // directory as it was.)
+      ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
     // Registered before the process starts, so no sequence can be missed. The
     // directory listens unconditionally: plenty of shells emit OSC 7 with no
     // help from us, and integration is about OSC 133.

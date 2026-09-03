@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_search.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
 

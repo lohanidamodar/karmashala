@@ -42,7 +42,7 @@
 /// `ESC CR` already works with Claude Code unconfigured.
 library;
 
-import 'package:xterm/core.dart';
+import 'package:xterm2/core.dart';
 
 /// `ESC` followed by carriage return: the meta-prefixed `Enter`.
 const kEscapeEnter = '\x1b\r';

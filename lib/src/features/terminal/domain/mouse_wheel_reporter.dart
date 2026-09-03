@@ -14,13 +14,19 @@
 /// Verified against real tmux 3.7b: sending `CSI < 64 ; x ; y M` puts the pane
 /// into copy-mode (it scrolls); sending `CSI < 68 ; x ; y M` does nothing.
 ///
-/// This lives in our code rather than in the vendored package because
+/// This lives in our code rather than in the package because
 /// `Terminal.mouseHandler` is injectable, so the fix costs no divergence. Only
 /// the wheel is reimplemented — every other button is delegated straight back to
 /// the package's own handler, which is correct.
+///
+/// NOTE: xterm2 carries the corrected ids itself (`TerminalMouseButton.wheelUp`
+/// is 64 there, not 68), so since the move off the vendored xterm 4.0.0 this
+/// handler agrees with the package rather than correcting it. It is kept
+/// because the tests below are the only thing pinning the wire format, and
+/// removing it is a change of its own.
 library;
 
-import 'package:xterm/core.dart';
+import 'package:xterm2/core.dart';
 
 /// Wheel button ids per the xterm spec, keyed by the package's enum.
 const _wheelIds = <TerminalMouseButton, int>{
@@ -62,6 +68,12 @@ class KarmashalaMouseHandler implements TerminalMouseHandler {
     switch (event.state.mouseReportMode) {
       case MouseReportMode.sgr:
         return '\x1b[<$wheelId;$x;${y}M';
+      case MouseReportMode.sgrPixels:
+        // SGR's encoding, reporting pixel offsets instead of cells (DECSET
+        // 1016). The package falls back to the cell offset when the view did
+        // not supply pixels, and so do we.
+        final pixel = event.pixelPosition ?? event.position;
+        return '\x1b[<$wheelId;${pixel.x + 1};${pixel.y + 1}M';
       case MouseReportMode.urxvt:
         return '\x1b[${32 + wheelId};$x;${y}M';
       case MouseReportMode.normal:

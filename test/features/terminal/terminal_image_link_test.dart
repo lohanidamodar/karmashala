@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import '../media/session_media_fixture.dart';
 import 'fake_instance.dart';
@@ -178,8 +178,10 @@ void main() {
 
       await pressCtrl(tester);
 
-      final highlight = instance.controller.highlights.single;
-      expect(highlight.underline, isTrue);
+      final highlight = instance.controller.underlines.single;
+      // A rule, not a wash: it is an underline the controller carries, and
+      // nothing was added to the filled `highlights` list.
+      expect(instance.controller.highlights, isEmpty);
       // Exactly `[Image #6]`, which starts at column 3 and is 10 cells long.
       expect(highlight.range!.begin, const CellOffset(3, 0));
       expect(highlight.range!.end, const CellOffset(13, 0));
@@ -197,7 +199,7 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(find.textContaining('click to'), findsNothing);
       expect(cursor(tester), SystemMouseCursors.text);
       expect(lookup.asked, isEmpty);
@@ -207,11 +209,11 @@ void main() {
       final instance = await pumpWithOutput(tester, 'ok [Image #6] pasted');
       await hover(tester, centreOfCell(tester, 6, 0));
       await pressCtrl(tester);
-      expect(instance.controller.highlights, hasLength(1));
+      expect(instance.controller.underlines, hasLength(1));
 
       await releaseCtrl(tester);
 
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(cursor(tester), SystemMouseCursors.text);
     });
 
@@ -227,7 +229,7 @@ void main() {
 
       await pressCtrl(tester);
 
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(cursor(tester), SystemMouseCursors.text);
       expect(find.textContaining('click to'), findsNothing);
     });

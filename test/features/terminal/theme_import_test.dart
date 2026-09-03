@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/terminal/data/warp_theme.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 String _fixture(String name) =>
     File('test/features/terminal/fixtures/$name').readAsStringSync();

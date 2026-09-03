@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// End-to-end proof of keep-alive and restore against **real ConPTY processes**
 /// and a **real SQLite file** — the two things a fake can always be made to

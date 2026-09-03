@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/terminal/data/command_block_recorder.dar
 import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
 import 'package:karmashala/src/features/terminal/data/command_run_watch.dart';
 import 'package:karmashala/src/features/terminal/domain/command_blocks.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// The byte stream a *real* PowerShell 5.1 produced under
 /// `powerShellIntegrationScript()`, captured verbatim — the same fixture

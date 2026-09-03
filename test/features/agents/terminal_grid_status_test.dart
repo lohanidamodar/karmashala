@@ -6,7 +6,7 @@ import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// Renders [fraction] of a captured PTY stream through a real VT parser and
 /// classifies the bottom of the resulting screen.

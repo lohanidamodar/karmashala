@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
 import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// A detached pane must not go blind just because nobody has a tab open on it.
 ///

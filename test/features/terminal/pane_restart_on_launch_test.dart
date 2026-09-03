@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_restart.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
 

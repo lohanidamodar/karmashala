@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
 
@@ -170,7 +170,7 @@ void main() {
         isEmpty,
         reason: 'the seam is never reached with the modifier up',
       );
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(find.textContaining('click to'), findsNothing);
       expect(cursor(tester), SystemMouseCursors.text);
     });
@@ -184,8 +184,12 @@ void main() {
 
       await pressCtrl(tester);
 
-      final highlight = instance.controller.highlights.single;
-      expect(highlight.underline, isTrue, reason: 'a rule, not a wash');
+      final highlight = instance.controller.underlines.single;
+      expect(
+        instance.controller.highlights,
+        isEmpty,
+        reason: 'a rule, not a wash',
+      );
       // Exactly `lib/main.dart`, which starts at column 5 and is 13 long.
       expect(highlight.range!.begin, const CellOffset(5, 0));
       expect(highlight.range!.end, const CellOffset(18, 0));
@@ -198,11 +202,11 @@ void main() {
       actions.exists[resolvedMain] = TerminalPathKind.file;
       await hover(tester, centreOfCell(tester, 8, 0));
       await pressCtrl(tester);
-      expect(instance.controller.highlights, hasLength(1));
+      expect(instance.controller.underlines, hasLength(1));
 
       await releaseCtrl(tester);
 
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(find.textContaining('click to'), findsNothing);
       expect(cursor(tester), SystemMouseCursors.text);
     });
@@ -218,7 +222,7 @@ void main() {
 
       await pressCtrl(tester);
 
-      expect(instance.controller.highlights, hasLength(1));
+      expect(instance.controller.underlines, hasLength(1));
     });
 
     testWidgets('a word that is not a path underlines nothing', (tester) async {
@@ -227,7 +231,7 @@ void main() {
 
       await pressCtrl(tester);
 
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(actions.probed, isEmpty, reason: 'no separator, so no candidate');
       expect(cursor(tester), SystemMouseCursors.text);
     });
@@ -237,12 +241,12 @@ void main() {
       actions.exists[resolvedMain] = TerminalPathKind.file;
       final mouse = await hover(tester, centreOfCell(tester, 8, 0));
       await pressCtrl(tester);
-      expect(instance.controller.highlights, hasLength(1));
+      expect(instance.controller.underlines, hasLength(1));
 
       await mouse.moveTo(centreOfCell(tester, 1, 0));
       await tester.pumpAndSettle();
 
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
     });
   });
 
@@ -322,7 +326,7 @@ void main() {
       await pressCtrl(tester);
 
       expect(actions.probed, [r'C:\src\app\lib\gone.dart']);
-      expect(instance.controller.highlights, isEmpty);
+      expect(instance.controller.underlines, isEmpty);
       expect(cursor(tester), SystemMouseCursors.text);
 
       await ctrlClick(tester, mouse, target);

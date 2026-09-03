@@ -1,6 +1,6 @@
 import 'package:karmashala/src/features/terminal/domain/mouse_wheel_reporter.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 /// tmux's `set -g mouse on` turns on VT200 tracking plus SGR encoding.
 const _vt200Mouse = '\x1b[?1000h';

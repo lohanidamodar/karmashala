@@ -18,7 +18,7 @@
 /// and never during a scan.
 library;
 
-import 'package:xterm/xterm.dart';
+import 'package:xterm2/xterm.dart';
 
 import 'terminal_search.dart';
 
