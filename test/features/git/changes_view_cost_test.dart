@@ -1,11 +1,19 @@
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/review_threads.dart';
 import 'package:karmashala/src/features/git/domain/file_change.dart';
 import 'package:karmashala/src/features/git/domain/git_commit.dart';
+import 'package:karmashala/src/features/git/domain/git_worktree.dart';
 import 'package:karmashala/src/features/git/domain/remote_repo.dart';
 import 'package:karmashala/src/features/git/domain/review_thread.dart';
 import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
@@ -13,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 /// **What one provider moving costs the file list.**
@@ -35,10 +44,15 @@ import '../../support/fixtures.dart';
 /// | a pull request appearing   |                      6 |     0 |
 /// | a review thread arriving   |                      6 |     0 |
 /// | selecting a session        |                      6 |     0 |
+/// | the worktree list arriving |                      6 |     0 |
 /// | the changes themselves     |                      6 |     6 |
+/// | reading another worktree   |                      – |     6 |
 ///
-/// The last row is the control: the list still repaints when the thing it
-/// draws moves, so a zero above cannot be bought by drawing nothing.
+/// The last two rows are the control: the list still repaints when the thing it
+/// draws moves, so a zero above cannot be bought by drawing nothing. The
+/// worktree rows are Loop 73's: the header gained a picker, and a picker that
+/// repainted every open diff whenever `git worktree list` answered would undo
+/// what the rest of this file measures.
 void main() {
   const paths = [
     'lib/main.dart',
@@ -84,12 +98,20 @@ void main() {
     ReviewThreadAttachment.attached,
   );
 
+  const worktreePath = r'C:\src\demo\wt\agent-a';
+  const worktree = GitWorktree(
+    path: EnvironmentPath(environmentId: 'windows', path: worktreePath),
+    branch: 'agent-a',
+  );
+
   /// Everything the panel reads, held where a test can move one of them and
   /// leave the rest exactly as they were.
   late List<FileChange> changes;
   late List<GitCommit> commits;
   late SessionDelivery delivery;
   late ReviewThreadIndex threads;
+  late List<GitWorktree> worktrees;
+  late AppDatabase db;
 
   setUp(() {
     changes = files;
@@ -100,14 +122,29 @@ void main() {
       remote: RemoteRepo(host: 'github.com', slug: 'o/r'),
     );
     threads = ReviewThreadIndex.empty;
+    worktrees = const [worktree];
+    // A real row behind the selection, because the header's picker resolves the
+    // checkout it offers to return to.
+    db = AppDatabase.memory();
+    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    ProjectDao(db).insert(project());
+    RepositoryDao(db).insert(repository());
   });
+  tearDown(() => db.close());
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
+        databaseProvider.overrideWithValue(db),
         selectedRepositoryIdProvider.overrideWith(_FixedRepository.new),
-        repositoryChangesProvider.overrideWith((ref) async => changes),
+        repositoryChangesProvider.overrideWith((ref) async {
+          // Watched, so "reading another worktree" reaches the list the way it
+          // does in the app rather than by invalidating it by hand.
+          ref.watch(viewedCheckoutProvider);
+          return changes;
+        }),
         recentCommitsProvider.overrideWith((ref) async => commits),
+        repoWorktreesProvider.overrideWith((ref) async => worktrees),
         repositoryDeliveryProvider.overrideWith((ref, _) async => delivery),
         repositoryReviewThreadsProvider.overrideWith((ref) async => threads),
       ],
@@ -214,6 +251,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(ChangesView.debugFileRowBuildCount, 0);
+  });
+
+  testWidgets('the worktree list arriving costs the file list nothing', (
+    tester,
+  ) async {
+    // The picker in the header is the only thing that reads it, and a worktree
+    // appearing or disappearing is constant on this machine.
+    final container = await pump(tester);
+
+    worktrees = const [
+      worktree,
+      GitWorktree(
+        path: EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\src\demo\wt\agent-b',
+        ),
+        branch: 'agent-b',
+      ),
+    ];
+    container.invalidate(repoWorktreesProvider);
+    await tester.pumpAndSettle();
+
+    expect(ChangesView.debugFileRowBuildCount, 0);
+  });
+
+  testWidgets('reading another worktree repaints every row exactly once', (
+    tester,
+  ) async {
+    // The other control. Browsing is a view state, but it is the view state
+    // that decides which tree the rows came from, so it has to reach them.
+    final container = await pump(tester);
+
+    container
+        .read(worktreeBrowsingProvider.notifier)
+        .browse(
+          const WorktreeBrowse(
+            repositoryId: 'r1',
+            path: EnvironmentPath(
+              environmentId: 'windows',
+              path: worktreePath,
+            ),
+            branch: 'agent-a',
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    expect(
+      ChangesView.debugFileRowBuildCount,
+      files.length,
+      reason: 'one build per row, and no repeats',
+    );
   });
 
   testWidgets('...but the changes themselves still repaint every row', (

@@ -1,6 +1,7 @@
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/domain/file_change.dart';
 import 'package:karmashala/src/features/git/domain/git_commit.dart';
+import 'package:karmashala/src/features/git/domain/git_worktree.dart';
 import 'package:karmashala/src/features/git/domain/remote_repo.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -11,6 +12,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // A clone with no worktrees: the header's picker has nothing to offer and
+  // draws nothing, which is what every case below expects to see.
+  final noWorktrees = repoWorktreesProvider.overrideWith(
+    (ref) async => const <GitWorktree>[],
+  );
+
   Future<void> pump(
     WidgetTester tester, {
     required List<FileChange> files,
@@ -20,6 +27,7 @@ void main() {
     return tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noWorktrees,
           repositoryChangesProvider.overrideWith((ref) async => files),
           recentCommitsProvider.overrideWith((ref) async => commits),
           selectedRepositoryIdProvider.overrideWith(
@@ -80,6 +88,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          noWorktrees,
+          // No workspace behind this one: the selection is a stub rather than a
+          // row, so the checkout it would resolve to is stated instead of read.
+          // The picker itself is covered by `worktree_browse_test.dart`.
+          selectedCheckoutPathProvider.overrideWithValue(null),
           repositoryChangesProvider.overrideWith((ref) async => const []),
           recentCommitsProvider.overrideWith(
             (ref) async => const [

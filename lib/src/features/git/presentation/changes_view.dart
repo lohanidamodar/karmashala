@@ -14,6 +14,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
 import 'diff_line_tile.dart';
 import 'remote_link.dart';
+import 'worktree_browse.dart';
 import '../domain/diff_line.dart';
 import '../domain/review_thread.dart';
 import '../domain/file_change.dart';
@@ -53,6 +54,13 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
           icon: AppIcons.gitDiff,
           title: 'Changes',
           actions: [
+            // Which worktree is being read, and the only control that changes
+            // it. A view state: the session's checkout is moved from the
+            // Repository pane, deliberately and by another verb.
+            //
+            // Flexible for the same reason as the links beside it — a worktree
+            // branch is as long as an agent's name, and this header is 226px.
+            const Flexible(child: WorktreeBrowsePicker()),
             // Flexible, so a long branch name in a narrow panel ellipsises
             // rather than overflowing — this header sits in a side panel that
             // can be dragged down to 240px.
@@ -67,6 +75,7 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
             const _SendReviewThreadsButton(),
           ],
         ),
+        const WorktreeBrowseNotice(),
         Expanded(
           child: _ChangedFiles(
             expanded: _expanded,
@@ -101,6 +110,13 @@ class _DeliveryLinks extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    // The branch and the pull request are the *selected checkout's*, and while
+    // another worktree is being read they would label it with somebody else's
+    // work. The picker beside this names the worktree instead; the head commit
+    // stays, because the commit log follows the tree being read.
+    final browsing = ref.watch(
+      browsedWorktreeProvider.select((browse) => browse != null),
+    );
     final delivery = repositoryId == null
         ? null
         : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
@@ -113,7 +129,7 @@ class _DeliveryLinks extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (delivery?.branch case final branch?) ...[
+        if (delivery?.branch case final branch? when !browsing) ...[
           const SizedBox(width: Insets.sm),
           Flexible(
             child: RemoteLink(
@@ -136,7 +152,7 @@ class _DeliveryLinks extends ConsumerWidget {
             ),
           ),
         ],
-        if (delivery?.pullRequest case final pr?) ...[
+        if (delivery?.pullRequest case final pr? when !browsing) ...[
           const SizedBox(width: Insets.sm),
           Flexible(
             child: RemoteLink(

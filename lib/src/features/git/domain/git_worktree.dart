@@ -21,6 +21,13 @@ class GitWorktree {
   /// Whether this is the bare repository entry.
   final bool isBare;
 
+  /// The directory's own name — the only short thing a detached worktree can
+  /// be listed under.
+  String get name => lastPathSegment(path.path);
+
+  /// What to call this worktree in a list: its branch, or its folder.
+  String get label => branch ?? name;
+
   @override
   bool operator ==(Object other) =>
       other is GitWorktree &&
@@ -34,4 +41,16 @@ class GitWorktree {
 
   @override
   String toString() => 'GitWorktree(${path.path}, branch: $branch)';
+}
+
+/// The last segment of [path], whichever separator it was written with.
+///
+/// Split by hand rather than with `p.basename`: a Windows path is read on a
+/// POSIX host in tests, and there `p.basename` returns the whole string.
+String lastPathSegment(String path) {
+  final segments = path
+      .replaceAll(r'\', '/')
+      .split('/')
+      .where((segment) => segment.isNotEmpty);
+  return segments.isEmpty ? path : segments.last;
 }
