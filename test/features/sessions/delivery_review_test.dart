@@ -157,7 +157,7 @@ void main() {
 
     // The case the strip was given a verdict for: it can now say the record is
     // empty, and the button beside it is what fills the gap.
-    expect(find.text('No check recorded'), findsOneWidget);
+    expect(find.text('Not checked'), findsOneWidget);
     expect(find.text('Check this'), findsOneWidget);
   });
 
@@ -231,7 +231,7 @@ void main() {
     await pump(tester);
 
     // The verdict still draws — the gap in the record is a fact either way.
-    expect(find.text('No check recorded'), findsOneWidget);
+    expect(find.text('Not checked'), findsOneWidget);
     expect(find.text('Check this'), findsNothing);
     expect(find.text('Check again'), findsNothing);
     expect(find.byIcon(AppIcons.listMagnifyingGlass), findsNothing);
