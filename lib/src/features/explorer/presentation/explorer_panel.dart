@@ -518,7 +518,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     return PaneScaffold(
       title: 'Explorer',
-      icon: AppIcons.treeStructure,
+      // No glyph: the title-bar toggle draws this pane's mark 30px above, in
+      // the same column — see [PaneHeader.icon].
       focused: focused,
       actions: [
         _HeaderActions(

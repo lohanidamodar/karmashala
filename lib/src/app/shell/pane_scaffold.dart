@@ -46,15 +46,24 @@ class PaneCloseAction extends InheritedWidget {
 /// it was the one piece of the shape a site could silently forget.
 class PaneHeader extends StatelessWidget {
   const PaneHeader({
-    required this.icon,
     required this.title,
+    this.icon,
     this.actions = const [],
     this.focused = false,
     super.key,
   });
 
-  /// The surface's own glyph, drawn at [Chrome.iconSmall].
-  final IconData icon;
+  /// The surface's own glyph, drawn at [Chrome.iconSmall], or null for a pane
+  /// whose glyph would only repeat one already on screen.
+  ///
+  /// It earns its place in the side panel, where eleven surfaces take turns in
+  /// one column and the mark is what a glance sorts them by. It does not in the
+  /// Explorer: that pane's glyph is also its title-bar toggle's, 30px directly
+  /// above it in the same column, so the corner drew the same mark twice — the
+  /// owner's *"same icon repeated"* — and the word beside it already names the
+  /// pane. Dropping it also hands 21px back to a title that clips at 280px
+  /// because five icon buttons hold 150px of the same row.
+  final IconData? icon;
 
   /// Written in any case; drawn uppercase, like every other chrome eyebrow.
   final String title;
@@ -83,8 +92,10 @@ class PaneHeader extends StatelessWidget {
           padding: const EdgeInsets.only(left: Insets.md, right: 2),
           child: Row(
             children: [
-              Icon(icon, size: Chrome.iconSmall, color: ink),
-              const SizedBox(width: Insets.sm),
+              if (icon case final glyph?) ...[
+                Icon(glyph, size: Chrome.iconSmall, color: ink),
+                const SizedBox(width: Insets.sm),
+              ],
               // Expanded rather than a Spacer: the title is the only thing in
               // this row that can give way, and at the Explorer's own 200px
               // minimum the actions alone are wider than the pane.
@@ -123,15 +134,17 @@ class PaneHeader extends StatelessWidget {
 class PaneScaffold extends StatelessWidget {
   const PaneScaffold({
     required this.title,
-    required this.icon,
     required this.body,
+    this.icon,
     this.actions = const [],
     this.focused = false,
     super.key,
   });
 
   final String title;
-  final IconData icon;
+
+  /// Optional, and for the reason [PaneHeader.icon] gives.
+  final IconData? icon;
   final Widget body;
   final List<Widget> actions;
   final bool focused;
