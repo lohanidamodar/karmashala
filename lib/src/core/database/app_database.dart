@@ -93,6 +93,27 @@ class AppDatabase {
   /// mode, and another process holding the file can make the switch fail
   /// outright. Both are handled by reading back what was adopted instead of
   /// assuming, and by carrying on either way: the app works in both modes.
+  ///
+  /// **Three pragmas were measured and deliberately not set.**
+  ///
+  /// * `cache_size`. Raising it from the default 2 MiB to 64 MiB changed
+  ///   nothing on this workload: 179 page-cache misses either way, reading the
+  ///   session list back over a 39 MB store after the terminal had walked every
+  ///   pane's scrollback. The session table already fits, and a scrollback walk
+  ///   streams pages that no cache size keeps.
+  /// * `mmap_size`. An I/O error becomes a segfault rather than an error code,
+  ///   and a stray pointer anywhere in the process can write through the
+  ///   mapping into the file. That is a poor trade against the user's live
+  ///   workspace with no measured gain behind it.
+  /// * `page_size`. The store's size is scrollback, so a bigger page is the
+  ///   obvious thought. It is the wrong one, and by a wide margin on the read
+  ///   that happens *most*: the metadata-only read every structural save makes
+  ///   over `terminal_panes` cost 47 page-cache misses at 4 KiB, 92 at 8 KiB
+  ///   and 106 at 16 KiB, because a wider page drags more of the neighbouring
+  ///   scrollback in per miss. Reading one tab's panes *with* their text
+  ///   improved only 12 -> 9 -> 8, and the file grew 18%. It would also need a
+  ///   `VACUUM` of the whole store to take effect for anyone who already has
+  ///   one, on this same isolate, at startup.
   void _configure() {
     _db.execute('PRAGMA foreign_keys = ON;');
     try {
