@@ -23,7 +23,7 @@ void main() {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 36);
+    expect(db.schemaVersion, 37);
   });
 
   test('v25 gives a session somewhere to record what it left', () {
