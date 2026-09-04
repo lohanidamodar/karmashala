@@ -30,6 +30,11 @@ class CompanionComposer extends StatefulWidget {
 
 class _CompanionComposerState extends State<CompanionComposer> {
   late TextEditingController _input;
+
+  /// Held so the box can be focused again after a send. `TextInputAction.send`
+  /// unfocuses on its way through `EditableText`, which closes the keyboard
+  /// after every message — the phone's version of "did that go?".
+  final _focus = FocusNode();
   bool _busy = false;
 
   @override
@@ -59,6 +64,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
   @override
   void dispose() {
     _input.removeListener(_onInputChange);
+    _focus.dispose();
     if (widget.controller == null) _input.dispose();
     super.dispose();
   }
@@ -71,7 +77,14 @@ class _CompanionComposerState extends State<CompanionComposer> {
     setState(() => _busy = true);
     try {
       await widget.onSend(text);
-      if (mounted) _input.clear();
+      if (mounted) {
+        _input.clear();
+        // Straight into the next message, the way every other chat box
+        // behaves: `TextInputAction.send` took the focus away on its way
+        // through, and a keyboard that shuts itself after each turn reads as
+        // the session having ended.
+        _focus.requestFocus();
+      }
     } catch (e) {
       // Keep the text so the user can retry once the host is back.
       messenger.showSnackBar(
@@ -121,7 +134,21 @@ class _CompanionComposerState extends State<CompanionComposer> {
                       enabled: canType,
                       minLines: 1,
                       maxLines: 5,
+                      // The keyboard's own key has to submit, and on Android
+                      // the *input type* is what decides that: an IME reads
+                      // `multiline` as "this field takes newlines" and draws
+                      // Return instead of the action key, so `onSubmitted` is
+                      // never called and the send lands as a line break —
+                      // "it only types the message but don't send".
+                      // `TextField` picks that type for itself for any
+                      // `maxLines != 1`, so the single-line type is named
+                      // here: the box still grows to [maxLines], and Enter is
+                      // Send. The desktop composer answers the same problem
+                      // the other way, intercepting a hardware Enter, which
+                      // is a key a soft keyboard does not deliver.
+                      keyboardType: TextInputType.text,
                       textInputAction: TextInputAction.send,
+                      focusNode: _focus,
                       onSubmitted: (_) => _send(),
                       decoration: InputDecoration(
                         border: InputBorder.none,
