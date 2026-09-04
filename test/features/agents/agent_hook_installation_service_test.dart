@@ -137,6 +137,14 @@ void main() {
       'the agent is not installed in this environment',
       reason: 'not "something else rewrote the config", which is a defect',
     );
+    // Recorded, but not a fault: the row says why, and nothing may show it as
+    // a degraded environment.
+    expect(row.agentPresent, isFalse);
+    expect(
+      AgentHookInstallationReport([row]).skippedByEnvironment,
+      isEmpty,
+      reason: 'an agent nobody installed is not this machine failing',
+    );
     // And nothing was created for an agent that is not here.
     expect(Directory(missing).existsSync(), isFalse);
   });

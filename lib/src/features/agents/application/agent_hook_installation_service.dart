@@ -64,13 +64,24 @@ class AgentHookInstallationReport {
   /// one per agent: the reason is a property of the door, and four copies of
   /// it is a wall of text saying one thing.
   ///
-  /// **[unknown] rows are not in here.** A store home that never answered is
-  /// not an environment we decided to skip; it is one we have no reading for,
-  /// and the two get different words and different colours — see
-  /// [unknownByEnvironment].
+  /// **Two kinds of row are deliberately not in here**, and both were folded
+  /// in once, and both read as the environment's fault when they were.
+  ///
+  /// An **[unknown]** row is one we have no reading for — the store home did
+  /// not answer inside its budget — not one we decided to skip; it gets its own
+  /// words and its own colour, see [unknownByEnvironment].
+  ///
+  /// An **agent that is simply not installed** ([AgentHookInstallation.
+  /// agentPresent] `false`) is a fact about that agent, not about the door, so
+  /// folding it in stated one agent's absence as the whole environment's
+  /// failure — in the error colour, beside two agents whose hooks had just gone
+  /// in.
   Map<String, String> get skippedByEnvironment => {
     for (final result in results)
-      if (!result.installed && !result.unknown && result.skippedBecause != null)
+      if (!result.installed &&
+          !result.unknown &&
+          result.agentPresent &&
+          result.skippedBecause != null)
         result.environmentId: result.skippedBecause!,
   };
 
@@ -126,6 +137,7 @@ class AgentHookInstallation {
     required this.environmentId,
     required this.installed,
     this.unknown = false,
+    this.agentPresent = true,
     this.skippedBecause,
     this.spoolDirectory,
     this.wslDistribution,
@@ -154,6 +166,17 @@ class AgentHookInstallation {
   /// after this row was written; the row is a statement about what was
   /// observed inside the budget, and the next launch's sweep is idempotent.
   final bool unknown;
+
+  /// Whether this agent has a store here at all.
+  ///
+  /// `false` is the one `installed: false` that is **not** a degraded
+  /// environment: there was no agent to hook. It still carries a
+  /// [skippedBecause], because a truthful record of a sweep says why each row
+  /// is what it is — but nothing may present it as a fault. A Mac with two
+  /// working agents and no Antigravity CLI was told, in red, that it had no
+  /// status callbacks at all.
+  final bool agentPresent;
+
 
   /// Why nothing was written, for an environment or agent we deliberately
   /// skipped. `null` when [installed].
@@ -537,6 +560,13 @@ class AgentHookInstallationService {
         agentId: descriptor.id,
         environmentId: environmentId,
         installed: applied,
+        // Carried on the row so `skippedByEnvironment` can leave it out. The
+        // reason above still says the agent is not installed, because a
+        // truthful record of a sweep says why each row is what it is — but an
+        // absent agent is a fact about the agent, not about the environment,
+        // and folding it in told a Mac with two working agents and no
+        // Antigravity CLI that it had no status callbacks at all.
+        agentPresent: !absent,
         spoolDirectory: spool?.path,
         wslDistribution: wslDistribution,
         skippedBecause: applied || endpoint == null

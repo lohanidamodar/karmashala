@@ -104,6 +104,31 @@ void main() {
     expect(find.textContaining('WSL · Ubuntu'), findsOneWidget);
   });
 
+  testWidgets('an agent nobody installed raises no alarm', (tester) async {
+    // Two agents' hooks went in and a third CLI is not on this machine. The
+    // page used to answer that with a red line saying the whole environment
+    // had no status callbacks — the owner's Mac, which had two working ones.
+    await pump(
+      tester,
+      const AgentHookInstallationReport([
+        AgentHookInstallation(
+          agentId: 'claudeCode',
+          environmentId: 'windows',
+          installed: true,
+        ),
+        AgentHookInstallation(
+          agentId: 'antigravity',
+          environmentId: 'windows',
+          installed: false,
+          agentPresent: false,
+          skippedBecause: 'the agent is not installed in this environment',
+        ),
+      ]),
+    );
+
+    expect(find.textContaining('No status callbacks'), findsNothing);
+  });
+
   testWidgets('the local host is named, never keyed', (tester) async {
     // `localHostEnvironmentId` is the literal `windows` on every platform, so
     // this line told a Mac's owner there were "no status callbacks from
