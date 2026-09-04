@@ -257,6 +257,7 @@ void main() {
             FakeCommandRunnerFactory(fallback: git),
           ),
           probeGateProvider.overrideWithValue(headlessProbeGate),
+          gitFilesProvider.overrideWithValue(noGitFiles),
         ],
       );
       addTearDown(container.dispose);

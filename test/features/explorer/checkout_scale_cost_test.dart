@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/environments/domain/environment_path.dar
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
+import 'package:karmashala/src/features/git/data/git_files.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -107,6 +108,31 @@ import '../terminal/fake_instance.dart';
 ///   the fan-out. Measured at **2 / 20 / 28** with nothing bounding it;
 ///   [kCheckoutProbeConcurrency] is the bound, and the peak is asserted
 ///   against it where the fan-out is widest.
+///
+/// ## A second unit: the file read
+///
+/// Two of a delivery reading's five questions stopped being subcommands. A
+/// repository's `origin` URL is a line in `.git/config` and its `origin/HEAD`
+/// is a line in `refs/remotes/origin/HEAD`, so both are read rather than
+/// asked — and a read costs no `CreateProcessW`, which is the whole mechanism
+/// above. Counting only subprocesses after that would report a saving where a
+/// cost had merely changed shape, so `_ProbeFiles` counts the reads and the
+/// same flatness is asserted in both units. For a WSL checkout a read is still
+/// a 9p round trip: cheaper than a process, never free.
+///
+/// Where the three scenes stand now, per scale point 1 / 10 / 69:
+///
+/// | scene | git | reads |
+/// |---|---|---|
+/// | collapsed | 0 / 0 / 0 | 0 / 0 / 0 |
+/// | expanded | 3 / 3 / 3 | 2 / 2 / 2 |
+/// | one workspace mutation | 3 / 3 / 3 | 0 / 0 / 0 |
+/// | a full pane of rows | 3 / 30 / 42 | 2 / 20 / 28 |
+///
+/// A mutation reads nothing because the repository reading is not re-taken —
+/// `repositoryOriginProvider` caches for its own lifetime and nothing
+/// invalidates it, which `delivery_providers.dart` states as a limitation
+/// rather than solving.
 void main() {
   /// The three points the curve is read at. One checkout is the "did we make
   /// the ordinary project worse" control; 69 is the owner's real number.
@@ -114,6 +140,7 @@ void main() {
 
   late AppDatabase db;
   late _ProbeRunner git;
+  late _ProbeFiles files;
 
   setUp(() {
     db = AppDatabase.memory();
@@ -121,6 +148,7 @@ void main() {
     ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     AgentInstallationDao(db).insert(agentInstallation());
     git = _ProbeRunner(responder: _git);
+    files = _ProbeFiles();
   });
   tearDown(() => db.close());
 
@@ -201,7 +229,14 @@ void main() {
         // **The real gate**, not the neutralised one the rest of the suite
         // uses: this is the file that measures when a probe is allowed to
         // spawn, so it has to be the frame the app really waits for.
-        ...fakeTerminalOverrides(database: db, frameGatedProbes: true),
+        // A real `.git` for every seeded clone, so the two facts that are
+        // files really are read here rather than falling back to `git` — the
+        // rest of the suite takes `noGitFiles` and never touches a disk.
+        ...fakeTerminalOverrides(
+          database: db,
+          frameGatedProbes: true,
+          gitFiles: files,
+        ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -260,6 +295,7 @@ void main() {
     // Filled by the cases below so the *shape* can be asserted across them
     // rather than inside any one of them.
     final gitByScale = <int, int>{};
+    final readsByScale = <int, int>{};
 
     for (final count in scale) {
       testWidgets('$count checkouts', (tester) async {
@@ -267,10 +303,12 @@ void main() {
         await pump(tester, expand: false);
         final rows = tester.widgetList(find.byType(SessionCard)).length;
         gitByScale[count] = totalGit();
+        readsByScale[count] = files.readCount;
         // ignore: avoid_print
         print(
           'CHECKOUT-COST collapsed checkouts=$count '
-          'git=${totalGit()} rows=$rows detail=${gitCounts()}',
+          'git=${totalGit()} reads=${files.readCount} rows=$rows '
+          'detail=${gitCounts()}',
         );
         // Nothing is expanded, so nothing is drawn — and nothing recorded may
         // be paid for.
@@ -282,7 +320,9 @@ void main() {
       // The three cases above ran first and filled the map.
       expect(gitByScale.keys.toSet(), scale.toSet());
       // ignore: avoid_print
-      print('CHECKOUT-COST collapsed curve=$gitByScale');
+      print(
+        'CHECKOUT-COST collapsed curve=$gitByScale reads=$readsByScale',
+      );
       // The invariant: a header the user has not opened draws nothing, so it
       // must ask git nothing — at any number of recorded checkouts.
       expect(
@@ -292,12 +332,23 @@ void main() {
             'a collapsed project ran git ($gitByScale) — work proportional to '
             'what is recorded rather than to what is visible',
       );
+      // And nothing may be read either. Two of the five questions became file
+      // reads in Loop 74, and a cheaper way to do work nobody asked for is
+      // still work nobody asked for.
+      expect(
+        readsByScale.values.toSet(),
+        {0},
+        reason:
+            'a collapsed project read `.git` ($readsByScale) — a saving that '
+            'only changed the shape of the cost',
+      );
     });
   });
 
   group('an expanded project', () {
     final gitByScale = <int, int>{};
     final rowsByScale = <int, int>{};
+    final readsByScale = <int, int>{};
 
     for (final count in scale) {
       testWidgets('$count checkouts', (tester) async {
@@ -306,10 +357,12 @@ void main() {
         final rows = tester.widgetList(find.byType(SessionCard)).length;
         gitByScale[count] = totalGit();
         rowsByScale[count] = rows;
+        readsByScale[count] = files.readCount;
         // ignore: avoid_print
         print(
           'CHECKOUT-COST expanded checkouts=$count '
-          'git=${totalGit()} rows=$rows peak=${git.peakInFlight} '
+          'git=${totalGit()} reads=${files.readCount} rows=$rows '
+          'peak=${git.peakInFlight} '
           'phases=${git.phaseNames} detail=${gitCounts()}',
         );
         // Non-vacuity for the phase claim below: a scene that asked git
@@ -323,13 +376,44 @@ void main() {
               '`CreateProcessW` runs on the calling thread, so that is time '
               'charged to the frame the user was waiting on',
         );
+        // **The two repository facts are files now**, so neither subcommand
+        // may appear at all. A process is never free on Windows however it is
+        // awaited: `CreateProcessW` runs on the calling thread before the
+        // future exists.
+        expect(
+          gitCounts().keys,
+          isNot(contains('remote get-url')),
+          reason:
+              '`git remote get-url origin` ran; `.git/config` carries that '
+              'line and a read of it spawns nothing',
+        );
+        expect(
+          gitCounts().keys,
+          isNot(contains('rev-parse --abbrev-ref')),
+          reason:
+              '`git rev-parse --abbrev-ref origin/HEAD` ran; '
+              '`refs/remotes/origin/HEAD` carries that line',
+        );
       });
     }
 
     testWidgets('costs git per visible row, not per checkout', (tester) async {
       expect(gitByScale.keys.toSet(), scale.toSet());
       // ignore: avoid_print
-      print('CHECKOUT-COST expanded curve=$gitByScale rows=$rowsByScale');
+      print(
+        'CHECKOUT-COST expanded curve=$gitByScale rows=$rowsByScale '
+        'reads=$readsByScale',
+      );
+      // Flat in the checkout count in the second unit too: a read is cheaper
+      // than a process and just as proportional to what is recorded if it is
+      // asked for per recorded checkout.
+      expect(
+        readsByScale.values.toSet(),
+        {readsByScale[1]},
+        reason:
+            'expanding a project read `.git` $readsByScale times — a fan-out '
+            'proportional to what is recorded rather than to what is drawn',
+      );
       // The project holds one session at every scale, so it draws one card at
       // every scale: rows follow sessions, not the repositories table.
       expect(rowsByScale.values.toSet(), {
@@ -424,7 +508,8 @@ void main() {
         // ignore: avoid_print
         print(
           'CHECKOUT-COST rows checkouts=$count '
-          'git=${totalGit()} rows=$rows peak=${git.peakInFlight} '
+          'git=${totalGit()} reads=${files.readCount} rows=$rows '
+          'peak=${git.peakInFlight} '
           'phases=${git.phaseNames} detail=${gitCounts()}',
         );
 
@@ -546,7 +631,7 @@ void main() {
         overrides: [
           // The neutral gate the rest of the suite takes — see
           // `headlessProbeGate`. This container has no widget tree.
-          ...fakeTerminalOverrides(database: db),
+          ...fakeTerminalOverrides(database: db, gitFiles: files),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
           commandRunnerFactoryProvider.overrideWithValue(
@@ -584,7 +669,8 @@ void main() {
       // ignore: avoid_print
       print(
         'CHECKOUT-COST worktrees repos=1 worktrees=$worktrees '
-        'git=${flat.requests.length} detail=$counts',
+        'git=${flat.requests.length} reads=${files.readCount} '
+        'detail=$counts paths=${files.reads}',
       );
 
       // Non-vacuity, and the control: the working-tree question really is
@@ -598,21 +684,40 @@ void main() {
             'the scene has ${worktrees + 1} working trees; '
             '`git status` ran ${counts['status']} times',
       );
+      // **One read of `.git/config` and one of the `origin/HEAD` ref for the
+      // whole clone.** The two facts became files in the same loop that keyed
+      // them by repository, so the count that matters is reads, and asserting
+      // the two subcommands are absent is what says they did not quietly come
+      // back.
       expect(
-        counts['remote get-url'],
+        files.readsEndingIn(r'\.git\config'),
         1,
         reason:
-            '`git remote get-url origin` ran ${counts['remote get-url']} times '
-            'for one repository — a repository question asked once per '
-            'worktree',
+            '`.git/config` was read '
+            '${files.readsEndingIn(r'\.git\config')} times for one repository '
+            '— a repository question asked once per worktree',
       );
       expect(
-        counts['rev-parse --abbrev-ref'],
+        files.readsEndingIn(r'\.git\refs\remotes\origin\HEAD'),
         1,
         reason:
+            'the `origin/HEAD` ref was read '
+            '${files.readsEndingIn(r'\.git\refs\remotes\origin\HEAD')} times '
+            'for one repository',
+      );
+      expect(
+        counts.keys,
+        isNot(contains('remote get-url')),
+        reason:
+            '`git remote get-url origin` ran ${counts['remote get-url']} '
+            'times; `.git/config` answered and no process was needed',
+      );
+      expect(
+        counts.keys,
+        isNot(contains('rev-parse --abbrev-ref')),
+        reason:
             '`git rev-parse --abbrev-ref origin/HEAD` ran '
-            '${counts['rev-parse --abbrev-ref']} times for one repository — a '
-            'repository question asked once per worktree',
+            '${counts['rev-parse --abbrev-ref']} times; the ref file answered',
       );
     });
   });
@@ -667,6 +772,64 @@ class _ProbeRunner extends FakeCommandRunner {
       _inFlight--;
     }
   }
+}
+
+/// A `.git` on no disk, and **a count of every read attempted**.
+///
+/// The second unit this file measures in. Two of a delivery reading's five
+/// questions are single lines in `.git` rather than subcommands, so counting
+/// only subprocesses would report a saving where a cost had merely changed
+/// shape — and for a WSL checkout a read is a 9p round trip too, cheaper than
+/// a process but not free.
+///
+/// Answers by shape rather than from a map so that every one of the 69 seeded
+/// clones is a real repository: an unreadable `.git` would send the reader
+/// straight back to `git`, which is the fallback path and not the one under
+/// measurement.
+class _ProbeFiles implements GitFiles {
+  /// Every path read, in order.
+  final List<String> reads = [];
+
+  int get readCount => reads.length;
+
+  /// How many of the reads were for [suffix], which is how the two facts are
+  /// told apart.
+  int readsEndingIn(String suffix) =>
+      reads.where((path) => path.endsWith(suffix)).length;
+
+  @override
+  Future<String?> readString(String path) async {
+    reads.add(path);
+    if (path.endsWith(r'\.git\config')) {
+      return '[remote "origin"]\n'
+          '\turl = https://github.com/acme/hub.git\n'
+          '\tfetch = +refs/heads/*:refs/remotes/origin/*\n';
+    }
+    if (path.endsWith(r'\.git\refs\remotes\origin\HEAD')) {
+      return 'ref: refs/remotes/origin/main\n';
+    }
+    // A worktree's `.git` is a *file* naming the clone's git directory. Only
+    // under the worktree folder: a clone's own `.git` is a directory, which is
+    // a failed read, which is how the reader tells the two apart.
+    if (path.endsWith(r'\.git') && path.contains(r'\.karmashala-worktrees\')) {
+      final name = path.split(r'\')[path.split(r'\').length - 2];
+      return 'gitdir: C:\\hub\\.git\\worktrees\\'
+          '$name\n';
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> exists(String path) async =>
+      throw UnimplementedError('nothing on this path stats');
+
+  @override
+  Future<void> createDirectory(String path) async =>
+      throw UnimplementedError('nothing on this path writes');
+
+  @override
+  Future<void> writeString(String path, String contents) async =>
+      throw UnimplementedError('nothing on this path writes');
 }
 
 /// Enough of a real git for every provider on the path to complete rather than

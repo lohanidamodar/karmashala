@@ -36,6 +36,9 @@ class _MemoryGitFiles implements GitFiles {
   @override
   Future<void> writeString(String path, String contents) async =>
       written[path] = contents;
+
+  @override
+  Future<String?> readString(String path) async => written[path];
 }
 
 /// Which checkpoints reach the decision record, and which do not.

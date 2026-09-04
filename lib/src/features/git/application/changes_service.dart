@@ -1,10 +1,13 @@
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
+import '../data/git_files.dart';
+import '../data/git_origin_reader.dart';
 import '../data/git_service.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
+import '../domain/repository_origin.dart';
 import '../domain/working_tree_status.dart';
 
 /// Notified with a repository whose working tree this service has just
@@ -36,10 +39,15 @@ class ChangesService {
     required this.runnerFactory,
     required this.environmentDao,
     this.onWorkingTreeChanged,
+    this.files = const HostGitFiles(),
   });
 
   final CommandRunnerFactory runnerFactory;
   final ExecutionEnvironmentDao environmentDao;
+
+  /// The filesystem [originFacts] reads `.git` through. A seam so a test can
+  /// count the reads without a disk; see [GitFiles].
+  final GitFiles files;
 
   /// See [WorkingTreeChanged]. Null in a test that only asserts git arguments.
   final WorkingTreeChanged? onWorkingTreeChanged;
@@ -64,6 +72,54 @@ class ChangesService {
   /// The default branch this clone recorded for `origin`, or `null`.
   Future<String?> originHead(EnvironmentPath repo) =>
       _gitFor(repo).originHead(repo);
+
+  /// Both of [repo]'s `origin` facts — the URL and the default branch — from
+  /// **two file reads rather than two subprocesses**, falling back to git for
+  /// whichever the files could not answer.
+  ///
+  /// This is what every visible Explorer row's delivery reading funnels into,
+  /// once per repository, so it is the one place in this service where reading
+  /// a file instead of running `git` is worth the code. `.git/config` carries
+  /// `remote.origin.url` on a line; `origin/HEAD` is a line in
+  /// `refs/remotes/origin/HEAD` or absent from `packed-refs`. Neither read
+  /// costs a `CreateProcessW`, which — see `checkout_probe_queue.dart` — is
+  /// charged to the calling thread whatever the future looks like.
+  ///
+  /// **Falls back per fact, not per call**, and falls back on any uncertainty
+  /// at all: an SSH repository this process cannot open, a `.git` that is
+  /// neither a directory with a config nor a pointer file, a config with
+  /// `include`/`insteadOf` indirection in it, a `reftable` repository with no
+  /// `refs/` tree. `GitOriginReader` documents each one. A wrong answer here is
+  /// worse than a slow one — the URL decides whether a row looks for a pull
+  /// request, and `origin/HEAD` is the base every ahead/behind count is
+  /// measured against.
+  ///
+  /// It lives here rather than in `GitService` because the environment is what
+  /// decides whether the files are reachable at all, and this is the layer that
+  /// holds it.
+  Future<RepositoryOrigin> originFacts(EnvironmentPath repo) async {
+    final env = environmentDao.getById(repo.environmentId);
+    if (env == null) {
+      throw GitException('Unknown environment: ${repo.environmentId}');
+    }
+    final reading = await GitOriginReader(
+      files: files,
+      hostPathOf: hostPathMapperFor(env),
+    ).read(repo.path);
+
+    // `_gitFor` only where a fact is missing, so a repository whose files
+    // answered never builds a runner it has nothing to run.
+    final url = reading.url.known
+        ? reading.url.value
+        : await _gitFor(repo).remoteUrl(repo);
+    if (url == null) return RepositoryOrigin.none;
+    return RepositoryOrigin(
+      url: url,
+      head: reading.head.known
+          ? reading.head.value
+          : await _gitFor(repo).originHead(repo),
+    );
+  }
 
   /// The current branch of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) =>

@@ -126,21 +126,19 @@ final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
 /// noticed. Both are rare, neither is watched today either, and the alternative
 /// is a watcher on two files or a re-read trigger: machinery for a fact that
 /// changes about once in the life of a clone.
+/// **Two file reads and no subprocess**, in the ordinary case.
+/// `ChangesService.originFacts` reads `remote.origin.url` out of `.git/config`
+/// and `origin/HEAD` out of `refs/remotes/origin/HEAD`, and falls back to `git
+/// remote get-url` / `git rev-parse` for whichever the files could not answer.
+/// Still on the probe queue, because a fallback can spawn and because a read
+/// across `\\wsl.localhost` is cheaper than a process rather than free.
 final repositoryOriginProvider = FutureProvider.autoDispose
     .family<RepositoryOrigin, Checkout>((ref, repository) async {
       // Read before the first await, like every other seam in this file.
       final changes = ref.read(changesServiceProvider);
       final probe = _probeOn(ref);
-      final dir = repository.path;
-
-      final url = await probe(() => changes.remoteUrl(dir));
-      // No remote, no default branch to look for: `origin/HEAD` cannot name
-      // one, and asking would be a process spent learning that.
-      if (url == null) return RepositoryOrigin.none;
-      return RepositoryOrigin(
-        url: url,
-        head: await probe(() => changes.originHead(dir)),
-      );
+      return await probe(() => changes.originFacts(repository.path)) ??
+          RepositoryOrigin.none;
     });
 
 /// The **local** half of a checkout's delivery state: branch, upstream, dirty

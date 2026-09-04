@@ -3,6 +3,7 @@ import 'package:karmashala/src/features/repositories/data/checkout_presence_prob
 import 'package:karmashala/src/core/util/clock.dart';
 import 'package:karmashala/src/core/util/id_generator.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/git/data/git_files.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
 
@@ -87,3 +88,41 @@ class FakeCheckoutPresenceProbe implements CheckoutPresenceProbe {
 /// `List<dynamic>`, which fails at the container and nowhere near here. Cost
 /// one full gate to learn.
 Future<void> headlessProbeGate() async {}
+
+/// `.git` for a test that is not about `.git`: **every read answers nothing**,
+/// so `ChangesService.originFacts` falls back to `git` exactly as it did before
+/// there was anything to read.
+///
+/// Hand it to `gitFilesProvider.overrideWithValue`, or take the default from
+/// `fakeTerminalOverrides`. Every container that reaches the delivery providers
+/// needs it, and for a sharper reason than tidiness: `HostGitFiles` performs
+/// **real** file I/O, whose completion is a real event-loop callback that
+/// `testWidgets`' fake-async clock does not control. The extra async gap it
+/// opens is enough to reorder a build against an invalidation — measured, on
+/// this change: twenty-three tests across seven files failed, and the loudest
+/// of them died inside `sessionDeliveryProvider` with *"Cannot use the Ref …
+/// after it has been disposed"*, a pre-existing `ref.read`-after-await that had
+/// simply never been given a wide enough gap to lose the race. A test suite
+/// that reads the machine it runs on is the problem; this is the fix.
+///
+/// So the read path is exercised only where a test opts in by handing over its
+/// own [GitFiles] — `git_origin_reader_test.dart`, `changes_service_test.dart`
+/// and `checkout_scale_cost_test.dart`, which is where that path lives.
+class NoGitFiles implements GitFiles {
+  const NoGitFiles();
+
+  @override
+  Future<String?> readString(String path) async => null;
+
+  @override
+  Future<bool> exists(String path) async => false;
+
+  @override
+  Future<void> createDirectory(String path) async {}
+
+  @override
+  Future<void> writeString(String path, String contents) async {}
+}
+
+/// The one every test shares; see [NoGitFiles].
+const noGitFiles = NoGitFiles();

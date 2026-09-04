@@ -24,6 +24,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -96,6 +97,7 @@ void main() {
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
         probeGateProvider.overrideWithValue(headlessProbeGate),
+        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     addTearDown(container.dispose);

@@ -152,6 +152,7 @@ void main() {
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
         probeGateProvider.overrideWithValue(headlessProbeGate),
+        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     addTearDown(container.dispose);

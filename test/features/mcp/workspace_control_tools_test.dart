@@ -91,6 +91,7 @@ branch refs/heads/feature/login
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
         probeGateProvider.overrideWithValue(headlessProbeGate),
+        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     server = LauncherControlServer(container);

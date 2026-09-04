@@ -7,17 +7,26 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../data/git_files.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
 import 'changes_service.dart';
 import 'git_providers.dart';
 
+/// The filesystem `ChangesService.originFacts` reads `.git` through.
+///
+/// A provider so a test can count the reads without a disk — the same reason
+/// `commandRunnerFactoryProvider` is one. The app always uses the real
+/// filesystem; nothing in it ever sets this.
+final gitFilesProvider = Provider<GitFiles>((ref) => const HostGitFiles());
+
 /// Provides the [ChangesService].
 final changesServiceProvider = Provider<ChangesService>(
   (ref) => ChangesService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    files: ref.watch(gitFilesProvider),
     // A merge rewrites files in place, which the watcher does see — but only on
     // the platforms that have a recursive one, and only for a root that is
     // being watched at all.

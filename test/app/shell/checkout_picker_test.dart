@@ -145,6 +145,7 @@ void main() {
         // These tests read a delivery future directly rather than through a
         // pump, so the real frame gate has no frame to wait for.
         probeGateProvider.overrideWithValue(headlessProbeGate),
+        gitFilesProvider.overrideWithValue(noGitFiles),
       ],
     );
     addTearDown(container.dispose);
