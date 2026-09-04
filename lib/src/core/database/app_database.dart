@@ -17,6 +17,7 @@ import 'migrations.dart';
 /// dependency stays confined to this file and never leaks into features.
 class AppDatabase {
   AppDatabase(this._db) {
+    _configure();
     _migrate();
   }
 
@@ -50,6 +51,70 @@ class AppDatabase {
 
   // --- Schema management -----------------------------------------------------
 
+  /// Connection settings, applied once before any other statement.
+  ///
+  /// **This connection is synchronous and lives on the UI isolate**, so a
+  /// commit is a frame the window does not draw. That is what the journal mode
+  /// is chosen for.
+  ///
+  /// * `foreign_keys` — the cascades the schema declares are only enforced when
+  ///   this is on. It is per-connection and off by default.
+  /// * `journal_mode = WAL` — a rollback-journal commit writes the *original*
+  ///   image of every page it touches to a `-journal` file, fsyncs it, writes
+  ///   the new pages to the database, fsyncs again, and then deletes the
+  ///   journal. Measured on one scrollback autosave (an `UPDATE` of a 64 KiB
+  ///   text column, which the terminal does on its own timer): **86 696 bytes
+  ///   of journal on top of the pages the database itself received**, twice.
+  ///   WAL appends the new pages to a `-wal` file once and never copies the old
+  ///   ones. It also lets a *second process* — which this app has, and has had
+  ///   in anger: see `todos_external_change_test.dart`, where the owner ticked
+  ///   todos off by writing to `karmashala.sqlite` while the app held it open —
+  ///   commit without blocking this connection's reads.
+  /// * `synchronous = NORMAL`, **and only once WAL is actually in effect.**
+  ///   In WAL mode this drops the fsync from every commit; a checkpoint still
+  ///   syncs. In rollback-journal mode the same setting risks a *corrupt*
+  ///   database on a power cut, so it is gated on the mode we got rather than
+  ///   the mode we asked for.
+  ///
+  /// **What WAL + NORMAL costs.** A process crash, a kill, or the app being
+  /// closed loses nothing: the `-wal` content is in the operating system's
+  /// cache and survives the process. An **OS crash or power loss** can lose the
+  /// most recently committed transactions — the database is never corrupted,
+  /// but the last few seconds of writes may roll back. For this app that is a
+  /// scrollback tick, a status word, or a note typed in the last moment.
+  ///
+  /// WAL is also **persistent in the database file** rather than per-connection:
+  /// once set it stays set, and the `-wal`/`-shm` sidecars appear beside
+  /// `karmashala.sqlite`. Anyone copying the store for a backup has to take all
+  /// three, or take a copy made while nothing has it open.
+  ///
+  /// The request can legitimately be refused — WAL needs shared memory, so a
+  /// database on a network share (a redirected `%APPDATA%`) stays in rollback
+  /// mode, and another process holding the file can make the switch fail
+  /// outright. Both are handled by reading back what was adopted instead of
+  /// assuming, and by carrying on either way: the app works in both modes.
+  void _configure() {
+    _db.execute('PRAGMA foreign_keys = ON;');
+    try {
+      _db.execute('PRAGMA journal_mode = WAL;');
+    } on SqliteException {
+      // Locked by another connection, or a filesystem with no shared memory.
+      // The rollback journal is slower, not wrong.
+      return;
+    }
+    if (journalMode != 'wal') return;
+    _db.execute('PRAGMA synchronous = NORMAL;');
+  }
+
+  /// The journal mode this connection actually got, lower-cased.
+  ///
+  /// Read rather than assumed: [_configure] *asks* for WAL and SQLite is
+  /// entitled to say no, and an in-memory database answers `memory` however
+  /// nicely it is asked.
+  String get journalMode =>
+      (_db.select('PRAGMA journal_mode;').first.values.first! as String)
+          .toLowerCase();
+
   /// Applies every step whose version is greater than the stored
   /// `PRAGMA user_version`, in ascending order, each in its own transaction.
   ///
@@ -64,7 +129,6 @@ class AppDatabase {
   /// The counting loop was a stricter approximation of it that happened to
   /// agree until two loops landed migrations at once.
   void _migrate() {
-    _db.execute('PRAGMA foreign_keys = ON;');
     final current = _userVersion;
     final pending = schemaMigrations.keys.where((v) => v > current).toList()
       ..sort();
