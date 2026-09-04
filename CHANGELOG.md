@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.10.2 (2026-09-03)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.12.0 (2026-09-04)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,150 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.12.0 — 2026-09-04 (build 25)
+
+**A false "Agent finished" no longer fires mid-turn, and the quota belongs to
+the session rather than to the app.** Sixty-two commits, most of them
+correcting something the app claimed and could not see.
+
+### Notifications told you a turn had ended when it had not
+
+Claude Code runs a `Task` subagent as *background work*: the main thread fires
+a real `Stop` the moment the worker launches, then wakes on a fresh
+`UserPromptSubmit` when it returns. Read as `idle`, that announced **"Agent
+finished"** three seconds into a turn with ten to run — and for a real
+subagent, its whole run early. The CLI hands over the discriminator and
+documents it for exactly this: a non-empty `background_tasks` means paused, not
+done. `session_crons` is deliberately not consulted, because a `/loop` session
+really has finished and is waiting on a clock.
+
+Two more, from reading the installed 2.1.260 rather than the 2.1.258 the
+comments were written against:
+
+- **A finished turn can now say what finished.** `Stop`, `StopFailure` and
+  `SubagentStop` carry their prose under `last_assistant_message`; only
+  `Notification` uses `message`, so every completion toast had been a session
+  name and nothing else while the answer arrived and was discarded.
+- **Four `Notification` subtypes that stop a session dead** — two elicitation
+  dialogs and two quota-resume notices — were unmapped, so a session parked on
+  one kept reporting `working` indefinitely. Nothing else can see them: a
+  transcript cannot express "a dialog is open".
+
+`SubagentStop`, `SessionStart`, `PreCompact` and `PermissionRequest` remain
+undeclared, each for a stated reason.
+
+### Usage: per session, and at a rate the payload dictates
+
+The chip moved out of the app status bar into the terminal session's own bar.
+Panes run different agents and different accounts, so one app-level figure
+attributed one account's remaining quota to a pane spending another's.
+
+The 60-second poll turned out to bound **one** of five triggers.
+`SessionChangeKind.status` — published from ~10 sites on every launch, every
+pane that stops, every project rescan — was unbounded, as were the chip's own
+click, Settings' refresh and the MCP tool. The floor now lives inside
+`AgentUsageService.fetch`, ahead of the 429 check, so no caller can route
+around it, and it is **derived from the reply**: every window is a percentage
+of a named period, so one point of a five-hour quota is three minutes, and
+polling faster spends requests to re-read the same integer. An idle ladder
+reaches fifteen minutes and collapses the instant anything moves, clamped never
+to overshoot a window's own reset.
+
+Per account, an idle focused hour costs **6 requests where it cost 60 plus one
+per status change**; twenty runs ending at once cost one; the ceiling is 20/hour
+whatever asks. A 429 or 5xx is now a wait rather than a failure — `Retry-After`
+when the server sends one, else 1m→2m→4m→8m→16m jittered upward only, per
+account. Every surface keeps its last number **with its age**; a reading never
+observed shows the question glyph, never a zero.
+
+### The database
+
+Query plans were extracted for all 84 `SELECT`s in `lib/`. Two scans on the one
+table that grows are now indexed (v36, v37), including the cost no plan shows:
+foreign-key enforcement made deleting one installation two whole-table scans —
+998 fullscan steps at 500 sessions, now none. `journal_mode = WAL`, with
+`synchronous = NORMAL` gated on WAL actually being adopted, because that
+setting under a rollback journal risks corruption rather than mere loss: one
+scrollback autosave had been writing 86,696 bytes of journal on top of the
+pages the database received, twice fsynced, on the UI isolate.
+
+**`karmashala.sqlite` alone is no longer a complete backup** — `-wal` and
+`-shm` sidecars now sit beside it. A crash or kill loses nothing; only an OS
+crash or power loss can roll back the last seconds.
+
+Three optimisations were measured and **declined** with numbers: `cache_size`,
+`mmap_size` (an I/O error becomes a segfault) and `page_size` (which made the
+hot read worse). No index on `sessions.status`, which would tax the app's most
+frequent write forever to save one scan at launch.
+
+### The interface
+
+- **Right-click menus everywhere on desktop** — Todos, Notes, Inbox, Files,
+  worktree chips, Snippets, Env vars, SSH hosts, all of Explorer — each
+  answering right-click, `Shift+F10`, the Menu key and a screen-reader action.
+  Two surfaces had right-click and **no keyboard path at all**; a Notes card
+  with a disabled Send button had no focus stop, so its menu was unreachable.
+- **Hovering an Explorer row no longer repaints the row.** The hover flag went
+  through the card's builder, so crossing one row rebuilt every chip, note and
+  glyph in it — twice. Menus are built on open now, not on every build of every
+  row.
+- **A split's two headers stop reading as one drawn twice.** Both rows drew the
+  same widget at the same height; the region header is now its own shape, and
+  the tab renames itself as soon as the split exists rather than once both
+  halves are filled.
+- Tabs drag along the strip to rearrange. A tab switch resizes no terminal grid.
+
+### macOS
+
+Discovery probed with `$SHELL -lc`, which reads `~/.zprofile` but never
+`~/.zshrc` — where most Macs set `PATH`, including the line Claude Code's and
+Codex's own installers add. Launched from Finder, the app found neither agent
+while both worked in a terminal. Invisible during development, because an app
+started *from* a terminal inherits the terminal's `PATH`.
+
+One uninstalled CLI also stopped the app seeing any of them: the re-detection
+sweep deleted rows that `sessions` references `ON DELETE RESTRICT`, and the
+raise from mid-loop killed the whole sweep. A missing installation is now
+either *moved* (its sessions repointed, so they stay resumable) or *gone*
+(deleted only if nothing depends on it).
+
+### Security
+
+A prompt reaching a WSL pane can no longer be executed by the distribution's
+login shell. `wsl.exe … -- <command>` is not an argv hand-off — the line is
+parsed twice, and Windows quoting satisfies only the first parser, so
+`` `id -u` `` ran and `$(touch …)` created files. The whole quoted command is
+now base64, the POSIX counterpart of what the Windows path already did with
+`-EncodedCommand`.
+
+### Also
+
+System health is probed rather than stat-ed, with four verdicts and the age of
+its reading. An agent can read and move a device's files. Explorer filters
+sessions by agent. `codex_accounts` gives Codex the account visibility Claude
+already had.
+
+---
+
+## 1.11.0 — 2026-09-03 (build 24)
+
+No release notes were written at the time; this entry is derived from the 19
+commits in the range, and says so rather than implying a summary that existed.
+
+Device file browsing and transfer, per driver capability, reachable from an
+agent as well as the UI. A session can say where it runs, and the project's `+`
+starts one without a dialog. OSC 8 hyperlinks are honoured through the link
+path that already existed. Search paints through xterm2's own highlight API,
+and `KarmashalaMouseHandler` was dropped for xterm2's own.
+
+Fixes: an idle nudge is no longer called an approval; the inbox says what the
+agent said, as the toast does; a missing agent is no longer blamed on its
+config; density follows the input device rather than the window width; tearing
+down a live pane no longer raises an unhandled exception. The release history
+for 1.1.0–1.10.2 was written in this range.
 
 ---
 
