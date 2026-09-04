@@ -176,6 +176,15 @@ PTY-hosted session keeps no event log, so `turnsSource` reads **"not
 recorded"** rather than handing you an empty list that reads as "it said
 nothing".
 
+**`session_send` is refused while the target has an approval prompt open.**
+Delivery is a keystroke, and at a prompt with options a keystroke is a choice:
+measured against all three CLIs, none of them read the text as a message and
+two of them decided the pending request with it. Read what is being asked with
+`session_transcript` and answer it with `session_answer`, or wait for the
+prompt to clear. Nothing else is gated — a message to a session that is merely
+mid-turn queues, which is the ordinary case, and a state no source could read
+sends rather than refusing on an absence of evidence.
+
 **`session_answer` presses a real approval key.** It answers the agent's own
 approve/deny prompt using that agent's declared bindings — nothing here invents
 a keystroke, and an agent that declares no way to decline from outside its own

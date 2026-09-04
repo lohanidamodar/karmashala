@@ -7,6 +7,7 @@ import '../agents/domain/agent_status.dart';
 import '../sessions/application/session_actions.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
+import '../sessions/application/session_status_providers.dart';
 import '../sessions/domain/session.dart';
 import '../sessions/domain/session_event_types.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
@@ -125,11 +126,54 @@ class SessionControlTools {
   ///   them come through here at all. They call
   ///   [SessionActions.continueSession] directly, which is why the prefix is
   ///   applied at this boundary and not down in the send.
+  ///
+  /// ## And why it refuses at an open approval prompt
+  ///
+  /// The same keystroke is the reason. When a prompt with options is on the
+  /// target's screen, the characters and the carriage return are keys pressed
+  /// *in that prompt*, and what they select is the CLI's business.
+  ///
+  /// **Measured 2026-09-04**, one message — `hold off, the branch must not
+  /// change` — typed the way this tool types it at a real approval prompt in
+  /// each installed CLI:
+  ///
+  /// | CLI | what happened |
+  /// | --- | --- |
+  /// | Claude Code v2.1.260 | **approved** the pending `Bash(touch …)`; the file was created and the message was never delivered |
+  /// | Codex v0.151.0 | **cancelled** the request and interrupted the turn; the message was split, `ch must not change` left dangling in the composer |
+  /// | Antigravity 1.1.25 | **approved**; the file was created and the message was never delivered |
+  ///
+  /// Three for three, no CLI treated it as a message and two of them decided
+  /// something. So this refuses, and names `session_answer` — the tool that is
+  /// *for* answering prompts, which presses the agent's own declared key and
+  /// records who decided.
+  ///
+  /// Only [AgentStatusReport.hasOpenPrompt] blocks. Not "mid-turn": that is a
+  /// much weaker signal, differs per CLI, and is permanently unrecorded where
+  /// hooks cannot be delivered — and a message queued behind a turn is the
+  /// ordinary case this tool exists for. An unknown state sends, deliberately:
+  /// the gate is on positive evidence of a modal, never on the absence of
+  /// evidence of one.
+  ///
+  /// The user's own message box is not gated, and should not be. A person
+  /// typing into their own pane can see the prompt they are typing into.
   Future<Object?> _send(String sessionId, String text) async {
     if (text.trim().isEmpty) {
       throw ArgumentError('text is required and cannot be blank.');
     }
     final session = _session(sessionId);
+    if (_container.read(sessionStatusLookupProvider)(sessionId)?.hasOpenPrompt ??
+        false) {
+      throw StateError(
+        'That session has an approval prompt open, so this would press keys in '
+        'that prompt rather than send a message — measured against all three '
+        'CLIs, none delivered the text and two of them decided the pending '
+        'request. Read what is being asked with session_transcript and answer '
+        'it with session_answer, which presses the key that agent itself names '
+        'and records who decided. Or wait for the prompt to clear and send '
+        'then.',
+      );
+    }
     final caller = callerSessionId;
     final attribution = caller == null || caller == sessionId
         ? null
@@ -336,7 +380,9 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
         'reads it as a request from a peer rather than as an instruction from '
         'the user; the line is built from the session the transport '
         'authenticated, so you can neither borrow another name nor drop your '
-        'own.',
+        'own. Refused while the target has an approval prompt open: the '
+        'keystrokes would land in that prompt instead — answer it with '
+        'session_answer, or wait.',
     'inputSchema': {
       'type': 'object',
       'properties': {

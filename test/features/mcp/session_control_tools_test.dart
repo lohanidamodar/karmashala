@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/agents/domain/built_in_agents.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
@@ -17,6 +18,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -54,6 +56,25 @@ void main() {
   late ProviderContainer container;
   late LauncherControlServer server;
 
+  /// What the status registry would say about a session, stubbed at the one
+  /// seam production reads it through. Nothing here stands up the status
+  /// pipeline: what is under test is what `session_send` does with the answer,
+  /// not how the answer is produced.
+  late AgentStatusReport? Function(String sessionId) statusLookup;
+
+  AgentStatusReport report(
+    String sessionId, {
+    required AgentActivityStatus status,
+    required AgentWaitKind waiting,
+  }) => AgentStatusReport(
+    agentId: AgentIds.claudeCode,
+    sessionId: sessionId,
+    status: status,
+    observedAt: testTime,
+    source: AgentStatusSource.terminalGrid,
+    waiting: waiting,
+  );
+
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_session_tools_');
     db = AppDatabase.memory();
@@ -63,9 +84,13 @@ void main() {
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Work'));
 
+    statusLookup = (_) => null;
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        sessionStatusLookupProvider.overrideWithValue(
+          (sessionId) => statusLookup(sessionId),
+        ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The built-ins plus one agent that declares no way to continue a
         // conversation — the case `open_session` has to refuse rather than
@@ -364,6 +389,139 @@ void main() {
           title: 'Audit the MCP surface',
         ).render('over here'),
       );
+    });
+  });
+
+  /// **A message must not become a keystroke in somebody's modal.**
+  ///
+  /// Measured 2026-09-04 by typing one message the way `sendTo` types it —
+  /// the text, then a carriage return — at a real approval prompt in each
+  /// installed CLI. Claude Code v2.1.260 and Antigravity 1.1.25 **approved**
+  /// the pending command and the file it was asking to create appeared; Codex
+  /// v0.151.0 **cancelled** it and left half the message dangling in its
+  /// composer. Not one of the three delivered the text.
+  ///
+  /// So the gate is on positive evidence of a prompt and on nothing else:
+  /// [AgentStatusReport.hasOpenPrompt], the same rule the approval card and
+  /// the phone offer their buttons from.
+  group('an open approval prompt', () {
+    test('a send into one is refused, and names session_answer', () async {
+      final written = attachPane('s1');
+      statusLookup = (id) => report(
+        id,
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      );
+
+      final result = await callTool('session_send', {
+        'sessionId': 's1',
+        'text': 'hold off, the branch must not change',
+      });
+
+      expect(result.isError, isTrue);
+      expect(result.text, contains('approval prompt open'));
+      expect(result.text, contains('session_answer'));
+      // The load-bearing assertion: nothing was typed. A refusal that still
+      // pressed the key would be the bug with an error message on it.
+      expect(written, isEmpty);
+    });
+
+    test('a session merely waiting at its own input still receives', () async {
+      final written = attachPane('s1');
+      // The distinction `AgentWaitKind` exists for: Claude Code fires the same
+      // notification when it wants permission and when it has simply finished
+      // a turn. Only one of those is a modal.
+      statusLookup = (id) => report(
+        id,
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+      );
+
+      final result = await callTool('session_send', {
+        'sessionId': 's1',
+        'text': 'over to you',
+      });
+
+      expect(result.isError, isFalse);
+      expect(written, ['over to you', '\r']);
+    });
+
+    test('an unrecorded wait sends rather than refusing on ignorance', () async {
+      final written = attachPane('s1');
+      statusLookup = (id) => report(
+        id,
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.unrecorded,
+      );
+
+      await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
+
+      expect(written, ['ping', '\r']);
+    });
+
+    test('a busy session receives, because a message queues', () async {
+      final written = attachPane('s1');
+      statusLookup = (id) => report(
+        id,
+        status: AgentActivityStatus.working,
+        waiting: AgentWaitKind.unrecorded,
+      );
+
+      await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
+
+      expect(written, ['ping', '\r']);
+    });
+
+    test('a session no source can read receives', () async {
+      final written = attachPane('s1');
+      // Null is the registry saying it has never seen this row. Refusing on
+      // that would refuse every imported session and every agent nobody has
+      // taught us to read.
+      statusLookup = (_) => null;
+
+      await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
+
+      expect(written, ['ping', '\r']);
+    });
+
+    test('the prompt belongs to the target, not the caller', () async {
+      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      final other = attachPane('s2');
+      // s1 is the one holding a prompt; it is still free to talk to s2.
+      statusLookup = (id) => id == 's1'
+          ? report(
+              id,
+              status: AgentActivityStatus.awaitingApproval,
+              waiting: AgentWaitKind.approval,
+            )
+          : null;
+
+      final result = await callTool('session_send', {
+        'sessionId': 's2',
+        'text': 'over here',
+      }, 's1');
+
+      expect(result.isError, isFalse);
+      expect(other, isNotEmpty);
+    });
+
+    test('session_answer is still the way in', () async {
+      final written = attachPane('s1');
+      statusLookup = (id) => report(
+        id,
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      );
+
+      // The refusal points here, so here must keep working: the tool that
+      // presses the agent's own declared key and records who decided.
+      final result = await callTool('session_answer', {
+        'sessionId': 's1',
+        'decision': 'approve',
+      });
+
+      expect(result.isError, isFalse);
+      expect(written, isNotEmpty);
     });
   });
 
