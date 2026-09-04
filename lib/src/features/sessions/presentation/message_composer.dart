@@ -49,13 +49,44 @@ class MessageComposer extends StatefulWidget {
 }
 
 class _MessageComposerState extends State<MessageComposer> {
-  late final _input = widget.controller ?? TextEditingController();
+  late TextEditingController _input;
   final _attachments = <_Attachment>[];
   bool _busy = false;
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKey);
 
   @override
+  void initState() {
+    super.initState();
+    _input = widget.controller ?? TextEditingController();
+    _input.addListener(_onInputChange);
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (mounted) setState(() {});
+  }
+
+  void _onInputChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(MessageComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _input.removeListener(_onInputChange);
+      if (oldWidget.controller == null) {
+        _input.dispose();
+      }
+      _input = widget.controller ?? TextEditingController();
+      _input.addListener(_onInputChange);
+    }
+  }
+
+  @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _input.removeListener(_onInputChange);
     _focusNode.dispose();
     if (widget.controller == null) _input.dispose();
     super.dispose();
@@ -172,97 +203,219 @@ class _MessageComposerState extends State<MessageComposer> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final canType = widget.enabled && !_busy;
+    final hasContent = _input.text.trim().isNotEmpty || _attachments.isNotEmpty;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
-        if (_attachments.isNotEmpty)
-          Align(
-            alignment: Alignment.centerLeft,
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-              child: Wrap(
-                spacing: Insets.sm,
-                runSpacing: Insets.sm,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (var i = 0; i < _attachments.length; i++)
-                    _Thumbnail(
-                      bytes: _attachments[i].bytes,
-                      onRemove: () => setState(() => _attachments.removeAt(i)),
+                  AnimatedContainer(
+                    duration: Motion.fast,
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: _focusNode.hasFocus
+                            ? scheme.primary.withValues(alpha: 0.7)
+                            : scheme.outlineVariant.withValues(alpha: 0.5),
+                        width: _focusNode.hasFocus ? 1.5 : 1.0,
+                      ),
+                      boxShadow: _focusNode.hasFocus
+                          ? [
+                              BoxShadow(
+                                color: scheme.primary.withValues(alpha: 0.08),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
                     ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_attachments.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                            child: Wrap(
+                              spacing: Insets.sm,
+                              runSpacing: Insets.sm,
+                              children: [
+                                for (var i = 0; i < _attachments.length; i++)
+                                  _Thumbnail(
+                                    bytes: _attachments[i].bytes,
+                                    onRemove: () => setState(
+                                      () => _attachments.removeAt(i),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                          child: TextField(
+                            controller: _input,
+                            focusNode: _focusNode,
+                            enabled: canType,
+                            minLines: 1,
+                            maxLines: 7,
+                            textInputAction: TextInputAction.newline,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 6,
+                              ),
+                              hintText: widget.hintText,
+                              hintStyle: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant.withValues(
+                                  alpha: 0.65,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final sendButton = IconButton.filled(
+                                tooltip: _busy ? 'Sending…' : 'Send (Enter)',
+                                onPressed: canType ? _send : null,
+                                visualDensity: VisualDensity.compact,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: (canType && hasContent)
+                                      ? scheme.primary
+                                      : scheme.surfaceContainerHighest,
+                                  foregroundColor: (canType && hasContent)
+                                      ? scheme.onPrimary
+                                      : scheme.onSurfaceVariant,
+                                ),
+                                icon: _busy
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        AppIcons.paperPlaneRight,
+                                        size: 15,
+                                      ),
+                              );
+
+                              final attachButton = IconButton(
+                                tooltip: 'Attach image (or paste with Ctrl+V)',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: canType ? _attach : null,
+                                icon: Icon(
+                                  AppIcons.image,
+                                  size: 18,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              );
+
+                              if (constraints.maxWidth > 380) {
+                                return Row(
+                                  children: [
+                                    attachButton,
+                                    if (widget.chips.isNotEmpty) ...[
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Wrap(
+                                          spacing: Insets.xs,
+                                          runSpacing: Insets.xs,
+                                          children: widget.chips,
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      const Spacer(),
+                                    ],
+                                    const SizedBox(width: 6),
+                                    sendButton,
+                                  ],
+                                );
+                              }
+
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    children: [
+                                      attachButton,
+                                      const Spacer(),
+                                      sendButton,
+                                    ],
+                                  ),
+                                  if (widget.chips.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Wrap(
+                                        spacing: Insets.xs,
+                                        runSpacing: Insets.xs,
+                                        children: widget.chips,
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5, left: 4, right: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (_attachments.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              'Images are saved to a temp folder and referenced by path so the agent can read them.',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                    fontSize: 11,
+                                  ),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        Text(
+                          'Enter to send · Shift + Enter for new line',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: scheme.onSurfaceVariant.withValues(
+                                  alpha: 0.6,
+                                ),
+                                fontSize: 11,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Attach image (or paste with Ctrl+V)',
-                onPressed: canType ? _attach : null,
-                icon: const Icon(AppIcons.image),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  focusNode: _focusNode,
-                  enabled: canType,
-                  minLines: 1,
-                  maxLines: 6,
-                  textInputAction: TextInputAction.newline,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    hintText: widget.hintText,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                // Named, because it is icon-only and Narrator reads the
-                // semantics tree rather than a hover: without this the most
-                // important control in the composer announced as "button".
-                // The chord is in the label for the same reason the toolbar
-                // puts chords in tooltips — it is the faster way to send, and
-                // the only place that says so.
-                tooltip: _busy ? 'Sending…' : 'Send (Enter)',
-                onPressed: canType ? _send : null,
-                icon: _busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(AppIcons.paperPlaneRight),
-              ),
-            ],
-          ),
         ),
-        if (widget.chips.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            // Wraps rather than a `Row`: this slot now holds more than one
-            // control, and a pane narrowed to a third of a 720px window at
-            // Windows' largest text step has no room for them side by side. A
-            // second line is the right answer there; an overflow stripe is not.
-            child: Wrap(
-              spacing: Insets.sm,
-              runSpacing: Insets.xs,
-              children: widget.chips,
-            ),
-          ),
-        if (_attachments.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              'Images are saved to a temp folder and referenced by path so the '
-              'agent can read them.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
       ],
     );
   }

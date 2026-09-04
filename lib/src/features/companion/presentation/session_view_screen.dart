@@ -18,7 +18,7 @@ import 'link_banner.dart';
 /// One session's transcript on the phone: the desktop chat's shapes drawn
 /// bottom-up by [CompanionTranscriptView], with the composer reduced to what
 /// the protocol lets a phone do — send a prompt, answer an approval.
-class SessionViewScreen extends ConsumerWidget {
+class SessionViewScreen extends ConsumerStatefulWidget {
   const SessionViewScreen({required this.sessionId, super.key});
 
   final String sessionId;
@@ -30,7 +30,21 @@ class SessionViewScreen extends ConsumerWidget {
       DeliveryStage.values.asNameMap()[stage]?.label ?? stage;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SessionViewScreen> createState() => _SessionViewScreenState();
+}
+
+class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
+  final _composer = TextEditingController();
+
+  @override
+  void dispose() {
+    _composer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionId = widget.sessionId;
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final gateway = ref.read(companionGatewayProvider);
@@ -92,6 +106,12 @@ class SessionViewScreen extends ConsumerWidget {
             'No transcript to show. Some agents keep none we can read — '
             'their terminal is the session — and a session that has just '
             'started has nothing in it yet.',
+        onSuggestionTap: (prompt) {
+          _composer.text = prompt;
+          _composer.selection = TextSelection.collapsed(
+            offset: prompt.length,
+          );
+        },
         footer: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -106,6 +126,7 @@ class SessionViewScreen extends ConsumerWidget {
                     gateway.answerApproval(sessionId, approval.id, decision),
               ),
             CompanionComposer(
+              controller: _composer,
               enabled: canPrompt,
               hintText: canPrompt
                   ? 'Message the agent…'
@@ -162,7 +183,9 @@ class SessionViewScreen extends ConsumerWidget {
                           if (session?.whereabouts != null)
                             session!.whereabouts!,
                           if (session?.deliveryStage != null)
-                            _stageLabel(session!.deliveryStage!),
+                            SessionViewScreen._stageLabel(
+                              session!.deliveryStage!,
+                            ),
                         ].join('  ·  '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

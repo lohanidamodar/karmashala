@@ -18,11 +18,15 @@ class TranscriptMessage {
     this.subagent,
     this.at,
     this.pendingToolUseId,
+    this.thinking,
   });
 
   /// `user`, `agent`, or `tool`.
   final String role;
   final String text;
+
+  /// Optional model reasoning or thinking process.
+  final String? thinking;
 
   /// The structured call behind a `tool` message: what it ran, and what it
   /// answered. Null for the other two roles.

@@ -12,6 +12,7 @@ class CompanionComposer extends StatefulWidget {
     required this.onSend,
     this.hintText = 'Message the agent…',
     this.enabled = true,
+    this.controller,
     super.key,
   });
 
@@ -21,18 +22,44 @@ class CompanionComposer extends StatefulWidget {
 
   final String hintText;
   final bool enabled;
+  final TextEditingController? controller;
 
   @override
   State<CompanionComposer> createState() => _CompanionComposerState();
 }
 
 class _CompanionComposerState extends State<CompanionComposer> {
-  final _input = TextEditingController();
+  late TextEditingController _input;
   bool _busy = false;
 
   @override
+  void initState() {
+    super.initState();
+    _input = widget.controller ?? TextEditingController();
+    _input.addListener(_onInputChange);
+  }
+
+  void _onInputChange() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(CompanionComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _input.removeListener(_onInputChange);
+      if (oldWidget.controller == null) {
+        _input.dispose();
+      }
+      _input = widget.controller ?? TextEditingController();
+      _input.addListener(_onInputChange);
+    }
+  }
+
+  @override
   void dispose() {
-    _input.dispose();
+    _input.removeListener(_onInputChange);
+    if (widget.controller == null) _input.dispose();
     super.dispose();
   }
 
@@ -57,60 +84,82 @@ class _CompanionComposerState extends State<CompanionComposer> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final canType = widget.enabled && !_busy;
+    final hasContent = _input.text.trim().isNotEmpty;
     final density = UiDensity.of(context);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
         Padding(
-          // The screen gutter, not a hand-picked 8: the composer sits directly
-          // under a transcript indented by [Insets.md] and above a home
-          // indicator, and it was the only row on the phone inset by 8.
           padding: EdgeInsets.fromLTRB(
             density.padX,
             density.padY,
             density.padX,
             density.padY,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  enabled: canType,
-                  minLines: 1,
-                  maxLines: 4,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _send(),
-                  decoration: InputDecoration(
-                    // `isDense` was undoing the touch theme's own input
-                    // padding, so the one field a thumb uses most was the
-                    // tightest in the app. The theme decides the density now.
-                    border: const OutlineInputBorder(),
-                    hintText: widget.hintText,
+          child: Container(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+            ),
+            padding: const EdgeInsets.only(left: 14, right: 4, top: 4, bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: TextField(
+                      controller: _input,
+                      enabled: canType,
+                      minLines: 1,
+                      maxLines: 5,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: widget.hintText,
+                        hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(width: Touch.gap),
-              IconButton.filled(
-                tooltip: 'Send',
-                onPressed: canType ? _send : null,
-                // Never smaller than the target floor, whatever a theme
-                // upstream decides: this is the button the whole screen is for.
-                constraints: BoxConstraints(
-                  minWidth: density.minRow,
-                  minHeight: density.minRow,
+                SizedBox(width: Touch.gap),
+                IconButton.filled(
+                  tooltip: 'Send',
+                  onPressed: canType ? _send : null,
+                  style: IconButton.styleFrom(
+                    backgroundColor: (canType && hasContent)
+                        ? scheme.primary
+                        : scheme.surfaceContainerHighest,
+                    foregroundColor: (canType && hasContent)
+                        ? scheme.onPrimary
+                        : scheme.onSurfaceVariant,
+                  ),
+                  constraints: BoxConstraints(
+                    minWidth: density.minRow,
+                    minHeight: density.minRow,
+                  ),
+                  icon: _busy
+                      ? SizedBox.square(
+                          dimension: density.icon,
+                          child: const CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(AppIcons.paperPlaneRight, size: density.icon),
                 ),
-                icon: _busy
-                    ? SizedBox.square(
-                        dimension: density.icon,
-                        child: const CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(AppIcons.paperPlaneRight, size: density.icon),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],

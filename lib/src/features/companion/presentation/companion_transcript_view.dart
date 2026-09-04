@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/markdown_message.dart';
 import '../client/companion_gateway.dart';
 
@@ -22,6 +23,7 @@ class CompanionTranscriptView extends StatefulWidget {
     required this.messages,
     this.footer,
     this.emptyHint = 'No messages yet.',
+    this.onSuggestionTap,
     super.key,
   });
 
@@ -32,6 +34,9 @@ class CompanionTranscriptView extends StatefulWidget {
   final Widget? footer;
 
   final String emptyHint;
+
+  /// Called when the user taps a suggested prompt from the empty state.
+  final ValueChanged<String>? onSuggestionTap;
 
   @override
   State<CompanionTranscriptView> createState() =>
@@ -82,24 +87,15 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final total = widget.messages.length;
 
     return Column(
       children: [
         Expanded(
           child: total == 0
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(Insets.xl),
-                    child: Text(
-                      widget.emptyHint,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
+              ? _CompanionEmptyState(
+                  emptyHint: widget.emptyHint,
+                  onSuggestionTap: widget.onSuggestionTap,
                 )
               : ListView.builder(
                   controller: _scroll,
@@ -222,65 +218,181 @@ class _MessageTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final density = UiDensity.of(context);
 
-    final (String gutter, Color color, String label) = switch (message.role) {
-      'user' => ('›', scheme.primary, 'You'),
-      'tool' => ('⏺', scheme.tertiary, 'Tool'),
-      'error' => ('✗', SemanticColors.of(context).failure, 'Error'),
-      _ => ('●', scheme.onSurface, 'Agent'),
-    };
-    final prose = message.role == 'user' || message.role == 'agent';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: Touch.icon,
-            child: Text(
-              gutter,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
+    if (message.role == 'user') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        child: Container(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.35),
             ),
           ),
-          SizedBox(width: density.glyphGap),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        label.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    _CopyButton(text: message.text),
-                  ],
-                ),
-                SizedBox(height: density.lineGap),
-                if (prose)
-                  MarkdownMessage(message.text)
-                else
-                  SelectableText(
-                    message.text,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: kMonoFamily,
-                      height: 1.35,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(AppIcons.userCircle, size: 16, color: scheme.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'YOU',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-              ],
+                  const Spacer(),
+                  _CopyButton(text: message.text),
+                ],
+              ),
+              const SizedBox(height: 4),
+              MarkdownMessage(message.text),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (message.role == 'tool') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        child: Container(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.35),
             ),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(AppIcons.terminal, size: 15, color: scheme.tertiary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'TOOL',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.tertiary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  _CopyButton(text: message.text),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SelectableText(
+                message.text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: kMonoFamily,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (message.role == 'error') {
+      final failure = SemanticColors.of(context).failure;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        child: Container(
+          decoration: BoxDecoration(
+            color: failure.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: failure.withValues(alpha: 0.4)),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(AppIcons.warning, size: 15, color: failure),
+                  const SizedBox(width: 6),
+                  Text(
+                    'ERROR',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: failure,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  _CopyButton(text: message.text),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SelectableText(
+                message.text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: kMonoFamily,
+                  color: failure,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Agent message
+    final text = message.text;
+    final thinkingMatch = RegExp(
+      r'<thinking>([\s\S]*?)</thinking>',
+    ).firstMatch(text);
+    final String? thinking = thinkingMatch?.group(1)?.trim();
+    final String cleanText = thinkingMatch != null
+        ? (text.substring(0, thinkingMatch.start) +
+                text.substring(thinkingMatch.end))
+            .trim()
+        : text;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: scheme.secondaryContainer.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(AppIcons.robot, size: 12, color: scheme.secondary),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'AGENT',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              _CopyButton(text: message.text),
+            ],
+          ),
+          if (thinking != null && thinking.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ThinkingAccordion(thinking: thinking),
+          ],
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: MarkdownMessage(cleanText),
           ),
         ],
       ),
@@ -322,6 +434,123 @@ class _CopyButtonState extends State<_CopyButton> {
         await Future<void>.delayed(const Duration(seconds: 2));
         if (mounted) setState(() => _copied = false);
       },
+    );
+  }
+}
+
+class _CompanionEmptyState extends StatelessWidget {
+  const _CompanionEmptyState({
+    required this.emptyHint,
+    this.onSuggestionTap,
+  });
+
+  final String emptyHint;
+  final ValueChanged<String>? onSuggestionTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer.withValues(alpha: 0.4),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: scheme.primary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Icon(
+                AppIcons.robot,
+                size: 24,
+                color: scheme.primary,
+              ),
+            ),
+            const SizedBox(height: Insets.sm),
+            Text(
+              'Start a conversation',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: Insets.xs),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+              child: Text(
+                emptyHint,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (onSuggestionTap != null) ...[
+              const SizedBox(height: Insets.lg),
+              Wrap(
+                spacing: Insets.xs,
+                runSpacing: Insets.xs,
+                alignment: WrapAlignment.center,
+                children: [
+                  _SuggestionChip(
+                    icon: AppIcons.code,
+                    label: 'Explain architecture',
+                    prompt:
+                        'Explain the architecture and main features of this project.',
+                    onTap: onSuggestionTap!,
+                  ),
+                  _SuggestionChip(
+                    icon: AppIcons.playCircle,
+                    label: 'Run tests',
+                    prompt: 'Run project tests and explain any failures',
+                    onTap: onSuggestionTap!,
+                  ),
+                  _SuggestionChip(
+                    icon: AppIcons.gitBranch,
+                    label: 'Recent changes',
+                    prompt: 'Summarize git status and recent changes',
+                    onTap: onSuggestionTap!,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({
+    required this.icon,
+    required this.label,
+    required this.prompt,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String prompt;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ActionChip(
+      avatar: Icon(icon, size: 14, color: scheme.primary),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      backgroundColor: scheme.surfaceContainerHigh,
+      side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      onPressed: () => onTap(prompt),
     );
   }
 }

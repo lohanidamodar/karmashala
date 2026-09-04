@@ -407,6 +407,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 active: active,
                 hasTerminal: hasTerminal,
               ),
+              onSuggestionTap: (prompt) {
+                _composer.text = prompt;
+                _composer.selection = TextSelection.collapsed(
+                  offset: prompt.length,
+                );
+              },
             ),
           ),
         ),
@@ -464,7 +470,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       final reference = message.subagent;
       if (reference != null) _subagents[out.length] = reference;
       out.add(
-        ChatMessage(role: message.role, text: message.text, tool: message.tool),
+        ChatMessage(
+          role: message.role,
+          text: message.text,
+          tool: message.tool,
+          thinking: message.thinking,
+          at: message.at,
+        ),
       );
     }
     return out;
