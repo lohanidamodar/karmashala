@@ -164,6 +164,62 @@ void main() {
     expect(dao.getByRepository('rX'), isEmpty);
   });
 
+  /// **The project header's two integers.**
+  ///
+  /// A count that is cheap and wrong is worse than the rows it replaced, so
+  /// these check the arithmetic rather than the plan: the same answers the
+  /// header used to get by building every session and counting them.
+  group('countsByRepositories', () {
+    test('counts the rows and the running ones', () {
+      dao.insert(session(id: 's1', status: SessionStatus.running));
+      dao.insert(session(id: 's2', status: SessionStatus.running));
+      dao.insert(session(id: 's3', status: SessionStatus.completed));
+      expect(dao.countsByRepositories(['r1']), (sessions: 3, running: 2));
+    });
+
+    test('and only under the repositories it was given', () {
+      dao.insert(session(id: 's1', status: SessionStatus.running));
+      expect(dao.countsByRepositories(['rX']), (sessions: 0, running: 0));
+    });
+
+    test('no repositories is zero, not every session', () {
+      // A project with no checkouts must read as empty. The `IN ()` this would
+      // otherwise build is not valid SQL, and the shape that *is* valid — no
+      // `WHERE` at all — would count the whole workspace under one header.
+      dao.insert(session(id: 's1', status: SessionStatus.running));
+      expect(dao.countsByRepositories(const []), (sessions: 0, running: 0));
+    });
+
+    test('a status nothing recognises still counts as a session', () {
+      // `_statusFrom` reads an unknown word as `SessionStatus.unknown` rather
+      // than throwing the row away, and the header counts the same way: the
+      // row exists whatever it claims to be doing.
+      dao.insert(session(id: 's1'));
+      db.execute("UPDATE sessions SET status = 'martian' WHERE id = 's1';");
+      expect(dao.countsByRepositories(['r1']), (sessions: 1, running: 0));
+    });
+
+    test('agrees with counting the rows one at a time', () {
+      // The property the change has to preserve: whatever `getByRepository`
+      // would have answered, this answers.
+      for (var i = 0; i < 7; i++) {
+        dao.insert(
+          session(
+            id: 's$i',
+            status: i.isEven ? SessionStatus.running : SessionStatus.completed,
+          ),
+        );
+      }
+      final rows = dao.getByRepository('r1');
+      expect(dao.countsByRepositories(['r1']), (
+        sessions: rows.length,
+        running: rows
+            .where((s) => s.status == SessionStatus.running)
+            .length,
+      ));
+    });
+  });
+
   test('deleting the repository cascades to its sessions', () {
     dao.insert(session());
     RepositoryDao(db).delete('r1');

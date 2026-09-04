@@ -313,6 +313,42 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// How many sessions sit under [repositoryIds], and how many of those are
+  /// running — in **one statement that decodes no session at all**.
+  ///
+  /// What a project header asks. It used to ask by calling [getByRepository]
+  /// once per repository and counting the answers, which is two wastes at
+  /// once: one statement per checkout (the owner has a project rescanned into
+  /// 69 of them), and a whole [Session] built out of twenty-one columns —
+  /// including two ISO date parses — for every row, to read one word off it
+  /// and drop the rest.
+  ///
+  /// A header never *names* a session, so nothing here returns one. The
+  /// counting happens in SQLite, over the repository index, and what comes
+  /// back is two integers however many sessions the project holds.
+  ///
+  /// The running word is taken from [SessionStatus.running] rather than
+  /// spelled into the SQL, the way [getClaimingLive] takes its words from
+  /// [SessionStatus.claimsLive]: renaming the enum value must not silently
+  /// make every header read zero.
+  ({int sessions, int running}) countsByRepositories(
+    Iterable<String> repositoryIds,
+  ) {
+    final ids = repositoryIds.toSet().toList();
+    if (ids.isEmpty) return (sessions: 0, running: 0);
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    final row = _db.query(
+      'SELECT COUNT(*) AS total, '
+      'COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS running '
+      'FROM sessions WHERE repository_id IN ($placeholders);',
+      [SessionStatus.running.name, ...ids],
+    ).first;
+    return (
+      sessions: (row['total'] as int?) ?? 0,
+      running: (row['running'] as int?) ?? 0,
+    );
+  }
+
   /// Sessions targeting [repositoryId].
   List<Session> getByRepository(String repositoryId) {
     final rows = _db.query(

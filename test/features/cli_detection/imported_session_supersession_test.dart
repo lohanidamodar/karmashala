@@ -156,6 +156,28 @@ void main() {
       expect(rows.single.externalId, 'cli-def');
     });
 
+    test('and is not counted twice under the project header either', () {
+      // `countByRepositories` is the header's read, and it has to apply the
+      // same rule the list does — a header that counted the hidden record
+      // would disagree with the rows drawn under it, which is worse than a
+      // slow header.
+      dao
+        ..insertIfAbsent(imported(id: 'imp-1', externalId: 'cli-abc'))
+        ..insertIfAbsent(imported(id: 'imp-2', externalId: 'cli-def'));
+      expect(dao.countByRepositories(['r1']), 2);
+
+      sessions.insert(native(externalId: 'cli-abc'));
+
+      expect(dao.countByRepositories(['r1']), dao.getByRepository('r1').length);
+      expect(dao.countByRepositories(['r1']), 1);
+      expect(dao.countByRepositories(['rX']), 0);
+      expect(
+        dao.countByRepositories(const []),
+        0,
+        reason: 'a project with no checkouts counts nothing, not everything',
+      );
+    });
+
     test('a pair already in the database resolves with no migration', () {
       // Exactly the shape a user upgrading into this fix has: both rows
       // already written, by a resume that predates the resolution.

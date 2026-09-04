@@ -321,15 +321,27 @@ final projectSummaryProvider = Provider.autoDispose
         ),
       );
 
-      var sessions = 0;
-      var running = 0;
+      // **Two statements for the whole project, and no session decoded.**
+      // This used to be two DAO reads *per repository* whose rows were built
+      // in full and then counted — twenty-one columns and two date parses per
+      // native row, twelve and one per imported row, all to add one to an
+      // integer. A header never names a session, so nothing it asks for needs
+      // to be one. The owner has a project rescanned into 69 checkouts, which
+      // is where the per-repository statement count was felt.
+      //
+      // Measured over eight repositories, in the planner's own VM steps: the
+      // old shape cost 8 x 661 steps and 8 temp-b-tree sorts at 100 sessions
+      // and 8 x 3161 at 500; the aggregate costs 903 and 4183, in one
+      // statement, with no sort. `session_start_cost_test` counts the other
+      // half — the rows the app then has to decode — and its slope fell from
+      // four re-reads of the list per start to three.
+      final ids = [for (final repository in repositories) repository.id];
+      final counts = sessionDao.countsByRepositories(ids);
+      final sessions = counts.sessions + importedDao.countByRepositories(ids);
+      final running = counts.running;
+
       int? changed;
       for (final repository in repositories) {
-        for (final session in sessionDao.getByRepository(repository.id)) {
-          sessions++;
-          if (session.status == SessionStatus.running) running++;
-        }
-        sessions += importedDao.getByRepository(repository.id).length;
         // The shared producer rather than this file's projection of it: a
         // session card, the delivery strip and the Changes panel all funnel
         // into `checkoutDeliveryProvider`, so that is the one most likely to be

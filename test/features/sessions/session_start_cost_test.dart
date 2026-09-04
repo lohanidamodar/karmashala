@@ -65,12 +65,28 @@ import '../terminal/fake_instance.dart';
 /// costs the same at a hundred sessions as at one.
 ///
 /// **What is left, and why it stays.** The last column does still rise, and
-/// that is the honest floor: four providers legitimately re-read the session
-/// list when the list changes shape — the placement map, the project summary,
-/// the Explorer's own list, and `SessionEndingObserver`'s sweep — and each is
-/// one statement and N decoded rows. That is pinned below as a slope rather
-/// than removed, so a *fifth* scanning watcher cannot be added without a number
-/// moving. The observer also re-arms one `ref.listen` per running row on every
+/// that is the honest floor: three providers legitimately re-read the session
+/// list when the list changes shape — the placement map, the Explorer's own
+/// list, and `SessionEndingObserver`'s sweep — and each is one statement and N
+/// decoded rows. That is pinned below as a slope rather than removed, so a
+/// *fourth* scanning watcher cannot be added without a number moving.
+///
+/// **It was four.** The project header was the fourth, and it was the one that
+/// had no business reading a row at all: it built a whole `Session` out of
+/// twenty-one columns, and a whole `ImportedSession` out of twelve, for every
+/// row under every checkout in the project — to add one to an integer and drop
+/// the rest. A header never *names* a session, so it now asks SQLite for two
+/// integers instead, in one statement for the whole project rather than two per
+/// repository. The slope fell from 4 to 3 and the numbers below moved with it:
+///
+/// ```txt
+/// sessions    rows decoded per start
+///        1     12 ->  12
+///       10     48 ->  39
+///      100    408 -> 309
+/// ```
+///
+/// The observer also re-arms one `ref.listen` per running row on every
 /// rebuild, which looks alarming and costs nothing: `statusStreams` is 1 at
 /// every scale, before the fix and after, because re-listening a live provider
 /// builds no stream.
@@ -159,20 +175,26 @@ void main() {
             're-arms a `ref.listen` per running row on every rebuild, and this '
             'is what says that costs nothing: $statusSubscriptions',
       );
-      // Rows, not statements. Four providers legitimately re-read the list
-      // when the list changes shape — the placement map, the project summary,
-      // the Explorer's own list and the follow-up sweep — and each is one
-      // statement and N decoded rows. A fifth would be invisible in every
-      // other number on this page.
+      // Rows, not statements. Three providers legitimately re-read the list
+      // when the list changes shape — the placement map, the Explorer's own
+      // list and the follow-up sweep — and each is one statement and N decoded
+      // rows. A fourth would be invisible in every other number on this page.
+      //
+      // It was four until the project header stopped reading rows to count
+      // them: `SessionDao.countsByRepositories` answers with two integers, so
+      // the header's contribution to this slope is now zero however many
+      // sessions the project holds. Tightened rather than left at 4, because a
+      // bound with slack in it is a bound that lets the next regression
+      // through.
       expect(
         [
           (rowsScanned[10]! - rowsScanned[1]!) / 9,
           (rowsScanned[100]! - rowsScanned[10]!) / 90,
         ],
-        everyElement(4),
+        everyElement(3),
         reason:
             'a start may re-read the session list a fixed number of times, '
-            'and that number is four: $rowsScanned',
+            'and that number is three: $rowsScanned',
       );
       expect(
         encodes.values.toSet(),

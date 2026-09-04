@@ -118,6 +118,21 @@ void main() {
         contains('SEARCH sessions USING INDEX idx_sessions_parent'),
       );
     });
+
+    test('the project header count, which reads no row at all', () {
+      // `SessionDao.countsByRepositories`. One statement for the whole
+      // project, over the repository index, with no sort — the header used to
+      // pay one `SELECT *` and one temp b-tree per checkout.
+      expect(
+        plan(
+          'SELECT COUNT(*) AS total, '
+          'COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS running '
+          'FROM sessions WHERE repository_id IN (?, ?);',
+        ),
+        [contains('SEARCH sessions USING INDEX idx_sessions_repository')],
+        reason: 'one step, and no USE TEMP B-TREE among them',
+      );
+    });
   });
 
   test('and the dao still answers with the row', () {

@@ -132,6 +132,26 @@ class ImportedSessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// How many conversations under [repositoryIds] still show as history — the
+  /// same rows [getByRepository] would return, counted rather than built.
+  ///
+  /// A project header wants the number and nothing else, and building the rows
+  /// to take `.length` of them cost twelve columns and a date parse each. The
+  /// `NOT EXISTS` stays: a conversation a native row has taken over is not a
+  /// second entry in the count, and a header that disagreed with the list
+  /// below it would be worse than a slow one.
+  int countByRepositories(Iterable<String> repositoryIds) {
+    final ids = repositoryIds.toSet().toList();
+    if (ids.isEmpty) return 0;
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    final rows = _db.query(
+      'SELECT COUNT(*) AS total FROM imported_sessions '
+      'WHERE repository_id IN ($placeholders) AND $_notSuperseded;',
+      ids,
+    );
+    return (rows.first['total'] as int?) ?? 0;
+  }
+
   List<ImportedSession> getByRepository(String repositoryId) {
     final rows = _db.query(
       'SELECT * FROM imported_sessions WHERE repository_id = ? '
