@@ -562,9 +562,19 @@ distribution can measure them.
 ### Running them
 
 ```powershell
-pwsh tool/live_tests.ps1              # both families
-pwsh tool/live_tests.ps1 -Family wsl  # WSL only
-pwsh tool/live_tests.ps1 -Family ssh  # SSH only
+.\tool\live_tests.ps1              # both families
+.\tool\live_tests.ps1 -Family wsl  # WSL only
+.\tool\live_tests.ps1 -Family ssh  # SSH only
+```
+
+**Windows PowerShell 5.1 runs it.** This said `pwsh` until 2026-09-04, which is
+PowerShell 7 and is *not installed on the owner's machine* — the instruction
+answered `CommandNotFoundException` for the one person it was written for. The
+script declares no `#requires` and uses no 7-only syntax, so 5.1 is enough. If
+the execution policy refuses the file:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool\live_tests.ps1 -Family wsl
 ```
 
 From Windows, never from a WSL shell — §17 applies to this script like anything

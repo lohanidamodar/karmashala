@@ -22,8 +22,12 @@
   the environment; without them those tests skip themselves and say so.
 
 .EXAMPLE
-  pwsh tool/live_tests.ps1
-  pwsh tool/live_tests.ps1 -Family wsl
+  .\tool\live_tests.ps1
+  .\tool\live_tests.ps1 -Family wsl
+
+  Windows PowerShell 5.1 is enough — no `#requires`, no 7-only syntax. Do not
+  write `pwsh` here: PowerShell 7 is not installed on the machine this script
+  exists for.
 
 .NOTES
   Never run this from a WSL shell. Bare `flutter` there resolves to the POSIX
