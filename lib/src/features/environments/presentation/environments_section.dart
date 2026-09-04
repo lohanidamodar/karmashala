@@ -122,13 +122,14 @@ class _EnvironmentCard extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              host == null
-                  ? environment.id
-                  : '${environment.id} · ${host!.address}',
-              style: MonoStyles.small,
-            ),
+            // The address, when there is one to give. Never the id: it is a
+            // database key, the local host's is the literal `windows` on every
+            // platform, and this card printed it under a heading reading
+            // "macOS".
+            if (host != null) ...[
+              const SizedBox(height: Insets.xs),
+              Text(host!.address, style: MonoStyles.small),
+            ],
             if (isSsh && host != null) ...[
               const SizedBox(height: Insets.sm),
               SshConnectionStatusChip(hostId: host!.id),
