@@ -90,7 +90,21 @@ void main() {
     addTearDown(client.close);
 
     await expectLater(
-      client.connect(helloTimeout: const Duration(milliseconds: 300)),
+      // **Long enough that it cannot be mistaken for connect latency.** The
+      // verdict this test asserts turns on `socketOpened`: when the hello
+      // times out, `connect` says *relay unreachable* if the socket never
+      // opened and probes forward if it did. At 300 ms that timeout fired
+      // before a loopback connect finished under gate load — four
+      // `flutter_tester` processes and a machine doing other work — so a relay
+      // that had taken the socket was reported as one that could not be
+      // reached, which is the opposite of what this case is named for.
+      //
+      // The failure modes are asymmetric, which is why this errs long: too
+      // short is a false failure, too long is only a slower test. Nothing here
+      // waits *for* the timeout to prove anything — the hello never arrives —
+      // so the bound is an upper limit on something that will not happen, and
+      // making it generous weakens no assertion.
+      client.connect(helloTimeout: const Duration(seconds: 2)),
       throwsA(
         isA<RemoteApiException>()
             .having((e) => e.hostAbsent, 'hostAbsent', isTrue)
