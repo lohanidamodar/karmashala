@@ -5,6 +5,7 @@ import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
@@ -301,6 +302,12 @@ class _DoneDivider extends StatelessWidget {
 }
 
 /// One todo: a tick, the line, and the menu that moves, files or removes it.
+///
+/// The menu is reached the four ways [RowContextMenu] defines — right-click,
+/// `Shift+F10`, the Menu key, a screen reader's action — and the `⋮` that
+/// duplicates them is drawn only while a pointer or the keyboard is on the
+/// row. The tick is the row's focus stop, which is what makes `Shift+F10`
+/// reachable here with no mouse at all.
 class _TodoRow extends ConsumerStatefulWidget {
   const _TodoRow({required this.todo, required this.showProject});
 
@@ -338,159 +345,55 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     ref.read(todosProvider.notifier).edit(widget.todo.id, text);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final todo = widget.todo;
-    final project = todo.projectId == null
-        ? null
-        : projectNameById(ref, todo.projectId!);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Checkbox(
-            value: todo.isDone,
-            semanticLabel: todo.isDone
-                ? 'Reopen “${todo.body}”'
-                : 'Finish “${todo.body}”',
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            onChanged: (next) => ref
-                .read(todosProvider.notifier)
-                .setDone(todo.id, next ?? false),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Insets.sm),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_editor case final editor?)
-                    TextField(
-                      controller: editor,
-                      autofocus: true,
-                      // Unbounded, unlike the composer: the row this replaces
-                      // already draws the whole body wrapped, so a field that
-                      // grows to exactly the same height means tapping to edit
-                      // never makes the line you were reading jump or shrink.
-                      // A tall row is only a tall row — the list scrolls.
-                      minLines: _minLines,
-                      maxLines: null,
-                      // Same contract as the composer, for the same reason.
-                      keyboardType: TextInputType.text,
-                      textInputAction: TextInputAction.done,
-                      style: theme.textTheme.bodyMedium,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onSubmitted: (_) => _commitEditing(),
-                      // Clicking away keeps the edit rather than dropping it:
-                      // the user finished typing and looked elsewhere, which
-                      // is not the same as asking to undo.
-                      onTapOutside: (_) => _commitEditing(),
-                    )
-                  else
-                    // A tap edits. There is nowhere else for a tap on a todo
-                    // to go, and a one-line thing whose typo you cannot fix is
-                    // a thing you delete and retype.
-                    InkWell(
-                      onTap: _startEditing,
-                      child: Text(
-                        todo.body,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: todo.isDone ? scheme.onSurfaceVariant : null,
-                          decoration: todo.isDone
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                      ),
-                    ),
-                  if (project != null && widget.showProject)
-                    Text(
-                      project,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          _RowMenu(todo: todo),
-        ],
-      ),
-    );
-  }
-}
-
-class _RowMenu extends ConsumerWidget {
-  const _RowMenu({required this.todo});
-
-  final Todo todo;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => PopupMenuButton<String>(
-    tooltip: 'Actions for “${todo.body}”',
-    position: PopupMenuPosition.under,
-    iconSize: Chrome.iconAction,
-    padding: EdgeInsets.zero,
-    constraints: const BoxConstraints(minWidth: 180),
-    icon: const Icon(AppIcons.dotsThreeVertical),
-    onSelected: (value) => _act(context, ref, value),
-    itemBuilder: (context) => [
-      if (!todo.isDone) ...[
-        DesktopMenuItem(value: 'up', label: 'Move up', icon: AppIcons.arrowUp),
-        DesktopMenuItem(
-          value: 'down',
-          label: 'Move down',
-          icon: AppIcons.arrowDown,
-        ),
-        const DesktopMenuDivider(),
-      ],
+  /// The row's actions, in the one vocabulary every path to them shares.
+  ///
+  /// Built fresh per call: the same entries cannot be mounted by the `⋮` and
+  /// by a right-click at once, and a menu is only ever built as it opens.
+  List<PopupMenuEntry<String>> _menuItems() => [
+    if (!widget.todo.isDone) ...[
+      DesktopMenuItem(value: 'up', label: 'Move up', icon: AppIcons.arrowUp),
       DesktopMenuItem(
-        value: 'file',
-        label: 'File under…',
-        icon: AppIcons.folder,
+        value: 'down',
+        label: 'Move down',
+        icon: AppIcons.arrowDown,
       ),
       const DesktopMenuDivider(),
-      DesktopMenuItem(
-        value: 'delete',
-        label: 'Delete',
-        icon: AppIcons.trash,
-        destructive: true,
-      ),
     ],
-  );
+    DesktopMenuItem(value: 'file', label: 'File under…', icon: AppIcons.folder),
+    const DesktopMenuDivider(),
+    DesktopMenuItem(
+      value: 'delete',
+      label: 'Delete',
+      icon: AppIcons.trash,
+      destructive: true,
+    ),
+  ];
 
-  Future<void> _act(BuildContext context, WidgetRef ref, String value) async {
+  Future<void> _act(String value) async {
     final todos = ref.read(todosProvider.notifier);
     switch (value) {
       case 'up':
-        todos.move(todo.id, up: true);
+        todos.move(widget.todo.id, up: true);
       case 'down':
-        todos.move(todo.id, up: false);
+        todos.move(widget.todo.id, up: false);
       case 'delete':
-        todos.delete(todo.id);
+        todos.delete(widget.todo.id);
       case 'file':
-        await _file(context, ref);
+        await _file();
     }
   }
 
   /// The "file under…" picker, opened where the row is rather than as a
   /// dialog: moving a todo between projects is a menu choice, not a form.
-  Future<void> _file(BuildContext context, WidgetRef ref) async {
+  ///
+  /// Anchored on the row rather than on the button that used to own this menu,
+  /// because the button is no longer the only way here — a right-click and
+  /// `Shift+F10` reach the same choice and neither has a button to sit under.
+  Future<void> _file() async {
     final box = context.findRenderObject() as RenderBox?;
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return;
+    if (box == null || overlay == null || !box.hasSize) return;
     final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
     final chosen = await showMenu<ProjectScope>(
       context: context,
@@ -500,10 +403,119 @@ class _RowMenu extends ConsumerWidget {
         overlay.size.width - origin.dx - box.size.width,
         0,
       ),
-      items: projectPickerMenuItems(ref, selected: todo.projectId),
+      items: projectPickerMenuItems(ref, selected: widget.todo.projectId),
     );
-    if (chosen == null) return;
-    ref.read(todosProvider.notifier).setProject(todo.id, chosen.projectId);
+    if (chosen == null || !mounted) return;
+    ref.read(todosProvider.notifier).setProject(widget.todo.id, chosen.projectId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final todo = widget.todo;
+    final project = todo.projectId == null
+        ? null
+        : projectNameById(ref, todo.projectId!);
+    final menuLabel = 'Actions for “${todo.body}”';
+
+    return RowContextMenu(
+      menuLabel: menuLabel,
+      menuItems: _menuItems(),
+      onSelected: _act,
+      builder: (context, menuVisible) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: todo.isDone,
+              semanticLabel: todo.isDone
+                  ? 'Reopen “${todo.body}”'
+                  : 'Finish “${todo.body}”',
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              onChanged: (next) => ref
+                  .read(todosProvider.notifier)
+                  .setDone(todo.id, next ?? false),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_editor case final editor?)
+                      TextField(
+                        controller: editor,
+                        autofocus: true,
+                        // Unbounded, unlike the composer: the row this replaces
+                        // already draws the whole body wrapped, so a field that
+                        // grows to exactly the same height means tapping to edit
+                        // never makes the line you were reading jump or shrink.
+                        // A tall row is only a tall row — the list scrolls.
+                        minLines: _minLines,
+                        maxLines: null,
+                        // Same contract as the composer, for the same reason.
+                        keyboardType: TextInputType.text,
+                        textInputAction: TextInputAction.done,
+                        style: theme.textTheme.bodyMedium,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onSubmitted: (_) => _commitEditing(),
+                        // Clicking away keeps the edit rather than dropping it:
+                        // the user finished typing and looked elsewhere, which
+                        // is not the same as asking to undo.
+                        onTapOutside: (_) => _commitEditing(),
+                      )
+                    else
+                      // A tap edits. There is nowhere else for a tap on a todo
+                      // to go, and a one-line thing whose typo you cannot fix is
+                      // a thing you delete and retype.
+                      InkWell(
+                        onTap: _startEditing,
+                        child: Text(
+                          todo.body,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: todo.isDone ? scheme.onSurfaceVariant : null,
+                            decoration: todo.isDone
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ),
+                    if (project != null && widget.showProject)
+                      Text(
+                        project,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            // Kept, and revealed rather than removed. Right-click is
+            // invisible until it is tried; a button that appears when the
+            // pointer is on the row costs nothing at rest and is how the menu
+            // is discovered in the first place. On a touch surface — the
+            // companion runs this pane — it is always drawn, because there is
+            // no right-click and no hover there to reveal it with.
+            RowMenuButton(
+              visible: menuVisible,
+              tooltip: menuLabel,
+              items: _menuItems(),
+              onSelected: _act,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
