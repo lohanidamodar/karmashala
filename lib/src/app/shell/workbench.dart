@@ -675,6 +675,11 @@ class _NoPaneForSession extends ConsumerWidget {
 /// room this frame, so a fourth per-session control, a remount, or a provider
 /// nobody has written yet all cost nothing.
 ///
+/// The quota chip is that fourth control, and it happens to *shorten* the
+/// reservation's work rather than lengthen it: it shares the facts line's row
+/// and draws `usage …` from the first frame, so that row no longer collapses to
+/// nothing while a session is being read. The reservation still covers the rest.
+///
 /// **What it cannot be is a constant.** The settled bar is 51px on a wide
 /// window and 127px on the narrowest one the app supports, because the actions
 /// legitimately wrap to three runs there — so a fixed height would either waste

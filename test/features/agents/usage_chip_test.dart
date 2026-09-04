@@ -20,7 +20,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
-import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
 
