@@ -847,6 +847,10 @@ class _TabStrip extends ConsumerWidget {
                     final terminal = TerminalActions(ref);
                     terminal.open(terminal.defaultProfile());
                   },
+                  // The one place in the strip no chip can offer: the room
+                  // after the last tab is how a tab is made last.
+                  onMoveTabToEnd: (tabId) =>
+                      sessions.reorderTab(tabId, tabs.length - 1),
                 ),
               ),
             ),
@@ -892,6 +896,41 @@ class _TabStrip extends ConsumerWidget {
 /// subject of the gesture: a test that computed the coordinate itself would
 /// stop testing the rule the moment the rule changed.
 const kTabStripEmptySpace = Key('tab-strip/empty-space');
+
+/// The insertion mark the strip draws while a tab is being dragged over it.
+///
+/// A drop that only announces itself by its result is a drop nobody aims: the
+/// strip has to say *where this will land* while the button is still down, the
+/// way every browser and editor does. Exactly one is ever on screen — a drag
+/// has one active target at a time — so a test can find *the* mark and read its
+/// rect to say which edge of which chip it is on.
+const kTabDropMarker = Key('tab-strip/drop-marker');
+
+/// [child] with [kTabDropMarker] laid down its leading or trailing edge.
+Widget _markedForDrop(
+  BuildContext context,
+  Widget child, {
+  required bool leading,
+}) => Stack(
+  fit: StackFit.passthrough,
+  children: [
+    child,
+    Positioned(
+      key: kTabDropMarker,
+      left: leading ? 0 : null,
+      right: leading ? null : 0,
+      top: 0,
+      bottom: 0,
+      width: 2,
+      // The mark is a statement, not a target: a drag is hit-tested through
+      // the avatar, and 2px of the chip that answered a pointer differently
+      // while a drag was over it would be a control nobody meant to make.
+      child: IgnorePointer(
+        child: ColoredBox(color: Theme.of(context).colorScheme.primary),
+      ),
+    ),
+  ],
+);
 
 /// One tab's chip, holding the strip's only watch on what happens *inside* a
 /// tab.
@@ -944,9 +983,47 @@ class _TabChip extends ConsumerWidget {
       data: TabDrag(tab.id),
       feedback: _TabDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
-      child: chip,
+      child: _dropSlot(ref, chip),
     );
   }
+
+  /// [chip], as the place another tab can be dropped into.
+  ///
+  /// The strip could not be rearranged at all until this, because a dragged tab
+  /// had nothing to land *on*: the only target over the strip is the one around
+  /// the whole of it, and that one refuses a tab by design — a tab is already a
+  /// tab. So the chip is both ends of the gesture, a `Draggable` for the tab it
+  /// carries and a `DragTarget` for the place it occupies.
+  ///
+  /// A *pane* is refused here rather than handled. A target that says no is
+  /// skipped and the drop walks up to the strip's own, which is what turns a
+  /// pane dragged out of a region header into a tab — so the two-way street
+  /// stays exactly as wide as it was.
+  ///
+  /// The chip being dragged shows `childWhenDragging` in place of this, so a
+  /// tab can never be dropped on itself and every drop that gets here moves
+  /// something.
+  Widget _dropSlot(WidgetRef ref, Widget chip) => DragTarget<TerminalDrag>(
+    onWillAcceptWithDetails: (details) => details.data is TabDrag,
+    onAcceptWithDetails: (details) {
+      if (details.data case TabDrag(:final tabId)) {
+        ref
+            .read(terminalSessionsControllerProvider.notifier)
+            .reorderTab(tabId, index);
+      }
+    },
+    builder: (context, candidate, _) {
+      final incoming = candidate.isEmpty ? null : candidate.first;
+      if (incoming is! TabDrag) return chip;
+      // Which edge the mark goes on is the direction of travel. A drop takes
+      // this chip's index, so a tab arriving from the right lands *before*
+      // this one and pushes it along; one from the left ends up after it.
+      final from = ref
+          .read(terminalTabsProvider)
+          .indexWhere((candidate) => candidate.id == incoming.tabId);
+      return _markedForDrop(context, chip, leading: from > index);
+    },
+  );
 
   /// Runs [scope], asking first when it would take a running session with it.
   ///
@@ -1239,6 +1316,7 @@ class _TabRail extends StatefulWidget {
     required this.width,
     required this.activeIndex,
     required this.onNewTab,
+    required this.onMoveTabToEnd,
   });
 
   final List<_StripTab> tabs;
@@ -1252,6 +1330,9 @@ class _TabRail extends StatefulWidget {
 
   /// Opens a terminal, for the gesture over the room the tabs did not use.
   final VoidCallback onNewTab;
+
+  /// Sends a tab to the end of the strip, for a drop in that same room.
+  final ValueChanged<String> onMoveTabToEnd;
 
   @override
   State<_TabRail> createState() => _TabRailState();
@@ -1419,10 +1500,33 @@ class _TabRailState extends State<_TabRail> {
           top: 0,
           bottom: 0,
           right: 0,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onDoubleTap: widget.onNewTab,
-            child: const SizedBox.expand(),
+          // Two gestures over the same pixels, and they do not compete: the
+          // double-click is a pointer gesture and the drop is resolved by the
+          // drag avatar's own hit test. The target is the *outer* of the two so
+          // the detector underneath still answers the hit that puts both of
+          // them on the path — and a pane is refused here so it carries on up
+          // to the strip's target and becomes a tab, as it always has.
+          child: DragTarget<TerminalDrag>(
+            onWillAcceptWithDetails: (details) => details.data is TabDrag,
+            onAcceptWithDetails: (details) {
+              if (details.data case TabDrag(:final tabId)) {
+                widget.onMoveTabToEnd(tabId);
+              }
+            },
+            builder: (context, candidate, _) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: widget.onNewTab,
+              child: candidate.isEmpty
+                  ? const SizedBox.expand()
+                  // Against the last chip rather than out in the middle of the
+                  // empty room: the mark says where the tab lands, and it lands
+                  // immediately after the tabs, not where the pointer is.
+                  : _markedForDrop(
+                      context,
+                      const SizedBox.expand(),
+                      leading: true,
+                    ),
+            ),
           ),
         ),
       ],
