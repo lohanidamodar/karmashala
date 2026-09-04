@@ -41,9 +41,17 @@ class AgentHookInstallationReport {
   /// Why each environment got nothing, one entry per environment rather than
   /// one per agent: the reason is a property of the door, and four copies of
   /// it is a wall of text saying one thing.
+  ///
+  /// Which is only true of the reasons left here. An agent that is simply not
+  /// installed ([AgentHookInstallation.agentPresent] `false`) is a fact about
+  /// that agent and not about the door, so folding it in stated one agent's
+  /// absence as the whole environment's failure — and did it in the error
+  /// colour, next to two agents whose hooks had just gone in.
   Map<String, String> get skippedByEnvironment => {
     for (final result in results)
-      if (!result.installed && result.skippedBecause != null)
+      if (!result.installed &&
+          result.agentPresent &&
+          result.skippedBecause != null)
         result.environmentId: result.skippedBecause!,
   };
 
@@ -87,6 +95,7 @@ class AgentHookInstallation {
     required this.agentId,
     required this.environmentId,
     required this.installed,
+    this.agentPresent = true,
     this.skippedBecause,
     this.spoolDirectory,
     this.wslDistribution,
@@ -95,6 +104,16 @@ class AgentHookInstallation {
   final String agentId;
   final String environmentId;
   final bool installed;
+
+  /// Whether this agent has a store here at all.
+  ///
+  /// `false` is the one `installed: false` that is **not** a degraded
+  /// environment: there was no agent to hook. It still carries a
+  /// [skippedBecause], because a truthful record of a sweep says why each row
+  /// is what it is — but nothing may present it as a fault. A Mac with two
+  /// working agents and no Antigravity CLI was told, in red, that it had no
+  /// status callbacks at all.
+  final bool agentPresent;
 
   /// Why nothing was written, for an environment or agent we deliberately
   /// skipped. `null` when [installed].
@@ -350,6 +369,7 @@ class AgentHookInstallationService {
               agentId: descriptor.id,
               environmentId: store.environmentId,
               installed: applied,
+              agentPresent: !absent,
               spoolDirectory: spool?.path,
               wslDistribution: environment?.wslDistribution,
               skippedBecause: applied || endpoint == null
