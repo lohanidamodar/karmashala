@@ -1,5 +1,30 @@
-import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
+import 'package:karmashala/src/features/agents/data/claude_auth_service.dart';
+import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
+
+import '../../support/fake_cli_store_locator.dart';
+import '../../support/fake_http_client.dart';
+import '../../support/fixtures.dart';
+
+class _MovableClock implements Clock {
+  _MovableClock(this.now);
+  DateTime now;
+  @override
+  DateTime nowUtc() => now.toUtc();
+
+  void advance(Duration by) => now = now.add(by);
+}
+
+const _usageBody = '{"five_hour": {"utilization": 42.0}}';
 
 void main() {
   final now = DateTime.utc(2026, 7, 28, 12);
@@ -97,6 +122,250 @@ void main() {
 
     test('is empty when rate_limit is missing', () {
       expect(parseCodexUsage({'email': 'x'}, now).isEmpty, isTrue);
+    });
+  });
+
+  group('parseRetryAfter', () {
+    test('reads the delay form', () {
+      expect(parseRetryAfter('120', now), const Duration(minutes: 2));
+      expect(parseRetryAfter(' 30 ', now), const Duration(seconds: 30));
+    });
+
+    test('reads the HTTP-date form, as of now', () {
+      final until = HttpDate.format(now.add(const Duration(minutes: 5)));
+      expect(parseRetryAfter(until, now), const Duration(minutes: 5));
+    });
+
+    test('a date already past is no wait at all, never a negative one', () {
+      final until = HttpDate.format(now.subtract(const Duration(minutes: 5)));
+      expect(parseRetryAfter(until, now), Duration.zero);
+      expect(parseRetryAfter('-30', now), Duration.zero);
+    });
+
+    test('is null when the header is absent or unreadable', () {
+      // Neither endpoint promises the header, so the caller has to have its own
+      // answer; saying "wait zero" here would be that answer, wrongly.
+      expect(parseRetryAfter(null, now), isNull);
+      expect(parseRetryAfter('', now), isNull);
+      expect(parseRetryAfter('soon', now), isNull);
+    });
+  });
+
+  /// **What a non-200 means, and what the app does next.**
+  ///
+  /// Every case below is served by `FakeHttpClient`: the endpoints under test
+  /// are the vendors' own, and the owner was rate limited when this was
+  /// written — asking them to prove a backoff is the one thing a backoff exists
+  /// to stop.
+  group('the answer the endpoint gave', () {
+    late _MovableClock clock;
+    late FakeHttpClient http;
+
+    setUp(() {
+      clock = _MovableClock(testTime);
+      http = FakeHttpClient(statusCode: 200, body: _usageBody);
+    });
+
+    AgentUsageService serviceWith() => AgentUsageService(
+      storeLocator: FixedLocator([
+        const CliStore(
+          environmentId: 'windows',
+          homesByAgentId: {'claudeCode': '/Users/me/.claude'},
+        ),
+      ]),
+      clock: clock,
+      httpClientFactory: () => http,
+      // The credential comes from a fake Keychain rather than a file, so
+      // nothing here reads or writes a real store.
+      keychain: ClaudeKeychainCache(
+        read: () async => ClaudeKeychainRead(
+          ClaudeKeychainOutcome.found,
+          secret: jsonEncode({
+            'claudeAiOauth': {'accessToken': 'token'},
+          }),
+        ),
+      ),
+      hostIsMacOS: true,
+      throttle: UsageThrottle(clock: clock),
+    );
+
+    Future<UsageException> failureOf(
+      AgentUsageService service, {
+      AgentInstallation? installation,
+    }) async {
+      try {
+        await service.fetch(installation ?? agentInstallation(), [posixEnv()]);
+      } on UsageException catch (e) {
+        return e;
+      }
+      fail('expected the fetch to fail');
+    }
+
+    test('429 is a rate limit, and the next ask never leaves the '
+        'machine', () async {
+      http.statusCode = HttpStatus.tooManyRequests;
+      final service = serviceWith();
+
+      final first = await failureOf(service);
+      expect(first.kind, UsageFailureKind.rateLimited);
+      expect(first.retryIn, kUsageBackoffBase);
+      expect(first.message, contains('Waiting 1m'));
+      expect(http.requests, 1);
+
+      // The bug this fixes: the poll kept firing into the limit at the rate
+      // that caused it.
+      final second = await failureOf(service);
+      expect(second.kind, UsageFailureKind.rateLimited);
+      expect(
+        http.requests,
+        1,
+        reason: 'a backoff that still makes the request is not a backoff',
+      );
+
+      clock.advance(kUsageBackoffBase);
+      http.statusCode = HttpStatus.ok;
+      final usage = await service.fetch(agentInstallation(), [posixEnv()]);
+      expect(usage.windows, hasLength(1));
+      expect(http.requests, 2);
+    });
+
+    test('a Retry-After the server sent decides the wait', () async {
+      http
+        ..statusCode = HttpStatus.tooManyRequests
+        ..responseHeaders = {'Retry-After': '120'};
+      final service = serviceWith();
+
+      final failure = await failureOf(service);
+      expect(failure.retryIn, const Duration(minutes: 2));
+      expect(failure.message, contains('Waiting 2m'));
+
+      clock.advance(const Duration(seconds: 119));
+      expect((await failureOf(service)).kind, UsageFailureKind.rateLimited);
+      expect(http.requests, 1, reason: 'the server said two minutes');
+
+      clock.advance(const Duration(seconds: 1));
+      await failureOf(service);
+      expect(http.requests, 2);
+    });
+
+    test('a limit on one account leaves the other askable', () async {
+      // Claude and Codex are two accounts and two endpoints; one vendor
+      // throttling us says nothing about the other. Two environments are two
+      // accounts for the same reason.
+      http.statusCode = HttpStatus.tooManyRequests;
+      final service = serviceWith();
+      await failureOf(service);
+
+      expect(service.rateLimitWait(agentInstallation()), isNotNull);
+      expect(
+        service.rateLimitWait(
+          agentInstallation(id: 'a2', agentId: AgentIds.codex),
+        ),
+        isNull,
+      );
+      expect(
+        service.rateLimitWait(
+          agentInstallation(id: 'a3', environmentId: 'wsl:Ubuntu'),
+        ),
+        isNull,
+      );
+    });
+
+    test('401 is a sign-in problem, and is retried at the usual '
+        'cadence', () async {
+      http.statusCode = HttpStatus.unauthorized;
+      final service = serviceWith();
+
+      final failure = await failureOf(service);
+      expect(failure.kind, UsageFailureKind.auth);
+      expect(failure.message, contains('Access token expired'));
+
+      // Deliberately no backoff: the user fixes this by running the agent once,
+      // and a chip that took sixteen minutes to notice would be useless.
+      await failureOf(service);
+      expect(http.requests, 2);
+    });
+
+    test('a 5xx is unusable, not a rate limit and not a network '
+        'failure', () async {
+      http.statusCode = HttpStatus.internalServerError;
+      final failure = await failureOf(serviceWith());
+
+      expect(failure.kind, UsageFailureKind.unusable);
+      expect(failure.message, contains('HTTP 500'));
+      expect(failure.retryIn, isNull);
+    });
+
+    test('a body that is not JSON is unusable, not unreachable', () async {
+      // Telling the user to check their network over a malformed body sends
+      // them somewhere there is nothing to find.
+      http.body = '<html>nope</html>';
+      final failure = await failureOf(serviceWith());
+
+      expect(failure.kind, UsageFailureKind.unusable);
+      expect(failure.message, contains('could not read'));
+    });
+
+    test('a socket that never answered is unreachable', () async {
+      http.throwOnRequest = const SocketException('failed host lookup');
+      final failure = await failureOf(serviceWith());
+
+      expect(failure.kind, UsageFailureKind.unreachable);
+      expect(failure.message, contains('Could not reach'));
+    });
+
+    test('an agent with no usage endpoint was never asked', () async {
+      final service = serviceWith();
+      final failure = await failureOf(
+        service,
+        installation: agentInstallation(
+          id: 'a9',
+          agentId: AgentIds.antigravity,
+        ),
+      );
+
+      expect(failure.kind, UsageFailureKind.notAsked);
+      expect(http.requests, 0);
+    });
+
+    test('a reading survives the rate limit that follows it, with its '
+        'own age', () async {
+      final service = serviceWith();
+      await service.fetch(agentInstallation(), [posixEnv()]);
+      clock.advance(const Duration(minutes: 4));
+      http.statusCode = HttpStatus.tooManyRequests;
+      await failureOf(service);
+
+      final remembered = service.remembered(agentInstallation());
+      expect(remembered?.windows.single.percent, 42.0);
+      expect(
+        remembered?.fetchedAt,
+        testTime,
+        reason: 'four minutes old, and it says so rather than looking live',
+      );
+      expect(
+        service.rememberedIfFresh(agentInstallation()),
+        isNull,
+        reason: 'too old to stand in for a fetch, not too old to show',
+      );
+    });
+
+    test('a reading inside one interval is served without asking', () async {
+      final service = serviceWith();
+      await service.fetch(agentInstallation(), [posixEnv()]);
+      expect(http.requests, 1);
+
+      // What a pane switch does: `agentUsageProvider` is autoDispose, so the
+      // question is asked again from scratch. It must not become a request.
+      expect(service.rememberedIfFresh(agentInstallation()), isNotNull);
+      clock.advance(kUsageRefreshInterval);
+      expect(service.rememberedIfFresh(agentInstallation()), isNull);
+    });
+
+    test('nothing is remembered before the first reading', () {
+      final service = serviceWith();
+      expect(service.remembered(agentInstallation()), isNull);
+      expect(service.rateLimitWait(agentInstallation()), isNull);
     });
   });
 }

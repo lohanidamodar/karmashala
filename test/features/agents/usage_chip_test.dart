@@ -2,12 +2,14 @@ import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
+import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -21,6 +23,32 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
 
+class _Movable implements Clock {
+  _Movable(this.now);
+  DateTime now;
+  @override
+  DateTime nowUtc() => now.toUtc();
+}
+
+/// The chip, in a tree, reading one container.
+///
+/// [visible] takes the chip out without taking the scope with it — the shape a
+/// pane switch has. Unmounting the whole `UncontrolledProviderScope` instead
+/// would prove nothing: Riverpod cancels its scheduled auto-dispose when the
+/// surrounding scope goes, which is why `UsageChip.dispose` stops the timer
+/// itself.
+Widget chipIn(ProviderContainer container, {bool visible = true}) =>
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: visible ? const UsageChip() : const SizedBox.shrink(),
+          ),
+        ),
+      ),
+    );
+
 /// **The four states the chip can be in**, and the rule that outranks all of
 /// them: the number is always spelled out, so the colour is never the only
 /// signal (`session_verdict_mark.dart` states it, and `CandidateStateMark` —
@@ -31,13 +59,16 @@ void main() {
 
   setUp(() => service = FakeAgentUsageService());
 
-  ProviderContainer containerFor({String agentId = AgentIds.claudeCode}) {
+  ProviderContainer containerFor({
+    String agentId = AgentIds.claudeCode,
+    Clock? clock,
+  }) {
     final db = seedUsageDatabase(agentId: agentId);
     addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
+        clockProvider.overrideWithValue(clock ?? FixedClock(testTime)),
         agentUsageServiceProvider.overrideWithValue(service),
         // Settings opens on a tap; nothing here may probe a real machine.
         commandRunnerFactoryProvider.overrideWithValue(
@@ -54,16 +85,10 @@ void main() {
   Future<ProviderContainer> pumpChip(
     WidgetTester tester, {
     String agentId = AgentIds.claudeCode,
+    Clock? clock,
   }) async {
-    final container = containerFor(agentId: agentId);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(
-          home: Scaffold(body: Center(child: UsageChip())),
-        ),
-      ),
-    );
+    final container = containerFor(agentId: agentId, clock: clock);
+    await tester.pumpWidget(chipIn(container));
     await tester.pump();
     return container;
   }
@@ -229,6 +254,117 @@ void main() {
       contains('Refresh failed: Could not reach the usage service'),
     );
     expect(find.byType(SnackBar), findsNothing);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('a rate limit keeps the number, and says how long it is '
+      'waiting', (tester) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = await pumpChip(tester);
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+
+    // What the endpoint actually sent the owner. The service turns it into a
+    // wait; the chip's job is to keep the number and explain the pause.
+    service.failure = UsageException(
+      'Usage request failed (HTTP 429).',
+      kind: UsageFailureKind.rateLimited,
+    );
+    container.read(usageRefreshProvider.notifier).refresh();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+    final tip = tooltipOf(tester);
+    expect(tip, contains('Last checked just now'));
+    expect(tip, contains('Rate limited by the usage service'));
+    expect(tip, contains('Waiting 1m'));
+    expect(
+      tip,
+      isNot(contains('Refresh failed')),
+      reason: 'a rate limit is not a failure the user should act on',
+    );
+    expect(
+      find.byIcon(AppIcons.clockCounterClockwise),
+      findsOneWidget,
+      reason: 'a number that was not confirmed is drawn as a reading with an '
+          'age, not as a live gauge',
+    );
+
+    // And the poll stops spending requests on a limit it has been told about —
+    // the whole bug: 60 requests an hour into an endpoint that was refusing.
+    final spent = service.calls.length;
+    container.read(usageRefreshProvider.notifier).refresh();
+    await tester.pump();
+    await tester.pump();
+    expect(service.calls.length, spent, reason: 'the backoff is in force');
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('a number the app already read survives the chip leaving the '
+      'tree', (tester) async {
+    // The reported symptom: the status bar showed nothing. `AsyncValue` carries
+    // a previous value through a refresh, but not through the autoDispose that
+    // a pane switch causes — and the first failure after coming back then had
+    // nothing to fall back on.
+    final clock = _Movable(testTime);
+    service = FakeAgentUsageService(clock: clock)
+      ..answer = usageSnapshot(percent: 62);
+    final container = containerFor(clock: clock);
+    await tester.pumpWidget(chipIn(container));
+    await tester.pump();
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+
+    // A millisecond, because Riverpod's auto-dispose is scheduled rather than
+    // immediate: without it the provider is still alive and the remount proves
+    // nothing about what a real pane switch does.
+    await tester.pumpWidget(chipIn(container, visible: false));
+    await tester.pump(const Duration(milliseconds: 1));
+    clock.now = clock.now.add(const Duration(minutes: 5));
+    service.failure = UsageException(
+      'Could not reach the usage service: SocketException',
+      kind: UsageFailureKind.unreachable,
+    );
+    await tester.pumpWidget(chipIn(container));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text('62% · 2h6m'),
+      findsOneWidget,
+      reason: 'the number it read five minutes ago, counted down honestly',
+    );
+    final tip = tooltipOf(tester);
+    expect(tip, contains('Last checked 5m ago'));
+    expect(tip, contains('Refresh failed: Could not reach the usage service'));
+    expect(find.byIcon(AppIcons.clockCounterClockwise), findsOneWidget);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('coming back inside one interval costs no request at all', (
+    tester,
+  ) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = await pumpChip(tester);
+    expect(service.calls.length, 1);
+
+    // A pane switch away and back. Every one of these used to be a request,
+    // bounded by nothing — the trigger the poll interval never covered.
+    for (var i = 0; i < 5; i++) {
+      await tester.pumpWidget(chipIn(container, visible: false));
+      // Long enough for Riverpod's scheduled auto-dispose to actually run, so
+      // the chip really is rebuilt from nothing each time round.
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pumpWidget(chipIn(container));
+      await tester.pump();
+    }
+
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(
+      service.calls.length,
+      1,
+      reason: 'five switches, and the reading was seconds old every time',
+    );
     await quiesce(tester, container);
   });
 
