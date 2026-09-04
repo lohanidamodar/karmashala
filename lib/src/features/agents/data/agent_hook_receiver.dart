@@ -55,28 +55,42 @@ class AgentHookReceiver {
     final id = agentId ?? '';
     final name = event ?? '';
     final spec = id.isEmpty ? null : registry.byId(id)?.hooks;
-    final sessionId = spec == null ? '' : _sessionId(spec.sessionIdPath, body);
+    // Decoded once and walked by path from here on. Several fields are read off
+    // the one payload, and re-parsing it per field made the cost of a callback
+    // grow with how much of it we learned to understand.
+    final payload = _decode(body);
+    final sessionId = spec == null
+        ? ''
+        : _stringAt(spec.sessionIdPath, payload);
     // The agent's own subtype for this event, when its payload carries one.
     // Empty means it does not — every Claude Code event but `Notification`, and
     // any CLI predating the field — and then the event name is all we have.
     final kind = spec == null || spec.eventKindPath.isEmpty
         ? ''
-        : _stringAt(spec.eventKindPath, body);
+        : _stringAt(spec.eventKindPath, payload);
     final declared = kind.isEmpty ? null : spec!.eventKindMeaning[kind];
     // A subtype the agent named and we do not recognise is `unknown`, not the
     // event's default. `Notification` defaults to `awaitingApproval`, and its
     // subtypes include a successful login and an MCP elicitation result — a
     // notice nobody is waiting on must not raise "this session needs you".
-    final status = kind.isEmpty
+    final declaredStatus = kind.isEmpty
         ? spec?.eventStatus[name] ?? AgentActivityStatus.unknown
         : declared?.status ?? AgentActivityStatus.unknown;
-    // The agent's own description of what it wants, when its hooks carry one.
-    // Claude Code's `Notification` payload has a `message`; this used to be
-    // decoded for the session id and discarded, which is why an approval could
-    // be announced but never explained.
-    final message = spec == null
-        ? ''
-        : _extractMessage(spec, body, declared);
+    // **The turn ended; the session did not.** Claude Code fires a real `Stop`
+    // on the main thread the moment a `Task` subagent is launched, and wakes
+    // the session with a fresh `UserPromptSubmit` when the worker reports back
+    // — so a hook stream that trusts the event name announces "Agent finished"
+    // in the middle of a turn, minutes or tens of minutes early. The payload
+    // says which it is, and that is the field this consults.
+    final status = _inFlight(spec, name, payload)
+        ? AgentActivityStatus.working
+        : declaredStatus;
+    // The agent's own description of what it wants or of what it just did, when
+    // its hooks carry one. This used to be decoded for the session id and
+    // discarded, which is why an approval could be announced but never
+    // explained; reading only `message` then left every finished turn with a
+    // session name and nothing else.
+    final message = spec == null ? '' : _messageIn(spec, payload, declared);
 
     final report = AgentStatusReport(
       agentId: id,
@@ -86,7 +100,12 @@ class AgentHookReceiver {
       observedAt: observedAt ?? clock.nowUtc(),
       detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
-      waiting: spec == null
+      // Only a session that stopped *for the user* has anything to be waiting
+      // on, so nothing else is asked the question. Without that guard the prose
+      // rules would run over a finished turn's own summary, and an agent that
+      // wrote "it needs your permission" in a sentence would have claimed an
+      // open prompt on the strength of its own prose.
+      waiting: spec == null || status != AgentActivityStatus.awaitingApproval
           ? AgentWaitKind.unrecorded
           : kind.isEmpty
           ? _waitKind(spec, message)
@@ -94,26 +113,6 @@ class AgentHookReceiver {
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
-  }
-
-  String _extractMessage(
-    AgentHookSpec spec,
-    String body,
-    AgentHookMeaning? declared,
-  ) {
-    final candidatePaths = spec.messagePaths.isNotEmpty
-        ? spec.messagePaths
-        : (spec.messagePath.isNotEmpty
-            ? [spec.messagePath]
-            : const <List<String>>[]);
-    for (final path in candidatePaths) {
-      final text = _stringAt(path, body).trim();
-      if (text.isNotEmpty) return text;
-    }
-    if (declared?.fallbackMessage != null) {
-      return declared!.fallbackMessage!;
-    }
-    return '';
   }
 
   /// What [message] says the agent is waiting on, per [spec]'s own rules.
@@ -132,31 +131,87 @@ class AgentHookReceiver {
     return AgentWaitKind.unrecorded;
   }
 
-  String _sessionId(List<String> path, String body) => _stringAt(path, body);
+  /// The agent's own words in [payload], per [spec]'s candidate paths.
+  ///
+  /// First non-empty wins. A path that is absent on this event is not a
+  /// failure: the paths describe an agent's whole hook surface, and no one
+  /// event carries all of them.
+  /// Falls back to [AgentHookMeaning.fallbackMessage] when the payload carries
+  /// no prose of its own.
+  ///
+  /// Antigravity's hooks are the case: the event *name* is the whole message —
+  /// `Execution failed`, `Maximum token budget exceeded` — and there is no
+  /// field to read one out of. A wording the app supplies for an event whose
+  /// meaning it declared is not an invented description; it is the description,
+  /// and without it those events reach the user as a session name alone.
+  static String _messageIn(
+    AgentHookSpec spec,
+    Object? payload,
+    AgentHookMeaning? declared,
+  ) {
+    for (final path in spec.messagePaths) {
+      final value = _stringAt(path, payload);
+      if (value.isNotEmpty) return value;
+    }
+    return declared?.fallbackMessage ?? '';
+  }
 
-  /// The string at [path] in the JSON [body], or `''`.
+  /// Whether [event]'s payload says work this session is waiting on is still
+  /// running, per [spec]'s [AgentHookSpec.inFlightPath].
+  ///
+  /// Only a **non-empty list** counts. A missing key, an empty list and a value
+  /// of any other shape all mean "nothing said so", which leaves the event
+  /// meaning what its name means — the answer an agent that never sends the
+  /// field has to get.
+  static bool _inFlight(AgentHookSpec? spec, String event, Object? payload) {
+    final path = spec?.inFlightPath[event];
+    if (path == null || path.isEmpty) return false;
+    final value = _valueAt(path, payload);
+    return value is List && value.isNotEmpty;
+  }
+
+  /// The hook body as JSON, or `null` when it is not JSON at all.
+  ///
+  /// A body we cannot read means "the agent did not tell us" for every field at
+  /// once, which is what every reader below already renders as nothing.
+  static Object? _decode(String body) {
+    try {
+      return jsonDecode(body);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The value at [path] in the decoded [payload], or `null`.
+  static Object? _valueAt(List<String> path, Object? payload) {
+    var value = payload;
+    for (final segment in path) {
+      if (value is! Map) return null;
+      value = value[segment];
+    }
+    return value;
+  }
+
+  /// The string at [path] in the decoded [payload], or `''`.
   ///
   /// Empty for a missing key, a non-string value or an unparseable body — all
   /// of which mean "the agent did not tell us", which the caller renders as
   /// nothing rather than as a placeholder.
-  String _stringAt(List<String> path, String body) {
-    Object? value;
-    try {
-      value = jsonDecode(body);
-    } on FormatException {
-      return '';
-    }
-    for (final segment in path) {
-      if (value is Map) {
-        value = value[segment];
-      } else if (value is List) {
-        final index = int.tryParse(segment);
-        if (index == null || index < 0 || index >= value.length) return '';
-        value = value[index];
-      } else {
-        return '';
-      }
-    }
+  /// A **list of one string** reads as that string.
+  ///
+  /// Antigravity sends the working directory as `workspacePaths`, a JSON array,
+  /// and there is no index to name in the path because the CLI sends one entry
+  /// — a session has one workspace. Without this, `cwdPath` reads nothing and
+  /// adoption falls back to the oldest pane, which is the wrong pane whenever
+  /// more than one is open.
+  ///
+  /// Narrow on purpose: only when the path's own destination is a list whose
+  /// first element is a string. A path that names an index (`['a', '0']`)
+  /// still resolves through [_valueAt] as it always did, and every string-valued
+  /// key — Claude Code's `message` and `last_assistant_message` among them — is
+  /// untouched.
+  static String _stringAt(List<String> path, Object? payload) {
+    final value = _valueAt(path, payload);
     if (value is String) return value;
     if (value is List && value.isNotEmpty && value.first is String) {
       return value.first as String;

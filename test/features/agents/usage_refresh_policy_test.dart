@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/agents/application/agent_usage_providers
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -52,9 +51,13 @@ void main() {
       dao.insert(session(id: 's$i'));
     }
     if (withOtherAgent) {
+      // An agent with **no usage endpoint at all**. This was `antigravity`
+      // until it grew one; a real agent that later gains a feature stops being
+      // a stand-in for lacking it, and the test then asserts the opposite of
+      // what it reads as.
       AgentInstallationDao(
         db,
-      ).insert(agentInstallation(id: 'a2', agentId: AgentIds.antigravity));
+      ).insert(agentInstallation(id: 'a2', agentId: 'unknownAgent'));
       dao.insert(session(id: 'other', agentInstallationId: 'a2'));
     }
     final container = ProviderContainer(
@@ -264,7 +267,9 @@ void main() {
   testWidgets('a pane running another agent starts no timer at all', (
     tester,
   ) async {
-    db = seedUsageDatabase(agentId: AgentIds.antigravity);
+    // See the note above: `antigravity` now has a usage endpoint, so it cannot
+    // stand for an agent that has none.
+    db = seedUsageDatabase(agentId: 'unknownAgent');
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),

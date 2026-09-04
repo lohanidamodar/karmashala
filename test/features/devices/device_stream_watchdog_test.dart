@@ -178,23 +178,28 @@ void main() {
       // Keep the device sending. Bounded by frames, not by a clock: the write
       // chain stalls once the socket buffers fill, and a megabyte or two is
       // past any platform's default.
-      var stalled = false;
-      for (var i = 0; i < 64 && !stalled; i++) {
+      // The *entry that reported the stall*, not whichever arrived last: the
+      // loop stops on the first matching report, but the watchdog keeps
+      // ticking, so a later health entry can land between the loop exiting
+      // and these assertions. Reading `seen.last` made this test fail under
+      // machine load with `live` in hand, having genuinely seen the stall.
+      DeviceStreamHealth? stall;
+      for (var i = 0; i < 64 && stall == null; i++) {
         device.video.add(scrcpyPacket(131072, ptsUs: 10000 + i, key: true));
         await Future<void>.delayed(const Duration(milliseconds: 40));
-        stalled = seen.any(
-          (h) => h.detail.contains('picture has not updated'),
-        );
+        stall = seen
+            .where((h) => h.detail.contains('picture has not updated'))
+            .firstOrNull;
       }
 
       expect(
-        stalled,
-        isTrue,
+        stall,
+        isNotNull,
         reason: 'the delivery clock never noticed a viewer that stopped '
             'reading; states seen: ${seen.map((h) => h.state).toSet()}',
       );
-      expect(seen.last.state, DeviceStreamState.stalled);
-      expect(seen.last.needsRestart, isTrue);
+      expect(stall!.state, DeviceStreamState.stalled);
+      expect(stall.needsRestart, isTrue);
     });
 
     test('a frozen picture can be repaired without tearing anything down',

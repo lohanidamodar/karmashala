@@ -51,6 +51,12 @@ void main() {
       final spec = antigravity.hooks;
       expect(spec, isNotNull);
       expect(spec!.eventStatus, {
+        // `SessionStart` is `working`, never `idle`. The event says a session
+        // began, which is the one reading that cannot be wrong; the reason
+        // Claude Code leaves it undeclared is that *its* `SessionStart` also
+        // fires on `compact`, mid-turn, where a flat `idle` would call a busy
+        // session finished. `working` has no such failure mode.
+        'SessionStart': AgentActivityStatus.working,
         'PreInvocation': AgentActivityStatus.working,
         'PostInvocation': AgentActivityStatus.working,
         'Stop': AgentActivityStatus.idle,
@@ -76,9 +82,14 @@ void main() {
       // `{"conversationId": "594f1ab1-…", …}` — protojson, so camelCase, and
       // nothing like Claude Code's `session_id`.
       expect(antigravity.hooks!.sessionIdPath, ['conversationId']);
-      // `workspacePaths` arrives as `[]` from the CLI, so there is no working
-      // directory to read and adoption falls back to the oldest pane.
-      expect(antigravity.hooks!.cwdPath, isEmpty);
+      // `workspacePaths` is the working directory, and it arrives as a JSON
+      // **array**. This assertion used to read `isEmpty`, on the belief that
+      // the CLI always sent `[]`; the audit run found it populated, so the
+      // path is declared and `_stringAt` reads a one-element list as its
+      // string. There is no index in the path because a session has one
+      // workspace. With this empty, adoption fell back to the oldest pane —
+      // the wrong pane whenever more than one is open.
+      expect(antigravity.hooks!.cwdPath, ['workspacePaths']);
     });
   });
 
@@ -112,7 +123,12 @@ void main() {
         environment: EnvironmentKind.windowsNative,
       );
 
-      expect(ours().keys.toSet(), {'PreInvocation', 'PostInvocation', 'Stop'});
+      expect(ours().keys.toSet(), {
+        'SessionStart',
+        'PreInvocation',
+        'PostInvocation',
+        'Stop',
+      });
       // Flat: the handler object itself, with no `matcher`/`hooks` wrapper.
       // That wrapper is only for the tool events, which we do not install.
       final stop = (ours()['Stop']! as List).single as Map;

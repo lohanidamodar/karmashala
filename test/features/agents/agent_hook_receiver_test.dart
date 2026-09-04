@@ -118,6 +118,58 @@ void main() {
     }
   });
 
+  test('a session stopped on something it cannot answer itself says so', () {
+    // Six subtypes newer than the ten this map was first written against. Each
+    // of these is *this* session stopped and unable to go on: an MCP server
+    // holding a dialog open (the CLI's own table marks both `waitingFor:
+    // "input needed"`), and a usage limit that did not resume on its own.
+    // Undeclared, every one of them left the session reading whatever it last
+    // said — normally `working` — for as long as it sat there.
+    const stopped = {
+      'elicitation_dialog': 'Claude Code needs your input',
+      'elicitation_url_dialog': 'An MCP server needs your input',
+      'quota_auto_resume_stale': 'Usage limit reset — press enter to continue',
+      'quota_auto_resume_disabled':
+          'Automatic continue was turned off — the task will not resume on '
+              'its own',
+    };
+
+    for (final entry in stopped.entries) {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification(entry.key, entry.value),
+      );
+
+      expect(
+        report.status,
+        AgentActivityStatus.awaitingApproval,
+        reason: entry.key,
+      );
+      expect(report.evidence, [entry.value], reason: entry.key);
+      // None of them is a list with a highlighted option, so none offers a
+      // button that types Enter into somebody's session.
+      expect(report.hasOpenPrompt, isFalse, reason: entry.key);
+    }
+  });
+
+  test('a session that resumed on its own is not holding anyone up', () {
+    // The other half of the same state machine: "Usage limit available —
+    // Claude is continuing your task". News that nobody is waiting is not a
+    // status, so it stays unrecorded.
+    final report = receiver.handle(
+      agentId: 'claudeCode',
+      event: 'Notification',
+      body: notification(
+        'quota_auto_resume_fired',
+        'Usage limit available — Claude is continuing your task',
+      ),
+    );
+
+    expect(report.status, AgentActivityStatus.unknown);
+    expect(reports.latest('claudeCode', 's1'), isNull);
+  });
+
   test('a subtype we have never seen is unknown, not an approval', () {
     final report = receiver.handle(
       agentId: 'claudeCode',
@@ -212,6 +264,167 @@ void main() {
     expect(report.status, AgentActivityStatus.idle);
     expect(report.sessionId, isEmpty);
     expect(reports.latest('claudeCode', ''), isNull);
+  });
+
+  group('what the agent said, not just that it said something', () {
+    test('a finished turn quotes its own last message', () {
+      // Captured verbatim from Claude Code 2.1.260 on 2026-09-04. Before this
+      // the payload was read for `message`, which `Stop` does not have, so
+      // every completion toast was a session name and nothing else.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Stop',
+          'stop_hook_active': false,
+          'last_assistant_message':
+              'I ran the echo command, which printed "hi" to the terminal.',
+          'background_tasks': <Object?>[],
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.evidence, [
+        'I ran the echo command, which printed "hi" to the terminal.',
+      ]);
+    });
+
+    test('a broken turn quotes the message it broke on', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'StopFailure',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'StopFailure',
+          'error': 'rate_limit',
+          'last_assistant_message': 'API Error: rate limit exceeded',
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.failed);
+      expect(report.evidence, ['API Error: rate limit exceeded']);
+    });
+
+    test('a Notification still quotes the key it has always quoted', () {
+      // Both keys are declared; no event carries both, so the order is a
+      // fallback rather than a precedence.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification(
+          'permission_prompt',
+          'Claude needs your permission to use Bash',
+        ),
+      );
+
+      expect(report.evidence, ['Claude needs your permission to use Bash']);
+    });
+
+    test('a finished turn is never read as an open prompt', () {
+      // The prose rules exist to tell a permission request from an idle nudge,
+      // and both are `awaitingApproval`. Run over a *summary* they would let an
+      // agent claim an open prompt by writing a sentence about one — and the
+      // wait kind is what puts an Enter-typing button on screen.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Stop',
+          'last_assistant_message':
+              'Done. Note that the next step needs your permission to run.',
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.waiting, AgentWaitKind.unrecorded);
+      expect(report.hasOpenPrompt, isFalse);
+    });
+  });
+
+  group('a Stop that only paused the turn', () {
+    /// A `Stop` payload as Claude Code 2.1.260 actually sends it, with
+    /// [running] entries in `background_tasks`. The two captured on 2026-09-04
+    /// differ in exactly this field: the mid-turn one lists the subagent it
+    /// just launched, the closing one lists nothing.
+    String stop({required bool running}) => jsonEncode({
+      'session_id': 's1',
+      'cwd': r'C:\src\demo',
+      'hook_event_name': 'Stop',
+      'stop_hook_active': false,
+      'last_assistant_message': running
+          ? 'Agent launched to run the command—waiting for completion.'
+          : 'The subagent executed the command successfully.',
+      'background_tasks': running
+          ? [
+              {
+                'id': 'a8989a29ed73d4888',
+                'type': 'subagent',
+                'status': 'running',
+                'description': 'Run echo subagent-ran command',
+              },
+            ]
+          : <Object?>[],
+      'session_crons': <Object?>[],
+    });
+
+    test('work still in flight is working, not finished', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+
+      expect(report.status, AgentActivityStatus.working);
+      expect(
+        reports.latest('claudeCode', 's1')!.status,
+        isNot(AgentActivityStatus.idle),
+      );
+    });
+
+    test('an empty list is the turn really ending', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: false),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
+
+    test('a payload with no such field is untouched', () {
+      // Every CLI that predates `background_tasks`, and every other event of
+      // the one that has it. Nothing said the session was busy, so `Stop` means
+      // what its name means.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: body('s1'),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
+
+    test('the field is only consulted for the event that declares it', () {
+      // `SessionEnd` also ends a session and carries no such field. A spec that
+      // named the path for every event would be reading a key that means
+      // nothing there.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'SessionEnd',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'SessionEnd',
+          'reason': 'other',
+          'background_tasks': [
+            {'id': 'x', 'type': 'subagent', 'status': 'running'},
+          ],
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
   });
 
   test('a missing event or agent never throws', () {
