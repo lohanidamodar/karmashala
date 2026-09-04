@@ -96,6 +96,7 @@ class AgentPaneLaunch {
     this.mcpArguments = const [],
     this.workingDirectory,
     this.wslDistribution,
+    this.sshHostId,
     this.sessionId,
     this.title,
   });
@@ -141,6 +142,10 @@ class AgentPaneLaunch {
   /// (or already-POSIX host) launch.
   final String? wslDistribution;
 
+  /// The remote SSH host id to run the launch on, or `null` for a local
+  /// (Windows/WSL/POSIX) launch.
+  final String? sshHostId;
+
   /// The `sessions` row this pane belongs to, when it has one.
   final String? sessionId;
 
@@ -166,6 +171,7 @@ class AgentPaneLaunch {
         mcpArguments: mcpArguments,
         workingDirectory: workingDirectory,
         wslDistribution: wslDistribution,
+        sshHostId: sshHostId,
         sessionId: sessionId,
         title: title,
       );
@@ -179,6 +185,7 @@ class AgentPaneLaunch {
     'arguments': arguments,
     if (workingDirectory != null) 'workingDirectory': workingDirectory,
     if (wslDistribution != null) 'wslDistribution': wslDistribution,
+    if (sshHostId != null) 'sshHostId': sshHostId,
     if (sessionId != null) 'sessionId': sessionId,
     if (title != null) 'title': title,
   };
@@ -213,6 +220,7 @@ class AgentPaneLaunch {
       arguments: mcp.withoutArgumentsIn(stored),
       workingDirectory: raw['workingDirectory'] as String?,
       wslDistribution: raw['wslDistribution'] as String?,
+      sshHostId: raw['sshHostId'] as String?,
       sessionId: raw['sessionId'] as String?,
       title: raw['title'] as String?,
     );

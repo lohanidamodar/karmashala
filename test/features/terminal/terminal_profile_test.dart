@@ -103,4 +103,37 @@ void main() {
 
     expect(context.posixShell, '/bin/bash');
   });
+
+  group('SSH terminal profiles', () {
+    final sshEnv = ExecutionEnvironment(
+      id: 'ssh:server1',
+      name: 'prod-server',
+      kind: EnvironmentKind.ssh,
+      sshHostId: 'server1',
+      createdAt: DateTime.utc(2026),
+    );
+
+    test('terminalProfilesFor includes SSH environments', () {
+      final profiles = terminalProfilesFor([sshEnv]);
+
+      expect(
+        profiles.map((p) => p.id),
+        contains('ssh:server1'),
+      );
+      final sshProfile = profiles.firstWhere((p) => p.id == 'ssh:server1');
+      expect(sshProfile.shell, TerminalShell.ssh);
+      expect(sshProfile.sshHostId, 'server1');
+      expect(sshProfile.label, 'SSH: prod-server');
+    });
+
+    test('terminalProfileFromId restores ssh profile', () {
+      final restored = terminalProfileFromId('ssh:server1');
+
+      expect(restored, isNotNull);
+      expect(restored!.shell, TerminalShell.ssh);
+      expect(restored.sshHostId, 'server1');
+      expect(restored.id, 'ssh:server1');
+    });
+  });
 }
+

@@ -147,6 +147,34 @@ class ProjectsController extends Notifier<List<Project>> {
     return result;
   }
 
+  /// Creates a project on [targetEnvironmentId], optionally cloning [gitRepoUrl].
+  ///
+  /// Works across local Windows, WSL, and remote SSH environments.
+  Future<ProjectCreationResult> createProject({
+    required String name,
+    required String targetEnvironmentId,
+    required String folderPath,
+    String? gitRepoUrl,
+    String? workspaceId,
+  }) async {
+    final dao = ref.read(executionEnvironmentDaoProvider);
+    final target = dao.getById(targetEnvironmentId);
+    if (target == null) {
+      throw StateError('Target execution environment not found: $targetEnvironmentId');
+    }
+    final result = await ref.read(projectServiceProvider).createProject(
+          name: name,
+          target: target,
+          targetPath: folderPath,
+          gitRepoUrl: gitRepoUrl,
+          workspaceId: workspaceId,
+        );
+    await _autoImportSessions(result.repositories);
+    _refresh();
+    return result;
+  }
+
+
   /// Re-runs repository discovery over [projectId]'s root and records anything
   /// new. Returns the repositories that were added.
   ///
@@ -344,6 +372,7 @@ final projectPathMissingProvider = FutureProvider.autoDispose
       final environmentDao = ref.read(executionEnvironmentDaoProvider);
       final env = environmentDao.getById(project.environmentId);
       if (env == null) return false;
+      if (env.kind == EnvironmentKind.ssh) return false;
 
       var path = project.root.path;
       if (env.kind == EnvironmentKind.wsl) {

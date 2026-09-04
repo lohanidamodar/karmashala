@@ -13,8 +13,10 @@ import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../ssh/application/ssh_providers.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
+import '../data/ssh_terminal_instance.dart';
 import '../data/terminal_grid_text.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_layout_dao.dart';
@@ -68,16 +70,38 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
         bool shellIntegration = false,
         AgentPaneLaunch? agentLaunch,
         Terminal? adoptTerminal,
-      }) => createPtyTerminalInstance(
-        id: id,
-        profile: profile,
-        workingDirectory: workingDirectory,
-        restoredScrollback: restoredScrollback,
-        shellIntegration: shellIntegration,
-        agentLaunch: agentLaunch,
-        adoptTerminal: adoptTerminal,
-        environmentOverlay: ref.read(terminalEnvOverlayProvider),
-      ),
+      }) {
+        final sshHostId = profile.sshHostId ?? agentLaunch?.sshHostId;
+        if (sshHostId != null) {
+          final host = ref.read(sshHostDaoProvider).getById(sshHostId);
+          if (host != null) {
+            final pool = ref.read(sshConnectionPoolProvider);
+            return SshTerminalInstance(
+              id: id,
+              title: agentLaunch?.title ?? 'SSH: ${host.name}',
+              profileId: profile.id,
+              host: host,
+              connection: pool.forHostId(host.id),
+              workingDirectory:
+                  workingDirectory ?? agentLaunch?.workingDirectory,
+              agentLaunch: agentLaunch,
+              adoptTerminal: adoptTerminal,
+              restoredScrollback: restoredScrollback,
+            );
+          }
+        }
+
+        return createPtyTerminalInstance(
+          id: id,
+          profile: profile,
+          workingDirectory: workingDirectory,
+          restoredScrollback: restoredScrollback,
+          shellIntegration: shellIntegration,
+          agentLaunch: agentLaunch,
+          adoptTerminal: adoptTerminal,
+          environmentOverlay: ref.read(terminalEnvOverlayProvider),
+        );
+      },
 );
 
 /// One tab: a tree of regions and which pane has focus.

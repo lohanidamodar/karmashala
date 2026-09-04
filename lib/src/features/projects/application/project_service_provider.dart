@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../repositories/application/repository_discovery_provider.dart';
@@ -15,5 +16,7 @@ final projectServiceProvider = Provider<ProjectService>(
     discovery: ref.watch(repositoryDiscoveryServiceProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
+    runnerFactory: ref.watch(commandRunnerFactoryProvider),
   ),
 );
+

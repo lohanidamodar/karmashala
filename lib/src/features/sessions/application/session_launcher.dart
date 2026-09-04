@@ -1396,6 +1396,7 @@ class SessionLauncher {
       ),
       workingDirectory: workingDirectory.path,
       wslDistribution: environment.wslDistribution,
+      sshHostId: environment.sshHostId,
       sessionId: session.id,
       title: session.title,
     );

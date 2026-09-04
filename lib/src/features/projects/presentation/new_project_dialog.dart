@@ -17,32 +17,42 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/data/repository_discovery_service.dart';
+import '../../ssh/application/ssh_hosts_controller.dart';
+import '../../ssh/presentation/remote_file_browser_dialog.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/domain/workspace.dart';
+import '../application/project_service.dart';
 import '../application/projects_controller.dart';
 
-/// Creates a project from a folder. The folder is chosen with the native
-/// Windows picker (which can browse drives and `\\wsl.localhost\…`); choosing a
-/// WSL distribution as the target binds the project to that distro's namespace
-/// (e.g. `C:\src` → `/mnt/c/src`).
+/// Creates a project from a folder or Git repository URL. Supports local,
+/// WSL, and SSH environments.
 class NewProjectDialog extends ConsumerStatefulWidget {
-  const NewProjectDialog({super.key});
+  const NewProjectDialog({this.initialEnvironmentId, super.key});
 
-  static Future<bool?> show(BuildContext context) => showDialog<bool>(
-    context: context,
-    builder: (_) => const NewProjectDialog(),
-  );
+  final String? initialEnvironmentId;
+
+  static Future<bool?> show(
+    BuildContext context, {
+    String? initialEnvironmentId,
+  }) =>
+      showDialog<bool>(
+        context: context,
+        builder: (_) => NewProjectDialog(
+          initialEnvironmentId: initialEnvironmentId,
+        ),
+      );
 
   @override
   ConsumerState<NewProjectDialog> createState() => _NewProjectDialogState();
 }
 
 class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
+  final _gitUrlController = TextEditingController();
   final _nameController = TextEditingController();
   final _folderController = TextEditingController();
   final _newWorkspaceController = TextEditingController();
-  String _targetId = localHostEnvironmentId;
+  late String _targetId;
 
   /// The context the project will be filed under — a guess until the user
   /// touches it, and never applied to anything that already exists.
@@ -59,7 +69,14 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   static const _translator = PathTranslator();
 
   @override
+  void initState() {
+    super.initState();
+    _targetId = widget.initialEnvironmentId ?? localHostEnvironmentId;
+  }
+
+  @override
   void dispose() {
+    _gitUrlController.dispose();
     _nameController.dispose();
     _folderController.dispose();
     _newWorkspaceController.dispose();
@@ -67,6 +84,34 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   }
 
   Future<void> _browse() async {
+    final environments = ref.read(environmentsControllerProvider);
+    final target = _envById(environments, _targetId);
+    if (target != null && target.kind == EnvironmentKind.ssh) {
+      final hostId = target.sshHostId;
+      if (hostId != null) {
+        final hosts = ref.read(sshHostsControllerProvider);
+        final host = hosts.where((h) => h.id == hostId).firstOrNull;
+        if (host != null) {
+          final dir = await RemoteFileBrowserDialog.pickDirectory(
+            context,
+            host: host,
+          );
+          if (dir == null) return;
+          setState(() {
+            _folderController.text = dir;
+            if (_nameController.text.trim().isEmpty) {
+              final cleaned = dir.replaceAll(RegExp(r'[\\/]+$'), '');
+              final lastSlash = cleaned.lastIndexOf('/');
+              _nameController.text = lastSlash != -1
+                  ? cleaned.substring(lastSlash + 1)
+                  : cleaned;
+            }
+          });
+          return;
+        }
+      }
+    }
+
     final dir = await getDirectoryPath();
     if (dir == null) return;
     setState(() {
@@ -99,11 +144,14 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   EnvironmentPath? _storedRoot(List<ExecutionEnvironment> environments) {
     final folder = _folderController.text.trim();
     if (folder.isEmpty) return null;
+    final target = _envById(environments, _targetId);
+    if (target?.kind == EnvironmentKind.ssh) {
+      return EnvironmentPath(environmentId: _targetId, path: folder);
+    }
     if (_targetId == localHostEnvironmentId) {
       return EnvironmentPath(environmentId: _targetId, path: folder);
     }
     final windows = _envById(environments, localHostEnvironmentId);
-    final target = _envById(environments, _targetId);
     if (windows == null || target == null) return null;
     try {
       return _translator.translate(
@@ -119,18 +167,38 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   /// The path as it will be stored for the chosen target (for the preview).
   String? _targetPreview(List<ExecutionEnvironment> environments) {
     final folder = _folderController.text.trim();
-    if (folder.isEmpty || _targetId == localHostEnvironmentId) return null;
-    final windows = _envById(environments, localHostEnvironmentId);
+    final gitUrl = _gitUrlController.text.trim();
     final target = _envById(environments, _targetId);
-    if (windows == null || target == null) return null;
+    if (target == null) return null;
+
+    if (target.kind == EnvironmentKind.ssh) {
+      if (folder.isNotEmpty) {
+        return 'Remote path: $folder';
+      } else if (gitUrl.isNotEmpty) {
+        final repo = repoNameFromUrl(gitUrl);
+        return 'Clone target: ~/karmashala/$repo';
+      }
+      return null;
+    }
+
+    if (folder.isEmpty || _targetId == localHostEnvironmentId) {
+      if (gitUrl.isNotEmpty && folder.isNotEmpty) {
+        return 'Clone target: $folder';
+      }
+      return null;
+    }
+
+    final windows = _envById(environments, localHostEnvironmentId);
+    if (windows == null) return null;
     try {
-      return _translator
+      final translated = _translator
           .translate(
             EnvironmentPath(environmentId: windows.id, path: folder),
             from: windows,
             to: target,
           )
           .path;
+      return gitUrl.isNotEmpty ? 'Clone target: $translated' : translated;
     } on PathTranslationException catch (e) {
       return '⚠ ${e.message}';
     }
@@ -138,10 +206,6 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
 
   /// How an environment is named in the dropdown — the app's one vocabulary
   /// for that, shared with what the phone is told each checkout lives in.
-  ///
-  /// A row that carries no name worth showing falls back to its own id, which
-  /// is at least a thing the user can match against the environments list; a
-  /// dropdown cannot render nothing.
   static String _environmentLabel(ExecutionEnvironment env) =>
       environmentLabel(env) ?? env.id;
 
@@ -153,26 +217,63 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   }
 
   Future<void> _create() async {
-    final name = _nameController.text.trim();
+    var name = _nameController.text.trim();
     final folder = _folderController.text.trim();
-    if (name.isEmpty || folder.isEmpty) {
-      setState(() => _error = 'Choose a folder and enter a project name.');
+    final gitUrl = _gitUrlController.text.trim();
+
+    if (name.isEmpty && gitUrl.isNotEmpty) {
+      name = repoNameFromUrl(gitUrl);
+      _nameController.text = name;
+    }
+
+    final environments = ref.read(environmentsControllerProvider);
+    final target = _envById(environments, _targetId);
+    final isSsh = target?.kind == EnvironmentKind.ssh;
+
+    if (name.isEmpty) {
+      setState(() => _error = 'Enter a project name.');
       return;
     }
+
+    if (folder.isEmpty && gitUrl.isEmpty) {
+      setState(() => _error = 'Provide a folder path or a Git repository URL.');
+      return;
+    }
+
+    if (folder.isEmpty &&
+        gitUrl.isNotEmpty &&
+        !isSsh &&
+        target?.kind != EnvironmentKind.wsl) {
+      setState(() => _error = 'Choose a local destination folder to clone into.');
+      return;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
     });
+
     try {
       final workspaceId = _resolveWorkspace();
-      final result = await ref
-          .read(projectsControllerProvider.notifier)
-          .createInEnvironment(
-            name: name,
-            windowsPath: folder,
-            targetEnvironmentId: _targetId,
-            workspaceId: workspaceId,
-          );
+      final ProjectCreationResult result;
+      if (gitUrl.isNotEmpty || isSsh) {
+        result = await ref.read(projectsControllerProvider.notifier).createProject(
+              name: name,
+              targetEnvironmentId: _targetId,
+              folderPath: folder,
+              gitRepoUrl: gitUrl.isEmpty ? null : gitUrl,
+              workspaceId: workspaceId,
+            );
+      } else {
+        result = await ref
+            .read(projectsControllerProvider.notifier)
+            .createInEnvironment(
+              name: name,
+              windowsPath: folder,
+              targetEnvironmentId: _targetId,
+              workspaceId: workspaceId,
+            );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -210,16 +311,16 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final environments = ref.watch(environmentsControllerProvider);
     final preview = _targetPreview(environments);
     final workspaces = ref.watch(workspacesControllerProvider);
+    final target = _envById(environments, _targetId);
+    final isSsh = target?.kind == EnvironmentKind.ssh;
+    final hasGit = _gitUrlController.text.trim().isNotEmpty;
 
     return AlertDialog(
-      // Material's own answer to a column that has outgrown the window: the
-      // context picker is one field more than this dialog used to hold, and at
-      // 720x560 with text at 1.3x that field was the 29px that did not fit.
       scrollable: true,
       title: const DesktopDialogTitle(
         icon: AppIcons.folderPlus,
         title: 'New project',
-        subtitle: 'Add a folder and discover its Git repositories.',
+        subtitle: 'Add a folder or clone a repository.',
       ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
@@ -232,18 +333,33 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               decoration: const InputDecoration(labelText: 'Environment'),
               items: [
                 for (final env in environments)
-                  if (env.kind != EnvironmentKind.ssh)
-                    DropdownMenuItem(
-                      value: env.id,
-                      child: Text(_environmentLabel(env)),
-                    ),
+                  DropdownMenuItem(
+                    value: env.id,
+                    child: Text(_environmentLabel(env)),
+                  ),
               ],
               onChanged: (v) => setState(() {
                 _targetId = v ?? localHostEnvironmentId;
-                // The stored spelling changes with the target, and so does the
-                // namespace the suggestion compares in.
                 _suggestWorkspace();
               }),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _gitUrlController,
+              decoration: const InputDecoration(
+                labelText: 'Git repository URL (optional)',
+                hintText: 'https://github.com/owner/repo.git',
+              ),
+              onChanged: (url) {
+                if (_nameController.text.trim().isEmpty &&
+                    url.trim().isNotEmpty) {
+                  setState(() {
+                    _nameController.text = repoNameFromUrl(url);
+                  });
+                } else {
+                  setState(() {});
+                }
+              },
             ),
             const SizedBox(height: 12),
             Row(
@@ -253,10 +369,23 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                   child: TextField(
                     controller: _folderController,
                     decoration: InputDecoration(
-                      labelText: 'Folder path',
-                      hintText: Platform.isWindows
-                          ? r'C:\src\karmashala'
-                          : '~/src/karmashala',
+                      labelText: isSsh
+                          ? (hasGit
+                              ? 'Remote folder path (optional)'
+                              : 'Remote folder path')
+                          : (hasGit
+                              ? 'Destination folder path'
+                              : 'Folder path'),
+                      hintText: isSsh
+                          ? (hasGit
+                              ? '~/karmashala/<repo>'
+                              : '/home/user/project')
+                          : (Platform.isWindows
+                              ? r'C:\src\karmashala'
+                              : '~/src/karmashala'),
+                      helperText: isSsh && hasGit
+                          ? 'Defaults to ~/karmashala/<repo> on remote host'
+                          : null,
                     ),
                     onChanged: (_) => setState(_suggestWorkspace),
                   ),
@@ -307,7 +436,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Create & scan'),
+              : Text(hasGit ? 'Clone & create' : 'Create & scan'),
         ),
       ],
     );

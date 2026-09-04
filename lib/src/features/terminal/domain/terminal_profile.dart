@@ -11,15 +11,18 @@ enum TerminalShell {
   /// [TerminalProfile.posixShellPath]; there is no fixed set of them the way
   /// there is on Windows, because the answer is whatever the machine has.
   posix,
+
+  /// An interactive shell or tmux session on a remote SSH host.
+  ssh,
 }
 
 /// A launchable terminal shell: a PowerShell/Command Prompt on the Windows host,
-/// an interactive shell in a specific WSL distribution (via `wsl.exe -d`), or a
-/// shell on a macOS or Linux host.
+/// an interactive shell in a specific WSL distribution (via `wsl.exe -d`),
+/// a shell on a macOS or Linux host, or an interactive session on an SSH host.
 ///
 /// Identified by a stable [id] (`powershell`, `cmd`, `wsl:<distro>`,
-/// `posix:/bin/zsh`) so it can be stored as the user's default-terminal
-/// preference.
+/// `posix:/bin/zsh`, `ssh:<hostId>`) so it can be stored as the user's
+/// default-terminal preference.
 class TerminalProfile {
   const TerminalProfile({
     required this.id,
@@ -27,6 +30,7 @@ class TerminalProfile {
     required this.shell,
     this.wslDistribution,
     this.posixShellPath,
+    this.sshHostId,
   });
 
   final String id;
@@ -39,10 +43,14 @@ class TerminalProfile {
   /// For [TerminalShell.posix], the absolute path of the shell to launch.
   final String? posixShellPath;
 
+  /// For [TerminalShell.ssh], the saved SSH host id.
+  final String? sshHostId;
+
   static const powerShellId = 'powershell';
   static const commandPromptId = 'cmd';
   static String wslId(String distro) => 'wsl:$distro';
   static String posixId(String path) => 'posix:$path';
+  static String sshId(String hostId) => 'ssh:$hostId';
 
   /// A profile for the shell at [path]. Labelled by its name, which is what a
   /// person calls it — `/bin/zsh` is "zsh".
@@ -55,6 +63,14 @@ class TerminalProfile {
       posixShellPath: path,
     );
   }
+
+  static TerminalProfile ssh(String hostId, {String? hostName}) =>
+      TerminalProfile(
+        id: sshId(hostId),
+        label: hostName != null ? 'SSH: $hostName' : 'SSH: $hostId',
+        shell: TerminalShell.ssh,
+        sshHostId: hostId,
+      );
 
   static const powerShell = TerminalProfile(
     id: powerShellId,
@@ -75,11 +91,18 @@ class TerminalProfile {
       other.label == label &&
       other.shell == shell &&
       other.wslDistribution == wslDistribution &&
-      other.posixShellPath == posixShellPath;
+      other.posixShellPath == posixShellPath &&
+      other.sshHostId == sshHostId;
 
   @override
-  int get hashCode =>
-      Object.hash(id, label, shell, wslDistribution, posixShellPath);
+  int get hashCode => Object.hash(
+    id,
+    label,
+    shell,
+    wslDistribution,
+    posixShellPath,
+    sshHostId,
+  );
 }
 
 /// The terminal profiles available on this machine.
@@ -119,17 +142,24 @@ List<TerminalProfile> terminalProfilesFor(
     TerminalProfile.commandPrompt,
   ];
   for (final env in environments) {
-    if (env.kind != EnvironmentKind.wsl) continue;
-    final distro = env.wslDistribution;
-    if (distro == null || distro.isEmpty) continue;
-    profiles.add(
-      TerminalProfile(
-        id: TerminalProfile.wslId(distro),
-        label: '$distro (WSL)',
-        shell: TerminalShell.wsl,
-        wslDistribution: distro,
-      ),
-    );
+    if (env.kind == EnvironmentKind.wsl) {
+      final distro = env.wslDistribution;
+      if (distro == null || distro.isEmpty) continue;
+      profiles.add(
+        TerminalProfile(
+          id: TerminalProfile.wslId(distro),
+          label: '$distro (WSL)',
+          shell: TerminalShell.wsl,
+          wslDistribution: distro,
+        ),
+      );
+    } else if (env.kind == EnvironmentKind.ssh) {
+      final hostId = env.sshHostId;
+      if (hostId == null || hostId.isEmpty) continue;
+      profiles.add(
+        TerminalProfile.ssh(hostId, hostName: env.name),
+      );
+    }
   }
   return profiles;
 }
@@ -158,6 +188,11 @@ TerminalProfile? terminalProfileFromId(String id) {
       shell: TerminalShell.wsl,
       wslDistribution: distro,
     );
+  }
+  if (id.startsWith('ssh:')) {
+    final hostId = id.substring(4);
+    if (hostId.isEmpty) return null;
+    return TerminalProfile.ssh(hostId);
   }
   return null;
 }

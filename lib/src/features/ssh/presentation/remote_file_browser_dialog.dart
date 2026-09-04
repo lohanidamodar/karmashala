@@ -19,9 +19,23 @@ import 'host_key_changed_alert.dart';
 /// remote `/home/me/src` is never handed to anything that would open it
 /// locally.
 class RemoteFileBrowserDialog extends ConsumerStatefulWidget {
-  const RemoteFileBrowserDialog({required this.host, super.key});
+  const RemoteFileBrowserDialog({
+    required this.host,
+    this.selectFolder = false,
+    super.key,
+  });
 
   final SshHost host;
+  final bool selectFolder;
+
+  static Future<String?> pickDirectory(
+    BuildContext context, {
+    required SshHost host,
+  }) =>
+      showDialog<String>(
+        context: context,
+        builder: (_) => RemoteFileBrowserDialog(host: host, selectFolder: true),
+      );
 
   static Future<void> show(BuildContext context, {required SshHost host}) =>
       showDialog<void>(
@@ -218,8 +232,15 @@ class _RemoteFileBrowserDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(widget.selectFolder ? 'Cancel' : 'Close'),
         ),
+        if (widget.selectFolder)
+          FilledButton(
+            onPressed: _directory == null || _busy
+                ? null
+                : () => Navigator.of(context).pop(_directory!.path),
+            child: const Text('Select folder'),
+          ),
       ],
     );
   }

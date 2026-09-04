@@ -17,12 +17,16 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../environments/application/environment_providers.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/domain/terminal_profile.dart';
 import '../../repositories/domain/repository.dart';
 import '../application/checkout.dart';
 import '../application/explorer_actions.dart';
@@ -166,6 +170,38 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     } catch (error) {
       _say(error is StateError ? error.message : 'Could not rescan: $error');
     }
+  }
+
+  void _openTerminal(Project project) {
+    final envDao = ref.read(executionEnvironmentDaoProvider);
+    final env = envDao.getById(project.environmentId);
+    final sshHostId = env?.sshHostId;
+    if (sshHostId != null) {
+      ref.read(terminalSessionsControllerProvider.notifier).openTab(
+            TerminalProfile.ssh(
+              sshHostId,
+              hostName: env?.name,
+            ),
+            workingDirectory: project.root.path,
+          );
+    } else if (env?.kind == EnvironmentKind.wsl) {
+      final distro = env?.wslDistribution ?? env?.name ?? '';
+      ref.read(terminalSessionsControllerProvider.notifier).openTab(
+            TerminalProfile(
+              id: TerminalProfile.wslId(distro),
+              label: '$distro (WSL)',
+              shell: TerminalShell.wsl,
+              wslDistribution: distro,
+            ),
+            workingDirectory: project.root.path,
+          );
+    } else {
+      ref.read(terminalSessionsControllerProvider.notifier).openTab(
+            TerminalProfile.powerShell,
+            workingDirectory: project.root.path,
+          );
+    }
+    ref.read(terminalVisibleProvider.notifier).set(true);
   }
 
   /// Opens [path] in the host's file manager and says why when it cannot.
@@ -592,6 +628,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     // per-checkout providers have already answered, so a header never starts a
     // second wave of git.
     final summary = ref.watch(projectSummaryProvider(project.id));
+    final envDao = ref.watch(executionEnvironmentDaoProvider);
+    final env = envDao.getById(project.environmentId);
+    final envBadge = env?.kind == EnvironmentKind.ssh
+        ? 'SSH · ${env?.name ?? 'remote'}'
+        : (env?.kind == EnvironmentKind.wsl
+            ? 'WSL · ${env?.wslDistribution ?? env?.name ?? 'distro'}'
+            : null);
 
     final rows = <Widget>[
       ProjectCard(
@@ -601,6 +644,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         selected: project.id == selectedProjectId,
         missing: missing,
         pinned: pinned,
+        environmentBadge: envBadge,
         summary: summary,
         onTap: () => _toggleProject(project),
         // Starts one; the menu below is where the dialog lives.
@@ -611,6 +655,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             value: 'new-session',
             label: 'New session…',
             icon: AppIcons.chatCircleDots,
+          ),
+          DesktopMenuItem(
+            value: 'terminal',
+            label: 'Open terminal',
+            icon: AppIcons.terminal,
           ),
           ..._agentMenuItems(menu.installations[project.root.environmentId]),
           DesktopMenuItem(
@@ -679,6 +728,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           switch (action) {
             case 'new-session':
               _newSessionDialog(project);
+            case 'terminal':
+              _openTerminal(project);
             case 'copy-cmd':
               copyCommandToClipboard(
                 context,

@@ -42,6 +42,7 @@ class ProjectCard extends StatelessWidget {
     this.pinned = false,
     this.onTogglePin,
     this.showMenu = true,
+    this.environmentBadge,
     super.key,
   });
 
@@ -51,6 +52,7 @@ class ProjectCard extends StatelessWidget {
   final bool selected;
   final bool missing;
   final bool pinned;
+  final String? environmentBadge;
   final ProjectSummary summary;
 
   /// Opens the project. Null draws the same card as a plain header — the
@@ -366,6 +368,24 @@ class ProjectCard extends StatelessWidget {
         : path;
     return Row(
       children: [
+        if (environmentBadge != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              environmentBadge!,
+              style: TextStyle(
+                fontSize: 10,
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
         if (missing) ...[
           Icon(
             AppIcons.warningCircle,

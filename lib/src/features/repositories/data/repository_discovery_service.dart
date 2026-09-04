@@ -1,8 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../core/process/command_runner.dart';
+import '../../../core/process/command_runner_factory.dart';
+import '../../environments/data/execution_environment_dao.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/execution_environment.dart';
 import '../domain/discovered_repository.dart';
 
 /// Raised when repository discovery cannot proceed (e.g. the root folder does
@@ -115,5 +121,81 @@ class LocalRepositoryDiscoveryService implements RepositoryDiscoveryService {
   Future<bool> _isGitRepository(Directory dir) async {
     final gitPath = p.join(dir.path, '.git');
     return await Directory(gitPath).exists() || await File(gitPath).exists();
+  }
+}
+
+/// A [RepositoryDiscoveryService] that routes discovery to [LocalRepositoryDiscoveryService]
+/// for local/WSL environments, and runs remote discovery via [CommandRunner] for SSH environments.
+class EnvironmentAwareRepositoryDiscoveryService implements RepositoryDiscoveryService {
+  const EnvironmentAwareRepositoryDiscoveryService({
+    required this.localDiscovery,
+    required this.runnerFactory,
+    required this.environments,
+  });
+
+  final RepositoryDiscoveryService localDiscovery;
+  final CommandRunnerFactory runnerFactory;
+  final ExecutionEnvironmentDao environments;
+
+  @override
+  Future<List<DiscoveredRepository>> discover(
+    EnvironmentPath root, {
+    int maxDepth = 5,
+  }) async {
+    final env = environments.getById(root.environmentId);
+    if (env != null && env.kind == EnvironmentKind.ssh) {
+      return _discoverSsh(root, env, maxDepth: maxDepth);
+    }
+    return localDiscovery.discover(root, maxDepth: maxDepth);
+  }
+
+  Future<List<DiscoveredRepository>> _discoverSsh(
+    EnvironmentPath root,
+    ExecutionEnvironment env, {
+    int maxDepth = 5,
+  }) async {
+    final runner = runnerFactory.forEnvironment(env);
+    final escaped = "'${root.path.replaceAll("'", r"'\''")}'";
+    final script = '''
+if [ -e $escaped/.git ]; then
+  echo $escaped
+fi
+find $escaped -maxdepth $maxDepth -name .git 2>/dev/null
+''';
+    final result = await runner.run(
+      CommandRequest(
+        executable: 'sh',
+        arguments: ['-c', script],
+      ),
+    );
+
+    final seen = <String>{};
+    final found = <DiscoveredRepository>[];
+    for (final line in const LineSplitter().convert(result.stdout)) {
+      var trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+        trimmed = trimmed.substring(1, trimmed.length - 1);
+      }
+      if (trimmed.endsWith('/.git')) {
+        trimmed = trimmed.substring(0, trimmed.length - 5);
+      }
+      final parts = trimmed.split('/');
+      if (parts.any(_skippedDirectories.contains)) continue;
+
+      if (seen.add(trimmed)) {
+        found.add(
+          DiscoveredRepository(
+            name: p.posix.basename(trimmed),
+            path: EnvironmentPath(
+              environmentId: root.environmentId,
+              path: trimmed,
+            ),
+          ),
+        );
+      }
+    }
+    found.sort((a, b) => a.path.path.compareTo(b.path.path));
+    return found;
   }
 }

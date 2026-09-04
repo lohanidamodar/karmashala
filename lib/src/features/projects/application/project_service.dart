@@ -1,6 +1,13 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+import '../../../core/process/command_runner.dart';
+import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/path_translator.dart';
 import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../explorer/application/checkout.dart';
@@ -21,6 +28,24 @@ class ProjectCreationResult {
   final List<Repository> repositories;
 }
 
+/// Helper to parse a repository name from a git URL.
+String repoNameFromUrl(String url) {
+  var cleaned = url.trim();
+  if (cleaned.endsWith('.git')) {
+    cleaned = cleaned.substring(0, cleaned.length - 4);
+  }
+  while (cleaned.endsWith('/')) {
+    cleaned = cleaned.substring(0, cleaned.length - 1);
+  }
+  final slashIndex = cleaned.lastIndexOf('/');
+  final colonIndex = cleaned.lastIndexOf(':');
+  final lastSep = slashIndex > colonIndex ? slashIndex : colonIndex;
+  if (lastSep != -1 && lastSep < cleaned.length - 1) {
+    return cleaned.substring(lastSep + 1);
+  }
+  return cleaned;
+}
+
 /// Application use-cases for projects: creating a project at a folder and
 /// discovering the Git repositories inside it.
 class ProjectService {
@@ -30,6 +55,7 @@ class ProjectService {
     required this.discovery,
     required this.ids,
     required this.clock,
+    this.runnerFactory,
     this.translator = const PathTranslator(),
   });
 
@@ -38,6 +64,7 @@ class ProjectService {
   final RepositoryDiscoveryService discovery;
   final IdGenerator ids;
   final Clock clock;
+  final CommandRunnerFactory? runnerFactory;
   final PathTranslator translator;
 
   /// Creates a project rooted at [root] named [name], discovers Git repositories
@@ -131,26 +158,184 @@ class ProjectService {
     return ProjectCreationResult(project: project, repositories: repositories);
   }
 
+  /// Creates a project in [target] environment, optionally cloning [gitRepoUrl].
+  ///
+  /// If [gitRepoUrl] is provided and [targetPath] is empty:
+  /// - For SSH/WSL: defaults to `~/karmashala/<repoName>`.
+  /// - For Windows/local: throws [RepositoryDiscoveryException] prompting for a destination path.
+  Future<ProjectCreationResult> createProject({
+    required String name,
+    required ExecutionEnvironment target,
+    required String targetPath,
+    String? gitRepoUrl,
+    String? workspaceId,
+    int maxDepth = 5,
+  }) async {
+    final now = clock.nowUtc();
+    final url = gitRepoUrl?.trim();
+    final hasGit = url != null && url.isNotEmpty;
+    var path = targetPath.trim();
+
+    if (hasGit && path.isEmpty) {
+      final repoName = repoNameFromUrl(url);
+      if (target.kind == EnvironmentKind.ssh ||
+          target.kind == EnvironmentKind.wsl) {
+        path = '~/karmashala/$repoName';
+      } else {
+        throw RepositoryDiscoveryException(
+          'Please choose a folder path to clone the repository into.',
+        );
+      }
+    } else if (path.isEmpty) {
+      throw RepositoryDiscoveryException(
+        'Please provide a folder path or a Git repository URL.',
+      );
+    }
+
+    String resolvedPath = path;
+
+    if (hasGit) {
+      if (runnerFactory == null) {
+        throw StateError(
+          'CommandRunnerFactory is required to clone git repositories.',
+        );
+      }
+      final runner = runnerFactory!.forEnvironment(target);
+      if (target.kind == EnvironmentKind.ssh ||
+          target.kind == EnvironmentKind.wsl) {
+        final posixEscaped = "'${path.replaceAll("'", r"'\''")}'";
+        final cloneEscaped = "'${url.replaceAll("'", r"'\''")}'";
+        final cloneScript = '''
+TARGET=$posixEscaped
+if [ -d "\$TARGET/.git" ]; then
+  echo "EXISTS"
+else
+  mkdir -p "\$(dirname "\$TARGET")" && git clone $cloneEscaped "\$TARGET"
+fi
+cd "\$TARGET" && pwd
+''';
+        final result = await runner.run(
+          CommandRequest(
+            executable: 'sh',
+            arguments: ['-c', cloneScript],
+          ),
+        );
+        if (!result.ok) {
+          throw RepositoryDiscoveryException(
+            'Failed to clone repository on ${target.name}: ${result.stderr.trim()}',
+          );
+        }
+        final lines = result.stdout.trim().split('\n');
+        resolvedPath = lines.last.trim();
+      } else {
+        final dir = Directory(path);
+        final gitDir = Directory(p.join(path, '.git'));
+        if (!gitDir.existsSync()) {
+          if (!dir.existsSync()) {
+            dir.parent.createSync(recursive: true);
+          }
+          final result = await runner.run(
+            CommandRequest(
+              executable: 'git',
+              arguments: ['clone', url, path],
+            ),
+          );
+          if (!result.ok) {
+            throw RepositoryDiscoveryException(
+              'Failed to clone repository: ${result.stderr.trim()}',
+            );
+          }
+        }
+        resolvedPath = dir.path;
+      }
+    } else if (target.kind == EnvironmentKind.ssh) {
+      if (runnerFactory != null) {
+        final runner = runnerFactory!.forEnvironment(target);
+        final posixEscaped = "'${path.replaceAll("'", r"'\''")}'";
+        final result = await runner.run(
+          CommandRequest(
+            executable: 'sh',
+            arguments: ['-c', 'cd $posixEscaped 2>/dev/null && pwd'],
+          ),
+        );
+        if (!result.ok || result.stdout.trim().isEmpty) {
+          throw RepositoryDiscoveryException(
+            'Folder does not exist on ${target.name}: $path',
+          );
+        }
+        resolvedPath = result.stdout.trim().split('\n').last.trim();
+      }
+    }
+
+    final root = EnvironmentPath(
+      environmentId: target.id,
+      path: resolvedPath,
+    );
+
+    final discovered = await discovery.discover(root, maxDepth: maxDepth);
+
+    final project = Project(
+      id: ids.newId(),
+      name: name,
+      root: root,
+      createdAt: now,
+      workspaceId: workspaceId,
+    );
+    projectDao.insert(project);
+
+    final repositories = <Repository>[];
+    if (discovered.isEmpty) {
+      var rootIsRepo = false;
+      if (target.kind == EnvironmentKind.ssh) {
+        if (runnerFactory != null) {
+          final runner = runnerFactory!.forEnvironment(target);
+          final check = await runner.run(
+            CommandRequest(
+              executable: 'sh',
+              arguments: [
+                '-c',
+                'test -e \'${resolvedPath.replaceAll("'", r"'\''")}/.git\'',
+              ],
+            ),
+          );
+          rootIsRepo = check.ok;
+        }
+      } else {
+        rootIsRepo =
+            Directory(p.join(resolvedPath, '.git')).existsSync() ||
+            File(p.join(resolvedPath, '.git')).existsSync();
+      }
+
+      if (rootIsRepo) {
+        final repo = Repository(
+          id: ids.newId(),
+          projectId: project.id,
+          name: name,
+          path: root,
+          createdAt: now,
+        );
+        repositoryDao.insert(repo);
+        repositories.add(repo);
+      }
+    } else {
+      for (final d in discovered) {
+        final repo = Repository(
+          id: ids.newId(),
+          projectId: project.id,
+          name: d.name,
+          path: d.path,
+          createdAt: now,
+        );
+        repositoryDao.insert(repo);
+        repositories.add(repo);
+      }
+    }
+
+    return ProjectCreationResult(project: project, repositories: repositories);
+  }
+
   /// Re-runs discovery for an existing [project] and persists any repositories
   /// not already recorded. Returns the newly added rows.
-  ///
-  /// Matched by **checkout identity**, not by string equality: discovery, `git
-  /// worktree list` and the workspace's own rows spell the same directory three
-  /// ways (`C:\ws\app`, `C:/ws/app`, a trailing separator), and comparing the
-  /// spellings would insert a second row for a repository that is already
-  /// there. "Rescan for repositories" is a menu item now, so that duplicate is
-  /// one click away rather than hypothetical. See [Checkout].
-  ///
-  /// **Scans on the host, records in the project's environment**, exactly as
-  /// [createProjectForEnvironment] does. This used to hand `project.root`
-  /// straight to discovery, and discovery is `dart:io` on the Windows host —
-  /// so for a project rooted in WSL, which is every project launched from a
-  /// WSL shell in this workspace, the scan asked Windows for
-  /// `/mnt/c/Users/…` and threw "Folder does not exist" every single time.
-  /// A rescan that always fails is why a repository cloned into a project
-  /// after it was added stayed invisible for good: the row could never be
-  /// written, so the checkout picker kept offering the one folder recorded on
-  /// the day the project was created.
   Future<List<Repository>> rediscover(
     Project project, {
     required ExecutionEnvironment projectEnvironment,
@@ -161,7 +346,9 @@ class ProjectService {
         .getByProject(project.id)
         .map((r) => Checkout(r.path))
         .toSet();
-    final scanRoot = projectEnvironment.id == windows.id
+    final scanRoot = projectEnvironment.kind == EnvironmentKind.ssh
+        ? project.root
+        : projectEnvironment.id == windows.id
         ? project.root
         : translator.translate(
             project.root,
@@ -170,6 +357,7 @@ class ProjectService {
           );
     final discovered = await discovery.discover(scanRoot, maxDepth: maxDepth);
     EnvironmentPath toProject(EnvironmentPath hostPath) =>
+        projectEnvironment.kind == EnvironmentKind.ssh ||
         projectEnvironment.id == windows.id
         ? hostPath
         : translator.translate(

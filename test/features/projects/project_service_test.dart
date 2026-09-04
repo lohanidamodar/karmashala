@@ -7,8 +7,11 @@ import 'package:karmashala/src/features/projects/application/project_service.dar
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/command_runner_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -21,12 +24,13 @@ void main() {
   EnvironmentPath root(String path) =>
       EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
-  ProjectService build() => ProjectService(
+  ProjectService build({CommandRunnerFactory? runnerFactory}) => ProjectService(
     projectDao: projectDao,
     repositoryDao: repositoryDao,
     discovery: discovery,
     ids: SequentialIdGenerator(),
     clock: FixedClock(testTime),
+    runnerFactory: runnerFactory,
   );
 
   setUp(() {
@@ -202,4 +206,98 @@ void main() {
       expect(result.repositories.single.path.environmentId, 'windows');
     },
   );
+
+  group('repoNameFromUrl', () {
+    test('extracts repo name from various git and github url formats', () {
+      expect(repoNameFromUrl('https://github.com/owner/my-repo.git'), 'my-repo');
+      expect(repoNameFromUrl('https://github.com/owner/my-repo'), 'my-repo');
+      expect(repoNameFromUrl('https://github.com/owner/my-repo/'), 'my-repo');
+      expect(repoNameFromUrl('git@github.com:owner/my-repo.git'), 'my-repo');
+      expect(repoNameFromUrl('ssh://git@server:2222/org/my-project.git'), 'my-project');
+    });
+  });
+
+  group('createProject on SSH target', () {
+    test('defaults target path to ~/karmashala/<repo> when path is empty', () async {
+      final remote = sshEnvFixture();
+      final runner = FakeCommandRunner(
+        environmentId: remote.id,
+        responder: (req) => const CommandResult(
+          exitCode: 0,
+          stdout: '/home/dev/karmashala/my-repo\n',
+          stderr: '',
+        ),
+      );
+      final factory = FakeCommandRunnerFactory(
+        byEnvironmentId: {remote.id: runner},
+      );
+
+      discovery.result = [
+        DiscoveredRepository(
+          name: 'my-repo',
+          path: EnvironmentPath(
+            environmentId: remote.id,
+            path: '/home/dev/karmashala/my-repo',
+          ),
+        ),
+      ];
+
+      final result = await build(runnerFactory: factory).createProject(
+        name: 'my-repo',
+        target: remote,
+        targetPath: '',
+        gitRepoUrl: 'https://github.com/owner/my-repo.git',
+      );
+
+      expect(result.project.name, 'my-repo');
+      expect(result.project.environmentId, remote.id);
+      expect(result.project.root.path, '/home/dev/karmashala/my-repo');
+      expect(result.repositories.single.name, 'my-repo');
+      expect(result.repositories.single.path.environmentId, remote.id);
+
+      // Verify the clone command was executed
+      expect(runner.requests.length, 1);
+      expect(runner.requests.first.executable, 'sh');
+      expect(runner.requests.first.arguments.last, contains('git clone'));
+      expect(runner.requests.first.arguments.last, contains('~/karmashala/my-repo'));
+    });
+
+    test('verifies remote folder existence when git repo is not provided', () async {
+      final remote = sshEnvFixture();
+      final runner = FakeCommandRunner(
+        environmentId: remote.id,
+        responder: (req) => const CommandResult(
+          exitCode: 0,
+          stdout: '/home/dev/existing-folder\n',
+          stderr: '',
+        ),
+      );
+      final factory = FakeCommandRunnerFactory(
+        byEnvironmentId: {remote.id: runner},
+      );
+
+      discovery.result = [
+        DiscoveredRepository(
+          name: 'existing-folder',
+          path: EnvironmentPath(
+            environmentId: remote.id,
+            path: '/home/dev/existing-folder',
+          ),
+        ),
+      ];
+
+      final result = await build(runnerFactory: factory).createProject(
+        name: 'existing-folder',
+        target: remote,
+        targetPath: '/home/dev/existing-folder',
+      );
+
+      expect(result.project.name, 'existing-folder');
+      expect(result.project.environmentId, remote.id);
+      expect(result.project.root.path, '/home/dev/existing-folder');
+      expect(runner.requests.length, 1);
+      expect(runner.requests.first.arguments.last, contains('cd'));
+    });
+  });
 }
+

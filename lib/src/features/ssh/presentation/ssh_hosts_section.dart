@@ -5,7 +5,11 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/row_menu.dart';
+import '../../projects/application/projects_controller.dart';
+import '../../projects/presentation/new_project_dialog.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/domain/terminal_profile.dart';
 import '../application/ssh_hosts_controller.dart';
 import '../domain/ssh_host.dart';
 import 'ssh_connection_status_chip.dart';
@@ -61,10 +65,34 @@ class _HostCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final key = host.privateKey;
+    final projects = ref
+        .watch(projectsControllerProvider)
+        .where((p) => p.environmentId == host.environmentId)
+        .toList();
+
+    void openTerminal() {
+      ref.read(terminalSessionsControllerProvider.notifier).openTab(
+            profile: TerminalProfile.ssh(
+              host.id,
+              hostName: host.name,
+            ),
+          );
+      ref.read(terminalVisibleProvider.notifier).set(true);
+    }
 
     return RowContextMenu(
       menuLabel: 'Actions for ${host.name}',
       itemBuilder: () => [
+        DesktopMenuItem(
+          value: 'terminal',
+          label: 'Start terminal',
+          icon: AppIcons.terminal,
+        ),
+        DesktopMenuItem(
+          value: 'new_project',
+          label: 'New project…',
+          icon: AppIcons.folderPlus,
+        ),
         DesktopMenuItem(
           value: 'browse',
           label: 'Browse files',
@@ -84,6 +112,11 @@ class _HostCard extends ConsumerWidget {
         ),
       ],
       onSelected: (value) => switch (value) {
+        'terminal' => openTerminal(),
+        'new_project' => NewProjectDialog.show(
+            context,
+            initialEnvironmentId: host.environmentId,
+          ),
         'browse' => RemoteFileBrowserDialog.show(context, host: host),
         'edit' => SshHostDialog.show(context, existing: host),
         _ => _remove(context, ref),
@@ -104,7 +137,28 @@ class _HostCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: Insets.sm),
                   Expanded(
-                    child: Text(host.name, style: theme.textTheme.titleSmall),
+                    child: Row(
+                      children: [
+                        Text(host.name, style: theme.textTheme.titleSmall),
+                        if (projects.isNotEmpty) ...[
+                          const SizedBox(width: Insets.xs),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${projects.length} project${projects.length == 1 ? '' : 's'}',
+                              style: theme.textTheme.labelSmall,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                   SshConnectionStatusChip(hostId: host.id, showError: false),
                 ],
@@ -128,22 +182,37 @@ class _HostCard extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: Insets.sm),
-              Row(
+              Wrap(
+                spacing: Insets.xs,
+                runSpacing: Insets.xs,
                 children: [
+                  FilledButton.tonalIcon(
+                    onPressed: openTerminal,
+                    icon: const Icon(AppIcons.terminal, size: 16),
+                    label: const Text('Terminal'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => NewProjectDialog.show(
+                      context,
+                      initialEnvironmentId: host.environmentId,
+                    ),
+                    icon: const Icon(AppIcons.folderPlus, size: 16),
+                    label: const Text('New project'),
+                  ),
                   TextButton.icon(
                     onPressed: () =>
                         RemoteFileBrowserDialog.show(context, host: host),
-                    icon: const Icon(AppIcons.folderOpen),
+                    icon: const Icon(AppIcons.folderOpen, size: 16),
                     label: const Text('Browse files'),
                   ),
                   TextButton.icon(
                     onPressed: () => SshHostDialog.show(context, existing: host),
-                    icon: const Icon(AppIcons.pencilSimple),
+                    icon: const Icon(AppIcons.pencilSimple, size: 16),
                     label: const Text('Edit'),
                   ),
                   TextButton.icon(
                     onPressed: () => _remove(context, ref),
-                    icon: const Icon(AppIcons.trash),
+                    icon: const Icon(AppIcons.trash, size: 16),
                     label: const Text('Remove'),
                     style: TextButton.styleFrom(
                       foregroundColor: theme.colorScheme.error,
