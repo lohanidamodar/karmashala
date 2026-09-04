@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../domain/agent_pane_launch.dart';
 import '../domain/launch_context.dart';
 import '../domain/shell_integration.dart';
@@ -214,15 +216,6 @@ Map<String, String> withWslEnv(Map<String, String> environment) {
   };
 }
 
-/// Whether `cmd.exe` would rewrite any part of [command] while parsing it.
-///
-/// `cmd` substitutes `%NAME%` at parse time, and quoting does not stop it. Only
-/// a percent sign can start that, so its absence is a complete answer: a
-/// command with none is one `cmd /c` passes through untouched.
-bool _expandsUnderCmd(ShellCommand command) =>
-    command.parts.any((part) => part.contains('%')) ||
-    (command.workingDirectory?.contains('%') ?? false);
-
 /// One Windows command line, handed to `cmd.exe /c` so that `cmd` re-parses it.
 ///
 /// **Every** ConPTY child is spawned as `<exe> <exe> <args…>`: `flutter_pty`
@@ -370,49 +363,59 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         environment: command.environment,
       );
     case ShellContextKind.wsl:
-      // **Through `cmd.exe /c` too, unless the command contains a percent
-      // sign.** Spawned directly, `flutter_pty`'s duplicated leading token
-      // makes the real command line `wsl.exe wsl.exe -d <distro> …`, and
-      // `wsl.exe` reads that second token as *the command to run inside the
-      // distro*: the distribution's login shell then execs a Windows PE back
-      // out through `binfmt_misc`. It works every day and dies the moment WSL
-      // interop is unregistered, as
+      // **Through `cmd.exe /c`, carrying a base64 payload the distro's login
+      // shell decodes.** Two separate facts force that shape, both measured on
+      // Windows 10.0.26200 against `archlinux`.
       //
-      //   /mnt/c/…/WindowsApps/wsl.exe: line 1: MZ: command not found
+      // 1. `cmd.exe` has to be the wrapper. Spawned directly, `flutter_pty`'s
+      //    duplicated leading token makes the real command line
+      //    `wsl.exe wsl.exe -d <distro> …`, and `wsl.exe` reads that second
+      //    token as *the command to run inside the distro*: the login shell
+      //    then execs a Windows PE back out through `binfmt_misc`. It works
+      //    every day and dies the moment WSL interop is unregistered, as
       //
-      // — the shell reading the PE's `MZ` header as a script. The owner hit
-      // that resuming an agent session, which is why "wsl is working fine" and
-      // "the pane will not start" are both true: `wsl.exe` is fine, and what
-      // is broken is running a Windows executable from inside Linux.
+      //      /mnt/c/…/WindowsApps/wsl.exe: line 1: MZ: command not found
       //
-      // The wrapper this path could not previously use is `cmd.exe`, because
-      // `cmd` expands `%NAME%` while parsing and an agent command carries a
-      // user's prompt — the one thing [quoteWindowsCommandArgument] promises
-      // not to do to it. That is only a hazard when there *is* a percent sign,
-      // so the choice is made per command rather than once for the path: a
-      // resume, and every prompt without a `%`, now reaches the distro
-      // directly and needs no interop at all. A prompt containing one keeps
-      // the round-trip, because silently rewriting what the user typed is
-      // worse than depending on a feature that is normally on.
-      if (!_expandsUnderCmd(command)) {
-        return throughCommandPrompt(
-          [
-            'wsl.exe',
-            '-d',
-            context.wslDistribution ?? '',
-            if (command.workingDirectory != null) ...[
-              '--cd',
-              command.workingDirectory!,
-            ],
-            '--',
-            ...command.parts,
-          ],
-          environment: withWslEnv(command.environment),
-        );
-      }
-      return PtyLaunch(
-        executable: 'wsl.exe',
-        arguments: [
+      //    — the shell reading the PE's `MZ` header as a script.
+      //
+      // 2. **`wsl.exe … -- <command>` is not an argv hand-off.** WSL takes the
+      //    command line *tail* after `--` and runs it through the
+      //    distribution's login shell: `wsl.exe -d archlinux -- echo '$0 // $$'`
+      //    answers `/usr/sbin/zsh // 1283809`, and every Windows quoting
+      //    character survives into that shell and is parsed again under POSIX
+      //    rules. So this is a **two-parser line**, and the arguments have to be
+      //    correct for the second parser as well as the first. They were not:
+      //
+      //      * a prompt with a newline truncated at `cmd`'s end-of-line and left
+      //        the opening quote dangling — `zsh:1: unmatched "`, the pane the
+      //        owner reported, and the failure mode of *every* multi-line
+      //        prompt;
+      //      * `` `id -u` `` and `$(id -u)` in a prompt were **executed** —
+      //        measured: the prompt arrived as `run 1000 now`, and
+      //        `$(touch /tmp/x)` really created the file. A prompt is written by
+      //        agents and pasted by users, so that is a command-injection hole,
+      //        not only a robustness bug;
+      //      * `$HOME` was expanded and `\\server` was eaten down to `\server`.
+      //
+      // The fix is the one the Windows-native branch above already reached for
+      // the same class of reason: stop quoting for two parsers at once and
+      // encode instead. [encodedPosixShellCommand] is the POSIX
+      // `-EncodedCommand`. Its base64 alphabet has no character `cmd` rewrites,
+      // no newline for `cmd` to truncate at and nothing for a shell to expand,
+      // so the payload crosses both parsers untouched and is quoted exactly
+      // once — by us, for the shell that will actually read it.
+      //
+      // That also retires the `%`-in-the-command escape hatch this branch used
+      // to have (a prompt containing a percent sign was sent the interop
+      // round-trip so `cmd` could not substitute `%NAME%` into it): a prompt's
+      // percent signs are inside the base64 now. `--cd` is still spelled out on
+      // the `cmd` line because `wsl.exe` is what translates a Windows path, so
+      // a *working directory* containing `%NAME%` would still be substituted —
+      // the same exposure the shell-profile branch above has always had, and
+      // the app supplies that path rather than the user's prose.
+      return throughCommandPrompt(
+        [
+          'wsl.exe',
           '-d',
           context.wslDistribution ?? '',
           if (command.workingDirectory != null) ...[
@@ -420,17 +423,10 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
             command.workingDirectory!,
           ],
           '--',
-          ...command.parts,
-          // Quoted for the same reason the native branch goes through `cmd.exe`:
-          // `flutter_pty` concatenates arguments with single spaces and no quoting,
-          // so an unquoted multi-word prompt reaches the agent as several
-          // arguments and is silently ignored. There is no wrapper on this path to
-          // re-parse the line — `wsl.exe`'s argv comes straight from
-          // `CommandLineToArgvW` — so the quoting has to be in the strings. An
-          // argument with no whitespace passes through unchanged.
-        ].map(quoteWindowsCommandArgument).toList(),
-        // wsl.exe sets the child's directory itself, so the host process must not
-        // also be pointed at a Linux path it cannot resolve.
+          ...encodedPosixShellCommand(command.parts),
+        ],
+        // wsl.exe sets the child's directory itself, so the host process must
+        // not also be pointed at a Linux path it cannot resolve.
         // A Win32 variable only crosses into the distro if `WSLENV` names it.
         environment: withWslEnv(command.environment),
       );
@@ -442,9 +438,20 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
 ///
 /// Only the environment crossing belongs here: which shell the external
 /// terminal itself is (PowerShell, cmd, …) is that terminal's own argument
-/// convention, applied by `SystemTerminalService`. Nothing is quoted, because
-/// unlike `flutter_pty` those paths deliver argv properly and quoting twice
-/// would corrupt it.
+/// convention, applied by `SystemTerminalService`. Nothing is quoted for *that*
+/// shell, because unlike `flutter_pty` those paths deliver argv properly and
+/// quoting twice would corrupt it.
+///
+/// **The WSL crossing is not one of those paths, and used to be treated as
+/// one.** `wsl.exe … -- <command>` hands the command line *tail* to the
+/// distribution's login shell rather than handing it an argv, so however
+/// faithfully the terminal renders these strings, a shell parses them again on
+/// the far side — the same double-parse [wrapForPty] documents, reached by a
+/// different route and carrying the same prompt. So the command crosses
+/// [encodedPosixShellCommand] here too. Every consumer of this list renders it
+/// with Windows quoting (`_argsFor`'s PowerShell and `cmd` forms, and
+/// `Process.start`'s own escaping), which is exactly the double quote that
+/// token needs.
 ///
 /// Takes a [ShellCommand] and returns a plain argv, so — as with [wrapForPty] —
 /// its own output cannot be fed back in.
@@ -462,7 +469,7 @@ List<String> wrapForExternalTerminal(
       command.workingDirectory!,
     ],
     '--',
-    ...command.parts,
+    ...encodedPosixShellCommand(command.parts),
   ];
 }
 
@@ -471,6 +478,77 @@ List<String> wrapForExternalTerminal(
 String quotePowerShellArgument(String value) =>
     "'${value.replaceAll("'", "''")}'";
 
+/// Quotes one argument for a **POSIX** shell — `sh`, `bash`, `zsh`.
+///
+/// The counterpart to [quoteWindowsCommandArgument], and it exists for the same
+/// reason: a WSL launch is a command line **two** parsers read, and the second
+/// of them is the distribution's login shell. `wsl.exe … -- <command>` does not
+/// hand that shell an argv; it hands it the command line tail, which the shell
+/// then parses under its own rules. Quoting only for Windows left every POSIX
+/// metacharacter live on the other side.
+///
+/// Single quotes, because they are the one POSIX construct with **no**
+/// exceptions inside them: no expansion, no command substitution, no backslash
+/// escapes. Everything the caller passes arrives byte for byte. An embedded
+/// single quote is the only thing that cannot appear, so it is spelled the
+/// standard way — close, escape it outside the quotes, reopen (`'\''`).
+///
+/// It promises not to mangle a user's prompt, and unlike
+/// [quoteWindowsCommandArgument] it has no `%` caveat to declare: a percent
+/// sign means nothing to a POSIX shell. What it cannot defend against on its
+/// own is the *first* parser — `cmd.exe` still expands `%NAME%` and still stops
+/// at a newline — which is why the WSL path wraps its output in
+/// [encodedPosixShellCommand] rather than putting it on the line directly.
+String quotePosixShellArgument(String value) =>
+    "'${value.replaceAll("'", r"'\''")}'";
+
+/// The POSIX shell command that runs [parts], quoted for that shell.
+///
+/// `exec` so the shell is *replaced* by the command rather than waiting on it:
+/// the pane's process tree stays the depth it was before the payload was
+/// encoded, and a signal delivered to it still reaches the agent.
+String posixShellCommand(List<String> parts) =>
+    'exec ${parts.map(quotePosixShellArgument).join(' ')}';
+
+/// [parts] as two argv tokens that carry it into a POSIX shell across a Windows
+/// command line without either parser touching it.
+///
+/// The POSIX answer to `powershell.exe -EncodedCommand`, reached for the same
+/// reason the native branch reached for that one: a `wsl.exe … -- <command>`
+/// line is read by `cmd.exe` and then again by the distribution's login shell,
+/// and one string cannot be quoted correctly for two parsers at once. So the
+/// command is not quoted for them at all — it is encoded into an alphabet
+/// neither of them has an opinion about, and quoted exactly once, by
+/// [quotePosixShellArgument], for the shell that actually runs it.
+///
+/// The tokens are `eval` and `$(echo '<base64>'|base64 -d)`, and each part of
+/// that is load-bearing:
+///
+/// * the base64 alphabet is `A-Za-z0-9+/=`. Nothing `cmd` expands (no `%`),
+///   nothing it stops at (no newline), nothing it reads as syntax (no
+///   `& | < > ^ ( )`), and nothing a shell globs or splits;
+/// * **the second token has to arrive double-quoted, and it does.** It contains
+///   spaces, so every Windows command-line renderer wraps it in `"…"` —
+///   [quoteWindowsCommandArgument] here, PowerShell's and Dart's native-command
+///   escaping on the external-terminal paths. A `"` is Windows' only quote and
+///   the shell's *weak* one, so what the login shell reads back is one word
+///   with the substitution live. Unquoted it would be split on IFS and a
+///   newline in the prompt would become a space;
+/// * `$(…)` is parsed from scratch by the shell, so the `'…'` inside it really
+///   quotes the blob instead of being literal apostrophes;
+/// * `base64 -d` is coreutils, and busybox spells it the same way. That is the
+///   single thing this asks of the distribution.
+///
+/// The cost, stated plainly: base64 is 4 bytes for 3, and a `cmd.exe` command
+/// line stops at 8191 characters, so the longest prompt that can be launched
+/// this way is about a quarter shorter than before. A prompt that does not fit
+/// fails loudly, where the alternative was one that arrived silently altered —
+/// or executed.
+List<String> encodedPosixShellCommand(List<String> parts) {
+  final blob = base64Encode(utf8.encode(posixShellCommand(parts)));
+  return ['eval', '\$(echo \'$blob\'|base64 -d)'];
+}
+
 /// Quotes one argument for a command line `cmd.exe` will re-parse.
 ///
 /// Follows `CommandLineToArgvW`'s rules — wrap in double quotes when the value
@@ -478,12 +556,24 @@ String quotePowerShellArgument(String value) =>
 /// backslashes that immediately precede one — because that is what the agent's
 /// own argument parser will apply on the other side.
 ///
-/// **One thing it deliberately does not do:** escape `%`. `cmd.exe` expands
-/// `%NAME%` for variables that exist, and there is no reliable escape for it on
-/// a `/c` command line (`%%` is a batch-file convention and is not collapsed
-/// here). A prompt containing `%USERNAME%` will therefore arrive substituted on
-/// a Windows-native launch. Unknown names are left alone, and the WSL path —
-/// which does not go through `cmd` — is unaffected.
+/// **Two things it deliberately does not do**, both of which are about
+/// `cmd.exe` rather than about `CommandLineToArgvW`:
+///
+/// * it does not escape `%`. `cmd` expands `%NAME%` for variables that exist,
+///   and there is no reliable escape for it on a `/c` command line (`%%` is a
+///   batch-file convention and is not collapsed here). Unknown names are left
+///   alone;
+/// * it does not quote a value **only** because it contains `& | < > ^ ( )`.
+///   Those are `cmd` syntax outside quotes, and a value with no space, tab or
+///   quote is returned untouched — so a single-token `a&b` handed to
+///   [throughCommandPrompt] would start a second command.
+///
+/// Neither reaches a user's prompt any more. The WSL agent path encodes its
+/// command ([encodedPosixShellCommand]) and puts nothing on the `cmd` line but
+/// `--cd`; the Windows-native path is PowerShell `-EncodedCommand`; and
+/// [wrapForPty]'s `commandPrompt` branch is unreachable for an agent, because
+/// `LaunchContext.forAgent` only ever answers `windowsNative`, `wsl` or `posix`.
+/// What is left on this line is paths and flags the app supplies itself.
 String quoteWindowsCommandArgument(String value) {
   if (value.isNotEmpty && !value.contains(RegExp(r'[ \t"]'))) return value;
 
