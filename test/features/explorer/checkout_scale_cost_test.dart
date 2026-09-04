@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -101,8 +102,9 @@ import '../terminal/fake_instance.dart';
 /// * **How many run at once**, measured as a peak of overlapping subprocesses
 ///   — which needs a fake that yields, since one that answers instantly can
 ///   never overlap with anything and would report a peak of one however wide
-///   the fan-out. Reported here; the bound itself is asserted once there is
-///   one.
+///   the fan-out. Measured at **2 / 20 / 28** with nothing bounding it;
+///   [kCheckoutProbeConcurrency] is the bound, and the peak is asserted
+///   against it where the fan-out is widest.
 void main() {
   /// The three points the curve is read at. One checkout is the "did we make
   /// the ordinary project worse" control; 69 is the owner's real number.
@@ -434,6 +436,17 @@ void main() {
               'a git subprocess started inside a frame (${git.phaseNames}) '
               'while $rows rows were being drawn',
         );
+        // And no more than a paneful at a time. Measured at 2 / 20 / 28 with
+        // nothing bounding it: twenty-eight `\\wsl.localhost` round trips
+        // alive together to fill in ten branch chips.
+        expect(
+          git.peakInFlight,
+          lessThanOrEqualTo(kCheckoutProbeConcurrency),
+          reason:
+              '${git.peakInFlight} git subprocesses were alive together while '
+              '$rows rows were being drawn, over the '
+              '$kCheckoutProbeConcurrency `CheckoutProbeQueue` allows',
+        );
       });
     }
 
@@ -452,6 +465,17 @@ void main() {
         reason: 'the pane drew ${rowsByScale[69]} rows at 69 checkouts',
       );
       expect(peakByScale.values, everyElement(greaterThan(0)));
+      // **The peak stops growing**, which is what a bound is for and what the
+      // per-scale assertions cannot say between them: 2 / 20 / 28 was a peak
+      // that followed the fan-out, and a bound is a peak that follows nothing.
+      expect(
+        peakByScale.values,
+        everyElement(lessThanOrEqualTo(kCheckoutProbeConcurrency)),
+        reason:
+            'the peak in flight was $peakByScale — a fan-out released into '
+            'one microtask queue rather than one bounded at '
+            '$kCheckoutProbeConcurrency',
+      );
     });
   });
 }
