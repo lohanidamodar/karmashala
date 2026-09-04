@@ -310,10 +310,11 @@ class AgentHookSpec {
     this.entryStyle = AgentHookEntryStyle.grouped,
     this.sessionIdPath = const ['session_id'],
     this.cwdPath = const ['cwd'],
-    this.messagePath = const [],
+    this.messagePaths = const [],
     this.messageWaiting = const {},
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
+    this.inFlightPath = const {},
     this.trustsCommandByHash = false,
     required this.eventStatus,
   });
@@ -352,15 +353,24 @@ class AgentHookSpec {
   /// to the oldest unclaimed pane rather than refusing.
   final List<String> cwdPath;
 
-  /// Where a human-readable description of *what the agent wants* sits in the
-  /// payload, or empty when this agent's hooks carry none.
+  /// Where a human-readable description of *what the agent is doing or wants*
+  /// sits in the payload — **candidate paths, tried in order**, the first
+  /// holding a non-empty string winning. Empty when this agent's hooks carry
+  /// none.
   ///
-  /// The only thing that ever tells us what is being approved in words the
-  /// agent itself chose. Claude Code's `Notification` payload has a `message`;
-  /// it used to be decoded and thrown away, which left the whole app able to
-  /// say "an approval is pending" and never what for. Empty means we quote
-  /// nothing rather than inventing a description.
-  final List<String> messagePath;
+  /// The only thing that ever tells us what is being approved, or what was
+  /// finished, in words the agent itself chose. Empty means we quote nothing
+  /// rather than inventing a description.
+  ///
+  /// A list rather than one path because the field is per **event**, not per
+  /// agent, and no single key covers a CLI's whole hook surface. Claude Code
+  /// 2.1.260 puts the prose under `message` on `Notification` and under
+  /// `last_assistant_message` on `Stop`, `StopFailure` and `SubagentStop` — so
+  /// reading only the first left every "Agent finished" toast with a session
+  /// name and nothing else, which is the half of the question the user actually
+  /// asked. No event carries both, so order is a fallback rather than a
+  /// precedence anyone has to reason about.
+  final List<List<String>> messagePaths;
 
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;
@@ -399,6 +409,25 @@ class AgentHookSpec {
   /// unrecognised notice must not be able to raise "this session needs you",
   /// because that badge is what puts a key-sending button in front of a user.
   final Map<String, AgentHookMeaning> eventKindMeaning;
+
+  /// Event name → where that event's payload lists work that is **still in
+  /// flight**, for an agent whose "the turn ended" event also fires when the
+  /// turn is merely *paused*.
+  ///
+  /// A non-empty list at that path replaces the event's [eventStatus] with
+  /// [AgentActivityStatus.working]: the session did not stop, it handed off and
+  /// will be woken again. Anything else — the key absent, an empty list, a
+  /// value that is not a list — leaves the event meaning exactly what it says,
+  /// so an agent that never sends the field is untouched.
+  ///
+  /// Claude Code needs this and says so in the field's own documentation.
+  /// `Stop` fires on the **main thread** the moment a `Task` subagent is
+  /// launched, and the payload carries `background_tasks` for precisely this
+  /// question — 2.1.260's schema describes it as *"In-flight background work
+  /// (running/pending + backgrounded) registered in this session. Lets hooks
+  /// distinguish 'session is done' from 'session is paused waiting for
+  /// background work to wake it'."*
+  final Map<String, List<String>> inFlightPath;
 
   /// Whether this agent gates each hook entry on a hash of the entry itself, so
   /// the installed **command string must not change between launches**.
