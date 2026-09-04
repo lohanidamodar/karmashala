@@ -82,6 +82,37 @@ const List<String> legacyAgentHookConfigKeys = <String>['chitragupta'];
 /// [agentHookMarker] in the Windows `~/.claude/settings.json`, an Antigravity
 /// block of `{}` — while Orca's Claude hooks, written three months earlier,
 /// were still firing, for the single reason that their command never changes.
+///
+/// ## Every file operation here is asynchronous, and that is load-bearing
+///
+/// A store home is not necessarily on this machine's own disk. For
+/// [EnvironmentKind.wsl] it is a `\\wsl.localhost\<distro>\home\<user>\…`
+/// UNC path served by a plan9 daemon **inside** the distribution, so every
+/// `exists`, every read and every rename here has a latency that belongs to
+/// that distribution and not to this app — and a *synchronous* Dart file
+/// operation has no timeout, so one that does not come back holds the isolate
+/// for as long as it takes.
+///
+/// This class used to do all of it synchronously: `existsSync`,
+/// `readAsStringSync`, `deleteSync`. On the owner's machine, in profile mode on
+/// 2026-09-04, the start-up sweep that drives it measured **1053 ms of a 1.91 s
+/// launch — 55% of it**, and none of that was CPU: the Dart isolate was at ~4%
+/// of one core. It was a wait, on the thread the window is painted on.
+///
+/// What that costs is not only slowness. The Windows file picker runs its own
+/// modal loop on the platform thread, which *is* this isolate's thread, so a
+/// dialog created while the isolate is occupied is created and never shown and
+/// the window goes Not Responding — measured in `core/util/file_picking.dart`
+/// by occupying the isolate for 25 s. `AgentHookSpool.drain` was moved off the
+/// isolate for exactly this reason and carries the share's own numbers (1 ms
+/// for an `exists`, 16 ms for a `list`, 84 ms for a name that is not a
+/// distribution); this was the remaining instance of the same fault.
+///
+/// So: nothing here is `…Sync`, the caller can put a bound on a store home that
+/// does not answer (`AgentHookInstallationService.defaultStoreBudget`), and the
+/// verification is untouched — [install] still reads back every file it wrote
+/// and still answers about **disk** rather than about intent, because a
+/// reported install that wrote nothing is worse than no install.
 class AgentHookInstaller {
   const AgentHookInstaller({
     this.replace = _replaceFile,
@@ -134,7 +165,8 @@ class AgentHookInstaller {
   /// The one reason [install] can answer `false` that is not a fault: there is
   /// no agent here to hook. Exposed so a caller can tell that apart from "the
   /// write did not land", which reads as a defect and is reported as one.
-  bool storeIsPresent(String storeHome) => Directory(storeHome).existsSync();
+  Future<bool> storeIsPresent(String storeHome) =>
+      Directory(storeHome).exists();
 
   Future<bool> install({
     required AgentDescriptor descriptor,
@@ -154,7 +186,7 @@ class AgentHookInstaller {
     // step earlier than it used to, so a store we refuse to touch is a store we
     // wrote nothing into — not one holding a bearer token beside a
     // `settings.json` we never opened.
-    _readConfigObject(descriptor, storeHome);
+    await _readConfigObject(descriptor, storeHome);
 
     // Written **before** the config entry that names it, so no launch can leave
     // an entry pointing at a script that is not there yet. The reverse order is
@@ -193,13 +225,13 @@ class AgentHookInstaller {
       }
       return changed;
     });
-    return installedEvents(
-          descriptor: descriptor,
-          storeHome: storeHome,
-          endpoint: endpoint,
-          environment: environment,
-        ).length ==
-        spec.eventStatus.length;
+    final events = await installedEvents(
+      descriptor: descriptor,
+      storeHome: storeHome,
+      endpoint: endpoint,
+      environment: environment,
+    );
+    return events.length == spec.eventStatus.length;
   }
 
   /// The declared events whose entry is on disk **right now**, spelling this
@@ -213,18 +245,25 @@ class AgentHookInstaller {
   /// Reads the file rather than any cached decode. A config that vanished, was
   /// truncated or stopped being JSON between the write and this call answers
   /// "none", which is the truth about what will fire.
-  Set<String> installedEvents({
+  ///
+  /// Asynchronous like everything else here, and this is the one place where
+  /// that had to be argued rather than assumed: it is the **verification**, and
+  /// the incident in [install]'s doc is a reported install that wrote nothing.
+  /// Awaiting a read changes when the answer arrives and not what it is — the
+  /// bytes are still read off disk after the write, by this method, and the
+  /// count is still compared against the declared events.
+  Future<Set<String>> installedEvents({
     required AgentDescriptor descriptor,
     required String storeHome,
     required AgentHookEndpoint endpoint,
     required EnvironmentKind environment,
-  }) {
+  }) async {
     final spec = descriptor.hooks;
     if (spec == null) return const {};
     final file = configFileFor(descriptor, storeHome)!;
     Map<String, Object?> hooks;
     try {
-      final raw = file.readAsStringSync();
+      final raw = await file.readAsString();
       final decoded = jsonDecode(raw.trim().isEmpty ? '{}' : raw);
       if (decoded is! Map<String, Object?>) return const {};
       final current = decoded[spec.configKey];
@@ -283,7 +322,7 @@ class AgentHookInstaller {
     // file further along. Removed whichever way the config edit went: a config
     // that never carried our entry can still be sitting beside files an earlier
     // run wrote.
-    if (_removeGeneratedFiles(descriptor, storeHome)) changed = true;
+    if (await _removeGeneratedFiles(descriptor, storeHome)) changed = true;
     return changed;
   }
 
@@ -305,16 +344,16 @@ class AgentHookInstaller {
   /// every tool call — and it is why leaving the entry behind is now safe.
   ///
   /// Returns whether a file was removed.
-  bool retireEndpoint({
+  Future<bool> retireEndpoint({
     required AgentDescriptor descriptor,
     required String storeHome,
-  }) {
+  }) async {
     if (descriptor.hooks == null) return false;
     var removed = false;
     final file = _endpointFile(descriptor, storeHome);
-    if (file != null && file.existsSync()) {
+    if (file != null && await file.exists()) {
       try {
-        file.deleteSync();
+        await file.delete();
         removed = true;
       } on FileSystemException {
         // Someone else's directory. The script fails closed on a token it
@@ -327,9 +366,9 @@ class AgentHookInstaller {
     // it would also leave the script a directory to keep writing into if the
     // endpoint file ever came back without one.
     final spool = spoolDirectoryFor(descriptor, storeHome);
-    if (spool != null && spool.existsSync()) {
+    if (spool != null && await spool.exists()) {
       try {
-        spool.deleteSync(recursive: true);
+        await spool.delete(recursive: true);
         removed = true;
       } on FileSystemException {
         // Same answer: the script exits zero on a directory it cannot see, and
@@ -615,7 +654,7 @@ class AgentHookInstaller {
         final spool = spoolDirectoryFor(descriptor, storeHome);
         if (spool == null) return false;
         try {
-          if (!spool.existsSync()) await spool.create(recursive: true);
+          if (!await spool.exists()) await spool.create(recursive: true);
         } on FileSystemException {
           return false;
         }
@@ -646,14 +685,14 @@ class AgentHookInstaller {
     String contents, {
     Future<void> Function(File staged)? harden,
   }) async {
-    if (file.existsSync()) {
+    if (await file.exists()) {
       try {
-        if (file.readAsStringSync() == contents) return true;
+        if (await file.readAsString() == contents) return true;
       } on FileSystemException {
         // Unreadable but present — rewritten below rather than trusted.
       }
     }
-    if (!Directory(storeHome).existsSync()) {
+    if (!await Directory(storeHome).exists()) {
       // The agent is not installed in this environment, so there is nothing to
       // hook. Returning rather than writing, because both other outcomes are
       // wrong: the callback script lives *inside* the store home, so the
@@ -667,7 +706,7 @@ class AgentHookInstaller {
       return false;
     }
     final parent = file.parent;
-    if (!parent.existsSync()) {
+    if (!await parent.exists()) {
       // The config need not live in the store home — `~/.gemini/config` sits
       // beside `~/.gemini/antigravity-cli` — so its directory can still be one
       // the CLI has not created yet.
@@ -675,7 +714,7 @@ class AgentHookInstaller {
     }
     await _writeAtomically(file, contents, harden: harden);
     try {
-      return file.readAsStringSync() == contents;
+      return await file.readAsString() == contents;
     } on FileSystemException {
       return false;
     }
@@ -907,13 +946,19 @@ class AgentHookInstaller {
   /// can be reached from more than one side of a machine, and an uninstall that
   /// only swept its own platform's extension would leave the other behind for
   /// ever.
-  bool _removeGeneratedFiles(AgentDescriptor descriptor, String storeHome) {
-    var removed = retireEndpoint(descriptor: descriptor, storeHome: storeHome);
+  Future<bool> _removeGeneratedFiles(
+    AgentDescriptor descriptor,
+    String storeHome,
+  ) async {
+    var removed = await retireEndpoint(
+      descriptor: descriptor,
+      storeHome: storeHome,
+    );
     for (final environment in EnvironmentKind.values) {
       final file = _callbackScriptFile(descriptor, storeHome, environment);
-      if (file == null || !file.existsSync()) continue;
+      if (file == null || !await file.exists()) continue;
       try {
-        file.deleteSync();
+        await file.delete();
         removed = true;
       } on FileSystemException {
         // Someone else's directory, and the config entry is already gone — a
@@ -966,12 +1011,12 @@ class AgentHookInstaller {
   /// A missing or empty file reads as `{}`: an agent installed but never run
   /// has no config yet, and refusing to create one would be refusing to install
   /// for the case the feature is most useful in.
-  (String, Map<String, Object?>) _readConfigObject(
+  Future<(String, Map<String, Object?>)> _readConfigObject(
     AgentDescriptor descriptor,
     String storeHome,
-  ) {
+  ) async {
     final file = configFileFor(descriptor, storeHome)!;
-    final raw = file.existsSync() ? file.readAsStringSync() : '{}';
+    final raw = await file.exists() ? await file.readAsString() : '{}';
     final trimmed = raw.trim().isEmpty ? '{}' : raw;
     final decoded = jsonDecode(trimmed);
     if (decoded is! Map<String, Object?>) {
@@ -989,7 +1034,10 @@ class AgentHookInstaller {
   ) async {
     final spec = descriptor.hooks!;
     final file = configFileFor(descriptor, storeHome)!;
-    final (trimmed, decoded) = _readConfigObject(descriptor, storeHome);
+    final (trimmed, decoded) = await _readConfigObject(
+      descriptor,
+      storeHome,
+    );
     final current = decoded[spec.configKey];
     final hooks = current is Map<String, Object?>
         ? Map<String, Object?>.from(current)
@@ -1010,7 +1058,7 @@ class AgentHookInstaller {
     // there, so a machine without this agent installed never gets an empty
     // config directory in its home from us.
     final parent = file.parent;
-    if (!parent.existsSync() && Directory(storeHome).existsSync()) {
+    if (!await parent.exists() && await Directory(storeHome).exists()) {
       await parent.create(recursive: true);
     }
 
@@ -1054,9 +1102,9 @@ class AgentHookInstaller {
     } finally {
       // Never left behind, whichever way the move went: a stray file in
       // somebody's `.claude` directory is litter we would have to explain.
-      if (staged.existsSync()) {
+      if (await staged.exists()) {
         try {
-          staged.deleteSync();
+          await staged.delete();
         } on FileSystemException {
           // Nothing more to try, and it must not mask the real failure.
         }
