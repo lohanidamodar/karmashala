@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.13.0 (2026-09-04)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.14.0 (2026-09-04)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,122 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.14.0 — 2026-09-04 (build 27)
+
+**The first release driven by a profile of the app running against the owner's
+real database.** They ran 1.13.0+26 in profile mode and reported *"very slow
+initially"*, *"explorer is loading something that made the ui laggy for quite
+some time"* and *"it's taking a lot of memory and cpu"*. Every change here
+answers a measurement rather than a suspicion, and two suspicions were measured
+and discarded.
+
+### Startup: 1053 ms of 1910 ms leaves the critical path
+
+From the app's own log, `Agent hooks: 6 installed` took **1053 ms — 55% of a
+1.91 s launch**. `AgentHookInstaller` did every file operation synchronously,
+and some store homes are inside WSL, reached over `\\wsl.localhost` where a
+synchronous Dart file operation has no timeout.
+
+Counted per `(agent, store home)` pair: a normal launch put **60 synchronous
+file operations on the UI isolate, 30 of them across the share**, and 18 more on
+quit inside a 150 ms shutdown step that could not interrupt them — a cap can
+only stop an await. Now zero synchronous operations on that path, nine async
+ones on a normal launch, the sweep concurrent per pair, and the whole thing
+below `runApp` behind `endOfFrame`.
+
+Why that matters beyond the second: the freeze investigation in 1.13.0 proved a
+native file dialog runs its modal loop on the platform thread, which *is* the
+Dart isolate's thread — so every synchronous WSL read on that isolate was a
+candidate freeze, not merely a slow one.
+
+An unreachable store home now gets **10 seconds and reports `unknown`** rather
+than blocking indefinitely or claiming "not installed" — a false negative sends
+someone hunting a configuration bug that does not exist. Ten seconds because the
+first touch of a WSL store home *starts a stopped distribution*.
+
+A session started before the sweep lands loses less than the change's shape
+suggests: the hook *entry* is a constant written once, so on any launch but the
+first it is already on disk. What a launch writes is the *endpoint file*, which
+the script reads when a hook **fires**. Settings → Tools says so until the sweep
+reports.
+
+### Sessions that name a conversation the CLI never wrote
+
+*"i've sessions when i start new session, there are sometimes sessions without
+cli sessions attached, either i need a quick button that will remove all those
+or i should be able to start new session on that session which is in our db but
+not in cli"*
+
+Both, per row, neither as the other's fallback — because they preserve different
+things. A bulk clear is right for debris from failed launches; restarting keeps
+the row's title, creation date, lineage, pins and notes.
+
+Restarting turned out to be nearly free. For an agent that takes `--session-id`
+the launcher stamps `externalSessionId = row.id`, so **the promised conversation
+id *is* the row id**: a restart is a launch with no `--resume` that reuses the
+row — the same promise, re-made to a CLI that will keep it.
+
+Finding these rows cannot be done on nullability. The id is recorded at launch,
+so a dead row and a live row are identical on that field; what separates them is
+*who chose the id*. Screening is three SQL statements total and no disk, and one
+store listing per (store, agent) pair runs **only when asked** — O(stores), not
+O(rows), nothing at startup or on a timer.
+
+`unknown` rows get **neither** verb. An unreadable store, a stopped
+distribution, a session twenty seconds old: shown and counted, never actionable,
+because restarting one could abandon a conversation that is merely unreachable.
+A test drives the review and the resume path over the same fixtures and asserts
+they never disagree.
+
+### The Explorer's corner
+
+*"same icon repeated 3 times doesn't look clean"* — it was one glyph meaning
+three things. `AppIcons.treeStructure` stood for the Explorer surface, a
+project, and the whole workspace's scope, and their centres sit at x=17, x=18.5
+and x=16 in rows 30px apart. Same mark, three sizes, one column.
+
+Now: `treeStructure` is the surface alone, `folder` one project, `folders` all
+of them, `stack` a context — plates in a pile, because a context holds projects
+and is not a place on disk. The closed scope bar wears the glyph of whichever
+menu row is selected, so the control and its menu agree; "no context" used to
+draw a folder, which was wrong twice. The Explorer's pane header drops its glyph
+entirely, because the title-bar toggle draws that exact mark 30px above it in
+the same column.
+
+Measured while there: the chrome above the list is **109px — 2.02 project
+rows**, 12% of the column at 1440x900 and **21.5% at the 720x560 minimum**. The
+pane title gets `paneWidth − 185`, of which 150px is five icon buttons, leaving
+**2.6px of headroom** at the default width and 125% text — which is why the
+labels in the screenshot were all truncated. Now 23.6px.
+
+### Measured and discarded
+
+Two things this release does **not** change, because the numbers refused them.
+
+**The glyph atlas is not rebuilt per frame.** It looked like it — `CreateGlyphAtlas`
+runs exactly 1.00 per frame — but every call is 0.19–0.83 ms with no call over
+1 ms and no tail. A real rebuild would show one expensive call and cheap ones.
+It is Impeller's normal incremental path finding its glyphs already cached.
+
+**CPU is not being spent in Dart.** In a 60 s window Dart accounted for 2.5 s —
+about 4% of one core. The work counts are also exactly 1.00 per frame for every
+raster operation, so nothing is drawn twice. What the profile *does* say is that
+`io.flutter.raster` does **3322 ms of work against the UI thread's 860 ms** —
+roughly 4:1, on the OpenGL backend. This app is raster-bound, so build-side
+tuning has little left to give and the terminal's painting is the cost centre.
+
+### Still open, deliberately unclaimed
+
+The Explorer's per-row git probes — three to five subprocesses per visible
+checkout, every one crossing the 9p boundary into WSL — are **not** fixed here.
+That is the *"laggy for quite some time"* half of the report and it is being
+worked on separately. `CliStoreLocator.locate` also still resolves each WSL
+`$HOME` through a serial login shell, which is likely a large share of what
+remains of startup. And ~100 MB of non-Dart memory growth over a session is
+measured but unattributed; it is native, and that is all the evidence supports.
 
 ---
 
