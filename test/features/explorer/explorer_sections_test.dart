@@ -427,13 +427,17 @@ void main() {
       addTearDown(db.close);
       final container = await pump(tester, db);
 
-      // The toggle is the whole of the feature's discoverability: a section
-      // nobody can see is a section nobody can learn about, so the button
-      // admits to the three it is hiding rather than leaving the sidebar
-      // looking as though sections were never there.
-      expect(find.byTooltip('Show 3 empty sections'), findsOneWidget);
+      // The funnel is the whole of the feature's discoverability: a section
+      // nobody can see is a section nobody can learn about, so it admits to
+      // the three it is hiding — before it is even opened — rather than
+      // leaving the sidebar looking as though sections were never there.
+      const tooltip = 'Filter sessions \u00b7 3 empty sections hidden';
+      expect(find.byTooltip(tooltip), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Show 3 empty sections'));
+      await tester.tap(find.byTooltip(tooltip));
+      await tester.pumpAndSettle();
+      // And the row that gives them back names the same count.
+      await tester.tap(find.text('Show 3 empty sections'));
       await tester.pumpAndSettle();
 
       expect(find.text('Pinned'), findsOneWidget);

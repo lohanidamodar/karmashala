@@ -19,6 +19,7 @@ import '../../settings/application/settings_controller.dart';
 import '../data/explorer_section_dao.dart';
 import '../domain/explorer_section.dart';
 import 'checkout.dart';
+import 'explorer_agent_filter.dart';
 
 /// The saved sections, in sidebar order, and every write to them.
 ///
@@ -275,6 +276,47 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
   ]);
 });
 
+/// The same sweep, narrowed to the agents the Explorer is showing.
+///
+/// **Where the agent filter meets sections, and the only place it does.**
+/// Applied to the candidates rather than to each section's members, because
+/// [assignSections] is a per-row question — which group claims *this* row — so
+/// filtering its input is the same answer as filtering each of its outputs,
+/// computed once. Everything downstream then agrees without being told: a
+/// section's header count, its rows, and [explorerSectionLayoutProvider]'s
+/// verdict on whether it is empty enough to fold away are all one list.
+///
+/// **So a section and the filter never argue.** The section decides which rows
+/// belong together; the filter decides which of those you are looking at. They
+/// intersect — "Checks failing, among my Codex sessions" is one section and one
+/// filter — and a section whose every row is filtered out reads as empty, which
+/// with [Settings.hideEmptySections] on means it folds away and is counted in
+/// the funnel's own "N empty sections" like any other. One funnel, one story
+/// about what the sidebar is holding back.
+///
+/// **The unfiltered path is the identity.** It hands back the very list
+/// [sectionCandidatesProvider] built — no copy, and no mount of
+/// [sessionAgentsProvider] — so an Explorer nobody has narrowed pays this
+/// nothing at all.
+final visibleSectionCandidatesProvider =
+    Provider.autoDispose<List<SectionCandidate>>((ref) {
+      final candidates = ref.watch(sectionCandidatesProvider);
+      final filter = ref.watch(explorerAgentFilterProvider);
+      if (filter.isUnfiltered) return candidates;
+      final agents = ref.watch(sessionAgentsProvider);
+      String? agentOf(SectionCandidate candidate) {
+        final imported = candidate.imported;
+        if (imported != null) return agents.forImported(imported);
+        final native = candidate.native;
+        return native == null ? null : agents.forNative(native);
+      }
+
+      return List.unmodifiable(<SectionCandidate>[
+        for (final candidate in candidates)
+          if (filter.allows(agentOf(candidate))) candidate,
+      ]);
+    });
+
 /// Every session, with everything a rule may ask about it — **read, never
 /// measured**.
 ///
@@ -334,7 +376,7 @@ final explorerSectionFactsProvider = Provider.autoDispose<List<SectionFacts>>((
   ref,
 ) {
   if (ref.watch(anySectionExpandedProvider)) ref.watch(deliveryPollProvider);
-  final candidates = ref.watch(sectionCandidatesProvider);
+  final candidates = ref.watch(visibleSectionCandidatesProvider);
   // One read of each ambient map, outside the loop: these are whole-app state,
   // not per-session state, and reading them per candidate would turn a fold
   // into a quadratic one.

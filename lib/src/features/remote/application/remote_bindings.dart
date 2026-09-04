@@ -811,10 +811,12 @@ Future<RemoteApprovalRequest> _approvalEvidenceFor(
 /// The one rule both halves of the remote approval path turn on, and the same
 /// one `ApprovalRequestCard` draws its buttons from: a key may be offered, and
 /// pressed, only for a wait a status source identified as an approval.
-bool _hasOpenPrompt(AgentStatusReport? report) =>
-    report != null &&
-    report.status == AgentActivityStatus.awaitingApproval &&
-    report.waiting == AgentWaitKind.approval;
+///
+/// The rule itself lives on [AgentStatusReport.hasOpenPrompt], because
+/// `session_send` refuses on it too and three copies of it could disagree.
+/// Absent is not an open prompt: a session no source could read is our blind
+/// spot, not a modal.
+bool _hasOpenPrompt(AgentStatusReport? report) => report?.hasOpenPrompt ?? false;
 
 RemoteWaitKind _wireWait(AgentWaitKind kind) => switch (kind) {
   AgentWaitKind.approval => RemoteWaitKind.approval,
