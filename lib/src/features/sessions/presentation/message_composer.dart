@@ -354,10 +354,16 @@ class _MessageComposerState extends State<MessageComposer> {
         tooltip: 'Attach image (or paste with Ctrl+V)',
         onPressed: canType ? _attach : null,
         // A pointer surface's control height, the same row as the title bar's
-        // buttons. `VisualDensity.compact` is already the app-wide default, so
-        // restating it here only subtracted its 8px a second time and left
-        // both of the composer's buttons 18 logical pixels tall — the primary
-        // action of the surface, smaller than the transcript's copy button.
+        // buttons.
+        //
+        // `VisualDensity.compact` is already the app-wide default, so
+        // restating it on the widget only subtracted its 8px a second time,
+        // and left both of the composer's buttons **18 logical pixels tall**
+        // — the primary action of the surface, two pixels off the 16x16 the
+        // transcript's deliberately low-emphasis copy button measures. Note
+        // that `minimumSize` alone does not fix it: `effectiveConstraints`
+        // subtracts the density adjustment from the minimum, which is exactly
+        // how `iconButtonTheme`'s 26 became 18. The density has to be named.
         style: IconButton.styleFrom(
           visualDensity: VisualDensity.standard,
           minimumSize: const Size.square(Chrome.control),
