@@ -371,7 +371,7 @@ void main() {
         service,
         installation: agentInstallation(
           id: 'a9',
-          agentId: AgentIds.antigravity,
+          agentId: 'unknownAgent',
         ),
       );
 
