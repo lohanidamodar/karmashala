@@ -106,20 +106,24 @@ void main() {
       // login shell execs a Windows PE back out through `binfmt_misc` — which
       // dies as `MZ: command not found` the moment interop is unregistered.
       expect(pty.executable, 'cmd.exe');
-      expect(pty.arguments, [
-        '/c',
-        'wsl.exe -d Ubuntu --cd /home/u/repo -- '
-            '/home/u/.local/bin/claude --resume sid',
-      ]);
+      expect(
+        pty.arguments.last,
+        startsWith('wsl.exe -d Ubuntu --cd /home/u/repo -- eval '),
+      );
+      expect(
+        _decodedScript(pty),
+        "exec '/home/u/.local/bin/claude' '--resume' 'sid'",
+      );
       // wsl.exe sets the child's directory itself; the host process must not be
       // pointed at a Linux path it cannot resolve.
       expect(pty.workingDirectory, isNull);
     });
 
-    test('a WSL argument with a space is quoted', () {
-      // Quoted either way — an unquoted prompt reached Claude Code as several
-      // arguments and was silently ignored. Now `cmd` re-parses the line, so
-      // the quotes are what survive its parse rather than `wsl.exe`'s.
+    test('a WSL argument with a space stays one argument', () {
+      // An unquoted prompt reached Claude Code as several arguments and was
+      // silently ignored. The quoting that stops that is now POSIX quoting
+      // inside the encoded payload, because the login shell — not `wsl.exe` —
+      // is what splits the tail into arguments.
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: 'claude',
@@ -127,18 +131,18 @@ void main() {
         workingDirectory: '/home/u/repo',
         wslDistribution: 'Ubuntu',
       );
-      expect(agentPtyLaunchFor(launch).arguments, [
-        '/c',
-        'wsl.exe -d Ubuntu --cd /home/u/repo -- claude '
-            '--permission-mode acceptEdits "say hello there"',
-      ]);
+      expect(
+        _decodedScript(agentPtyLaunchFor(launch)),
+        "exec 'claude' '--permission-mode' 'acceptEdits' 'say hello there'",
+      );
     });
 
-    test('but a prompt with a percent sign keeps the direct form', () {
+    test('a prompt with a percent sign no longer needs the direct form', () {
       // `cmd` substitutes `%NAME%` while parsing and quoting does not stop it,
-      // so routing this through cmd would hand the agent something other than
-      // what the user typed. Keeping the round-trip — and its dependency on
-      // interop — is the lesser harm.
+      // so this used to be sent the `wsl.exe wsl.exe …` interop round-trip to
+      // keep `cmd` away from it — at the cost of dying whenever `binfmt_misc`
+      // was unregistered. The percent sign is inside the base64 now, so there
+      // is one WSL path again and it depends on nothing.
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: 'claude',
@@ -147,8 +151,9 @@ void main() {
         wslDistribution: 'Ubuntu',
       );
       final pty = agentPtyLaunchFor(launch);
-      expect(pty.executable, 'wsl.exe');
-      expect(pty.arguments.last, r'"explain %PATH% please"');
+      expect(pty.executable, 'cmd.exe');
+      expect(pty.arguments.last, isNot(contains('%')));
+      expect(_decodedScript(pty), r"exec 'claude' 'explain %PATH% please'");
     });
 
     test('the session id reaches the agent through the environment', () {
@@ -221,11 +226,14 @@ void main() {
         context: LaunchContext.forAgent(wslLaunch, hostIsWindows: true),
       );
       expect(pty.executable, 'cmd.exe');
-      expect(pty.arguments, [
-        '/c',
-        'wsl.exe -d Ubuntu --cd /home/u/repo -- '
-            '/home/u/.local/bin/claude --resume sid',
-      ]);
+      expect(
+        pty.arguments.last,
+        startsWith('wsl.exe -d Ubuntu --cd /home/u/repo -- eval '),
+      );
+      expect(
+        _decodedScript(pty),
+        "exec '/home/u/.local/bin/claude' '--resume' 'sid'",
+      );
       // Once, still: the point of this test is that the destination is not
       // wrapped twice, and `cmd.exe /c` carries exactly one `wsl.exe`.
       expect(
@@ -331,20 +339,20 @@ void main() {
       expect(wrapped, isNot(isA<ShellCommand>()));
 
       // And the external-terminal wrapper is single by the same construction.
-      expect(
-        wrapForExternalTerminal(command, const LaunchContext.wsl('Ubuntu')),
-        [
-          'wsl.exe',
-          '-d',
-          'Ubuntu',
-          '--cd',
-          '/home/u/repo',
-          '--',
-          'claude',
-          '--resume',
-          'sid',
-        ],
+      final external = wrapForExternalTerminal(
+        command,
+        const LaunchContext.wsl('Ubuntu'),
       );
+      expect(external.take(7), [
+        'wsl.exe',
+        '-d',
+        'Ubuntu',
+        '--cd',
+        '/home/u/repo',
+        '--',
+        'eval',
+      ]);
+      expect(_decode(external.last), "exec 'claude' '--resume' 'sid'");
       expect(
         wrapForExternalTerminal(
           command,
@@ -915,4 +923,16 @@ void main() {
       expect(sessionPortBase('sess-1'), 29770);
     });
   });
+}
+
+/// The POSIX script a WSL launch really hands the distribution's login shell.
+///
+/// `wsl.exe … --` gives the shell the command line *tail*, so the payload is
+/// base64 and what has to be asserted is what comes back out of it.
+String _decodedScript(PtyLaunch launch) => _decode(launch.arguments.last);
+
+String _decode(String text) {
+  final match = RegExp(r"echo '([A-Za-z0-9+/=]+)'\|base64 -d").firstMatch(text);
+  expect(match, isNotNull, reason: 'no encoded POSIX command in: $text');
+  return utf8.decode(base64Decode(match!.group(1)!));
 }
