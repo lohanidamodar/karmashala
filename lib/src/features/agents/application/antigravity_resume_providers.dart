@@ -94,11 +94,9 @@ final antigravityResumePlannerProvider = Provider<AntigravityResumePlanner>((
       workingDirectory: directory.path,
       conversationId: session.externalSessionId,
       lastConversationForDirectory: latest,
-      conversationIdsHeldByOtherSessions: {
-        for (final row in ref.read(sessionDaoProvider).getAll())
-          if (row.id != session.id && (row.externalSessionId ?? '').isNotEmpty)
-            row.externalSessionId!,
-      },
+      conversationIdsHeldByOtherSessions: ref
+          .read(sessionDaoProvider)
+          .heldExternalSessionIds(excludingSessionId: session.id),
     );
   };
 });

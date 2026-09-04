@@ -119,11 +119,8 @@ class SessionTitleSyncService {
   }
 
   List<Session> _waiting() => [
-    for (final row in sessionDao.getAll())
-      if (!row.isArchived &&
-          (row.externalSessionId ?? '').isNotEmpty &&
-          _waitingForAName(row))
-        row,
+    for (final row in sessionDao.getWaitingForTitleSync())
+      if (_waitingForAName(row)) row,
   ];
 
   bool _waitingForAName(Session row) {

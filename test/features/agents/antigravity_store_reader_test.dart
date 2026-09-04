@@ -158,6 +158,27 @@ void main() {
       expect((await reader.read(storeHome)).single.workspace, isNull);
       expect(await reader.readLastConversations(storeHome), isEmpty);
     });
+
+    test('history.jsonl supplements workspaces for older conversations', () async {
+      writeConversation('older');
+      writeConversation('newer');
+      writeFile('cache/last_conversations.json', '{"/work/newer": "newer"}');
+      writeFile(
+        'history.jsonl',
+        '{"display":"hi","workspace":"/work/older","conversationId":"older"}\n'
+        '{"display":"hello","workspace":"/work/newer","conversationId":"newer"}\n',
+      );
+
+      final workspaces = await reader.readWorkspacesByConversation(storeHome);
+      expect(workspaces['older'], '/work/older');
+      expect(workspaces['newer'], '/work/newer');
+
+      final convs = await reader.read(storeHome);
+      expect(
+        {for (final c in convs) c.id: c.workspace},
+        {'older': '/work/older', 'newer': '/work/newer'},
+      );
+    });
   });
 
   group('the title', () {
@@ -298,6 +319,26 @@ void main() {
 
       expect(await reader.readSummaries(storeHome), isEmpty);
       expect((await reader.read(storeHome)).single.preview, isEmpty);
+    });
+  });
+
+  group('AntigravityStoreCache', () {
+    test('serves cached workspaces and titles across sweeps', () async {
+      final cache = AntigravityStoreCache();
+      final cachedReader = AntigravityStoreReader(countSteps: false, cache: cache);
+
+      writeConversation('c1');
+      writeFile('history.jsonl', '{"conversationId":"c1","workspace":"/work"}\n');
+      writeFile('annotations/c1.pbtxt', 'title:"Cached Title"');
+
+      final first = await cachedReader.read(storeHome);
+      expect(first.single.workspace, '/work');
+      expect(first.single.title, 'Cached Title');
+
+      final workspaces = await cachedReader.readHistoryWorkspaces(storeHome);
+      expect(workspaces['c1'], '/work');
+      final title = await cachedReader.readTitle(storeHome, 'c1');
+      expect(title, 'Cached Title');
     });
   });
 }

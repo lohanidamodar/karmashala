@@ -87,7 +87,7 @@ class DetectedProjectsView extends ConsumerWidget {
                       padding: EdgeInsets.all(24),
                       child: Text(
                         'No sessions detected yet.\nPress Detect to scan the '
-                        'Claude Code and Codex stores (Windows + WSL).',
+                        'Claude Code, Codex, and Antigravity stores (Windows + WSL).',
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -113,6 +113,7 @@ class _ProjectTile extends StatelessWidget {
     final theme = Theme.of(context);
     final claude = project.countFor(AgentIds.claudeCode);
     final codex = project.countFor(AgentIds.codex);
+    final antigravity = project.countFor(AgentIds.antigravity);
     return ExpansionTile(
       leading: const Icon(AppIcons.folder),
       title: Text(project.name),
@@ -127,6 +128,8 @@ class _ProjectTile extends StatelessWidget {
         children: [
           if (claude > 0) _Badge(agentId: AgentIds.claudeCode, count: claude),
           if (codex > 0) _Badge(agentId: AgentIds.codex, count: codex),
+          if (antigravity > 0)
+            _Badge(agentId: AgentIds.antigravity, count: antigravity),
         ],
       ),
       childrenPadding: const EdgeInsets.only(left: 8, bottom: 8),

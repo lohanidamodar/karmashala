@@ -65,7 +65,9 @@ final focusedUsageInstallationProvider =
       )) {
         if (installation.id != session.agentInstallationId) continue;
         final agentId = installation.agentId;
-        return agentId == AgentIds.claudeCode || agentId == AgentIds.codex
+        return agentId == AgentIds.claudeCode ||
+                agentId == AgentIds.codex ||
+                agentId == AgentIds.antigravity
             ? installation
             : null;
       }

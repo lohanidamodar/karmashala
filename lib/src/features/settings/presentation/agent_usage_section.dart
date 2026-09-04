@@ -26,7 +26,7 @@ class UsageSection extends StatelessWidget {
       title: 'USAGE & LIMITS',
       child: installations.isEmpty
           ? Text(
-              'No Claude or Codex installation identified.',
+              'No Claude, Codex, or Antigravity installation identified.',
               style: theme.textTheme.bodySmall,
             )
           : Column(
@@ -112,6 +112,25 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                   ),
               ],
             ),
+            if (usage?.email != null) ...[
+              const SizedBox(height: Insets.xs),
+              Row(
+                children: [
+                  Icon(
+                    AppIcons.userCircle,
+                    size: 13,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    usage!.email!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: Insets.xs),
               Text(

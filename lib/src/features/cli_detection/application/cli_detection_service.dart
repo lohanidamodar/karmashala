@@ -30,6 +30,7 @@ class CliStore {
 
   String? get claudeHome => homesByAgentId['claudeCode'];
   String? get codexHome => homesByAgentId['codex'];
+  String? get antigravityHome => homesByAgentId['antigravity'];
 }
 
 /// Resolves the on-disk CLI store homes for each environment. Which stores
@@ -133,7 +134,11 @@ class CliStoreLocator {
         ),
   };
 
+  final Map<String, String> _wslHomeCache = {};
+
   Future<String?> _wslHome(ExecutionEnvironment env) async {
+    final cached = _wslHomeCache[env.id];
+    if (cached != null) return cached;
     final runner = runnerFactory.forEnvironment(env);
     try {
       final result = await runner.run(
@@ -143,7 +148,11 @@ class CliStoreLocator {
         ),
       );
       final home = result.stdout.trim();
-      return result.ok && home.isNotEmpty ? home : null;
+      if (result.ok && home.isNotEmpty) {
+        _wslHomeCache[env.id] = home;
+        return home;
+      }
+      return null;
     } on CommandException {
       return null;
     }

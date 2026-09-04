@@ -255,6 +255,16 @@ void main() {
       );
     });
 
+    test('matches WSL /mnt/c path to Windows C: drive path', () {
+      expect(
+        conversationForDirectory(
+          {'/mnt/c/Users/dlohani/projects': conversation},
+          r'C:\Users\dlohani\projects',
+        ),
+        conversation,
+      );
+    });
+
     test('an entry naming a file that is not there refuses', () async {
       writeLastConversations({workdir: conversation});
 

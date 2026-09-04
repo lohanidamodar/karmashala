@@ -920,7 +920,7 @@ class _TabChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-    final title = sessions.titleForTab(tab.id);
+    final title = ref.watch(terminalTabTitleProvider(tab.id));
     final chip = TerminalTabChip(
       title: title,
       liveness: _liveness(ref),

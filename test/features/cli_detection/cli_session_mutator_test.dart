@@ -58,6 +58,25 @@ void main() {
     expect(index.readAsStringSync(), contains('"thread_name":"new name"'));
   });
 
+  test('Antigravity rename writes annotation file', () async {
+    final conv = File(p.join(tmp.path, '.gemini/antigravity-cli/conversations/conv-1.db'))
+      ..createSync(recursive: true);
+    final session = DetectedSession(
+      cli: AgentIds.antigravity,
+      sessionId: 'conv-1',
+      cwd: const EnvironmentPath(environmentId: 'windows', path: '/x'),
+      filePath: conv.path,
+      storeHome: p.join(tmp.path, '.gemini/antigravity-cli'),
+    );
+
+    await mutator.rename(session, 'my new agy title');
+    final annotation = File(
+      p.join(tmp.path, '.gemini/antigravity-cli/annotations/conv-1.pbtxt'),
+    );
+    expect(annotation.existsSync(), isTrue);
+    expect(annotation.readAsStringSync(), 'title:"my new agy title"\n');
+  });
+
   test('delete removes the session file', () async {
     final file = File(p.join(tmp.path, '.claude/projects/-x/abc.jsonl'))
       ..createSync(recursive: true)
@@ -171,6 +190,30 @@ void main() {
       expect(report.deleted, 0);
       expect(mutator.storeScans, 0);
       expect(File(claude('a').filePath).existsSync(), isTrue);
+    });
+
+    test('deleteAll removes antigravity conversation, annotations, and presence', () async {
+      final store = p.join(tmp.path, '.gemini/antigravity-cli');
+      final conv = File(p.join(store, 'conversations/conv-1.db'))
+        ..createSync(recursive: true);
+      final annot = File(p.join(store, 'annotations/conv-1.pbtxt'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('title:"test"\n');
+      final pres = File(p.join(store, 'presence/conv-1.lock'))
+        ..createSync(recursive: true);
+      final session = DetectedSession(
+        cli: AgentIds.antigravity,
+        sessionId: 'conv-1',
+        cwd: const EnvironmentPath(environmentId: 'windows', path: '/x'),
+        filePath: conv.path,
+        storeHome: store,
+      );
+
+      final report = await mutator.deleteAll([session]);
+      expect(report.isComplete, isTrue);
+      expect(conv.existsSync(), isFalse);
+      expect(annot.existsSync(), isFalse);
+      expect(pres.existsSync(), isFalse);
     });
   });
 }

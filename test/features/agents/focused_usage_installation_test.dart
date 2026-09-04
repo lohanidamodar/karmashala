@@ -41,12 +41,16 @@ void main() {
     expect(container.read(focusedUsageInstallationProvider)?.id, 'a1');
   });
 
-  test('follows the focused session from Claude to Codex', () {
+  test('follows the focused session across Claude, Codex, and Antigravity', () {
     db = seedUsageDatabase();
     AgentInstallationDao(
       db,
     ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
     SessionDao(db).insert(session(id: 's2', agentInstallationId: 'a2'));
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(id: 'a3', agentId: AgentIds.antigravity));
+    SessionDao(db).insert(session(id: 's3', agentInstallationId: 'a3'));
     final container = containerFor(db);
 
     container.read(selectedSessionIdProvider.notifier).select('s1');
@@ -60,10 +64,16 @@ void main() {
       container.read(focusedUsageInstallationProvider)?.agentId,
       AgentIds.codex,
     );
+
+    container.read(selectedSessionIdProvider.notifier).select('s3');
+    expect(
+      container.read(focusedUsageInstallationProvider)?.agentId,
+      AgentIds.antigravity,
+    );
   });
 
   test('is null for an agent whose usage endpoint we do not speak', () {
-    db = seedUsageDatabase(agentId: AgentIds.antigravity);
+    db = seedUsageDatabase(agentId: 'unknownAgent');
     final container = containerFor(db);
     container.read(selectedSessionIdProvider.notifier).select('s1');
 

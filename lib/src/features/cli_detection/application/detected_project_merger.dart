@@ -19,6 +19,7 @@ List<DetectedProject> mergeDetectedProjects(
   final groups = <String, _Group>{};
 
   for (final session in sessions) {
+    if (session.cwd.path.trim().isEmpty) continue;
     final env = environmentsById[session.environmentId];
     final (key, display) = _canonical(session, env, translator);
     final group = groups.putIfAbsent(key, () => _Group(key, display));

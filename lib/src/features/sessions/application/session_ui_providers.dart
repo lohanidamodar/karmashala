@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../agents/domain/agent_ids.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/imported_session.dart';
@@ -70,7 +71,7 @@ final selectedSessionIdProvider =
 final importedTranscriptProvider = StreamProvider.autoDispose
     .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
       final session = ref.read(importedSessionDaoProvider).getById(sessionId);
-      if (session == null) {
+      if (session == null || session.cli == AgentIds.antigravity) {
         yield const [];
         return;
       }

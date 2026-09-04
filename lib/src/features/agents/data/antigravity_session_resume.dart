@@ -198,7 +198,24 @@ String? conversationForDirectory(
   for (final entry in byDirectory.entries) {
     if (_trimSeparators(entry.key) == wanted) return entry.value;
   }
+  final normWanted = _normalizePathForMatch(wanted);
+  for (final entry in byDirectory.entries) {
+    final normEntry = _normalizePathForMatch(_trimSeparators(entry.key));
+    if (normWanted == normEntry) return entry.value;
+  }
   return null;
+}
+
+String _normalizePathForMatch(String path) {
+  var p = path.replaceAll(r'\', '/');
+  final m = RegExp(r'^/mnt/([a-zA-Z])/(.*)$').firstMatch(p);
+  if (m != null) {
+    p = '${m.group(1)}:/${m.group(2)}';
+  }
+  if (RegExp(r'^[a-zA-Z]:/').hasMatch(p)) {
+    return p.toLowerCase();
+  }
+  return p;
 }
 
 String _trimSeparators(String path) {

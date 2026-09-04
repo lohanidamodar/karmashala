@@ -149,12 +149,7 @@ class LaunchedSessionAttributionService {
     };
     // The app's existing idempotence rule, borrowed from
     // `SessionAdoptionService`: the CLI's id is the key, and one conversation is
-    // one row. Grown as rows are written, so two candidates in one sweep cannot
-    // both be given the same conversation.
-    final held = <String>{
-      for (final row in sessionDao.getAll())
-        if ((row.externalSessionId ?? '').isNotEmpty) row.externalSessionId!,
-    };
+    final held = sessionDao.heldExternalSessionIds();
 
     // Grouped by agent and directory, because that pair is all the store knows:
     // a rollout records where it ran, never which process ran it.
@@ -232,9 +227,7 @@ class LaunchedSessionAttributionService {
         environment.id: environment,
     };
     final candidates = <_Candidate>[];
-    for (final row in sessionDao.getAll()) {
-      if (row.isArchived) continue;
-      if ((row.externalSessionId ?? '').isNotEmpty) continue;
+    for (final row in sessionDao.getUnattributed()) {
       // Only a running session. A stopped one has no CLI writing a conversation
       // to find, and leaving it waiting would buy a store scan on every slot
       // for the rest of the app's run; `SessionActions` recovers an id for one

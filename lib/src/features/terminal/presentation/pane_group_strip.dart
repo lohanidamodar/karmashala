@@ -161,7 +161,7 @@ class PaneTabChip extends ConsumerWidget {
     // redraws nothing. Null for a pane with no live agent session, which is
     // when the liveness marker takes the slot back.
     final activity = ref.watch(paneAgentActivityProvider(paneId));
-    final title = sessions.titleForPane(paneId);
+    final title = ref.watch(terminalPaneTitleProvider(paneId));
 
     final chip = WorkbenchTabChip(
       selected: selected,
