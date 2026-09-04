@@ -28,6 +28,24 @@ const double _glyphGap = 5;
 /// never carries the state on its own — see [UsageChipView.label].
 enum UsageTone { healthy, warning, critical, muted }
 
+/// **What the glyph claims**, in the system health panel's vocabulary.
+///
+/// A gauge says "this is a measurement"; a history clock says "this is a
+/// reading, and it has an age"; a question mark says nothing was observed at
+/// all. `HealthLevel.unknown` exists for the same reason: an unmeasured state
+/// must never borrow the mark of a measured one.
+enum UsageMark {
+  /// A number that the current read produced — or is producing, while the first
+  /// answer is still in flight and the label says so.
+  live,
+
+  /// A number the app has, that the current read did not confirm.
+  stale,
+
+  /// No number at all. The chip says why in its tooltip and claims nothing.
+  unknown,
+}
+
 /// Everything the chip draws, resolved from one usage snapshot.
 ///
 /// A value rather than widget code so the thresholds, the wording and the four
@@ -38,7 +56,7 @@ class UsageChipView {
     required this.label,
     required this.tooltip,
     required this.tone,
-    this.stale = false,
+    this.mark = UsageMark.live,
   });
 
   /// The words on the chip. **Always spells out the number** when one is known:
@@ -48,14 +66,13 @@ class UsageChipView {
   final String tooltip;
   final UsageTone tone;
 
-  /// The number on screen was not confirmed by the current read — the refresh
-  /// failed, or one is still in flight over a reading we already had.
+  /// What the glyph is allowed to claim about the label beside it.
   ///
-  /// Drawn as a different glyph rather than a different colour, because the
-  /// colour is carrying the quota: muting a 97% because it is four minutes old
-  /// would hide the more important of the two facts. The age itself is in the
-  /// tooltip, which is the only place in a status bar with room for it.
-  final bool stale;
+  /// A different glyph rather than a different colour, because the colour is
+  /// carrying the quota: muting a 97% because it is four minutes old would hide
+  /// the more important of the two facts. The age itself is in the tooltip,
+  /// which is the only place in a status bar with room for it.
+  final UsageMark mark;
 }
 
 /// What the chip should say about [usage], as of [now].
@@ -64,9 +81,10 @@ class UsageChipView {
 ///
 /// * **live** — a number and how long until that window resets;
 /// * **checking** — muted, before the first answer arrives;
-/// * **muted** — the lookup failed and no number has ever been read, so the
-///   service's own sentence is all there is to show (an expired token tells the
-///   user to run the agent once; a rate limit says how long it is waiting);
+/// * **unknown** — the lookup failed and no number has ever been read. It
+///   claims nothing: a dash, the neutral colour, the question glyph, and the
+///   service's own sentence in the tooltip (an expired token tells the user to
+///   run the agent once; a rate limit says how long it is waiting);
 /// * **stale** — a refresh failed but a number is known. It keeps being shown,
 ///   with a different glyph and its age in the tooltip. Losing a number you had
 ///   is worse than showing an old one that admits it is old.
@@ -85,22 +103,28 @@ UsageChipView usageChipViewFor(
   final value = live ?? remembered;
   final error = usage.error;
   if (value == null) {
+    // Nothing was observed, so nothing is claimed: no gauge, no zero, and a
+    // dash that is plainly not a reading. `HealthLevel.unknown` is the same
+    // answer to the same question one panel over.
     return UsageChipView(
       label: error == null ? 'usage …' : 'usage —',
       tooltip: error == null ? 'Checking agent usage…' : _messageOf(error),
       tone: UsageTone.muted,
+      mark: error == null ? UsageMark.live : UsageMark.unknown,
     );
   }
 
   // Anything not confirmed by the current read: a failed refresh, or one still
   // in flight over a number we already had.
-  final stale = error != null || live == null;
+  final mark = error != null || live == null
+      ? UsageMark.stale
+      : UsageMark.live;
   final window = _tightest(value.windows);
   final age = _ago(now.difference(value.fetchedAt));
   final detail = [
     for (final w in value.windows) _windowLine(w, now),
     if (value.email != null) value.email!,
-    if (stale) 'Last checked $age' else 'Checked $age',
+    if (mark == UsageMark.stale) 'Last checked $age' else 'Checked $age',
     if (error != null) _failureLine(error),
   ].join('\n');
 
@@ -111,7 +135,7 @@ UsageChipView usageChipViewFor(
       label: 'usage —',
       tooltip: 'No usage windows reported.\n$detail',
       tone: UsageTone.muted,
-      stale: stale,
+      mark: mark,
     );
   }
 
@@ -122,7 +146,7 @@ UsageChipView usageChipViewFor(
         : '${window.percent.round()}% · ${formatUsageDuration(reset.difference(now))}',
     tooltip: detail,
     tone: _toneFor(window.percent),
-    stale: stale,
+    mark: mark,
   );
 }
 
@@ -265,11 +289,14 @@ class _UsageChipState extends ConsumerState<UsageChip> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                // The stale glyph is the health panel's, on purpose: one
-                // vocabulary for "this is a reading, and it has an age".
-                view.stale
-                    ? AppIcons.clockCounterClockwise
-                    : AppIcons.circleHalf,
+                // The health panel's glyphs, on purpose: one vocabulary for
+                // "this is a reading with an age" and for "nothing was
+                // observed".
+                switch (view.mark) {
+                  UsageMark.live => AppIcons.circleHalf,
+                  UsageMark.stale => AppIcons.clockCounterClockwise,
+                  UsageMark.unknown => AppIcons.question,
+                },
                 size: _glyph,
                 color: colour,
               ),

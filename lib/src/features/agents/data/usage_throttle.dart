@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import '../../../core/util/clock.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_usage.dart';
+import '../domain/usage_failure.dart';
 
 /// **At most one usage request per account per minute**, and the interval the
 /// status-bar chip's poll runs at. Re-exported by `usage_refresh_policy.dart`,
@@ -35,6 +38,16 @@ const Duration kUsageBackoffBase = Duration(minutes: 1);
 /// a five-hour window.
 const Duration kUsageBackoffCeiling = Duration(minutes: 16);
 
+/// How much of a wait is spread, as a fraction added on top of it.
+///
+/// **Only ever added.** A server that named a wait must not be asked sooner
+/// than it said, so the spread is one-sided: 1m becomes 1m00s-1m15s. It matters
+/// because every copy of this app that met one outage would otherwise come back
+/// at the same instant — the owner's own 2026-09-04 failure was upstream and
+/// self-resolving, which is exactly the shape that produces a synchronised
+/// crowd on the way out of it.
+const double kUsageBackoffJitter = 0.25;
+
 /// The longest wait a server-sent `Retry-After` can buy.
 ///
 /// The server outranks our doubling — it knows its own limit — but not without
@@ -50,6 +63,23 @@ const Duration kUsageBackoffMax = Duration(hours: 1);
 /// strip already groups its rows this way.
 String usageAccountKey(AgentInstallation installation) =>
     '${installation.agentId}@${installation.environmentId}';
+
+/// A refusal in force: how long is left, what kind it was, and the sentence
+/// that says so. Kept whole so a surface can explain a wait it did not witness.
+class UsagePause {
+  const UsagePause({
+    required this.wait,
+    required this.kind,
+    required this.reason,
+  });
+
+  final Duration wait;
+  final UsageFailureKind kind;
+
+  /// The vendor's own failure, in one sentence, without the wait appended —
+  /// the wait is recomputed whenever it is drawn so a countdown stays true.
+  final String reason;
+}
 
 /// **What the app remembers between usage lookups**: the last reading of each
 /// account, and how long the vendor told us to wait before asking again.
@@ -76,7 +106,8 @@ class UsageThrottle {
     this.freshFor = kUsageRefreshInterval,
     this.base = kUsageBackoffBase,
     this.ceiling = kUsageBackoffCeiling,
-  });
+    double Function()? jitter,
+  }) : _jitter = jitter ?? Random().nextDouble;
 
   final Clock clock;
 
@@ -89,6 +120,10 @@ class UsageThrottle {
 
   final Duration base;
   final Duration ceiling;
+
+  /// A fraction in `[0, 1)`, spread over [kUsageBackoffJitter] of the wait.
+  /// Injected so a test can pin the schedule exactly; the default is random.
+  final double Function() _jitter;
 
   final _readings = <String, AgentUsage>{};
   final _limits = <String, _RateLimit>{};
@@ -107,12 +142,18 @@ class UsageThrottle {
     return age.isNegative || age < freshFor ? usage : null;
   }
 
-  /// How much longer this account is holding off, or null if it may ask now.
-  Duration? waitFor(AgentInstallation installation) {
+  /// The refusal in force for this account, or null if it may ask now.
+  ///
+  /// Recomputed from the clock on every call, so a countdown drawn twenty
+  /// seconds later is twenty seconds shorter rather than the number that was
+  /// true when the vendor said no.
+  UsagePause? pauseFor(AgentInstallation installation) {
     final limit = _limits[usageAccountKey(installation)];
     if (limit == null) return null;
     final left = limit.until.difference(clock.nowUtc());
-    return left > Duration.zero ? left : null;
+    return left > Duration.zero
+        ? UsagePause(wait: left, kind: limit.kind, reason: limit.reason)
+        : null;
   }
 
   /// A reading arrived: remember it, and forget the limit it cleared.
@@ -122,26 +163,37 @@ class UsageThrottle {
     _limits.remove(key);
   }
 
-  /// The vendor said no. Returns how long this account will now wait.
+  /// The vendor said no, in a way that means *stop asking* — a `429` or a
+  /// `5xx`. Returns the wait this account is now holding.
   ///
   /// [retryAfter] is the server's own `Retry-After`, and it wins: it is the one
   /// number in this exchange that is not a guess. Absent, the wait doubles from
-  /// [base] to [ceiling] per consecutive refusal.
-  Duration recordRateLimit(
+  /// [base] to [ceiling] per consecutive refusal. Either way it is spread by up
+  /// to [kUsageBackoffJitter], upwards only.
+  UsagePause recordRefusal(
     AgentInstallation installation, {
+    required UsageFailureKind kind,
+    required String reason,
     Duration? retryAfter,
   }) {
     final key = usageAccountKey(installation);
     final attempts = (_limits[key]?.attempts ?? 0) + 1;
-    final wait = retryAfter == null
-        ? _doubled(attempts)
-        : _clamp(retryAfter, Duration.zero, kUsageBackoffMax);
+    final wait = _clamp(
+      _spread(retryAfter ?? _doubled(attempts)),
+      Duration.zero,
+      kUsageBackoffMax,
+    );
     _limits[key] = _RateLimit(
       until: clock.nowUtc().add(wait),
       attempts: attempts,
+      kind: kind,
+      reason: reason,
     );
-    return wait;
+    return UsagePause(wait: wait, kind: kind, reason: reason);
   }
+
+  Duration _spread(Duration wait) =>
+      wait + wait * (kUsageBackoffJitter * _jitter().clamp(0, 1));
 
   /// Drops everything known about one account, so the next ask is a real one.
   /// Used by the tests that need a clean slate; nothing in the app calls it.
@@ -165,11 +217,19 @@ class UsageThrottle {
 }
 
 class _RateLimit {
-  const _RateLimit({required this.until, required this.attempts});
+  const _RateLimit({
+    required this.until,
+    required this.attempts,
+    required this.kind,
+    required this.reason,
+  });
 
   final DateTime until;
 
   /// Consecutive refusals, which is what the doubling counts. Reset by any
   /// success, so a limit that lifts costs the next one nothing.
   final int attempts;
+
+  final UsageFailureKind kind;
+  final String reason;
 }

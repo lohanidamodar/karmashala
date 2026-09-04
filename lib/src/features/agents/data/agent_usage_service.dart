@@ -112,19 +112,15 @@ class AgentUsageService {
   AgentUsage? remembered(AgentInstallation installation) =>
       _throttle.remembered(installation);
 
-  /// How long this account is holding off after a `429`, or null if it may ask
-  /// now. Read at render time so a countdown on screen stays true.
-  Duration? rateLimitWait(AgentInstallation installation) =>
-      _throttle.waitFor(installation);
-
   /// The refusal this account would get if it asked right now, or null.
   ///
   /// So a surface can say *why* the number is not moving without making the
   /// request that would tell it — the settings panel opens on this rather than
-  /// looking untroubled while the chip shows a stalled reading.
-  UsageException? pendingRateLimit(AgentInstallation installation) {
-    final wait = _throttle.waitFor(installation);
-    return wait == null ? null : _rateLimited(wait);
+  /// looking untroubled while the chip shows a stalled reading. Recomputed on
+  /// every call, so the countdown in it is the one that is true now.
+  UsageException? pendingPause(AgentInstallation installation) {
+    final pause = _throttle.pauseFor(installation);
+    return pause == null ? null : _waiting(pause);
   }
 
   /// A reading young enough to stand in for a fresh one, or null.
@@ -144,28 +140,41 @@ class AgentUsageService {
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
-    final pending = pendingRateLimit(installation);
+    final pending = pendingPause(installation);
     if (pending != null) throw pending;
     try {
       final usage = await fetchFresh(installation, environments);
       _throttle.recordSuccess(installation, usage);
       return usage;
     } on UsageException catch (e) {
-      if (e.kind != UsageFailureKind.rateLimited) rethrow;
+      if (!_worthWaitingOut(e.kind)) rethrow;
       // The server's own `Retry-After` when it sent one, our doubling when it
       // did not. Either way the wait is decided here, where the consecutive
       // count lives, and not at the socket.
-      throw _rateLimited(
-        _throttle.recordRateLimit(installation, retryAfter: e.retryIn),
+      throw _waiting(
+        _throttle.recordRefusal(
+          installation,
+          kind: e.kind,
+          reason: e.message,
+          retryAfter: e.retryIn,
+        ),
       );
     }
   }
 
-  UsageException _rateLimited(Duration wait) => UsageException(
-    'Rate limited by the usage service. Waiting ${describeUsageWait(wait)} '
-    'before asking again.',
-    kind: UsageFailureKind.rateLimited,
-    retryIn: wait,
+  /// The two failures that mean *stop asking*: being throttled, and pushing on
+  /// a server that is already struggling. An expired token and an unreachable
+  /// endpoint are neither — the first is fixed by the user and must be noticed
+  /// on the next tick, and the second costs the vendor nothing.
+  static bool _worthWaitingOut(UsageFailureKind kind) =>
+      kind == UsageFailureKind.rateLimited ||
+      kind == UsageFailureKind.serverBusy;
+
+  UsageException _waiting(UsagePause pause) => UsageException(
+    '${pause.reason} Waiting ${describeUsageWait(pause.wait)} before asking '
+    'again.',
+    kind: pause.kind,
+    retryIn: pause.wait,
   );
 
   /// The lookup itself, with no memory and no backoff in front of it.
@@ -352,19 +361,27 @@ class AgentUsageService {
       // Both endpoints are treated identically here: neither is documented, and
       // guessing at a vendor-specific header we cannot observe without making
       // the very request we are trying not to make would be inventing evidence.
-      final retryAfter = status == HttpStatus.tooManyRequests
+      final retryAfter = status >= HttpStatus.tooManyRequests
           ? parseRetryAfter(
               response.headers.value(HttpHeaders.retryAfterHeader),
               clock.nowUtc(),
             )
           : null;
       final body = await response.transform(utf8.decoder).join();
+      // Neither of these carries the wait itself: how long to hold off is the
+      // throttle's decision, because only it knows how many refusals came
+      // before this one.
       if (status == HttpStatus.tooManyRequests) {
-        // Deliberately not a wait: how long to hold off is the throttle's
-        // decision, because only it knows how many refusals came before.
         throw UsageException(
-          'Usage request failed (HTTP $status).',
+          'Rate limited by the usage service.',
           kind: UsageFailureKind.rateLimited,
+          retryIn: retryAfter,
+        );
+      }
+      if (status >= HttpStatus.internalServerError) {
+        throw UsageException(
+          'The usage service is having trouble (HTTP $status).',
+          kind: UsageFailureKind.serverBusy,
           retryIn: retryAfter,
         );
       }

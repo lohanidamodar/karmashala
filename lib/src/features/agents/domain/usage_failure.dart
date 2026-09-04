@@ -21,7 +21,14 @@ enum UsageFailureKind {
   /// nothing to do; it recovers on its own.
   unreachable,
 
-  /// It answered, but not with usage: a `5xx`, some other non-200, or a body
+  /// The vendor answered `5xx`. Like [rateLimited] in the only way that
+  /// matters here — asking again immediately is pushing on something that is
+  /// already unwell — and unlike it in what the user is told, because nobody is
+  /// being throttled. The owner's own outage on 2026-09-04 was this shape: it
+  /// cleared on its own, with nothing changed at either end.
+  serverBusy,
+
+  /// It answered, but not with usage: an unexpected status under 500, or a body
   /// that is not the shape we parse.
   unusable,
 
@@ -37,6 +44,7 @@ enum UsageFailureKind {
 /// health panel was built to delete.
 String usageFailureHeadline(UsageFailureKind kind) => switch (kind) {
   UsageFailureKind.rateLimited => 'Rate limited',
+  UsageFailureKind.serverBusy => 'The usage service is having trouble',
   UsageFailureKind.auth => 'Sign-in needed',
   UsageFailureKind.unreachable => 'Could not reach the usage service',
   UsageFailureKind.unusable => 'The usage service answered with an error',

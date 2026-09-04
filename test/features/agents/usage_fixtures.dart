@@ -2,6 +2,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
+import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
 import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
@@ -26,10 +27,19 @@ import '../../support/fixtures.dart';
 /// one, so a test that counts [calls] counts requests that would actually have
 /// left the machine.
 class FakeAgentUsageService extends AgentUsageService {
-  FakeAgentUsageService({this.answer, this.failure, Clock? clock})
+  FakeAgentUsageService({
+    AgentUsage? answer,
+    UsageException? failure,
+    Clock? clock,
+  }) : this._(clock ?? FixedClock(testTime), answer, failure);
+
+  FakeAgentUsageService._(Clock clock, this.answer, this.failure)
     : super(
         storeLocator: FixedLocator(const []),
-        clock: clock ?? FixedClock(testTime),
+        clock: clock,
+        // No jitter: a test pins the schedule exactly, and the spread itself is
+        // measured in `usage_throttle_test.dart` where it belongs.
+        throttle: UsageThrottle(clock: clock, jitter: () => 0),
       );
 
   /// What the next fetch returns, when [failure] is null.

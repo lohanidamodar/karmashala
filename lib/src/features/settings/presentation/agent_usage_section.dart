@@ -67,7 +67,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     // And why it is not moving, if it is not: a card that looked untroubled
     // while the chip showed a stalled reading is how the two surfaces came to
     // disagree about one account.
-    _failure = service.pendingRateLimit(widget.installation);
+    _failure = service.pendingPause(widget.installation);
   }
 
   Future<void> _fetch() async {
@@ -187,7 +187,16 @@ class _FailureLine extends StatelessWidget {
     final semantic = SemanticColors.of(context);
     final (icon, colour) = switch (failure.kind) {
       // A pause, not a fault: nothing is broken and nothing needs fixing.
-      UsageFailureKind.rateLimited => (AppIcons.pauseCircle, semantic.attention),
+      UsageFailureKind.rateLimited => (
+        AppIcons.pauseCircle,
+        semantic.attention,
+      ),
+      // Not red either: the vendor is unwell, the user did nothing wrong, and
+      // the app is already waiting it out.
+      UsageFailureKind.serverBusy => (
+        AppIcons.warningCircle,
+        semantic.attention,
+      ),
       UsageFailureKind.auth => (AppIcons.userCircle, semantic.failure),
       UsageFailureKind.unreachable => (AppIcons.linkBreak, semantic.neutral),
       UsageFailureKind.unusable => (AppIcons.warningCircle, semantic.failure),

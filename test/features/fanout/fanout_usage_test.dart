@@ -241,7 +241,7 @@ void main() {
       tester,
       usageFor: (_) => Future<AgentUsage>.error(
         UsageException(
-          'Usage request failed (HTTP 429).',
+          'Rate limited by the usage service.',
           kind: UsageFailureKind.rateLimited,
         ),
       ),

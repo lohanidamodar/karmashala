@@ -215,6 +215,13 @@ void main() {
     expect(find.text('usage —'), findsOneWidget);
     expect(colourOf(tester, 'usage —'), light.neutral);
     expect(
+      find.byIcon(AppIcons.question),
+      findsOneWidget,
+      reason: 'nothing was measured, so the gauge glyph is not drawn — the '
+          'same answer HealthLevel.unknown gives one panel over',
+    );
+    expect(find.byIcon(AppIcons.circleHalf), findsNothing);
+    expect(
       tooltipOf(tester),
       'Access token expired. Run the agent once to refresh, then retry.',
       reason: "the service's own sentence, verbatim",
@@ -266,7 +273,7 @@ void main() {
     // What the endpoint actually sent the owner. The service turns it into a
     // wait; the chip's job is to keep the number and explain the pause.
     service.failure = UsageException(
-      'Usage request failed (HTTP 429).',
+      'Rate limited by the usage service.',
       kind: UsageFailureKind.rateLimited,
     );
     container.read(usageRefreshProvider.notifier).refresh();
@@ -388,6 +395,20 @@ void main() {
       final view = usageChipViewFor(const AsyncLoading(), testTime);
       expect(view.tone, UsageTone.muted);
       expect(view.label, 'usage …');
+      expect(
+        view.mark,
+        UsageMark.live,
+        reason: 'a read that has not answered yet is not a claim about it',
+      );
+    });
+
+    test('claims nothing when it never got a number', () {
+      final view = usageChipViewFor(
+        AsyncError(UsageException('nope'), StackTrace.empty),
+        testTime,
+      );
+      expect(view.mark, UsageMark.unknown);
+      expect(view.label, 'usage —', reason: 'a dash, never a zero');
     });
 
     test('is muted, not coloured, when a fetch reported no windows', () {

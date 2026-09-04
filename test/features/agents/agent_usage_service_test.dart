@@ -186,7 +186,7 @@ void main() {
         ),
       ),
       hostIsMacOS: true,
-      throttle: UsageThrottle(clock: clock),
+      throttle: UsageThrottle(clock: clock, jitter: () => 0),
     );
 
     Future<UsageException> failureOf(
@@ -209,7 +209,10 @@ void main() {
       final first = await failureOf(service);
       expect(first.kind, UsageFailureKind.rateLimited);
       expect(first.retryIn, kUsageBackoffBase);
-      expect(first.message, contains('Waiting 1m'));
+      expect(
+        first.message,
+        'Rate limited by the usage service. Waiting 1m before asking again.',
+      );
       expect(http.requests, 1);
 
       // The bug this fixes: the poll kept firing into the limit at the rate
@@ -256,16 +259,14 @@ void main() {
       final service = serviceWith();
       await failureOf(service);
 
-      expect(service.rateLimitWait(agentInstallation()), isNotNull);
+      expect(service.pendingPause(agentInstallation()), isNotNull);
       expect(
-        service.rateLimitWait(
-          agentInstallation(id: 'a2', agentId: AgentIds.codex),
+        service.pendingPause(agentInstallation(id: 'a2', agentId: AgentIds.codex),
         ),
         isNull,
       );
       expect(
-        service.rateLimitWait(
-          agentInstallation(id: 'a3', environmentId: 'wsl:Ubuntu'),
+        service.pendingPause(agentInstallation(id: 'a3', environmentId: 'wsl:Ubuntu'),
         ),
         isNull,
       );
@@ -286,14 +287,38 @@ void main() {
       expect(http.requests, 2);
     });
 
-    test('a 5xx is unusable, not a rate limit and not a network '
-        'failure', () async {
-      http.statusCode = HttpStatus.internalServerError;
-      final failure = await failureOf(serviceWith());
+    test('a 5xx is waited out too, and is not called a rate limit', () async {
+      // The owner's own failure was upstream and self-resolving. Pushing on a
+      // server that is already struggling is the same mistake as pushing on one
+      // that is throttling us — but the user is not being throttled, and must
+      // not be told they are.
+      http.statusCode = HttpStatus.serviceUnavailable;
+      final service = serviceWith();
+      final failure = await failureOf(service);
+
+      expect(failure.kind, UsageFailureKind.serverBusy);
+      expect(failure.message, contains('having trouble (HTTP 503)'));
+      expect(failure.message, contains('Waiting 1m'));
+      expect(failure.retryIn, kUsageBackoffBase);
+
+      await failureOf(service);
+      expect(http.requests, 1, reason: 'the wait holds for a 5xx as well');
+    });
+
+    test('an unexpected status under 500 is unusable, and is not waited '
+        'out', () async {
+      // Nothing about a 418 says the server is unwell or that we are being
+      // throttled, so it is reported and retried at the usual cadence.
+      http.statusCode = 418;
+      final service = serviceWith();
+      final failure = await failureOf(service);
 
       expect(failure.kind, UsageFailureKind.unusable);
-      expect(failure.message, contains('HTTP 500'));
+      expect(failure.message, contains('HTTP 418'));
       expect(failure.retryIn, isNull);
+
+      await failureOf(service);
+      expect(http.requests, 2);
     });
 
     test('a body that is not JSON is unusable, not unreachable', () async {
@@ -365,7 +390,7 @@ void main() {
     test('nothing is remembered before the first reading', () {
       final service = serviceWith();
       expect(service.remembered(agentInstallation()), isNull);
-      expect(service.rateLimitWait(agentInstallation()), isNull);
+      expect(service.pendingPause(agentInstallation()), isNull);
     });
   });
 }

@@ -75,7 +75,7 @@ void main() {
 
   testWidgets('a 429 is a wait, and is not drawn as a fault', (tester) async {
     service.failure = UsageException(
-      'Usage request failed (HTTP 429).',
+      'Rate limited by the usage service.',
       kind: UsageFailureKind.rateLimited,
     );
     await pump(tester);
@@ -109,7 +109,7 @@ void main() {
     // The user opens Settings *because* the chip stopped moving. A card that
     // said nothing would be the two surfaces disagreeing about one account.
     service.failure = UsageException(
-      'Usage request failed (HTTP 429).',
+      'Rate limited by the usage service.',
       kind: UsageFailureKind.rateLimited,
     );
     await expectLater(
