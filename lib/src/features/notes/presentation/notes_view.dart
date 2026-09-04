@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../todos/presentation/project_menu.dart';
@@ -162,6 +164,19 @@ class _EmptyNotes extends ConsumerWidget {
   }
 }
 
+/// One note: what it says, where it came from, and the one verb it is for.
+///
+/// **Send stays on the card; edit and delete moved to the row's menu.** A note
+/// exists to be handed back to an agent, so the verb that does it is drawn
+/// always — the same trade `ExplorerRowAction` makes for the `+` that starts
+/// work. The other two are housekeeping, and housekeeping belongs behind the
+/// `⋮` that [RowContextMenu] reveals under a pointer, opens on a right-click,
+/// and hands to `Shift+F10` and to a screen reader.
+///
+/// The card body is a tap target because of that menu, not only for
+/// convenience: it is the card's focus stop, and without one a note with no
+/// session to send to — whose Send button is disabled, and therefore not
+/// focusable — would have no keyboard path to its own actions at all.
 class _NoteCard extends ConsumerWidget {
   const _NoteCard({required this.note});
 
@@ -183,83 +198,137 @@ class _NoteCard extends ConsumerWidget {
     final targetTitle = targetId == null
         ? null
         : (source?.title ?? sessions.getById(targetId)?.title ?? 'the session');
+    final menuLabel = 'Actions for “${note.displayTitle}”';
+    void act(String value) => _act(context, ref, value, targetId, targetTitle);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.sm, 2),
-      child: Container(
-        padding: const EdgeInsets.all(Insets.sm),
-        decoration: BoxDecoration(
+    return RowContextMenu(
+      menuLabel: menuLabel,
+      menuItems: _menuItems(targetTitle),
+      onSelected: act,
+      builder: (context, menuVisible) => Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.sm, 2),
+        child: Material(
           color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(Radii.sm),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              note.displayTitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-            // Clipped, never rewritten: a long note shows its opening and says
-            // nothing about the rest. The whole text is one tap away in the
-            // editor, and is what gets sent.
-            Text(
-              note.body,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: Insets.xs),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _origin(
-                      source?.title,
-                      note.projectId == null
-                          ? null
-                          : projectNameById(ref, note.projectId!),
-                    ),
-                    maxLines: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            side: BorderSide(color: scheme.outlineVariant),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () => _edit(context, ref),
+            child: Padding(
+              padding: const EdgeInsets.all(Insets.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    note.displayTitle,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  // Clipped, never rewritten: a long note shows its opening and says
+                  // nothing about the rest. The whole text is one tap away in the
+                  // editor, and is what gets sent.
+                  Text(
+                    note.body,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
-                ),
-                _CardAction(
-                  icon: AppIcons.paperPlaneRight,
-                  tooltip: targetId == null
-                      ? 'No session to send this to — open one first'
-                      : 'Send to $targetTitle’s message box',
-                  onPressed: targetId == null
-                      ? null
-                      : () => _sendBack(context, ref, targetId, targetTitle!),
-                ),
-                _CardAction(
-                  icon: AppIcons.pencilSimple,
-                  tooltip: 'Edit note',
-                  onPressed: () => _edit(context, ref),
-                ),
-                _CardAction(
-                  icon: AppIcons.trash,
-                  tooltip: 'Delete note',
-                  onPressed: () =>
-                      ref.read(notesProvider.notifier).delete(note.id),
-                ),
-              ],
+                  const SizedBox(height: Insets.xs),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _origin(
+                            source?.title,
+                            note.projectId == null
+                                ? null
+                                : projectNameById(ref, note.projectId!),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      _CardAction(
+                        icon: AppIcons.paperPlaneRight,
+                        tooltip: targetId == null
+                            ? 'No session to send this to — open one first'
+                            : 'Send to $targetTitle’s message box',
+                        onPressed: targetId == null
+                            ? null
+                            : () => _sendBack(context, ref, targetId, targetTitle!),
+                      ),
+                      RowMenuButton(
+                        visible: menuVisible,
+                        tooltip: menuLabel,
+                        items: _menuItems(targetTitle),
+                        onSelected: act,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  /// The card's actions, in the one vocabulary every path to them shares.
+  ///
+  /// Built fresh per call: the same entries cannot be mounted by the `⋮` and by
+  /// a right-click at once, and a menu is only ever built as it opens.
+  List<PopupMenuEntry<String>> _menuItems(String? targetTitle) => [
+    DesktopMenuItem(
+      value: 'send',
+      label: targetTitle == null
+          ? 'Send back — open a session first'
+          : 'Send to $targetTitle’s message box',
+      icon: AppIcons.paperPlaneRight,
+      enabled: targetTitle != null,
+    ),
+    DesktopMenuItem(
+      value: 'edit',
+      label: 'Edit note',
+      icon: AppIcons.pencilSimple,
+    ),
+    const DesktopMenuDivider(),
+    DesktopMenuItem(
+      value: 'delete',
+      label: 'Delete note',
+      icon: AppIcons.trash,
+      destructive: true,
+    ),
+  ];
+
+  Future<void> _act(
+    BuildContext context,
+    WidgetRef ref,
+    String value,
+    String? targetId,
+    String? targetTitle,
+  ) async {
+    switch (value) {
+      case 'send':
+        if (targetId != null) {
+          _sendBack(context, ref, targetId, targetTitle!);
+        }
+      case 'edit':
+        await _edit(context, ref);
+      case 'delete':
+        ref.read(notesProvider.notifier).delete(note.id);
+    }
   }
 
   /// Where the note is filed and where it came from, in the words of what is
