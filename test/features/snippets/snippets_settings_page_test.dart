@@ -1,6 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
@@ -174,6 +177,49 @@ void main() {
 
     expect(container.read(commandSnippetsProvider), isEmpty);
     expect(find.text('Nothing saved yet.'), findsOneWidget);
+  });
+
+  /// The same actions on a right-click, because a user who learned the gesture
+  /// in the Todos pane will try it here.
+  ///
+  /// The buttons are *not* hidden. This is a settings form and they are worded
+  /// — "Edit", "Delete" — so they are the interface here rather than the
+  /// icon-only clutter the row menu exists to remove on a dense list.
+  testWidgets('a card answers a right-click and Shift+F10 as well', (
+    tester,
+  ) async {
+    container
+        .read(commandSnippetsProvider.notifier)
+        .add(label: 'Analyze', command: 'flutter analyze', shellId: 'pwsh');
+    await pumpPage(tester);
+    // Still drawn, and still worded.
+    expect(find.widgetWithText(TextButton, 'Edit'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Delete'), findsOneWidget);
+
+    await tester.tap(find.text('Analyze'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    expect(
+      find.widgetWithText(DesktopMenuItem<String>, 'Delete'),
+      findsOneWidget,
+    );
+    // Off the menu, on to its barrier: the next assertion has to be about a
+    // menu this test opened, not one still up from the last gesture.
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    // And from the keyboard: the card's own Edit button is the focus stop a
+    // Tab lands on, and the menu answers from anywhere inside the card.
+    Focus.of(tester.element(find.text('Edit'))).requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(DesktopMenuItem<String>, 'Delete'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a snippet that runs itself says so in words', (tester) async {

@@ -597,6 +597,35 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
+  /// Moves tab [tabId] to position [toIndex], sliding the rest along.
+  ///
+  /// The verb behind dragging a chip along the workbench strip, and the one the
+  /// strip had no equivalent of at all: *"move to re-arrange tab — all should
+  /// work like normal applications"*. Remove-then-insert rather than a swap,
+  /// because that is what an insertion point means — dropping the last tab on
+  /// the first pushes the others right rather than exchanging two of them,
+  /// which is what every browser does.
+  ///
+  /// **Only the order.** It does not activate the tab it moved: [activateTab]
+  /// restarts the panes a tab was left holding ([_restoreLivePanesIn]), and
+  /// tidying a strip must not spawn a shell. Nothing here touches focus either.
+  ///
+  /// Returns whether anything moved, so a drop onto the place a tab already
+  /// occupies costs no publish and no layout write. Ordinals are the store's
+  /// own business — see `_writeChangedRows` — so [persistStructure] is all this
+  /// owes for the new order to survive a restart.
+  bool reorderTab(String tabId, int toIndex) {
+    final from = _tabs.indexWhere((tab) => tab.id == tabId);
+    if (from < 0 || _tabs.length < 2) return false;
+    final to = toIndex.clamp(0, _tabs.length - 1);
+    if (from == to) return false;
+    _tabs.insert(to, _tabs.removeAt(from));
+    _tabsMutated();
+    _publish();
+    persistStructure();
+    return true;
+  }
+
   /// Closes tab [id].
   ///
   /// Closing a tab is a *view* action, so by default every pane in it that still
@@ -1063,8 +1092,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   void previousTab() => _stepTab(-1);
 
-  /// The label shown on tab [tabId]: the focused pane's title, plus the pane
-  /// count once the tab holds more than one.
+  /// The label shown on tab [tabId]: the focused pane's title while the tab is
+  /// one pane, and the tab's own directory once it holds more than one.
   ///
   /// Derived here rather than at each call site so the tab strip, the overflow
   /// picker and anything else that names a tab agree by construction.
@@ -1080,27 +1109,37 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
             orElse: () => tab.focusedPaneId,
           )
         : tab.focusedPaneId;
-    final occupied = tab.layout.panes.where((id) => !_isEmptyRegion(id));
-    if (occupied.length > 1) {
-      // A split tab names *itself*, not one of its regions. Each region now
-      // carries its own header, so borrowing the focused pane's name printed
-      // the same word twice — once on the tab and once in the region below it
-      // — and the `(2)` counted panes the user can already see. The owner read
-      // the result as an extra tab that "doesn't do anything".
-      //
-      // The directory is what a terminal tab is *about*, and unlike a borrowed
-      // session name it does not change as focus moves between regions. Taken
-      // from the first occupied region rather than the focused one for exactly
-      // that reason.
-      final first = occupied.first;
-      final directory = _instances[first]?.workingDirectory;
+    // A tab that is more than one pane names *itself*, not one of its panes.
+    //
+    // **The gate is the one the header is drawn on, and nothing else.** A pane
+    // header appears exactly when `tab.layout.panes.length > 1` — either the
+    // tab is split, or one region has a stack in it — so this is the condition
+    // under which borrowing a pane's name prints the same word twice, once on
+    // the tab and once in the row directly beneath it. It used to read
+    // `occupied.length > 1`, which asks something else: whether two regions
+    // are *filled*. That is false for the whole of the state right after every
+    // split, when one region holds the pane and the other is still the empty
+    // invitation — which is precisely the moment the user is looking, and the
+    // moment the owner screenshotted with `New session` printed twice, one row
+    // under the other, on a 2000px window.
+    //
+    // The directory is what a terminal tab is *about*, and unlike a borrowed
+    // session name it does not change as focus moves between regions. Taken
+    // from the first occupied region rather than the focused one for exactly
+    // that reason. The `(2)` that used to follow is gone for the same reason
+    // the borrowing is: the regions it counted are all on screen already.
+    if (tab.layout.panes.length > 1) {
+      final occupied = tab.layout.panes.where((id) => !_isEmptyRegion(id));
+      final first = occupied.isEmpty ? null : occupied.first;
+      final directory = first == null
+          ? null
+          : _instances[first]?.workingDirectory;
       if (directory != null && directory.isNotEmpty) {
         return directoryLabel(directory, home: _homeDirectory);
       }
       // No directory to name it by — a stub pane, or a shell that has not
       // reported one. Fall back to the borrowed name, but still without the
-      // count: the regions it counts are on screen either way.
-      return _titles.putIfAbsent(named, () => _titleForPane(named));
+      // count.
     }
     return _titles.putIfAbsent(named, () => _titleForPane(named));
   }

@@ -580,7 +580,7 @@ things outside this app.
 
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
-| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the three pane tests | there is no WSL, or no `flutter_pty.dll` to spawn a ConPTY with |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the pane tests | there is no WSL, or no `flutter_pty.dll` to spawn a ConPTY with |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
@@ -612,6 +612,31 @@ before anything was run, and the threshold is counted on top of it. The test
 asserts **relationships** rather than those numbers, so a one-line prompt on
 another machine proves the same rule. Worth running after any change to the
 detach policy, the WSL launch path, or what a pane does with user input.
+
+`live_wsl_prompt_test.dart` answers what happens to a **prompt** on the way into
+a WSL agent pane, and it exists because of a launch that died on 2026-09-03 as
+
+```txt
+zsh:1: unmatched "
+```
+
+`wsl.exe … -- <command>` is not an argv hand-off: WSL takes the command line
+*tail* and runs it through the distribution's login shell (`-- echo '$0'` answers
+`/usr/sbin/zsh`), so the line is parsed **twice** and Windows quoting satisfies
+only the first parser. Measured against `archlinux` before the fix: a multi-line
+prompt was truncated by `cmd` at its first newline and left the opening quote
+dangling — the reported failure, and the fate of *every* multi-line prompt;
+`` `id -u` `` and `$(id -u)` in a prompt were **executed**, and `$(touch …)`
+really created the file; `$HOME` was expanded and `\\server` became `\server`.
+
+A prompt is written by agents and pasted by users. It is not trusted text, and
+the fix is the POSIX counterpart of what the Windows-native path already does
+with `-EncodedCommand`: `encodedPosixShellCommand` base64s the whole
+`quotePosixShellArgument`-quoted command, so nothing user-supplied is on the
+command line for either parser to act on. The test asserts the bytes the process
+received — written to a file inside the distro, not read off the pane, because a
+ConPTY re-flows what it paints and a newline is exactly what has to survive.
+`pty_command_line_test.dart` pins the same list on every gate.
 
 `live_pane_resize_test.dart` answers one question nothing above the PTY can:
 **does the process in a pane learn the size the app resized it to?** Everything

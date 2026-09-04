@@ -265,23 +265,33 @@ class _HeaderLabel extends StatelessWidget {
   }
 }
 
-/// Right-click support, shared by every row that has a menu.
+/// Right-click, and only right-click.
 ///
-/// Lives beside [DesktopMenuItem] rather than in the Explorer because the Files
-/// side panel needs the same gesture and the same menu chrome.
+/// **Prefer `RowContextMenu` in `row_menu.dart`.** A row's menu has to answer
+/// `Shift+F10`, the Menu key and a screen reader as well as a mouse — a menu
+/// reachable by one gesture and no keyboard is an accessibility regression
+/// (CLAUDE.md §5) — and that widget is this one plus those three. This is the
+/// pointer half it is built on, kept separate for the surfaces whose gesture is
+/// not on a row at all: a terminal's body, a tab chip, a pane strip.
 class ContextMenuRegion extends StatelessWidget {
   const ContextMenuRegion({
-    required this.menuItems,
+    required this.itemBuilder,
     required this.onSelected,
     required this.child,
     super.key,
   });
 
-  final List<PopupMenuEntry<String>> menuItems;
+  /// Called when the menu opens, and not before. It used to be a `List`, built
+  /// on every build of every row for a menu that opens on one row at most —
+  /// see `RowMenuItemBuilder` in `row_menu.dart` for what that cost.
+  final List<PopupMenuEntry<String>> Function() itemBuilder;
+
   final ValueChanged<String> onSelected;
   final Widget child;
 
   Future<void> _show(BuildContext context, Offset position) async {
+    final items = itemBuilder();
+    if (items.isEmpty) return;
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (overlay == null) return;
@@ -291,7 +301,7 @@ class ContextMenuRegion extends StatelessWidget {
         Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
-      items: menuItems,
+      items: items,
     );
     if (selected != null) onSelected(selected);
   }

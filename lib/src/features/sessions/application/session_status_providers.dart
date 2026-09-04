@@ -60,11 +60,31 @@ final sessionActivityLookupProvider =
     Provider<AgentActivityStatus Function(String sessionId)>(
       (ref) =>
           (sessionId) =>
-              ref
-                  .read(sessionStatusRegistryProvider)
-                  .reportForOpenId(sessionId)
-                  ?.status ??
+              ref.read(sessionStatusLookupProvider)(sessionId)?.status ??
               AgentActivityStatus.unknown,
+    );
+
+/// **One session's whole status report, read synchronously**, for the callers
+/// that need more of it than the status word.
+///
+/// The same shape and the same reasons as [sessionActivityLookupProvider] — a
+/// function computed at the call rather than a `family` that would cache the
+/// first answer to a question whose only value is being current — and the read
+/// that one is now expressed in terms of, so the two cannot disagree about what
+/// the registry says.
+///
+/// It exists for `session_send`, which must not type a message into a session
+/// holding an open approval prompt: the keystrokes go into the modal, and
+/// [AgentStatusReport.hasOpenPrompt] needs [AgentStatusReport.waiting] as well
+/// as the status.
+///
+/// Null for a session the registry has never seen — an imported row, one in
+/// somebody else's terminal, an agent nobody has taught us to read. That is
+/// *unknown*, and callers must not read it as either state.
+final sessionStatusLookupProvider =
+    Provider<AgentStatusReport? Function(String sessionId)>(
+      (ref) => (sessionId) =>
+          ref.read(sessionStatusRegistryProvider).reportForOpenId(sessionId),
     );
 
 /// paneId → the session standing in it, for the whole workspace.

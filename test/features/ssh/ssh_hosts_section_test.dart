@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -7,7 +8,9 @@ import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -88,7 +91,15 @@ void main() {
     // A remote host is configured, not discovered — adding one is what makes
     // its environment exist.
     expect(environments.getById(saved.environmentId), isNotNull);
-    expect(find.text('dev@build.example.com:2222'), findsOneWidget);
+    // Named per section: this screen puts both under one scroll view, and the
+    // environment card names the same machine by the same address.
+    expect(
+      find.descendant(
+        of: find.byType(SshHostsSection),
+        matching: find.text('dev@build.example.com:2222'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the key path is stored with the environment that owns it', (
@@ -214,6 +225,52 @@ void main() {
     expect(environments.getById('ssh:id-0'), isNull);
   });
 
+  /// The same actions on a right-click and from the keyboard, because a user
+  /// who learned the gesture in the panes will try it here.
+  ///
+  /// The buttons are not hidden: this is a settings form and they are worded,
+  /// so they are the interface here rather than the icon-only clutter the row
+  /// menu exists to remove on a dense list.
+  testWidgets('a host card answers a right-click and Shift+F10', (
+    tester,
+  ) async {
+    hosts.upsert(
+      SshHost(
+        id: 'h1',
+        name: 'build-box',
+        host: 'build.example.com',
+        port: 22,
+        username: 'dev',
+        authMethod: SshAuthMethod.password,
+        createdAt: testTime,
+      ),
+    );
+    await pump(tester);
+    expect(find.widgetWithText(TextButton, 'Edit'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Remove'), findsOneWidget);
+
+    await tester.tap(find.text('build-box'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    expect(
+      find.widgetWithText(DesktopMenuItem<String>, 'Remove'),
+      findsOneWidget,
+    );
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    Focus.of(tester.element(find.text('Edit'))).requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(DesktopMenuItem<String>, 'Browse files'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a new host appears in the environments list straight away', (
     tester,
   ) async {
@@ -230,7 +287,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SSH'), findsOneWidget);
-    expect(find.text('ssh:id-0 · dev@build.example.com:2222'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(EnvironmentsSection),
+        matching: find.text('dev@build.example.com:2222'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();

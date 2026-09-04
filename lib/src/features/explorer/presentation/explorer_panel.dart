@@ -26,6 +26,8 @@ import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../application/checkout.dart';
 import '../application/explorer_actions.dart';
+import '../application/explorer_agent_filter.dart';
+import '../domain/agent_filter.dart';
 import '../application/project_tree.dart';
 import '../application/session_diff_stat.dart';
 import '../application/checkout_picker.dart';
@@ -426,6 +428,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final hidingEmptySections = ref.watch(
       settingsControllerProvider.select((s) => s.hideEmptySections),
     );
+    final agentFilter = ref.watch(explorerAgentFilterProvider);
     // Watched only under the condition the sections are actually drawn under,
     // because watching it is what pays for the empty filter — see
     // [explorerSectionLayoutProvider]. A search narrows the tree to the
@@ -491,25 +494,22 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-            // The filter's only entrance, and the one thing that keeps hiding
-            // an empty section honest: a group folded away for holding
-            // nothing is invisible, so a user who has never had a red build
-            // would otherwise have no way to learn that "Checks failing"
-            // exists. The tooltip says how many are being held back, so the
-            // sidebar admits to filtering rather than simply looking empty.
-            if (layout != null)
-              IconButton(
-                tooltip: hidingEmptySections
-                    ? layout.hidden == 0
-                          ? 'Showing every section'
-                          : 'Show ${layout.hidden} empty '
-                                'section${layout.hidden == 1 ? '' : 's'}'
-                    : 'Hide empty sections',
-                isSelected: hidingEmptySections,
-                icon: const Icon(AppIcons.funnel),
-                onPressed: () => ref
-                    .read(settingsControllerProvider.notifier)
-                    .setHideEmptySections(!hidingEmptySections),
+            // **One funnel, for everything the Explorer is holding back.**
+            // Two view controls that both hide rows would be two things to
+            // find and two stories about why a session is not on screen, so
+            // the agent filter moved into the affordance the empty-section
+            // filter had already established rather than growing a second one
+            // beside it. The glyph fills while a narrowing is in force and the
+            // tooltip names both halves — which agents are off the list, and
+            // how many sections were folded away — because a control that
+            // hides rows and says nothing is how a user concludes a session is
+            // gone.
+            if (projects.isNotEmpty)
+              _ExplorerFilterButton(
+                filter: agentFilter,
+                hidingEmptySections: hidingEmptySections,
+                hiddenSections: layout?.hidden,
+                sectionsOnScreen: layout != null,
               ),
             IconButton(
               // The mode's only entrance, and one of its two exits. A toggle
@@ -606,7 +606,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         // Starts one; the menu below is where the dialog lives.
         onNewSession: () => _startWithDefaults(project),
         onTogglePin: () => _togglePin(project),
-        menuItems: [
+        menuItemsBuilder: () => [
           DesktopMenuItem(
             value: 'new-session',
             label: 'New session…',
@@ -710,17 +710,35 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     // Two indexed DAO reads, and no git at any depth: the checkouts a session
     // works in are the right sidebar's subject now, not a row here.
-    final sessions = ref.watch(projectSessionsProvider(project.id));
+    final visible = ref.watch(visibleProjectSessionsProvider(project.id));
+    final sessions = visible.sessions;
     if (sessions.isEmpty) {
       rows.add(
-        const _TreeHint(
+        _TreeHint(
           depth: 1,
-          message: 'No sessions yet — start one with the + on this project.',
+          // Never "no sessions yet" over sessions the user's own filter took
+          // away: that sentence invites them to start work they already have.
+          // A project emptied by the filter says so, and says how much.
+          message: visible.hidden == 0
+              ? 'No sessions yet — start one with the + on this project.'
+              : '${_sessionCount(visible.hidden)} hidden by the agent filter.',
         ),
       );
       return rows;
     }
     rows.addAll(_sessionCards(project, sessions, depth: 1));
+    // Said where the rows are missing rather than only in the header, and only
+    // while a narrowing is actually in force: a partly-filtered list looks
+    // exactly like a shorter one, and this is the sentence that tells the two
+    // apart.
+    if (visible.hidden > 0) {
+      rows.add(
+        _TreeHint(
+          depth: 1,
+          message: '${visible.hidden} more hidden by the agent filter.',
+        ),
+      );
+    }
     return rows;
   }
 
@@ -1015,6 +1033,120 @@ class _HeaderActions extends StatelessWidget {
 }
 
 /// A non-interactive hint shown under an expanded, empty node.
+/// `1 session` / `3 sessions` — a count that reads as a sentence.
+String _sessionCount(int n) => '$n session${n == 1 ? '' : 's'}';
+
+/// **Everything the Explorer is hiding, behind one glyph.**
+///
+/// The empty-section filter shipped as a bare toggle here. It grew into a menu
+/// rather than acquiring a neighbour because a second hiding control would have
+/// been a second thing to find and a second explanation for the same
+/// observation — "a session I know I have is not on this list". One funnel now
+/// answers it, and both narrowings are ticked in the same list.
+///
+/// **The agent rows toggle**, so a set is reachable: tick Codex for Codex only,
+/// tick Claude Code as well for the two of them, untick the last one to come
+/// back to everything. Selecting closes the menu — that is what a
+/// [PopupMenuButton] does, and inventing a menu that does not would trade a
+/// second click for a control that behaves like nothing else in the app.
+///
+/// **The glyph fills while the agent filter is narrowing**, and only then.
+/// Hiding empty sections is on by default and hides nothing a user chose to
+/// look at, so marking it would make the mark meaningless; a chosen narrowing
+/// is exactly the state that must be legible before anyone hovers. Shape rather
+/// than colour, and the tooltip says the same thing in words — see
+/// [agentFilterTooltip], which names the agents that are off the list rather
+/// than counting the rows, because counting them means sweeping projects nobody
+/// has opened.
+class _ExplorerFilterButton extends ConsumerWidget {
+  const _ExplorerFilterButton({
+    required this.filter,
+    required this.hidingEmptySections,
+    required this.hiddenSections,
+    required this.sectionsOnScreen,
+  });
+
+  final AgentFilter filter;
+  final bool hidingEmptySections;
+
+  /// How many sections the empty filter folded away, null when sections are
+  /// not on screen at all (a search is narrowing the tree).
+  final int? hiddenSections;
+
+  final bool sectionsOnScreen;
+
+  static const String _allAgents = 'agents:all';
+  static const String _emptySections = 'sections:empty';
+  static const String _agentPrefix = 'agent:';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final registry = ref.watch(agentRegistryProvider);
+    final hidden = hiddenSections ?? 0;
+    return PopupMenuButton<String>(
+      tooltip: _tooltip(registry),
+      padding: EdgeInsets.zero,
+      iconSize: Chrome.icon,
+      icon: Icon(filter.isUnfiltered ? AppIcons.funnel : AppIcons.funnelFill),
+      onSelected: (value) {
+        final settings = ref.read(settingsControllerProvider.notifier);
+        if (value == _emptySections) {
+          settings.setHideEmptySections(!hidingEmptySections);
+        } else if (value == _allAgents) {
+          settings.setExplorerAgentFilter(const {});
+        } else {
+          settings.setExplorerAgentFilter(
+            filter.toggled(value.substring(_agentPrefix.length)).agentIds,
+          );
+        }
+      },
+      itemBuilder: (context) => [
+        DesktopMenuItem(
+          value: _allAgents,
+          label: 'All agents',
+          icon: AppIcons.listChecks,
+          selected: filter.isUnfiltered,
+        ),
+        for (final id in filterableAgentIds(registry))
+          DesktopMenuItem(
+            value: '$_agentPrefix$id',
+            label: registry.displayNameFor(id),
+            icon: AppIcons.robot,
+            selected: filter.agentIds.contains(id),
+          ),
+        // Offered only where it can act: with a search narrowing the tree the
+        // sections are not drawn, and a tick over a surface that is not on
+        // screen is a control the user cannot check the effect of.
+        if (sectionsOnScreen) ...[
+          const PopupMenuDivider(),
+          DesktopMenuItem(
+            value: _emptySections,
+            // The wording the toggle had, kept: a section folded away for
+            // holding nothing is invisible, so this row is the only place a
+            // user learns "Checks failing" exists at all, and it says how many
+            // it is holding back rather than merely offering a switch.
+            label: !hidingEmptySections
+                ? 'Hide empty sections'
+                : hidden == 0
+                ? 'Showing every section'
+                : 'Show $hidden empty section${hidden == 1 ? '' : 's'}',
+            icon: AppIcons.funnel,
+            selected: hidingEmptySections,
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _tooltip(AgentRegistry registry) {
+    final hidden = hiddenSections ?? 0;
+    final agents = agentFilterTooltip(filter, registry);
+    if (!hidingEmptySections || hidden == 0) return agents;
+    return '$agents \u00b7 $hidden empty '
+        'section${hidden == 1 ? '' : 's'} hidden';
+  }
+}
+
 class _TreeHint extends StatelessWidget {
   const _TreeHint({required this.depth, required this.message});
   final int depth;

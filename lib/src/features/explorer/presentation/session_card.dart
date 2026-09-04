@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../sessions/domain/session_lineage.dart';
 import '../application/session_diff_stat.dart';
 import 'explorer_row.dart';
@@ -49,7 +50,7 @@ class SessionCard extends StatelessWidget {
     required this.agentLabel,
     required this.title,
     required this.onTap,
-    required this.menuItems,
+    required this.menuItemsBuilder,
     required this.onMenu,
     this.agentColor,
     this.badge,
@@ -137,7 +138,10 @@ class SessionCard extends StatelessWidget {
   final bool lineageBroken;
 
   final VoidCallback onTap;
-  final List<PopupMenuEntry<String>> menuItems;
+  /// Called when the menu opens, and not before — see `RowMenuItemBuilder`.
+  /// A hundred cards used to build a hundred menus per frame for the one
+  /// that might be opened.
+  final RowMenuItemBuilder menuItemsBuilder;
   final ValueChanged<String> onMenu;
 
   /// Whether the row has an overflow menu at all.
@@ -186,16 +190,16 @@ class SessionCard extends StatelessWidget {
       depth: depth,
       selected: selected,
       onTap: onTap,
-      menuItems: menuItems,
+      menuItemsBuilder: menuItemsBuilder,
       onMenu: onMenu,
-      builder: (context, menuVisible) {
+      builder: (context) {
         final lines = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             _line1(context, muted, density),
             SizedBox(height: density.lineGap),
-            _line2(theme, density, menuVisible: menuVisible),
+            _line2(theme, density),
             // A worktree session draws its third line even before git has
             // answered: the glyph that says "this has its own checkout" is a
             // persisted fact, and it must not blink into existence.
@@ -287,11 +291,7 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  Widget _line2(
-    ThemeData theme,
-    UiDensity density, {
-    required bool menuVisible,
-  }) => Row(
+  Widget _line2(ThemeData theme, UiDensity density) => Row(
     children: [
       if (lineageBroken) ...[
         Tooltip(
@@ -339,10 +339,9 @@ class SessionCard extends StatelessWidget {
         ),
       ),
       if (showMenu)
-        ExplorerRowMenuButton(
-          visible: menuVisible,
+        RowMenuButton(
           tooltip: 'Session actions',
-          items: menuItems,
+          itemBuilder: menuItemsBuilder,
           onSelected: onMenu,
         ),
     ],

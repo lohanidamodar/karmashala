@@ -183,7 +183,7 @@ class NativeSessionRow extends ConsumerWidget {
       onTap: selecting
           ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
           : open,
-      menuItems: [
+      menuItemsBuilder: () => [
         // Moving a session to another agent, or branching it, belongs on the
         // session — not only on the delivery strip, which is the one place it
         // used to live and is only reachable while a session is on screen.
@@ -396,7 +396,7 @@ class ImportedSessionRow extends ConsumerWidget {
       onTap: selecting
           ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
           : () => _open(context, ref, session),
-      menuItems: [
+      menuItemsBuilder: () => [
         DesktopMenuItem(
           value: 'resume',
           // "in app" was distinguishing it from the three external-terminal

@@ -1,6 +1,8 @@
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/util/clock.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
+import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
 import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
@@ -19,11 +21,25 @@ import '../../support/fixtures.dart';
 /// Substituted for the real one through `agentUsageServiceProvider`, so the
 /// provider under test still runs its own body — nothing here reaches the
 /// vendor endpoints, and no token is read from disk.
+///
+/// **It overrides the network half only.** `fetchFresh` is the lookup; `fetch`
+/// — the throttle, the remembered reading and the `429` backoff — is the real
+/// one, so a test that counts [calls] counts requests that would actually have
+/// left the machine.
 class FakeAgentUsageService extends AgentUsageService {
-  FakeAgentUsageService({this.answer, this.failure})
+  FakeAgentUsageService({
+    AgentUsage? answer,
+    UsageException? failure,
+    Clock? clock,
+  }) : this._(clock ?? FixedClock(testTime), answer, failure);
+
+  FakeAgentUsageService._(Clock clock, this.answer, this.failure)
     : super(
         storeLocator: FixedLocator(const []),
-        clock: FixedClock(testTime),
+        clock: clock,
+        // No jitter: a test pins the schedule exactly, and the spread itself is
+        // measured in `usage_throttle_test.dart` where it belongs.
+        throttle: UsageThrottle(clock: clock, jitter: () => 0),
       );
 
   /// What the next fetch returns, when [failure] is null.
@@ -32,19 +48,19 @@ class FakeAgentUsageService extends AgentUsageService {
   /// What the next fetch throws instead.
   UsageException? failure;
 
-  /// One entry per fetch, in order. This is the number the refresh policy's
+  /// One entry per request, in order. This is the number the refresh policy's
   /// tests count.
   final List<AgentInstallation> calls = [];
 
   @override
-  Future<AgentUsage> fetch(
+  Future<AgentUsage> fetchFresh(
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
     calls.add(installation);
     final failed = failure;
     if (failed != null) throw failed;
-    return answer ?? usageSnapshot();
+    return answer ?? usageSnapshot(fetchedAt: clock.nowUtc());
   }
 }
 

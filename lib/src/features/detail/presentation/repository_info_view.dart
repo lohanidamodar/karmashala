@@ -8,6 +8,7 @@ import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/checkout_picker.dart';
@@ -488,8 +489,13 @@ class _WorktreeRow extends ConsumerWidget {
           '${worktree.path.path}\n'
           "Click to read this worktree's changes\n"
           "Right-click to select it as the session's checkout",
-      child: ContextMenuRegion(
-        menuItems: [
+      // [RowContextMenu] rather than a bare right-click: the tooltip above
+      // tells the user to right-click, and until now that was the only way in
+      // — the chip is a focus stop and had no answer for `Shift+F10`, the Menu
+      // key or a screen reader. No `⋮`: the chip is a chip.
+      child: RowContextMenu(
+        menuLabel: 'Actions for ${worktree.label}',
+        itemBuilder: () => [
           DesktopMenuItem<String>(
             value: 'read',
             label: 'Read this worktree here',
@@ -514,7 +520,7 @@ class _WorktreeRow extends ConsumerWidget {
             );
           }
         },
-        child: InkWell(
+        builder: (context) => InkWell(
           onTap: id == null || root == null
               ? null
               : () => browseWorktree(

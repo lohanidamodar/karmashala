@@ -1,6 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -23,7 +27,14 @@ const longTodo =
 void main() {
   /// The panel this lives in, at the width it actually gets on a desktop, with
   /// two projects so "which one" is a real question.
-  Future<ProviderContainer> pump(WidgetTester tester) async {
+  ///
+  /// [platform] is what decides the density — a mouse or a thumb — and so
+  /// whether the row's `⋮` is drawn at rest. Windows by default, because
+  /// this pane is read on the desktop; the companion runs it on Android.
+  Future<ProviderContainer> pump(
+    WidgetTester tester, {
+    TargetPlatform platform = TargetPlatform.windows,
+  }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -43,8 +54,11 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(
+        child: MaterialApp(
+          theme: AppTheme.light().copyWith(platform: platform),
+          // Exactly what a root does: ask the platform, install the density.
+          builder: (context, inner) => UiDensity.wrap(context, inner!),
+          home: const Scaffold(
             body: Row(
               children: [
                 SizedBox(width: 320, child: TodosView()),
@@ -57,6 +71,24 @@ void main() {
     );
     await tester.pumpAndSettle();
     return container;
+  }
+
+  /// Puts a mouse on [finder] and leaves it there.
+  Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(() => gesture.removePointer());
+    await gesture.moveTo(tester.getCenter(finder));
+    await tester.pumpAndSettle();
+    return gesture;
+  }
+
+  /// Opens a row's menu the way a mouse does: hover the row, then press the
+  /// `⋮` the hover just revealed.
+  Future<void> openRowMenu(WidgetTester tester, String body) async {
+    await hover(tester, find.text(body));
+    await tester.tap(find.byTooltip('Actions for “$body”'));
+    await tester.pumpAndSettle();
   }
 
   Future<void> write(WidgetTester tester, String text) async {
@@ -200,8 +232,7 @@ void main() {
       'second',
     ]);
 
-    await tester.tap(find.byTooltip('Actions for “second”'));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'second');
     await tester.tap(find.text('Move up'));
     await tester.pumpAndSettle();
 
@@ -216,8 +247,7 @@ void main() {
     container.read(todosProvider.notifier).add(body: 'unfiled for now');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Actions for “unfiled for now”'));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'unfiled for now');
     await tester.tap(find.text('File under…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Karmashala'));
@@ -233,12 +263,128 @@ void main() {
     container.read(todosProvider.notifier).add(body: 'temporary');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Actions for “temporary”'));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'temporary');
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
 
     expect(container.read(todosProvider), isEmpty);
+  });
+
+  /// The rule the Explorer set and this pane now keeps: a row's actions are on
+  /// the row, reachable four ways, and the button that duplicates them is
+  /// drawn when a pointer or the keyboard is on the row — or always, where
+  /// there is no pointer at all.
+  ///
+  /// The keyboard path is asserted rather than assumed. Hiding a button is
+  /// only honest while the menu can still be opened without a mouse, and the
+  /// Explorer's own history is the reason to test the paths that *look* fine:
+  /// a bug there discarded every mouse-driven choice on every row while
+  /// right-click and Shift+F10 went on working.
+  group('the row menu, four ways in', () {
+    testWidgets('the button is not drawn until a pointer is on the row', (
+      tester,
+    ) async {
+      final container = await pump(tester);
+      container.read(todosProvider.notifier).add(body: 'quiet at rest');
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Actions for “quiet at rest”'), findsNothing);
+
+      await hover(tester, find.text('quiet at rest'));
+      expect(find.byTooltip('Actions for “quiet at rest”'), findsOneWidget);
+    });
+
+    testWidgets('but is always drawn on a touch surface, which has no hover', (
+      tester,
+    ) async {
+      final container = await pump(tester, platform: TargetPlatform.android);
+      container.read(todosProvider.notifier).add(body: 'thumbed');
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Actions for “thumbed”'), findsOneWidget);
+    });
+
+    testWidgets('a right-click opens it, which is the desktop gesture', (
+      tester,
+    ) async {
+      final container = await pump(tester);
+      container.read(todosProvider.notifier).add(body: 'right-clicked');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('right-clicked'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete'), findsOneWidget);
+    });
+
+    testWidgets('Shift+F10 opens it from the focused row', (tester) async {
+      final container = await pump(tester);
+      container.read(todosProvider.notifier).add(body: 'keyboard only');
+      await tester.pumpAndSettle();
+
+      // The line is one of the row's focus stops — the tick is the other —
+      // and focusing it is what a Tab does.
+      Focus.of(tester.element(find.text('keyboard only'))).requestFocus();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete'), findsOneWidget);
+    });
+
+    testWidgets('so does the Menu key', (tester) async {
+      final container = await pump(tester);
+      container.read(todosProvider.notifier).add(body: 'menu key');
+      await tester.pumpAndSettle();
+
+      Focus.of(tester.element(find.text('menu key'))).requestFocus();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete'), findsOneWidget);
+    });
+
+    testWidgets('and the keyboard reveals the button it did not need', (
+      tester,
+    ) async {
+      final container = await pump(tester);
+      container.read(todosProvider.notifier).add(body: 'focused');
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Actions for “focused”'), findsNothing);
+
+      Focus.of(tester.element(find.text('focused'))).requestFocus();
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Actions for “focused”'), findsOneWidget);
+    });
+
+    testWidgets('a mouse-driven choice is not swallowed by its own menu', (
+      tester,
+    ) async {
+      // The Explorer's bug, asserted here so this pane cannot repeat it: the
+      // menu's modal barrier takes the hover off the row, and a button that
+      // unmounts under its own menu makes `showMenu` drop the result.
+      final container = await pump(tester);
+      container.read(todosProvider.notifier).add(body: 'delete me');
+      await tester.pumpAndSettle();
+
+      final gesture = await hover(tester, find.text('delete me'));
+      await tester.tap(find.byTooltip('Actions for “delete me”'));
+      await tester.pumpAndSettle();
+      // The barrier is up; take the pointer off the row, as one really does.
+      await gesture.moveTo(const Offset(1000, 500));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(todosProvider), isEmpty);
+    });
   });
 
   group('a todo is a sentence, so nothing here scrolls sideways', () {

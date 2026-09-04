@@ -179,6 +179,31 @@ void main() {
     expect(host.requests, isEmpty);
   });
 
+  /// The half a right-click cannot do. This pane had the gesture and nothing
+  /// else, so every file in the tree was reachable from the keyboard and none
+  /// of their actions were — the regression the whole rule exists to prevent.
+  testWidgets('Shift+F10 and the Menu key open the same menu', (tester) async {
+    await pump(tester, environments: [windows]);
+
+    // The row's own InkWell is the focus stop a Tab lands on.
+    Focus.of(tester.element(find.text('lib'))).requestFocus();
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pumpAndSettle();
+    expect(find.text('Open in File Explorer'), findsOneWidget);
+
+    await tester.tap(find.text('Copy path'));
+    await tester.pumpAndSettle();
+    expect(copied, [r'C:\src\app\lib']);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Open in File Explorer'), findsOneWidget);
+  });
+
   testWidgets('a reveal that fails anyway says so', (tester) async {
     // The path resolves, so the entry is offered — and then the file manager
     // will not start. Reveal reports that as an outcome, not a throw, so a
