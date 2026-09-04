@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/logging/app_logger.dart';

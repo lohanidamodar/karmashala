@@ -50,6 +50,15 @@ Future<Set<String>> wslRunningDistributions() async {
 /// warm**, so a tick every [interval] is a rounding error next to the
 /// five-second status poll it feeds.
 ///
+/// **A rounding error only while the share answers.** That cost is the
+/// distribution's to pay, not this app's, and it has no ceiling — so every
+/// operation the drain performs is asynchronous rather than synchronous. A
+/// `listSync` here used to put the whole wait on the isolate, four hundred
+/// milliseconds apart, for as long as the distribution took; `AgentHookSpool`
+/// carries the measurements and `core/util/file_picking.dart` carries what an
+/// occupied isolate does to a native file dialog that is being created at the
+/// same moment.
+///
 /// **It will not wake a distribution the user shut down.** The share is served
 /// by a plan9 daemon *inside* the distribution, so listing it starts one that
 /// is stopped — and an app that quietly resurrects a distribution every
@@ -129,7 +138,11 @@ class AgentHookSpoolDrainer {
             !running.contains(distribution)) {
           continue;
         }
-        for (final event in spool.drain(source.directory, limit: maxPerTick)) {
+        final events = await spool.drain(
+          source.directory,
+          limit: maxPerTick,
+        );
+        for (final event in events) {
           onEvent(event);
         }
       }

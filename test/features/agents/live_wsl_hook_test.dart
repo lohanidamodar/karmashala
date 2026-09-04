@@ -170,7 +170,7 @@ void main() {
     // The Windows side, exactly as the app does it: list the spool over the
     // share, read each payload, delete it, apply it.
     final spool = Directory(p.join(uncHome, '$agentHookMarker.spool'));
-    final events = const AgentHookSpool().drain(spool);
+    final events = await const AgentHookSpool().drain(spool);
     if (events.isEmpty) {
       fail(_verdict(spool, uncHome, wslHome, hook));
     }
