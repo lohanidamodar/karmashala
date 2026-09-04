@@ -109,7 +109,7 @@ class CompanionSessionRow extends StatelessWidget {
           (_) => SessionViewScreen(sessionId: session.id),
         ),
       ),
-      menuItems: const [],
+      menuItemsBuilder: () => const [],
       onMenu: (_) {},
     );
   }
