@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -10,6 +9,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 
 import '../../../core/process/path_translator.dart';
+import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_label.dart';
@@ -67,8 +67,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   }
 
   Future<void> _browse() async {
-    final dir = await getDirectoryPath();
-    if (dir == null) return;
+    final dir = await pickOneDirectory(what: 'a project folder');
+    if (dir == null || !mounted) return;
     setState(() {
       _folderController.text = dir;
       if (_nameController.text.trim().isEmpty) {

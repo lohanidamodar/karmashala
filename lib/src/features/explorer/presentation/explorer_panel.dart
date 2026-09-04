@@ -1,4 +1,3 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/desktop_dialog.dart';
+import '../../../core/util/file_picking.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_registry.dart';
@@ -307,7 +307,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final actions = ref.read(editorActionsProvider);
     String? subPath;
     if (chooseSubfolder) {
-      final picked = await getDirectoryPath(
+      final picked = await pickOneDirectory(
+        what: 'a folder of ${project.name} to open',
         initialDirectory: actions.windowsRootPath(project),
         confirmButtonText: 'Open in editor',
       );

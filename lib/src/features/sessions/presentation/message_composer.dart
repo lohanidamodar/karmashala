@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pasteboard/pasteboard.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/file_picking.dart';
 
 /// A pasted/attached image, kept on disk so its path can be handed to the agent.
 class _Attachment {
@@ -145,7 +145,8 @@ class _MessageComposerState extends State<MessageComposer> {
         return;
       }
       // Otherwise let the user pick an image file.
-      final file = await openFile(
+      final file = await pickOneFile(
+        what: 'an image to attach',
         acceptedTypeGroups: const [
           XTypeGroup(
             label: 'Images',
