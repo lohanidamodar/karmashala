@@ -28,26 +28,75 @@ const String _noAddressBound =
 /// leave was one `I bootstrap:` line in a file nobody opens — which is how a
 /// day went by with nine sessions on disk probes.
 class AgentHookInstallationReport {
-  const AgentHookInstallationReport(this.results);
+  const AgentHookInstallationReport(this.results, {this.swept = true});
 
+  /// **Before any sweep has finished**, which is not the same thing as a sweep
+  /// that found nothing — and the difference is the whole reason this exists.
+  ///
+  /// The sweep now runs after the first frame rather than before the window
+  /// (see `AppLifecycle.installAgentHooks`), so for the first moments of a
+  /// launch there genuinely is no answer yet. An empty [results] would have
+  /// made the Tools panel silent in that window, which reads as *"the hooks
+  /// are fine"* — the confident false statement §19 of `CLAUDE.md` exists to
+  /// delete. So the un-swept state is its own value, and the panel says the
+  /// callbacks are not in place *yet* rather than saying nothing.
+  static const AgentHookInstallationReport unswept =
+      AgentHookInstallationReport(<AgentHookInstallation>[], swept: false);
+
+  /// A finished sweep that touched nothing: a machine with no hook-capable
+  /// agent installed in any environment.
   static const AgentHookInstallationReport none = AgentHookInstallationReport(
     <AgentHookInstallation>[],
   );
 
   final List<AgentHookInstallation> results;
 
+  /// Whether a sweep has reported at all. `false` only for [unswept].
+  final bool swept;
+
   int get installed => results.where((r) => r.installed).length;
+
+  /// How many store homes did not answer inside their budget. See
+  /// [AgentHookInstallation.unknown].
+  int get unknown => results.where((r) => r.unknown).length;
 
   /// Why each environment got nothing, one entry per environment rather than
   /// one per agent: the reason is a property of the door, and four copies of
   /// it is a wall of text saying one thing.
+  ///
+  /// **Two kinds of row are deliberately not in here**, and both were folded
+  /// in once, and both read as the environment's fault when they were.
+  ///
+  /// An **[unknown]** row is one we have no reading for — the store home did
+  /// not answer inside its budget — not one we decided to skip; it gets its own
+  /// words and its own colour, see [unknownByEnvironment].
+  ///
+  /// An **agent that is simply not installed** ([AgentHookInstallation.
+  /// agentPresent] `false`) is a fact about that agent, not about the door, so
+  /// folding it in stated one agent's absence as the whole environment's
+  /// failure — in the error colour, beside two agents whose hooks had just gone
+  /// in.
   Map<String, String> get skippedByEnvironment => {
     for (final result in results)
-      if (!result.installed && result.skippedBecause != null)
+      if (!result.installed &&
+          !result.unknown &&
+          result.agentPresent &&
+          result.skippedBecause != null)
+        result.environmentId: result.skippedBecause!,
+  };
+
+  /// The environments whose store home did not answer inside its budget, and
+  /// what that means for them. Separate from [skippedByEnvironment] because
+  /// "we do not know" and "we know it did not happen" are different claims.
+  Map<String, String> get unknownByEnvironment => {
+    for (final result in results)
+      if (result.unknown && result.skippedBecause != null)
         result.environmentId: result.skippedBecause!,
   };
 
   bool get anySkipped => skippedByEnvironment.isNotEmpty;
+
+  bool get anyUnknown => unknownByEnvironment.isNotEmpty;
 
   /// Every spool directory this sweep installed — one per **agent**, because
   /// each agent keeps its payloads in its own store home.
@@ -70,7 +119,7 @@ class AgentHookInstallationReport {
 class AgentHookInstallationReportController
     extends Notifier<AgentHookInstallationReport> {
   @override
-  AgentHookInstallationReport build() => AgentHookInstallationReport.none;
+  AgentHookInstallationReport build() => AgentHookInstallationReport.unswept;
 
   void set(AgentHookInstallationReport next) => state = next;
 }
@@ -87,6 +136,8 @@ class AgentHookInstallation {
     required this.agentId,
     required this.environmentId,
     required this.installed,
+    this.unknown = false,
+    this.agentPresent = true,
     this.skippedBecause,
     this.spoolDirectory,
     this.wslDistribution,
@@ -95,6 +146,37 @@ class AgentHookInstallation {
   final String agentId;
   final String environmentId;
   final bool installed;
+
+  /// Whether this row is an **admission of ignorance** rather than a result:
+  /// the store home did not answer inside
+  /// [AgentHookInstallationService.defaultStoreBudget], so what is on disk
+  /// there is unknown.
+  ///
+  /// A `\\wsl.localhost` store home is served by a plan9 daemon *inside* the
+  /// distribution, and nothing bounds how long it may take to answer. Before
+  /// the bound this row could not exist, because the sweep simply never
+  /// returned — no report, no log line, and no spool being drained, for the
+  /// whole run. The bound turns that into a reading that says what it is.
+  ///
+  /// It is deliberately not `installed: false` with an ordinary reason:
+  /// §19 of `CLAUDE.md` is that an unobserved state must not borrow the words
+  /// of an observed one, and a false *"not installed"* would send someone
+  /// looking for a config bug that may not be there. The work is not cancelled
+  /// either — a Dart future cannot be — so the files may well land a moment
+  /// after this row was written; the row is a statement about what was
+  /// observed inside the budget, and the next launch's sweep is idempotent.
+  final bool unknown;
+
+  /// Whether this agent has a store here at all.
+  ///
+  /// `false` is the one `installed: false` that is **not** a degraded
+  /// environment: there was no agent to hook. It still carries a
+  /// [skippedBecause], because a truthful record of a sweep says why each row
+  /// is what it is — but nothing may present it as a fault. A Mac with two
+  /// working agents and no Antigravity CLI was told, in red, that it had no
+  /// status callbacks at all.
+  final bool agentPresent;
+
 
   /// Why nothing was written, for an environment or agent we deliberately
   /// skipped. `null` when [installed].
@@ -163,11 +245,39 @@ class AgentHookInstallation {
 ///   stronger rather than weaker, because `AgentHookInstaller` reads back every
 ///   file it writes into that store home and the store home *is* the transport.
 class AgentHookInstallationService {
-  AgentHookInstallationService(this._ref, {AppLogger? logger})
-    : _log = logger ?? AppLogger.named('agent-hooks');
+  AgentHookInstallationService(
+    this._ref, {
+    AppLogger? logger,
+    Duration? storeBudget,
+  }) : _log = logger ?? AppLogger.named('agent-hooks'),
+       _storeBudget = storeBudget ?? defaultStoreBudget;
+
+  /// How long **one agent's sweep of one store home** may take before the app
+  /// stops waiting for it and reports [AgentHookInstallation.unknown].
+  ///
+  /// There was no bound at all until Loop 78, and there could not be one: every
+  /// file operation on the install path was *synchronous*, and a synchronous
+  /// Dart file operation has no timeout — so a `\\wsl.localhost` store home
+  /// whose plan9 daemon stopped answering held the isolate, not just this
+  /// feature, for as long as the distribution took. `AgentHookSpool` carries
+  /// the share's measurements (1 ms for an `exists`, 16 ms for a `list`, 84 ms
+  /// for a name that is not a distribution) and `core/util/file_picking.dart`
+  /// carries what an occupied isolate does to a native file dialog: it is
+  /// created and never shown, and the window goes Not Responding.
+  ///
+  /// Ten seconds rather than something tight, because the honest failure here
+  /// is *slow*, not *broken*: the first touch of a WSL store home over the
+  /// share **starts a stopped distribution**, and a cold plan9 daemon is
+  /// seconds. A budget that cut that off would report `unknown` for a store
+  /// that was about to answer perfectly well. What it does rule out is the
+  /// unbounded case — a share that never answers now costs one row saying so,
+  /// instead of a report, a log line and a spool drain that never arrive for
+  /// the rest of the run.
+  static const Duration defaultStoreBudget = Duration(seconds: 10);
 
   final Ref _ref;
   final AppLogger _log;
+  final Duration _storeBudget;
 
   Future<List<AgentHookInstallation>> installAll(AgentHookEndpoint endpoint) =>
       _forEachStore(
@@ -242,9 +352,8 @@ class AgentHookInstallationService {
     )
     act,
   }) async {
-    final results = <AgentHookInstallation>[];
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
-    if (environments.isEmpty) return results;
+    if (environments.isEmpty) return const [];
 
     final stores = await _ref
         .read(cliStoreLocatorProvider)
@@ -253,6 +362,19 @@ class AgentHookInstallationService {
     final installer = _ref.read(agentHookInstallerProvider);
     final registry = _ref.read(agentRegistryProvider);
 
+    // **Every (agent, store home) pair at once, not one after another.**
+    //
+    // The pairs are independent by construction: each agent declares its own
+    // `homeDirectoryName`, so no two of them read or write the same config
+    // file, and two environments are two different filesystems — one of them
+    // commonly a `\\wsl.localhost` share whose latency belongs to a
+    // distribution rather than to this app. In series, one slow share was the
+    // whole sweep's cost and a hung one was the whole sweep; concurrently it
+    // is one row's cost and one row's [AgentHookInstallation.unknown].
+    //
+    // `Future.wait` keeps the input order, so the report is still store order
+    // then registry order and nothing downstream has to sort.
+    final pending = <Future<AgentHookInstallation>>[];
     for (final store in stores) {
       final environment = byId[store.environmentId];
       final kind = environment?.kind;
@@ -272,116 +394,205 @@ class AgentHookInstallationService {
       // by writing a file into a store home the installer reads back byte for
       // byte, which is a stronger check than a status line.
       final reachable = kind != null && (endpoint?.reaches(kind) ?? false);
-      const unreachableBecause = _noAddressBound;
       for (final descriptor in registry.descriptors) {
         if (descriptor.hooks == null) continue;
         final home = store.homesByAgentId[descriptor.id];
         if (home == null) continue;
-        if (skipUnreachable && !reachable) {
-          // Not just skipped — *cleaned*. Skipping only decided what not to
-          // write, and left whatever was already in the file: an entry an
-          // earlier build wrote while the address was still reachable, or one
-          // spelling a noisier command than this version writes. That entry
-          // keeps firing on every prompt, and the owner watched it print
-          // `curl: (52) Empty reply from server` into a live session and fail
-          // the hook. A callback we cannot deliver has no business staying in
-          // somebody's config, so removing ours is the only honest state here.
-          var removed = false;
-          try {
-            removed = await installer.uninstall(
+        pending.add(
+          _bounded(
+            agentId: descriptor.id,
+            environmentId: store.environmentId,
+            home: home,
+            body: () => _oneStore(
+              verb: verb,
+              skipUnreachable: skipUnreachable,
+              endpoint: endpoint,
+              act: act,
+              installer: installer,
               descriptor: descriptor,
-              storeHome: home,
-            );
-          } catch (error, stack) {
-            _log.warning(
-              'Could not remove unreachable ${descriptor.id} hooks in '
-              '${describeEnvironmentId(store.environmentId)}; leaving the config untouched.',
-              error,
-              stack,
-            );
-          }
-          results.add(
-            AgentHookInstallation(
-              agentId: descriptor.id,
               environmentId: store.environmentId,
-              installed: false,
-              skippedBecause: removed
-                  ? '$unreachableBecause; the hook left here by an earlier '
-                        'run was removed'
-                  : '$unreachableBecause; status falls back to the state file',
-            ),
-          );
-          continue;
-        }
-        try {
-          final applied = await act(installer, descriptor, home, kind);
-          // An agent that is not installed in this environment has no store
-          // and nothing to hook. That is the one `false` which is not a
-          // defect, and it must not be reported as one: a Mac with the
-          // Antigravity IDE but not its CLI logged "wrote the hooks but the
-          // config does not carry them" on every launch, which reads as a
-          // config being rewritten under us.
-          final absent = !installer.storeIsPresent(home);
-          if (!applied && !absent && endpoint != null) {
-            // An install that did not land. [AgentHookInstaller.install] now
-            // reads the file back, so this is a fact about disk rather than
-            // about our intent — and it has to say so, because the count it
-            // feeds ("N installed, M skipped") is the only place anyone would
-            // notice. Silence here is what let the owner's app report
-            // "1 installed" all day with nothing in any config home.
-            _log.warning(
-              'Wrote ${descriptor.id} hooks in ${describeEnvironmentId(store.environmentId)} but the '
-              'config does not carry them; status falls back to the state '
-              'file. Another process rewriting $home is the usual cause.',
-            );
-          }
-          // Where this agent's payloads will land, for a transport that
-          // reports by file. Asked of the installer rather than rebuilt here,
-          // so the drainer and the uninstall sweep can never disagree about
-          // the path.
-          final spool =
-              applied &&
-                  kind != null &&
-                  endpoint?.transportFor(kind) is AgentHookSpoolTransport
-              ? installer.spoolDirectoryFor(descriptor, home)
-              : null;
-          results.add(
-            AgentHookInstallation(
-              agentId: descriptor.id,
-              environmentId: store.environmentId,
-              installed: applied,
-              spoolDirectory: spool?.path,
               wslDistribution: environment?.wslDistribution,
-              skippedBecause: applied || endpoint == null
-                  ? null
-                  : absent
-                  ? 'the agent is not installed in this environment'
-                  : 'the callbacks were written but are not in the config '
-                        'file; something else rewrote it',
+              kind: kind,
+              home: home,
+              reachable: reachable,
             ),
-          );
-        } catch (error, stack) {
-          // Someone's real config. A file we cannot parse is left exactly as it
-          // is, and the app starts anyway — an agent whose status we cannot
-          // observe is a much smaller problem than a rewritten settings file.
-          _log.warning(
-            'Could not $verb ${descriptor.id} hooks in '
-            '${describeEnvironmentId(store.environmentId)}; leaving the config untouched.',
-            error,
-            stack,
-          );
-          results.add(
-            AgentHookInstallation(
-              agentId: descriptor.id,
-              environmentId: store.environmentId,
-              installed: false,
-              skippedBecause: '$error',
-            ),
-          );
-        }
+          ),
+        );
       }
     }
-    return results;
+    return Future.wait(pending);
+  }
+
+  /// One (agent, store home) pair, with its own bound. A pair that does not
+  /// answer inside [defaultStoreBudget] becomes a row that says so rather than
+  /// a sweep that never finishes — see [AgentHookInstallation.unknown] for why
+  /// that is the honest answer and not a softened failure.
+  ///
+  /// The bound stops the **waiting**, not the work: a Dart future cannot be
+  /// cancelled, so the operations behind it run to completion in the
+  /// background. That is deliberately harmless here — every write is staged and
+  /// renamed (`AgentHookInstaller._writeAtomically`), so a write that lands
+  /// after this row was published lands whole, and the next launch's sweep is
+  /// idempotent to the byte and simply agrees with it.
+  Future<AgentHookInstallation> _bounded({
+    required String agentId,
+    required String environmentId,
+    required String home,
+    required Future<AgentHookInstallation> Function() body,
+  }) => body().timeout(
+    _storeBudget,
+    onTimeout: () {
+      final budget = _describeBudget(_storeBudget);
+      _log.warning(
+        'The store home for $agentId in '
+        '${describeEnvironmentId(environmentId)} did not answer within '
+        '$budget ($home); whether its status callbacks are in place is '
+        'unknown for this run.',
+      );
+      return AgentHookInstallation(
+        agentId: agentId,
+        environmentId: environmentId,
+        installed: false,
+        unknown: true,
+        skippedBecause:
+            'the store home did not answer within $budget, so whether the '
+            'callbacks are in place there is unknown',
+      );
+    },
+  );
+
+  /// The budget in words a person can read. Sub-second in milliseconds, so a
+  /// test's tight budget cannot print the app telling somebody their store home
+  /// *"did not answer within 0s"*.
+  static String _describeBudget(Duration budget) => budget.inSeconds >= 1
+      ? '${budget.inSeconds}s'
+      : '${budget.inMilliseconds} ms';
+
+  /// The per-pair body [_forEachStore] runs concurrently. Never throws: every
+  /// escape becomes a row, because a config we could not read is somebody's
+  /// real file and the launch goes on without it.
+  Future<AgentHookInstallation> _oneStore({
+    required String verb,
+    required bool skipUnreachable,
+    required AgentHookEndpoint? endpoint,
+    required Future<bool> Function(
+      AgentHookInstaller installer,
+      AgentDescriptor descriptor,
+      String home,
+      EnvironmentKind? kind,
+    )
+    act,
+    required AgentHookInstaller installer,
+    required AgentDescriptor descriptor,
+    required String environmentId,
+    required String? wslDistribution,
+    required EnvironmentKind? kind,
+    required String home,
+    required bool reachable,
+  }) async {
+    const unreachableBecause = _noAddressBound;
+    if (skipUnreachable && !reachable) {
+      // Not just skipped — *cleaned*. Skipping only decided what not to
+      // write, and left whatever was already in the file: an entry an
+      // earlier build wrote while the address was still reachable, or one
+      // spelling a noisier command than this version writes. That entry
+      // keeps firing on every prompt, and the owner watched it print
+      // `curl: (52) Empty reply from server` into a live session and fail
+      // the hook. A callback we cannot deliver has no business staying in
+      // somebody's config, so removing ours is the only honest state here.
+      var removed = false;
+      try {
+        removed = await installer.uninstall(
+          descriptor: descriptor,
+          storeHome: home,
+        );
+      } catch (error, stack) {
+        _log.warning(
+          'Could not remove unreachable ${descriptor.id} hooks in '
+          '${describeEnvironmentId(environmentId)}; leaving the config untouched.',
+          error,
+          stack,
+        );
+      }
+      return AgentHookInstallation(
+        agentId: descriptor.id,
+        environmentId: environmentId,
+        installed: false,
+        skippedBecause: removed
+            ? '$unreachableBecause; the hook left here by an earlier run '
+                  'was removed'
+            : '$unreachableBecause; status falls back to the state file',
+      );
+    }
+    try {
+      final applied = await act(installer, descriptor, home, kind);
+      // An agent that is not installed in this environment has no store
+      // and nothing to hook. That is the one `false` which is not a
+      // defect, and it must not be reported as one: a Mac with the
+      // Antigravity IDE but not its CLI logged "wrote the hooks but the
+      // config does not carry them" on every launch, which reads as a
+      // config being rewritten under us.
+      final absent = !await installer.storeIsPresent(home);
+      if (!applied && !absent && endpoint != null) {
+        // An install that did not land. [AgentHookInstaller.install] now
+        // reads the file back, so this is a fact about disk rather than
+        // about our intent — and it has to say so, because the count it
+        // feeds ("N installed, M skipped") is the only place anyone would
+        // notice. Silence here is what let the owner's app report
+        // "1 installed" all day with nothing in any config home.
+        _log.warning(
+          'Wrote ${descriptor.id} hooks in ${describeEnvironmentId(environmentId)} but the '
+          'config does not carry them; status falls back to the state '
+          'file. Another process rewriting $home is the usual cause.',
+        );
+      }
+      // Where this agent's payloads will land, for a transport that
+      // reports by file. Asked of the installer rather than rebuilt here,
+      // so the drainer and the uninstall sweep can never disagree about
+      // the path.
+      final spool =
+          applied &&
+              kind != null &&
+              endpoint?.transportFor(kind) is AgentHookSpoolTransport
+          ? installer.spoolDirectoryFor(descriptor, home)
+          : null;
+      return AgentHookInstallation(
+        agentId: descriptor.id,
+        environmentId: environmentId,
+        installed: applied,
+        // Carried on the row so `skippedByEnvironment` can leave it out. The
+        // reason above still says the agent is not installed, because a
+        // truthful record of a sweep says why each row is what it is — but an
+        // absent agent is a fact about the agent, not about the environment,
+        // and folding it in told a Mac with two working agents and no
+        // Antigravity CLI that it had no status callbacks at all.
+        agentPresent: !absent,
+        spoolDirectory: spool?.path,
+        wslDistribution: wslDistribution,
+        skippedBecause: applied || endpoint == null
+            ? null
+            : absent
+            ? 'the agent is not installed in this environment'
+            : 'the callbacks were written but are not in the config file; '
+                  'something else rewrote it',
+      );
+    } catch (error, stack) {
+      // Someone's real config. A file we cannot parse is left exactly as it
+      // is, and the app starts anyway — an agent whose status we cannot
+      // observe is a much smaller problem than a rewritten settings file.
+      _log.warning(
+        'Could not $verb ${descriptor.id} hooks in '
+        '${describeEnvironmentId(environmentId)}; leaving the config untouched.',
+        error,
+        stack,
+      );
+      return AgentHookInstallation(
+        agentId: descriptor.id,
+        environmentId: environmentId,
+        installed: false,
+        skippedBecause: '$error',
+      );
+    }
   }
 }
 

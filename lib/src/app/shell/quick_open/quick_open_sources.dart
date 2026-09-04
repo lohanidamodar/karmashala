@@ -17,6 +17,7 @@ import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/repositories/application/repository_providers.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
+import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/domain/session.dart';
 import '../../../features/sessions/domain/session_launch.dart';
@@ -275,6 +276,25 @@ class QuickOpenSources {
         keywords: const ['mcp', 'bridge', 'wsl', 'interop', 'disk', 'adb'],
         onSelect: () => EnvironmentHealthDialog.show(context),
       ),
+      // Beside "Check system health" on purpose, and built the same way: a
+      // reading taken when asked, shown with its age, acted on only where it
+      // is certain. This one is about the workspace rather than the machine —
+      // rows whose agent has no record of the conversation they name.
+      _command(
+        'Review sessions with no conversation',
+        subtitle: 'Rows an agent cannot resume — remove them, or start a '
+            'conversation in them',
+        icon: AppIcons.warningCircle,
+        keywords: const [
+          'unresumable',
+          'missing',
+          'orphan',
+          'empty',
+          'cleanup',
+          'tidy',
+        ],
+        onSelect: () => UnresumableSessionsDialog.show(context),
+      ),
       _command(
         'Open Settings',
         icon: AppIcons.gearSix,
@@ -411,7 +431,7 @@ class QuickOpenSources {
         id: 'all',
         title: 'All projects',
         subtitle: 'Show every project, in any context',
-        icon: AppIcons.treeStructure,
+        icon: AppIcons.folders,
         current: scope.isAll,
         target: WorkspaceScope.all,
       ),
@@ -423,7 +443,7 @@ class QuickOpenSources {
             workspace,
             projectCount: counts[workspace.id] ?? 0,
           ),
-          icon: AppIcons.folder,
+          icon: AppIcons.stack,
           current: scope.workspaceId == workspace.id,
           target: WorkspaceScope.of(workspace.id),
         ),

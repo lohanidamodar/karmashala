@@ -539,4 +539,31 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// Every project at once — the unnarrowed end of the context filter.
+  ///
+  /// One third of a vocabulary that had collapsed into a single mark. In the
+  /// Explorer's chrome: [treeStructure] is the Explorer **surface** (its
+  /// title-bar toggle and its pane header), [folder] is one project, [folders]
+  /// is all of them, and [stack] is a context. All three used to be
+  /// [treeStructure], stacked ~30px apart in the same 16px column, so the
+  /// corner read as one glyph repeated and said nothing about which of the
+  /// three it meant. Elsewhere [treeStructure] still marks things that really
+  /// are trees — a worktree, a fan of subagents — where nothing it could be
+  /// confused with is on screen.
+  static const IconData folders = IconData(
+    0xe260,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// A context — a named subset of the workspace's projects. Plates in a pile
+  /// rather than a folder: a context holds projects, it is not a place on disk.
+  static const IconData stack = IconData(
+    0xe466,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }

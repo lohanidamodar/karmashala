@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
+import '../../features/agents/domain/agent_hook_endpoint.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/remote/application/remote_access_controller.dart';
@@ -189,56 +190,112 @@ class AppLifecycle {
 
   /// Installs the agents' status hooks in the background and retains the
   /// future, so shutdown can wait for a config rewrite rather than cut it off.
-  void installAgentHooks(LauncherControlServer server) {
+  ///
+  /// [afterFirstFrame], when given, is what the **first** sweep waits behind.
+  /// It exists because "in the background" was only ever true of the *await*:
+  /// until Loop 78 every file operation on the install path was synchronous, so
+  /// the sweep ran on the isolate in one unbroken block between two frames and
+  /// the window could not paint until it finished. It measured **1053 ms of a
+  /// 1.91 s launch** on the owner's machine — 55% of it, for work no user is
+  /// waiting for. Both halves of that are fixed here: the I/O is asynchronous
+  /// (`AgentHookInstaller`) so it yields, and the first sweep now starts after
+  /// the window has painted rather than while it is trying to.
+  ///
+  /// **What a session started in the gap gets, exactly.** The hook *entry* in
+  /// the agent's own config is a constant written once and then recognised on
+  /// every later launch (see `AgentHookInstaller.hookCommand`), so on any
+  /// launch but the very first it is already there before this app starts. What
+  /// a launch writes is the **endpoint file**, and the installed script reads
+  /// that *when a hook fires* rather than when the CLI starts — so a session
+  /// launched in the gap loses only the events that fire inside it, and starts
+  /// reporting the moment the file lands. It is not a session that is deaf for
+  /// its lifetime. That is exactly why the gap is one frame and not "when the
+  /// app is idle", and why the caller's gate must have a fallback rather than
+  /// waiting for a frame that a tray-only launch may never paint.
+  ///
+  /// Until the sweep reports, the app says so rather than saying nothing:
+  /// `AgentHookInstallationReport.unswept` is the initial state and the Tools
+  /// panel renders it as *not in place yet*. §19 of `CLAUDE.md` is the rule
+  /// being followed — an unobserved state is `unknown`, never `healthy`.
+  void installAgentHooks(
+    LauncherControlServer server, {
+    Future<void> Function()? afterFirstFrame,
+  }) {
     // The WSL switch usually does not exist yet when an app that launches with
     // Windows starts, so the first sweep skips every WSL store — and until now
     // nothing ever revisited that decision: the owner's WSL sessions ran all
     // morning with no hooks while the adapter sat there. The server tells us
     // when it finally binds, and the sweep is idempotent to the byte, so
     // running it again costs a config rewrite only where something changed.
+    //
+    // No frame gate on this one: by the time the switch binds the window has
+    // long since painted, and a re-sweep that waited for a *further* frame
+    // would be waiting on an idle app.
     server.onWslInterfaceBound = () {
       _logger.info('The WSL switch is up; installing hooks for it now.');
       _installAgentHooksNow(server);
     };
-    _installAgentHooksNow(server);
+    _installAgentHooksNow(server, gate: afterFirstFrame);
   }
 
-  void _installAgentHooksNow(LauncherControlServer server) {
+  void _installAgentHooksNow(
+    LauncherControlServer server, {
+    Future<void> Function()? gate,
+  }) {
     final endpoint = server.hookEndpoint;
     if (endpoint == null) return;
-    // Off the startup path: rewriting hooks reads and writes the agents' own
-    // config files, and the window should not wait for it. Hooks that land a
-    // moment after launch are still hooks; a slower launch is felt every time.
-    _hookInstallation = _container
-        .read(agentHookInstallationServiceProvider)
-        .installAll(endpoint)
-        .then(
-          (results) {
-            final report = AgentHookInstallationReport(results);
-            // Published, not just logged. A skipped environment means the
-            // hook-only states are unreportable there for the whole run, and
-            // Settings is where the user can be told rather than told nothing.
-            _container
-                .read(agentHookInstallationReportProvider.notifier)
-                .set(report);
-            // The environments that report by file rather than by socket. A
-            // WSL agent cannot reach any address this app binds, so it writes
-            // its payloads into its own store home and this polls for them;
-            // see `AgentHookSpoolDrainer`. An empty list stops the timer, so a
-            // machine with no WSL polls nothing.
-            _container
-                .read(agentHookSpoolDrainerProvider)
-                .watch(report.spoolSources);
-            _logger.info(
-              'Agent hooks: ${report.installed} installed, '
-              '${results.length - report.installed} skipped'
-              '${report.spoolSources.isEmpty ? '' : ', '
-                    '${report.spoolSources.length} reporting by spool'}.',
-            );
-          },
-          onError: (Object error, StackTrace stack) =>
-              _logger.warning('Agent hook installation failed.', error, stack),
+    _hookInstallation = _sweepAgentHooks(endpoint, gate);
+  }
+
+  /// One sweep, behind [gate], with everything it reports published.
+  ///
+  /// Retained by [_installAgentHooksNow] rather than fired and forgotten, so
+  /// shutdown's `agent hook installation` step can wait for a config rewrite
+  /// instead of cutting it off — and so a sweep still sitting behind [gate]
+  /// when the user quits is one the shutdown budget can decline to wait for.
+  Future<void> _sweepAgentHooks(
+    AgentHookEndpoint endpoint,
+    Future<void> Function()? gate,
+  ) async {
+    if (gate != null) {
+      try {
+        await gate();
+      } on Object catch (error, stack) {
+        // A gate that throws must not cost the user their hooks: the sweep is
+        // the point and the gate is only about *when*.
+        _logger.warning(
+          'Waiting for the first frame before installing agent hooks failed; '
+          'installing now.',
+          error,
+          stack,
         );
+      }
+    }
+    try {
+      final results = await _container
+          .read(agentHookInstallationServiceProvider)
+          .installAll(endpoint);
+      final report = AgentHookInstallationReport(results);
+      // Published, not just logged. A skipped environment means the
+      // hook-only states are unreportable there for the whole run, and
+      // Settings is where the user can be told rather than told nothing.
+      _container.read(agentHookInstallationReportProvider.notifier).set(report);
+      // The environments that report by file rather than by socket. A
+      // WSL agent cannot reach any address this app binds, so it writes
+      // its payloads into its own store home and this polls for them;
+      // see `AgentHookSpoolDrainer`. An empty list stops the timer, so a
+      // machine with no WSL polls nothing.
+      _container.read(agentHookSpoolDrainerProvider).watch(report.spoolSources);
+      _logger.info(
+        'Agent hooks: ${report.installed} installed, '
+        '${results.length - report.installed - report.unknown} skipped'
+        '${report.unknown == 0 ? '' : ', ${report.unknown} unknown'}'
+        '${report.spoolSources.isEmpty ? '' : ', '
+              '${report.spoolSources.length} reporting by spool'}.',
+      );
+    } on Object catch (error, stack) {
+      _logger.warning('Agent hook installation failed.', error, stack);
+    }
   }
 
   /// Looks for agents this workspace has never searched for, in the background.

@@ -3,6 +3,10 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/tools_page.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/features/environments/application/environment_health.dart';
+import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart'
+    show healthIcon;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,6 +104,31 @@ void main() {
     expect(find.textContaining('WSL · Ubuntu'), findsOneWidget);
   });
 
+  testWidgets('an agent nobody installed raises no alarm', (tester) async {
+    // Two agents' hooks went in and a third CLI is not on this machine. The
+    // page used to answer that with a red line saying the whole environment
+    // had no status callbacks — the owner's Mac, which had two working ones.
+    await pump(
+      tester,
+      const AgentHookInstallationReport([
+        AgentHookInstallation(
+          agentId: 'claudeCode',
+          environmentId: 'windows',
+          installed: true,
+        ),
+        AgentHookInstallation(
+          agentId: 'antigravity',
+          environmentId: 'windows',
+          installed: false,
+          agentPresent: false,
+          skippedBecause: 'the agent is not installed in this environment',
+        ),
+      ]),
+    );
+
+    expect(find.textContaining('No status callbacks'), findsNothing);
+  });
+
   testWidgets('the local host is named, never keyed', (tester) async {
     // `localHostEnvironmentId` is the literal `windows` on every platform, so
     // this line told a Mac's owner there were "no status callbacks from
@@ -136,6 +165,72 @@ void main() {
     );
 
     expect(find.textContaining('No status callbacks'), findsNothing);
+    expect(find.textContaining('not in place yet'), findsNothing);
+  });
+
+  testWidgets('before the first sweep it says "not yet", not nothing', (
+    tester,
+  ) async {
+    // The sweep runs after the first frame now, so there is a real window in
+    // every launch where nothing has been observed. An empty report used to be
+    // indistinguishable from a clean one, and this panel's *silence* reads as
+    // "your hooks are fine" — the confident false statement §19 exists to
+    // delete, moved into a new place.
+    await pump(tester, AgentHookInstallationReport.unswept);
+
+    expect(find.textContaining('not in place yet'), findsOneWidget);
+    expect(
+      find.textContaining('reads the CLI\'s own files until it does'),
+      findsOneWidget,
+      reason: 'what a session started in the gap actually gets',
+    );
+    expect(
+      find.textContaining('No status callbacks'),
+      findsNothing,
+      reason: 'nothing has been observed, so nothing may be claimed either way',
+    );
+  });
+
+  testWidgets('a store home that never answered is not called a failure', (
+    tester,
+  ) async {
+    // A `\\wsl.localhost` store home is served by a plan9 daemon inside the
+    // distribution and has no bound of its own. When it does not answer inside
+    // the app's budget, what is on disk there was never seen — and a confident
+    // "no status callbacks from WSL" would send someone looking for a config
+    // bug that may not exist.
+    await pump(
+      tester,
+      const AgentHookInstallationReport([
+        AgentHookInstallation(
+          agentId: 'claudeCode',
+          environmentId: 'wsl:Ubuntu',
+          installed: false,
+          unknown: true,
+          skippedBecause:
+              'the store home did not answer within 10s, so whether the '
+              'callbacks are in place there is unknown',
+        ),
+      ]),
+    );
+
+    expect(find.textContaining('could not be confirmed'), findsOneWidget);
+    expect(find.textContaining('WSL · Ubuntu'), findsOneWidget);
+    expect(find.textContaining('the next launch checks again'), findsOneWidget);
+    expect(
+      find.textContaining('No status callbacks'),
+      findsNothing,
+      reason: 'that is the wording for an observed failure',
+    );
+    // Unknown's own icon, never the failure mark. More than one, because the
+    // bridge row above is unknown too until somebody runs the probe — which is
+    // the same rule being applied twice rather than a stray match.
+    expect(find.byIcon(healthIcon(HealthLevel.unknown)), findsWidgets);
+    expect(
+      find.byIcon(AppIcons.warningCircle),
+      findsNothing,
+      reason: 'the mark a skipped environment gets is not this row\'s to wear',
+    );
   });
 }
 
