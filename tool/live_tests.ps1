@@ -70,7 +70,8 @@ if ($Family -in @('wsl', 'all')) {
     Tag   = 'live-wsl'
     Files = @(
       'test/features/agents/live_wsl_hook_test.dart',
-      'test/terminal/live_wsl_pane_test.dart'
+      'test/terminal/live_wsl_pane_test.dart',
+      'test/terminal/live_wsl_prompt_test.dart'
     )
   }
 }

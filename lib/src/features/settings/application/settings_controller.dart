@@ -70,6 +70,18 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Which agents the Explorer shows, as `AgentDescriptor.id`s.
+  ///
+  /// Empty is "every agent" — see [AgentFilter], where unticking the last one
+  /// is what returns the sidebar to the unfiltered list. Written sorted so two
+  /// identical choices made in a different order are one settings value and not
+  /// two, which is what keeps `Settings ==` from reporting a change nobody
+  /// made.
+  void setExplorerAgentFilter(Set<String> agentIds) {
+    state = state.copyWith(explorerAgentFilter: agentIds.toList()..sort());
+    _save();
+  }
+
   void setThemeMode(AppThemeMode mode) {
     state = state.copyWith(themeMode: mode);
     _save();

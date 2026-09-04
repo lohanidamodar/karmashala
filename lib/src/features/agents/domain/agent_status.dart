@@ -115,6 +115,23 @@ class AgentStatusReport {
   /// agent's descriptor recognises — may claim [AgentWaitKind.approval].
   final AgentWaitKind waiting;
 
+  /// **Whether a prompt with options is on this session's screen right now.**
+  ///
+  /// The one rule every surface that puts a keystroke into a pane turns on, in
+  /// one place so they cannot disagree: the approval card draws its buttons
+  /// from it, the phone offers approve/deny from it, and `session_send` refuses
+  /// to type from it.
+  ///
+  /// Both halves are needed. [AgentActivityStatus.awaitingApproval] alone says
+  /// the session stopped for the user, which is equally true of an agent
+  /// sitting at its own input — and at an idle prompt a carriage return submits
+  /// whatever is in the composer. Only a source with positive evidence of a
+  /// prompt claims [AgentWaitKind.approval], so anything less is *not* an open
+  /// prompt, [AgentWaitKind.unrecorded] included.
+  bool get hasOpenPrompt =>
+      status == AgentActivityStatus.awaitingApproval &&
+      waiting == AgentWaitKind.approval;
+
   @override
   String toString() =>
       'AgentStatusReport($agentId/$sessionId, ${status.name}, ${source.name}, '

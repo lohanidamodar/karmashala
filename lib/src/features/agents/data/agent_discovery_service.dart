@@ -48,6 +48,54 @@ CommandRequest locateRequest(
   );
 }
 
+/// Fences a located path off from everything else an interactive shell prints.
+const String kAgentPathMarker = '__karmashala_agent:';
+
+/// The **interactive** login-shell lookup for [executableName] — what to ask
+/// when [locateRequest] found nothing on the local POSIX host.
+///
+/// A login shell reads `~/.zprofile` and `~/.zshenv`; it never reads
+/// `~/.zshrc`, which is where a great many Macs actually put their PATH — the
+/// `~/.local/bin` line that Claude Code's and Codex's own installers add goes
+/// there. That difference is invisible while the app is launched from a
+/// terminal, because the shell it spawns inherits the terminal's already-built
+/// PATH. Launched from Finder it inherits launchd's, which is
+/// `/usr/bin:/bin:/usr/sbin:/sbin` and nothing else, so every agent CLI on the
+/// machine became undetectable the moment the app was installed like an app.
+///
+/// Two consequences shape the command:
+///
+/// * The output is **marked**. An interactive shell runs the user's whole
+///   startup file — prompts, version-manager banners, `motd` — and the first
+///   line of that is not a path. Only a line carrying [kAgentPathMarker] is
+///   read as an answer.
+/// * The **exit code is ignored** for the same reason: an interactive zsh can
+///   exit non-zero over something in a plugin that has nothing to do with the
+///   lookup. The marker's presence is the result.
+CommandRequest interactiveLocateRequest(
+  String executableName, {
+  String? loginShell,
+}) => CommandRequest(
+  executable: loginShell ?? localLoginShell(),
+  arguments: [
+    '-ilc',
+    'p=\$(command -v $executableName 2>/dev/null) && '
+        "printf '%s\\n' \"$kAgentPathMarker\$p\"",
+  ],
+);
+
+/// The path an [interactiveLocateRequest] reported, or `null` if it reported
+/// none — whatever else the shell's startup files printed around it.
+String? markedPath(String stdout) {
+  for (final line in stdout.split(RegExp(r'[\r\n]+'))) {
+    final trimmed = line.trim();
+    if (!trimmed.startsWith(kAgentPathMarker)) continue;
+    final path = trimmed.substring(kAgentPathMarker.length).trim();
+    if (path.isNotEmpty) return path;
+  }
+  return null;
+}
+
 /// The owner's login shell on this machine, or `bash` when `$SHELL` says
 /// nothing usable.
 ///
@@ -264,6 +312,31 @@ class AgentDiscoveryService {
       }
       if (!located.ok) continue;
       final path = firstNonEmptyLine(located.stdout);
+      if (path != null) return path;
+    }
+    return _locateInInteractiveShell(descriptor);
+  }
+
+  /// The second look, through an interactive login shell.
+  ///
+  /// Only for the **local POSIX host**, and only after the login shell came
+  /// back empty, so a machine whose PATH is set where a login shell can see it
+  /// pays nothing for this. WSL and SSH keep their `bash -lc`: those are
+  /// configured through their profile files, and starting an interactive shell
+  /// over a remote connection is a different kind of expensive.
+  ///
+  /// See [interactiveLocateRequest] for why the login shell misses agents that
+  /// the user's own terminal finds instantly.
+  Future<String?> _locateInInteractiveShell(AgentDescriptor descriptor) async {
+    if (environment.kind != EnvironmentKind.localPosix) return null;
+    for (final name in descriptor.binaries.forKind(environment.kind)) {
+      final CommandResult located;
+      try {
+        located = await runner.run(interactiveLocateRequest(name));
+      } on CommandException {
+        return null; // Environment unavailable — treat as "not installed".
+      }
+      final path = markedPath(located.stdout);
       if (path != null) return path;
     }
     return null;

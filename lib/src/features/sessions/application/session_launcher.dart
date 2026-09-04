@@ -1151,7 +1151,7 @@ class SessionLauncher {
     // prompt is the only channel the spawned agent has. Built from the parent's
     // own row, and stripped again by rebuilding the same string — never by
     // pattern-matching the text. See [SessionAttribution].
-    final attribution = _attributionFor(request.parentSessionId);
+    final attribution = attributionFor(request.parentSessionId);
     final firstMessage = attribution == null || request.firstMessage == null
         ? request.firstMessage
         : attribution.render(request.firstMessage!);
@@ -1530,14 +1530,24 @@ class SessionLauncher {
     environment: environment,
   );
 
-  /// The attribution for a session spawned by [parentSessionId], or `null` for
-  /// one the user started. Reads the parent's real title so the prefix and the
-  /// strip are built from the same data.
-  SessionAttribution? _attributionFor(String? parentSessionId) {
-    if (parentSessionId == null) return null;
-    final parent = _ref.read(sessionDaoProvider).getById(parentSessionId);
-    if (parent == null) return null;
-    return SessionAttribution(sessionId: parent.id, title: parent.title);
+  /// The attribution for text a *session* is putting into another session's
+  /// input, or `null` when no session can be named for it.
+  ///
+  /// Two callers, one prefix: the opening prompt of a session an agent spawned
+  /// (where [senderSessionId] is the parent), and `session_send` relaying a
+  /// message (where it is the caller the MCP transport authenticated). They
+  /// build the line from the same place on purpose — the strip rebuilds it
+  /// rather than parsing it, so a second format would be a line nothing knows
+  /// how to remove.
+  ///
+  /// Null for a sender with no session of its own and for a row that has gone.
+  /// Naming a sender we cannot read would be inventing provenance, which is the
+  /// failure the prefix exists to close rather than a smaller version of it.
+  SessionAttribution? attributionFor(String? senderSessionId) {
+    if (senderSessionId == null) return null;
+    final sender = _ref.read(sessionDaoProvider).getById(senderSessionId);
+    if (sender == null) return null;
+    return SessionAttribution(sessionId: sender.id, title: sender.title);
   }
 
   /// Types [text] into a PTY-hosted session, exactly as if the user had.
