@@ -71,6 +71,12 @@ typedef MigrationStep = void Function(Database db);
 ///   agent's declared axes, because a shared three-value enum cannot say that
 ///   Claude Code has six modes or that Codex's sandbox and approval policy are
 ///   two separate dimensions.
+/// * **v36** — index the CLI conversation a session records, so the two sweeps
+///   that ask "is this store session already one of ours?" once per detected
+///   conversation stop scanning the whole table each time.
+/// * **v37** — index the installation a session ran under, which is what
+///   `ON DELETE RESTRICT` makes SQLite scan for on every agent-installation
+///   delete, and what the re-detection sweep asks about per stored row.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -107,6 +113,8 @@ final Map<int, MigrationStep> schemaMigrations = {
   33: _migrateToV33,
   34: _migrateToV34,
   35: _migrateToV35,
+  36: _migrateToV36,
+  37: _migrateToV37,
 };
 
 /// Was this pane running when its row was written?
@@ -1553,4 +1561,104 @@ void _migrateToV35(Database db) {
       [selection, legacy, agentId],
     );
   }
+}
+
+/// Index the CLI conversation a session records.
+///
+/// `sessions.external_session_id` has been a plain, unindexed `TEXT` since v3,
+/// and two DAO reads filter on it — `SessionDao.getByExternalSessionId` and
+/// `getAllByExternalSessionId`. Both planned as `SCAN sessions`, and both are
+/// called **once per detected store conversation**:
+///
+/// * `SessionAutoImportService.importForRepositories` asks "is this store
+///   session already a native row?" for every conversation the CLI stores hold
+///   under a repository, and
+/// * `SessionAdoptionService._bestMatch` asks the same question for every
+///   candidate that survives its cheap filters, on the status registry's store
+///   slot.
+///
+/// So the cost was conversations × sessions, and a CLI store carries far more
+/// conversations than a workspace carries rows. Measured with the query
+/// planner's own counters, one lookup at three workspace sizes:
+///
+/// ```txt
+///                   20 rows       100 rows      500 rows
+///   before   SCAN,  19 fullscan   99 fullscan   499 fullscan   1558 VM steps
+///   after  SEARCH,   0 fullscan    0 fullscan     0 fullscan     34 VM steps
+/// ```
+///
+/// **Three columns, not one.** `(external_session_id)` alone turns the scan
+/// into a search and leaves `USE TEMP B-TREE FOR ORDER BY` behind, because both
+/// readers order by `created_at DESC, id DESC` — the total order that lets a
+/// caller choose the same row twice when a conversation was resumed and two
+/// rows name it. Carrying those two columns in the index removes the sort as
+/// well: 62 VM steps with one column, 34 with three, at every scale.
+///
+/// **What it costs.** 45 KB at 500 sessions — 0.11% of a store whose size is
+/// scrollback — and one b-tree insert per session created and per session
+/// adopted. Nothing else: SQLite skips index maintenance for a statement that
+/// does not touch an indexed column, so the frequent writes (`updateStatus`,
+/// `updateTitle`, `updatePaneId`) measured unchanged at 38 and 39 VM steps with
+/// the index present and absent.
+///
+/// `IF NOT EXISTS`, like every other index in this file, so re-running is safe.
+void _migrateToV36(Database db) {
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_external '
+    'ON sessions (external_session_id, created_at, id);',
+  );
+}
+
+/// Index the installation a session ran under.
+///
+/// **The cost this one removes is mostly invisible.** `sessions` references
+/// `agent_installations` `ON DELETE RESTRICT`, and SQLite enforces that by
+/// looking for referencing children whenever a parent row is deleted. With no
+/// index on the child column the look is a table scan, and it does not appear
+/// in `EXPLAIN QUERY PLAN` at all — the foreign-key check is generated
+/// bytecode, not a plan step. Only counting finds it. Deleting one
+/// installation, with `PRAGMA foreign_keys = ON`:
+///
+/// ```txt
+///                100 sessions              500 sessions
+///   before   198 fullscan steps,  731    998 fullscan steps,  3531 VM steps
+///   after      0 fullscan steps,   35      0 fullscan steps,    35 VM steps
+/// ```
+///
+/// Two scans of the whole table, not one, for a single delete.
+///
+/// The re-detection sweep pays it on the path whose failure it was written for.
+/// `AgentInstallationDao.deleteIfUnreferenced` asks "is anything still pointing
+/// at this row?" per stored installation the probe did not find — the guard
+/// that stops SQLite raising 1811 from inside the loop and taking the whole
+/// sweep with it, which is what left Settings reporting no agents at all — and
+/// `repointSessions` moves the sessions of an installation that turned out to
+/// have *moved* rather than gone. Both scanned:
+///
+/// ```txt
+///                       100 sessions   500 sessions
+///   guard      before    308 steps      1508 steps
+///              after       8 steps         8 steps   (a covering index:
+///                                                     the table is never read)
+///   repoint    before    309 steps      1509 steps
+///              after      13 steps        13 steps
+/// ```
+///
+/// **What it costs.** 12 KB at 500 sessions, and eight VM steps on the one
+/// write that touches the column — `INSERT INTO sessions`, once per session
+/// started, measured at 72 steps before this index and 78 after (64 with
+/// neither this nor v36's). The frequent writes are untouched, because SQLite
+/// skips index maintenance for a statement that changes no indexed column:
+/// `updateStatus`, `updateTitle` and `updatePaneId` measured at 38, 39 and 47
+/// steps with both indexes present and with neither.
+///
+/// It does **not** touch the `UNIQUE (agent_kind, environment_id,
+/// executable_path)` constraint on `agent_installations`, which is what makes
+/// "the same agent at a new path" an unambiguous move. That constraint is load
+/// bearing for correctness and nothing here replaces, reorders or weakens it.
+void _migrateToV37(Database db) {
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_installation '
+    'ON sessions (agent_installation_id);',
+  );
 }
