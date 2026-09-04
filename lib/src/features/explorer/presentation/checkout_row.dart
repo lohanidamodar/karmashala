@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../application/session_diff_stat.dart';
 import 'explorer_row.dart';
 import 'session_card.dart';
@@ -39,7 +40,7 @@ class CheckoutRow extends StatelessWidget {
     this.onNewSession,
     this.newSessionTooltip = 'New session here',
     this.extraAction,
-    this.menuItems = const [],
+    this.menuItemsBuilder,
     this.onMenu,
     super.key,
   });
@@ -73,7 +74,9 @@ class CheckoutRow extends StatelessWidget {
   /// folder.
   final Widget? extraAction;
 
-  final List<PopupMenuEntry<String>> menuItems;
+  /// Called when the menu opens, and not before. Null for a row with no
+  /// menu — see `RowMenuItemBuilder`.
+  final RowMenuItemBuilder? menuItemsBuilder;
   final ValueChanged<String>? onMenu;
 
   /// The measured facts are dropped in order of value as the pane narrows,
@@ -95,16 +98,15 @@ class CheckoutRow extends StatelessWidget {
     depth: depth,
     selected: selected,
     onTap: onTap,
-    menuItems: menuItems,
+    menuItemsBuilder: menuItemsBuilder,
     onMenu: onMenu,
-    builder: (context, menuVisible) => LayoutBuilder(
+    builder: (context) => LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         return _row(
           context,
           showStat: width >= _statWidth,
           showBranch: width >= _branchWidth,
-          menuVisible: menuVisible,
         );
       },
     ),
@@ -114,7 +116,6 @@ class CheckoutRow extends StatelessWidget {
     BuildContext context, {
     required bool showStat,
     required bool showBranch,
-    required bool menuVisible,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -198,11 +199,10 @@ class CheckoutRow extends StatelessWidget {
             icon: AppIcons.plus,
             onPressed: onNewSession,
           ),
-        if (menuItems.isNotEmpty && onMenu != null)
-          ExplorerRowMenuButton(
-            visible: menuVisible,
+        if (menuItemsBuilder != null && onMenu != null)
+          RowMenuButton(
             tooltip: 'Folder actions',
-            items: menuItems,
+            itemBuilder: menuItemsBuilder!,
             onSelected: onMenu,
           ),
       ],

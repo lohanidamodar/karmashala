@@ -6,10 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_signals.dart';
+import '../data/usage_throttle.dart';
 import 'agent_usage_providers.dart';
 
 /// How often the usage chip re-reads the quota while the window has focus.
-const kUsageRefreshInterval = Duration(seconds: 60);
+///
+/// Defined with the throttle that enforces the same number on every other way
+/// of asking, because the timer is only one of them — see
+/// [kUsageRefreshInterval] there for why sixty seconds was kept.
+export '../data/usage_throttle.dart' show kUsageRefreshInterval;
 
 /// The interval actually in effect — the seam a test uses to turn the tick off.
 ///

@@ -10,6 +10,7 @@ import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
 import '../data/agent_usage_service.dart';
 import '../domain/agent_usage.dart';
+import '../domain/usage_failure.dart';
 
 /// Where a quota stops being background information.
 ///
@@ -27,6 +28,24 @@ const double _glyphGap = 5;
 /// never carries the state on its own — see [UsageChipView.label].
 enum UsageTone { healthy, warning, critical, muted }
 
+/// **What the glyph claims**, in the system health panel's vocabulary.
+///
+/// A gauge says "this is a measurement"; a history clock says "this is a
+/// reading, and it has an age"; a question mark says nothing was observed at
+/// all. `HealthLevel.unknown` exists for the same reason: an unmeasured state
+/// must never borrow the mark of a measured one.
+enum UsageMark {
+  /// A number that the current read produced — or is producing, while the first
+  /// answer is still in flight and the label says so.
+  live,
+
+  /// A number the app has, that the current read did not confirm.
+  stale,
+
+  /// No number at all. The chip says why in its tooltip and claims nothing.
+  unknown,
+}
+
 /// Everything the chip draws, resolved from one usage snapshot.
 ///
 /// A value rather than widget code so the thresholds, the wording and the four
@@ -37,6 +56,7 @@ class UsageChipView {
     required this.label,
     required this.tooltip,
     required this.tone,
+    this.mark = UsageMark.live,
   });
 
   /// The words on the chip. **Always spells out the number** when one is known:
@@ -45,6 +65,14 @@ class UsageChipView {
 
   final String tooltip;
   final UsageTone tone;
+
+  /// What the glyph is allowed to claim about the label beside it.
+  ///
+  /// A different glyph rather than a different colour, because the colour is
+  /// carrying the quota: muting a 97% because it is four minutes old would hide
+  /// the more important of the two facts. The age itself is in the tooltip,
+  /// which is the only place in a status bar with room for it.
+  final UsageMark mark;
 }
 
 /// What the chip should say about [usage], as of [now].
@@ -53,30 +81,51 @@ class UsageChipView {
 ///
 /// * **live** — a number and how long until that window resets;
 /// * **checking** — muted, before the first answer arrives;
-/// * **muted** — the fetch failed and we have never had a number, so the
-///   service's own sentence is all there is to show (an expired token tells the
-///   user to run the agent once);
-/// * **stale** — a refresh failed but a previous number is known. It keeps
-///   being shown, and the tooltip says when it was read. Losing a number you
-///   had is worse than showing an old one that admits it is old.
-UsageChipView usageChipViewFor(AsyncValue<AgentUsage> usage, DateTime now) {
-  final value = usage.value;
+/// * **unknown** — the lookup failed and no number has ever been read. It
+///   claims nothing: a dash, the neutral colour, the question glyph, and the
+///   service's own sentence in the tooltip (an expired token tells the user to
+///   run the agent once; a rate limit says how long it is waiting);
+/// * **stale** — a refresh failed but a number is known. It keeps being shown,
+///   with a different glyph and its age in the tooltip. Losing a number you had
+///   is worse than showing an old one that admits it is old.
+///
+/// [remembered] is the last reading the service holds for this account, and it
+/// is what makes the stale state survive a pane switch: `agentUsageProvider` is
+/// `autoDispose`, so `AsyncValue` alone carries a previous value only until the
+/// chip leaves the tree. Without it, the first failure after coming back to a
+/// pane blanked a number the app had read seconds earlier.
+UsageChipView usageChipViewFor(
+  AsyncValue<AgentUsage> usage,
+  DateTime now, {
+  AgentUsage? remembered,
+}) {
+  final live = usage.value;
+  final value = live ?? remembered;
   final error = usage.error;
   if (value == null) {
+    // Nothing was observed, so nothing is claimed: no gauge, no zero, and a
+    // dash that is plainly not a reading. `HealthLevel.unknown` is the same
+    // answer to the same question one panel over.
     return UsageChipView(
       label: error == null ? 'usage …' : 'usage —',
       tooltip: error == null ? 'Checking agent usage…' : _messageOf(error),
       tone: UsageTone.muted,
+      mark: error == null ? UsageMark.live : UsageMark.unknown,
     );
   }
 
+  // Anything not confirmed by the current read: a failed refresh, or one still
+  // in flight over a number we already had.
+  final mark = error != null || live == null
+      ? UsageMark.stale
+      : UsageMark.live;
   final window = _tightest(value.windows);
   final age = _ago(now.difference(value.fetchedAt));
   final detail = [
     for (final w in value.windows) _windowLine(w, now),
     if (value.email != null) value.email!,
-    if (error == null) 'Checked $age' else 'Last checked $age',
-    if (error != null) 'Refresh failed: ${_messageOf(error)}',
+    if (mark == UsageMark.stale) 'Last checked $age' else 'Checked $age',
+    if (error != null) _failureLine(error),
   ].join('\n');
 
   if (window == null) {
@@ -86,6 +135,7 @@ UsageChipView usageChipViewFor(AsyncValue<AgentUsage> usage, DateTime now) {
       label: 'usage —',
       tooltip: 'No usage windows reported.\n$detail',
       tone: UsageTone.muted,
+      mark: mark,
     );
   }
 
@@ -96,6 +146,7 @@ UsageChipView usageChipViewFor(AsyncValue<AgentUsage> usage, DateTime now) {
         : '${window.percent.round()}% · ${formatUsageDuration(reset.difference(now))}',
     tooltip: detail,
     tone: _toneFor(window.percent),
+    mark: mark,
   );
 }
 
@@ -130,6 +181,16 @@ String _windowLine(UsageWindow window, DateTime now) {
 
 String _messageOf(Object error) =>
     error is UsageException ? error.message : '$error';
+
+/// The one line the tooltip gives a failure that did not cost us the number.
+///
+/// A rate limit already says what happened *and* what the app is doing about
+/// it, so prefixing "Refresh failed" would bury the only actionable half —
+/// that nothing is wrong and nobody should keep clicking.
+String _failureLine(Object error) =>
+    error is UsageException && error.kind == UsageFailureKind.rateLimited
+    ? error.message
+    : 'Refresh failed: ${_messageOf(error)}';
 
 String _ago(Duration since) => since < const Duration(minutes: 1)
     ? 'just now'
@@ -203,6 +264,9 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     final view = usageChipViewFor(
       ref.watch(agentUsageProvider(installation)),
       ref.read(clockProvider).nowUtc(),
+      // Survives what `AsyncValue` cannot: the chip is rebuilt from nothing
+      // every time the focused pane moves to another account and back.
+      remembered: ref.watch(agentUsageServiceProvider).remembered(installation),
     );
     final semantic = SemanticColors.of(context);
     final colour = switch (view.tone) {
@@ -224,7 +288,18 @@ class _UsageChipState extends ConsumerState<UsageChip> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(AppIcons.circleHalf, size: _glyph, color: colour),
+              Icon(
+                // The health panel's glyphs, on purpose: one vocabulary for
+                // "this is a reading with an age" and for "nothing was
+                // observed".
+                switch (view.mark) {
+                  UsageMark.live => AppIcons.circleHalf,
+                  UsageMark.stale => AppIcons.clockCounterClockwise,
+                  UsageMark.unknown => AppIcons.question,
+                },
+                size: _glyph,
+                color: colour,
+              ),
               const SizedBox(width: _glyphGap),
               Text(
                 view.label,

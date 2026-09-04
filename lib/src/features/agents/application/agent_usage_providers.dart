@@ -30,12 +30,24 @@ final agentUsageServiceProvider = Provider<AgentUsageService>(
 /// `UsageRefreshController` owns, and one that would keep hitting the vendor
 /// endpoint with an expired token while the user is away. A failure stays a
 /// failure until something asks again.
+///
+/// **A first build is answered from memory when it can be.** `autoDispose` plus
+/// a family key means this provider is created afresh every time the focused
+/// pane moves to another account and back, and each creation used to be an
+/// unconditional request — the one trigger no interval bounded. `isFirstBuild`
+/// is exactly the case Riverpod documents as "the state was destroyed and later
+/// recreated", so a pane switch now costs a request only when the reading the
+/// app already holds has aged past one interval. A tick or a click is not a
+/// first build and always asks.
 final agentUsageProvider = FutureProvider.autoDispose
     .family<AgentUsage, AgentInstallation>((ref, installation) async {
+      final service = ref.watch(agentUsageServiceProvider);
+      if (ref.isFirstBuild) {
+        final remembered = service.rememberedIfFresh(installation);
+        if (remembered != null) return remembered;
+      }
       final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
-      return ref
-          .watch(agentUsageServiceProvider)
-          .fetch(installation, environments);
+      return service.fetch(installation, environments);
     }, retry: (_, _) => null);
 
 /// The installation whose quota the app chrome should be showing: the agent

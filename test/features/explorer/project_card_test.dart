@@ -68,7 +68,7 @@ void main() {
                 summary: summary,
                 onTap: () {},
                 onNewSession: () {},
-                menuItems: const [],
+                menuItemsBuilder: () => const [],
                 onMenu: (_) {},
               ),
             ),

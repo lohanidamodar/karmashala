@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 
-import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 
 /// What a row stands for, and therefore how strongly it is drawn.
 ///
@@ -53,18 +50,20 @@ enum ExplorerRowKind {
 ///   and the tile is indented one [indent] per level, so a session reads as
 ///   sitting inside its repository rather than merely after it.
 /// * **State.** Selected, hovered and focused are one function of the fill,
-///   shared by every row kind, so they cannot disagree.
-/// * **The menu.** Right-click, `Shift+F10` and the Menu key all open the same
-///   one — see [_openMenu] — and the button that duplicates them is drawn only
-///   when it can be wanted; see the `menuVisible` argument to [builder].
-class ExplorerRow extends StatefulWidget {
+///   shared by every row kind, so they cannot disagree — see
+///   [_ExplorerRowFill], which is the only part of a row a hover rebuilds.
+/// * **The menu.** Right-click, `Shift+F10`, the Menu key and a screen
+///   reader's action all open the same one, and the `⋮` that duplicates them
+///   is drawn only when it can be wanted. All of that is [RowContextMenu] now:
+///   the Explorer wrote it, and every pane in the app shares it.
+class ExplorerRow extends StatelessWidget {
   const ExplorerRow({
     required this.kind,
     required this.depth,
     required this.selected,
     required this.builder,
     this.onTap,
-    this.menuItems = const [],
+    this.menuItemsBuilder,
     this.onMenu,
     super.key,
   });
@@ -77,16 +76,19 @@ class ExplorerRow extends StatefulWidget {
   /// that way, above a list it is already inside.
   final VoidCallback? onTap;
 
-  final List<PopupMenuEntry<String>> menuItems;
+  /// Called when the menu opens, and not before. Null for a row with no menu.
+  final RowMenuItemBuilder? menuItemsBuilder;
+
   final ValueChanged<String>? onMenu;
 
   /// The row's content.
   ///
-  /// `menuVisible` says whether the overflow button should be drawn right now.
-  /// The row still has to *reserve* its slot when it is false — see
-  /// [ExplorerRowMenuButton] — or the text reflows the moment a pointer
-  /// arrives.
-  final Widget Function(BuildContext context, bool menuVisible) builder;
+  /// It is built when the row's *data* changes and not when a pointer crosses
+  /// it: the `⋮` reads the hover state through [RowInteractionScope] rather
+  /// than being handed a flag through here. The row still has to *reserve* the
+  /// button's slot when it is not drawn — see [RowMenuButton] — or the text
+  /// reflows the moment a pointer arrives.
+  final WidgetBuilder builder;
 
   /// One step of the tree, per level of depth.
   static const indent = Insets.md;
@@ -103,82 +105,14 @@ class ExplorerRow extends StatefulWidget {
   ///
   /// One number for every row kind: a button that is 20px on one row and 22 on
   /// the next cannot sit on a shared centre-line, which is what "not aligned
-  /// properly" was.
-  static double slotOf(UiDensity density) =>
-      density.isTouch ? Touch.target : Chrome.icon + Insets.sm;
+  /// properly" was. Deferred to [RowMenuButton] so the verbs beside the menu
+  /// cannot drift away from it.
+  static double slotOf(UiDensity density) => RowMenuButton.slotOf(density);
 
   /// The glyph inside that slot.
-  static double glyphOf(UiDensity density) =>
-      density.isTouch ? Touch.icon : Chrome.icon;
+  static double glyphOf(UiDensity density) => RowMenuButton.glyphOf(density);
 
-  @override
-  State<ExplorerRow> createState() => _ExplorerRowState();
-}
-
-class _ExplorerRowState extends State<ExplorerRow> {
-  bool _hovered = false;
-  bool _focused = false;
-
-  bool get _hasMenu => widget.menuItems.isNotEmpty && widget.onMenu != null;
-
-  /// The keyboard's way to the same menu the mouse gets from a right-click.
-  ///
-  /// `Shift+F10` and the Menu key are the platform convention, and they are
-  /// what makes revealing the overflow button on hover honest rather than a
-  /// regression: the menu is reachable from a focused row with no pointer at
-  /// all.
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || !_hasMenu) return KeyEventResult.ignored;
-    final wanted =
-        event.logicalKey == LogicalKeyboardKey.contextMenu ||
-        (event.logicalKey == LogicalKeyboardKey.f10 &&
-            HardwareKeyboard.instance.isShiftPressed);
-    if (!wanted) return KeyEventResult.ignored;
-    final context = node.context;
-    if (context == null) return KeyEventResult.ignored;
-    _openMenu(context);
-    return KeyEventResult.handled;
-  }
-
-  /// Opens the row's menu against the row itself.
-  ///
-  /// Anchored under the row's leading edge rather than at the pointer, because
-  /// there is no pointer: this is the path a keyboard takes.
-  Future<void> _openMenu(BuildContext context) async {
-    final box = context.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null || !box.hasSize) return;
-    final origin = box.localToGlobal(
-      Offset(Insets.lg, box.size.height),
-      ancestor: overlay,
-    );
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(origin.dx, origin.dy, 1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: widget.menuItems,
-    );
-    if (selected != null) widget.onMenu?.call(selected);
-  }
-
-  /// Resting tone, then the states, in the order they compose: what is selected
-  /// stays selected while it is hovered.
-  Color _fill(ColorScheme scheme) {
-    var color = widget.kind.surface(scheme);
-    if (widget.selected) {
-      color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.14), color);
-    }
-    if (_focused) {
-      color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.10), color);
-    }
-    if (_hovered) {
-      color = Color.alphaBlend(scheme.onSurface.withValues(alpha: 0.06), color);
-    }
-    return color;
-  }
+  bool get _hasMenu => menuItemsBuilder != null && onMenu != null;
 
   /// A floor, never a fixed height: every row still grows with its text at
   /// 200% scale instead of clipping it.
@@ -186,19 +120,13 @@ class _ExplorerRowState extends State<ExplorerRow> {
     if (density.isTouch) return Touch.target;
     // A session card is three lines and sets its own height; the single-line
     // structural rows share the chrome's row height.
-    return widget.kind == ExplorerRowKind.session ? 0 : Chrome.row;
+    return kind == ExplorerRowKind.session ? 0 : Chrome.row;
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final density = UiDensity.of(context);
-    // A thumb has neither a hover nor a right-click, so on a touch-width
-    // surface the button is the only way to the menu and is always drawn. A
-    // pointer has both, and a permanent button on every one of a hundred rows
-    // is the clutter that was reported — so there it is revealed by the pointer
-    // or by the keyboard. Width, never the operating system (CLAUDE.md §6).
-    final menuVisible = density.isTouch || _hovered || _focused;
 
     Widget content = Padding(
       padding: EdgeInsets.symmetric(
@@ -207,7 +135,7 @@ class _ExplorerRowState extends State<ExplorerRow> {
         // between rows, which is what makes them read as separate things.
         vertical: density.isTouch ? density.padY : Insets.xs,
       ),
-      child: widget.builder(context, menuVisible),
+      child: Builder(builder: builder),
     );
     final minHeight = _minHeight(density);
     if (minHeight > 0) {
@@ -217,159 +145,99 @@ class _ExplorerRowState extends State<ExplorerRow> {
       );
     }
 
-    Widget tile = DecoratedBox(
-      decoration: BoxDecoration(
-        color: _fill(scheme),
-        borderRadius: ExplorerRow._radius,
-      ),
-      child: Stack(
-        children: [
-          InkWell(
-            onTap: widget.onTap,
-            onHover: (hovered) {
-              if (_hovered != hovered) setState(() => _hovered = hovered);
-            },
-            // The ink itself is invisible — it paints on the pane's Material,
-            // under this tile's own fill — so hover, focus and selection are
-            // painted by [_fill] instead. The well is still what carries the
-            // tap, the focus node and Enter-activates-the-row.
-            borderRadius: ExplorerRow._radius,
-            child: content,
-          ),
-          if (widget.selected)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: Container(
-                  width: ExplorerRow._rule,
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(Radii.sm),
-                    ),
+    // Built once, and handed to the fill as a `child` it passes straight
+    // through: a hover repaints the tone and rebuilds nothing inside it.
+    final stack = Stack(
+      children: [
+        InkWell(
+          onTap: onTap,
+          // The ink itself is invisible — it paints on the pane's Material,
+          // under this tile's own fill — so hover, focus and selection are
+          // painted by [_ExplorerRowFill] instead. The well is still what
+          // carries the tap, the focus node and Enter-activates-the-row.
+          borderRadius: ExplorerRow._radius,
+          child: content,
+        ),
+        if (selected)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: ExplorerRow._rule,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(Radii.sm),
                   ),
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
-
-    if (_hasMenu) {
-      tile = ContextMenuRegion(
-        menuItems: widget.menuItems,
-        onSelected: widget.onMenu!,
-        child: tile,
-      );
-      // The menu as a semantics action on the row itself, not only as a button
-      // that appears under a pointer.
-      //
-      // Revealing the button on hover took the control out of the semantics
-      // tree: a screen reader's browse mode does not move Flutter's focus, so
-      // there was no "Session actions" to find anywhere in the pane — the menu
-      // existed for a mouse and for a keyboard, and for nothing else. A custom
-      // action restores it for every row without putting a hundred more
-      // widgets and focus nodes back on the list.
-      // The value, not the variable: the closure would otherwise read `tile`
-      // after this assignment and build itself for ever.
-      final withMenu = tile;
-      tile = Builder(
-        builder: (context) => Semantics(
-          customSemanticsActions: {
-            CustomSemanticsAction(label: widget.kind.menuLabel): () =>
-                _openMenu(context),
-          },
-          child: withMenu,
-        ),
-      );
-    }
 
     return Padding(
       padding: EdgeInsets.only(
-        left: Insets.xs + widget.depth * ExplorerRow.indent,
+        left: Insets.xs + depth * ExplorerRow.indent,
         right: Insets.xs,
         bottom: ExplorerRow.gap,
       ),
-      // Not a focus stop of its own: it watches the row's *subtree*, so the row
-      // still reads as focused while the keyboard is inside the menu button it
-      // just revealed — otherwise tabbing to that button would hide it.
-      child: Focus(
-        canRequestFocus: false,
-        skipTraversal: true,
-        onFocusChange: (focused) {
-          if (_focused != focused) setState(() => _focused = focused);
-        },
-        onKeyEvent: _onKey,
-        child: tile,
+      // Right-click, `Shift+F10`, the Menu key and the screen-reader action all
+      // come from here, along with the hover state the fill and the `⋮` listen
+      // to. The Explorer wrote all of that first; it is shared now so that every
+      // pane answers a row the same way.
+      child: RowContextMenu(
+        menuLabel: kind.menuLabel,
+        itemBuilder: _hasMenu ? menuItemsBuilder : null,
+        onSelected: onMenu ?? (_) {},
+        builder: (context) =>
+            _ExplorerRowFill(kind: kind, selected: selected, child: stack),
       ),
     );
   }
 }
 
-/// The row's overflow menu, in the slot every row kind reserves for it.
+/// The tone a row rests at, and the two states that tint it.
 ///
-/// One size, one glyph, one hit area, so the button lands on the same
-/// centre-line whether the row is a project, a folder or a session.
-///
-/// [visible] false keeps the slot and draws nothing in it. That is deliberate
-/// twice over: the row's text must not reflow when a pointer arrives, and an
-/// absent button is absent from the focus ring too, so a hundred sessions cost
-/// a hundred tab stops instead of two hundred.
-///
-/// **It stays while its own menu is open, and that is not a nicety.** Opening
-/// the menu pushes a route whose modal barrier takes both the hover and the
-/// focus off the row in the same frame, so a button drawn only for a hovering
-/// pointer unmounted itself underneath its own menu — and `showMenu` drops the
-/// result when the button that opened it is gone. Every choice on every row was
-/// silently discarded for a mouse user; right-click and Shift+F10 worked, which
-/// is exactly why the tests did not see it.
-class ExplorerRowMenuButton extends StatefulWidget {
-  const ExplorerRowMenuButton({
-    required this.visible,
-    required this.tooltip,
-    required this.items,
-    required this.onSelected,
-    super.key,
+/// Its own widget because it is the *only* part of a row a hover changes: as a
+/// dependent of [RowInteractionScope] it is what a pointer rebuilds, and
+/// [child] — the whole card — travels through it untouched. See
+/// [RowInteraction] for the lag this shape exists to fix.
+class _ExplorerRowFill extends StatelessWidget {
+  const _ExplorerRowFill({
+    required this.kind,
+    required this.selected,
+    required this.child,
   });
 
-  final bool visible;
-  final String tooltip;
-  final List<PopupMenuEntry<String>> items;
-  final ValueChanged<String> onSelected;
-
-  @override
-  State<ExplorerRowMenuButton> createState() => _ExplorerRowMenuButtonState();
-}
-
-class _ExplorerRowMenuButtonState extends State<ExplorerRowMenuButton> {
-  bool _open = false;
+  final ExplorerRowKind kind;
+  final bool selected;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final density = UiDensity.of(context);
-    final slot = ExplorerRow.slotOf(density);
-    return SizedBox(
-      width: slot,
-      height: slot,
-      child: widget.visible || _open
-          ? PopupMenuButton<String>(
-              tooltip: widget.tooltip,
-              padding: EdgeInsets.zero,
-              iconSize: ExplorerRow.glyphOf(density),
-              icon: const Icon(AppIcons.dotsThreeVertical),
-              onOpened: () => setState(() => _open = true),
-              onCanceled: () {
-                if (mounted) setState(() => _open = false);
-              },
-              onSelected: (value) {
-                if (mounted) setState(() => _open = false);
-                widget.onSelected(value);
-              },
-              itemBuilder: (context) => widget.items,
-            )
-          : null,
+    final scheme = Theme.of(context).colorScheme;
+    final interaction = RowInteractionScope.maybeOf(context);
+    // Resting tone, then the states, in the order they compose: what is
+    // selected stays selected while it is hovered.
+    var color = kind.surface(scheme);
+    if (selected) {
+      color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.14), color);
+    }
+    if (interaction?.focused ?? false) {
+      color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.10), color);
+    }
+    if (interaction?.hovered ?? false) {
+      color = Color.alphaBlend(scheme.onSurface.withValues(alpha: 0.06), color);
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: ExplorerRow._radius,
+      ),
+      child: child,
     );
   }
 }

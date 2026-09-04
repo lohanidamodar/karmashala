@@ -87,7 +87,7 @@ void main() {
     stat: stat,
     worktree: worktree,
     onTap: () {},
-    menuItems: const [],
+    menuItemsBuilder: () => const [],
     onMenu: (_) {},
   );
 

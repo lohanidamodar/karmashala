@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/util/clock.dart';
@@ -11,13 +12,33 @@ import '../domain/agent_installation.dart';
 import '../domain/agent_ids.dart';
 import '../domain/agent_registry.dart';
 import '../domain/agent_usage.dart';
+import '../domain/usage_failure.dart';
 import 'claude_auth_service.dart';
+import 'usage_throttle.dart';
 import '../../environments/domain/environment_label.dart';
 
 /// Raised when a usage lookup cannot complete.
+///
+/// [kind] is what the surfaces switch on: a rate limit, an expired token and an
+/// unreachable endpoint are three different situations for the user, and for
+/// years they arrived here as one grey dash. [message] stays the sentence a
+/// human reads.
 class UsageException implements Exception {
-  UsageException(this.message);
+  UsageException(
+    this.message, {
+    this.kind = UsageFailureKind.unusable,
+    this.retryIn,
+  });
+
   final String message;
+
+  final UsageFailureKind kind;
+
+  /// How long until this account may ask again. Only ever set for
+  /// [UsageFailureKind.rateLimited] — every other failure may be retried by the
+  /// next tick.
+  final Duration? retryIn;
+
   @override
   String toString() => 'UsageException: $message';
 }
@@ -35,6 +56,14 @@ class UsageException implements Exception {
 /// token has expired the request 401s; rather than refresh it ourselves (which
 /// could disturb the CLI's own credentials), we surface a clear message telling
 /// the user to run the agent once to refresh.
+///
+/// **Every request the app makes to either endpoint goes through [fetch]**, and
+/// [fetch] is where the [UsageThrottle] sits: it serves a reading the app
+/// already has rather than asking again inside one poll interval, and it
+/// refuses outright while a `429` is still in force. That is deliberate — the
+/// chip, the settings panel and the fan-out dialog each used to be their own
+/// unrated request path, which is how a user with several panes could spend far
+/// more than the one-a-minute the poll interval suggests.
 class AgentUsageService {
   AgentUsageService({
     required this.storeLocator,
@@ -42,13 +71,19 @@ class AgentUsageService {
     HttpClient Function()? httpClientFactory,
     ClaudeKeychainCache? keychain,
     bool? hostIsMacOS,
+    UsageThrottle? throttle,
   }) : _newClient = httpClientFactory ?? HttpClient.new,
        _keychain = keychain ?? claudeKeychain,
-       _hostIsMacOS = hostIsMacOS ?? Platform.isMacOS;
+       _hostIsMacOS = hostIsMacOS ?? Platform.isMacOS,
+       _throttle = throttle ?? UsageThrottle(clock: clock);
 
   final CliStoreLocator storeLocator;
   final Clock clock;
   final HttpClient Function() _newClient;
+
+  /// What was read last, and how long the vendor said to wait. Shared by every
+  /// caller of this service, which is the point: one account, one limit.
+  final UsageThrottle _throttle;
 
   /// The memo in front of `security find-generic-password`. Injectable so a
   /// test can count the spawns this service causes.
@@ -73,8 +108,88 @@ class AgentUsageService {
     'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
   );
 
+  /// The last reading taken for this account, however old, or null if none was
+  /// taken in this run.
+  ///
+  /// **Every surface shows this when a lookup fails**, with its age beside it.
+  /// A number the app read four minutes ago is worth more than a dash, as long
+  /// as it never pretends to be live — the reason `AgentStatusReport.evidenceAt`
+  /// exists.
+  AgentUsage? remembered(AgentInstallation installation) =>
+      _throttle.remembered(installation);
+
+  /// The refusal this account would get if it asked right now, or null.
+  ///
+  /// So a surface can say *why* the number is not moving without making the
+  /// request that would tell it — the settings panel opens on this rather than
+  /// looking untroubled while the chip shows a stalled reading. Recomputed on
+  /// every call, so the countdown in it is the one that is true now.
+  UsageException? pendingPause(AgentInstallation installation) {
+    final pause = _throttle.pauseFor(installation);
+    return pause == null ? null : _waiting(pause);
+  }
+
+  /// A reading young enough to stand in for a fresh one, or null.
+  ///
+  /// What stops a pane switch costing a request: `agentUsageProvider` is
+  /// `autoDispose` and family-keyed on the installation, so moving between two
+  /// panes re-creates it every time, and each re-creation used to be an
+  /// unconditional trip to the vendor.
+  AgentUsage? rememberedIfFresh(AgentInstallation installation) =>
+      _throttle.rememberedIfFresh(installation);
+
   /// Fetches usage for [installation]. Throws [UsageException] on any failure.
+  ///
+  /// Refuses without a request while the account is rate limited: the whole
+  /// point of a backoff is that the request is not made.
   Future<AgentUsage> fetch(
+    AgentInstallation installation,
+    List<ExecutionEnvironment> environments,
+  ) async {
+    final pending = pendingPause(installation);
+    if (pending != null) throw pending;
+    try {
+      final usage = await fetchFresh(installation, environments);
+      _throttle.recordSuccess(installation, usage);
+      return usage;
+    } on UsageException catch (e) {
+      if (!_worthWaitingOut(e.kind)) rethrow;
+      // The server's own `Retry-After` when it sent one, our doubling when it
+      // did not. Either way the wait is decided here, where the consecutive
+      // count lives, and not at the socket.
+      throw _waiting(
+        _throttle.recordRefusal(
+          installation,
+          kind: e.kind,
+          reason: e.message,
+          retryAfter: e.retryIn,
+        ),
+      );
+    }
+  }
+
+  /// The two failures that mean *stop asking*: being throttled, and pushing on
+  /// a server that is already struggling. An expired token and an unreachable
+  /// endpoint are neither — the first is fixed by the user and must be noticed
+  /// on the next tick, and the second costs the vendor nothing.
+  static bool _worthWaitingOut(UsageFailureKind kind) =>
+      kind == UsageFailureKind.rateLimited ||
+      kind == UsageFailureKind.serverBusy;
+
+  UsageException _waiting(UsagePause pause) => UsageException(
+    '${pause.reason} Waiting ${describeUsageWait(pause.wait)} before asking '
+    'again.',
+    kind: pause.kind,
+    retryIn: pause.wait,
+  );
+
+  /// The lookup itself, with no memory and no backoff in front of it.
+  ///
+  /// Separate from [fetch] so a test double can answer the network half while
+  /// still being throttled and remembered exactly like the real one.
+  @protected
+  @visibleForOverriding
+  Future<AgentUsage> fetchFresh(
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
@@ -87,6 +202,7 @@ class AgentUsageService {
       throw UsageException(
         'Usage is not available for '
         '${AgentRegistry.builtIn.displayNameFor(agentId)}.',
+        kind: UsageFailureKind.notAsked,
       );
     }
     final stores = await storeLocator.locate(environments);
@@ -100,6 +216,7 @@ class AgentUsageService {
     if (store == null) {
       throw UsageException(
         'Could not locate the store for ${describeEnvironmentId(installation.environmentId)}.',
+        kind: UsageFailureKind.notAsked,
       );
     }
 
@@ -131,7 +248,12 @@ class AgentUsageService {
     required bool keychain,
   }) async {
     final home = store.claudeHome;
-    if (home == null) throw UsageException('No Claude store for this install.');
+    if (home == null) {
+      throw UsageException(
+        'No Claude store for this install.',
+        kind: UsageFailureKind.notAsked,
+      );
+    }
 
     // Read email from .claude.json if available
     String? email;
@@ -141,7 +263,6 @@ class AgentUsageService {
     if (oauthAccount is Map<String, dynamic>) {
       email = oauthAccount['emailAddress'] as String?;
     }
-
     // On macOS there is no credentials file: Claude Code keeps `claudeAiOauth`
     // in the login Keychain. Same object, different cupboard.
     if (!keychain) {
@@ -160,6 +281,7 @@ class AgentUsageService {
         'macOS would not release the Claude credential from the Keychain'
         '${detail == null ? '' : ' ($detail)'}. Allow Karmashala access to '
         '"${ClaudeAuthService.keychainService}" in Keychain Access.',
+        kind: UsageFailureKind.auth,
       );
     }
     try {
@@ -185,7 +307,10 @@ class AgentUsageService {
 
   Future<AgentUsage> _claudeUsage(String? token, {String? email}) async {
     if (token == null) {
-      throw UsageException('Not signed in to Claude in this environment.');
+      throw UsageException(
+        'Not signed in to Claude in this environment.',
+        kind: UsageFailureKind.auth,
+      );
     }
     final json = await _getJson(_claudeUsageUrl, {
       'Authorization': 'Bearer $token',
@@ -196,14 +321,22 @@ class AgentUsageService {
 
   Future<AgentUsage> _fetchCodex(CliStore store, p.Context ctx) async {
     final home = store.codexHome;
-    if (home == null) throw UsageException('No Codex store for this install.');
+    if (home == null) {
+      throw UsageException(
+        'No Codex store for this install.',
+        kind: UsageFailureKind.notAsked,
+      );
+    }
     final auth = await _readJson(ctx.join(home, 'auth.json'));
     final tokens = auth?['tokens'];
     final token = tokens is Map<String, dynamic>
         ? tokens['access_token'] as String?
         : null;
     if (token == null) {
-      throw UsageException('Not signed in to Codex in this environment.');
+      throw UsageException(
+        'Not signed in to Codex in this environment.',
+        kind: UsageFailureKind.auth,
+      );
     }
     final idToken = tokens is Map<String, dynamic>
         ? tokens['id_token'] as String?
@@ -319,26 +452,72 @@ class AgentUsageService {
       final request = await client.getUrl(url);
       headers.forEach(request.headers.set);
       final response = await request.close();
+      final status = response.statusCode;
+      // Read the header before the body. On a `429` the body is a vendor error
+      // blob we do not parse, and `Retry-After` — the one thing RFC 9110 says
+      // every 429 may carry — is the only part of that answer worth having.
+      // Both endpoints are treated identically here: neither is documented, and
+      // guessing at a vendor-specific header we cannot observe without making
+      // the very request we are trying not to make would be inventing evidence.
+      final retryAfter = status >= HttpStatus.tooManyRequests
+          ? parseRetryAfter(
+              response.headers.value(HttpHeaders.retryAfterHeader),
+              clock.nowUtc(),
+            )
+          : null;
       final body = await response.transform(utf8.decoder).join();
-      if (response.statusCode == 401) {
+      // Neither of these carries the wait itself: how long to hold off is the
+      // throttle's decision, because only it knows how many refusals came
+      // before this one.
+      if (status == HttpStatus.tooManyRequests) {
         throw UsageException(
-          'Access token expired. Run the agent once to refresh, then retry.',
+          'Rate limited by the usage service.',
+          kind: UsageFailureKind.rateLimited,
+          retryIn: retryAfter,
         );
       }
-      if (response.statusCode != 200) {
+      if (status >= HttpStatus.internalServerError) {
         throw UsageException(
-          'Usage request failed (HTTP ${response.statusCode}).',
+          'The usage service is having trouble (HTTP $status).',
+          kind: UsageFailureKind.serverBusy,
+          retryIn: retryAfter,
+        );
+      }
+      if (status == HttpStatus.unauthorized) {
+        throw UsageException(
+          'Access token expired. Run the agent once to refresh, then retry.',
+          kind: UsageFailureKind.auth,
+        );
+      }
+      if (status != HttpStatus.ok) {
+        throw UsageException(
+          'Usage request failed (HTTP $status).',
+          kind: UsageFailureKind.unusable,
         );
       }
       final decoded = jsonDecode(body);
       if (decoded is! Map<String, dynamic>) {
-        throw UsageException('Unexpected usage response shape.');
+        throw UsageException(
+          'Unexpected usage response shape.',
+          kind: UsageFailureKind.unusable,
+        );
       }
       return decoded;
     } on UsageException {
       rethrow;
+    } on FormatException catch (e) {
+      // An answer we could not read is not an endpoint we could not reach, and
+      // telling the user to check their network over a malformed body sends
+      // them somewhere there is nothing to find.
+      throw UsageException(
+        'The usage service sent something we could not read: ${e.message}',
+        kind: UsageFailureKind.unusable,
+      );
     } catch (e) {
-      throw UsageException('Could not reach the usage service: $e');
+      throw UsageException(
+        'Could not reach the usage service: $e',
+        kind: UsageFailureKind.unreachable,
+      );
     } finally {
       client.close(force: true);
     }
@@ -378,6 +557,28 @@ class AgentUsageService {
     } finally {
       client.close(force: true);
     }
+  }
+}
+
+/// `Retry-After`, in either form RFC 9110 allows: a delay in seconds, or an
+/// HTTP-date to wait until.
+///
+/// Null when the header is absent or unreadable — the caller then falls back to
+/// its own doubling, which is the case that has to work anyway, since neither
+/// vendor promises the header.
+Duration? parseRetryAfter(String? header, DateTime now) {
+  final raw = header?.trim();
+  if (raw == null || raw.isEmpty) return null;
+  final seconds = int.tryParse(raw);
+  if (seconds != null) {
+    return seconds <= 0 ? Duration.zero : Duration(seconds: seconds);
+  }
+  try {
+    final until = HttpDate.parse(raw);
+    final wait = until.difference(now);
+    return wait.isNegative ? Duration.zero : wait;
+  } on Exception {
+    return null;
   }
 }
 
