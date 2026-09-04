@@ -88,7 +88,15 @@ void main() {
     // A remote host is configured, not discovered — adding one is what makes
     // its environment exist.
     expect(environments.getById(saved.environmentId), isNotNull);
-    expect(find.text('dev@build.example.com:2222'), findsOneWidget);
+    // Named per section: this screen puts both under one scroll view, and the
+    // environment card names the same machine by the same address.
+    expect(
+      find.descendant(
+        of: find.byType(SshHostsSection),
+        matching: find.text('dev@build.example.com:2222'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the key path is stored with the environment that owns it', (
@@ -230,7 +238,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SSH'), findsOneWidget);
-    expect(find.text('ssh:id-0 · dev@build.example.com:2222'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(EnvironmentsSection),
+        matching: find.text('dev@build.example.com:2222'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
