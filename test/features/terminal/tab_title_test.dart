@@ -350,6 +350,73 @@ void main() {
             'session name it does not move as focus moves between regions',
       );
     });
+
+    test('the rename happens at the split, not when the split is filled', () {
+      // The second report, with a screenshot: `New session` on the tab strip
+      // and `New session` again in the region header directly beneath it, on a
+      // ~2000px window. Splitting starts nothing, so the second region is
+      // *empty* — and the rule used to be gated on how many regions were
+      // occupied, which is one until the user fills it. That is the whole of
+      // the state they are looking at when they split.
+      final tabId = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\karmashala',
+      );
+      final pane = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      writeTitle(controller, container, 'New session');
+      expect(
+        controller.titleForTab(tabId),
+        'New session',
+        reason: 'one pane, so the tab is that pane',
+      );
+
+      controller.splitPane(SplitAxis.horizontal);
+
+      expect(
+        controller.titleForTab(tabId),
+        'src/karmashala',
+        reason: 'the tab names itself as soon as a region header exists to '
+            'name the pane, which is the moment of the split',
+      );
+      expect(
+        controller.titleForPane(pane),
+        'New session',
+        reason: 'the region header still names the pane — the two rows now '
+            'say different things, which is the point',
+      );
+    });
+
+    test('a stack in one region renames its tab too', () {
+      // Not only splits: a region holding two panes draws a header as well, so
+      // the tab would echo whichever of them was in front. The gate is "this
+      // tab is more than one pane", which covers both shapes.
+      final host = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\karmashala',
+      );
+      final first = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      controller.activateTab(host);
+      controller.moveTabIntoSlot(guest, first);
+
+      expect(
+        container.read(terminalSessionsControllerProvider).tabs.single.layout
+            .groups,
+        hasLength(1),
+        reason: 'one region, two panes stacked in it',
+      );
+      expect(controller.titleForTab(host), 'src/karmashala');
+    });
   });
 }
 

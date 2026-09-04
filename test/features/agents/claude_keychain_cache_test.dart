@@ -1,13 +1,12 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/features/agents/data/claude_auth_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 
-import '../../support/fake_command_runner.dart';
+import '../../support/fake_cli_store_locator.dart';
+import '../../support/fake_http_client.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -39,97 +38,6 @@ class _Movable {
   _Movable(this.now);
   DateTime now;
   DateTime call() => now;
-}
-
-/// The stores the service would have found, without touching a disk.
-class _FixedStores extends CliStoreLocator {
-  _FixedStores(this.stores)
-    : super(
-        runnerFactory: FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
-      );
-
-  final List<CliStore> stores;
-
-  @override
-  Future<List<CliStore>> locate(List<dynamic> environments) async => stores;
-}
-
-/// A response the service can read, without a socket.
-class _FakeResponse extends Stream<List<int>> implements HttpClientResponse {
-  _FakeResponse(this.statusCode, this.body);
-
-  @override
-  final int statusCode;
-  final String body;
-
-  @override
-  StreamSubscription<List<int>> listen(
-    void Function(List<int> event)? onData, {
-    Function? onError,
-    void Function()? onDone,
-    bool? cancelOnError,
-  }) => Stream.value(utf8.encode(body)).listen(
-    onData,
-    onError: onError,
-    onDone: onDone,
-    cancelOnError: cancelOnError,
-  );
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeRequest implements HttpClientRequest {
-  _FakeRequest(this.response, this.sentAuthorization);
-
-  final _FakeResponse response;
-  final List<String?> sentAuthorization;
-
-  @override
-  final HttpHeaders headers = _FakeHeaders();
-
-  @override
-  Future<HttpClientResponse> close() async {
-    sentAuthorization.add((headers as _FakeHeaders).values['authorization']);
-    return response;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeHeaders implements HttpHeaders {
-  final values = <String, String>{};
-
-  @override
-  void set(String name, Object value, {bool preserveHeaderCase = false}) =>
-      values[name.toLowerCase()] = '$value';
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeHttpClient implements HttpClient {
-  _FakeHttpClient(this.statusCode, this.body);
-
-  int statusCode;
-  String body;
-  final sentAuthorization = <String?>[];
-  int requests = 0;
-
-  @override
-  Future<HttpClientRequest> getUrl(Uri url) async {
-    requests++;
-    return _FakeRequest(_FakeResponse(statusCode, body), sentAuthorization);
-  }
-
-  /// The service closes its client in a `finally`, so this is on the path of
-  /// every fetch including the failing ones.
-  @override
-  void close({bool force = false}) {}
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 const _usageBody = '{"five_hour": {"utilization": 42.0}}';
@@ -274,15 +182,15 @@ void main() {
   });
 
   group('the Claude usage fetch on a Mac', () {
-    late _FakeHttpClient http;
+    late FakeHttpClient http;
 
     AgentUsageService serviceWith(
       ClaudeKeychainCache keychain, {
-      _FakeHttpClient? client,
+      FakeHttpClient? client,
     }) {
-      http = client ?? _FakeHttpClient(200, _usageBody);
+      http = client ?? FakeHttpClient(statusCode: 200, body: _usageBody);
       return AgentUsageService(
-        storeLocator: _FixedStores([
+        storeLocator: FixedLocator([
           const CliStore(
             environmentId: 'windows',
             homesByAgentId: {'claudeCode': '/Users/me/.claude'},
@@ -356,7 +264,7 @@ void main() {
         ),
       );
       final cache = ClaudeKeychainCache(read: security.read);
-      final client = _FakeHttpClient(401, '{}');
+      final client = FakeHttpClient(statusCode: 401, body: '{}');
       final service = serviceWith(cache, client: client);
 
       await expectLater(

@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -16,7 +17,9 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/verification/data/verification_dao.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
 import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -145,5 +148,65 @@ void main() {
       isTrue,
     );
     expect(SessionDao(db).getById('s1')!.status, SessionStatus.failed);
+  });
+
+  /// The same rule the Todos and Notes panes keep, on the pane whose rows
+  /// already carried their verbs: the row's actions are reachable by
+  /// right-click, `Shift+F10` and the Menu key, not only by aiming at a glyph.
+  ///
+  /// Nothing is hidden here — an inbox row's two buttons are both verbs the row
+  /// is *for* — so the menu is a second way to the same things plus the one the
+  /// row's own tap performs.
+  group('the row menu', () {
+    testWidgets('a right-click opens it', (tester) async {
+      SessionDao(db).insert(
+        session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
+      );
+      await pump(tester);
+
+      await tester.tap(find.text('Fix login'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open the session'), findsOneWidget);
+      expect(find.text('Dismiss'), findsOneWidget);
+    });
+
+    testWidgets('Shift+F10 opens it from the focused row', (tester) async {
+      SessionDao(db).insert(
+        session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
+      );
+      await pump(tester);
+
+      Focus.of(tester.element(find.text('Fix login'))).requestFocus();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open the session'), findsOneWidget);
+    });
+
+    testWidgets('so does the Menu key, and Dismiss on it clears the row', (
+      tester,
+    ) async {
+      SessionDao(db).insert(
+        session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
+      );
+      await pump(tester);
+
+      Focus.of(tester.element(find.text('Fix login'))).requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+
+      // The menu row, not the button that carries the same tooltip.
+      await tester.tap(find.widgetWithText(DesktopMenuItem<String>, 'Dismiss'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing needs you.'), findsOneWidget);
+      expect(FollowUpDao(db).open(), isEmpty);
+    });
   });
 }

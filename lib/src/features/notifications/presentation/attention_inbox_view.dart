@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_handoff_service.dart';
 import '../../sessions/domain/session_resume.dart';
@@ -90,23 +92,19 @@ class AttentionInboxView extends ConsumerWidget {
 /// button that launches. The confirmation is not skipped; only the hunt for it
 /// is.
 ///
-/// Its own widget so that only follow-up rows read
-/// [sessionContinuationProvider] — the answer costs three row lookups, and the
-/// inbox draws two hundred rows of other kinds that would learn nothing from
-/// it.
-class _ContinueAction extends ConsumerWidget {
+/// Its own widget for the shape of the control, not for the answer: whether a
+/// continuation is possible is now read once per row by [_InboxRow], because
+/// the row's *menu* has to offer the same verb this button does and the two
+/// must not disagree. The property that mattered is unchanged — only follow-up
+/// rows read [sessionContinuationProvider] at all, and the answer costs three
+/// row lookups the inbox's other two hundred rows would learn nothing from.
+class _ContinueAction extends StatelessWidget {
   const _ContinueAction({required this.sessionId});
 
   final String sessionId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Hidden rather than disabled when there is nowhere to go, matching the
-    // delivery strip: a dead control on every row of a list reads as a broken
-    // feature, and the dialog behind it would have nothing to offer.
-    if (!ref.watch(sessionContinuationProvider(sessionId)).isPossible) {
-      return const SizedBox.shrink();
-    }
+  Widget build(BuildContext context) {
     return IconButton(
       // The accessible name, so Narrator reads the promise and not just
       // "button" — the tooltip is the only place this control can make it.
@@ -120,7 +118,16 @@ class _ContinueAction extends ConsumerWidget {
   }
 }
 
-class _InboxRow extends StatelessWidget {
+/// One waiting thing, and the two verbs it is for.
+///
+/// The buttons that stay are the ones the row *is* for — dismissing a notice
+/// you have dealt with, and, on a follow-up, the "Continue with…" the row
+/// exists to ask. What the row had no way to offer was any of it without a
+/// mouse, so [RowContextMenu] adds the right-click, `Shift+F10`, the Menu key
+/// and the screen-reader action, over the same verbs plus the one the row's own
+/// tap performs. There is no `⋮` here because there is nothing behind it: every
+/// action this row has is already a visible verb.
+class _InboxRow extends ConsumerWidget {
   const _InboxRow({
     required this.item,
     required this.now,
@@ -134,7 +141,7 @@ class _InboxRow extends StatelessWidget {
   final VoidCallback onDismiss;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
@@ -156,79 +163,112 @@ class _InboxRow extends StatelessWidget {
     // Seen items stay in the list but stop shouting — an approval you have
     // read is still an approval you have not answered.
     final muted = item.seen;
+    // Read on follow-up rows and nowhere else; see [_ContinueAction].
+    final canContinue =
+        item.kind == InboxItemKind.followUp &&
+        ref
+            .watch(sessionContinuationProvider(item.session.openId))
+            .isPossible;
 
-    return InkWell(
-      onTap: onOpen,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.xs, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                icon,
-                size: Chrome.icon,
-                color: muted ? scheme.onSurfaceVariant : colour,
+    return RowContextMenu(
+      menuLabel: 'Actions for “${item.label}”',
+      itemBuilder: () => [
+        DesktopMenuItem(
+          value: 'open',
+          label: 'Open the session',
+          icon: AppIcons.arrowSquareOut,
+        ),
+        if (canContinue)
+          DesktopMenuItem(
+            value: 'continue',
+            label: 'Continue with…',
+            icon: AppIcons.arrowBendDownRight,
+          ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'dismiss',
+          label: 'Dismiss',
+          icon: AppIcons.x,
+        ),
+      ],
+      onSelected: (value) => switch (value) {
+        'open' => onOpen(),
+        'continue' => ContinueWithDialog.show(context, item.session.openId),
+        _ => onDismiss(),
+      },
+      builder: (context) => InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.xs, 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  icon,
+                  size: Chrome.icon,
+                  color: muted ? scheme.onSurfaceVariant : colour,
+                ),
               ),
-            ),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
-                      color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
-                    ),
-                  ),
-                  Text(
-                    '${item.kind.label}  ·  '
-                    '${describeAge(now.difference(item.at))}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  // The source's own words, when it gave any. Two lines: enough
-                  // to decide whether to open the session without opening it,
-                  // and not so much that the list stops being a list.
-                  if (item.detail case final detail?)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        detail,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
+                        color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
                       ),
                     ),
-                ],
+                    Text(
+                      '${item.kind.label}  ·  '
+                      '${describeAge(now.difference(item.at))}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    // The source's own words, when it gave any. Two lines: enough
+                    // to decide whether to open the session without opening it,
+                    // and not so much that the list stops being a list.
+                    if (item.detail case final detail?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          detail,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            // Only a follow-up, and deliberately: a follow-up is a session that
-            // *ended* and left something behind, which is the question
-            // "Continue with…" answers. Every other kind belongs to a session
-            // that is still there to be talked to, and opening the row is the
-            // whole of dealing with it.
-            if (item.kind == InboxItemKind.followUp)
-              _ContinueAction(sessionId: item.session.openId),
-            IconButton(
-              tooltip: 'Dismiss',
-              iconSize: Chrome.iconAction,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(AppIcons.x),
-              onPressed: onDismiss,
-            ),
-          ],
+              // Only a follow-up, and deliberately: a follow-up is a session that
+              // *ended* and left something behind, which is the question
+              // "Continue with…" answers. Every other kind belongs to a session
+              // that is still there to be talked to, and opening the row is the
+              // whole of dealing with it.
+              if (canContinue)
+                _ContinueAction(sessionId: item.session.openId),
+              IconButton(
+                tooltip: 'Dismiss',
+                iconSize: Chrome.iconAction,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(AppIcons.x),
+                onPressed: onDismiss,
+              ),
+            ],
+          ),
         ),
       ),
     );

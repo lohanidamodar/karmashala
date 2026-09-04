@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +60,32 @@ void main() {
     );
     await tester.pumpAndSettle();
     return container;
+  }
+
+  /// Puts a mouse on [finder] and leaves it there.
+  Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(() => gesture.removePointer());
+    await gesture.moveTo(tester.getCenter(finder));
+    await tester.pumpAndSettle();
+    return gesture;
+  }
+
+  /// Opens a card's menu the way a mouse does: hover the card, then press the
+  /// `⋮` the hover just revealed, then pick [choice].
+  Future<void> pickFromRowMenu(
+    WidgetTester tester,
+    String title,
+    String choice,
+  ) async {
+    // `.first` because a short note's title and its body are the same run of
+    // text, drawn twice on the one card.
+    await hover(tester, find.text(title).first);
+    await tester.tap(find.byTooltip('Actions for “$title”'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(choice));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('a note captured from a session is filed under its project', (
@@ -135,8 +162,7 @@ void main() {
     final note = notes.capture(body: 'about the toolbar', projectId: 'p1');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Edit note'));
-    await tester.pumpAndSettle();
+    await pickFromRowMenu(tester, 'about the toolbar', 'Edit note');
     // The dialog opens on the note's current filing.
     expect(find.text('Demo'), findsOneWidget);
     await tester.tap(find.text('Demo'));

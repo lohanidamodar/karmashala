@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../application/session_diff_stat.dart';
 import 'explorer_row.dart';
 import 'session_card.dart';
@@ -34,7 +35,7 @@ class ProjectCard extends StatelessWidget {
     required this.selected,
     required this.summary,
     required this.onTap,
-    required this.menuItems,
+    required this.menuItemsBuilder,
     required this.onMenu,
     this.onNewSession,
     this.missing = false,
@@ -63,7 +64,8 @@ class ProjectCard extends StatelessWidget {
   final VoidCallback? onNewSession;
 
   final VoidCallback? onTogglePin;
-  final List<PopupMenuEntry<String>> menuItems;
+  /// Called when the menu opens, and not before — see `RowMenuItemBuilder`.
+  final RowMenuItemBuilder menuItemsBuilder;
   final ValueChanged<String> onMenu;
 
   /// Whether to draw the row's overflow menu. See [SessionCard.showMenu].
@@ -96,10 +98,10 @@ class ProjectCard extends StatelessWidget {
       depth: 0,
       selected: selected,
       onTap: onTap,
-      menuItems: menuItems,
+      menuItemsBuilder: menuItemsBuilder,
       onMenu: onMenu,
-      builder: (context, menuVisible) => density.isTouch
-          ? _touchBody(context, muted, semantic, density, menuVisible)
+      builder: (context) => density.isTouch
+          ? _touchBody(context, muted, semantic, density)
           : LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
@@ -114,7 +116,6 @@ class ProjectCard extends StatelessWidget {
                       density,
                       wide: width >= aggregateWidth,
                       roomy: width >= badgeWidth,
-                      menuVisible: menuVisible,
                     ),
                     SizedBox(height: density.lineGap),
                     _line2(context, muted, density),
@@ -137,7 +138,6 @@ class ProjectCard extends StatelessWidget {
     TextStyle? muted,
     SemanticColors semantic,
     UiDensity density,
-    bool menuVisible,
   ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -175,10 +175,9 @@ class ProjectCard extends StatelessWidget {
                 onPressed: onNewSession,
               ),
             if (showMenu)
-              ExplorerRowMenuButton(
-                visible: menuVisible,
+              RowMenuButton(
                 tooltip: 'Project actions',
-                items: menuItems,
+                itemBuilder: menuItemsBuilder,
                 onSelected: onMenu,
               ),
             const SizedBox(width: Insets.xs),
@@ -242,7 +241,6 @@ class ProjectCard extends StatelessWidget {
     UiDensity density, {
     required bool wide,
     required bool roomy,
-    required bool menuVisible,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -304,10 +302,9 @@ class ProjectCard extends StatelessWidget {
             onPressed: onNewSession,
           ),
         if (showMenu)
-          ExplorerRowMenuButton(
-            visible: menuVisible,
+          RowMenuButton(
             tooltip: 'Project actions',
-            items: menuItems,
+            itemBuilder: menuItemsBuilder,
             onSelected: onMenu,
           ),
       ],

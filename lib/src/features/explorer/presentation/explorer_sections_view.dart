@@ -5,6 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../application/checkout.dart';
@@ -146,11 +147,12 @@ class _SectionHeader extends ConsumerWidget {
     final muted = density.muted(theme);
     final controller = ref.read(explorerSectionsProvider.notifier);
 
-    // Built once and handed to both the row and its button: `ExplorerRow`
-    // carries the right-click and keyboard paths to a menu, and
-    // `ExplorerRowMenuButton` is the pointer's. Two literals here would be two
-    // menus that drift.
-    final items = <PopupMenuEntry<String>>[
+    // One function, handed to both the row and its button: `ExplorerRow`
+    // carries the right-click and keyboard paths to a menu, and `RowMenuButton`
+    // is the pointer's. Two literals here would be two menus that drift — and a
+    // literal at all would build every entry on every build of every header,
+    // for a menu that is open on one of them at most.
+    List<PopupMenuEntry<String>> items() => [
       DesktopMenuItem(value: 'new', label: 'New section…', icon: AppIcons.plus),
       if (section.isEditable) ...[
         DesktopMenuItem(
@@ -183,9 +185,9 @@ class _SectionHeader extends ConsumerWidget {
       depth: 0,
       selected: false,
       onTap: () => controller.toggleCollapsed(section.id),
-      menuItems: items,
+      menuItemsBuilder: items,
       onMenu: onAction,
-      builder: (context, menuVisible) => Row(
+      builder: (context) => Row(
         children: [
           Icon(
             section.collapsed ? AppIcons.caretRight : AppIcons.caretDown,
@@ -213,10 +215,9 @@ class _SectionHeader extends ConsumerWidget {
             SizedBox(width: density.glyphGap),
             Text('$count', style: muted),
           ],
-          ExplorerRowMenuButton(
-            visible: menuVisible,
+          RowMenuButton(
             tooltip: 'Section actions',
-            items: items,
+            itemBuilder: items,
             onSelected: onAction,
           ),
         ],
