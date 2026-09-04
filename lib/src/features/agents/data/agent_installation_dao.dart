@@ -1,3 +1,5 @@
+import 'package:sqlite3/sqlite3.dart' show SqliteException;
+
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../../environments/domain/environment_path.dart';
@@ -86,6 +88,47 @@ class AgentInstallationDao {
 
   void delete(String id) {
     _db.execute('DELETE FROM agent_installations WHERE id = ?;', [id]);
+  }
+
+  /// Moves every session recorded against installation [from] onto [to].
+  ///
+  /// A session's installation is a record of *which agent ran it*, and an agent
+  /// that moved on disk — reinstalled elsewhere, or found at its durable path
+  /// after having first been seen through a wrapper — is the same agent. Left
+  /// alone, those sessions point at a row that is about to go, which is both
+  /// unresumable and undeletable: `sessions.agent_installation_id` is
+  /// `ON DELETE RESTRICT`.
+  void repointSessions({required String from, required String to}) {
+    _db.execute(
+      'UPDATE sessions SET agent_installation_id = ? '
+      'WHERE agent_installation_id = ?;',
+      [to, from],
+    );
+  }
+
+  /// Deletes [id] unless something still points at it, and says whether it
+  /// went.
+  ///
+  /// Asking first rather than deleting and catching: `sessions` references this
+  /// table `ON DELETE RESTRICT`, so removing a row that ran even one session
+  /// raises `SqliteException(1811)` — and that exception, thrown from the
+  /// middle of a re-detection sweep, used to abort the whole run and leave the
+  /// app reporting *no agents at all* because one uninstalled CLI could not be
+  /// tidied away. A row somebody's history depends on is kept, not forced.
+  bool deleteIfUnreferenced(String id) {
+    final referencing = _db.query(
+      'SELECT 1 FROM sessions WHERE agent_installation_id = ? LIMIT 1;',
+      [id],
+    );
+    if (referencing.isNotEmpty) return false;
+    try {
+      delete(id);
+      return true;
+    } on SqliteException {
+      // Some other table references it. Same rule: the row stays, and the
+      // sweep carries on rather than the app losing sight of every agent.
+      return false;
+    }
   }
 
   AgentInstallation _fromRow(Map<String, Object?> row) => AgentInstallation(
