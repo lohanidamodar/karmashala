@@ -14,11 +14,44 @@ import '../../environments/domain/environment_path.dart';
 /// original spelling: whichever one reached the provider first is the one git is
 /// handed, and both are valid paths to the same tree.
 class Checkout {
-  const Checkout(this.path);
+  const Checkout(this.path, {this.repository});
 
   /// The path as the caller wrote it. This, not the canonical form, is what
   /// runs — lower-casing a WSL path would point at nothing.
   final EnvironmentPath path;
+
+  /// The repository this working tree belongs to, when the caller knows it,
+  /// and null when it does not.
+  ///
+  /// **Deliberately outside [==] and [hashCode]**, exactly like the spelling
+  /// of [path] above: `Checkout(wt)` and `Checkout(wt, repository: repo)` are
+  /// the same working tree and must stay one provider entry, or a row and the
+  /// card under it would run git twice for one directory again. Whichever
+  /// reached the provider first is the one whose answer is used — the rule the
+  /// class doc already states for the path.
+  ///
+  /// It exists because two facts a delivery reading needs — `origin`'s URL and
+  /// `origin/HEAD` — belong to the **repository** and not to the working tree,
+  /// so every worktree of one clone has the same answer. The app knows the
+  /// pairing from the session row that made the worktree; git would only know
+  /// it after a process or a read of `.git`. See [forRepository].
+  ///
+  /// A caller that omits it is not wrong, only less thrifty: the working tree
+  /// is then treated as its own repository, which git answers identically —
+  /// remote refs are shared by every worktree — for the price of one extra
+  /// reading. It is never a wrong answer, only a repeated one.
+  final EnvironmentPath? repository;
+
+  /// The repository half of this checkout, as its own key.
+  ///
+  /// This is what a repository-level provider is keyed by: every worktree of
+  /// one clone, and the clone itself, map onto one entry. The result carries
+  /// no [repository] of its own — a repository is its own repository, and a
+  /// second spelling of that would be a second key.
+  Checkout forRepository() {
+    final repo = repository;
+    return repo == null ? this : Checkout(repo);
+  }
 
   String get _key => canonicalPathKey(path.path);
 

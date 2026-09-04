@@ -8,11 +8,13 @@ import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
@@ -475,6 +477,142 @@ void main() {
             'the peak in flight was $peakByScale — a fan-out released into '
             'one microtask queue rather than one bounded at '
             '$kCheckoutProbeConcurrency',
+      );
+    });
+  });
+
+  /// **What a repository with several worktrees pays**, which is a different
+  /// property from anything above and is not implied by any of them.
+  ///
+  /// Flatness is flatness *in the checkout count*: the groups above seed
+  /// independent repositories, deliberately, because that is the conservative
+  /// case for the question they ask. It means they cannot see sharing at all —
+  /// with one clone per checkout there is nothing to share, so a per-checkout
+  /// question and a per-repository one cost exactly the same and every
+  /// assertion above passes either way.
+  ///
+  /// The owner's workspace is the opposite shape: one hub clone with ~25
+  /// `wt-*` worktrees beside it. `origin`'s URL and `origin/HEAD` are
+  /// properties of the **repository** — they live in `.git/config` and
+  /// `refs/remotes/origin/HEAD`, and a worktree's `.git` is a file pointing at
+  /// the clone's git directory — so all twenty-six rows have the same two
+  /// answers, and until Loop 74 all twenty-six asked for them.
+  ///
+  /// Measured directly rather than through the pane, and with a fake that
+  /// answers without yielding: this group is about *how many* questions are
+  /// asked, so the frame gate and the concurrency bound — which are about
+  /// *when* and *how many at a time* — would only add pumping to it. The
+  /// groups above own both of those.
+  group('worktrees of one repository', () {
+    const repoPath = EnvironmentPath(
+      environmentId: 'windows',
+      path: r'C:\hub',
+    );
+    const worktrees = 5;
+
+    EnvironmentPath worktreeAt(int i) => EnvironmentPath(
+      environmentId: 'windows',
+      path:
+          r'C:\hub\.karmashala-worktrees\wt-'
+          '$i',
+    );
+
+    /// One clone, [worktrees] worktrees of it, and a session in each — the
+    /// shape a fan-out over one repository leaves behind.
+    void seedWorktrees() {
+      RepositoryDao(db).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
+      for (var i = 0; i < worktrees; i++) {
+        SessionDao(db).insert(
+          Session(
+            id: 'w$i',
+            repositoryId: 'r0',
+            agentInstallationId: 'a1',
+            title: 'Worktree $i',
+            useWorktree: true,
+            worktree: worktreeAt(i),
+            status: SessionStatus.running,
+            createdAt: testTime,
+            externalSessionId: 'wt-ext-$i',
+          ),
+        );
+      }
+    }
+
+    testWidgets('ask origin once, not once per worktree', (tester) async {
+      seedWorktrees();
+      // A plain fake: instant answers, so nothing here needs a frame pumped.
+      final flat = FakeCommandRunner(responder: _git);
+      final container = ProviderContainer(
+        overrides: [
+          // The neutral gate the rest of the suite takes — see
+          // `headlessProbeGate`. This container has no widget tree.
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: flat),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // `listen` and not a bare `read`: an `autoDispose` family with no
+      // listener is collected the moment it is created, and the whole property
+      // under test is that the second worktree finds the first one's answer
+      // still there.
+      final readings = <Future<void>>[];
+      for (var i = 0; i < worktrees; i++) {
+        final provider = worktreeDeliveryProvider((
+          repo: repoPath,
+          worktree: worktreeAt(i),
+        ));
+        final subscription = container.listen(provider, (_, _) {});
+        addTearDown(subscription.close);
+        readings.add(container.read(provider.future));
+      }
+      await Future.wait(readings);
+
+      final counts = <String, int>{};
+      for (final request in flat.requests) {
+        final args = request.arguments.skip(2).toList();
+        if (args.isEmpty) continue;
+        final key = args.length > 1 && args.first != 'status'
+            ? '${args[0]} ${args[1]}'
+            : args.first;
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      // ignore: avoid_print
+      print(
+        'CHECKOUT-COST worktrees repos=1 worktrees=$worktrees '
+        'git=${flat.requests.length} detail=$counts',
+      );
+
+      // Non-vacuity, and the control: the working-tree question really is
+      // asked once per working tree — five worktrees plus the clone they came
+      // from — so a repository question asked once is sharing rather than a
+      // scene that asked nothing.
+      expect(
+        counts['status'],
+        worktrees + 1,
+        reason:
+            'the scene has ${worktrees + 1} working trees; '
+            '`git status` ran ${counts['status']} times',
+      );
+      expect(
+        counts['remote get-url'],
+        1,
+        reason:
+            '`git remote get-url origin` ran ${counts['remote get-url']} times '
+            'for one repository — a repository question asked once per '
+            'worktree',
+      );
+      expect(
+        counts['rev-parse --abbrev-ref'],
+        1,
+        reason:
+            '`git rev-parse --abbrev-ref origin/HEAD` ran '
+            '${counts['rev-parse --abbrev-ref']} times for one repository — a '
+            'repository question asked once per worktree',
       );
     });
   });

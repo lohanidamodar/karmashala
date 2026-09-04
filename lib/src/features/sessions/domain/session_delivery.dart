@@ -111,8 +111,9 @@ class SessionDelivery {
   ///
   /// [behindBase] is `git rev-list --count` against whatever `origin/main` this
   /// clone last fetched. Nothing in this app runs `git fetch` — see
-  /// `checkoutDeliveryProvider`, which is deliberately five local processes and
-  /// no network — so the count is only as fresh as the user's last pull. That
+  /// `checkoutDeliveryProvider`, which is deliberately a handful of local
+  /// processes and no network — so the count is only as fresh as the user's
+  /// last pull. That
   /// makes a count above zero *proof* that the branch is behind (those commits
   /// are already on this disk and are not on this branch) and a count of zero
   /// proof of nothing at all.

@@ -8,6 +8,7 @@ import '../../git/application/changes_providers.dart';
 import '../../git/application/checkout_probe_queue.dart';
 import '../../git/domain/diff_stat.dart';
 import '../../git/domain/remote_repo.dart';
+import '../../git/domain/repository_origin.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/data/github_service.dart';
 import '../../github/domain/pull_request_snapshot.dart';
@@ -100,6 +101,48 @@ final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
   DeliveryPollController.new,
 );
 
+/// What a clone records about `origin`, **once per repository** rather than
+/// once per working tree.
+///
+/// `origin`'s URL and `origin/HEAD` are properties of the repository: they
+/// live in `.git/config` and `refs/remotes/origin/HEAD`, and a worktree's
+/// `.git` is a file pointing at the clone's git directory, so every worktree of
+/// one clone has the same answer. Asking them per *checkout* meant a
+/// repository with a dozen `wt-*` folders answered the same two questions
+/// thirteen times on every pass — measured, and asserted against, in
+/// `checkout_scale_cost_test.dart`'s `worktrees of one repository` group.
+///
+/// **Keyed by the repository, and that is the whole point.** Every worktree
+/// reading maps onto one entry through [Checkout.forRepository], so Riverpod
+/// answers the second and subsequent asks from the first one's future. The key
+/// has to be available *before* the first await for that to work, which is why
+/// [Checkout] carries the repository rather than this provider discovering it:
+/// `ref.watch` after an await is the hazard this file keeps naming, and a
+/// repository discovered by reading `.git` could only be watched after one.
+///
+/// **It caches for its own lifetime and nothing invalidates it**, deliberately.
+/// `autoDispose`, so it is collected once no row is watching — but while rows
+/// are, a `git remote set-url` or a fetch that moves `origin/HEAD` is not
+/// noticed. Both are rare, neither is watched today either, and the alternative
+/// is a watcher on two files or a re-read trigger: machinery for a fact that
+/// changes about once in the life of a clone.
+final repositoryOriginProvider = FutureProvider.autoDispose
+    .family<RepositoryOrigin, Checkout>((ref, repository) async {
+      // Read before the first await, like every other seam in this file.
+      final changes = ref.read(changesServiceProvider);
+      final probe = _probeOn(ref);
+      final dir = repository.path;
+
+      final url = await probe(() => changes.remoteUrl(dir));
+      // No remote, no default branch to look for: `origin/HEAD` cannot name
+      // one, and asking would be a process spent learning that.
+      if (url == null) return RepositoryOrigin.none;
+      return RepositoryOrigin(
+        url: url,
+        head: await probe(() => changes.originHead(dir)),
+      );
+    });
+
 /// The **local** half of a checkout's delivery state: branch, upstream, dirty
 /// files, `+N −M`, and how far it stands from its base. No network, no `gh`.
 ///
@@ -108,11 +151,13 @@ final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
 /// describing *one* working tree, and keying by session would run git twenty
 /// times for one answer.
 ///
-/// Costs three to five processes: one `git status --porcelain=v1 --branch`
-/// (branch, upstream, divergence and the file list together), one `git remote
-/// get-url`, and — when there is a remote — `rev-parse origin/HEAD` plus a
-/// `rev-list` and a `diff --numstat` against it. Recomputed when the workspace
-/// mutates, which is the signal the rest of the Explorer already rebuilds on.
+/// Costs **one to three processes of its own**: one `git status --porcelain=v1
+/// --branch` (branch, upstream, divergence and the file list together) and —
+/// when the repository has a default branch to measure against — a `rev-list`
+/// and a `diff --numstat` against it. The other two, `remote get-url` and
+/// `origin/HEAD`, are the repository's and are paid once for every worktree of
+/// it by [repositoryOriginProvider]. Recomputed when the workspace mutates,
+/// which is the signal the rest of the Explorer already rebuilds on.
 ///
 /// **None of those processes starts in the frame that asked for them.** Every
 /// one goes through [checkoutProbeQueueProvider], which waits for the frame to
@@ -125,11 +170,13 @@ final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
 /// say, not an error banner in a tree.
 final checkoutDeliveryProvider = FutureProvider.autoDispose
     .family<SessionDelivery, Checkout>((ref, checkout) async {
-      // Three to five git subprocesses, one instance per visible checkout. The
-      // working tree can move when an agent starts or stops and when the
-      // workspace itself changes; it cannot move because a row was renamed or
-      // a permission mode was set, and paying five processes per checkout for
-      // either was the bill `checkout_scale_cost_test.dart` was written for.
+      // One to three git subprocesses of its own, one instance per visible
+      // checkout, plus the repository's two — paid once for every worktree of
+      // it. The working tree can move when an agent starts or stops and when
+      // the workspace itself changes; it cannot move because a row was renamed
+      // or a permission mode was set, and paying five processes per checkout
+      // for either was the bill `checkout_scale_cost_test.dart` was written
+      // for.
       ref.watchSessionKinds(const {
         SessionChangeKind.membership,
         SessionChangeKind.status,
@@ -139,15 +186,27 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
       // Read before the first await, like every other seam in this file.
       final probe = _probeOn(ref);
       final dir = checkout.path;
+      // Watched before the first await, and awaited below: the repository's
+      // two questions now overlap this checkout's `status` instead of queueing
+      // behind it, so a row's own chain is three round trips deep rather than
+      // four. And for the second and later worktrees of one clone there is
+      // nothing to overlap — the answer is already there.
+      //
+      // Wrapped in [_orNull] **at the watch**, not at the await, because the
+      // line below may return without awaiting it: a directory that is not a
+      // repository has nothing to say and does not wait to be told what its
+      // remote is. An errored future nobody awaits is an unhandled async
+      // error; one that cannot error is safe to drop.
+      final origin = _orNull(
+        () => ref
+            .watch(repositoryOriginProvider(checkout.forRepository()).future),
+      );
 
       final status = await probe(() => changes.statusWithBranch(dir));
       if (status == null) return SessionDelivery.unknown;
 
-      final remoteUrl = await probe(() => changes.remoteUrl(dir));
-      final hasRemote = remoteUrl != null;
-      final base = hasRemote
-          ? await probe(() => changes.originHead(dir))
-          : null;
+      final facts = await origin ?? RepositoryOrigin.none;
+      final base = facts.head;
 
       // Both against the same base, and started together: they are two
       // processes that do not need each other's answer.
@@ -169,9 +228,9 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
         branch: status.branch,
         baseBranch: base,
         upstream: status.upstream,
-        hasRemote: hasRemote,
-        remote: RemoteRepo.parse(remoteUrl),
-        defaultBranch: _branchOf(base),
+        hasRemote: facts.hasRemote,
+        remote: RemoteRepo.parse(facts.url),
+        defaultBranch: facts.defaultBranch,
         dirtyFiles: status.changes.length,
         lines: lines,
         aheadOfBase: aheadBehind?.ahead,
@@ -193,8 +252,16 @@ final worktreeDeliveryProvider = FutureProvider.autoDispose
       // Both watches are taken before the first await: `ref.watch` after an
       // await is a documented Riverpod hazard, and taking them together runs
       // the two checkouts' git concurrently rather than in series.
+      //
+      // The worktree is named **with the repository it came from**, which is
+      // the one thing git would have to be asked for and the workspace already
+      // knows: it is how [repositoryOriginProvider] folds every worktree of one
+      // clone onto one entry. See [Checkout.repository] for why naming it does
+      // not split the family key.
       final own = ref.watch(
-        checkoutDeliveryProvider(Checkout(key.worktree)).future,
+        checkoutDeliveryProvider(
+          Checkout(key.worktree, repository: key.repo),
+        ).future,
       );
       final parent = ref.watch(
         checkoutDeliveryProvider(Checkout(key.repo)).future,
@@ -417,13 +484,6 @@ final sessionDeliveryActionsProvider = Provider.autoDispose
       ),
     );
 
-/// `origin/main` → `main`. What `gh repo view` would call the default branch,
-/// without asking it.
-String? _branchOf(String? remoteRef) {
-  if (remoteRef == null) return null;
-  final slash = remoteRef.indexOf('/');
-  return slash < 0 ? remoteRef : remoteRef.substring(slash + 1);
-}
 
 /// Runs [probe], turning any failure into null ("could not tell").
 Future<T?> _orNull<T>(Future<T?> Function() probe) async {

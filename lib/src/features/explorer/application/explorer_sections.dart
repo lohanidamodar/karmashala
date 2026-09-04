@@ -445,7 +445,16 @@ SessionDelivery? _localDelivery(Ref ref, SectionCandidate candidate) {
           ref,
           worktreeDeliveryProvider((repo: repository, worktree: worktree)),
         ) ??
-        _warm(ref, checkoutDeliveryProvider(Checkout(worktree)));
+        // Named with its repository, the same way `worktreeDeliveryProvider`
+        // names it: the key is the worktree either way, and the repository is
+        // what lets `repositoryOriginProvider` answer once for a clone rather
+        // than once per `wt-*` folder under it.
+        _warm(
+          ref,
+          checkoutDeliveryProvider(
+            Checkout(worktree, repository: repository),
+          ),
+        );
   }
   return _warm(ref, checkoutDeliveryProvider(Checkout(repository)));
 }
