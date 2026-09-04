@@ -55,28 +55,43 @@ class AgentHookReceiver {
     final id = agentId ?? '';
     final name = event ?? '';
     final spec = id.isEmpty ? null : registry.byId(id)?.hooks;
-    final sessionId = spec == null ? '' : _sessionId(spec.sessionIdPath, body);
+    // Decoded once and walked by path from here on. Several fields are read off
+    // the one payload, and re-parsing it per field made the cost of a callback
+    // grow with how much of it we learned to understand.
+    final payload = _decode(body);
+    final sessionId = spec == null
+        ? ''
+        : _stringAt(spec.sessionIdPath, payload);
     // The agent's own subtype for this event, when its payload carries one.
     // Empty means it does not — every Claude Code event but `Notification`, and
     // any CLI predating the field — and then the event name is all we have.
     final kind = spec == null || spec.eventKindPath.isEmpty
         ? ''
-        : _stringAt(spec.eventKindPath, body);
+        : _stringAt(spec.eventKindPath, payload);
     final declared = kind.isEmpty ? null : spec!.eventKindMeaning[kind];
     // A subtype the agent named and we do not recognise is `unknown`, not the
     // event's default. `Notification` defaults to `awaitingApproval`, and its
     // subtypes include a successful login and an MCP elicitation result — a
     // notice nobody is waiting on must not raise "this session needs you".
-    final status = kind.isEmpty
+    final declaredStatus = kind.isEmpty
         ? spec?.eventStatus[name] ?? AgentActivityStatus.unknown
         : declared?.status ?? AgentActivityStatus.unknown;
+    // **The turn ended; the session did not.** Claude Code fires a real `Stop`
+    // on the main thread the moment a `Task` subagent is launched, and wakes
+    // the session with a fresh `UserPromptSubmit` when the worker reports back
+    // — so a hook stream that trusts the event name announces "Agent finished"
+    // in the middle of a turn, minutes or tens of minutes early. The payload
+    // says which it is, and that is the field this consults.
+    final status = _inFlight(spec, name, payload)
+        ? AgentActivityStatus.working
+        : declaredStatus;
     // The agent's own description of what it wants, when its hooks carry one.
     // Claude Code's `Notification` payload has a `message`; this used to be
     // decoded for the session id and discarded, which is why an approval could
     // be announced but never explained.
     final message = spec == null || spec.messagePath.isEmpty
         ? ''
-        : _stringAt(spec.messagePath, body);
+        : _stringAt(spec.messagePath, payload);
 
     final report = AgentStatusReport(
       agentId: id,
@@ -112,24 +127,49 @@ class AgentHookReceiver {
     return AgentWaitKind.unrecorded;
   }
 
-  String _sessionId(List<String> path, String body) => _stringAt(path, body);
+  /// Whether [event]'s payload says work this session is waiting on is still
+  /// running, per [spec]'s [AgentHookSpec.inFlightPath].
+  ///
+  /// Only a **non-empty list** counts. A missing key, an empty list and a value
+  /// of any other shape all mean "nothing said so", which leaves the event
+  /// meaning what its name means — the answer an agent that never sends the
+  /// field has to get.
+  static bool _inFlight(AgentHookSpec? spec, String event, Object? payload) {
+    final path = spec?.inFlightPath[event];
+    if (path == null || path.isEmpty) return false;
+    final value = _valueAt(path, payload);
+    return value is List && value.isNotEmpty;
+  }
 
-  /// The string at [path] in the JSON [body], or `''`.
+  /// The hook body as JSON, or `null` when it is not JSON at all.
+  ///
+  /// A body we cannot read means "the agent did not tell us" for every field at
+  /// once, which is what every reader below already renders as nothing.
+  static Object? _decode(String body) {
+    try {
+      return jsonDecode(body);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// The value at [path] in the decoded [payload], or `null`.
+  static Object? _valueAt(List<String> path, Object? payload) {
+    var value = payload;
+    for (final segment in path) {
+      if (value is! Map) return null;
+      value = value[segment];
+    }
+    return value;
+  }
+
+  /// The string at [path] in the decoded [payload], or `''`.
   ///
   /// Empty for a missing key, a non-string value or an unparseable body — all
   /// of which mean "the agent did not tell us", which the caller renders as
   /// nothing rather than as a placeholder.
-  String _stringAt(List<String> path, String body) {
-    Object? value;
-    try {
-      value = jsonDecode(body);
-    } on FormatException {
-      return '';
-    }
-    for (final segment in path) {
-      if (value is! Map) return '';
-      value = value[segment];
-    }
+  static String _stringAt(List<String> path, Object? payload) {
+    final value = _valueAt(path, payload);
     return value is String ? value : '';
   }
 }

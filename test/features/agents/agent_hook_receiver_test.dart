@@ -214,6 +214,90 @@ void main() {
     expect(reports.latest('claudeCode', ''), isNull);
   });
 
+  group('a Stop that only paused the turn', () {
+    /// A `Stop` payload as Claude Code 2.1.260 actually sends it, with
+    /// [running] entries in `background_tasks`. The two captured on 2026-09-04
+    /// differ in exactly this field: the mid-turn one lists the subagent it
+    /// just launched, the closing one lists nothing.
+    String stop({required bool running}) => jsonEncode({
+      'session_id': 's1',
+      'cwd': r'C:\src\demo',
+      'hook_event_name': 'Stop',
+      'stop_hook_active': false,
+      'last_assistant_message': running
+          ? 'Agent launched to run the command—waiting for completion.'
+          : 'The subagent executed the command successfully.',
+      'background_tasks': running
+          ? [
+              {
+                'id': 'a8989a29ed73d4888',
+                'type': 'subagent',
+                'status': 'running',
+                'description': 'Run echo subagent-ran command',
+              },
+            ]
+          : <Object?>[],
+      'session_crons': <Object?>[],
+    });
+
+    test('work still in flight is working, not finished', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: true),
+      );
+
+      expect(report.status, AgentActivityStatus.working);
+      expect(
+        reports.latest('claudeCode', 's1')!.status,
+        isNot(AgentActivityStatus.idle),
+      );
+    });
+
+    test('an empty list is the turn really ending', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: stop(running: false),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
+
+    test('a payload with no such field is untouched', () {
+      // Every CLI that predates `background_tasks`, and every other event of
+      // the one that has it. Nothing said the session was busy, so `Stop` means
+      // what its name means.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: body('s1'),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
+
+    test('the field is only consulted for the event that declares it', () {
+      // `SessionEnd` also ends a session and carries no such field. A spec that
+      // named the path for every event would be reading a key that means
+      // nothing there.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'SessionEnd',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'SessionEnd',
+          'reason': 'other',
+          'background_tasks': [
+            {'id': 'x', 'type': 'subagent', 'status': 'running'},
+          ],
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+    });
+  });
+
   test('a missing event or agent never throws', () {
     expect(
       receiver.handle(agentId: null, event: null, body: '').status,

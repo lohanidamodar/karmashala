@@ -361,6 +361,37 @@ const _claudeCode = AgentDescriptor(
         waiting: AgentWaitKind.input,
       ),
     },
+    // **`Stop` does not always mean the turn is over.** Claude Code 2.1.260
+    // runs a `Task` subagent as *background* work: the main thread fires a real
+    // `Stop` the moment the worker is launched, and a fresh `UserPromptSubmit`
+    // carrying a `<task-notification>` wakes it when the worker reports back.
+    // Captured whole on 2026-09-04 by pointing a `--settings` file's hooks at a
+    // scratch directory and running one `-p` turn that used the `Task` tool
+    // (session `95355021-…`, ~13 s end to end):
+    //
+    //   09:59:17.6  PreToolUse   Task           (main thread)
+    //   09:59:19.7  PreToolUse   Bash           agent_id=a8989a29…
+    //   09:59:22.1  Stop         background_tasks:[{type:"subagent",
+    //                              status:"running",…}]
+    //                            last_assistant_message:"Agent launched to run
+    //                              the command—waiting for completion."
+    //   09:59:23.7  SubagentStop agent_id=a8989a29…
+    //   09:59:23.8  UserPromptSubmit  prompt:"<task-notification>…"
+    //   09:59:25.3  Stop         background_tasks:[]
+    //
+    // The 09:59:22 `Stop` is the main thread's, carries no `agent_id`, and is
+    // three seconds into a turn that had thirteen to run. Read as `idle` it
+    // fires "Agent finished" — and the message it would quote to say *what*
+    // finished is "waiting for completion". The CLI's own wake-up note spells
+    // the rule out: *"A task-notification fires each time this agent stops with
+    // no live background children of its own."* On a real `Task` that window is
+    // the subagent's whole run.
+    //
+    // `background_tasks` is the field the CLI provides for exactly this, and
+    // only it: `session_crons` is deliberately **not** consulted, because a
+    // session with a `/loop` scheduled has genuinely finished its turn and is
+    // waiting on a clock, not on work.
+    inFlightPath: {'Stop': ['background_tasks']},
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,

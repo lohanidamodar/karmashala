@@ -314,6 +314,7 @@ class AgentHookSpec {
     this.messageWaiting = const {},
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
+    this.inFlightPath = const {},
     this.trustsCommandByHash = false,
     required this.eventStatus,
   });
@@ -399,6 +400,25 @@ class AgentHookSpec {
   /// unrecognised notice must not be able to raise "this session needs you",
   /// because that badge is what puts a key-sending button in front of a user.
   final Map<String, AgentHookMeaning> eventKindMeaning;
+
+  /// Event name → where that event's payload lists work that is **still in
+  /// flight**, for an agent whose "the turn ended" event also fires when the
+  /// turn is merely *paused*.
+  ///
+  /// A non-empty list at that path replaces the event's [eventStatus] with
+  /// [AgentActivityStatus.working]: the session did not stop, it handed off and
+  /// will be woken again. Anything else — the key absent, an empty list, a
+  /// value that is not a list — leaves the event meaning exactly what it says,
+  /// so an agent that never sends the field is untouched.
+  ///
+  /// Claude Code needs this and says so in the field's own documentation.
+  /// `Stop` fires on the **main thread** the moment a `Task` subagent is
+  /// launched, and the payload carries `background_tasks` for precisely this
+  /// question — 2.1.260's schema describes it as *"In-flight background work
+  /// (running/pending + backgrounded) registered in this session. Lets hooks
+  /// distinguish 'session is done' from 'session is paused waiting for
+  /// background work to wake it'."*
+  final Map<String, List<String>> inFlightPath;
 
   /// Whether this agent gates each hook entry on a hash of the entry itself, so
   /// the installed **command string must not change between launches**.
