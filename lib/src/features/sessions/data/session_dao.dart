@@ -230,6 +230,25 @@ class SessionDao {
     return byPane;
   }
 
+  /// sessionId → the repository it targets, for every row at once.
+  ///
+  /// The narrow read [paneSessionIds] is, for the other map the Explorer keeps:
+  /// [sessionProjectIdsProvider] wants a session's *placement* and nothing
+  /// else, and it used to get it by calling [getAll] and reading two fields off
+  /// each decoded [Session]. That built a twenty-one entry map and parsed an
+  /// ISO timestamp per row — and `dateFromIso`'s own comment records that
+  /// parsing was profiled at 8% of the app's CPU during a terminal flood — to
+  /// answer a question about two columns.
+  ///
+  /// Unordered, because a map is: nothing downstream reads it in sequence.
+  Map<String, String> repositoryIdsById() {
+    final rows = _db.query('SELECT id, repository_id FROM sessions;');
+    return {
+      for (final row in rows)
+        row['id']! as String: row['repository_id']! as String,
+    };
+  }
+
   /// Every row whose status still claims something is running, oldest first.
   ///
   /// What `SessionLivenessReconciler` sweeps. Filtered in SQL rather than by

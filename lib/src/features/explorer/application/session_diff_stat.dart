@@ -248,11 +248,17 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
     for (final repository in ref.read(repositoryDaoProvider).getAll())
       repository.id: repository.projectId,
   };
+  // Two columns per row, not a decoded session. This is a map from an id to an
+  // id; building a `Session` out of twenty-one columns and an `ImportedSession`
+  // out of twelve — parsing an ISO timestamp in each, which `dateFromIso`'s own
+  // comment measured at 8% of the app's CPU under load — to read two of them is
+  // the waste `SessionDao.paneSessionIds` already avoids next door.
   return Map.unmodifiable({
-    for (final session in ref.read(sessionDaoProvider).getAll())
-      session.id: ?repositories[session.repositoryId],
-    for (final session in ref.read(importedSessionDaoProvider).getAll())
-      session.id: ?repositories[session.repositoryId],
+    for (final entry in ref.read(sessionDaoProvider).repositoryIdsById().entries)
+      entry.key: ?repositories[entry.value],
+    for (final entry
+        in ref.read(importedSessionDaoProvider).repositoryIdsById().entries)
+      entry.key: ?repositories[entry.value],
   });
 });
 

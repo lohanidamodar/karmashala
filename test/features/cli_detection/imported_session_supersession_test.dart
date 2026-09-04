@@ -178,6 +178,23 @@ void main() {
       );
     });
 
+    test('and is placed once, by the row that took it over', () {
+      // `repositoryIdsById` is the Explorer's placement map, narrowed to two
+      // columns. It has to apply the same rule the list does, or a superseded
+      // conversation would be filed under a project while nothing drew it.
+      dao
+        ..insertIfAbsent(imported(id: 'imp-1', externalId: 'cli-abc'))
+        ..insertIfAbsent(imported(id: 'imp-2', externalId: 'cli-def'));
+      expect(dao.repositoryIdsById(), {'imp-1': 'r1', 'imp-2': 'r1'});
+
+      sessions.insert(native(externalId: 'cli-abc'));
+
+      expect(dao.repositoryIdsById(), {'imp-2': 'r1'});
+      expect(dao.repositoryIdsById(), {
+        for (final row in dao.getAll()) row.id: row.repositoryId,
+      });
+    });
+
     test('a pair already in the database resolves with no migration', () {
       // Exactly the shape a user upgrading into this fix has: both rows
       // already written, by a resume that predates the resolution.

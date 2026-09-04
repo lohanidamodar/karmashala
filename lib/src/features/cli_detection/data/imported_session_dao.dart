@@ -132,6 +132,24 @@ class ImportedSessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// conversationId → the repository it belongs to, for every record still
+  /// showing as history.
+  ///
+  /// The counterpart of `SessionDao.repositoryIdsById`, and for the same
+  /// reader: the Explorer's placement map wants two columns, and building an
+  /// [ImportedSession] to read them costs twelve columns and two ISO parses a
+  /// row. The `NOT EXISTS` stays, so a conversation a native row has taken over
+  /// is placed once — by the native row — rather than twice.
+  Map<String, String> repositoryIdsById() {
+    final rows = _db.query(
+      'SELECT id, repository_id FROM imported_sessions WHERE $_notSuperseded;',
+    );
+    return {
+      for (final row in rows)
+        row['id']! as String: row['repository_id']! as String,
+    };
+  }
+
   /// How many conversations under [repositoryIds] still show as history — the
   /// same rows [getByRepository] would return, counted rather than built.
   ///

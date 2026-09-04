@@ -164,6 +164,29 @@ void main() {
     expect(dao.getByRepository('rX'), isEmpty);
   });
 
+  group('repositoryIdsById', () {
+    test('places every row, and nothing else about it', () {
+      dao.insert(session(id: 's1'));
+      dao.insert(session(id: 's2'));
+      expect(dao.repositoryIdsById(), {'s1': 'r1', 's2': 'r1'});
+    });
+
+    test('is empty on an empty table, not absent', () {
+      expect(dao.repositoryIdsById(), isEmpty);
+    });
+
+    test('agrees with the decoded rows it replaced', () {
+      // The property: a narrow read must answer what building the whole
+      // session and reading two fields off it answered.
+      for (var i = 0; i < 5; i++) {
+        dao.insert(session(id: 's$i'));
+      }
+      expect(dao.repositoryIdsById(), {
+        for (final row in dao.getAll()) row.id: row.repositoryId,
+      });
+    });
+  });
+
   /// **The project header's two integers.**
   ///
   /// A count that is cheap and wrong is worse than the rows it replaced, so
