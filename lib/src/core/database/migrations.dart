@@ -107,6 +107,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   33: _migrateToV33,
   34: _migrateToV34,
   35: _migrateToV35,
+  36: _migrateToV36,
 };
 
 /// Was this pane running when its row was written?
@@ -1553,4 +1554,32 @@ void _migrateToV35(Database db) {
       [selection, legacy, agentId],
     );
   }
+}
+
+/// Saved Codex OAuth identities and indexed CLI-conversation lookup.
+///
+/// The complete token bundle is retained because a refresh token, account id
+/// and access token are one credential. Nothing is logged or split into
+/// independently stale columns; the display fields are denormalized only.
+///
+/// `sessions.external_session_id` is also the lookup used once per detected
+/// CLI conversation by import and adoption. Including the stable ordering
+/// columns lets SQLite answer both the filter and `created_at DESC, id DESC`
+/// without scanning the session table or building a temporary sort.
+void _migrateToV36(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS codex_accounts (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL UNIQUE,
+      email TEXT,
+      plan_type TEXT,
+      auth_json TEXT NOT NULL,
+      captured_env_id TEXT,
+      captured_at TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_external '
+    'ON sessions (external_session_id, created_at, id);',
+  );
 }

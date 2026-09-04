@@ -14,11 +14,15 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 35);
+    expect(db.schemaVersion, 36);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 35);
+    expect(version, 36);
     final indexes = db.query("PRAGMA index_list('sessions');");
     expect(indexes.map((row) => row['name']), contains('idx_sessions_pane'));
+    expect(
+      indexes.map((row) => row['name']),
+      contains('idx_sessions_external'),
+    );
   });
 
   test('the migration keys stay contiguous, and the version is their '
@@ -62,6 +66,7 @@ void main() {
         'session_repositories',
         'imported_sessions',
         'claude_accounts',
+        'codex_accounts',
         'terminal_tabs',
         'terminal_panes',
         'ssh_hosts',
@@ -123,7 +128,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 35);
+    expect(db.schemaVersion, 36);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
