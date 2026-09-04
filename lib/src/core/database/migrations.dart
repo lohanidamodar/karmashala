@@ -108,6 +108,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   34: _migrateToV34,
   35: _migrateToV35,
   36: _migrateToV36,
+  37: _migrateToV37,
 };
 
 /// Was this pane running when its row was written?
@@ -1581,5 +1582,16 @@ void _migrateToV36(Database db) {
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sessions_external '
     'ON sessions (external_session_id, created_at, id);',
+  );
+}
+
+/// Index the installation a session ran under.
+///
+/// This serves the re-detection guard, installation repoint, and the foreign
+/// key check SQLite performs when an installation is removed.
+void _migrateToV37(Database db) {
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_installation '
+    'ON sessions (agent_installation_id);',
   );
 }

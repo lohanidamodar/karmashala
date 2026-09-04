@@ -65,12 +65,45 @@ import '../terminal/fake_instance.dart';
 /// costs the same at a hundred sessions as at one.
 ///
 /// **What is left, and why it stays.** The last column does still rise, and
-/// that is the honest floor: four providers legitimately re-read the session
-/// list when the list changes shape — the placement map, the project summary,
-/// the Explorer's own list, and `SessionEndingObserver`'s sweep — and each is
-/// one statement and N decoded rows. That is pinned below as a slope rather
-/// than removed, so a *fifth* scanning watcher cannot be added without a number
-/// moving. The observer also re-arms one `ref.listen` per running row on every
+/// that is the honest floor: three providers legitimately re-read the session
+/// list when the list changes shape — the placement map, the Explorer's own
+/// list, and `SessionEndingObserver`'s sweep — and each is one statement and N
+/// decoded rows. That is pinned below as a slope rather than removed, so a
+/// *fourth* scanning watcher cannot be added without a number moving.
+///
+/// **It was four.** The project header was the fourth, and it was the one that
+/// had no business reading a row at all: it built a whole `Session` out of
+/// twenty-one columns, and a whole `ImportedSession` out of twelve, for every
+/// row under every checkout in the project — to add one to an integer and drop
+/// the rest. A header never *names* a session, so it now asks SQLite for two
+/// integers instead, in one statement for the whole project rather than two per
+/// repository. The slope fell from 4 to 3 and the numbers below moved with it:
+///
+/// ```txt
+/// sessions    rows decoded per start
+///        1     12 ->  12
+///       10     48 ->  39
+///      100    408 -> 309
+/// ```
+///
+/// **And rows are not the whole cost of a row.** Of the three readers left,
+/// one — the placement map — wants a session's *repository* and nothing else,
+/// and was building the whole twenty-one-column object (with the ISO parse
+/// `dateFromIso`'s comment measured at 8% of the app's CPU under load) to read
+/// two fields off it. `SessionDao.repositoryIdsById` asks for the two columns,
+/// the way `paneSessionIds` next door already does. Columns decoded per start:
+///
+/// ```txt
+/// sessions    column values decoded
+///        1    213 ->  175
+///       10    780 ->  571
+///      100   6450 -> 4531
+/// ```
+///
+/// The slope is 63 -> 44: three readers at 21 columns each becomes 21 + 21 + 2.
+/// A row count cannot see that difference, so this file counts cells as well.
+///
+/// The observer also re-arms one `ref.listen` per running row on every
 /// rebuild, which looks alarming and costs nothing: `statusStreams` is 1 at
 /// every scale, before the fix and after, because re-listening a live provider
 /// builds no stream.
@@ -96,6 +129,7 @@ void main() {
     final statements = <int, int>{};
     final rowReads = <int, int>{};
     final rowsScanned = <int, int>{};
+    final cellsScanned = <int, int>{};
     final statusSubscriptions = <int, int>{};
     final notifications = <int, int>{};
     final encodes = <int, int>{};
@@ -113,6 +147,7 @@ void main() {
         statements[count] = measured.statements;
         rowReads[count] = measured.rowReads;
         rowsScanned[count] = measured.rowsScanned;
+        cellsScanned[count] = measured.cellsScanned;
         statusSubscriptions[count] = measured.statusSubscriptions;
         notifications[count] = measured.notifications;
         encodes[count] = measured.encodes;
@@ -124,6 +159,7 @@ void main() {
           'reads=${measured.reads} writes=${measured.writes} '
           'rowReads=${measured.rowReads} scans=${measured.tableScans} '
           'rowsScanned=${measured.rowsScanned} '
+          'cellsScanned=${measured.cellsScanned} '
           'statusStreams=${measured.statusSubscriptions} '
           'notified=${measured.notifications} encodes=${measured.encodes} '
           'screenScans=${measured.screenScans} spawns=${measured.spawns}',
@@ -159,20 +195,42 @@ void main() {
             're-arms a `ref.listen` per running row on every rebuild, and this '
             'is what says that costs nothing: $statusSubscriptions',
       );
-      // Rows, not statements. Four providers legitimately re-read the list
-      // when the list changes shape — the placement map, the project summary,
-      // the Explorer's own list and the follow-up sweep — and each is one
-      // statement and N decoded rows. A fifth would be invisible in every
-      // other number on this page.
+      // Rows, not statements. Three providers legitimately re-read the list
+      // when the list changes shape — the placement map, the Explorer's own
+      // list and the follow-up sweep — and each is one statement and N decoded
+      // rows. A fourth would be invisible in every other number on this page.
+      //
+      // It was four until the project header stopped reading rows to count
+      // them: `SessionDao.countsByRepositories` answers with two integers, so
+      // the header's contribution to this slope is now zero however many
+      // sessions the project holds. Tightened rather than left at 4, because a
+      // bound with slack in it is a bound that lets the next regression
+      // through.
       expect(
         [
           (rowsScanned[10]! - rowsScanned[1]!) / 9,
           (rowsScanned[100]! - rowsScanned[10]!) / 90,
         ],
-        everyElement(4),
+        everyElement(3),
         reason:
             'a start may re-read the session list a fixed number of times, '
-            'and that number is four: $rowsScanned',
+            'and that number is three: $rowsScanned',
+      );
+      // **Columns, which the row count cannot see.** Three reads of the same
+      // rows are not three equal costs: two of them want the whole session and
+      // one wants its placement, which is two columns. 21 + 21 + 2 is the
+      // slope, and it was 21 x 3 while the placement map decoded a `Session`
+      // it then read `id` and `repositoryId` off.
+      expect(
+        [
+          (cellsScanned[10]! - cellsScanned[1]!) / 9,
+          (cellsScanned[100]! - cellsScanned[10]!) / 90,
+        ],
+        everyElement(44),
+        reason:
+            'an extra session costs a start 21 columns for the Explorer list, '
+            '21 for the ending sweep and 2 for the placement map — never 21 '
+            'for a reader that wants 2: $cellsScanned',
       );
       expect(
         encodes.values.toSet(),
@@ -354,7 +412,12 @@ void main() {
 }
 
 /// A read with no `WHERE` against the sessions table.
-final _unfilteredSessionScan = RegExp(r'FROM\s+sessions\s+ORDER\s+BY');
+///
+/// Either spelling: the Explorer's list orders its rows, and the placement map
+/// asks for two columns of every row and does not. Both are scans, and a
+/// pattern that only recognised the ordered one stopped counting the placement
+/// map the moment it was narrowed.
+final _unfilteredSessionScan = RegExp(r'FROM\s+sessions\s*(;|ORDER\s+BY)');
 
 /// One session row by id — what `sessionWhereaboutsProvider` asks per card.
 final _oneRowRead = RegExp(r'FROM\s+sessions\s+WHERE\s+id\s+=');
@@ -378,6 +441,7 @@ class _StartCost {
     required this.rowReads,
     required this.tableScans,
     required this.rowsScanned,
+    required this.cellsScanned,
     required this.statusSubscriptions,
     required this.notifications,
     required this.encodes,
@@ -403,6 +467,12 @@ class _StartCost {
   /// `SessionEndingObserver` answers every membership-or-status signal with
   /// exactly that.
   final int rowsScanned;
+
+  /// **Column values decoded** out of the sessions table — rows times their
+  /// width. What tells a narrow read from a `SELECT *` over the same rows,
+  /// which [rowsScanned] cannot: the placement map asks for two columns and the
+  /// Explorer's own list asks for twenty-one, and only this number says so.
+  final int cellsScanned;
 
   /// Streams `agentSessionStatusProvider` had to build. The observer re-arms
   /// one `ref.listen` per running row on every rebuild, so a start that made
@@ -602,6 +672,7 @@ class _StartWorkspace {
       rowReads: db.reads.where(_oneRowRead.hasMatch).length,
       tableScans: db.reads.where(_unfilteredSessionScan.hasMatch).length,
       rowsScanned: db.sessionRowsScanned,
+      cellsScanned: db.sessionCellsScanned,
       statusSubscriptions: statusSubscriptions,
       notifications: notifications,
       // The new pane's own terminal is built during the measurement, so its
@@ -619,15 +690,25 @@ class _StartWorkspace {
   }
 }
 
-/// A [CountingDatabase] that also counts the *rows* the sessions table gave
-/// back.
+/// A [CountingDatabase] that also counts the *rows* and the *columns* the
+/// sessions table gave back.
 ///
 /// A statement count hides the whole of `SessionEndingObserver`: one `getAll()`
 /// is one statement and N decoded rows, and the observer answers every
 /// membership-or-status signal with one. Counting rows is what tells a scan
 /// that is O(1) in statements from one that is O(sessions) in work.
+///
+/// **And counting cells is what tells `SELECT *` from a narrow read**, which
+/// the row count is blind to: `SELECT id, repository_id` and
+/// `SELECT *` return the same rows, and one of them builds a two-entry map per
+/// row while the other builds twenty-one and parses an ISO timestamp out of
+/// two of them. That difference is invisible in every other number on this
+/// page and is most of the work a placement map actually does.
 class _RowCountingDatabase extends CountingDatabase {
   int sessionRowsScanned = 0;
+
+  /// Column values handed back from the sessions table — rows x their width.
+  int sessionCellsScanned = 0;
 
   static final _sessionTable = RegExp(r'FROM\s+sessions\b');
 
@@ -635,6 +716,7 @@ class _RowCountingDatabase extends CountingDatabase {
   void reset() {
     super.reset();
     sessionRowsScanned = 0;
+    sessionCellsScanned = 0;
   }
 
   @override
@@ -643,7 +725,12 @@ class _RowCountingDatabase extends CountingDatabase {
     List<Object?> params = const [],
   ]) {
     final rows = super.query(sql, params);
-    if (_sessionTable.hasMatch(sql)) sessionRowsScanned += rows.length;
+    if (_sessionTable.hasMatch(sql)) {
+      sessionRowsScanned += rows.length;
+      for (final row in rows) {
+        sessionCellsScanned += row.length;
+      }
+    }
     return rows;
   }
 }
