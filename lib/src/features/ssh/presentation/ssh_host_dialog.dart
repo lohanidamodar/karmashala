@@ -1,4 +1,3 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
@@ -84,8 +84,8 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
   }
 
   Future<void> _browseForKey() async {
-    final file = await openFile();
-    if (file == null) return;
+    final file = await pickOneFile(what: 'an SSH private key');
+    if (file == null || !mounted) return;
     setState(() {
       _keyPath.text = file.path;
       // The picker runs on the Windows host, so what it returns is a Windows

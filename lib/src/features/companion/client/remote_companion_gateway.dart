@@ -1905,7 +1905,11 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
     final delta = page.messages.sublist(page.messages.length - needed);
     state.messages = List.unmodifiable([
-      ...state.messages,
+      // A turn arriving is the reason going away: "there is nothing to read
+      // here" cannot stand above something to read, whatever the host said
+      // when the transcript was still empty.
+      for (final message in state.messages)
+        if (message.role != kCompanionAbsenceRole) message,
       for (final message in delta)
         CompanionChatMessage(role: message.role, text: message.text),
     ]);
@@ -2034,6 +2038,10 @@ class RemoteCompanionGateway implements CompanionGateway {
               'the top of what the phone has. The desktop holds the whole '
               'conversation.',
         ),
+      // Which nothing this is, in the phone's words, from the host's fact.
+      // Only when there is genuinely nothing: a reason beside turns would be
+      // describing a transcript that exists.
+      if (page.messages.isEmpty) ?_absenceRow(page.absence),
       for (final message in page.messages)
         CompanionChatMessage(role: message.role, text: message.text),
     ]);
@@ -2042,6 +2050,26 @@ class RemoteCompanionGateway implements CompanionGateway {
     state.stale = false;
     _pushTranscript(state);
   }
+
+  /// The host's reason for an empty transcript, in the phone's own words.
+  ///
+  /// Null for a nothing nobody accounted for — an older desktop, or a reason
+  /// this build has never heard of — which leaves the screen's hedged hint in
+  /// place rather than inventing a specific claim.
+  CompanionChatMessage? _absenceRow(RemoteTranscriptAbsence? absence) =>
+      switch (absence) {
+        RemoteTranscriptAbsence.noChatView => const CompanionChatMessage(
+          role: kCompanionAbsenceRole,
+          // The desktop's own sentence for this session, minus the half a
+          // phone cannot act on: it has no terminal to look at.
+          text:
+              'This agent keeps no transcript this app can read, so there is '
+              'no chat view for it — on the desktop or here. Its terminal is '
+              'the session, and the desktop is where that lives. Messages you '
+              'send from here still reach it.',
+        ),
+        null => null,
+      };
 
   void _pushTranscript(_TranscriptState state) {
     for (final listener in state.listeners.toList()) {

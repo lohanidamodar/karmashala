@@ -278,6 +278,38 @@ class RemoteTranscriptMessage {
   int get hashCode => Object.hash(role, text);
 }
 
+/// Why a transcript page carries nothing, when the host can actually say.
+///
+/// An empty list has always meant two different things — *this agent keeps no
+/// record we can read* and *this session has not spoken yet* — and the host
+/// knew which while the phone could only hedge across both. That is how a
+/// running Antigravity session came to show a welcome screen with starter
+/// prompts on it: the desktop refuses that agent's store (protobuf in an
+/// unpublished schema, see `agentSupportsChatView`) and sent `[]`, which is
+/// also what a brand-new session sends.
+///
+/// **A fact, never a sentence.** The wire carries which nothing it is and the
+/// phone words it, so the wording stays a client decision and an older phone
+/// that has never heard of a value falls back to the hedge rather than
+/// rendering a word it cannot place.
+enum RemoteTranscriptAbsence {
+  /// The agent keeps no record this app can read, so there is no chat view for
+  /// this session at all — not now, and not after it answers.
+  noChatView('no_chat_view');
+
+  const RemoteTranscriptAbsence(this.wire);
+
+  final String wire;
+
+  /// An absent or unrecognised word reads as null — *we were not told why* —
+  /// which is exactly the hedge that existed before this field.
+  static RemoteTranscriptAbsence? parse(Object? wire) => _byWire[wire];
+
+  static final Map<Object?, RemoteTranscriptAbsence> _byWire = {
+    for (final value in RemoteTranscriptAbsence.values) value.wire: value,
+  };
+}
+
 /// A run of transcript messages plus the cursor to ask after next time.
 /// `transcript.get` answers with one; `transcript.appended` carries the delta.
 class RemoteTranscriptPage {
@@ -286,6 +318,7 @@ class RemoteTranscriptPage {
     required this.messages,
     required this.cursor,
     this.omitted = 0,
+    this.absence,
   });
 
   final String sessionId;
@@ -305,11 +338,16 @@ class RemoteTranscriptPage {
   /// — which is what it was.
   final int omitted;
 
+  /// Why [messages] is empty, when the host knows. Null means it did not say —
+  /// an older host, or a nothing it cannot account for either.
+  final RemoteTranscriptAbsence? absence;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'messages': [for (final m in messages) m.toJson()],
     'cursor': cursor,
     if (omitted > 0) 'omitted': omitted,
+    if (absence != null) 'absence': absence!.wire,
   };
 
   static RemoteTranscriptPage fromJson(Map<String, Object?> json) {
@@ -322,6 +360,7 @@ class RemoteTranscriptPage {
     final omitted = json['omitted'];
     return RemoteTranscriptPage(
       omitted: omitted is int && omitted > 0 ? omitted : 0,
+      absence: RemoteTranscriptAbsence.parse(json['absence']),
       sessionId: sessionId,
       messages: [
         for (final m in messages)

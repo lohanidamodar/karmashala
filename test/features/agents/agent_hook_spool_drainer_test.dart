@@ -226,7 +226,10 @@ class _RecordingSpool extends AgentHookSpool {
   static final listed = <String>[];
 
   @override
-  List<AgentHookSpoolEvent> drain(Directory directory, {int limit = 64}) {
+  Future<List<AgentHookSpoolEvent>> drain(
+    Directory directory, {
+    int limit = 64,
+  }) {
     listed.add(directory.path);
     return super.drain(directory, limit: limit);
   }

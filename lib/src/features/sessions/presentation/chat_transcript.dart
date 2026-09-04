@@ -68,16 +68,12 @@ class ChatTranscriptView extends StatefulWidget {
     this.resolveHostPath,
     this.onPathTap,
     this.detailBuilder,
-    this.onSuggestionTap,
     super.key,
   });
 
   final List<ChatMessage> messages;
   final Widget? footer;
   final String emptyHint;
-
-  /// Called when the user taps an empty-state suggestion prompt.
-  final ValueChanged<String>? onSuggestionTap;
 
   /// Turns a path an agent wrote into one this process can open — a WSL
   /// `/mnt/c/…` into its Windows form. Supplied by whoever knows the session's
@@ -171,14 +167,13 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         Expanded(
           child: FocusTraversalGroup(
             child: total == 0
-                ? _ChatEmptyState(
-                    hint: widget.emptyHint,
-                    onSuggestionTap: widget.onSuggestionTap,
-                  )
+                ? _ChatEmptyState(hint: widget.emptyHint)
                 : Align(
                     alignment: Alignment.topCenter,
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 860),
+                      constraints: const BoxConstraints(
+                        maxWidth: Chrome.readableWidth,
+                      ),
                       child: ListView.builder(
                         controller: _scroll,
                         padding: const EdgeInsets.symmetric(
@@ -225,7 +220,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
           Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 860),
+              constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
               child: widget.footer!,
             ),
           ),
@@ -316,13 +311,13 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: Insets.sm,
-                vertical: Insets.xs + 2,
+                vertical: Insets.xs,
               ),
               child: Row(
                 children: [
                   Icon(
                     AppIcons.chatCircleDots,
-                    size: 14,
+                    size: Chrome.iconAction,
                     color: scheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: Insets.xs),
@@ -336,7 +331,7 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
                   const Spacer(),
                   Icon(
                     _expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                    size: 14,
+                    size: Chrome.iconAction,
                     color: scheme.onSurfaceVariant,
                   ),
                 ],
@@ -365,15 +360,35 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
   }
 }
 
-/// A welcoming empty state with interactive GenUI starter prompts.
+/// What the conversation says when it has nothing to say yet: one glyph, one
+/// heading, and the sentence explaining which kind of nothing this is.
+///
+/// **It used to also offer four prompt cards** — *Explain project
+/// architecture*, *Run tests and inspect failures*, and two more — which
+/// filled the composer with a hardcoded English sentence. They are gone from
+/// the pointer surface, for reasons that are about this surface rather than
+/// about the idea:
+///
+/// - **They did not fit.** Measured at the 390x844 CLAUDE.md §11 pins, all
+///   four overflowed their row — by 53, 78, 16 and 16 logical pixels, with no
+///   clip, which Flutter reports as unreachable content. A card needs ~393px
+///   and a chat pane narrowed by a split routinely has less. They were also
+///   the only reason this state needed a scroll view to fit a short pane.
+/// - **The affordance is already focused.** The composer is directly below
+///   with a caret in it, and the cards only *typed* into it — the user still
+///   had to press send. On a phone, where typing is expensive and there is no
+///   palette, that trade is worth it, and `companion_transcript_view.dart`
+///   keeps them for exactly that reason. Here Ctrl+P and Snippets are the
+///   surface for a phrase you reuse, and unlike four frozen strings they are
+///   the user's own.
+///
+/// What stayed is the part that teaches the screen: the old empty state was a
+/// bare centred line of `bodySmall`, and a session pane with nothing in it now
+/// says so with a mark, a heading and a reason.
 class _ChatEmptyState extends StatelessWidget {
-  const _ChatEmptyState({
-    required this.hint,
-    this.onSuggestionTap,
-  });
+  const _ChatEmptyState({required this.hint});
 
   final String hint;
-  final ValueChanged<String>? onSuggestionTap;
 
   /// Centred while it fits, scrollable the moment it does not.
   ///
@@ -402,176 +417,48 @@ class _ChatEmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    // Check if hint is an explanatory terminal notice
-    final isTerminalNotice = hint.contains('terminal is the session') ||
+    // A session whose agent keeps no readable transcript is not an empty
+    // conversation, it is a surface that will never have one — so it gets the
+    // terminal's mark and no heading promising an answer.
+    final isTerminalNotice =
+        hint.contains('terminal is the session') ||
         hint.contains('no chat view') ||
         hint.contains('keeps no transcript');
 
-    if (isTerminalNotice) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.all(Insets.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHigh,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    AppIcons.terminal,
-                    size: 22,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: Insets.md),
-                Text(
-                  hint,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580),
+        // One measure for both branches. They had 520 and 580, which is a
+        // difference no reader can see and two numbers a maintainer has to
+        // keep in step.
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: const EdgeInsets.all(Insets.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHigh,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: scheme.outlineVariant),
-                ),
-                alignment: Alignment.center,
-                child: Icon(AppIcons.robot, size: 26, color: scheme.primary),
+              // `Chrome.iconHero` is the token for exactly this glyph, and the
+              // bordered circle each branch drew around its own invented 52/26
+              // and 44/22 pair is chrome around the one picture on a surface
+              // that has nothing else on it.
+              Icon(
+                isTerminalNotice ? AppIcons.terminal : AppIcons.robot,
+                size: Chrome.iconHero,
+                color: isTerminalNotice ? scheme.onSurfaceVariant : scheme.primary,
               ),
-              const SizedBox(height: Insets.md),
-              Text(
-                'Ready to assist',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+              const SizedBox(height: Insets.sm),
+              if (!isTerminalNotice) ...[
+                Text(
+                  'Ready to assist',
+                  style: theme.textTheme.titleMedium,
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: Insets.xs),
+                const SizedBox(height: Insets.xs),
+              ],
               Text(
                 hint,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-              if (onSuggestionTap != null) ...[
-                const SizedBox(height: Insets.lg),
-                Wrap(
-                  spacing: Insets.sm,
-                  runSpacing: Insets.sm,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    _PromptSuggestionCard(
-                      icon: AppIcons.code,
-                      label: 'Explain project architecture',
-                      onTap: () => onSuggestionTap!(
-                        'Explain the architecture and main features of this project.',
-                      ),
-                    ),
-                    _PromptSuggestionCard(
-                      icon: AppIcons.playCircle,
-                      label: 'Run tests and inspect failures',
-                      onTap: () => onSuggestionTap!(
-                        'Run the test suite and inspect any failures.',
-                      ),
-                    ),
-                    _PromptSuggestionCard(
-                      icon: AppIcons.magnifyingGlass,
-                      label: 'Search codebase for TODOs',
-                      onTap: () => onSuggestionTap!(
-                        'Search the codebase for open TODOs and summarize them.',
-                      ),
-                    ),
-                    _PromptSuggestionCard(
-                      icon: AppIcons.gitBranch,
-                      label: 'Review recent git commits',
-                      onTap: () => onSuggestionTap!(
-                        'Review recent git commits and explain latest changes.',
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PromptSuggestionCard extends StatelessWidget {
-  const _PromptSuggestionCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(Radii.md),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(Radii.md),
-        hoverColor: scheme.surfaceContainerHighest,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.md,
-            vertical: Insets.sm,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.md),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.6),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14, color: scheme.primary),
-              const SizedBox(width: Insets.sm),
-              Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: scheme.onSurface,
                 ),
               ),
             ],
@@ -598,17 +485,30 @@ class _ChatMessageTile extends StatelessWidget {
   /// Hung under the body, indented with it: the subagent this row spawned.
   final Widget? detail;
 
+  /// **One rhythm for every role.** Two adjacent messages are always
+  /// `Insets.sm` apart — 4 above and 4 below, meeting in the middle.
+  ///
+  /// It was `Insets.xs` on a user, tool and error row and `Insets.sm` on an
+  /// agent one, so the space between two messages depended on which pair they
+  /// were: measured at 1440x900, the gap from the last line of one message to
+  /// the first line of the next came to 41, 44, 46 and 49 logical pixels
+  /// across four consecutive boundaries. That variation encoded nothing a
+  /// reader could use — a transcript's messages are all items in one list, and
+  /// what marks the start of a turn is the user card's raised fill, not extra
+  /// air. The turn boundary is already drawn; it does not also need spacing.
+  static const _tileMargin = EdgeInsets.symmetric(vertical: Insets.xs);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
 
-    final (String gutter, Color color, String label) = switch (message.role) {
-      'user' => ('›', scheme.primary, 'You'),
-      'tool' => ('⏺', scheme.tertiary, 'Tool'),
-      'error' => ('✗', scheme.error, 'Error'),
-      _ => ('●', scheme.onSurface, 'Agent'),
+    final label = switch (message.role) {
+      'user' => 'You',
+      'tool' => 'Tool',
+      'error' => 'Error',
+      _ => 'Agent',
     };
 
     final activity = message.tool;
@@ -623,34 +523,43 @@ class _ChatMessageTile extends StatelessWidget {
 
     if (isUser) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        padding: _tileMargin,
         child: Container(
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(Radii.md),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.6),
-            ),
+            // **No border.** `surfaceContainerHigh` is two steps up the ramp
+            // from the page in both brightnesses (0x2C2C33 on 0x17171B dark,
+            // 0xE4E4E8 on 0xF7F7F8 light), so the fill already separates the
+            // card — and a fill *and* a hairline is two grouping mechanisms
+            // doing one job, plus 2px of height per turn. The tool card keeps
+            // its border because its fill is barely a step from the page and
+            // inverts direction between light and dark.
           ),
-          padding: const EdgeInsets.fromLTRB(
-            Insets.md,
-            Insets.sm,
-            Insets.md,
-            Insets.md,
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.md,
+            vertical: Insets.sm,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(AppIcons.userCircle, size: 15, color: scheme.primary),
+                  Icon(
+                    AppIcons.userCircle,
+                    size: Chrome.iconSmall,
+                    color: scheme.primary,
+                  ),
                   const SizedBox(width: Insets.xs),
                   Text(
                     'YOU',
+                    // `labelSmall` is the chrome eyebrow, and the theme spaces
+                    // it at 0.8 on purpose; the 0.5 this used to override it
+                    // with made the transcript's eyebrows the only ones in the
+                    // app set differently.
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
                     ),
                   ),
                   if (message.at != null) ...[
@@ -677,22 +586,21 @@ class _ChatMessageTile extends StatelessWidget {
 
     if (isAgent) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+        padding: _tileMargin,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHigh,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(AppIcons.robot, size: 12, color: scheme.onSurface),
+                // A bare glyph, sized and spaced exactly like the user row's.
+                // It was a 20px bordered circle around a 12px robot — the
+                // same rank as the user's eyebrow, given a different and
+                // heavier treatment, and 4px taller than the line of text it
+                // sits in for the sake of the decoration.
+                Icon(
+                  AppIcons.robot,
+                  size: Chrome.iconSmall,
+                  color: scheme.onSurface,
                 ),
                 const SizedBox(width: Insets.xs),
                 Text(
@@ -700,7 +608,6 @@ class _ChatMessageTile extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurface,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
                   ),
                 ),
                 if (message.at != null) ...[
@@ -722,10 +629,10 @@ class _ChatMessageTile extends StatelessWidget {
               ThinkingAccordion(thinking: thinking),
               const SizedBox(height: Insets.xs),
             ],
-            Padding(
-              padding: const EdgeInsets.only(left: 2),
-              child: MarkdownMessage(cleanText, onPathTap: onPathTap),
-            ),
+            // Flush with the eyebrow above it. The 2px indent this had was
+            // too small to read as an indent and enough to stop the body
+            // lining up with the glyph naming it.
+            MarkdownMessage(cleanText, onPathTap: onPathTap),
             ?detail,
           ],
         ),
@@ -735,7 +642,7 @@ class _ChatMessageTile extends StatelessWidget {
     if (isError) {
       final failure = SemanticColors.of(context).failure;
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        padding: _tileMargin,
         child: Container(
           padding: const EdgeInsets.all(Insets.sm),
           decoration: BoxDecoration(
@@ -746,7 +653,11 @@ class _ChatMessageTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(AppIcons.warningCircle, color: failure),
+              Icon(
+                AppIcons.warningCircle,
+                size: Chrome.iconSmall,
+                color: failure,
+              ),
               const SizedBox(width: Insets.xs),
               Expanded(
                 child: Column(
@@ -759,7 +670,7 @@ class _ChatMessageTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: Insets.xs),
                     SelectableText(
                       message.text,
                       style: theme.textTheme.bodySmall?.copyWith(color: failure),
@@ -777,7 +688,7 @@ class _ChatMessageTile extends StatelessWidget {
     final failure = SemanticColors.of(context).failure;
     final isToolError = activity?.isError == true;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      padding: _tileMargin,
       child: Container(
         decoration: BoxDecoration(
           color: dark
@@ -791,7 +702,17 @@ class _ChatMessageTile extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(Radii.md),
           child: Padding(
-            padding: const EdgeInsets.all(Insets.sm),
+            // Tighter vertically than the other roles, because a tool row is
+            // the densest and by far the most repeated thing in a transcript
+            // — one real 265-message session holds 23 pairs of adjacent ones,
+            // so 4px here is 4px multiplied by every call the agent made. It
+            // is what brought a tool-to-tool boundary into line with the rest:
+            // 46 logical pixels between two of them against 36 everywhere
+            // else, measured at 1440x900.
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: Insets.xs,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -799,7 +720,7 @@ class _ChatMessageTile extends StatelessWidget {
                   children: [
                     Icon(
                       _toolIcon(activity?.name),
-                      size: 15,
+                      size: Chrome.iconSmall,
                       color: isToolError ? failure : scheme.tertiary,
                     ),
                     const SizedBox(width: Insets.xs),
@@ -814,8 +735,7 @@ class _ChatMessageTile extends StatelessWidget {
                       const SizedBox(width: Insets.xs),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1,
+                          horizontal: Insets.xs,
                         ),
                         decoration: BoxDecoration(
                           color: failure.withValues(alpha: 0.15),

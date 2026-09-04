@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -10,6 +9,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 
 import '../../../core/process/path_translator.dart';
+import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_label.dart';
@@ -96,7 +96,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
             context,
             host: host,
           );
-          if (dir == null) return;
+          // `mounted` as well as null: the dialog is awaited, and a `setState`
+          // on a State the user has since dismissed throws. The local branch
+          // below has always checked it; this one crossed an await over SFTP,
+          // which is the slower of the two.
+          if (dir == null || !mounted) return;
           setState(() {
             _folderController.text = dir;
             if (_nameController.text.trim().isEmpty) {
@@ -112,8 +116,15 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       }
     }
 
-    final dir = await getDirectoryPath();
-    if (dir == null) return;
+    // The local fallback, and the only branch that opens a *native* picker —
+    // hence `pickOneDirectory`, which announces itself to the log and flushes
+    // before asking. A native picker runs its modal loop on the platform
+    // thread, which is the Dart isolate's thread, so a busy isolate leaves it
+    // created and never shown with the window Not Responding; the announcement
+    // is what names the button when that happens. The SSH branch above needs
+    // none of it — a remote browse is a Flutter dialog over SFTP.
+    final dir = await pickOneDirectory(what: 'a project folder');
+    if (dir == null || !mounted) return;
     setState(() {
       _folderController.text = dir;
       if (_nameController.text.trim().isEmpty) {

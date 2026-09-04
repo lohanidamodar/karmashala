@@ -393,7 +393,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                       SessionStatsButton(sessionId: widget.sessionId),
                     ],
                     hintText: active
-                        ? 'Message the agent…  (attach an image with 🖼)'
+                        // No emoji: the hint used to read "(attach an image
+                        // with 🖼)" and there is no 🖼 anywhere in the
+                        // composer to press — the attach control is a
+                        // Phosphor image glyph whose tooltip already names
+                        // the gesture, including the Ctrl+V one the hint
+                        // never mentioned.
+                        ? 'Message the agent…'
                         : 'Type to continue this session…',
                     onSend: (text) => ref
                         .read(sessionActionsProvider)
@@ -407,12 +413,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 active: active,
                 hasTerminal: hasTerminal,
               ),
-              onSuggestionTap: (prompt) {
-                _composer.text = prompt;
-                _composer.selection = TextSelection.collapsed(
-                  offset: prompt.length,
-                );
-              },
             ),
           ),
         ),

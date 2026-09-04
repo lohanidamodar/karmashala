@@ -611,11 +611,12 @@ Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
     if (imported != null) return _importedTranscript(imported);
     throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
   }
-  var messages = session.surface == SessionSurface.pane
+  final record = session.surface == SessionSurface.pane
       ? await _agentRecordMessages(ref, session)
       // `session.id`, not the id asked with: a superseded imported id has no
       // event log of its own.
-      : _eventLogMessages(ref, session.id);
+      : (messages: _eventLogMessages(ref, session.id), absence: null);
+  var messages = record.messages;
 
   final attribution = _attributionOf(ref, session);
   if (attribution != null) {
@@ -636,6 +637,9 @@ Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
     sessionId: session.id,
     messages: messages,
     cursor: messages.length,
+    // Only ever a reason for a nothing. A page that carries turns needs no
+    // explanation, and one that carried both would be saying two things.
+    absence: messages.isEmpty ? record.absence : null,
   );
 }
 
@@ -658,33 +662,57 @@ Future<RemoteTranscriptPage> _importedTranscript(
   );
 }
 
+/// What [_agentRecordMessages] answers with: the turns, and *why* there are
+/// none when the host can say so.
+typedef _AgentRecord = ({
+  List<RemoteTranscriptMessage> messages,
+  RemoteTranscriptAbsence? absence,
+});
+
+const _AgentRecord _nothingKnown = (
+  messages: <RemoteTranscriptMessage>[],
+  absence: null,
+);
+
 /// The agent's own transcript file — `sessionChatTranscriptProvider`'s source,
 /// read once rather than polled. Tool rows are dropped, as the desktop chat
 /// view drops them.
-Future<List<RemoteTranscriptMessage>> _agentRecordMessages(
-  Ref ref,
-  Session session,
-) async {
+///
+/// The empty answers are not interchangeable, and this is the only place that
+/// can tell them apart. `agentSupportsChatView` refusing the agent is a
+/// **structural** nothing: Antigravity's store is protobuf in an unpublished
+/// schema, so there will never be a transcript here however long the session
+/// runs, and the desktop says exactly that in its own empty state. Every other
+/// early return is a nothing we cannot account for — no external id yet, an
+/// installation that has gone, a store file the locator could not find — and
+/// those stay unexplained rather than being dressed up as the structural one.
+Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
   final externalId = session.externalSessionId;
-  if (externalId == null || externalId.isEmpty) return const [];
+  if (externalId == null || externalId.isEmpty) return _nothingKnown;
   final agentId = ref
       .read(agentInstallationDaoProvider)
       .getById(session.agentInstallationId)
       ?.agentId;
-  if (agentId == null) return const [];
+  if (agentId == null) return _nothingKnown;
   if (!agentSupportsChatView(ref.read(agentRegistryProvider).byId(agentId))) {
-    return const [];
+    return const (
+      messages: <RemoteTranscriptMessage>[],
+      absence: RemoteTranscriptAbsence.noChatView,
+    );
   }
   final path = await ref
       .read(sessionTranscriptLocatorProvider)
       .locate(agentId: agentId, externalSessionId: externalId);
-  if (path == null) return const [];
+  if (path == null) return _nothingKnown;
   final messages = await readCliTranscript(path, agentId);
-  return [
-    for (final message in messages)
-      if (message.role != 'tool')
-        RemoteTranscriptMessage(role: message.role, text: message.text),
-  ];
+  return (
+    messages: [
+      for (final message in messages)
+        if (message.role != 'tool')
+          RemoteTranscriptMessage(role: message.role, text: message.text),
+    ],
+    absence: null,
+  );
 }
 
 /// The engine's event log, mapped exactly as the desktop chat view maps it.

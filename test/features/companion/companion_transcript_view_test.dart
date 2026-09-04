@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
@@ -282,6 +283,174 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+  });
+
+  // --- Which nothing it is -------------------------------------------------
+  //
+  // "I have a running antigravity session and in the mobile companion app it
+  // shows running, but when I open it, it doesn't show any transcript." The
+  // host knew why — that agent keeps no store this app can read — and the
+  // phone drew a welcome screen with starter prompts on it, which is the one
+  // thing that reads as "this screen is broken" for a session already mid-run.
+  group('an empty transcript says which nothing it is', () {
+    const reason = CompanionChatMessage(
+      role: kCompanionAbsenceRole,
+      text: 'This agent keeps no transcript this app can read, so there is no '
+          'chat view for it — on the desktop or here.',
+    );
+
+    FakeCompanionGateway gateway({
+      List<CompanionChatMessage> messages = const [],
+      CompanionSessionStatus status = CompanionSessionStatus.working,
+    }) => FakeCompanionGateway.paired(
+      sessions: [summary('s1', title: 'Running now', status: status)],
+      transcripts: {'s1': messages},
+    );
+
+    for (final (name, size) in [
+      ('phone', kPhoneSize),
+      ('tablet', kTabletSize),
+    ]) {
+      testWidgets('$name: the reason is the screen, not a welcome', (
+        tester,
+      ) async {
+        await pumpPhone(
+          tester,
+          gateway: gateway(messages: const [reason]),
+          home: const SessionViewScreen(sessionId: 's1'),
+          size: size,
+        );
+        await tester.pump();
+
+        expect(find.textContaining('no chat view for it'), findsOneWidget);
+        // Not onboarding, and not a turn: no invitation to start something
+        // that is already running, and no gutter that reads as the agent.
+        expect(find.text('Start a conversation'), findsNothing);
+        expect(find.text('Explain architecture'), findsNothing);
+        expect(find.text('AGENT'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a session that has not started is still welcomed', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(status: CompanionSessionStatus.idle),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text('Start a conversation'), findsOneWidget);
+      expect(find.text('Explain architecture'), findsOneWidget);
+
+      // A chip writes the prompt and stops — the composer sends it.
+      await tester.tap(find.text('Explain architecture'));
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        startsWith('Explain the architecture'),
+      );
+    });
+
+    testWidgets('a session already working is offered no starter prompts', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(status: CompanionSessionStatus.working),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text('Explain architecture'), findsNothing);
+      // The hedge is still said out loud: with no reason from the host, both
+      // nothings are still possible and the phone claims neither.
+      expect(
+        find.textContaining('their terminal is the session'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  // --- What a message spends its height on ---------------------------------
+  //
+  // Measured at 390x844: a copy `IconButton` at the touch floor made every
+  // tile's gutter 48px tall to carry an 11px label, so a one-line message
+  // spent 72px of the list on 20px of text and three of them took a fifth of
+  // the transcript viewport on chrome.
+  group('a message spends its height on its text', () {
+    const three = [
+      CompanionChatMessage(role: 'user', text: 'one'),
+      CompanionChatMessage(role: 'agent', text: 'two'),
+      CompanionChatMessage(role: 'tool', text: 'three'),
+    ];
+
+    Size gutterOf(WidgetTester tester, String label) => tester.getSize(
+      find.ancestor(of: find.text(label), matching: find.byType(Row)).first,
+    );
+
+    for (final (name, size) in [
+      ('phone', kPhoneSize),
+      ('tablet', kTabletSize),
+    ]) {
+      testWidgets('$name: the gutter is sized by its label', (tester) async {
+        await pumpPhone(
+          tester,
+          gateway: gatewayWith(three),
+          home: const SessionViewScreen(sessionId: 's1'),
+          size: size,
+        );
+        await tester.pump();
+
+        for (final label in ['YOU', 'AGENT', 'TOOL']) {
+          expect(
+            gutterOf(tester, label).height,
+            lessThan(Touch.target),
+            reason: '$label: a row of chrome must not cost a whole target',
+          );
+        }
+      });
+    }
+
+    testWidgets('every message is still selectable, which is the copy', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gatewayWith(three),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      // What the copy button was for. `MarkdownMessage` is already
+      // `selectable: true` and its own long press raises the platform's
+      // selection toolbar — a target the system draws, at its own sizes —
+      // so a tool row is selectable too rather than being the one role a
+      // reader cannot get text out of.
+      expect(find.byType(SelectableText), findsWidgets);
+    });
+
+    testWidgets('message text is not the app\'s smallest step', (tester) async {
+      await pumpPhone(
+        tester,
+        gateway: gatewayWith(three),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      final theme = Theme.of(tester.element(find.byType(ListView)));
+      final tool = tester.widget<SelectableText>(
+        find.widgetWithText(SelectableText, 'three'),
+      );
+      expect(
+        tool.style?.fontSize,
+        theme.textTheme.bodyMedium?.fontSize,
+        reason: 'a tool row was `bodySmall`, the ramp\'s 12, on the phone\'s '
+            'most-read screen',
+      );
+    });
   });
 
   group('the way back never sits on the newest message', () {

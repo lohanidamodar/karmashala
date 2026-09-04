@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:file_selector/file_selector.dart';
-
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_hook_installation_service.dart';
@@ -12,6 +10,7 @@ import '../../browser/application/browser_consent_providers.dart';
 import '../../browser/domain/browser_consent.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/application/system_health.dart';
 import '../../environments/application/system_health_service.dart';
@@ -70,7 +69,8 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
   }
 
   Future<void> _browse() async {
-    final file = await openFile(
+    final file = await pickOneFile(
+      what: 'a terminal program',
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Executables', extensions: ['exe']),
       ],
@@ -191,7 +191,8 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
   }
 
   Future<void> _browse() async {
-    final file = await openFile(
+    final file = await pickOneFile(
+      what: 'an editor program',
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Executables', extensions: ['exe']),
       ],
