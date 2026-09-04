@@ -30,10 +30,43 @@ void main() {
   final codex = agentInstallation(id: 'a2', agentId: AgentIds.codex);
   final claudeInWsl = agentInstallation(id: 'a3', environmentId: 'wsl:Ubuntu');
 
+  /// A reading whose window names **no period**, which is the case the floor
+  /// cannot derive anything from and falls back to [kUsageMinInterval] for.
   AgentUsage reading({DateTime? at, double percent = 42}) => AgentUsage(
     windows: [UsageWindow(label: '5-hour', percent: percent)],
     fetchedAt: at ?? clock.nowUtc(),
   );
+
+  /// A reading shaped like the real payloads: a five-hour window and a
+  /// seven-day one, each carrying the period its own key named.
+  AgentUsage measured({
+    DateTime? at,
+    double percent = 42,
+    double weekly = 3,
+    Duration? resetsIn,
+  }) {
+    final fetchedAt = at ?? clock.nowUtc();
+    return AgentUsage(
+      windows: [
+        UsageWindow(
+          label: '5-hour',
+          percent: percent,
+          span: kUsageFiveHourWindow,
+          resetsAt: resetsIn == null ? null : fetchedAt.add(resetsIn),
+        ),
+        UsageWindow(
+          label: '7-day',
+          percent: weekly,
+          span: kUsageSevenDayWindow,
+        ),
+      ],
+      fetchedAt: fetchedAt,
+    );
+  }
+
+  /// One hundredth of a five-hour window: how long one point of that quota
+  /// takes to spend at maximum burn, and therefore the floor it implies.
+  const fiveHourFloor = Duration(minutes: 3);
 
   /// One refusal, in the shape the service records: a kind, the vendor's own
   /// sentence, and the server's advice when it gave any.
@@ -218,17 +251,17 @@ void main() {
       );
     });
 
-    test('stands in for a fresh one only inside one interval', () {
+    test('stands in for a fresh one only inside the floor', () {
       throttle.recordSuccess(claude, reading());
 
       expect(throttle.rememberedIfFresh(claude), isNotNull);
-      clock.advance(kUsageRefreshInterval - const Duration(seconds: 1));
+      clock.advance(kUsageMinInterval - const Duration(seconds: 1));
       expect(throttle.rememberedIfFresh(claude), isNotNull);
       clock.advance(const Duration(seconds: 1));
       expect(
         throttle.rememberedIfFresh(claude),
         isNull,
-        reason: 'past one interval the app would have asked anyway',
+        reason: 'past the floor a request can learn something',
       );
       expect(
         throttle.remembered(claude),
@@ -247,6 +280,172 @@ void main() {
     test('is nothing at all before the first successful read', () {
       expect(throttle.remembered(claude), isNull);
       expect(throttle.rememberedIfFresh(claude), isNull);
+    });
+  });
+
+  group('the floor the payload implies', () {
+    test('is one hundredth of the shortest window it names', () {
+      // Three minutes, and it is not a preference: a five-hour quota has a
+      // hundred points in it, so one point cannot be spent in less.
+      expect(usageAskFloor(measured()), fiveHourFloor);
+    });
+
+    test('is the same however many panes spend it', () {
+      // The number this class defends is a percentage of an *account's*
+      // window, so ten panes on one account still have a hundred points
+      // between them. This is why one floor can serve a display that is per
+      // pane.
+      expect(usageAskFloor(measured(percent: 4)), fiveHourFloor);
+      expect(usageAskFloor(measured(percent: 96)), fiveHourFloor);
+    });
+
+    test('ignores a window whose period the payload did not name', () {
+      // Paid overage carries a utilization and no period at all. It must not
+      // shorten the floor the named windows earned, and it must not lengthen
+      // it either.
+      final withOverage = AgentUsage(
+        windows: [
+          ...measured().windows,
+          const UsageWindow(label: 'Extra usage', percent: 8),
+        ],
+        fetchedAt: clock.nowUtc(),
+      );
+      expect(usageAskFloor(withOverage), fiveHourFloor);
+    });
+
+    test('falls back to the minute when nothing names a period', () {
+      // Antigravity's tiers, and any reply we have not learned to read. A
+      // window we cannot bound must not be given a bound.
+      expect(usageAskFloor(reading()), kUsageMinInterval);
+    });
+
+    test('is never under the minute, however short the window', () {
+      final tiny = AgentUsage(
+        windows: [
+          UsageWindow(
+            label: 'ten minutes',
+            percent: 1,
+            span: const Duration(minutes: 10),
+          ),
+        ],
+        fetchedAt: clock.nowUtc(),
+      );
+      expect(usageAskFloor(tiny), kUsageMinInterval);
+    });
+
+    test('is what a reading stands in for, per account', () {
+      throttle.recordSuccess(claude, measured());
+      expect(throttle.floorFor(claude), fiveHourFloor);
+
+      clock.advance(fiveHourFloor - const Duration(seconds: 1));
+      expect(
+        throttle.rememberedIfFresh(claude),
+        isNotNull,
+        reason: 'inside three minutes a request could not have learned a point',
+      );
+      clock.advance(const Duration(seconds: 1));
+      expect(throttle.rememberedIfFresh(claude), isNull);
+    });
+  });
+
+  group('when the app asks on its own', () {
+    test('waits the floor after a reading that moved', () {
+      throttle.recordSuccess(claude, measured(percent: 40));
+      expect(throttle.dueIn(claude), fiveHourFloor);
+
+      clock.advance(fiveHourFloor);
+      throttle.recordSuccess(claude, measured(percent: 41));
+      expect(
+        throttle.dueIn(claude),
+        fiveHourFloor,
+        reason: 'the account is being spent; keep asking at the floor',
+      );
+    });
+
+    test('doubles while nothing moves, and stops at the ceiling', () {
+      throttle.recordSuccess(claude, measured(percent: 40));
+      final waits = <Duration>[throttle.dueIn(claude)];
+      // Eight unmoved readings: 3m, 6m, 12m and then the ceiling, whatever
+      // else happens.
+      for (var i = 0; i < 8; i++) {
+        clock.advance(throttle.dueIn(claude));
+        throttle.recordSuccess(claude, measured(at: clock.nowUtc()));
+        waits.add(throttle.dueIn(claude));
+      }
+      expect(waits.take(4), [
+        fiveHourFloor,
+        fiveHourFloor,
+        fiveHourFloor * 2,
+        fiveHourFloor * 4,
+      ]);
+      expect(waits.last, kUsageIdleCeiling);
+      expect(
+        waits.every((w) => w <= kUsageIdleCeiling),
+        isTrue,
+        reason: 'a reading has to be worth something when the user looks',
+      );
+    });
+
+    test('a movement anywhere in the account collapses the ladder', () {
+      throttle.recordSuccess(claude, measured(percent: 40, weekly: 3));
+      for (var i = 0; i < 4; i++) {
+        clock.advance(throttle.dueIn(claude));
+        throttle.recordSuccess(claude, measured(at: clock.nowUtc()));
+      }
+      expect(throttle.dueIn(claude), greaterThan(fiveHourFloor));
+
+      // The chip shows one window, but the seven-day figure creeping is still
+      // an account being spent.
+      clock.advance(throttle.dueIn(claude));
+      throttle.recordSuccess(
+        claude,
+        measured(at: clock.nowUtc(), weekly: 4),
+      );
+      expect(throttle.dueIn(claude), fiveHourFloor);
+    });
+
+    test('never later than a window reset, which is when it will change', () {
+      // Idle for long enough to earn a twelve-minute wait, then a reading
+      // whose window turns over in four.
+      throttle.recordSuccess(claude, measured(percent: 40));
+      for (var i = 0; i < 3; i++) {
+        clock.advance(throttle.dueIn(claude));
+        throttle.recordSuccess(claude, measured(at: clock.nowUtc()));
+      }
+      expect(throttle.dueIn(claude), fiveHourFloor * 4);
+
+      clock.advance(throttle.dueIn(claude));
+      throttle.recordSuccess(
+        claude,
+        measured(at: clock.nowUtc(), resetsIn: const Duration(minutes: 4)),
+      );
+      expect(
+        throttle.dueIn(claude),
+        const Duration(minutes: 4) + kUsageResetGrace,
+        reason: 'the one moment the number is known to change',
+      );
+    });
+
+    test('a reset already past cannot pull an ask inside the floor', () {
+      throttle.recordSuccess(
+        claude,
+        measured(resetsIn: const Duration(seconds: -30)),
+      );
+      expect(throttle.dueIn(claude), fiveHourFloor);
+    });
+
+    test('is now before anything has ever been read', () {
+      expect(throttle.dueIn(claude), Duration.zero);
+    });
+
+    test('is per account, like everything else here', () {
+      throttle.recordSuccess(claude, measured());
+      expect(throttle.dueIn(claude), fiveHourFloor);
+      expect(
+        throttle.dueIn(codex),
+        Duration.zero,
+        reason: 'one account being on schedule says nothing about another',
+      );
     });
   });
 

@@ -7,9 +7,7 @@ import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -27,20 +25,25 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
-/// **What the usage chip costs the row it sits in.**
+/// **What the account quota costs the window's own row — which is now
+/// nothing.**
 ///
-/// `status_bar.dart` carries a note about the two terminal counts: "a process
-/// exiting anywhere used to repaint this whole row". The chip must not
-/// reintroduce that in the other direction — a quota moving is the most
-/// frequent change on the row, and it must repaint one item and no others.
+/// The chip lived here and has moved to the session's bar under the terminal,
+/// for the reason the model chip moved before it: *"tied to session not app
+/// because each session might be different one."* A quota belongs to an
+/// `(agent, environment)` account, and a window holds panes on several — so one
+/// figure in the window chrome reported whichever session the app believed was
+/// focused and attributed its remaining quota to every pane beside it.
+///
+/// So this file's obligation inverts, and is worth keeping either way. This row
+/// must not repaint for a quota **at all** now — it has no chip of its own to
+/// justify it — and it must still hold at 720x560 with the chip gone and the
+/// state group taking the middle group's room. `session_bar_usage_test.dart`
+/// measures the chip in its new home.
 ///
 /// Counted, never timed, for the reason every other cost test in this suite
 /// gives: the suite runs at `--concurrency=4`, so a wall-clock assertion over a
 /// few milliseconds is a coin toss, while widget builds are countable exactly.
-///
-/// What it measures (2026-09-02): a usage change costs **1 chip build and 0
-/// builds of the row's other items**; a blurred window costs **0 of either and
-/// no request at all**, five intervals deep.
 void main() {
   late FakeAgentUsageService service;
 
@@ -56,19 +59,20 @@ void main() {
     seeded = db;
     addTearDown(db.close);
     // A name long enough to compete for the row's width at 720px, which is
-    // where the chip's arrival is felt.
+    // where the loss of the middle group is felt.
     RepositoryDao(db).insert(
       repository(id: 'r2', name: 'karmashala-app-desktop-shell', path: r'C:\s'),
     );
     final container = ProviderContainer(
       overrides: [
-        // A real interval: this file is the one that is about the tick.
+        // A real floor: this file still has to prove a tick cannot reach the
+        // row, and a zero floor would arm nothing to prove it with.
         ...fakeTerminalOverrides(
           database: db,
-          usageRefreshInterval: kUsageRefreshInterval,
+          usageService: service,
+          usagePollFloor: kUsageMinInterval,
         ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        agentUsageServiceProvider.overrideWithValue(service),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -84,7 +88,7 @@ void main() {
 
   /// Puts session `s1` in the terminal tab on screen and takes the Explorer's
   /// selection away — the state a user is in after activating a tab whose
-  /// session has no pane yet, which is where the chips went missing.
+  /// session has no pane yet.
   void showInTerminalOnly(ProviderContainer container) {
     final opened = container
         .read(terminalSessionsControllerProvider.notifier)
@@ -114,29 +118,39 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('a usage change repaints the chip and nothing else in the row', (
-    tester,
-  ) async {
+  testWidgets('the quota is not on this row any more, and neither is its '
+      'timer', (tester) async {
     service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+
+    expect(find.byType(UsageChip), findsNothing);
+    expect(find.textContaining('62%'), findsNothing);
+    expect(
+      service.calls,
+      isEmpty,
+      reason: 'the window chrome asks no vendor anything',
+    );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('a quota change cannot reach the row at all', (tester) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = barContainer();
+    await tester.pumpWidget(bar(container));
+    await tester.pump();
 
     ShellStatusBar.debugItemBuildCount = 0;
     UsageChip.debugBuildCount = 0;
 
     service.answer = usageSnapshot(percent: 77);
-    container.read(usageRefreshProvider.notifier).refresh();
-    await tester.pump();
+    // Nothing watches the policy here, so there is nothing to refresh — which
+    // is the assertion. Five intervals of a real floor produce no build of
+    // anything on this row.
+    await tester.pump(kUsageMinInterval * 5);
     await tester.pump();
 
-    expect(find.text('77% · 2h11m'), findsOneWidget);
-    expect(
-      UsageChip.debugBuildCount,
-      greaterThan(0),
-      reason: 'the chip is the thing that changed',
-    );
     expect(
       ShellStatusBar.debugItemBuildCount,
       0,
@@ -144,87 +158,45 @@ void main() {
           'the branch, the tab count and the panel toggle know nothing '
           'about a quota and must not repaint for one',
     );
+    expect(UsageChip.debugBuildCount, 0, reason: 'there is no chip here');
     await quiesce(tester, container);
   });
 
-  testWidgets('a blurred window costs the row nothing at all', (tester) async {
-    service.answer = usageSnapshot(percent: 62);
-    final container = barContainer();
-    await tester.pumpWidget(bar(container));
-    await tester.pump();
-
-    container.read(windowFocusedProvider.notifier).set(false);
-    await tester.pump();
-    ShellStatusBar.debugItemBuildCount = 0;
-    UsageChip.debugBuildCount = 0;
-    final fetches = service.calls.length;
-
-    await tester.pump(kUsageRefreshInterval * 5);
-    await tester.pump();
-
-    expect(service.calls.length, fetches, reason: 'zero polling while away');
-    expect(UsageChip.debugBuildCount, 0);
-    expect(ShellStatusBar.debugItemBuildCount, 0);
-    await quiesce(tester, container);
-  });
-
-  testWidgets('the row still holds at the minimum window with the chip on it', (
+  testWidgets('the row still holds at the minimum window without the chip', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     await expectSurvivesWindowMatrix(
       tester,
       build: () => bar(container),
       because:
-          'the status bar already competes for width at 720x560, and the chip '
-          'adds a glyph, a percent and a countdown to the busiest end of it',
+          'the status bar competes for width at 720x560, and losing the middle '
+          'group changes what the two that are left are allotted',
     );
     await quiesce(tester, container);
   });
 
-  testWidgets('the muted chip holds at the minimum window too', (tester) async {
-    // The longest state the chip can be in is not the number — it is the
-    // failure, whose whole sentence goes in the tooltip.
-    service.failure = UsageException(
-      'Access token expired. Run the agent once to refresh, then retry.',
-    );
-    final container = barContainer();
-    await expectSurvivesWindowMatrix(
-      tester,
-      build: () => bar(container),
-      because: 'a muted chip must not change the row it sits in',
-    );
-    await quiesce(tester, container);
-  });
-
-  testWidgets('the chip follows the terminal tab when the tree selects nothing', (
+  testWidgets('the row survives a session that is only in the terminal', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
+    // The regression the chip used to guard: selection is dropped on purpose
+    // whenever a selected session has no live pane. Nothing on this row reads
+    // the session any more, so it must simply be untroubled by it.
     final container = barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pumpAndSettle();
-    expect(find.textContaining('62%'), findsOneWidget);
 
     showInTerminalOnly(container);
     await tester.pumpAndSettle();
 
-    // The regression: selection is dropped on purpose whenever a selected
-    // session has no live pane, so a window with an agent plainly running in it
-    // was left with no quota and no model — the two facts about that agent.
-    expect(
-      find.textContaining('62%'),
-      findsOneWidget,
-      reason: 'the session in the tab on screen is the one the window is about',
-    );
+    expect(find.byType(ShellStatusBar), findsOneWidget);
+    expect(find.byType(UsageChip), findsNothing);
     await quiesce(tester, container);
   });
 
-  testWidgets('the toggle rides the right edge and the chips hold the middle', (
+  testWidgets('the toggle rides the right edge and the state group holds it', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pumpAndSettle();
@@ -241,23 +213,11 @@ void main() {
           )
           .first,
     );
-    final chip = tester.getRect(find.textContaining('62%'));
 
     expect(
       row.right - toggle.right,
       lessThan(24),
       reason: 'the panel toggle is the last item on the row',
-    );
-    // And the state group rides the right edge with it rather than drifting
-    // into the middle of the row: everything from the tab count rightwards is
-    // one block, and the row's left half is where you are, not what is running.
-    // And the two chips are the middle group, near the centre of the row —
-    // they are about the one session in front of you, while the counts beside
-    // the toggle are about the whole window.
-    expect(
-      (chip.center.dx - row.center.dx).abs(),
-      lessThan(row.width * 0.1),
-      reason: 'the session chips sit around the middle of the row',
     );
     await quiesce(tester, container);
   });
@@ -265,12 +225,10 @@ void main() {
   testWidgets('the state group reaches the right edge of a wide window', (
     tester,
   ) async {
-    service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     // Wide, because this is invisible at 800: the narrower the row, the less
     // free space there is to be lost, and the bug is *unused free space*. On a
-    // 1600px window it came to 500 blank pixels past the panel toggle, with the
-    // whole group sitting in the middle of the bar.
+    // 1600px window it came to 500 blank pixels past the panel toggle.
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -292,14 +250,6 @@ void main() {
       row.right - toggle.right,
       lessThan(24),
       reason: 'the group ends where the row ends, at any width',
-    );
-    // And the chips stay in the middle at that width too: the wide window is
-    // where a layout drifts, because it is the only one with slack to misplace.
-    final chip = tester.getRect(find.textContaining('62%'));
-    expect(
-      (chip.center.dx - row.center.dx).abs(),
-      lessThan(row.width * 0.1),
-      reason: 'the session chips hold the middle on a wide window',
     );
     await quiesce(tester, container);
   });

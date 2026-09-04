@@ -401,16 +401,65 @@ void main() {
       );
     });
 
-    test('a reading inside one interval is served without asking', () async {
+    test('the floor is read off the payload, not off a constant', () async {
       final service = serviceWith();
       await service.fetch(agentInstallation(), [posixEnv()]);
       expect(http.requests, 1);
 
-      // What a pane switch does: `agentUsageProvider` is autoDispose, so the
-      // question is asked again from scratch. It must not become a request.
+      // `_usageBody` is a `five_hour` window, so one point of it is three
+      // minutes. Nothing chose that number; the key did.
+      expect(
+        service.askFloor(agentInstallation()),
+        const Duration(minutes: 3),
+      );
       expect(service.rememberedIfFresh(agentInstallation()), isNotNull);
-      clock.advance(kUsageRefreshInterval);
+      clock.advance(kUsageMinInterval);
+      expect(
+        service.rememberedIfFresh(agentInstallation()),
+        isNotNull,
+        reason: 'a minute in, a request could not have learned a point',
+      );
+      clock.advance(const Duration(minutes: 2));
       expect(service.rememberedIfFresh(agentInstallation()), isNull);
+    });
+
+    test('**no caller can ask twice inside the floor**', () async {
+      // The property the whole rate-limit fix rests on. `fetch` is the only
+      // door, and the floor is behind it rather than in front of each caller —
+      // the tick, the chip's click, a status change, the Settings button, the
+      // fan-out dialog and the MCP tool all arrive here, and four of them used
+      // to arrive unconditionally.
+      final service = serviceWith();
+      await service.fetch(agentInstallation(), [posixEnv()]);
+      expect(http.requests, 1);
+
+      for (var i = 0; i < 20; i++) {
+        clock.advance(const Duration(seconds: 8));
+        await service.fetch(agentInstallation(), [posixEnv()]);
+      }
+      expect(
+        http.requests,
+        1,
+        reason: 'twenty asks across 160 seconds, one request',
+      );
+
+      clock.advance(const Duration(minutes: 3));
+      await service.fetch(agentInstallation(), [posixEnv()]);
+      expect(http.requests, 2, reason: 'past the floor it asks for real');
+    });
+
+    test('a served reading is the one that was read, age and all', () async {
+      final service = serviceWith();
+      final first = await service.fetch(agentInstallation(), [posixEnv()]);
+      clock.advance(const Duration(minutes: 1));
+      final second = await service.fetch(agentInstallation(), [posixEnv()]);
+
+      expect(http.requests, 1);
+      expect(
+        second.fetchedAt,
+        first.fetchedAt,
+        reason: 'nothing here invents a fresher timestamp for an old number',
+      );
     });
 
     test('nothing is remembered before the first reading', () {

@@ -4,7 +4,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/agent_usage_service.dart';
 import '../domain/agent_ids.dart';
@@ -29,47 +28,57 @@ final agentUsageServiceProvider = Provider<AgentUsageService>(
 /// the window has focus — a second polling loop behind the one
 /// `UsageRefreshController` owns, and one that would keep hitting the vendor
 /// endpoint with an expired token while the user is away. A failure stays a
-/// failure until something asks again.
+/// **Every build is answered from memory when it can be**, and the check is
+/// not here.
 ///
-/// **A first build is answered from memory when it can be.** `autoDispose` plus
-/// a family key means this provider is created afresh every time the focused
-/// pane moves to another account and back, and each creation used to be an
-/// unconditional request — the one trigger no interval bounded. `isFirstBuild`
-/// is exactly the case Riverpod documents as "the state was destroyed and later
-/// recreated", so a pane switch now costs a request only when the reading the
-/// app already holds has aged past one interval. A tick or a click is not a
-/// first build and always asks.
+/// It used to be, guarded by `ref.isFirstBuild`, and that bounded exactly one
+/// trigger. `isFirstBuild` is true only when Riverpod *mounts* the element — a
+/// pane switch, because `autoDispose` plus a family key destroys and recreates
+/// this provider as the account on screen changes. Every other trigger reaches
+/// here through `ref.invalidate`, which is a rebuild and not a mount, so the
+/// tick, the chip's click and a session's status moving each went straight to
+/// the vendor however recently the app had read the number. The floor now lives
+/// in [AgentUsageService.fetch], where all six paths pass it.
+///
+/// **Retry is off deliberately.** Riverpod's default would re-run a failed
+/// fetch ten times with exponential backoff, on its own timer, whether or not
+/// the window has focus — a second polling loop behind the one
+/// `UsageRefreshController` owns, and one that would keep hitting the vendor
+/// endpoint with an expired token while the user is away. A failure stays a
+/// failure until something asks again.
 final agentUsageProvider = FutureProvider.autoDispose
-    .family<AgentUsage, AgentInstallation>((ref, installation) async {
+    .family<AgentUsage, AgentInstallation>((ref, installation) {
       final service = ref.watch(agentUsageServiceProvider);
-      if (ref.isFirstBuild) {
-        final remembered = service.rememberedIfFresh(installation);
-        if (remembered != null) return remembered;
-      }
       final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
       return service.fetch(installation, environments);
     }, retry: (_, _) => null);
 
-/// The installation whose quota the app chrome should be showing: the agent
-/// behind the session you are looking at.
+/// **Whose quota one session is spending**: the installation behind
+/// [sessionId], when we speak its agent's usage endpoint.
 ///
-/// Null — and therefore **no chip at all** — when nothing is selected, or when
-/// the selected session's agent is not one of the two whose usage endpoint
-/// [AgentUsageService] speaks. That is the same allowlist the service enforces,
-/// applied one step earlier so an Antigravity pane shows nothing rather than an
-/// error the user can do nothing about.
+/// Keyed by session rather than derived from whatever the app believes is
+/// focused, because the two are not the same question and the app was answering
+/// the wrong one. `focusedSessionIdProvider` — the Explorer's selection, then
+/// the active pane — decided which account the window's status bar reported,
+/// so a workspace with a Claude pane and a Codex pane showed one figure for
+/// both, and a click in the tree could change which account the number belonged
+/// to without changing the pane the user was typing in. Panes run different
+/// agents and different accounts; each pane's chip now asks about its own.
 ///
-/// Watches membership and placement only: a session's agent installation
-/// cannot change under a rename or a status transition, and this sits in a row
-/// that redraws on every shell change already.
-final focusedUsageInstallationProvider =
-    Provider.autoDispose<AgentInstallation?>((ref) {
-      ref.watchSessionKinds(const {
-        SessionChangeKind.membership,
-        SessionChangeKind.placement,
-      });
-      final sessionId = ref.watch(focusedSessionIdProvider);
-      if (sessionId == null) return null;
+/// Null — and therefore **no chip at all** — when the row has gone, or when its
+/// agent is not one of the three whose usage endpoint [AgentUsageService]
+/// speaks. That is the same allowlist the service enforces, applied one step
+/// earlier so a pane on an agent we have no endpoint for shows nothing rather
+/// than an error the user can do nothing about. Nothing is the answer on
+/// purpose: a dash would read as a reading.
+///
+/// Watches membership only. A row's `agentInstallationId` is written when it is
+/// created and never moves, so a rename, a status transition or a pane change
+/// cannot alter this answer; the installation list is watched for the one thing
+/// that can, a re-detection.
+final usageInstallationForSessionProvider = Provider.autoDispose
+    .family<AgentInstallation?, String>((ref, sessionId) {
+      ref.watchSessionKinds(const {SessionChangeKind.membership});
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return null;
       for (final installation in ref.watch(

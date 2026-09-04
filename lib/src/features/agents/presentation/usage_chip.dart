@@ -9,6 +9,7 @@ import '../../settings/presentation/settings_screen.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
 import '../data/agent_usage_service.dart';
+import '../data/usage_throttle.dart';
 import '../domain/agent_usage.dart';
 import '../domain/usage_failure.dart';
 
@@ -210,22 +211,40 @@ String formatUsageDuration(Duration span) {
   return '${span.inMinutes}m';
 }
 
-/// **Live quota for the agent you are looking at**, in the status bar.
+/// **What the account behind one session has left**, in that session's own bar.
 ///
-/// Follows the focused session: a Claude pane shows Claude's windows, a Codex
-/// pane shows Codex's, and a pane running anything else shows **nothing at
-/// all** — [focusedUsageInstallationProvider] applies the same allowlist the
-/// service does, so an agent we have no endpoint for produces an absent chip
-/// rather than a permanent error.
+/// It sits with the session's permission mode, its model and its delivery
+/// actions, and not in the window's status bar, where it used to be. The
+/// owner's words: *"move this usage to the terminal status bar so it's tied to
+/// session not app because each session might be different one."* Panes run
+/// different agents — Claude Code, Codex and Antigravity each have their own
+/// quota — and more than one account of the same agent, so one figure in the
+/// window's chrome attributed one account's remaining quota to a pane running a
+/// different one. The model chip moved out of that row for the same reason and
+/// is drawn a few pixels from this.
 ///
-/// It never raises a `SnackBar`. A stale token would nag once a minute; the
+/// **The reading is per account; the display is per session.** [sessionId] only
+/// chooses *which* account is described. The fetch, the schedule, the rate limit
+/// and the timer all belong to `usageAccountKey` — the `(agent, environment)`
+/// pair — so several panes on one account cost one request between them, and a
+/// pane that is not on screen costs nothing at all, because nothing watches its
+/// providers.
+///
+/// A session whose agent has **no usage endpoint** draws nothing:
+/// [usageInstallationForSessionProvider] applies the service's own allowlist, so
+/// the chip is absent rather than showing a dash that reads like data.
+///
+/// It never raises a `SnackBar`. A stale token would nag on every tick; the
 /// failure lives in the chip and in its tooltip, where the user can read it
 /// when they choose to.
 class UsageChip extends ConsumerStatefulWidget {
-  const UsageChip({super.key});
+  const UsageChip({required this.sessionId, super.key});
 
-  /// Builds of the chip, counted so the status bar's cost test can prove a
-  /// usage change repaints this and nothing else in the row.
+  /// The session whose account this describes.
+  final String sessionId;
+
+  /// Builds of the chip, counted so a cost test can prove a usage change
+  /// repaints this and nothing else in the bar it sits in.
   @visibleForTesting
   static int debugBuildCount = 0;
 
@@ -242,24 +261,32 @@ class _UsageChipState extends ConsumerState<UsageChip> {
   void dispose() {
     // The widget tree going away must take the timer with it. Riverpod's own
     // scheduled auto-dispose is cancelled when the surrounding `ProviderScope`
-    // unmounts, so this is the only hook that always runs.
-    _policy?.stopPolling();
+    // unmounts, so this is the only hook that always runs — but the timer now
+    // belongs to the *account*, so it is released rather than stopped: a
+    // sibling pane on the same account may still be on screen, and stopping
+    // outright took the schedule away from it.
+    _policy?.release(this);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     UsageChip.debugBuildCount++;
-    final installation = ref.watch(focusedUsageInstallationProvider);
+    final installation = ref.watch(
+      usageInstallationForSessionProvider(widget.sessionId),
+    );
     if (installation == null) return const SizedBox.shrink();
 
-    // Keeps the one refresh timer alive for exactly as long as a chip is on
-    // screen; the policy owns the ticking, this only asks for it to exist —
-    // and re-arms the tick that this widget's own teardown cancelled.
-    ref.watch(usageRefreshProvider);
-    final policy = ref.read(usageRefreshProvider.notifier);
+    // Keeps this **account's** refresh timer alive for exactly as long as a
+    // chip on it is on screen; the policy owns the ticking, this only asks for
+    // it to exist — and re-arms the tick that this widget's own teardown
+    // cancelled. Keyed by account, so two panes on one account share one timer
+    // and a second account brings its own.
+    final account = usageAccountKey(installation);
+    ref.watch(usageRefreshProvider(account));
+    final policy = ref.read(usageRefreshProvider(account).notifier);
     _policy = policy;
-    policy.ensurePolling();
+    policy.retain(this);
 
     final view = usageChipViewFor(
       ref.watch(agentUsageProvider(installation)),

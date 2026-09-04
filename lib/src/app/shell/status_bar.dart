@@ -5,7 +5,6 @@ import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import 'side_panel_state.dart';
 
-import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/projects/application/projects_controller.dart';
@@ -17,11 +16,15 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 /// place that answers "is something running that I cannot see" without opening a
 /// dialog. Every item is a button, because a status bar that reports a fact you
 /// then have to go and find is half a control.
+///
+/// **Everything on it is about the window.** Two per-session chips used to sit
+/// here and both have gone to the session's own bar: the model, and then the
+/// account quota. See the comment on the row for why the quota could not stay.
 class ShellStatusBar extends ConsumerWidget {
   const ShellStatusBar({super.key});
 
   /// Builds of this row's own items, counted so a cost test can prove that a
-  /// usage change repaints the chip and leaves the rest of the row alone.
+  /// per-session change — a model, a quota — does not reach this row at all.
   @visibleForTesting
   static int debugItemBuildCount = 0;
 
@@ -62,7 +65,7 @@ class ShellStatusBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       child: DefaultTextStyle.merge(
         style: style,
-        // Three groups with the slack between them, rather than one row with a
+        // Two groups with the slack between them, rather than one row with a
         // `Spacer`. The two look equivalent and are not: a `Flexible` child is
         // allotted a share of the free space and then sizes itself to its
         // content, and the share it does not use is **not** handed back to the
@@ -72,16 +75,15 @@ class ShellStatusBar extends ConsumerWidget {
         // every pixel of slack *between* the groups instead, so none of it can
         // escape to either end.
         //
-        // The order is what each group answers: where you are, what this
-        // session is costing, and what is running. The two chips sit in the
-        // middle because they are about the one session in front of you, while
-        // the counts on the right are about the whole window.
-        //
-        // "Middle" here means equal gaps, not dead centre — the middle group
-        // lands half the difference between the two side groups to the right of
-        // true centre, which measures 7px at 900 and 52px at 1800. Exact
-        // centring would need the side groups padded to a common width, and
-        // that width can only be known after they are laid out.
+        // The order is what each group answers: where you are, and what is
+        // running. **Both are facts about the window**, which is now the whole
+        // of this row's remit. The two chips that were not — the model a
+        // session runs under, and the quota its account is spending — have both
+        // moved to the session's own bar under the terminal. The quota was the
+        // last of them: it is per *account*, and the window shows panes on
+        // several, so one figure here reported whichever session the app
+        // believed was focused and attributed its account's remaining quota to
+        // every pane beside it.
         //
         // Every group is `Flexible`, and that is not decoration: a non-flex
         // child of a `Row` is laid out unbounded, and a `Flexible` inside an
@@ -125,24 +127,11 @@ class ShellStatusBar extends ConsumerWidget {
                 ],
               ),
             ),
-            // What the account has left, which is the one thing here that is
-            // about neither where you are nor what is running in this window.
-            // `const`, so a rebuild of this row cannot rebuild the chip and a
-            // quota moving cannot rebuild the row — the subscription is the
-            // chip's own, and it is the only thing that repaints for it.
-            //
-            // The model chip was here too, and moved: which model a session
-            // runs under is a fact about *that session*, so it belongs in the
-            // session's own bar beside its permission mode and its commit and
-            // push actions, not in the window's chrome beside the quota.
-            const Flexible(flex: 4, child: Center(child: UsageChip())),
-            // 1 : 4 : 5, measured rather than picked. A loose `Flexible` is
-            // capped at its share even when the other groups leave the row
-            // half empty, so these are not preferences, they are budgets: at
-            // 720x560 the session chips need 209px with the longest model name
-            // a shipped agent has, and this group needs 362px at the 1.3x OS
-            // text step. Every neighbouring pair was tried against the window
-            // matrix — 3:5, 3:6 and 4:6 each overflow a cell that 4:5 clears.
+            // 1 : 5, from the measured 1 : 4 : 5 with the quota's middle group
+            // taken out. A loose `Flexible` is capped at its share even when
+            // the other group leaves the row half empty, so these are not
+            // preferences, they are budgets: this group needs 362px at 720x560
+            // on the 1.3x OS text step, and the ratio is what reserves it.
             Flexible(
               flex: 5,
               child: Row(

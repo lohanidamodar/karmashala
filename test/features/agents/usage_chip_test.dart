@@ -7,6 +7,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
+import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
 import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
@@ -30,6 +31,10 @@ class _Movable implements Clock {
   DateTime nowUtc() => now.toUtc();
 }
 
+/// The account key the seeded workspace files its quota under, and therefore
+/// the key of the refresh policy behind its chip: `claudeCode@windows`.
+final _claudeAccount = usageAccountKey(agentInstallation());
+
 /// The chip, in a tree, reading one container.
 ///
 /// [visible] takes the chip out without taking the scope with it — the shape a
@@ -43,7 +48,7 @@ Widget chipIn(ProviderContainer container, {bool visible = true}) =>
       child: MaterialApp(
         home: Scaffold(
           body: Center(
-            child: visible ? const UsageChip() : const SizedBox.shrink(),
+            child: visible ? const UsageChip(sessionId: 's1') : const SizedBox.shrink(),
           ),
         ),
       ),
@@ -54,21 +59,26 @@ Widget chipIn(ProviderContainer container, {bool visible = true}) =>
 /// signal (`session_verdict_mark.dart` states it, and `CandidateStateMark` —
 /// the last surface that broke it — now keeps it too).
 void main() {
+  late _Movable clock;
   late FakeAgentUsageService service;
   final light = SemanticColors.forBrightness(Brightness.light);
 
-  setUp(() => service = FakeAgentUsageService());
+  setUp(() {
+    // One clock for the container and for the service, so a test that moves
+    // time past the account's floor moves it for both. A fixed clock leaves
+    // every reading eternally fresh and no refresh in this file can reach the
+    // endpoint.
+    clock = _Movable(testTime);
+    service = FakeAgentUsageService(clock: clock);
+  });
 
-  ProviderContainer containerFor({
-    String agentId = AgentIds.claudeCode,
-    Clock? clock,
-  }) {
+  ProviderContainer containerFor({String agentId = AgentIds.claudeCode}) {
     final db = seedUsageDatabase(agentId: agentId);
     addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        clockProvider.overrideWithValue(clock ?? FixedClock(testTime)),
+        clockProvider.overrideWithValue(clock),
         agentUsageServiceProvider.overrideWithValue(service),
         // Settings opens on a tap; nothing here may probe a real machine.
         commandRunnerFactoryProvider.overrideWithValue(
@@ -85,13 +95,16 @@ void main() {
   Future<ProviderContainer> pumpChip(
     WidgetTester tester, {
     String agentId = AgentIds.claudeCode,
-    Clock? clock,
   }) async {
-    final container = containerFor(agentId: agentId, clock: clock);
+    final container = containerFor(agentId: agentId);
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
     return container;
   }
+
+  /// Moves past the account's floor, which is what a refresh has to do before
+  /// it can reach the endpoint at all — [usageFixtureFloor].
+  void pastTheFloor() => clock.now = clock.now.add(usageFixtureFloor);
 
   /// The policy owns a real periodic timer, and `testWidgets` fails a test that
   /// leaves one pending. Blur is the app's own way of cancelling it.
@@ -242,20 +255,21 @@ void main() {
     expect(find.text('62% · 2h11m'), findsOneWidget);
 
     // Offline behaves exactly like any other failed fetch.
+    pastTheFloor();
     service.failure = UsageException(
       'Could not reach the usage service: SocketException',
     );
-    container.read(usageRefreshProvider.notifier).refresh();
+    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
     await tester.pump();
     await tester.pump();
 
     expect(
-      find.text('62% · 2h11m'),
+      find.text('62% · 2h8m'),
       findsOneWidget,
       reason: 'losing a number you had is worse than an old one that admits it',
     );
     final tip = tooltipOf(tester);
-    expect(tip, contains('Last checked just now'));
+    expect(tip, contains('Last checked 3m ago'));
     expect(
       tip,
       contains('Refresh failed: Could not reach the usage service'),
@@ -272,17 +286,18 @@ void main() {
 
     // What the endpoint actually sent the owner. The service turns it into a
     // wait; the chip's job is to keep the number and explain the pause.
+    pastTheFloor();
     service.failure = UsageException(
       'Rate limited by the usage service.',
       kind: UsageFailureKind.rateLimited,
     );
-    container.read(usageRefreshProvider.notifier).refresh();
+    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62% · 2h8m'), findsOneWidget);
     final tip = tooltipOf(tester);
-    expect(tip, contains('Last checked just now'));
+    expect(tip, contains('Last checked 3m ago'));
     expect(tip, contains('Rate limited by the usage service'));
     expect(tip, contains('Waiting 1m'));
     expect(
@@ -299,12 +314,15 @@ void main() {
 
     // And the poll stops spending requests on a limit it has been told about —
     // the whole bug: 60 requests an hour into an endpoint that was refusing.
+    // Thirty seconds on: past the floor, so the floor is not what refuses; the
+    // wait the vendor's own `429` bought is.
     final spent = service.calls.length;
-    container.read(usageRefreshProvider.notifier).refresh();
+    clock.now = clock.now.add(const Duration(seconds: 30));
+    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
     await tester.pump();
     await tester.pump();
     expect(service.calls.length, spent, reason: 'the backoff is in force');
-    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('62% · 2h7m'), findsOneWidget);
     await quiesce(tester, container);
   });
 
@@ -314,10 +332,8 @@ void main() {
     // a previous value through a refresh, but not through the autoDispose that
     // a pane switch causes — and the first failure after coming back then had
     // nothing to fall back on.
-    final clock = _Movable(testTime);
-    service = FakeAgentUsageService(clock: clock)
-      ..answer = usageSnapshot(percent: 62);
-    final container = containerFor(clock: clock);
+    service.answer = usageSnapshot(percent: 62);
+    final container = containerFor();
     await tester.pumpWidget(chipIn(container));
     await tester.pump();
     expect(find.text('62% · 2h11m'), findsOneWidget);
@@ -348,7 +364,7 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('coming back inside one interval costs no request at all', (
+  testWidgets('coming back inside the floor costs no request at all', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
@@ -380,6 +396,7 @@ void main() {
     service.answer = usageSnapshot();
     final container = await pumpChip(tester);
     final before = service.calls.length;
+    pastTheFloor();
 
     await tester.tap(find.byIcon(AppIcons.circleHalf));
     await tester.pumpAndSettle();
@@ -387,6 +404,29 @@ void main() {
     expect(service.calls.length, before + 1, reason: 'a click is a refresh');
     expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.text('USAGE & LIMITS'), findsOneWidget);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('and clicking inside the floor spends nothing, however often', (
+    tester,
+  ) async {
+    // **A click is not a licence.** It is a request path like any other, and it
+    // passes the same floor: inside three minutes the number it would fetch is
+    // the number already on the chip, so the click opens the panel and asks
+    // nobody. Nothing in the app can force a request any more, which is the
+    // point — four of the five triggers used to be able to.
+    service.answer = usageSnapshot();
+    final container = await pumpChip(tester);
+    final before = service.calls.length;
+
+    for (var i = 0; i < 5; i++) {
+      await tester.tap(find.byIcon(AppIcons.circleHalf));
+      await tester.pumpAndSettle();
+      Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+      await tester.pumpAndSettle();
+    }
+
+    expect(service.calls.length, before, reason: 'five clicks, no requests');
     await quiesce(tester, container);
   });
 

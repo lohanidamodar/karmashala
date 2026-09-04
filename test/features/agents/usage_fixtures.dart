@@ -66,6 +66,12 @@ class FakeAgentUsageService extends AgentUsageService {
 
 /// One usage snapshot. The second window is deliberately near zero so a test
 /// choosing [percent] chooses which window the chip picks.
+///
+/// Both windows carry the **period their key names**, exactly as the parsers
+/// produce them, because that is what the request schedule is derived from: a
+/// fixture without spans would exercise the `kUsageMinInterval` fallback and
+/// nothing the app actually meets. One point of the five-hour window is three
+/// minutes — [usageFixtureFloor].
 AgentUsage usageSnapshot({
   double percent = 62,
   DateTime? fetchedAt,
@@ -79,17 +85,22 @@ AgentUsage usageSnapshot({
         label: '5-hour',
         percent: percent,
         resetsAt: at.add(resetsIn),
+        span: kUsageFiveHourWindow,
       ),
       UsageWindow(
         label: '7-day',
         percent: 1,
         resetsAt: at.add(const Duration(days: 3)),
+        span: kUsageSevenDayWindow,
       ),
     ],
     fetchedAt: at,
     email: email,
   );
 }
+
+/// The floor [usageSnapshot] implies: one hundredth of its shortest window.
+const usageFixtureFloor = Duration(minutes: 3);
 
 /// A workspace with one repository, one agent installation and one session on
 /// it — everything `focusedUsageInstallationProvider` has to walk.
