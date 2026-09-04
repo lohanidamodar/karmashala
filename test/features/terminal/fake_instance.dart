@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/agents/application/agent_usage_providers
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -27,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_profiles.dart';
 
+import '../../support/fakes.dart';
 import '../agents/usage_fixtures.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
@@ -275,8 +277,14 @@ fakeTerminalOverrides({
   bool shellIntegration = false,
   bool restoreLivePanes = true,
   Duration usagePollFloor = Duration.zero,
+  bool frameGatedProbes = false,
 }) {
   return [
+    // Off by default for the same reason and in the same words as
+    // `deliveryPollIntervalProvider` below — see [headlessProbeGate]. The one
+    // test that is *about* the gate asks for the real one.
+    if (!frameGatedProbes)
+      probeGateProvider.overrideWithValue(headlessProbeGate),
     if (database != null) databaseProvider.overrideWithValue(database),
     // A real periodic timer would outlive the widget tree and trip
     // flutter_test's pending-timer check; tests drive saving explicitly.

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/application/checkout_probe_queue.dart';
 import '../../git/domain/diff_stat.dart';
 import '../../git/domain/remote_repo.dart';
 import '../../github/application/github_providers.dart';
@@ -113,6 +114,13 @@ final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
 /// `rev-list` and a `diff --numstat` against it. Recomputed when the workspace
 /// mutates, which is the signal the rest of the Explorer already rebuilds on.
 ///
+/// **None of those processes starts in the frame that asked for them.** Every
+/// one goes through [checkoutProbeQueueProvider], which waits for the frame to
+/// finish first — see `checkout_probe_queue.dart` for why a `Process.run` is
+/// charged to the frame that calls it. So a row paints with no branch chip and
+/// no `+N −M`, and fills in once the window is up; `SessionDiffStat` already
+/// reads a missing answer as "not measured", never as "no branch".
+///
 /// Never throws: a folder that is not a repository is a row with nothing to
 /// say, not an error banner in a tree.
 final checkoutDeliveryProvider = FutureProvider.autoDispose
@@ -128,15 +136,17 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
         SessionChangeKind.workspace,
       });
       final changes = ref.read(changesServiceProvider);
+      // Read before the first await, like every other seam in this file.
+      final probe = _probeOn(ref);
       final dir = checkout.path;
 
-      final status = await _orNull(() => changes.statusWithBranch(dir));
+      final status = await probe(() => changes.statusWithBranch(dir));
       if (status == null) return SessionDelivery.unknown;
 
-      final remoteUrl = await _orNull(() => changes.remoteUrl(dir));
+      final remoteUrl = await probe(() => changes.remoteUrl(dir));
       final hasRemote = remoteUrl != null;
       final base = hasRemote
-          ? await _orNull(() => changes.originHead(dir))
+          ? await probe(() => changes.originHead(dir))
           : null;
 
       // Both against the same base, and started together: they are two
@@ -151,8 +161,8 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
       final (aheadBehind, lines) = await (
         base == null
             ? Future<AheadBehind?>.value()
-            : _orNull(() => changes.aheadBehind(dir, base: base)),
-        _orNull(() => changes.diffStat(dir, base: base)),
+            : probe(() => changes.aheadBehind(dir, base: base)),
+        probe(() => changes.diffStat(dir, base: base)),
       ).wait;
 
       return SessionDelivery(
@@ -189,6 +199,7 @@ final worktreeDeliveryProvider = FutureProvider.autoDispose
       final parent = ref.watch(
         checkoutDeliveryProvider(Checkout(key.repo)).future,
       );
+      final probe = _probeOn(ref);
       final delivery = await own;
       if (delivery.baseBranch != null) return delivery;
 
@@ -199,10 +210,10 @@ final worktreeDeliveryProvider = FutureProvider.autoDispose
       if (base == null || base == delivery.branch) return delivery;
 
       final changes = ref.read(changesServiceProvider);
-      final aheadBehind = await _orNull(
+      final aheadBehind = await probe(
         () => changes.aheadBehind(key.worktree, base: base),
       );
-      final lines = await _orNull(
+      final lines = await probe(
         () => changes.diffStat(key.worktree, base: base),
       );
       return delivery.copyWith(
@@ -421,4 +432,27 @@ Future<T?> _orNull<T>(Future<T?> Function() probe) async {
   } catch (_) {
     return null;
   }
+}
+
+/// How this file starts a git subprocess: on the shared checkout queue, and
+/// never throwing.
+///
+/// Two policies in one call, because they are the same decision made twice —
+/// *when* a row's git may run, and *what a row shows while it has not*. The
+/// queue holds the first (see `checkout_probe_queue.dart`); [_orNull] holds the
+/// second, and has since before the queue existed.
+///
+/// Returned as a closure taken **before** the first await, like every other
+/// seam in this file: `ref.read` after an await is the hazard the comments
+/// above keep naming, and a probe that read the queue late would be reaching
+/// into a provider that may already have been disposed.
+///
+/// Deliberately not applied to the two `gh` providers in this file. A pull
+/// request costs a network round trip, and letting one hold a slot in a queue
+/// sized for local processes would starve every visible row's branch chip
+/// behind it. They already chain off a local reading, so they are behind the
+/// gate anyway.
+Future<T?> Function<T>(Future<T?> Function()) _probeOn(Ref ref) {
+  final queue = ref.read(checkoutProbeQueueProvider);
+  return <T>(run) => queue.run(() => _orNull(run));
 }

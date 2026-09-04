@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/notifications/domain/session_attention.d
 import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
@@ -94,6 +95,7 @@ void main() {
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
+        probeGateProvider.overrideWithValue(headlessProbeGate),
       ],
     );
     addTearDown(container.dispose);

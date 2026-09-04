@@ -68,3 +68,22 @@ class FakeCheckoutPresenceProbe implements CheckoutPresenceProbe {
     required ExecutionEnvironment windows,
   }) async => answers[directory.path] ?? CheckoutPresence.unknown;
 }
+
+/// The probe gate for a container that has no widget tree: no wait at all.
+///
+/// Hand it to `probeGateProvider.overrideWithValue`. A checkout's git probes
+/// wait for the frame that asked for them to finish before they spawn anything
+/// — see `checkout_probe_queue.dart` for why a `Process.run` is charged to the
+/// frame that calls it. A `ProviderContainer` with no widget tree pumps no
+/// frames, so the real gate schedules one, nothing ever draws it, and a
+/// delivery reading **hangs** rather than failing. Every container that reaches
+/// those providers therefore needs this, including a widget test that reads a
+/// delivery future without pumping.
+///
+/// **The gate function rather than the `Override`**, deliberately: `Override`
+/// is a sealed type Riverpod's public library does not export, so a helper
+/// returning one is untypeable — and an untyped one turns
+/// `fakeTerminalOverrides`' own inferred `List<Override>` into a
+/// `List<dynamic>`, which fails at the container and nowhere near here. Cost
+/// one full gate to learn.
+Future<void> headlessProbeGate() async {}

@@ -139,7 +139,15 @@ class NativeSessionRow extends ConsumerWidget {
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
     // Asynchronous by construction: the card renders without it and fills in
     // when git answers. Keyed by session, deduplicated by checkout.
-    final stat = ref.watch(sessionDiffStatProvider(session.id)).asData?.value;
+    //
+    // `.value` rather than `asData?.value`, for the reason
+    // `sessionDeliveryActionsProvider` gives: a refresh is an `AsyncLoading`
+    // carrying the value it already had, and reading it as null redrew the row
+    // as though the app had never measured the checkout. Every workspace
+    // mutation is such a refresh, so that was a branch chip blinking out
+    // whenever an agent started or stopped.
+    final delivery = ref.watch(sessionDiffStatProvider(session.id));
+    final stat = delivery.value;
 
     return SessionCard(
       depth: depth,
@@ -171,6 +179,7 @@ class NativeSessionRow extends ConsumerWidget {
       whereabouts: whereabouts.note,
       whereaboutsTooltip: whereabouts.explanation,
       stat: stat,
+      statPending: !delivery.hasValue,
       worktree: session.useWorktree,
       link: link,
       parentTitle: parentTitle,
@@ -369,10 +378,12 @@ class ImportedSessionRow extends ConsumerWidget {
       }
     }
 
-    final stat = ref
-        .watch(repositoryDiffStatProvider(session.repositoryId))
-        .asData
-        ?.value;
+    // `.value`, and `hasValue` for the pending flag, for the same two reasons
+    // the native row above gives.
+    final delivery = ref.watch(
+      repositoryDiffStatProvider(session.repositoryId),
+    );
+    final stat = delivery.value;
 
     return SessionCard(
       depth: depth,
@@ -391,6 +402,7 @@ class ImportedSessionRow extends ConsumerWidget {
       branch: stat?.branch,
       subPath: subPath,
       stat: stat,
+      statPending: !delivery.hasValue,
       selecting: selecting,
       ticked: ticked,
       onTap: selecting

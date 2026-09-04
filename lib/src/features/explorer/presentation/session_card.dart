@@ -61,6 +61,7 @@ class SessionCard extends StatelessWidget {
     this.whereabouts,
     this.whereaboutsTooltip,
     this.stat,
+    this.statPending = false,
     this.worktree = false,
     this.pinned = false,
     this.link,
@@ -114,6 +115,19 @@ class SessionCard extends StatelessWidget {
 
   /// Line three, right: what the checkout has produced.
   final SessionDiffStat? stat;
+
+  /// Whether git has been asked about this checkout and has not answered yet.
+  ///
+  /// **§19's rule, on a row.** A row's git probes now wait for the frame that
+  /// drew the row to finish before they spawn anything, so an empty line three
+  /// is the *ordinary* state for the first moments of every launch — and it
+  /// looked exactly like a checkout with no branch, which is a claim. An
+  /// ellipsis where the branch will be says "not measured yet" in the one place
+  /// the user is already looking, and the tooltip says it in words.
+  ///
+  /// It also holds the space, so the common case — a real checkout, which
+  /// always has a branch to name — does not shift when the answer lands.
+  final bool statPending;
 
   /// Whether this session runs in its own worktree — the one structural fact
   /// about a session that the branch name does not already imply.
@@ -205,6 +219,7 @@ class SessionCard extends StatelessWidget {
             // persisted fact, and it must not blink into existence.
             if (worktree ||
                 branch != null ||
+                statPending ||
                 subPath != null ||
                 lineageBroken ||
                 whereabouts != null ||
@@ -349,9 +364,14 @@ class SessionCard extends StatelessWidget {
 
   Widget _line3(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
+    // The ellipsis stands in for the branch and only for the branch: once we
+    // have a branch name we have measured the checkout, so the two are never
+    // both on the line.
+    final unmeasured = statPending && branch == null;
     final where = [
       ?subPath,
       ?branch,
+      if (unmeasured) '…',
       ?whereabouts,
       if (lineageBroken) 'lineage cannot be established',
     ].join('  ·  ');
@@ -359,7 +379,12 @@ class SessionCard extends StatelessWidget {
     // already the first thing to ellipsise at the pane's minimum width.
     final leading = subPath != null
         ? AppIcons.folder
-        : (branch != null ? AppIcons.gitBranch : null);
+        : (branch != null || unmeasured ? AppIcons.gitBranch : null);
+    final tooltip = [
+      if (where.isNotEmpty) where,
+      if (unmeasured) 'Branch and change counts have not been measured yet.',
+      ?whereaboutsTooltip,
+    ].join('\n');
     return Row(
       children: [
         if (leading != null) ...[
@@ -374,9 +399,7 @@ class SessionCard extends StatelessWidget {
         // is the only thing that gives up width.
         Expanded(
           child: Tooltip(
-            message: whereaboutsTooltip == null
-                ? where
-                : '$where\n$whereaboutsTooltip',
+            message: tooltip,
             child: Text(
               where,
               maxLines: 1,

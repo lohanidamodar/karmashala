@@ -20,6 +20,7 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -66,20 +67,56 @@ import '../terminal/fake_instance.dart';
 /// **visible**, not to what is recorded. Since the Explorer now lists sessions
 /// and not checkouts, that invariant is **flatness in the checkout count** —
 /// the same cost at 69 checkouts as at 1, not merely a smaller slope.
+///
+/// ## Two more properties, added for the start-up report
+///
+/// Flatness says how *many* processes a scene costs. It says nothing about
+/// **when** they run or **how many at a time**, and the owner's 1.13.0+26
+/// report — *"startup is the most laggy and it's taking a lot of memory and
+/// cpu"* — was about both. A 60 s profile of that build named
+/// `RtlCreateUnicodeString` (4.60%, the largest single leaf) and
+/// `NtCreateUserProcess` (2.02%) among the top Dart CPU leaves with
+/// `_Utf8Decoder.decode16` and `_StringBase._interpolate` under them: spawning
+/// git and reading its output, charged to the isolate that asked. It is charged
+/// there because `Process.run` only looks asynchronous — `CreateProcessW` runs
+/// on the calling thread before the future exists — and
+/// `checkoutDeliveryProvider` was reached from a widget's `build`, so a window
+/// opening onto thirteen rows paid for every one of those spawns inside one
+/// frame's build phase.
+///
+/// **Honestly: the burst itself was not captured.** It had rolled off the VM
+/// timeline's ring buffer before a snapshot could be taken, and six samples
+/// over 12 s of idle found zero git processes — so `autoDispose` is working and
+/// this is a start-up and expand burst, not ongoing churn. The code path, the
+/// CPU leaves and the report agree; that agreement is the evidence, and it is
+/// weaker than a measurement of the burst would have been.
+///
+/// So two properties join flatness, and both are counted rather than timed for
+/// the same reason:
+///
+/// * **Nothing spawns inside a frame.** Every subprocess is stamped with the
+///   scheduler phase it started in, and the only phase allowed is
+///   [SchedulerPhase.idle]. A spawn in [SchedulerPhase.persistentCallbacks] is
+///   one the user paid for in the frame they were waiting on.
+/// * **How many run at once**, measured as a peak of overlapping subprocesses
+///   — which needs a fake that yields, since one that answers instantly can
+///   never overlap with anything and would report a peak of one however wide
+///   the fan-out. Reported here; the bound itself is asserted once there is
+///   one.
 void main() {
   /// The three points the curve is read at. One checkout is the "did we make
   /// the ordinary project worse" control; 69 is the owner's real number.
   const scale = [1, 10, 69];
 
   late AppDatabase db;
-  late FakeCommandRunner git;
+  late _ProbeRunner git;
 
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
     AgentInstallationDao(db).insert(agentInstallation());
-    git = FakeCommandRunner(responder: _git);
+    git = _ProbeRunner(responder: _git);
   });
   tearDown(() => db.close());
 
@@ -119,6 +156,34 @@ void main() {
     );
   }
 
+  /// The same [count] checkouts, with **a session in each** so the tree draws
+  /// as many rows as it has room for.
+  ///
+  /// [seed] draws one row at every scale, which is what makes it the right
+  /// instrument for flatness — but one row's five processes can never overlap
+  /// more than twice, so a concurrency bound measured on it would pass however
+  /// large it was. A scene has to be able to *exceed* the bound before the
+  /// bound means anything, and thirteen rows on thirteen distinct checkouts
+  /// can: distinct, because Riverpod folds two rows in one working tree into
+  /// one probe and rightly so.
+  void seedOnePerCheckout(int count) {
+    seed(count);
+    for (var i = 1; i < count; i++) {
+      SessionDao(db).insert(
+        Session(
+          id: 'n$i',
+          repositoryId: 'r$i',
+          agentInstallationId: 'a1',
+          title: 'Native $i',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: testTime,
+          externalSessionId: 'native-ext-$i',
+        ),
+      );
+    }
+  }
+
   Future<ProviderContainer> pump(
     WidgetTester tester, {
     required bool expand,
@@ -129,7 +194,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        // **The real gate**, not the neutralised one the rest of the suite
+        // uses: this is the file that measures when a probe is allowed to
+        // spawn, so it has to be the frame the app really waits for.
+        ...fakeTerminalOverrides(database: db, frameGatedProbes: true),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -237,7 +305,19 @@ void main() {
         // ignore: avoid_print
         print(
           'CHECKOUT-COST expanded checkouts=$count '
-          'git=${totalGit()} rows=$rows detail=${gitCounts()}',
+          'git=${totalGit()} rows=$rows peak=${git.peakInFlight} '
+          'phases=${git.phaseNames} detail=${gitCounts()}',
+        );
+        // Non-vacuity for the phase claim below: a scene that asked git
+        // nothing would satisfy it trivially.
+        expect(totalGit(), greaterThan(0));
+        expect(
+          git.phases,
+          {SchedulerPhase.idle},
+          reason:
+              'a git subprocess started inside a frame (${git.phaseNames}) — '
+              '`CreateProcessW` runs on the calling thread, so that is time '
+              'charged to the frame the user was waiting on',
         );
       });
     }
@@ -273,8 +353,25 @@ void main() {
         // Warm: everything the first frame wanted has been asked for.
         final before = totalGit();
         container.read(sessionsRevisionProvider.notifier).bump();
+
+        // **The bump arrives from outside a frame** — a session starting or
+        // stopping, not a widget building — and the probes still wait for one.
+        // Draining microtasks without pumping is what tells a frame apart from
+        // a bare `await`: a gate that only yielded a microtask would have
+        // spawned by now, and would delay the frame that shows the new state
+        // instead of following it.
+        await tester.idle();
+        expect(
+          totalGit(),
+          before,
+          reason:
+              'a workspace mutation spawned git before the next frame was '
+              'drawn',
+        );
+
         await tester.pumpAndSettle();
         gitByScale[count] = totalGit() - before;
+        expect(gitByScale[count], greaterThan(0), reason: 'the re-read ran');
         // ignore: avoid_print
         print(
           'CHECKOUT-COST mutation checkouts=$count '
@@ -300,6 +397,114 @@ void main() {
       );
     });
   });
+
+  /// **When** a full screen of rows spawns, and **how many at a time.**
+  ///
+  /// A session in every checkout, so the pane draws as many rows as it fits and
+  /// the fan-out is wide enough for a bound to matter. Flatness is not asserted
+  /// here — this scene *does* grow with the checkout count, because every
+  /// checkout has a row wanting to be drawn — the groups above own that.
+  group('a full pane of rows', () {
+    final gitByScale = <int, int>{};
+    final rowsByScale = <int, int>{};
+    final peakByScale = <int, int>{};
+
+    for (final count in scale) {
+      testWidgets('$count checkouts, one session each', (tester) async {
+        seedOnePerCheckout(count);
+        await pump(tester, expand: true);
+        final rows = tester.widgetList(find.byType(SessionCard)).length;
+        gitByScale[count] = totalGit();
+        rowsByScale[count] = rows;
+        peakByScale[count] = git.peakInFlight;
+        // ignore: avoid_print
+        print(
+          'CHECKOUT-COST rows checkouts=$count '
+          'git=${totalGit()} rows=$rows peak=${git.peakInFlight} '
+          'phases=${git.phaseNames} detail=${gitCounts()}',
+        );
+
+        // Nothing spawns inside a frame — the property the start-up report is
+        // about, asserted where the fan-out is widest.
+        expect(totalGit(), greaterThan(0));
+        expect(
+          git.phases,
+          {SchedulerPhase.idle},
+          reason:
+              'a git subprocess started inside a frame (${git.phaseNames}) '
+              'while $rows rows were being drawn',
+        );
+      });
+    }
+
+    testWidgets('draws a pane full of rows', (tester) async {
+      expect(gitByScale.keys.toSet(), scale.toSet());
+      // ignore: avoid_print
+      print(
+        'CHECKOUT-COST rows curve=$gitByScale rows=$rowsByScale '
+        'peak=$peakByScale',
+      );
+      // Non-vacuity: the whole point of this group is a scene wide enough for
+      // *when* and *how many* to be visible at all.
+      expect(
+        rowsByScale[69],
+        greaterThan(1),
+        reason: 'the pane drew ${rowsByScale[69]} rows at 69 checkouts',
+      );
+      expect(peakByScale.values, everyElement(greaterThan(0)));
+    });
+  });
+}
+
+/// The fake git, plus the two things this file now has to know about a
+/// subprocess besides that it happened: **when** it started and **how many
+/// others were running**.
+///
+/// The scheduler phase is the honest way to ask "was this inside a frame".
+/// `Process.run` is not asynchronous the way it reads — `CreateProcessW` runs
+/// on the calling thread before the future exists — so a spawn recorded in
+/// [SchedulerPhase.persistentCallbacks] is one the user paid for in the frame
+/// they were waiting on, and a spawn recorded at [SchedulerPhase.idle] is one
+/// the window has already painted around.
+class _ProbeRunner extends FakeCommandRunner {
+  _ProbeRunner({super.responder});
+
+  /// Every scheduler phase a subprocess has been started in.
+  final Set<SchedulerPhase> phases = {};
+
+  int _inFlight = 0;
+
+  /// The most subprocesses that were ever running together.
+  int peakInFlight = 0;
+
+  String get phaseNames => phases.map((p) => p.name).toList().toString();
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async {
+    // Stamped and recorded *before* the yield, because that is when a real
+    // process would already exist.
+    phases.add(SchedulerBinding.instance.schedulerPhase);
+    final result = super.run(request);
+    _inFlight++;
+    if (_inFlight > peakInFlight) peakInFlight = _inFlight;
+    try {
+      // One yield, and it is what makes the peak measurable: a fake that
+      // answers without ever giving up the isolate can never overlap with
+      // anything, so an unbounded fan-out would still report a peak of one.
+      //
+      // **A frame and not a `Future.delayed`,** which was tried first and
+      // silently truncated the measurement. `pumpAndSettle` stops as soon as a
+      // pump leaves no *frame* scheduled, and a probe parked on a bare timer
+      // leaves none — so the settle returned with one process counted, four
+      // never started, and a pending timer the binding rightly complained
+      // about. A frame is also the truer stand-in: a real git process outlives
+      // several.
+      await SchedulerBinding.instance.endOfFrame;
+      return await result;
+    } finally {
+      _inFlight--;
+    }
+  }
 }
 
 /// Enough of a real git for every provider on the path to complete rather than

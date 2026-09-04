@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/environments/domain/environment_path.dar
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
@@ -141,6 +142,9 @@ void main() {
         // A real poll timer outlives the widget tree and trips the pending-timer
         // check; nothing here is testing the poll.
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
+        // These tests read a delivery future directly rather than through a
+        // pump, so the real frame gate has no frame to wait for.
+        probeGateProvider.overrideWithValue(headlessProbeGate),
       ],
     );
     addTearDown(container.dispose);

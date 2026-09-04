@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -172,6 +173,7 @@ void main() {
           (repos) async => const ImportSummary(),
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
+        probeGateProvider.overrideWithValue(headlessProbeGate),
       ],
     );
     addTearDown(container.dispose);

@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -89,6 +90,7 @@ branch refs/heads/feature/login
           FakeCommandRunnerFactory(fallback: git),
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
+        probeGateProvider.overrideWithValue(headlessProbeGate),
       ],
     );
     server = LauncherControlServer(container);
