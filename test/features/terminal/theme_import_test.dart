@@ -227,7 +227,7 @@ void main() {
     });
 
     test('never throws, whatever it is handed', () {
-      for (final junk in ['', ' ', '{{{{', 'a: *undefined_alias']) {
+      for (final junk in ['', '\u0000', '{{{{', 'a: *undefined_alias']) {
         expect(() => parseWarpTheme(junk), returnsNormally, reason: junk);
       }
     });

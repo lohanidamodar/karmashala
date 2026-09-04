@@ -185,7 +185,7 @@ class AntigravitySessionAttributionService {
           row.worktree ??
           repositoryDao.getById(row.repositoryId)?.path;
       if (directory == null || directory.path.isEmpty) continue;
-      final key = '${directory.environmentId} ${directory.path}';
+      final key = '${directory.environmentId}\u0000${directory.path}';
       perDirectory[key] = (perDirectory[key] ?? 0) + 1;
       final paneId = row.paneId;
       final read = readPaneTail;
