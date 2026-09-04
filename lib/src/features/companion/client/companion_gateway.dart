@@ -290,9 +290,20 @@ class CompanionSessionSummary {
 /// than as a message.
 const String kCompanionNoticeRole = 'notice';
 
+/// The role on the gateway's own account of **why** a transcript is empty,
+/// when the host said so — `RemoteTranscriptAbsence` put into words here, on
+/// the client, because the wire carries the fact and not the sentence.
+///
+/// Not a turn either, and not [kCompanionNoticeRole]: that one marks history
+/// the host kept back, and is drawn as the top edge of a loaded window. This
+/// one is the whole of what there is, and is drawn instead of the empty
+/// state's welcome — a screen offering starter prompts for a session the user
+/// can see running was the "it shows running but no transcript" report.
+const String kCompanionAbsenceRole = 'absence';
+
 /// One transcript turn. Role vocabulary matches the desktop chat view:
-/// `user`, `agent`, `tool` or `error`, plus [kCompanionNoticeRole] for the
-/// gateway's own marker.
+/// `user`, `agent`, `tool` or `error`, plus [kCompanionNoticeRole] and
+/// [kCompanionAbsenceRole] for the gateway's own markers.
 class CompanionChatMessage {
   const CompanionChatMessage({required this.role, required this.text});
 

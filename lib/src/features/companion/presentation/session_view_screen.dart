@@ -106,12 +106,20 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
             'No transcript to show. Some agents keep none we can read — '
             'their terminal is the session — and a session that has just '
             'started has nothing in it yet.',
-        onSuggestionTap: (prompt) {
-          _composer.text = prompt;
-          _composer.selection = TextSelection.collapsed(
-            offset: prompt.length,
-          );
-        },
+        // Starter prompts are onboarding, and onboarding is only true of a
+        // session that has not started. A chip cannot be offered to a phone
+        // that may not send one, and offering "Explain architecture" beside a
+        // session the badge says is *working* is the same confident nothing
+        // the empty transcript was.
+        onSuggestionTap:
+            canPrompt && session?.status != CompanionSessionStatus.working
+            ? (prompt) {
+                _composer.text = prompt;
+                _composer.selection = TextSelection.collapsed(
+                  offset: prompt.length,
+                );
+              }
+            : null,
         footer: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,7 +137,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
               controller: _composer,
               enabled: canPrompt,
               hintText: canPrompt
-                  ? 'Message the agent…'
+                  ? 'Send a message…'
                   : 'This phone was not granted prompt rights.',
               onSend: (text) => gateway.sendPrompt(sessionId, text),
             ),

@@ -406,6 +406,35 @@ void main() {
     expect(messages.last.text, 'turn-${kRemoteTranscriptPageMax + extra - 1}');
   });
 
+  test('an empty transcript arrives with the host\'s reason for it', () async {
+    // "It shows running, but when I open it, it doesn't show any transcript."
+    // Nothing was broken about the reading — Antigravity keeps no store this
+    // app can parse — but an empty list said the same thing as a session that
+    // had not spoken, so the phone hedged and drew a welcome over the answer.
+    fake.transcripts['s1'] = const [];
+    fake.absences['s1'] = RemoteTranscriptAbsence.noChatView;
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final messages = await gateway.transcript('s1').first;
+    expect(messages.single.role, kCompanionAbsenceRole);
+    // The wire carried the fact; the phone owns the sentence.
+    expect(messages.single.text, contains('no chat view'));
+    expect(messages.single.text, contains('still reach it'));
+  });
+
+  test('a transcript with turns carries no reason at all', () async {
+    // A reason beside turns would be describing a transcript that exists.
+    fake.absences['s1'] = RemoteTranscriptAbsence.noChatView;
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final messages = await gateway.transcript('s1').first;
+    expect([for (final m in messages) m.role], ['user']);
+  });
+
   test('a revoked pairing says so, rather than blaming a busy desktop',
       () async {
     // A revoke and a slow desktop look identical on the wire: a request goes

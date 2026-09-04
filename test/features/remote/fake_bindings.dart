@@ -11,6 +11,10 @@ import 'package:karmashala/src/features/remote/protocol.dart';
 class FakeRemoteBindings {
   final Map<String, RemoteSessionSnapshot> sessions = {};
   final Map<String, List<RemoteTranscriptMessage>> transcripts = {};
+
+  /// Why a session's transcript is empty, for a host that can say — the
+  /// `agentSupportsChatView` refusal, as the production bindings report it.
+  final Map<String, RemoteTranscriptAbsence> absences = {};
   final Map<String, String?> stages = {};
   final Map<String, RemoteApprovalRequest> approvals = {};
   final List<({String sessionId, String text})> prompts = [];
@@ -96,6 +100,7 @@ class FakeRemoteBindings {
         sessionId: id,
         messages: List.of(messages),
         cursor: messages.length,
+        absence: messages.isEmpty ? absences[id] : null,
       );
     },
     sendPrompt: (sessionId, text) async {

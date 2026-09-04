@@ -270,6 +270,73 @@ void main() {
     expect(page.messages, isEmpty);
   });
 
+  // --- Which nothing it is ------------------------------------------------
+  //
+  // "I have a running antigravity session and in the mobile companion app it
+  // shows running, but when I open it, it doesn't show any transcript." The
+  // reading was never broken — Antigravity's store is protobuf in an
+  // unpublished schema, so `agentSupportsChatView` refuses it by design. What
+  // was broken is that the host knew that and sent `[]`, which is also what a
+  // session that has not spoken yet sends, so the phone had to hedge across
+  // both and drew a welcome screen over the answer.
+  group('a transcript page says why it is empty', () {
+    void seedPaneSession(String id, {required String agentId}) {
+      AgentInstallationDao(db).insert(
+        AgentInstallation(
+          id: 'i-$agentId',
+          agentId: agentId,
+          executable: path('C:\\bin\\$agentId.exe'),
+          createdAt: now,
+        ),
+      );
+      SessionDao(db).insert(
+        Session(
+          id: id,
+          repositoryId: 'r1',
+          agentInstallationId: 'i-$agentId',
+          title: 'Running now',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: now,
+          // A PTY-hosted session renders from the agent's own record, which
+          // is the path that can refuse.
+          surface: SessionSurface.pane,
+          externalSessionId: 'ext-$id',
+        ),
+      );
+    }
+
+    test('an agent with no readable store is named as the reason', () async {
+      seedWorkspace();
+      seedPaneSession('s-anti', agentId: 'antigravity');
+
+      final bindings = container.read(remoteHostBindingsProvider);
+      final page = await bindings.transcriptFor('s-anti');
+
+      expect(page.messages, isEmpty);
+      expect(page.absence, RemoteTranscriptAbsence.noChatView);
+      // The fact survives the round trip a phone actually reads it through.
+      expect(
+        RemoteTranscriptPage.fromJson(page.toJson()).absence,
+        RemoteTranscriptAbsence.noChatView,
+      );
+    });
+
+    test('a nothing the host cannot account for stays unexplained', () async {
+      seedWorkspace();
+      // The event-log path: an ordinary session with no turns yet. Claiming a
+      // structural reason here would be the same invention in reverse.
+      seedSession('s-quiet');
+
+      final bindings = container.read(remoteHostBindingsProvider);
+      final page = await bindings.transcriptFor('s-quiet');
+
+      expect(page.messages, isEmpty);
+      expect(page.absence, isNull);
+      expect(page.toJson().containsKey('absence'), isFalse);
+    });
+  });
+
   test('the event-log transcript mirrors the desktop chat mapping', () async {
     seedWorkspace();
     seedSession('s1');

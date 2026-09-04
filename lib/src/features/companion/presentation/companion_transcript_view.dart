@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
@@ -85,18 +84,40 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
   Future<void> _toLatest() =>
       _scroll.animateTo(0, duration: Motion.base, curve: Curves.easeOut);
 
+  /// The gateway's account of an empty transcript, pulled out of the list: it
+  /// is not a turn, and a session with a reason has an *explanation* rather
+  /// than a welcome.
+  String? _absence() {
+    for (final message in widget.messages) {
+      if (message.role == kCompanionAbsenceRole) return message.text;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final total = widget.messages.length;
+    final absence = _absence();
+    final turns = [
+      for (final message in widget.messages)
+        if (message.role != kCompanionAbsenceRole) message,
+    ];
+    final total = turns.length;
 
     return Column(
       children: [
         Expanded(
           child: total == 0
-              ? _CompanionEmptyState(
-                  emptyHint: widget.emptyHint,
-                  onSuggestionTap: widget.onSuggestionTap,
-                )
+              // Which nothing this is decides which screen it gets. A welcome
+              // offering starter prompts, on a session the user can see
+              // running, was the "shows running but no transcript" report:
+              // the desktop knew the agent keeps no readable record and the
+              // phone drew onboarding over the top of the answer.
+              ? absence != null
+                    ? _TranscriptUnavailable(reason: absence)
+                    : _CompanionEmptyState(
+                        emptyHint: widget.emptyHint,
+                        onSuggestionTap: widget.onSuggestionTap,
+                      )
               : ListView.builder(
                   controller: _scroll,
                   reverse: true,
@@ -116,7 +137,7 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                   },
                   itemBuilder: (context, index) {
                     final ordinal = total - 1 - index;
-                    final message = widget.messages[ordinal];
+                    final message = turns[ordinal];
                     return message.role == kCompanionNoticeRole
                         ? _WindowTopNotice(
                             key: ValueKey<int>(ordinal),
@@ -209,138 +230,147 @@ class _WindowTopNotice extends StatelessWidget {
 }
 
 /// One turn, in the desktop chat's shapes at a thumb's sizes.
+///
+/// **Copying is a long press, not a button in every gutter.** Measured on a
+/// 390x844 phone: an `IconButton` at the touch floor made every tile's gutter
+/// 48px tall to carry an 11px label, so a one-line message spent 72px of the
+/// list on 20px of text and three of them took a fifth of the transcript
+/// viewport on chrome. A long press is already what a phone's chat means by
+/// "do something with this message"; it cannot compete with the tap that opens
+/// a link inside the text, because a tap and a long press are different
+/// gestures with no arena to lose; and the target becomes the whole tile
+/// rather than a 48px square. The snackbar is the confirmation the vanishing
+/// tick used to be.
 class _MessageTile extends StatelessWidget {
   const _MessageTile({required this.message, super.key});
 
   final CompanionChatMessage message;
 
+  /// The gutter: who is speaking, in one compact row.
+  ///
+  /// Sized by the label rather than by a control, which is the whole of the
+  /// space this view got back. [leading] lets the agent keep the redesign's
+  /// avatar mark without every other role paying for a `Stack`.
+  Widget _gutter(
+    ThemeData theme, {
+    required Widget leading,
+    required String label,
+    required Color color,
+    required double gap,
+  }) => Row(
+    children: [
+      leading,
+      SizedBox(width: gap),
+      Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    // A phone reads at arm's length: message text takes the step up the ramp
+    // that `UiDensity.muted` already takes for supporting lines, so a tool row
+    // is not the app's smallest type on its most-read screen.
+    final mono = theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily);
+
+    Widget tile({required Widget child, Color? fill, Color? edge}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      child: Container(
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: edge == null ? null : Border.all(color: edge),
+        ),
+        padding: fill == null && edge == null
+            ? EdgeInsets.zero
+            : const EdgeInsets.all(Insets.md),
+        child: child,
+      ),
+    );
 
     if (message.role == 'user') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Container(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.35),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(AppIcons.userCircle, size: 16, color: scheme.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    'YOU',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  _CopyButton(text: message.text),
-                ],
+      return tile(
+        fill: scheme.surfaceContainerHigh,
+        edge: scheme.outlineVariant.withValues(alpha: 0.35),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _gutter(
+              theme,
+              leading: Icon(
+                AppIcons.userCircle,
+                size: density.iconSmall,
+                color: scheme.primary,
               ),
-              const SizedBox(height: 4),
-              MarkdownMessage(message.text),
-            ],
-          ),
+              label: 'YOU',
+              color: scheme.primary,
+              gap: density.glyphGap,
+            ),
+            const SizedBox(height: Insets.xs),
+            MarkdownMessage(message.text),
+          ],
         ),
       );
     }
 
     if (message.role == 'tool') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Container(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.35),
+      return tile(
+        fill: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        edge: scheme.outlineVariant.withValues(alpha: 0.35),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _gutter(
+              theme,
+              leading: Icon(
+                AppIcons.terminal,
+                size: density.iconSmall,
+                color: scheme.tertiary,
+              ),
+              label: 'TOOL',
+              color: scheme.tertiary,
+              gap: density.glyphGap,
             ),
-          ),
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(AppIcons.terminal, size: 15, color: scheme.tertiary),
-                  const SizedBox(width: 6),
-                  Text(
-                    'TOOL',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.tertiary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  _CopyButton(text: message.text),
-                ],
-              ),
-              const SizedBox(height: 6),
-              SelectableText(
-                message.text,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: kMonoFamily,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
+            const SizedBox(height: Insets.xs),
+            SelectableText(message.text, style: mono),
+          ],
         ),
       );
     }
 
     if (message.role == 'error') {
       final failure = SemanticColors.of(context).failure;
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Container(
-          decoration: BoxDecoration(
-            color: failure.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: failure.withValues(alpha: 0.4)),
-          ),
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(AppIcons.warning, size: 15, color: failure),
-                  const SizedBox(width: 6),
-                  Text(
-                    'ERROR',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: failure,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  _CopyButton(text: message.text),
-                ],
+      return tile(
+        fill: failure.withValues(alpha: 0.08),
+        edge: failure.withValues(alpha: 0.4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _gutter(
+              theme,
+              leading: Icon(
+                AppIcons.warning,
+                size: density.iconSmall,
+                color: failure,
               ),
-              const SizedBox(height: 6),
-              SelectableText(
-                message.text,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: kMonoFamily,
-                  color: failure,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
+              label: 'ERROR',
+              color: failure,
+              gap: density.glyphGap,
+            ),
+            const SizedBox(height: Insets.xs),
+            SelectableText(
+              message.text,
+              style: mono?.copyWith(color: failure),
+            ),
+          ],
         ),
       );
     }
@@ -353,87 +383,96 @@ class _MessageTile extends StatelessWidget {
     final String? thinking = thinkingMatch?.group(1)?.trim();
     final String cleanText = thinkingMatch != null
         ? (text.substring(0, thinkingMatch.start) +
-                text.substring(thinkingMatch.end))
-            .trim()
+                  text.substring(thinkingMatch.end))
+              .trim()
         : text;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+    return tile(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: scheme.secondaryContainer.withValues(alpha: 0.4),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(AppIcons.robot, size: 12, color: scheme.secondary),
+          _gutter(
+            theme,
+            leading: Container(
+              width: Touch.icon + Insets.xs,
+              height: Touch.icon + Insets.xs,
+              decoration: BoxDecoration(
+                color: scheme.secondaryContainer.withValues(alpha: 0.4),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 6),
-              Text(
-                'AGENT',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
+              alignment: Alignment.center,
+              child: Icon(
+                AppIcons.robot,
+                size: density.iconSmall,
+                color: scheme.secondary,
               ),
-              const Spacer(),
-              _CopyButton(text: message.text),
-            ],
+            ),
+            label: 'AGENT',
+            color: scheme.onSurface,
+            gap: density.glyphGap,
           ),
           if (thinking != null && thinking.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: Insets.xs),
             ThinkingAccordion(thinking: thinking),
           ],
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: MarkdownMessage(cleanText),
-          ),
+          const SizedBox(height: Insets.xs),
+          MarkdownMessage(cleanText),
         ],
       ),
     );
   }
 }
 
-/// Copy-to-clipboard, at a size a thumb can hit.
-class _CopyButton extends StatefulWidget {
-  const _CopyButton({required this.text});
+/// Why this session has no chat view — the host's fact, worded by the gateway,
+/// drawn as an answer rather than as onboarding.
+///
+/// Deliberately **not** the welcome state: no heading that invites a first
+/// message, and no starter chips. The session is already running; what the
+/// reader needs is the reason the list is empty, and an offer to type
+/// something is the one thing that reads as "this screen is broken".
+class _TranscriptUnavailable extends StatelessWidget {
+  const _TranscriptUnavailable({required this.reason});
 
-  final String text;
-
-  @override
-  State<_CopyButton> createState() => _CopyButtonState();
-}
-
-class _CopyButtonState extends State<_CopyButton> {
-  bool _copied = false;
+  final String reason;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final density = UiDensity.of(context);
-    return IconButton(
-      tooltip: _copied ? 'Copied' : 'Copy message',
-      iconSize: density.icon,
-      constraints: BoxConstraints(
-        minWidth: density.minRow,
-        minHeight: density.minRow,
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _HeroGlyph(
+              icon: AppIcons.terminal,
+              fill: scheme.surfaceContainerHigh,
+              edge: scheme.outlineVariant,
+              tint: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: Insets.md),
+            Text(
+              'No chat view for this session',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: Insets.sm),
+            // Left-aligned: three lines of prose centred reads as a slogan,
+            // and this is an explanation the reader has to actually follow.
+            Text(
+              reason,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
       ),
-      padding: EdgeInsets.zero,
-      color: _copied ? SemanticColors.of(context).idle : scheme.onSurfaceVariant,
-      icon: Icon(_copied ? AppIcons.check : AppIcons.copySimple),
-      onPressed: () async {
-        await Clipboard.setData(ClipboardData(text: widget.text));
-        if (!mounted) return;
-        setState(() => _copied = true);
-        await Future<void>.delayed(const Duration(seconds: 2));
-        if (mounted) setState(() => _copied = false);
-      },
     );
   }
 }
@@ -458,45 +497,40 @@ class _CompanionEmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: scheme.primary.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Icon(
-                AppIcons.robot,
-                size: 24,
-                color: scheme.primary,
-              ),
+            _HeroGlyph(
+              icon: AppIcons.robot,
+              fill: scheme.primaryContainer.withValues(alpha: 0.4),
+              edge: scheme.primary.withValues(alpha: 0.2),
+              tint: scheme.primary,
             ),
-            const SizedBox(height: Insets.sm),
+            const SizedBox(height: Insets.md),
             Text(
               'Start a conversation',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: Insets.xs),
+            const SizedBox(height: Insets.sm),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Insets.md),
               child: Text(
                 emptyHint,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
+                // `bodySmall` is the ramp's 12 and this is a paragraph, not a
+                // caption: the one screen with nothing else on it was setting
+                // its only text in the app's smallest size.
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),
             ),
             if (onSuggestionTap != null) ...[
-              const SizedBox(height: Insets.lg),
+              const SizedBox(height: Insets.xl),
               Wrap(
-                spacing: Insets.xs,
-                runSpacing: Insets.xs,
+                // The floor between two targets, not half of it: at 4 a thumb
+                // aiming for one chip can reach its neighbour.
+                spacing: Touch.gap,
+                runSpacing: Touch.gap,
                 alignment: WrapAlignment.center,
                 children: [
                   _SuggestionChip(
@@ -528,6 +562,37 @@ class _CompanionEmptyState extends StatelessWidget {
   }
 }
 
+/// The one picture on a screen with nothing else on it, at the touch size the
+/// theme names for exactly that.
+class _HeroGlyph extends StatelessWidget {
+  const _HeroGlyph({
+    required this.icon,
+    required this.tint,
+    this.fill,
+    this.edge,
+  });
+
+  final IconData icon;
+  final Color tint;
+  final Color? fill;
+  final Color? edge;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    // The glyph plus a ring of its own size around it, so the mark scales
+    // with the token rather than with a hand-picked diameter.
+    width: Touch.iconHero + Insets.xl,
+    height: Touch.iconHero + Insets.xl,
+    decoration: BoxDecoration(
+      color: fill,
+      shape: BoxShape.circle,
+      border: edge == null ? null : Border.all(color: edge!),
+    ),
+    alignment: Alignment.center,
+    child: Icon(icon, size: Touch.iconHero, color: tint),
+  );
+}
+
 class _SuggestionChip extends StatelessWidget {
   const _SuggestionChip({
     required this.icon,
@@ -546,11 +611,11 @@ class _SuggestionChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return ActionChip(
-      avatar: Icon(icon, size: 14, color: scheme.primary),
-      label: Text(label, style: theme.textTheme.bodySmall),
+      avatar: Icon(icon, size: Touch.iconSmall, color: scheme.primary),
+      label: Text(label, style: theme.textTheme.bodyMedium),
       backgroundColor: scheme.surfaceContainerHigh,
       side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: const StadiumBorder(),
       onPressed: () => onTap(prompt),
     );
   }
