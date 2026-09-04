@@ -58,15 +58,19 @@ class _MessageComposerState extends State<MessageComposer> {
   void initState() {
     super.initState();
     _input = widget.controller ?? TextEditingController();
-    _input.addListener(_onInputChange);
     _focusNode.addListener(_onFocusChange);
   }
 
+  /// Focus decides the card's border colour, and changes once per click rather
+  /// than once per character — so this one may rebuild the composer.
+  ///
+  /// **There is deliberately no listener on [_input].** One existed, and it
+  /// called `setState` for every keystroke so the send button could recolour:
+  /// the whole composer subtree — the card, the field's wrapper, the toolbar's
+  /// `LayoutBuilder`, both buttons, the chip row — rebuilt per character, in
+  /// the widget the user types into most. [_SendButton] listens to the
+  /// controller itself instead, so a character now rebuilds one button.
   void _onFocusChange() {
-    if (mounted) setState(() {});
-  }
-
-  void _onInputChange() {
     if (mounted) setState(() {});
   }
 
@@ -74,19 +78,16 @@ class _MessageComposerState extends State<MessageComposer> {
   void didUpdateWidget(MessageComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      _input.removeListener(_onInputChange);
       if (oldWidget.controller == null) {
         _input.dispose();
       }
       _input = widget.controller ?? TextEditingController();
-      _input.addListener(_onInputChange);
     }
   }
 
   @override
   void dispose() {
     _focusNode.removeListener(_onFocusChange);
-    _input.removeListener(_onInputChange);
     _focusNode.dispose();
     if (widget.controller == null) _input.dispose();
     super.dispose();
@@ -202,9 +203,9 @@ class _MessageComposerState extends State<MessageComposer> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final canType = widget.enabled && !_busy;
-    final hasContent = _input.text.trim().isNotEmpty || _attachments.isNotEmpty;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -212,208 +213,265 @@ class _MessageComposerState extends State<MessageComposer> {
         const Divider(height: 1),
         Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 860),
+            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AnimatedContainer(
-                    duration: Motion.fast,
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: _focusNode.hasFocus
-                            ? scheme.primary.withValues(alpha: 0.7)
-                            : scheme.outlineVariant.withValues(alpha: 0.5),
-                        width: _focusNode.hasFocus ? 1.5 : 1.0,
+              padding: const EdgeInsets.all(Insets.sm),
+              child: AnimatedContainer(
+                duration: Motion.fast,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(Radii.lg),
+                  // The accent border is the whole focus signal. It used to
+                  // also grow from 1.0 to 1.5 and light a `primary` glow: the
+                  // width change relaid the composer out — and so nudged the
+                  // transcript — every time the box took or lost focus, and
+                  // the glow was a second mechanism saying the one thing the
+                  // colour already says. `inputDecorationTheme` marks focus
+                  // the same way, so every field in the app now agrees.
+                  border: Border.all(
+                    color: _focusNode.hasFocus
+                        ? scheme.primary
+                        : scheme.outlineVariant,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_attachments.isNotEmpty) _attachmentStrip(theme),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Insets.md,
+                        vertical: Insets.sm,
                       ),
-                      boxShadow: _focusNode.hasFocus
-                          ? [
-                              BoxShadow(
-                                color: scheme.primary.withValues(alpha: 0.08),
-                                blurRadius: 8,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_attachments.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-                            child: Wrap(
-                              spacing: Insets.sm,
-                              runSpacing: Insets.sm,
-                              children: [
-                                for (var i = 0; i < _attachments.length; i++)
-                                  _Thumbnail(
-                                    bytes: _attachments[i].bytes,
-                                    onRemove: () => setState(
-                                      () => _attachments.removeAt(i),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                          child: TextField(
-                            controller: _input,
-                            focusNode: _focusNode,
-                            enabled: canType,
-                            minLines: 1,
-                            maxLines: 7,
-                            textInputAction: TextInputAction.newline,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                            decoration: InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 6,
-                              ),
-                              hintText: widget.hintText,
-                              hintStyle: Theme.of(
-                                context,
-                              ).textTheme.bodyMedium?.copyWith(
-                                color: scheme.onSurfaceVariant.withValues(
-                                  alpha: 0.65,
-                                ),
-                              ),
-                            ),
+                      child: TextField(
+                        controller: _input,
+                        focusNode: _focusNode,
+                        enabled: canType,
+                        // **Three lines at rest, not one.** The composer is
+                        // where the whole session is written, and a one-line
+                        // strip under a 94px stack of chrome was the owner's
+                        // "message enter prompt field is very small": the
+                        // glyphs got 19 of the composer's 113 logical pixels.
+                        // Three lines is what a paragraph of instruction
+                        // needs before it starts scrolling under itself.
+                        minLines: 3,
+                        maxLines: 12,
+                        textInputAction: TextInputAction.newline,
+                        style: theme.textTheme.bodyMedium,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          // `filled` is on in the app's theme, and with no
+                          // border to bound it the fill painted a hard-edged
+                          // `surfaceContainerLowest` rectangle *inside* this
+                          // rounded card — a second surface behind the text,
+                          // white-on-grey in light mode. The card is the
+                          // surface; the field draws none of its own.
+                          filled: false,
+                          border: InputBorder.none,
+                          // The wrapper above already spends `Insets.sm`
+                          // vertically; a second helping here paid twice.
+                          contentPadding: EdgeInsets.zero,
+                          hintText: widget.hintText,
+                          hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final sendButton = IconButton.filled(
-                                tooltip: _busy ? 'Sending…' : 'Send (Enter)',
-                                onPressed: canType ? _send : null,
-                                visualDensity: VisualDensity.compact,
-                                style: IconButton.styleFrom(
-                                  backgroundColor: (canType && hasContent)
-                                      ? scheme.primary
-                                      : scheme.surfaceContainerHighest,
-                                  foregroundColor: (canType && hasContent)
-                                      ? scheme.onPrimary
-                                      : scheme.onSurfaceVariant,
-                                ),
-                                icon: _busy
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        AppIcons.paperPlaneRight,
-                                        size: 15,
-                                      ),
-                              );
-
-                              final attachButton = IconButton(
-                                tooltip: 'Attach image (or paste with Ctrl+V)',
-                                visualDensity: VisualDensity.compact,
-                                onPressed: canType ? _attach : null,
-                                icon: Icon(
-                                  AppIcons.image,
-                                  size: 18,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              );
-
-                              if (constraints.maxWidth > 380) {
-                                return Row(
-                                  children: [
-                                    attachButton,
-                                    if (widget.chips.isNotEmpty) ...[
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Wrap(
-                                          spacing: Insets.xs,
-                                          runSpacing: Insets.xs,
-                                          children: widget.chips,
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      const Spacer(),
-                                    ],
-                                    const SizedBox(width: 6),
-                                    sendButton,
-                                  ],
-                                );
-                              }
-
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Row(
-                                    children: [
-                                      attachButton,
-                                      const Spacer(),
-                                      sendButton,
-                                    ],
-                                  ),
-                                  if (widget.chips.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Wrap(
-                                        spacing: Insets.xs,
-                                        runSpacing: Insets.xs,
-                                        children: widget.chips,
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5, left: 4, right: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (_attachments.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              'Images are saved to a temp folder and referenced by path so the agent can read them.',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(color: scheme.onSurfaceVariant),
-                            ),
-                          )
-                        else
-                          const Spacer(),
-                        Text(
-                          'Enter to send · Shift + Enter for new line',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: scheme.onSurfaceVariant.withValues(
-                                  alpha: 0.6,
-                                ),
-                              ),
-                        ),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Insets.sm,
+                        0,
+                        Insets.sm,
+                        Insets.sm,
+                      ),
+                      child: _toolbar(canType),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  /// The thumbnails, and the one line explaining where the files went.
+  ///
+  /// The note used to sit *below* the card and be drawn always — one
+  /// `labelSmall` line plus its padding, 31 of the composer's 113 logical
+  /// pixels, for a sentence that is true only when something is attached and
+  /// that overflowed its row by 138px at 390 wide. It now costs nothing until
+  /// there is an attachment to explain, and sits beside the thing it explains.
+  Widget _attachmentStrip(ThemeData theme) => Padding(
+    padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: Insets.sm,
+          runSpacing: Insets.sm,
+          children: [
+            for (var i = 0; i < _attachments.length; i++)
+              _Thumbnail(
+                bytes: _attachments[i].bytes,
+                onRemove: () => setState(() => _attachments.removeAt(i)),
+              ),
+          ],
+        ),
+        const SizedBox(height: Insets.xs),
+        Text(
+          'Saved to a temp folder and sent to the agent as file paths.',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Attach, the session's chips, and send.
+  ///
+  /// Two arrangements, because at a pane's narrowest the three cannot share a
+  /// row: the chips take the row to themselves and the buttons keep the one
+  /// above. The threshold is named rather than inlined — it is the width the
+  /// two buttons plus one chip need, and nothing else in the app branches on
+  /// it (CLAUDE.md §6 forbids *scattered* raw widths, not a local measure).
+  static const _toolbarRowMinWidth = 380.0;
+
+  Widget _toolbar(bool canType) => LayoutBuilder(
+    builder: (context, constraints) {
+      final send = _SendButton(
+        input: _input,
+        attachments: _attachments,
+        busy: _busy,
+        onSend: canType ? _send : null,
+      );
+      final attach = IconButton(
+        tooltip: 'Attach image (or paste with Ctrl+V)',
+        onPressed: canType ? _attach : null,
+        // A pointer surface's control height, the same row as the title bar's
+        // buttons.
+        //
+        // `VisualDensity.compact` is already the app-wide default, so
+        // restating it on the widget only subtracted its 8px a second time,
+        // and left both of the composer's buttons **18 logical pixels tall**
+        // — the primary action of the surface, two pixels off the 16x16 the
+        // transcript's deliberately low-emphasis copy button measures. Note
+        // that `minimumSize` alone does not fix it: `effectiveConstraints`
+        // subtracts the density adjustment from the minimum, which is exactly
+        // how `iconButtonTheme`'s 26 became 18. The density has to be named.
+        style: IconButton.styleFrom(
+          visualDensity: VisualDensity.standard,
+          minimumSize: const Size.square(Chrome.control),
+        ),
+        icon: const Icon(AppIcons.image),
+      );
+
+      if (constraints.maxWidth > _toolbarRowMinWidth) {
+        return Row(
+          children: [
+            attach,
+            if (widget.chips.isNotEmpty)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+                  child: Wrap(
+                    spacing: Insets.xs,
+                    runSpacing: Insets.xs,
+                    children: widget.chips,
+                  ),
+                ),
+              )
+            else
+              const Spacer(),
+            send,
+          ],
+        );
+      }
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [attach, const Spacer(), send]),
+          if (widget.chips.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.xs),
+              child: Wrap(
+                spacing: Insets.xs,
+                runSpacing: Insets.xs,
+                children: widget.chips,
+              ),
+            ),
+        ],
+      );
+    },
+  );
+}
+
+/// Send, and the one thing in the composer that knows what has been typed.
+///
+/// Scoped to its own widget so that a keystroke rebuilds a 26px button rather
+/// than the composer around it: the accent fill is only earned once there is
+/// something to send, and that is the sole reason anything here watches the
+/// controller. See `_MessageComposerState._onFocusChange`.
+class _SendButton extends StatelessWidget {
+  const _SendButton({
+    required this.input,
+    required this.attachments,
+    required this.busy,
+    required this.onSend,
+  });
+
+  final TextEditingController input;
+  final List<_Attachment> attachments;
+  final bool busy;
+
+  /// Null when the composer cannot send at all — disabled, or mid-send.
+  final VoidCallback? onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: input,
+      builder: (context, value, _) {
+        final ready =
+            onSend != null &&
+            (value.text.trim().isNotEmpty || attachments.isNotEmpty);
+        return IconButton.filled(
+          // Named, because it is icon-only and Narrator reads the semantics
+          // tree rather than a hover: without this the most important control
+          // in the composer announced as "button". The chord is in the label
+          // for the same reason the toolbar puts chords in tooltips — it is
+          // the faster way to send, and now the only place that says so, the
+          // permanent "Enter to send · Shift + Enter for new line" strip
+          // under the box having been the composer's largest single spend.
+          tooltip: busy
+              ? 'Sending…'
+              : 'Send (Enter) · Shift + Enter for a new line',
+          onPressed: onSend,
+          style: IconButton.styleFrom(
+            visualDensity: VisualDensity.standard,
+            minimumSize: const Size.square(Chrome.control),
+            backgroundColor: ready
+                ? scheme.primary
+                : scheme.surfaceContainerHighest,
+            foregroundColor: ready ? scheme.onPrimary : scheme.onSurfaceVariant,
+          ),
+          icon: busy
+              ? const SizedBox.square(
+                  dimension: Chrome.iconSmall,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(AppIcons.paperPlaneRight),
+        );
+      },
     );
   }
 }

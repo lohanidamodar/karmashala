@@ -512,6 +512,21 @@ class Chrome {
   static const menuRow = 32.0;
   static const menuRowTall = 44.0;
 
+  /// The widest a column of prose is allowed to get, in logical pixels.
+  ///
+  /// A conversation is read, not scanned, and a line that runs the full width
+  /// of a 2560px window loses the reader between its end and the next line's
+  /// start (CLAUDE.md §6: *constrain readable content with a max width*). The
+  /// chat transcript and the composer under it are centred at this width so
+  /// they stay one column rather than two that happen to be near each other.
+  ///
+  /// Named here because it was written as a bare `860` in three places — the
+  /// transcript's list, its footer slot and the composer — and three copies of
+  /// a measure are three chances for the column and the box beneath it to stop
+  /// lining up. [UiDensity.compactWidth] is the *touch* answer to the same
+  /// question and is deliberately narrower; this is the pointer surface's.
+  static const readableWidth = 860.0;
+
   /// One level of a file tree's indentation.
   ///
   /// Narrower than [Insets.lg] on purpose: a repository nests deeply and a
