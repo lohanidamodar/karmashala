@@ -2,9 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// `Override` is not part of the main barrel in Riverpod 3.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -12,6 +16,7 @@ import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
 import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
+import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_usage_strip.dart';
@@ -22,6 +27,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+import '../agents/usage_fixtures.dart';
 
 /// Usage at the point of decision.
 ///
@@ -30,6 +36,13 @@ import '../../support/window_matrix.dart';
 /// the number can be in — comfortable, nearly exhausted, unknown, still
 /// arriving — and, in every one of them, that the launch button is still
 /// pressable. That last assertion is the point: this is a warning, never a gate.
+
+class _Movable implements Clock {
+  _Movable(this.now);
+  DateTime now;
+  @override
+  DateTime nowUtc() => now.toUtc();
+}
 
 /// The compact end of the responsive contract (CLAUDE.md §6).
 const phone = WindowCell('390x844 (phone)', Size(390, 844));
@@ -75,6 +88,7 @@ Future<ProviderContainer> pumpSetup(
   WidgetTester tester, {
   required UsageLookup usageFor,
   int select = 2,
+  List<Override> extraOverrides = const [],
 }) async {
   final db = seeded();
   addTearDown(db.close);
@@ -86,6 +100,7 @@ Future<ProviderContainer> pumpSetup(
       ),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       agentUsageProvider.overrideWith((ref, install) => usageFor(install)),
+      ...extraOverrides,
     ],
   );
   addTearDown(container.dispose);
@@ -209,6 +224,41 @@ void main() {
     // Riverpod keeps a retry timer alive behind a failed lookup; closing the
     // dialog is what disposes it, and the container stands in for that here.
     container.dispose();
+  });
+
+  testWidgets('a failed lookup over a number we already have keeps the '
+      'number', (tester) async {
+    // The strip used to read the error first and print "not recorded" over a
+    // reading the app was holding — the fan-out is exactly where losing it
+    // costs something, because the number is why the dialog shows it at all.
+    final clock = _Movable(testTime);
+    final service = FakeAgentUsageService(clock: clock)
+      ..answer = usageSnapshot(percent: 62);
+    await service.fetch(agentInstallation(id: 'a1'), const []);
+    clock.now = clock.now.add(const Duration(minutes: 4));
+
+    await pumpSetup(
+      tester,
+      usageFor: (_) => Future<AgentUsage>.error(
+        UsageException(
+          'Usage request failed (HTTP 429).',
+          kind: UsageFailureKind.rateLimited,
+        ),
+      ),
+      extraOverrides: [
+        clockProvider.overrideWithValue(clock),
+        agentUsageServiceProvider.overrideWithValue(service),
+      ],
+    );
+
+    expect(find.textContaining('62%'), findsOneWidget);
+    expect(find.text('Last checked 4m ago · Rate limited'), findsOneWidget);
+    expect(
+      find.text('not recorded'),
+      findsOneWidget,
+      reason: 'the Codex account has no reading at all, and still says so',
+    );
+    expectLaunchStillOffered(tester);
   });
 
   testWidgets('an account with no windows reported is not recorded either', (

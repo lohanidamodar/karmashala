@@ -117,6 +117,16 @@ class AgentUsageService {
   Duration? rateLimitWait(AgentInstallation installation) =>
       _throttle.waitFor(installation);
 
+  /// The refusal this account would get if it asked right now, or null.
+  ///
+  /// So a surface can say *why* the number is not moving without making the
+  /// request that would tell it — the settings panel opens on this rather than
+  /// looking untroubled while the chip shows a stalled reading.
+  UsageException? pendingRateLimit(AgentInstallation installation) {
+    final wait = _throttle.waitFor(installation);
+    return wait == null ? null : _rateLimited(wait);
+  }
+
   /// A reading young enough to stand in for a fresh one, or null.
   ///
   /// What stops a pane switch costing a request: `agentUsageProvider` is
@@ -134,8 +144,8 @@ class AgentUsageService {
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
-    final wait = _throttle.waitFor(installation);
-    if (wait != null) throw _rateLimited(wait);
+    final pending = pendingRateLimit(installation);
+    if (pending != null) throw pending;
     try {
       final usage = await fetchFresh(installation, environments);
       _throttle.recordSuccess(installation, usage);

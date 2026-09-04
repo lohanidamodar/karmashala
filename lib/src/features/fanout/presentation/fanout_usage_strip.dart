@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/data/agent_usage_service.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_usage.dart';
+import '../../agents/domain/usage_failure.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../sessions/domain/session_resume.dart';
 
 /// What the selected accounts have left, shown where the fan-out is confirmed.
 ///
@@ -110,34 +113,53 @@ class _AccountUsage extends ConsumerWidget {
         '${AgentRegistry.builtIn.displayNameFor(installation.agentId)} · '
         '${ref.watch(environmentLabelForIdProvider(installation.environmentId))}';
     final usage = ref.watch(agentUsageProvider(installation));
-
-    // The error is read *before* the loading flag, and `when` is avoided
-    // entirely: Riverpod retries a failed provider, and while it retries the
-    // state is an `AsyncLoading` that carries the error. Asking "is it loading"
-    // first would leave a lookup that has already failed reading as "checking…"
-    // for as long as the dialog is open.
     final error = usage.error;
-    if (error != null) {
-      return _notRecorded(
-        context,
-        account,
-        error is UsageException ? error.message : '$error',
-      );
+
+    // **The value first, and never `when`.** A failed lookup carries the value
+    // it had — and, across the `autoDispose` that closing this dialog causes,
+    // the service's remembered reading does. Reading the error first threw both
+    // away and printed "not recorded" over a number the app was holding.
+    final value =
+        usage.value ??
+        ref.watch(agentUsageServiceProvider).remembered(installation);
+    if (value == null) {
+      // Slow, offline, or a token being refreshed — none of which is the
+      // dialog's problem. Deliberately plain text and not a spinner: this row
+      // must never be the thing that keeps the surface animating.
+      return error == null
+          ? _line(context, account, 'checking…')
+          : _notRecorded(
+              context,
+              account,
+              error is UsageException ? error.message : '$error',
+            );
     }
-    final value = usage.value;
-    // Slow, offline, or a token being refreshed — none of which is the dialog's
-    // problem. Deliberately plain text and not a spinner: this row must never be
-    // the thing that keeps the surface animating.
-    if (value == null) return _line(context, account, 'checking…');
     final window = _tightest(value);
     // A reply with no windows in it measured nothing, so it is reported the same
     // way an unreachable account is.
-    return window == null
-        ? _notRecorded(context, account, 'No usage windows reported.')
-        : _measured(context, account, window);
+    if (window == null) {
+      return _notRecorded(context, account, 'No usage windows reported.');
+    }
+    return _measured(
+      context,
+      account,
+      window,
+      // A number that could not be confirmed says so, and says how old it is —
+      // never silently, which would make a stale figure look live.
+      note: error == null
+          ? null
+          : 'Last checked '
+                '${describeAge(ref.read(clockProvider).nowUtc().difference(value.fetchedAt))}'
+                '${error is UsageException ? ' · ${usageFailureHeadline(error.kind)}' : ''}',
+    );
   }
 
-  Widget _measured(BuildContext context, String account, UsageWindow window) {
+  Widget _measured(
+    BuildContext context,
+    String account,
+    UsageWindow window, {
+    String? note,
+  }) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final color = window.percent >= 95
@@ -178,6 +200,13 @@ class _AccountUsage extends ConsumerWidget {
               color: color,
             ),
           ),
+          if (note != null)
+            Text(
+              note,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: SemanticColors.of(context).neutral,
+              ),
+            ),
           if (window.percent >= 80) ...[
             const SizedBox(height: Insets.xs),
             Row(
