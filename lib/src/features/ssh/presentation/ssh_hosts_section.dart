@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/ssh_hosts_controller.dart';
 import '../domain/ssh_host.dart';
@@ -43,6 +45,13 @@ class SshHostsSection extends ConsumerWidget {
   }
 }
 
+/// One saved host.
+///
+/// The buttons stay drawn and stay worded: this is a settings form, not a
+/// dense list, and "Edit" in words is the interface here rather than the
+/// icon-only clutter the row menu exists to remove. What it gains is the other
+/// half of the rule — the same actions on a right-click, `Shift+F10` and the
+/// Menu key, so a habit learned in the panes is not disappointed here.
 class _HostCard extends ConsumerWidget {
   const _HostCard({required this.host});
 
@@ -53,70 +62,97 @@ class _HostCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final key = host.privateKey;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  AppIcons.globe,
-                  size: Chrome.iconTitle,
-                  color: theme.colorScheme.tertiary,
-                ),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text(host.name, style: theme.textTheme.titleSmall),
-                ),
-                SshConnectionStatusChip(hostId: host.id, showError: false),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              host.address,
-              style: MonoStyles.body,
-            ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              switch (host.authMethod) {
-                SshAuthMethod.password => 'Password (asked each connection)',
-                SshAuthMethod.privateKey =>
-                  'Key: ${key?.path ?? '—'} (${key?.environmentId ?? '—'})',
-              },
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: Insets.sm),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: () =>
-                      RemoteFileBrowserDialog.show(context, host: host),
-                  icon: const Icon(AppIcons.folderOpen),
-                  label: const Text('Browse files'),
-                ),
-                TextButton.icon(
-                  onPressed: () => SshHostDialog.show(context, existing: host),
-                  icon: const Icon(AppIcons.pencilSimple),
-                  label: const Text('Edit'),
-                ),
-                TextButton.icon(
-                  onPressed: () => _remove(context, ref),
-                  icon: const Icon(AppIcons.trash),
-                  label: const Text('Remove'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error,
+    return RowContextMenu(
+      menuLabel: 'Actions for ${host.name}',
+      menuItems: [
+        DesktopMenuItem(
+          value: 'browse',
+          label: 'Browse files',
+          icon: AppIcons.folderOpen,
+        ),
+        DesktopMenuItem(
+          value: 'edit',
+          label: 'Edit',
+          icon: AppIcons.pencilSimple,
+        ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'remove',
+          label: 'Remove',
+          icon: AppIcons.trash,
+          destructive: true,
+        ),
+      ],
+      onSelected: (value) => switch (value) {
+        'browse' => RemoteFileBrowserDialog.show(context, host: host),
+        'edit' => SshHostDialog.show(context, existing: host),
+        _ => _remove(context, ref),
+      },
+      builder: (context, _) => Card(
+        margin: const EdgeInsets.only(bottom: Insets.sm),
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    AppIcons.globe,
+                    size: Chrome.iconTitle,
+                    color: theme.colorScheme.tertiary,
                   ),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Text(host.name, style: theme.textTheme.titleSmall),
+                  ),
+                  SshConnectionStatusChip(hostId: host.id, showError: false),
+                ],
+              ),
+              const SizedBox(height: Insets.xs),
+              Text(
+                host.address,
+                style: MonoStyles.body,
+              ),
+              const SizedBox(height: Insets.xs),
+              Text(
+                switch (host.authMethod) {
+                  SshAuthMethod.password => 'Password (asked each connection)',
+                  SshAuthMethod.privateKey =>
+                    'Key: ${key?.path ?? '—'} (${key?.environmentId ?? '—'})',
+                },
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ],
-            ),
-          ],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: Insets.sm),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () =>
+                        RemoteFileBrowserDialog.show(context, host: host),
+                    icon: const Icon(AppIcons.folderOpen),
+                    label: const Text('Browse files'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => SshHostDialog.show(context, existing: host),
+                    icon: const Icon(AppIcons.pencilSimple),
+                    label: const Text('Edit'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _remove(context, ref),
+                    icon: const Icon(AppIcons.trash),
+                    label: const Text('Remove'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

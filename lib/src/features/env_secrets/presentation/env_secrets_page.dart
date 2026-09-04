@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
+import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/env_secrets_controller.dart';
@@ -208,6 +210,14 @@ class _Fact extends StatelessWidget {
   }
 }
 
+/// One saved variable.
+///
+/// The buttons stay drawn and stay worded. This is a settings form, not a
+/// dense list: "Edit" and "Remove" in words are the interface here, and the
+/// clutter the row menu exists to remove — an icon-only glyph on every line of
+/// a hundred-row pane — is not what this page has. What it gains is the other
+/// half of the rule: the same actions on a right-click, `Shift+F10` and the
+/// Menu key, so a habit learned in the Todos pane is not disappointed here.
 class _VariableCard extends ConsumerWidget {
   const _VariableCard({required this.variable});
 
@@ -217,75 +227,106 @@ class _VariableCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  variable.secret ? AppIcons.warningCircle : AppIcons.code,
-                  size: Chrome.iconTitle,
-                  color: scheme.tertiary,
-                ),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text(variable.name, style: MonoStyles.label),
-                ),
-                Switch(
-                  value: variable.enabled,
-                  onChanged: (value) => ref
-                      .read(envSecretsControllerProvider.notifier)
-                      .setVariableEnabled(variable.id, value),
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            // The whole write-only rule, in one widget: a secret shows that it
-            // is set and when, and never what it is.
-            variable.secret
-                ? Text(
-                    'Hidden — set, and not shown again.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  )
-                : Text(
-                    variable.value,
-                    style: MonoStyles.body,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+    return RowContextMenu(
+      menuLabel: 'Actions for ${variable.name}',
+      menuItems: [
+        DesktopMenuItem(
+          value: 'edit',
+          label: variable.secret ? 'Replace' : 'Edit',
+          icon: AppIcons.pencilSimple,
+        ),
+        DesktopMenuItem(
+          value: 'toggle',
+          label: variable.enabled
+              ? 'Turn off — keep it, stop loading it'
+              : 'Turn on — load it into terminals',
+          icon: variable.enabled ? AppIcons.pauseCircle : AppIcons.playCircle,
+        ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'remove',
+          label: 'Remove',
+          icon: AppIcons.trash,
+          destructive: true,
+        ),
+      ],
+      onSelected: (value) => switch (value) {
+        'edit' => EnvVariableDialog.show(context, existing: variable),
+        'toggle' => ref
+            .read(envSecretsControllerProvider.notifier)
+            .setVariableEnabled(variable.id, !variable.enabled),
+        _ => _remove(context, ref),
+      },
+      builder: (context, _) => Card(
+        margin: const EdgeInsets.only(bottom: Insets.sm),
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    variable.secret ? AppIcons.warningCircle : AppIcons.code,
+                    size: Chrome.iconTitle,
+                    color: scheme.tertiary,
                   ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              variable.enabled
-                  ? 'Updated ${_date(variable.updatedAt)}'
-                  : 'Off — kept, but not loaded into terminals.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Text(variable.name, style: MonoStyles.label),
+                  ),
+                  Switch(
+                    value: variable.enabled,
+                    onChanged: (value) => ref
+                        .read(envSecretsControllerProvider.notifier)
+                        .setVariableEnabled(variable.id, value),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: Insets.sm),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: () =>
-                      EnvVariableDialog.show(context, existing: variable),
-                  icon: const Icon(AppIcons.pencilSimple),
-                  label: Text(variable.secret ? 'Replace' : 'Edit'),
+              const SizedBox(height: Insets.xs),
+              // The whole write-only rule, in one widget: a secret shows that it
+              // is set and when, and never what it is.
+              variable.secret
+                  ? Text(
+                      'Hidden — set, and not shown again.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    )
+                  : Text(
+                      variable.value,
+                      style: MonoStyles.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+              const SizedBox(height: Insets.xs),
+              Text(
+                variable.enabled
+                    ? 'Updated ${_date(variable.updatedAt)}'
+                    : 'Off — kept, but not loaded into terminals.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
                 ),
-                TextButton.icon(
-                  onPressed: () => _remove(context, ref),
-                  icon: const Icon(AppIcons.trash),
-                  label: const Text('Remove'),
-                  style: TextButton.styleFrom(foregroundColor: scheme.error),
-                ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: Insets.sm),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () =>
+                        EnvVariableDialog.show(context, existing: variable),
+                    icon: const Icon(AppIcons.pencilSimple),
+                    label: Text(variable.secret ? 'Replace' : 'Edit'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _remove(context, ref),
+                    icon: const Icon(AppIcons.trash),
+                    label: const Text('Remove'),
+                    style: TextButton.styleFrom(foregroundColor: scheme.error),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

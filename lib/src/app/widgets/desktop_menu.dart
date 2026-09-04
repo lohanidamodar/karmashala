@@ -265,10 +265,14 @@ class _HeaderLabel extends StatelessWidget {
   }
 }
 
-/// Right-click support, shared by every row that has a menu.
+/// Right-click, and only right-click.
 ///
-/// Lives beside [DesktopMenuItem] rather than in the Explorer because the Files
-/// side panel needs the same gesture and the same menu chrome.
+/// **Prefer `RowContextMenu` in `row_menu.dart`.** A row's menu has to answer
+/// `Shift+F10`, the Menu key and a screen reader as well as a mouse — a menu
+/// reachable by one gesture and no keyboard is an accessibility regression
+/// (CLAUDE.md §5) — and that widget is this one plus those three. This is the
+/// pointer half it is built on, kept separate for the surfaces whose gesture is
+/// not on a row at all: a terminal's body, a tab chip, a pane strip.
 class ContextMenuRegion extends StatelessWidget {
   const ContextMenuRegion({
     required this.menuItems,
