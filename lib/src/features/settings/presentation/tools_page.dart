@@ -12,6 +12,7 @@ import '../../browser/application/browser_consent_providers.dart';
 import '../../browser/domain/browser_consent.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../environments/application/system_health.dart';
 import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
@@ -376,7 +377,9 @@ class McpBridgeSection extends ConsumerWidget {
                     const SizedBox(width: Insets.xs),
                     Expanded(
                       child: Text(
-                        'No status callbacks from ${entry.key} — '
+                        'No status callbacks from '
+                        '${ref.watch(environmentLabelForIdProvider(entry.key))}'
+                        ' — '
                         '${entry.value}. Sessions there fall back to reading '
                         'the CLI\'s files, which cannot tell you when an agent '
                         'is waiting for approval or has failed.',

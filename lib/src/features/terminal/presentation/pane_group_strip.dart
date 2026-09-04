@@ -23,13 +23,29 @@ import 'session_status.dart';
 /// it back out. This is that handle, and it is what lets a region hold more
 /// than one pane at all.
 ///
-/// **It costs one [Chrome.tabStrip] row and no more.** That token already names
-/// "the workbench tab strip, the side panel's header and every pane header", so
-/// a region header is the same 30px row as everything else in the chrome rather
-/// than a new density invented for it. Vertical space in a terminal is the
-/// scarcest thing there is, which is also why the header is not drawn at all
-/// while a tab has one region holding one pane: the workbench strip is already
-/// that pane's header, and a second copy of it would be 30px saying nothing.
+/// **It is deliberately not the tab strip.** It used to be — the same
+/// [Chrome.tabStrip] height, the same chip, the same everything — and the
+/// owner reported the result twice: *"when split, the same pane has two
+/// headers"*, and before that *"an extra tab that doesn't do anything"*. Two
+/// identical rows stacked one on the other read as one row drawn twice, at
+/// 2000px as much as at 720. So this row says what it is by its shape:
+///
+/// * **[Chrome.paneStrip], not [Chrome.tabStrip]** — 24px against 30, which
+///   also hands 6px back to the terminal rather than taking any.
+/// * **A leading split mark**, [AppIcons.squareSplitHorizontal] — the same
+///   glyph an empty region wears as its hero. A region already has a
+///   vocabulary of its own; this row joins it instead of the tab strip's.
+/// * **Dense chips** ([WorkbenchTabChip.dense]): the label a step down, and
+///   the selection rule under the chip, against the pane it names.
+///
+/// Shape and size rather than colour, for the reason `session_status.dart`
+/// gives about liveness — a hue is not a category, and this app's chrome is a
+/// neutral ramp with one accent that is already spoken for.
+///
+/// Vertical space in a terminal is the scarcest thing there is, which is why
+/// the header is not drawn at all while a tab has one region holding one pane:
+/// the workbench strip is already that pane's header, and a second copy of it
+/// would be a row saying nothing.
 class PaneGroupStrip extends ConsumerWidget {
   const PaneGroupStrip({
     required this.group,
@@ -54,43 +70,65 @@ class PaneGroupStrip extends ConsumerWidget {
       onAcceptWithDetails: (details) =>
           _drop(sessions, details.data, group.activePaneId),
       builder: (context, candidate, _) => Container(
-        height: Chrome.tabStrip,
+        height: Chrome.paneStrip,
         color: candidate.isEmpty
             ? scheme.surfaceContainerLow
             // The same wash the empty region uses, so "this will land here"
             // looks the same wherever a drag is over.
             : scheme.primary.withValues(alpha: 0.08),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final metrics = tabStripMetrics(
-              constraints.maxWidth,
-              group.panes.length,
-              min: kMinRegionTabWidth,
-              max: kMaxRegionTabWidth,
-            );
-            final chips = [
-              for (final paneId in group.panes)
-                SizedBox(
-                  width: metrics.extent,
-                  child: PaneTabChip(
-                    key: PaneTabChip.keyFor(paneId),
-                    paneId: paneId,
-                    selected: paneId == group.activePaneId,
-                    accented: focused && paneId == group.activePaneId,
-                  ),
+        child: Row(
+          children: [
+            // What the row is, said before the first name on it. Not a
+            // control: there is no verb here the chips and the region menu do
+            // not already carry, and a button that only explains itself is one
+            // more thing to click by mistake.
+            Tooltip(
+              message: 'The panes in this region of the split',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+                child: Icon(
+                  AppIcons.squareSplitHorizontal,
+                  size: Chrome.iconSmall,
+                  color: scheme.onSurfaceVariant,
                 ),
-            ];
-            // A region can be dragged down to `kMinPaneWeight` of the tab, so
-            // even at the floor extent the chips may not fit. Scrolling is the
-            // only honest answer there; the workbench strip's picker is not,
-            // because these are the tabs of *this* region.
-            return metrics.overflowing
-                ? SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(children: chips),
-                  )
-                : Row(children: chips);
-          },
+              ),
+            ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final metrics = tabStripMetrics(
+                    constraints.maxWidth,
+                    group.panes.length,
+                    min: kMinRegionTabWidth,
+                    max: kMaxRegionTabWidth,
+                  );
+                  final chips = [
+                    for (final paneId in group.panes)
+                      SizedBox(
+                        width: metrics.extent,
+                        child: PaneTabChip(
+                          key: PaneTabChip.keyFor(paneId),
+                          paneId: paneId,
+                          selected: paneId == group.activePaneId,
+                          accented: focused && paneId == group.activePaneId,
+                        ),
+                      ),
+                  ];
+                  // A region can be dragged down to `kMinPaneWeight` of the
+                  // tab, so even at the floor extent the chips may not fit.
+                  // Scrolling is the only honest answer there; the workbench
+                  // strip's picker is not, because these are the tabs of
+                  // *this* region.
+                  return metrics.overflowing
+                      ? SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: chips),
+                        )
+                      : Row(children: chips);
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -166,6 +204,9 @@ class PaneTabChip extends ConsumerWidget {
     final chip = WorkbenchTabChip(
       selected: selected,
       accented: accented,
+      // The pane variant: shorter, quieter, and ruled underneath — see
+      // [PaneGroupStrip] for why the two rows must not look alike.
+      dense: true,
       onTap: () => sessions.focusPane(paneId),
       onSecondaryTapDown: (details) =>
           _menu(context, sessions, details.globalPosition),
@@ -180,7 +221,9 @@ class PaneTabChip extends ConsumerWidget {
             : 'Close pane',
         iconSize: Chrome.iconSmall,
         visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+        // A [Chrome.paneStrip] row with a 2px rule under it leaves 22px; the
+        // workbench strip's 20px box fits but leaves no gutter at all.
+        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
         padding: EdgeInsets.zero,
         icon: const Icon(AppIcons.x),
         onPressed: () => sessions.closePane(paneId),

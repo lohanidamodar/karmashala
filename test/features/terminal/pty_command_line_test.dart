@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
@@ -159,14 +161,35 @@ void main() {
 
       expect(
         conPtyCommandLine(launch),
-        'cmd.exe cmd.exe /c wsl.exe -d Ubuntu --cd /home/me/proj '
-        '-- claude --resume abc123',
+        startsWith(
+          'cmd.exe cmd.exe /c wsl.exe -d Ubuntu --cd /home/me/proj -- eval ',
+        ),
         reason: 'cmd drops the stray token, so wsl.exe sees its own options '
             'and runs the agent in the distro with no PE round-trip',
       );
+      expect(decodedPosixScript(launch), "exec 'claude' '--resume' 'abc123'");
     });
 
-    test('an ordinary prompt does too', () {
+    test('the payload is one double-quoted token, and nothing else is', () {
+      // The shape the whole fix rests on. `wsl.exe … --` gives the tail to the
+      // distro's login shell, so what that shell reads back has to be one word
+      // with the substitution live — which is what a Windows `"…"` is.
+      final line = conPtyCommandLine(
+        wrapForPty(resume(), const LaunchContext.wsl('Ubuntu')),
+      );
+      expect(
+        RegExp(r'''-- eval "\$\(echo '[A-Za-z0-9+/=]+'\|base64 -d\)"$''')
+            .hasMatch(line),
+        isTrue,
+        reason: line,
+      );
+      // Nothing `cmd` rewrites or stops at can be left in the line.
+      final payload = line.substring(line.indexOf('-- eval '));
+      expect(payload, isNot(contains('%')));
+      expect(payload, isNot(contains('\n')));
+    });
+
+    test('an ordinary prompt survives as one argument', () {
       final launch = wrapForPty(
         const ShellCommand(
           executable: 'claude',
@@ -177,26 +200,49 @@ void main() {
       );
 
       expect(conPtyCommandLine(launch), startsWith('cmd.exe cmd.exe /c '));
-      expect(conPtyCommandLine(launch), contains('"fix the failing test"'));
-    });
-
-    test('but a prompt with a percent sign keeps the direct form', () {
-      // `cmd` substitutes `%NAME%` while parsing and quoting does not stop it,
-      // so routing this through cmd would hand the agent something other than
-      // what the user typed. Depending on interop is the lesser harm.
-      final launch = wrapForPty(
-        const ShellCommand(
-          executable: 'claude',
-          arguments: [r'explain %PATH% to me'],
-          workingDirectory: '/home/me/proj',
-        ),
-        const LaunchContext.wsl('Ubuntu'),
+      expect(
+        decodedPosixScript(launch),
+        "exec 'claude' 'fix the failing test'",
       );
-
-      expect(launch.executable, 'wsl.exe');
-      expect(conPtyCommandLine(launch), startsWith('wsl.exe wsl.exe -d Ubuntu'));
-      expect(conPtyCommandLine(launch), contains(r'%PATH%'));
     });
+
+    // Every one of these was measured against a real `archlinux` pane before
+    // the fix, and every one of them arrived wrong. The first six are the
+    // characters a POSIX shell acts on; the last three are what `cmd.exe` acts
+    // on. `live_wsl_prompt_test.dart` asserts the same list against a real
+    // ConPTY — this file is the part that runs on every gate.
+    const hostile = <String, String>{
+      'a double quote': 'he said "hello" to me',
+      'an unbalanced double quote': 'he said "hello',
+      'a single quote': "it's a trap",
+      'a backtick': 'run `id -u` and report',
+      'a command substitution': r'run $(id -u) and report',
+      'a bare variable': r'my $HOME is here',
+      'a semicolon': 'a; rm -rf ~; b',
+      'a percent sign': 'about 50%USERNAME% done',
+      'a newline': 'line one\nline two',
+    };
+
+    for (final entry in hostile.entries) {
+      test('a prompt containing ${entry.key} reaches the agent unchanged', () {
+        final launch = wrapForPty(
+          ShellCommand(executable: 'claude', arguments: [entry.value]),
+          const LaunchContext.wsl('Ubuntu'),
+        );
+
+        // Decoded, it is a single POSIX-quoted argument: nothing to expand,
+        // nothing to split, nothing to run.
+        expect(
+          decodedPosixScript(launch),
+          "exec 'claude' ${quotePosixShellArgument(entry.value)}",
+        );
+        // And on the way there, none of it is on the command line at all.
+        final line = conPtyCommandLine(launch);
+        expect(line, isNot(contains(entry.value)));
+        expect(line, isNot(contains('\n')));
+        expect(line.substring(line.indexOf('-- eval ')), isNot(contains('%')));
+      });
+    }
 
     test('and the environment still crosses with WSLENV naming it', () {
       final launch = wrapForPty(
@@ -213,4 +259,128 @@ void main() {
       expect(launch.environment['WSLENV'], 'KARMASHALA_SESSION/u');
     });
   });
+
+  group('quotePosixShellArgument', () {
+    test('leaves ordinary text alone inside single quotes', () {
+      expect(quotePosixShellArgument('plain'), "'plain'");
+      expect(quotePosixShellArgument('two words'), "'two words'");
+      expect(quotePosixShellArgument(''), "''");
+    });
+
+    test('neutralises everything a POSIX shell would act on', () {
+      for (final value in [
+        r'$HOME',
+        r'$(id -u)',
+        '`id -u`',
+        'a; b',
+        'a && b',
+        'a | b',
+        'a > b',
+        '*.dart',
+        '~',
+        'line\nline',
+        r'back\slash',
+        '50%',
+      ]) {
+        expect(quotePosixShellArgument(value), "'$value'");
+      }
+    });
+
+    test('splices a single quote out and back in', () {
+      // The one character single quotes cannot contain. `'\''` closes, escapes
+      // the quote outside, and reopens.
+      expect(quotePosixShellArgument("it's"), r"'it'\''s'");
+      expect(quotePosixShellArgument("'"), r"''\'''");
+    });
+  });
+
+  group('encodedPosixShellCommand', () {
+    test('is two tokens, and only the second needs quoting', () {
+      final tokens = encodedPosixShellCommand(['claude', 'go']);
+      expect(tokens.first, 'eval');
+      expect(quoteWindowsCommandArgument(tokens.first), 'eval');
+      expect(
+        quoteWindowsCommandArgument(tokens.last),
+        '"${tokens.last}"',
+        reason:
+            'the second token has to arrive double-quoted or the shell splits '
+            'the decoded script on IFS',
+      );
+    });
+
+    test('carries anything at all, base64 and nothing else', () {
+      final tokens = encodedPosixShellCommand([
+        'claude',
+        'a "b" `c` \$(d) 50% e\nf',
+      ]);
+      expect(
+        RegExp(r'''^\$\(echo '[A-Za-z0-9+/=]+'\|base64 -d\)$''')
+            .hasMatch(tokens.last),
+        isTrue,
+        reason: tokens.last,
+      );
+    });
+  });
+
+  group('the argv an external terminal is handed', () {
+    // `wsl.exe … --` is a shell hand-off wherever it is spelled, so this path
+    // carries the same encoded payload — `_startInExternalTerminal` puts a
+    // prompt through it.
+    test('crosses WSL through the same encoded payload', () {
+      final argv = wrapForExternalTerminal(
+        const ShellCommand(
+          executable: 'claude',
+          arguments: ['say "hi" and run `id`'],
+          workingDirectory: '/home/me/proj',
+        ),
+        const LaunchContext.wsl('Ubuntu'),
+      );
+
+      expect(argv.take(6), [
+        'wsl.exe',
+        '-d',
+        'Ubuntu',
+        '--cd',
+        '/home/me/proj',
+        '--',
+      ]);
+      expect(argv[6], 'eval');
+      expect(
+        utf8.decode(
+          base64Decode(
+            RegExp(r"'([A-Za-z0-9+/=]+)'").firstMatch(argv[7])!.group(1)!,
+          ),
+        ),
+        "exec 'claude' 'say \"hi\" and run `id`'",
+      );
+    });
+
+    test('and leaves a non-WSL command exactly as it was', () {
+      const command = ShellCommand(
+        executable: 'claude',
+        arguments: ['say "hi"'],
+      );
+      expect(
+        wrapForExternalTerminal(command, const LaunchContext.windowsNative()),
+        ['claude', 'say "hi"'],
+      );
+      expect(
+        wrapForExternalTerminal(command, const LaunchContext.posix()),
+        ['claude', 'say "hi"'],
+      );
+    });
+  });
+}
+
+/// The POSIX script a WSL launch really hands the distribution's login shell.
+///
+/// Asserting on this rather than on the base64 is the point: the blob is an
+/// encoding detail, and what has to be right is the command on the other side
+/// of it.
+String decodedPosixScript(PtyLaunch launch) {
+  final match = RegExp(
+    r"eval \x22\$\(echo '([A-Za-z0-9+/=]+)'\|base64 -d\)\x22",
+  ).firstMatch(launch.arguments.last);
+  expect(match, isNotNull, reason: 'not an encoded WSL launch: $launch');
+  return utf8.decode(base64Decode(match!.group(1)!));
 }

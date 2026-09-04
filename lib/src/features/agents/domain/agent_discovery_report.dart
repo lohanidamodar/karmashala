@@ -27,6 +27,7 @@ class EnvironmentScanReport {
     this.missing = const [],
     this.added = const [],
     this.removed = const [],
+    this.retained = const [],
     this.updated = const [],
   });
 
@@ -41,6 +42,7 @@ class EnvironmentScanReport {
        missing = const [],
        added = const [],
        removed = const [],
+       retained = const [],
        updated = const [];
 
   final String environmentId;
@@ -56,6 +58,15 @@ class EnvironmentScanReport {
 
   final List<AgentInstallation> added;
   final List<AgentInstallation> removed;
+
+  /// Uninstalled here, but kept on record because sessions still point at them.
+  ///
+  /// Neither found nor removed, and reported as neither: counting these among
+  /// [found] would claim an agent is installed when the scan just proved it is
+  /// not, and dropping them silently would leave the environment listing a row
+  /// the summary never mentions.
+  final List<AgentInstallation> retained;
+
   final List<AgentVersionChange> updated;
 }
 
@@ -80,6 +91,7 @@ class AgentDiscoveryReport {
   int get foundCount => installations.length;
   int get addedCount => _sum((e) => e.added.length);
   int get removedCount => _sum((e) => e.removed.length);
+  int get retainedCount => _sum((e) => e.retained.length);
   int get updatedCount => _sum((e) => e.updated.length);
 
   List<EnvironmentScanReport> get unreachable => [
@@ -108,6 +120,8 @@ class AgentDiscoveryReport {
       if (addedCount > 0) '$addedCount new.',
       if (updatedCount > 0) '${_count(updatedCount, 'version')} changed.',
       if (removedCount > 0) '$removedCount no longer installed.',
+      if (retainedCount > 0)
+        '$retainedCount gone but kept for sessions that used it.',
     ];
 
     final missing = <String>[
