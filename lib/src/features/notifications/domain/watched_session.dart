@@ -8,6 +8,7 @@ class WatchedSession {
     required this.label,
     required this.openId,
     required this.imported,
+    this.paneId,
     this.stateFilePath,
   });
 
@@ -22,6 +23,13 @@ class WatchedSession {
 
   final bool imported;
 
+  /// The live pane this native session occupies, when it has one.
+  ///
+  /// Carried from the loader's already-read session row so a status cycle does
+  /// not query that same row again merely to recover its pane id. Imported
+  /// sessions never have an in-app pane.
+  final String? paneId;
+
   /// The agent's transcript file, when one is known. `null` for native
   /// sessions, whose status can only come from hooks.
   final String? stateFilePath;
@@ -33,10 +41,12 @@ class WatchedSession {
       other.label == label &&
       other.openId == openId &&
       other.imported == imported &&
+      other.paneId == paneId &&
       other.stateFilePath == stateFilePath;
 
   @override
-  int get hashCode => Object.hash(key, label, openId, imported, stateFilePath);
+  int get hashCode =>
+      Object.hash(key, label, openId, imported, paneId, stateFilePath);
 
   @override
   String toString() => 'WatchedSession($key, $label)';

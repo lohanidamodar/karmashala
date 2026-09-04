@@ -174,9 +174,11 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
     // terminal right beside it.
     readTail: (session) {
       if (session.imported) return const [];
-      final row = ref.read(sessionDaoProvider).getById(session.openId);
-      if (row == null) return const [];
-      return sessionTerminalTail(ref, row, agentId: session.key.agentId);
+      return sessionTerminalTailForPane(
+        ref,
+        session.paneId,
+        agentId: session.key.agentId,
+      );
     },
     // One store scan for every session still missing a transcript path, on the
     // registry's own slow interval — not one per badge per tick.

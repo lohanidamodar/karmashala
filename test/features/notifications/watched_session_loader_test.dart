@@ -238,7 +238,12 @@ void main() {
   });
 
   test('a native session with a CLI id is watched', () async {
-    sessions.insert(session(id: 's1').copyWith(externalSessionId: 'cli-9'));
+    sessions.insert(
+      session(id: 's1').copyWith(
+        externalSessionId: 'cli-9',
+        paneId: 'pane-9',
+      ),
+    );
 
     final watched = await settled(loader());
 
@@ -246,6 +251,11 @@ void main() {
     expect(watched.single.key.agentId, AgentIds.claudeCode);
     expect(watched.single.key.sessionId, 'cli-9');
     expect(watched.single.imported, isFalse);
+    expect(
+      watched.single.paneId,
+      'pane-9',
+      reason: 'the status cycle must not query this row again for its pane',
+    );
     expect(watched.single.stateFilePath, isNull);
   });
 

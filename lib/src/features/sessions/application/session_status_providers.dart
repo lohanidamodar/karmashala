@@ -196,7 +196,20 @@ int _urgency(AgentActivityStatus status) => switch (status) {
 /// because these rows are also what gets quoted back to the user as "what is
 /// being approved": too few and the question is cut off mid-sentence.
 List<String> sessionTerminalTail(Ref ref, Session session, {String? agentId}) {
-  final paneId = session.paneId;
+  return sessionTerminalTailForPane(ref, session.paneId, agentId: agentId);
+}
+
+/// The bottom rows of [paneId], or nothing when it is absent or no longer live.
+///
+/// This is the row-free form used by the status registry. Its loader has
+/// already read the session row and carries the pane id in `WatchedSession`, so
+/// querying the row again for every watched session on every cycle is pure
+/// duplicate work.
+List<String> sessionTerminalTailForPane(
+  Ref ref,
+  String? paneId, {
+  String? agentId,
+}) {
   if (paneId == null) return const [];
   final instance = ref
       .read(terminalSessionsControllerProvider.notifier)

@@ -126,6 +126,7 @@ class WatchedSessionLoader {
           label: session.title,
           openId: session.id,
           imported: false,
+          paneId: session.paneId,
         ),
         now,
       ));
