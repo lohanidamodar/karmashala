@@ -34,12 +34,26 @@
 /// is not a modified `Enter` is delegated straight back to the package's own
 /// handler.
 ///
-/// **Not implemented, deliberately:** honouring `modifyOtherKeys`
-/// (`CSI > 4 ; 2 m`) or the kitty protocol (`CSI > 1 u`) so the *program* chooses
-/// when modifiers are reported. That needs the vendored parser to route prefixed
-/// CSI away from SGR, a new `EscapeHandler` method, and mode state on `Terminal`
-/// — three forked files — and it would not change the reported symptom, because
-/// `ESC CR` already works with Claude Code unconfigured.
+/// **Only a press is encoded — a release is delegated.** This handler was
+/// written against xterm 4.0.0, whose `TerminalView` returned early on a
+/// `KeyUpEvent` and whose `TerminalKeyboardEvent` had no event type at all: an
+/// input handler could only ever be asked about a press. xterm2 forwards the
+/// release too, as `TerminalKeyEventType.release`, so the kitty keyboard
+/// protocol can report it — and every handler in xterm2's own default chain
+/// opens with the same guard this one now has. Without it a modified `Enter`
+/// was encoded twice per keystroke, once going down and once coming up, which
+/// is the *"shift enter is creating new line twice"* the owner reported after
+/// the migration. Delegating rather than returning null is what lets
+/// `KittyKeyboardInputHandler` answer a release when a program has asked for
+/// event types; with kitty mode off it answers null, and nothing is written.
+///
+/// **Still deliberately unconditional on a press.** xterm2 does implement
+/// `modifyOtherKeys` and the kitty protocol, so a *program* could choose when
+/// modifiers are reported — but this handler runs ahead of both and answers
+/// `ESC CR` either way. That is the sequence Claude Code reads with no
+/// configuration, and nothing in a pane has asked for either mode; deferring to
+/// them would be a change of behaviour, not a fix, and belongs to whoever wants
+/// it rather than to this one.
 library;
 
 import 'package:xterm2/core.dart';
@@ -57,6 +71,8 @@ class KarmashalaInputHandler implements TerminalInputHandler {
   @override
   String? call(TerminalKeyboardEvent event) {
     if (!_isEnter(event.key)) return fallback(event);
+    // Going up is not a second keystroke — only the press is encoded.
+    if (event.type == TerminalKeyEventType.release) return fallback(event);
     // No modifier: the ordinary Enter the shell expects, untouched.
     if (!event.shift && !event.ctrl && !event.alt) return fallback(event);
     if (event.ctrl) return '\x1b[13;${_modifier(event)}u';
