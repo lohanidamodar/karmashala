@@ -389,11 +389,8 @@ class _MessageComposerState extends State<MessageComposer> {
                               'Images are saved to a temp folder and referenced by path so the agent can read them.',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                    fontSize: 11,
-                                  ),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
                             ),
                           )
                         else
@@ -405,7 +402,6 @@ class _MessageComposerState extends State<MessageComposer> {
                                 color: scheme.onSurfaceVariant.withValues(
                                   alpha: 0.6,
                                 ),
-                                fontSize: 11,
                               ),
                         ),
                       ],

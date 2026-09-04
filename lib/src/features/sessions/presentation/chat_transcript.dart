@@ -375,8 +375,30 @@ class _ChatEmptyState extends StatelessWidget {
   final String hint;
   final ValueChanged<String>? onSuggestionTap;
 
+  /// Centred while it fits, scrollable the moment it does not.
+  ///
+  /// The welcome state is a `Column` of a glyph, a heading, prose and a wrap of
+  /// suggestion chips, and it does not fit a short transcript pane: at the
+  /// 260px this gets in `workbench_test.dart` it overflowed by 37 logical
+  /// pixels, which Flutter treats as an error because the content cannot be
+  /// reached. A pane is short whenever the window is, whenever a split halves
+  /// it, and whenever the composer grows — so this is the ordinary case rather
+  /// than an edge one, and clipping it would hide the chips that are the point.
+  ///
+  /// `minHeight` is what keeps the centring: the scroll view hands its child
+  /// unbounded height, so a bare `Center` inside one collapses onto the content
+  /// and centres nothing.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+        child: _body(context),
+      ),
+    ),
+  );
+
+  Widget _body(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
@@ -635,9 +657,8 @@ class _ChatMessageTile extends StatelessWidget {
                     const SizedBox(width: Insets.sm),
                     Text(
                       compactAge(DateTime.now().difference(message.at!)),
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
-                        fontSize: 11,
                       ),
                     ),
                   ],
@@ -686,9 +707,8 @@ class _ChatMessageTile extends StatelessWidget {
                   const SizedBox(width: Insets.sm),
                   Text(
                     compactAge(DateTime.now().difference(message.at!)),
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
-                      fontSize: 11,
                     ),
                   ),
                 ],
@@ -726,7 +746,7 @@ class _ChatMessageTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(AppIcons.warningCircle, size: 16, color: failure),
+              Icon(AppIcons.warningCircle, color: failure),
               const SizedBox(width: Insets.xs),
               Expanded(
                 child: Column(
@@ -803,8 +823,11 @@ class _ChatMessageTile extends StatelessWidget {
                         ),
                         child: Text(
                           'FAILED',
-                          style: TextStyle(
-                            fontSize: 9,
+                          // The theme's smallest label rather than a 9pt
+                          // literal: this badge says a tool call failed, and
+                          // text that ignores the type scale also ignores the
+                          // reader who scaled it up.
+                          style: theme.textTheme.labelSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: failure,
                           ),

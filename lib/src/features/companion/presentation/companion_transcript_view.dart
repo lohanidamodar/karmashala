@@ -543,10 +543,11 @@ class _SuggestionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return ActionChip(
       avatar: Icon(icon, size: 14, color: scheme.primary),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
+      label: Text(label, style: theme.textTheme.bodySmall),
       backgroundColor: scheme.surfaceContainerHigh,
       side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
