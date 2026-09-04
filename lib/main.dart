@@ -24,6 +24,7 @@ import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/env_secrets/application/env_secrets_controller.dart';
 import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/sessions/application/session_liveness_reconciler.dart';
 import 'src/features/sessions/data/session_dao.dart';
 import 'src/features/settings/application/settings_controller.dart';
@@ -161,6 +162,11 @@ Future<void> main() async {
   // one-time scan above had already run.
   lifecycle.startAgentDiscovery();
 
+  // The control server, retained here so the hook sweep below can be started
+  // *after* `runApp` — see the sweep's own comment for why that ordering is the
+  // point rather than a tidy-up.
+  LauncherControlServer? controlServer;
+
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
   if (SystemIntegrationService.isSupported) {
     try {
@@ -193,8 +199,7 @@ Future<void> main() async {
     // out. Nothing installed the hooks before Loop 31: `AgentHookInstaller` had
     // no call site since Loop 28, so `awaitingApproval` and `failed`, which
     // only a hook can observe, were unreachable in the running app.
-    final controlServer = await lifecycle.startControlServer();
-    if (controlServer != null) lifecycle.installAgentHooks(controlServer);
+    controlServer = await lifecycle.startControlServer();
   }
 
   runApp(
@@ -203,6 +208,41 @@ Future<void> main() async {
       child: const KarmashalaApp(),
     ),
   );
+
+  // The agents' status hooks, **after the first frame** rather than before the
+  // window.
+  //
+  // This used to run just above `runApp`, and it was 1053 ms of a 1.91 s launch
+  // on the owner's machine — 55% of it — because every file operation on the
+  // install path was synchronous and several of those paths are
+  // `\\wsl.localhost` UNC paths served by a plan9 daemon inside a
+  // distribution. "Unawaited" bought nothing: synchronous I/O holds the isolate
+  // whether or not anybody is waiting on the future, and the isolate is the
+  // thread the first frame is painted on. The I/O is asynchronous now
+  // (`AgentHookInstaller`), and this ordering is the other half — the window
+  // exists before the app starts rewriting other applications' config files.
+  //
+  // **The timeout on the gate is load-bearing, not defensive.** `endOfFrame`
+  // schedules a frame when the scheduler is idle, but a launch that starts
+  // minimised to the tray — which this app supports — may never be asked to
+  // paint one, and a sweep that never runs is a run with no status callbacks at
+  // all. Two seconds later it goes ahead regardless.
+  //
+  // What a session started in that window gets is documented on
+  // `AppLifecycle.installAgentHooks`: the config entry is a constant already on
+  // disk, and the script reads the endpoint file when a hook *fires*, so such a
+  // session loses only the events inside the gap rather than its whole
+  // lifetime. Until the sweep reports, Settings says the callbacks are not in
+  // place yet rather than saying nothing.
+  if (controlServer != null) {
+    lifecycle.installAgentHooks(
+      controlServer,
+      afterFirstFrame: () => WidgetsBinding.instance.endOfFrame.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      ),
+    );
+  }
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps

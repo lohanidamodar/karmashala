@@ -6,7 +6,9 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -536,6 +538,104 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       expect(runner.requests, isEmpty);
     });
   });
+
+  group('the agents\' hooks are installed behind the first frame', () {
+    /// A server with a hook endpoint and no bound port. `hookEndpoint` is the
+    /// only thing `installAgentHooks` reads, and binding one here would buy
+    /// nothing but a socket.
+    _HookOnlyServer serverFor(ProviderContainer container) =>
+        _HookOnlyServer(container);
+
+    test('the sweep does not start until the gate is released', () async {
+      final sweeps = <int>[];
+      final scoped = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          agentHookInstallationServiceProvider.overrideWith(
+            (ref) => _RecordingHookService(ref, sweeps),
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+      final lifecycle = AppLifecycle(scoped);
+      final gate = Completer<void>();
+
+      lifecycle.installAgentHooks(
+        serverFor(scoped),
+        afterFirstFrame: () => gate.future,
+      );
+      await pumpEventQueue();
+
+      // This is the whole point: the sweep rewrites three other applications'
+      // global config files across up to four filesystems, and until Loop 78 it
+      // did that in the same isolate turn the window was trying to paint in —
+      // 1053 ms of a 1.91 s launch on the owner's machine.
+      expect(sweeps, isEmpty, reason: 'the window has not painted yet');
+      // And the app says so rather than saying nothing. An empty report used
+      // to be indistinguishable from a clean one.
+      expect(
+        scoped.read(agentHookInstallationReportProvider).swept,
+        isFalse,
+      );
+
+      gate.complete();
+      await pumpEventQueue();
+
+      expect(sweeps, [1]);
+      expect(scoped.read(agentHookInstallationReportProvider).swept, isTrue);
+    });
+
+    test('a gate that throws still gets the hooks installed', () async {
+      // The gate is about *when*, never about *whether*: a launch whose first
+      // frame never comes — minimised to the tray — must not be a launch with
+      // no status callbacks at all.
+      final sweeps = <int>[];
+      final scoped = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          agentHookInstallationServiceProvider.overrideWith(
+            (ref) => _RecordingHookService(ref, sweeps),
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+
+      AppLifecycle(scoped).installAgentHooks(
+        serverFor(scoped),
+        afterFirstFrame: () => Future<void>.error(StateError('no binding')),
+      );
+      await pumpEventQueue();
+
+      expect(sweeps, [1]);
+    });
+
+    test('the WSL re-sweep waits for nothing', () async {
+      // By the time the switch binds the window has long since painted, so a
+      // re-sweep that waited for a *further* frame would be waiting on an idle
+      // app. The gate is only ever the first sweep's.
+      final sweeps = <int>[];
+      final scoped = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          agentHookInstallationServiceProvider.overrideWith(
+            (ref) => _RecordingHookService(ref, sweeps),
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+      final server = serverFor(scoped);
+      final gate = Completer<void>();
+
+      AppLifecycle(scoped).installAgentHooks(
+        server,
+        afterFirstFrame: () => gate.future,
+      );
+      server.onWslInterfaceBound!();
+      await pumpEventQueue();
+
+      expect(sweeps, [1], reason: 'the first sweep is still behind the gate');
+    });
+  });
 }
 
 /// A pane whose process teardown outlives `dispose()`, the way a real one's
@@ -577,6 +677,32 @@ class _FrozenStopwatch implements Stopwatch {
   void stop() {}
   @override
   void reset() {}
+}
+
+/// A server that has a hook endpoint and nothing else. Binding a port would
+/// buy this test nothing: `installAgentHooks` reads `hookEndpoint` and sets
+/// `onWslInterfaceBound`, and neither needs a socket.
+class _HookOnlyServer extends LauncherControlServer {
+  _HookOnlyServer(super.container);
+
+  @override
+  AgentHookEndpoint? get hookEndpoint =>
+      const AgentHookEndpoint(port: 4242, token: 'tok');
+}
+
+/// Counts sweeps and touches no config file. The real service walks every
+/// located CLI store, which on this machine means the developer's own
+/// `~/.claude` — never something a unit test may write into.
+class _RecordingHookService extends AgentHookInstallationService {
+  _RecordingHookService(super.ref, this._sweeps);
+
+  final List<int> _sweeps;
+
+  @override
+  Future<List<AgentHookInstallation>> installAll(AgentHookEndpoint endpoint) {
+    _sweeps.add(_sweeps.length + 1);
+    return Future.value(const <AgentHookInstallation>[]);
+  }
 }
 
 /// A control server that records when it was stopped, without binding a port.

@@ -505,7 +505,10 @@ args = ["blender-mcp"]
       final entry = handlersFor('Stop').single['command'];
 
       expect(
-        installer.retireEndpoint(descriptor: codex, storeHome: storeHome()),
+        await installer.retireEndpoint(
+          descriptor: codex,
+          storeHome: storeHome(),
+        ),
         isTrue,
       );
 
@@ -514,7 +517,10 @@ args = ["blender-mcp"]
       expect(handlersFor('Stop').single['command'], entry);
       // And a second call has nothing left to do.
       expect(
-        installer.retireEndpoint(descriptor: codex, storeHome: storeHome()),
+        await installer.retireEndpoint(
+          descriptor: codex,
+          storeHome: storeHome(),
+        ),
         isFalse,
       );
     });

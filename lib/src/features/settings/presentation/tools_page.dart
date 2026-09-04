@@ -12,6 +12,8 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../environments/application/environment_health.dart'
+    show HealthLevel;
 import '../../environments/application/system_health.dart';
 import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
@@ -362,35 +364,45 @@ class McpBridgeSection extends ConsumerWidget {
           // in a log file, so nine sessions ran on disk probes all day with
           // nothing on screen saying the app had quietly stopped being able to
           // tell you your agent was blocked.
+          //
+          // **Three states, not two, and the first one is new.** The sweep runs
+          // after the first frame now rather than before the window
+          // (`AppLifecycle.installAgentHooks`), so there is a real moment early
+          // in a launch when the answer is *not yet*. An empty report used to
+          // be indistinguishable from a clean one, which would have put this
+          // panel's silence — read as "the hooks are fine" — on screen during
+          // exactly the window in which they are not. §19's rule is that an
+          // unobserved state gets `unknown`'s icon and the neutral colour, so
+          // it does.
+          if (!hooks.swept) ...[
+            const SizedBox(height: Insets.sm),
+            const _HookNote.unknown(
+              'Status callbacks are not in place yet — that sweep runs just '
+              'after the window opens. A session started before it lands '
+              'reads the CLI\'s own files until it does, and starts reporting '
+              'as soon as it has.',
+            ),
+          ],
+          // A store home that never answered. Not the same claim as a skip and
+          // deliberately not dressed as one: what is on disk there was never
+          // observed, so this says so rather than guessing either way.
+          for (final entry in hooks.unknownByEnvironment.entries)
+            _HookNote.unknown(
+              'Status callbacks for '
+              '${ref.watch(environmentLabelForIdProvider(entry.key))} could '
+              'not be confirmed — ${entry.value}. Sessions there may or may '
+              'not report; the next launch checks again.',
+            ),
           if (hooks.anySkipped) ...[
             const SizedBox(height: Insets.sm),
             for (final entry in hooks.skippedByEnvironment.entries)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Insets.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      AppIcons.warningCircle,
-                      size: Chrome.icon,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Expanded(
-                      child: Text(
-                        'No status callbacks from '
-                        '${ref.watch(environmentLabelForIdProvider(entry.key))}'
-                        ' — '
-                        '${entry.value}. Sessions there fall back to reading '
-                        'the CLI\'s files, which cannot tell you when an agent '
-                        'is waiting for approval or has failed.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              _HookNote.skipped(
+                'No status callbacks from '
+                '${ref.watch(environmentLabelForIdProvider(entry.key))}'
+                ' — '
+                '${entry.value}. Sessions there fall back to reading '
+                'the CLI\'s files, which cannot tell you when an agent '
+                'is waiting for approval or has failed.',
               ),
           ],
         ],
@@ -399,6 +411,54 @@ class McpBridgeSection extends ConsumerWidget {
   }
 }
 
+
+/// One line about the hook sweep.
+///
+/// Two constructors rather than a colour argument, because which one a row gets
+/// is the claim it is making and not a styling choice. [_HookNote.skipped] says
+/// *we know these callbacks are not there*; [_HookNote.unknown] says *we do not
+/// know*, in `HealthLevel.unknown`'s own icon and the neutral colour — the same
+/// vocabulary the system-health panel uses, so an admission of ignorance is not
+/// read as a quieter failure. §19 of `CLAUDE.md` is the rule.
+class _HookNote extends StatelessWidget {
+  /// An observed failure of the callback path, worded and coloured exactly as
+  /// it was before the unknown case existed.
+  const _HookNote.skipped(this.text) : _unknown = false;
+
+  /// A reading nobody took.
+  const _HookNote.unknown(this.text) : _unknown = true;
+
+  final String text;
+  final bool _unknown;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _unknown
+        ? healthColor(context, HealthLevel.unknown)
+        : theme.colorScheme.error;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            _unknown ? healthIcon(HealthLevel.unknown) : AppIcons.warningCircle,
+            size: Chrome.icon,
+            color: color,
+          ),
+          const SizedBox(width: Insets.xs),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// The MCP bridge's verdict on the settings page, from the same reading the
 /// System health panel shows.
