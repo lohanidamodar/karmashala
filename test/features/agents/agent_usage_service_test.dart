@@ -417,7 +417,6 @@ void main() {
       final service = serviceWith();
       expect(service.remembered(agentInstallation()), isNull);
       expect(service.pendingPause(agentInstallation()), isNull);
->>>>>>> main
     });
   });
 }
