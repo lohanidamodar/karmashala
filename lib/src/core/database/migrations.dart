@@ -71,6 +71,9 @@ typedef MigrationStep = void Function(Database db);
 ///   agent's declared axes, because a shared three-value enum cannot say that
 ///   Claude Code has six modes or that Codex's sandbox and approval policy are
 ///   two separate dimensions.
+/// * **v36** — index the CLI conversation a session records, so the two sweeps
+///   that ask "is this store session already one of ours?" once per detected
+///   conversation stop scanning the whole table each time.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -107,6 +110,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   33: _migrateToV33,
   34: _migrateToV34,
   35: _migrateToV35,
+  36: _migrateToV36,
 };
 
 /// Was this pane running when its row was written?
@@ -1553,4 +1557,50 @@ void _migrateToV35(Database db) {
       [selection, legacy, agentId],
     );
   }
+}
+
+/// Index the CLI conversation a session records.
+///
+/// `sessions.external_session_id` has been a plain, unindexed `TEXT` since v3,
+/// and two DAO reads filter on it — `SessionDao.getByExternalSessionId` and
+/// `getAllByExternalSessionId`. Both planned as `SCAN sessions`, and both are
+/// called **once per detected store conversation**:
+///
+/// * `SessionAutoImportService.importForRepositories` asks "is this store
+///   session already a native row?" for every conversation the CLI stores hold
+///   under a repository, and
+/// * `SessionAdoptionService._bestMatch` asks the same question for every
+///   candidate that survives its cheap filters, on the status registry's store
+///   slot.
+///
+/// So the cost was conversations × sessions, and a CLI store carries far more
+/// conversations than a workspace carries rows. Measured with the query
+/// planner's own counters, one lookup at three workspace sizes:
+///
+/// ```txt
+///                   20 rows       100 rows      500 rows
+///   before   SCAN,  19 fullscan   99 fullscan   499 fullscan   1558 VM steps
+///   after  SEARCH,   0 fullscan    0 fullscan     0 fullscan     34 VM steps
+/// ```
+///
+/// **Three columns, not one.** `(external_session_id)` alone turns the scan
+/// into a search and leaves `USE TEMP B-TREE FOR ORDER BY` behind, because both
+/// readers order by `created_at DESC, id DESC` — the total order that lets a
+/// caller choose the same row twice when a conversation was resumed and two
+/// rows name it. Carrying those two columns in the index removes the sort as
+/// well: 62 VM steps with one column, 34 with three, at every scale.
+///
+/// **What it costs.** 45 KB at 500 sessions — 0.11% of a store whose size is
+/// scrollback — and one b-tree insert per session created and per session
+/// adopted. Nothing else: SQLite skips index maintenance for a statement that
+/// does not touch an indexed column, so the frequent writes (`updateStatus`,
+/// `updateTitle`, `updatePaneId`) measured unchanged at 38 and 39 VM steps with
+/// the index present and absent.
+///
+/// `IF NOT EXISTS`, like every other index in this file, so re-running is safe.
+void _migrateToV36(Database db) {
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_external '
+    'ON sessions (external_session_id, created_at, id);',
+  );
 }
