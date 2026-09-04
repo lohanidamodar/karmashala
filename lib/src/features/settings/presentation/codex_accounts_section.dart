@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/application/codex_accounts_controller.dart';
 import '../../agents/data/codex_auth_service.dart';
 import '../../agents/domain/agent_installation.dart';
@@ -86,6 +87,30 @@ class _CodexInstallCardState extends ConsumerState<_CodexInstallCard> {
     }
   }
 
+  Future<void> _switchTo(CodexAccount account) async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(codexAccountsControllerProvider.notifier)
+          .switchTo(widget.installation, account);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Switched Codex to ${account.email ?? account.accountId}.',
+            ),
+          ),
+        );
+      }
+    } on CodexAuthException catch (error) {
+      if (mounted) _error(error.message);
+    } catch (error) {
+      if (mounted) _error('Unexpected error: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _error(String message) {
     final theme = Theme.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -97,6 +122,8 @@ class _CodexInstallCardState extends ConsumerState<_CodexInstallCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final snapshot = ref.watch(codexAuthSnapshotProvider(widget.installation));
+    final accounts = ref.watch(codexAccountsControllerProvider);
+    final activeId = snapshot.asData?.value.accountId;
     return Card(
       margin: const EdgeInsets.only(bottom: Insets.sm),
       child: Padding(
@@ -151,10 +178,48 @@ class _CodexInstallCardState extends ConsumerState<_CodexInstallCard> {
               data: (value) => _CurrentAccount(snapshot: value),
             ),
             const SizedBox(height: Insets.sm),
-            TextButton.icon(
-              onPressed: _busy ? null : _capture,
-              icon: const Icon(AppIcons.downloadSimple),
-              label: const Text('Capture current'),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: _busy ? null : _capture,
+                  icon: const Icon(AppIcons.downloadSimple),
+                  label: const Text('Capture current'),
+                ),
+                if (accounts.isNotEmpty)
+                  PopupMenuButton<CodexAccount>(
+                    enabled: !_busy,
+                    tooltip: 'Switch this install to a captured account',
+                    onSelected: _switchTo,
+                    itemBuilder: (_) => [
+                      for (final account in accounts)
+                        DesktopMenuItem(
+                          value: account,
+                          enabled: activeId != account.accountId,
+                          selected: activeId == account.accountId,
+                          label: account.email ?? account.accountId,
+                          icon: AppIcons.userCircle,
+                        ),
+                    ],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Insets.sm,
+                        vertical: Insets.xs,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            AppIcons.arrowsClockwise,
+                            size: Chrome.iconAction,
+                          ),
+                          const SizedBox(width: Insets.xs),
+                          const Text('Switch to'),
+                          Icon(AppIcons.caretDown, size: Chrome.iconAction),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

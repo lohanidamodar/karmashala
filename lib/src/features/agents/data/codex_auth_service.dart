@@ -12,6 +12,9 @@ import '../domain/codex_account.dart';
 class CodexAuthException implements Exception {
   CodexAuthException(this.message);
   final String message;
+
+  @override
+  String toString() => 'CodexAuthException: $message';
 }
 
 class CodexAuthLocator {
@@ -45,6 +48,9 @@ class CodexAuthService {
 
   final IdGenerator ids;
   final Clock clock;
+
+  static const _backupSuffix = '.karmashala.bak';
+  static const _tmpSuffix = '.karmashala.tmp';
 
   Future<CodexAuthSnapshot> readSnapshot(
     String path,
@@ -85,6 +91,52 @@ class CodexAuthService {
       auth: auth,
       capturedEnvironmentId: environmentId,
       capturedAt: clock.nowUtc(),
+    );
+  }
+
+  /// Makes [account] active while preserving unrelated top-level auth fields.
+  ///
+  /// Codex owns `auth.json`; Karmashala owns none of its future keys. Only the
+  /// token bundle captured for this account is replaced. The original is
+  /// backed up once and the new JSON is renamed into place atomically.
+  Future<void> switchTo(CodexAccount account, String path) async {
+    final tokens = account.auth['tokens'];
+    if (tokens is! Map<String, dynamic>) {
+      throw CodexAuthException(
+        'The captured Codex account has no usable token bundle.',
+      );
+    }
+    final file = File(path);
+    final current = await _readForSwitch(file);
+    current['tokens'] = tokens;
+
+    final backup = File('$path$_backupSuffix');
+    if (!await backup.exists() && await file.exists()) {
+      await file.copy(backup.path);
+    }
+    final staged = File('$path$_tmpSuffix');
+    try {
+      await staged.writeAsString('${jsonEncode(current)}\n', flush: true);
+      await staged.rename(path);
+    } catch (error) {
+      if (await staged.exists()) await staged.delete();
+      throw CodexAuthException('Could not switch Codex account: $error');
+    }
+  }
+
+  Future<Map<String, dynamic>> _readForSwitch(File file) async {
+    if (!await file.exists()) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map<String, dynamic>) return decoded;
+    } on FormatException catch (error) {
+      throw CodexAuthException(
+        'Cannot switch accounts because ${file.path} is not valid JSON '
+        '(${error.message}).',
+      );
+    }
+    throw CodexAuthException(
+      'Cannot switch accounts because ${file.path} is not a JSON object.',
     );
   }
 

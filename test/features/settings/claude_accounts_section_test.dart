@@ -155,6 +155,7 @@ void main() {
     expect(find.text('owner@example.com'), findsNWidgets(2));
     expect(find.text('pro'), findsNWidgets(2));
     expect(find.text('Capture current'), findsOneWidget);
+    expect(find.text('Switch to'), findsOneWidget);
     expect(find.byTooltip('Forget this captured account'), findsOneWidget);
   });
 }

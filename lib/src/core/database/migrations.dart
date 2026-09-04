@@ -109,6 +109,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   35: _migrateToV35,
   36: _migrateToV36,
   37: _migrateToV37,
+  38: _migrateToV38,
 };
 
 /// Was this pane running when its row was written?
@@ -1557,28 +1558,13 @@ void _migrateToV35(Database db) {
   }
 }
 
-/// Saved Codex OAuth identities and indexed CLI-conversation lookup.
+/// Index the CLI conversation a session records.
 ///
-/// The complete token bundle is retained because a refresh token, account id
-/// and access token are one credential. Nothing is logged or split into
-/// independently stale columns; the display fields are denormalized only.
-///
-/// `sessions.external_session_id` is also the lookup used once per detected
-/// CLI conversation by import and adoption. Including the stable ordering
-/// columns lets SQLite answer both the filter and `created_at DESC, id DESC`
-/// without scanning the session table or building a temporary sort.
+/// `sessions.external_session_id` is the lookup used once per detected CLI
+/// conversation by import and adoption. Including the stable ordering columns
+/// lets SQLite answer both the filter and `created_at DESC, id DESC` without
+/// scanning the session table or building a temporary sort.
 void _migrateToV36(Database db) {
-  db.execute('''
-    CREATE TABLE IF NOT EXISTS codex_accounts (
-      id TEXT PRIMARY KEY,
-      account_id TEXT NOT NULL UNIQUE,
-      email TEXT,
-      plan_type TEXT,
-      auth_json TEXT NOT NULL,
-      captured_env_id TEXT,
-      captured_at TEXT NOT NULL
-    );
-  ''');
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sessions_external '
     'ON sessions (external_session_id, created_at, id);',
@@ -1594,4 +1580,32 @@ void _migrateToV37(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_sessions_installation '
     'ON sessions (agent_installation_id);',
   );
+}
+
+/// Saved Codex OAuth identities.
+///
+/// The complete token bundle is retained because a refresh token, account id
+/// and access token are one credential. Nothing is logged or split into
+/// independently stale columns; the display fields are denormalized only.
+///
+/// **Its own version, and that is not cosmetic.** This table was first written
+/// into `_migrateToV36` on a branch, beside the index that version already
+/// carried on `main`. A version number is not a label — it is compared against
+/// the stored `PRAGMA user_version`, and only steps *greater* than it run. A
+/// database that had already taken `main`'s v36 therefore stands at 36, skips
+/// it forever, and never sees this table at all: the app would then query
+/// `codex_accounts` on a database that has none. Two branches may not spend the
+/// same number on different work.
+void _migrateToV38(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS codex_accounts (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL UNIQUE,
+      email TEXT,
+      plan_type TEXT,
+      auth_json TEXT NOT NULL,
+      captured_env_id TEXT,
+      captured_at TEXT NOT NULL
+    );
+  ''');
 }

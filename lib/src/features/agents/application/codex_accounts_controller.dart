@@ -47,15 +47,7 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
   List<CodexAccount> build() => ref.watch(codexAccountDaoProvider).getAll();
 
   Future<CodexAccount> captureCurrent(AgentInstallation installation) async {
-    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
-    final path = await ref
-        .read(codexAuthLocatorProvider)
-        .authPathFor(installation, environments);
-    if (path == null) {
-      throw CodexAuthException(
-        'Could not locate Codex auth for ${installation.environmentId}.',
-      );
-    }
+    final path = await _pathFor(installation);
     final account = await ref
         .read(codexAuthServiceProvider)
         .capture(path, installation.environmentId);
@@ -65,10 +57,42 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
     return saved;
   }
 
+  /// Switches the installation after first preserving its outgoing identity.
+  Future<void> switchTo(
+    AgentInstallation installation,
+    CodexAccount account,
+  ) async {
+    final service = ref.read(codexAuthServiceProvider);
+    final dao = ref.read(codexAccountDaoProvider);
+    final path = await _pathFor(installation);
+    try {
+      dao.upsert(await service.capture(path, installation.environmentId));
+    } on CodexAuthException {
+      // A missing outgoing login is valid: the saved account can still be
+      // restored into this installation.
+    }
+    await service.switchTo(account, path);
+    state = dao.getAll();
+    ref.invalidate(codexAuthSnapshotProvider(installation));
+  }
+
   void forget(CodexAccount account) {
     final dao = ref.read(codexAccountDaoProvider);
     dao.delete(account.id);
     state = dao.getAll();
+  }
+
+  Future<String> _pathFor(AgentInstallation installation) async {
+    final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+    final path = await ref
+        .read(codexAuthLocatorProvider)
+        .authPathFor(installation, environments);
+    if (path == null) {
+      throw CodexAuthException(
+        'Could not locate Codex auth for ${installation.environmentId}.',
+      );
+    }
+    return path;
   }
 }
 
