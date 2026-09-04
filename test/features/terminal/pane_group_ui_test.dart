@@ -1,5 +1,7 @@
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
@@ -29,9 +31,10 @@ ProviderContainer workbenchContainer() {
 
 Future<void> pumpWorkbench(
   WidgetTester tester,
-  ProviderContainer container,
-) async {
-  tester.view.physicalSize = const Size(1400, 900);
+  ProviderContainer container, {
+  Size size = const Size(1400, 900),
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -253,6 +256,101 @@ void main() {
       find.byType(PaneGroupStrip),
       findsNothing,
       reason: 'one region holding one pane needs no header of its own',
+    );
+  });
+
+  testWidgets('a region header does not look like the workbench strip', (
+    tester,
+  ) async {
+    // Reported twice — *"an extra tab that doesn't do anything"*, then *"when
+    // split, the same pane has two headers"* — and the screenshot was taken on
+    // a full-width window, so crowding is not what made the two rows read as
+    // one. They were the same widget at the same height. The header is now a
+    // shorter row carrying the split mark an empty region wears.
+    final container = workbenchContainer();
+    final controller = controllerOf(container);
+    controller.openTab(TerminalProfile.powerShell);
+
+    await pumpWorkbench(tester, container);
+    controller.openInSlot(
+      controller.splitPane(SplitAxis.horizontal)!,
+      TerminalProfile.commandPrompt,
+    );
+    await tester.pump();
+
+    final header = find.byType(PaneGroupStrip).first;
+    expect(tester.getSize(header).height, Chrome.paneStrip);
+    expect(
+      Chrome.paneStrip,
+      lessThan(Chrome.tabStrip),
+      reason: 'the row that belongs to a pane is shorter than the row that '
+          'belongs to the window',
+    );
+    expect(
+      find.descendant(
+        of: header,
+        matching: find.byIcon(AppIcons.squareSplitHorizontal),
+      ),
+      findsOneWidget,
+      reason: 'the same glyph an empty region wears, so both rows of a split '
+          'read as region chrome rather than as tabs',
+    );
+  });
+
+  testWidgets('and the header keeps its shape in the minimum window', (
+    tester,
+  ) async {
+    // 720x560 split down the middle is ~355px a region, which is where two
+    // rows of near-identical chrome stop being merely confusing and become
+    // unreadable. Both headers still draw at their own height, and the strip
+    // scrolls rather than overflowing — an overflow here fails the test.
+    final container = workbenchContainer();
+    final controller = controllerOf(container);
+    controller.openTab(TerminalProfile.powerShell);
+
+    await pumpWorkbench(tester, container, size: const Size(720, 560));
+    controller.openInSlot(
+      controller.splitPane(SplitAxis.horizontal)!,
+      TerminalProfile.commandPrompt,
+    );
+    await tester.pump();
+
+    final headers = find.byType(PaneGroupStrip);
+    expect(headers, findsNWidgets(2));
+    expect(tester.getSize(headers.at(0)).height, Chrome.paneStrip);
+    expect(tester.getSize(headers.at(1)).height, Chrome.paneStrip);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a fresh split does not print the same name on two rows', (
+    tester,
+  ) async {
+    // The screenshot: `New session` on the tab strip, `New session` again in
+    // the region header directly under it. Splitting starts nothing, so the
+    // right-hand region is the empty invitation and the tab has to rename
+    // itself at the split rather than once the split is filled.
+    final container = workbenchContainer();
+    final controller = controllerOf(container);
+    controller.openTab(
+      TerminalProfile.powerShell,
+      workingDirectory: r'C:\src\karmashala',
+    );
+    final pane = activeTab(container).layout.panes.single;
+    controller.instanceFor(pane)!.terminal.write('\x1b]2;New session\x07');
+
+    await pumpWorkbench(tester, container);
+    controller.splitPane(SplitAxis.horizontal);
+    await tester.pump();
+
+    expect(
+      find.text('New session'),
+      findsOneWidget,
+      reason: 'the region header names the pane, and only it does',
+    );
+    expect(
+      find.text('src/karmashala'),
+      findsOneWidget,
+      reason: 'the tab names what it is about — its directory',
     );
   });
 

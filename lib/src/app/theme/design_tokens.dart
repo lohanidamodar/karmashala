@@ -486,6 +486,17 @@ class Chrome {
   /// one undifferentiated slab of chrome rather than two rows.
   static const titleBar = tabStrip;
 
+  /// A **pane** header — the row one region of a split draws for the panes
+  /// stacked in it.
+  ///
+  /// Deliberately *not* [tabStrip]. The two rows sit one directly above the
+  /// other in a split, and drawing them at the same height made the region
+  /// header read as a second, inert copy of the tab above it — the owner's
+  /// "an extra tab that doesn't do anything". Height is the cheapest thing a
+  /// glance sorts by, it costs no colour, and here it hands 6px back to the
+  /// terminal rather than taking any.
+  static const paneStrip = 24.0;
+
   /// The status bar along the bottom of the window.
   static const statusBar = 22.0;
 
@@ -549,6 +560,11 @@ class Chrome {
   /// theme layer when it is deliberately fixed — a widget must not be the place
   /// that decides one.
   static const TextStyle tabLabel = TextStyle(fontSize: 12);
+
+  /// [tabLabel] a step down, for a [paneStrip] row. A pane is named *inside* a
+  /// tab, so its name is set smaller than the tab's — the same hierarchy the
+  /// two heights state, said again in type.
+  static const TextStyle paneLabel = TextStyle(fontSize: 11);
 
   /// [titleBar] grown with the ambient text scale, and never shrunk below the
   /// design height: a 150% menu label does not fit a 30px row, and clipping
