@@ -9,12 +9,12 @@ import 'agent_detection_section.dart';
 import 'agent_label.dart';
 import 'agent_usage_section.dart';
 import 'claude_accounts_section.dart';
+import 'codex_accounts_section.dart';
 import 'default_model_section.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// Settings → Agents: the default agent, Claude account management and the
-/// vendor usage windows.
+/// Settings → Agents: defaults, Claude and Codex identities, and vendor usage.
 class AgentsPage extends ConsumerWidget {
   const AgentsPage({super.key});
 
@@ -76,6 +76,11 @@ class AgentsPage extends ConsumerWidget {
         ClaudeAccountsSection(
           installations: installations
               .where((i) => i.agentId == AgentIds.claudeCode)
+              .toList(),
+        ),
+        CodexAccountsSection(
+          installations: installations
+              .where((i) => i.agentId == AgentIds.codex)
               .toList(),
         ),
         UsageSection(

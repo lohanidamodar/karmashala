@@ -7,11 +7,14 @@ import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/claude_accounts_controller.dart';
+import 'package:karmashala/src/features/agents/application/codex_accounts_controller.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
 import 'package:karmashala/src/features/agents/domain/claude_account.dart';
 import 'package:karmashala/src/features/agents/domain/claude_auth_snapshot.dart';
+import 'package:karmashala/src/features/agents/domain/codex_account.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/claude_accounts_section.dart';
+import 'package:karmashala/src/features/settings/presentation/codex_accounts_section.dart';
 
 import '../../support/fixtures.dart';
 
@@ -105,6 +108,55 @@ void main() {
 
     expect(switched, [theirs]);
   });
+
+  testWidgets('Codex shows the active identity and captured accounts', (
+    tester,
+  ) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    final installation = agentInstallation();
+    final captured = CodexAccount(
+      id: 'saved-1',
+      accountId: 'account-1',
+      email: 'owner@example.com',
+      planType: 'pro',
+      auth: const {},
+      capturedAt: testTime,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          codexAccountsControllerProvider.overrideWith(
+            () => _FakeCodexAccounts([captured]),
+          ),
+          codexAuthSnapshotProvider(installation).overrideWith(
+            (ref) async => const CodexAuthSnapshot(
+              environmentId: 'windows',
+              accountId: 'account-1',
+              email: 'owner@example.com',
+              planType: 'pro',
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CodexAccountsSection(installations: [installation]),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('CODEX ACCOUNTS'), findsOneWidget);
+    expect(find.text('owner@example.com'), findsNWidgets(2));
+    expect(find.text('pro'), findsNWidgets(2));
+    expect(find.text('Capture current'), findsOneWidget);
+    expect(find.byTooltip('Forget this captured account'), findsOneWidget);
+  });
 }
 
 class _FakeAccounts extends ClaudeAccountsController {
@@ -121,4 +173,13 @@ class _FakeAccounts extends ClaudeAccountsController {
     AgentInstallation installation,
     ClaudeAccount account,
   ) async => _switched.add(account);
+}
+
+class _FakeCodexAccounts extends CodexAccountsController {
+  _FakeCodexAccounts(this._accounts);
+
+  final List<CodexAccount> _accounts;
+
+  @override
+  List<CodexAccount> build() => _accounts;
 }
