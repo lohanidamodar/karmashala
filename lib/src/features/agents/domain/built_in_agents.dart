@@ -342,26 +342,52 @@ const _claudeCode = AgentDescriptor(
       'needs your permission': AgentWaitKind.approval,
       'waiting for your input': AgentWaitKind.input,
     },
-    // **`Notification` is not a status.** Claude Code 2.1.258 fires it for ten
+    // **`Notification` is not a status.** Claude Code fires it for sixteen
     // unrelated things and says which in a required `notification_type` field.
-    // Read off the shipped binary's own `notificationType:` call sites:
+    // **Re-read against the installed 2.1.260**, whose own allowlist is
+    //
+    //   ["permission_prompt","idle_prompt","auth_success",
+    //    "elicitation_dialog","agent_needs_input","agent_completed",
+    //    "elicitation_url_dialog","worker_permission_prompt",
+    //    "push_notification","computer_use_enter","computer_use_exit",
+    //    "quota_auto_resume_fired","quota_auto_resume_stale",
+    //    "quota_auto_resume_disabled"]
+    //
+    // plus `elicitation_complete` and `elicitation_response`, which the
+    // `Notification` event's own `matcherMetadata` appends to it. Six of those
+    // are newer than the ten this comment used to list. Messages, off the
+    // binary's `notificationType:` call sites and its dialog table:
     //
     //   permission_prompt         "Claude needs your permission to use ${tool}"
     //   worker_permission_prompt  "${worker} needs permission for ${tool}"
     //   idle_prompt               "Claude is waiting for your input"
-    //   agent_needs_input         "${label} needs your input"      (fleet)
-    //   agent_completed           "${label} finished" / "failed"   (fleet)
+    //   elicitation_dialog        "Claude Code needs your input"
+    //   elicitation_url_dialog    "An MCP server needs your input"
+    //   quota_auto_resume_stale   "Usage limit reset — press enter to continue"
+    //   quota_auto_resume_disabled  "Automatic continue was turned off — the
+    //                               task will not resume on its own"
+    //   quota_auto_resume_fired   "Usage limit available — Claude is
+    //                               continuing your task"
+    //   agent_needs_input         "${label} needs your input"       (fleet)
+    //   agent_completed           "${label} finished" / "failed"    (fleet)
     //   auth_success              "Claude Code login successful"
     //   elicitation_complete      "MCP server "X" confirmed elicitation …"
     //   elicitation_response      "Elicitation response for server "X": accept"
     //   computer_use_exit         "Claude is done using your computer"
     //   push_notification         whatever a remote sent
     //
-    // Every one of them used to arrive as `awaitingApproval`. The last five say
-    // nothing about whether this session is waiting, and the two `agent_*` ones
-    // are about a *different* session in the roster, so none is declared and
-    // all resolve to `unknown` — which is not recorded, and therefore leaves
-    // the session saying whatever it last said.
+    // Every one of them used to arrive as `awaitingApproval`. What is declared
+    // below is what says **this** session is stopped and cannot go on without
+    // the user; everything else resolves to `unknown`, which is not recorded
+    // and therefore leaves the session saying whatever it last said.
+    //
+    // **One correction worth keeping.** This comment used to say the two
+    // `agent_*` types are about a different session in the roster. That is
+    // true of the fleet call sites, and *not* the whole story: 2.1.260's dialog
+    // table also raises `agent_needs_input` for this session's own "Teammate
+    // setup needs your input" and "File sync is offline — your message is
+    // waiting". Overloaded across two meanings, one of which would be a lie
+    // here, it stays undeclared — but for the new reason, not the old one.
     eventKindPath: ['notification_type'],
     eventKindMeaning: {
       'permission_prompt': AgentHookMeaning(
@@ -376,6 +402,47 @@ const _claudeCode = AgentDescriptor(
       // The 60-second nudge after a turn ends. Still holding the user up —
       // that is what `awaitingApproval` answers — but with nothing to confirm.
       'idle_prompt': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+      ),
+      // **An MCP server is asking the user something, and nothing moves until
+      // it is answered.** The CLI's own dialog table is unambiguous about which
+      // side is blocked: both kinds carry `waitingFor: "input needed"`, against
+      // the `"dialog open"` its passive dialogs get. Undeclared, a session sat
+      // on one of these read `working` for as long as the dialog stayed up.
+      //
+      // `input`, not `approval`, because an elicitation is a **form** — free
+      // text, a schema, or a link to open — and the Enter/Esc pair below
+      // answers a list with something highlighted. Nothing here has seen one of
+      // these on screen, and a key we are not sure lands on a prompt is a key
+      // we do not send.
+      'elicitation_dialog': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+      ),
+      'elicitation_url_dialog': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+      ),
+      // **The usage limit reset and the session did not restart itself.** Its
+      // message says so in the imperative — "Usage limit reset — press enter to
+      // continue" — and its two siblings are the same state reached another
+      // way: "Automatic continue was turned off — the task will not resume on
+      // its own", and the same sentence for a limit that now resets more than
+      // 24 hours out. A turn parked like this is indistinguishable from a
+      // working one to every other source we have, so without these the app's
+      // answer was whatever the session last said, for as long as it sat there.
+      //
+      // Still `input`. The CLI names Enter, which is the Approve key — but not
+      // what Esc would do, and `approval` offers both. The third sibling,
+      // `quota_auto_resume_fired` ("Claude is continuing your task"), is the
+      // opposite state and is deliberately left undeclared: it is news that
+      // nobody is held up, which is not a status this app records.
+      'quota_auto_resume_stale': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+      ),
+      'quota_auto_resume_disabled': AgentHookMeaning(
         AgentActivityStatus.awaitingApproval,
         waiting: AgentWaitKind.input,
       ),
@@ -443,6 +510,44 @@ const _claudeCode = AgentDescriptor(
       // know the event simply never fires it.
       'StopFailure': AgentActivityStatus.failed,
     },
+    // **What is left out, and why — checked against 2.1.260's own hook-event
+    // table, which lists 33 events.** Each installed event is a process the
+    // user's agent spawns on every firing, so the bar is a question this app
+    // asks that nothing already answers.
+    //
+    // * `SubagentStop` — "Right before a subagent (Agent tool call) concludes
+    //   its response. Input to command is JSON with agent_id, agent_type, and
+    //   agent_transcript_path." It is **not this session stopping**: the
+    //   captured payload carries the parent's `session_id` with an `agent_id`
+    //   beside it, so `idle` would be a false completion and `working` says
+    //   nothing new — the worker's own `PreToolUse`/`PostToolUse` already fire
+    //   under the parent's `session_id` and keep it reading `working`. The
+    //   transcript-looks-idle problem it was raised for is fixed in
+    //   `stateFile` below (`tool_use` before the assistant record, and an aged
+    //   `working` record becoming `unknown` rather than `idle`), and the
+    //   mid-turn `Stop` it also touches is fixed by `inFlightPath` above. What
+    //   it *would* buy is a toast when a long worker returns, and the parent
+    //   resumes at that instant — so nobody is unblocked and nothing is
+    //   actionable.
+    //
+    // * `SessionStart` — a flat status would be wrong. Its `source` matcher is
+    //   `["startup","resume","clear","compact","fork"]`, and `compact` fires
+    //   mid-turn on a session that is working, so `idle` would report a busy
+    //   session as finished. Telling them apart needs a *per-event* subtype
+    //   path, and `eventKindPath` is one path for the whole spec — spent on
+    //   `notification_type`, which answers a question nothing else can.
+    //
+    // * `PreCompact` — `working`, which every surrounding tool event already
+    //   says. Its stdout contract is also live: "Exit code 0 - stdout appended
+    //   as custom compact instructions", so the callback would be one edit away
+    //   from writing into the user's compaction.
+    //
+    // * `PermissionRequest` — still no. 2.1.260 words it exactly as before:
+    //   "Output JSON with hookSpecificOutput containing decision to allow or
+    //   deny. Exit code 0 - use hook decision if provided." An empty reply
+    //   risks being read as a decision on somebody's permission prompt, and
+    //   `Notification`'s `permission_prompt` already reports the same moment
+    //   with a message that names the tool.
   ),
   // A transcript ending in an assistant record is a finished turn; one ending
   // in a user record (a prompt or a tool result) means the agent is mid-turn.

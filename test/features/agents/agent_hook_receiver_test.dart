@@ -118,6 +118,58 @@ void main() {
     }
   });
 
+  test('a session stopped on something it cannot answer itself says so', () {
+    // Six subtypes newer than the ten this map was first written against. Each
+    // of these is *this* session stopped and unable to go on: an MCP server
+    // holding a dialog open (the CLI's own table marks both `waitingFor:
+    // "input needed"`), and a usage limit that did not resume on its own.
+    // Undeclared, every one of them left the session reading whatever it last
+    // said — normally `working` — for as long as it sat there.
+    const stopped = {
+      'elicitation_dialog': 'Claude Code needs your input',
+      'elicitation_url_dialog': 'An MCP server needs your input',
+      'quota_auto_resume_stale': 'Usage limit reset — press enter to continue',
+      'quota_auto_resume_disabled':
+          'Automatic continue was turned off — the task will not resume on '
+              'its own',
+    };
+
+    for (final entry in stopped.entries) {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification(entry.key, entry.value),
+      );
+
+      expect(
+        report.status,
+        AgentActivityStatus.awaitingApproval,
+        reason: entry.key,
+      );
+      expect(report.evidence, [entry.value], reason: entry.key);
+      // None of them is a list with a highlighted option, so none offers a
+      // button that types Enter into somebody's session.
+      expect(report.hasOpenPrompt, isFalse, reason: entry.key);
+    }
+  });
+
+  test('a session that resumed on its own is not holding anyone up', () {
+    // The other half of the same state machine: "Usage limit available —
+    // Claude is continuing your task". News that nobody is waiting is not a
+    // status, so it stays unrecorded.
+    final report = receiver.handle(
+      agentId: 'claudeCode',
+      event: 'Notification',
+      body: notification(
+        'quota_auto_resume_fired',
+        'Usage limit available — Claude is continuing your task',
+      ),
+    );
+
+    expect(report.status, AgentActivityStatus.unknown);
+    expect(reports.latest('claudeCode', 's1'), isNull);
+  });
+
   test('a subtype we have never seen is unknown, not an approval', () {
     final report = receiver.handle(
       agentId: 'claudeCode',
