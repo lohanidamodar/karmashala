@@ -562,20 +562,23 @@ distribution can measure them.
 ### Running them
 
 ```powershell
-.\tool\live_tests.ps1              # both families
-.\tool\live_tests.ps1 -Family wsl  # WSL only
-.\tool\live_tests.ps1 -Family ssh  # SSH only
-```
-
-**Windows PowerShell 5.1 runs it.** This said `pwsh` until 2026-09-04, which is
-PowerShell 7 and is *not installed on the owner's machine* — the instruction
-answered `CommandNotFoundException` for the one person it was written for. The
-script declares no `#requires` and uses no 7-only syntax, so 5.1 is enough. If
-the execution policy refuses the file:
-
-```powershell
+powershell -ExecutionPolicy Bypass -File tool\live_tests.ps1
 powershell -ExecutionPolicy Bypass -File tool\live_tests.ps1 -Family wsl
+powershell -ExecutionPolicy Bypass -File tool\live_tests.ps1 -Family ssh
 ```
+
+**Both halves of that line are load-bearing on the owner's machine**, and each
+was learned by the documented command failing on 2026-09-04:
+
+* **`powershell`, not `pwsh`.** `pwsh` is PowerShell 7 and is not installed
+  here — the instruction answered `CommandNotFoundException` for the one person
+  it was written for. The script declares no `#requires` and uses no 7-only
+  syntax, so Windows PowerShell 5.1 runs it as it stands.
+* **`-ExecutionPolicy Bypass -File`.** The machine's policy is `Restricted`, so
+  `.\tool\live_tests.ps1` answers `PSSecurityException: running scripts is
+  disabled on this system`. The flag applies to that child process only and
+  changes no system state, which is why it is the documented form rather than
+  advice to run `Set-ExecutionPolicy`.
 
 From Windows, never from a WSL shell — §17 applies to this script like anything
 else. It prints what it found **before** running anything, so a green run whose
