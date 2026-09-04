@@ -7,6 +7,7 @@ import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/row_menu.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
@@ -317,12 +318,20 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
         ),
       ),
     );
+    // [RowContextMenu] rather than a bare right-click: this row had the
+    // gesture and nothing else, so a keyboard could reach every file in the
+    // tree and none of their actions. It now answers `Shift+F10`, the Menu key
+    // and a screen reader's named action too — the row's own `InkWell` is the
+    // focus stop that makes those work. No `⋮`: nothing here is hidden behind
+    // one, and a glyph on every line of a file tree is the clutter this pane
+    // has always done without.
     final menu = Semantics(
       selected: selected,
-      child: ContextMenuRegion(
+      child: RowContextMenu(
+        menuLabel: 'Actions for ${entry.name}',
         menuItems: _menuItems(),
         onSelected: _onMenu,
-        child: row,
+        builder: (context, _) => row,
       ),
     );
     if (!isDir || !_expanded) return menu;
