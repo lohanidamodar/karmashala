@@ -85,18 +85,40 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
   Future<void> _toLatest() =>
       _scroll.animateTo(0, duration: Motion.base, curve: Curves.easeOut);
 
+  /// The gateway's account of an empty transcript, pulled out of the list: it
+  /// is not a turn, and a session with a reason has an *explanation* rather
+  /// than a welcome.
+  String? _absence() {
+    for (final message in widget.messages) {
+      if (message.role == kCompanionAbsenceRole) return message.text;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final total = widget.messages.length;
+    final absence = _absence();
+    final turns = [
+      for (final message in widget.messages)
+        if (message.role != kCompanionAbsenceRole) message,
+    ];
+    final total = turns.length;
 
     return Column(
       children: [
         Expanded(
           child: total == 0
-              ? _CompanionEmptyState(
-                  emptyHint: widget.emptyHint,
-                  onSuggestionTap: widget.onSuggestionTap,
-                )
+              // Which nothing this is decides which screen it gets. A welcome
+              // offering starter prompts, on a session the user can see
+              // running, was the "shows running but no transcript" report:
+              // the desktop knew the agent keeps no readable record and the
+              // phone drew onboarding over the top of the answer.
+              ? absence != null
+                    ? _TranscriptUnavailable(reason: absence)
+                    : _CompanionEmptyState(
+                        emptyHint: widget.emptyHint,
+                        onSuggestionTap: widget.onSuggestionTap,
+                      )
               : ListView.builder(
                   controller: _scroll,
                   reverse: true,
@@ -116,7 +138,7 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                   },
                   itemBuilder: (context, index) {
                     final ordinal = total - 1 - index;
-                    final message = widget.messages[ordinal];
+                    final message = turns[ordinal];
                     return message.role == kCompanionNoticeRole
                         ? _WindowTopNotice(
                             key: ValueKey<int>(ordinal),
@@ -434,6 +456,69 @@ class _CopyButtonState extends State<_CopyButton> {
         await Future<void>.delayed(const Duration(seconds: 2));
         if (mounted) setState(() => _copied = false);
       },
+    );
+  }
+}
+
+/// Why this session has no chat view — the host's fact, worded by the gateway,
+/// drawn as an answer rather than as onboarding.
+///
+/// Deliberately **not** the welcome state: no heading that invites a first
+/// message, and no starter chips. The session is already running; what the
+/// reader needs is the reason the list is empty, and an offer to type
+/// something is the one thing that reads as "this screen is broken".
+class _TranscriptUnavailable extends StatelessWidget {
+  const _TranscriptUnavailable({required this.reason});
+
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: Touch.iconHero + Insets.md,
+              height: Touch.iconHero + Insets.md,
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHigh,
+                shape: BoxShape.circle,
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                AppIcons.terminal,
+                size: Touch.icon,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: Insets.md),
+            Text(
+              'No chat view for this session',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: Insets.sm),
+            // Left-aligned: three lines of prose centred reads as a slogan,
+            // and this is an explanation the reader has to actually follow.
+            Text(
+              reason,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

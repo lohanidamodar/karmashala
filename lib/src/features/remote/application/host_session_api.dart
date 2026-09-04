@@ -218,6 +218,10 @@ class HostSessionApi {
               messages: collapseTaskNotifications(page.messages.sublist(start)),
               cursor: page.cursor,
               omitted: start,
+              // Carried, not re-derived: this rebuilds the page to window it,
+              // and dropping the reason here would have thrown away the one
+              // thing that tells the phone which nothing it is looking at.
+              absence: page.absence,
             ).toJson(),
           );
         case FrameType.promptSend:

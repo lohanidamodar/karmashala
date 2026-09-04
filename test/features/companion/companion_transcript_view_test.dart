@@ -284,6 +284,95 @@ void main() {
     }
   });
 
+  // --- Which nothing it is -------------------------------------------------
+  //
+  // "I have a running antigravity session and in the mobile companion app it
+  // shows running, but when I open it, it doesn't show any transcript." The
+  // host knew why — that agent keeps no store this app can read — and the
+  // phone drew a welcome screen with starter prompts on it, which is the one
+  // thing that reads as "this screen is broken" for a session already mid-run.
+  group('an empty transcript says which nothing it is', () {
+    const reason = CompanionChatMessage(
+      role: kCompanionAbsenceRole,
+      text: 'This agent keeps no transcript this app can read, so there is no '
+          'chat view for it — on the desktop or here.',
+    );
+
+    FakeCompanionGateway gateway({
+      List<CompanionChatMessage> messages = const [],
+      CompanionSessionStatus status = CompanionSessionStatus.working,
+    }) => FakeCompanionGateway.paired(
+      sessions: [summary('s1', title: 'Running now', status: status)],
+      transcripts: {'s1': messages},
+    );
+
+    for (final (name, size) in [
+      ('phone', kPhoneSize),
+      ('tablet', kTabletSize),
+    ]) {
+      testWidgets('$name: the reason is the screen, not a welcome', (
+        tester,
+      ) async {
+        await pumpPhone(
+          tester,
+          gateway: gateway(messages: const [reason]),
+          home: const SessionViewScreen(sessionId: 's1'),
+          size: size,
+        );
+        await tester.pump();
+
+        expect(find.textContaining('no chat view for it'), findsOneWidget);
+        // Not onboarding, and not a turn: no invitation to start something
+        // that is already running, and no gutter that reads as the agent.
+        expect(find.text('Start a conversation'), findsNothing);
+        expect(find.text('Explain architecture'), findsNothing);
+        expect(find.text('AGENT'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('a session that has not started is still welcomed', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(status: CompanionSessionStatus.idle),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text('Start a conversation'), findsOneWidget);
+      expect(find.text('Explain architecture'), findsOneWidget);
+
+      // A chip writes the prompt and stops — the composer sends it.
+      await tester.tap(find.text('Explain architecture'));
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        startsWith('Explain the architecture'),
+      );
+    });
+
+    testWidgets('a session already working is offered no starter prompts', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(status: CompanionSessionStatus.working),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text('Explain architecture'), findsNothing);
+      // The hedge is still said out loud: with no reason from the host, both
+      // nothings are still possible and the phone claims neither.
+      expect(
+        find.textContaining('their terminal is the session'),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('the way back never sits on the newest message', () {
     // 1c, seen on the phone 2026-09-02: the pill floated centred inside the
     // list's viewport, so while it was up it covered a line or two of the
