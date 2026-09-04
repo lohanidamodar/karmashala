@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.12.0 (2026-09-04)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.13.0 (2026-09-04)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,108 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.13.0 — 2026-09-04 (build 26)
+
+**SSH hosts become real workspaces, and five things the owner reported in one
+sitting are fixed.** Every fix below started as a report from using 1.12.0, and
+three of them turned out to be caused by something other than the obvious
+suspect.
+
+### SSH hosts: clone, sessions, terminals
+
+A remote host is no longer a place you can only reach — you can clone a
+repository onto it, run agent sessions there, and open a plain terminal on it.
+Picking a project folder on an SSH target browses **that host** over SFTP
+instead of opening a local dialog that cannot see the remote disk.
+
+### Shift+Enter inserted two newlines
+
+Not the dictation change that enabled the text-input path — measured identical
+with it on and off. The **xterm2 migration**: xterm 4.0.0 dropped key releases
+before they reached an input handler, and xterm2 forwards them so the kitty
+protocol can report them. Every handler in xterm2's own chain opens with a
+release guard; ours was written when releases did not exist, so it encoded
+`ESC CR` on the press *and* on the release. Plain Enter never doubled, because
+it is delegated and the keytab guards its own release — the same reason Ctrl+C
+was fine. One line, and the bytes on the wire are now `['\x1B\r']` where they
+were `['\x1B\r', '\x1B\r']`.
+
+### A message sent from the phone typed but never sent
+
+Also not the chat redesign — the submit path is byte-identical across it.
+`TextField` chooses its keyboard when you do not name one, and `maxLines > 1`
+makes it `TextInputType.multiline`, which Android draws with Return instead of
+an action key. No action was ever reported, `onSubmitted` was never called, and
+the key inserted a line break. The send button always worked, which is why the
+desktop looked fine. The keyboard now draws Send, and the box keeps focus after
+one.
+
+### Browse froze the window
+
+Reported as a crash; it is a hang, and the file picker is the victim rather than
+the cause. `IFileDialog::Show` runs its own modal loop on the platform thread —
+which, in the Windows embedder, is the Dart isolate's thread. An occupied
+isolate therefore leaves the dialog **created and never shown** with both
+windows Not Responding, recovering only when the isolate frees. Measured: the
+`#32770 "Open"` window exists with `visible=0` and `IsHungAppWindow=1`.
+
+So the picker was never the bug. `AgentHookSpool.drain` was doing synchronous
+`existsSync`/`listSync`/`readAsStringSync` over `\\wsl.localhost` **every 400
+ms**, with three spool directories live; it is now async. Every picker call
+announces itself to the log and **flushes** first, so a recurrence names the
+button — which it could not before, because `LogFileSink` queues behind its own
+400 ms timer *on the isolate that is about to stop*. That is why the log ended
+mid-run with no exception and read as a crash.
+
+**Still open**, and deliberately not claimed as fixed: `flutter_pty`'s
+`Pty.start` cost 1.6 s of isolate in a measured run, and `flutter_pty_win.c`
+already documents `ResizePseudoConsole` sometimes not returning at all. The
+instruments that measured this are kept in `integration_test/` and
+`tool/verification/`.
+
+### An Antigravity session showed no transcript
+
+Correct, and now it says so. Antigravity's conversation store is protobuf in an
+unpublished schema, so there is nothing readable to show — the desktop terminal
+shows live PTY output, not a parsed transcript. The desktop knew the reason and
+sent the phone an empty list, indistinguishable from "this session has not
+spoken yet", so the phone had to hedge across both. The reason now travels, as
+a field rather than a new action; every *other* empty case stays unexplained on
+purpose, because inferring one would be a guess.
+
+### The chat redesign, measured
+
+The composer's text area was **19px of 113px** — 17%. The largest single item in
+the remaining chrome was a permanently drawn `Enter to send · Shift + Enter for
+new line` strip at 31px, bigger than the field, and at 390 wide it overflowed
+its row by **138 unclipped pixels**. Text area is now 57px; the hint moved to
+the send button's tooltip.
+
+Inter-message spacing ran 49/41/49/41/46/44 — four values encoding nothing,
+traced to one card's unexplained 8-top/12-bottom asymmetry plus each card
+paying its own padding inside a list that already padded. Now one margin, 11%
+tighter over seven messages.
+
+Two bugs found while measuring: the input painted a second hard-edged surface
+inside its own rounded card (`filled: true` still paints under
+`InputBorder.none`), and both composer buttons rendered 18px because the theme
+is already `VisualDensity.compact` and the redesign subtracted that a second
+time. The empty state's four prompt chips all overflowed at 390 and are gone
+from desktop, where Ctrl+P and Snippets hold phrases the user chose themselves;
+the phone keeps them, where typing is expensive.
+
+On mobile: the message box went 24px → 56, tile gutters 48px → 16/22, the hint
+stopped changing size when you typed, and its contrast came up off 3:1.
+
+### Also
+
+A `dial_honesty` test gave a real loopback connect and a hello 300 ms between
+them, so under gate load the verdict inverted — a relay that *had* taken the
+socket was reported unreachable. The last two raw NUL bytes in source are
+escaped, which is what made one file undiffable and invisible to `grep`.
 
 ---
 
