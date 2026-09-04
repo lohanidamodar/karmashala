@@ -108,6 +108,7 @@ class Settings {
     this.terminalFontSize = defaultTerminalFontSize,
     this.notesEnabled = true,
     this.hideEmptySections = true,
+    this.explorerAgentFilter = const [],
     this.debugMode = kDefaultDebugMode,
     this.logVerbosity = LogVerbosity.normal,
     this.logToFile = true,
@@ -330,6 +331,25 @@ class Settings {
   /// the matching graph is not mounted at all.
   final bool hideEmptySections;
 
+  /// The `AgentDescriptor.id`s the Explorer is narrowed to, empty for "every
+  /// agent".
+  ///
+  /// A **set** rather than a single choice, because the request this answers
+  /// was "agy only, codex only, claude only, or two of them only" — and a
+  /// **filter** rather than a section rule, because a section groups one row
+  /// into one place while this narrows the whole list. See [AgentFilter].
+  ///
+  /// Persisted, and the reason is in [explorerAgentFilterProvider]: a narrowing
+  /// that reset every launch would be re-applied every launch. What keeps that
+  /// from being a trap is that the Explorer says so out loud — a filled funnel
+  /// in the header naming the agents it is holding back, and a count in place
+  /// of the rows wherever a project has none left.
+  ///
+  /// A `List` rather than a `Set` for the reason [pinnedSessionIds] is one:
+  /// this is what JSON round-trips, and one shape in and out of storage is
+  /// fewer places to disagree.
+  final List<String> explorerAgentFilter;
+
   /// Whether debug mode is on: the root logger drops to `ALL` and the Logs
   /// panel appears on the side-panel rail.
   ///
@@ -402,6 +422,7 @@ class Settings {
     double? terminalFontSize,
     bool? notesEnabled,
     bool? hideEmptySections,
+    List<String>? explorerAgentFilter,
     bool? debugMode,
     LogVerbosity? logVerbosity,
     bool? logToFile,
@@ -459,6 +480,7 @@ class Settings {
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
+    explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
     debugMode: debugMode ?? this.debugMode,
     logVerbosity: logVerbosity ?? this.logVerbosity,
     logToFile: logToFile ?? this.logToFile,
@@ -523,6 +545,7 @@ class Settings {
     'terminalFontSize': terminalFontSize,
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
+    'explorerAgentFilter': explorerAgentFilter,
     'debugMode': debugMode,
     'logVerbosity': logVerbosity.name,
     'logToFile': logToFile,
@@ -675,6 +698,9 @@ class Settings {
       hideEmptySections: json['hideEmptySections'] is bool
           ? json['hideEmptySections'] as bool
           : true,
+      explorerAgentFilter: json['explorerAgentFilter'] is List
+          ? (json['explorerAgentFilter'] as List).whereType<String>().toList()
+          : const [],
       debugMode: json['debugMode'] is bool
           ? json['debugMode'] as bool
           : kDefaultDebugMode,
@@ -728,6 +754,7 @@ class Settings {
       other.terminalFontSize == terminalFontSize &&
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
+      _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
       other.debugMode == debugMode &&
       other.logVerbosity == logVerbosity &&
       other.logToFile == logToFile &&
@@ -781,6 +808,7 @@ class Settings {
       Object.hash(
         androidSlimming,
         hideEmptySections,
+        Object.hashAll(explorerAgentFilter),
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
         Object.hashAllUnordered(

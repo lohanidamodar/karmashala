@@ -97,8 +97,10 @@ void main() {
     expect(find.text('WINDOWS'), findsOneWidget);
     expect(find.text('WSL'), findsOneWidget);
     expect(find.text('SSH'), findsOneWidget);
-    // The remote host reads as a machine, not as an opaque id.
-    expect(find.text('ssh:h1 · dev@127.0.0.1:2222'), findsOneWidget);
+    // The remote host reads as a machine, not as an opaque id — and the id it
+    // used to be printed beside is gone.
+    expect(find.text('dev@127.0.0.1:2222'), findsOneWidget);
+    expect(find.textContaining('ssh:h1'), findsNothing);
     // Same agent, two environments, two independent installations — with the
     // remote versions and paths visible beside the local one.
     expect(find.text('v2.1.251 · /home/dev/.local/bin/claude'), findsOneWidget);
@@ -160,5 +162,29 @@ void main() {
 
     expect(installations.getByEnvironment('windows'), isNotEmpty);
     expect(find.textContaining(r'v9.9.9 · C:\bin\claude.exe'), findsWidgets);
+  });
+
+  testWidgets('the local host card shows no database key', (tester) async {
+    // `localHostEnvironmentId` is the literal `windows` on every platform and
+    // is documented as never being shown to anyone. This card printed it as a
+    // mono subtitle, so a Mac read "macOS" with "windows" underneath it.
+    db.execute('DELETE FROM execution_environments;');
+    environments.upsert(posixEnv());
+    await pump(tester);
+
+    expect(find.text('macOS'), findsOneWidget);
+    expect(find.text('windows'), findsNothing);
+  });
+
+  testWidgets('an SSH card still shows the address it connects to', (
+    tester,
+  ) async {
+    // Dropping the id must not take the one line on this card that says which
+    // machine it is.
+    hosts.upsert(remoteHost());
+    environments.upsert(sshEnvFixture());
+    await pump(tester);
+
+    expect(find.textContaining('dev@127.0.0.1'), findsOneWidget);
   });
 }

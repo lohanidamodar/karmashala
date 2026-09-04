@@ -529,4 +529,14 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  /// The same glyph filled, for a funnel that is actually narrowing something.
+  ///
+  /// Phosphor keeps one codepoint per icon across its weights — see
+  /// [pushPin]/[pushPinFill] — so the fill is the family, not the character.
+  static const IconData funnelFill = IconData(
+    0xe266,
+    fontFamily: 'PhosphorFill',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }
