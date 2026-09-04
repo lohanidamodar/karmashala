@@ -8,6 +8,7 @@ import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
 import '../../features/agents/domain/agent_status.dart';
+import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/detail/presentation/workbench_session_view.dart';
 import '../../features/explorer/application/explorer_actions.dart';
@@ -674,6 +675,11 @@ class _NoPaneForSession extends ConsumerWidget {
 /// room this frame, so a fourth per-session control, a remount, or a provider
 /// nobody has written yet all cost nothing.
 ///
+/// The quota chip is that fourth control, and it happens to *shorten* the
+/// reservation's work rather than lengthen it: it shares the facts line's row
+/// and draws `usage …` from the first frame, so that row no longer collapses to
+/// nothing while a session is being read. The reservation still covers the rest.
+///
 /// **What it cannot be is a constant.** The settled bar is 51px on a wide
 /// window and 127px on the narrowest one the app supports, because the actions
 /// legitimately wrap to three runs there — so a fixed height would either waste
@@ -744,7 +750,34 @@ class _SessionBar extends ConsumerWidget {
                 // Full width and above everything, so the facts read as a caption
                 // over the row rather than as the first item in it.
                 if (sessionId != null) ...[
-                  DeliveryStateLine(sessionId: sessionId),
+                  Row(
+                    children: [
+                      Expanded(child: DeliveryStateLine(sessionId: sessionId)),
+                      // **What this session's account has left, at the end of
+                      // the line of facts** — because that is what it is. It
+                      // came from the window's status bar, where one figure
+                      // spoke for whichever session the app believed was
+                      // focused; each pane now reads its own account, which is
+                      // the whole of the owner's *"tied to session not app"*.
+                      //
+                      // In the facts line and not in the action row below it,
+                      // deliberately. The actions over-offer (Loop 33) and
+                      // wrap rather than shrink, so anything added beside them
+                      // is paid for in runs: at 720px the row is already 14px
+                      // over with the model chip squeezed to its glyphs, which
+                      // is why that chip steps aside under ~820px. A quota is
+                      // not a control and must not compete with `Run tests`,
+                      // `Check this` and `Continue with…` for the same
+                      // pixels — up here it cannot push them anywhere at any
+                      // width, and it is legible at every one.
+                      //
+                      // Its own widget with its own subscription, so a quota
+                      // moving — the most frequent change in this bar —
+                      // repaints the chip and neither the facts beside it nor
+                      // the actions under it.
+                      UsageChip(sessionId: sessionId),
+                    ],
+                  ),
                   // Whatever this session has just been told, in this session's
                   // bar. Full width for the same reason, and directly over the
                   // chips that post it.

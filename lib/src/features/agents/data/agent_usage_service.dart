@@ -59,11 +59,11 @@ class UsageException implements Exception {
 ///
 /// **Every request the app makes to either endpoint goes through [fetch]**, and
 /// [fetch] is where the [UsageThrottle] sits: it serves a reading the app
-/// already has rather than asking again inside one poll interval, and it
+/// already has rather than asking again inside this account's floor, and it
 /// refuses outright while a `429` is still in force. That is deliberate — the
-/// chip, the settings panel and the fan-out dialog each used to be their own
-/// unrated request path, which is how a user with several panes could spend far
-/// more than the one-a-minute the poll interval suggests.
+/// chip, the settings panel, the fan-out dialog and the MCP tool each used to be
+/// their own unrated request path, which is how a user with several panes could
+/// spend far more than the poll interval suggested.
 class AgentUsageService {
   AgentUsageService({
     required this.storeLocator,
@@ -131,21 +131,49 @@ class AgentUsageService {
 
   /// A reading young enough to stand in for a fresh one, or null.
   ///
-  /// What stops a pane switch costing a request: `agentUsageProvider` is
-  /// `autoDispose` and family-keyed on the installation, so moving between two
-  /// panes re-creates it every time, and each re-creation used to be an
-  /// unconditional trip to the vendor.
+  /// Consulted by [fetch] itself — see there. Public because a surface may want
+  /// to know whether the number it is about to show came off the wire.
   AgentUsage? rememberedIfFresh(AgentInstallation installation) =>
       _throttle.rememberedIfFresh(installation);
 
+  /// How long a reading stands in for a fresh one, for this account.
+  ///
+  /// Read off the payload — [usageAskFloor] — so a five-hour quota is three
+  /// minutes and a reply that named no period is one.
+  Duration askFloor(AgentInstallation installation) =>
+      _throttle.floorFor(installation);
+
+  /// How long until this account is worth asking about on the app's own
+  /// initiative. `UsageRefreshController` arms its tick at this.
+  Duration dueIn(AgentInstallation installation) =>
+      _throttle.dueIn(installation);
+
+  /// [dueIn] by account key, for the refresh policy — which is keyed by account
+  /// and therefore never holds an installation of its own.
+  Duration dueInForAccount(String accountKey) =>
+      _throttle.dueInForKey(accountKey);
+
   /// Fetches usage for [installation]. Throws [UsageException] on any failure.
   ///
-  /// Refuses without a request while the account is rate limited: the whole
-  /// point of a backoff is that the request is not made.
+  /// **Two things happen before a socket is opened**, and both are here rather
+  /// than in a caller, because "every caller remembered to check" is not a
+  /// property a rate limit can be defended with:
+  ///
+  /// * a reading inside this account's floor is handed straight back. The floor
+  ///   is the shortest time in which the quota can move by a point
+  ///   ([usageAskFloor]), so the request it skips could not have learned
+  ///   anything. This is the one place the app's request rate is bounded — the
+  ///   tick, the chip's click, a session's status moving, the Settings button,
+  ///   the fan-out dialog and the MCP tool all arrive here, and four of them
+  ///   used to arrive unconditionally.
+  /// * a rate limit still in force refuses without asking. The whole point of a
+  ///   backoff is that the request is not made.
   Future<AgentUsage> fetch(
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
+    final fresh = _throttle.rememberedIfFresh(installation);
+    if (fresh != null) return fresh;
     final pending = pendingPause(installation);
     if (pending != null) throw pending;
     try {
@@ -596,7 +624,7 @@ AgentUsage parseClaudeUsage(
 }) {
   final windows = <UsageWindow>[];
 
-  void addNamed(String key, String label) {
+  void addNamed(String key, String label, Duration span) {
     final w = json[key];
     if (w is Map<String, dynamic> && w['utilization'] is num) {
       windows.add(
@@ -604,15 +632,19 @@ AgentUsage parseClaudeUsage(
           label: label,
           percent: (w['utilization'] as num).toDouble(),
           resetsAt: _parseIsoDate(w['resets_at']),
+          // The period the key itself names. Kept because it is what turns a
+          // percentage into a rate — see [UsageWindow.span] and
+          // [usageAskFloor].
+          span: span,
         ),
       );
     }
   }
 
-  addNamed('five_hour', '5-hour');
-  addNamed('seven_day', '7-day');
-  addNamed('seven_day_opus', 'Opus · 7-day');
-  addNamed('seven_day_sonnet', 'Sonnet · 7-day');
+  addNamed('five_hour', '5-hour', kUsageFiveHourWindow);
+  addNamed('seven_day', '7-day', kUsageSevenDayWindow);
+  addNamed('seven_day_opus', 'Opus · 7-day', kUsageSevenDayWindow);
+  addNamed('seven_day_sonnet', 'Sonnet · 7-day', kUsageSevenDayWindow);
 
   // Per-model / scoped limits. Only model-scoped entries are added here; the
   // generic session/weekly buckets are already covered by the named keys above.
@@ -632,6 +664,10 @@ AgentUsage parseClaudeUsage(
           label: period.isEmpty ? model : '$model · $period',
           percent: (entry['percent'] as num).toDouble(),
           resetsAt: _parseIsoDate(entry['resets_at']),
+          // Only `weekly` names a period we can read off the payload. Anything
+          // else is left null rather than assumed — a window whose length we do
+          // not know must not shorten the floor for the ones we do.
+          span: group == 'weekly' ? kUsageSevenDayWindow : null,
         ),
       );
     }
@@ -663,7 +699,7 @@ AgentUsage parseCodexUsage(
   final windows = <UsageWindow>[];
   final rateLimit = json['rate_limit'];
   if (rateLimit is Map<String, dynamic>) {
-    void add(String key, String label) {
+    void add(String key, String label, Duration span) {
       final w = rateLimit[key];
       if (w is Map<String, dynamic> && w['used_percent'] is num) {
         windows.add(
@@ -671,13 +707,14 @@ AgentUsage parseCodexUsage(
             label: label,
             percent: (w['used_percent'] as num).toDouble(),
             resetsAt: _codexReset(w, now),
+            span: span,
           ),
         );
       }
     }
 
-    add('primary_window', '5-hour');
-    add('secondary_window', '7-day');
+    add('primary_window', '5-hour', kUsageFiveHourWindow);
+    add('secondary_window', '7-day', kUsageSevenDayWindow);
   }
   return AgentUsage(
     windows: windows,

@@ -6,6 +6,8 @@ import 'package:karmashala/src/features/agents/application/agent_usage_providers
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -24,22 +26,45 @@ class _MovableClock implements Clock {
   DateTime nowUtc() => now.toUtc();
 }
 
-/// **When the quota is read again, and — more importantly — when it is not.**
+/// **When the quota is read again, and — far more importantly — when it is
+/// not.**
 ///
-/// One timer, cancelled outright on blur. The counted unit is a fetch: every
-/// entry in `FakeAgentUsageService.calls` is one request that would have gone
-/// to the vendor endpoint.
+/// One timer per *account*, cancelled outright on blur, armed at the moment the
+/// reading itself says another request could learn something. The counted unit
+/// is a fetch: every entry in `FakeAgentUsageService.calls` is one request that
+/// would have gone to the vendor endpoint.
+///
+/// Two properties this file exists to hold:
+///
+/// * **the schedule comes off the payload.** A `five_hour` window has a hundred
+///   points in it, so a point takes three minutes to spend and a request inside
+///   three minutes cannot learn one. Idle, the wait doubles to
+///   [kUsageIdleCeiling]. Measured below: an idle hour costs **6** requests
+///   where the old fixed minute cost **60**, and nothing that fires in between
+///   can exceed the floor, because the floor is enforced in the service.
+/// * **the reading is per account, the display is per pane.** A hundred panes
+///   on one account cost one request and hold one timer between them.
 void main() {
   late AppDatabase db;
   late FakeAgentUsageService service;
   late _MovableClock clock;
 
+  /// The key both the throttle and the policy file this workspace's quota
+  /// under: `claudeCode@windows`.
+  final claudeAccount = usageAccountKey(agentInstallation());
+
   setUp(() {
-    service = FakeAgentUsageService();
     clock = _MovableClock(testTime);
+    // The service's own clock, so the age of a reading moves with the test's.
+    // A fixed clock would make every reading eternally fresh and no schedule
+    // here would ever be exercised.
+    service = FakeAgentUsageService(clock: clock);
   });
   tearDown(() => db.close());
 
+  /// Puts [sessions] chips on screen, one per session row, all on the one
+  /// installation `seedUsageDatabase` creates unless [withOtherAgent] adds a
+  /// second.
   Future<ProviderContainer> pumpChip(
     WidgetTester tester, {
     int sessions = 1,
@@ -72,8 +97,21 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(body: Center(child: UsageChip())),
+        child: MaterialApp(
+          home: Scaffold(
+            // Scrolling, not for the scrolling: a hundred chips in a bare
+            // `Column` overflow an 800x600 test window, and a `Column` inside a
+            // scroll view still builds every one of them — which is the point
+            // of asking for a hundred.
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 1; i <= sessions; i++)
+                    UsageChip(sessionId: 's$i'),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -82,7 +120,7 @@ void main() {
   }
 
   UsageRefreshController policyOf(ProviderContainer container) =>
-      container.read(usageRefreshProvider.notifier);
+      container.read(usageRefreshProvider(claudeAccount).notifier);
 
   void setFocus(ProviderContainer container, {required bool focused}) =>
       container.read(windowFocusedProvider.notifier).set(focused);
@@ -90,26 +128,79 @@ void main() {
   void publish(ProviderContainer container, SessionChange change) =>
       container.read(sessionsRevisionProvider.notifier).changed(change);
 
+  /// Moves the wall clock and the test clock together.
+  ///
+  /// Both, or the schedule is measured against a clock that never moves: the
+  /// timer fires off `tester.pump`, and how old the reading is by then comes
+  /// from [clock]. Advanced first, so the callbacks the pump runs read the time
+  /// they are supposed to be running at.
+  Future<void> elapse(WidgetTester tester, Duration by) async {
+    clock.now = clock.now.add(by);
+    await tester.pump(by);
+    await tester.pump();
+  }
+
   /// Leaves no pending timer behind, which `testWidgets` treats as a failure.
   Future<void> quiesce(WidgetTester tester, ProviderContainer container) async {
     setFocus(container, focused: false);
     await tester.pump();
   }
 
-  testWidgets('reads once on mount, then once every interval while focused', (
-    tester,
-  ) async {
+  testWidgets('reads once on mount, then when the payload says a point '
+      'could have moved', (tester) async {
     final container = await pumpChip(tester);
     expect(service.calls.length, 1, reason: 'the chip fetches when it appears');
     expect(policyOf(container).isPolling, isTrue);
+    expect(
+      policyOf(container).delay,
+      usageFixtureFloor,
+      reason: 'three minutes, read off the five-hour window the reply named',
+    );
 
-    await tester.pump(kUsageRefreshInterval);
-    await tester.pump();
-    expect(service.calls.length, 2);
+    // The tick armed before that first reading landed could only use the
+    // floor, so one lands at a minute. It costs an invalidate and no request.
+    await elapse(tester, kUsageMinInterval);
+    expect(
+      service.calls.length,
+      1,
+      reason: 'a minute in, one point of a five-hour quota cannot be spent',
+    );
 
-    await tester.pump(kUsageRefreshInterval);
-    await tester.pump();
-    expect(service.calls.length, 3);
+    await elapse(tester, const Duration(minutes: 2));
+    expect(service.calls.length, 2, reason: 'three minutes in, it asks');
+    await quiesce(tester, container);
+  });
+
+  testWidgets('an idle hour costs six requests, where a fixed minute cost '
+      'sixty', (tester) async {
+    // The measurement behind the change. The fake answers with the same
+    // percentages every time, which is what an account nobody is spending
+    // looks like: the wait doubles 3m → 6m → 12m → 15m and holds there.
+    final container = await pumpChip(tester);
+    for (var minute = 0; minute < 60; minute++) {
+      await elapse(tester, const Duration(minutes: 1));
+    }
+    expect(
+      service.calls.length,
+      6,
+      reason: 'requests at 0, 3, 9, 21, 36 and 51 minutes',
+    );
+
+    // And the second hour is cheaper still, because the ladder has reached
+    // its ceiling: four requests, one every fifteen minutes.
+    for (var minute = 0; minute < 60; minute++) {
+      await elapse(tester, const Duration(minutes: 1));
+    }
+    expect(
+      service.calls.length,
+      10,
+      reason: 'a quarter of an hour apart, which is where the ladder stops',
+    );
+    expect(
+      policyOf(container).delay,
+      lessThanOrEqualTo(kUsageIdleCeiling),
+      reason: 'the ladder stops here, so a reading stays worth looking at',
+    );
     await quiesce(tester, container);
   });
 
@@ -126,9 +217,8 @@ void main() {
       reason: 'the timer is cancelled, not left running and idle',
     );
 
-    await tester.pump(kUsageRefreshInterval * 5);
-    await tester.pump();
-    expect(service.calls.length, 1, reason: 'five intervals, no requests');
+    await elapse(tester, const Duration(hours: 1));
+    expect(service.calls.length, 1, reason: 'an hour away, no requests');
     expect(
       UsageChip.debugBuildCount,
       builds,
@@ -153,7 +243,7 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('a flurry of focus changes inside one interval costs nothing', (
+  testWidgets('a flurry of focus changes inside the floor costs nothing', (
     tester,
   ) async {
     final container = await pumpChip(tester);
@@ -168,27 +258,67 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('a status change reads once; a title change reads nothing', (
+  testWidgets('a title change reads nothing, however often it fires', (
     tester,
   ) async {
     final container = await pumpChip(tester);
-
-    publish(container, const SessionChange.renamed('s1'));
-    await tester.pump();
-    await tester.pump();
+    for (var i = 0; i < 5; i++) {
+      clock.now = clock.now.add(const Duration(minutes: 5));
+      publish(container, const SessionChange.renamed('s1'));
+      await tester.pump();
+      await tester.pump();
+    }
     expect(
       service.calls.length,
       1,
       reason: "the store sweep's title sync moves no quota",
     );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('a status change asks — and cannot ask inside the floor', (
+    tester,
+  ) async {
+    // **The trigger that was costing the 429s.** A run ending is the moment
+    // usage actually moved, so it is worth a request; but it fires on every
+    // launch, every pane that stops and every coarse `bump()`, and it used to
+    // mean an unconditional one. With several agents finishing runs it out-ran
+    // the poll interval it was supposed to sit inside.
+    final container = await pumpChip(tester);
 
     publish(container, const SessionChange.statusChanged('s1'));
     await tester.pump();
     await tester.pump();
     expect(
       service.calls.length,
+      1,
+      reason: 'seconds after a reading, a run ending cannot have moved a point',
+    );
+
+    clock.now = clock.now.add(usageFixtureFloor);
+    publish(container, const SessionChange.statusChanged('s1'));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      service.calls.length,
       2,
-      reason: 'a run ending is the moment usage actually moved',
+      reason: 'past the floor it is the best moment there is to ask',
+    );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('twenty runs ending at once cost one request', (tester) async {
+    final container = await pumpChip(tester, sessions: 20);
+    clock.now = clock.now.add(usageFixtureFloor);
+    for (var i = 1; i <= 20; i++) {
+      publish(container, SessionChange.statusChanged('s$i'));
+      await tester.pump();
+      await tester.pump();
+    }
+    expect(
+      service.calls.length,
+      2,
+      reason: 'one mount, one ask — the other nineteen are inside the floor',
     );
     await quiesce(tester, container);
   });
@@ -198,6 +328,7 @@ void main() {
   ) async {
     // The fan-out check: one subscription in the policy, not one per row.
     final container = await pumpChip(tester, sessions: 100);
+    clock.now = clock.now.add(usageFixtureFloor);
     publish(container, const SessionChange.statusChanged('s42'));
     await tester.pump();
     await tester.pump();
@@ -206,11 +337,81 @@ void main() {
     await quiesce(tester, container);
   });
 
+  testWidgets('a hundred panes on one account share one fetch and one timer', (
+    tester,
+  ) async {
+    // The property that lets the chip be per pane at all. Every one of these
+    // draws a number; between them they cost the one request the account's
+    // quota is worth, and they hold the one timer keyed on that account.
+    final container = await pumpChip(tester, sessions: 100);
+    expect(find.byIcon(AppIcons.circleHalf), findsNWidgets(100));
+    expect(service.calls.length, 1, reason: '100 chips, one request');
+
+    await elapse(tester, usageFixtureFloor);
+    expect(service.calls.length, 2, reason: 'and one per tick, not a hundred');
+    expect(policyOf(container).isPolling, isTrue);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('a second account gets its own reading and its own timer', (
+    tester,
+  ) async {
+    // Two quotas are two quotas: the whole reason the chip moved out of the
+    // window's status bar, where one figure spoke for both.
+    db = seedUsageDatabase();
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+    SessionDao(db).insert(session(id: 's2', agentInstallationId: 'a2'));
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        clockProvider.overrideWithValue(clock),
+        agentUsageServiceProvider.overrideWithValue(service),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                UsageChip(sessionId: 's1'),
+                UsageChip(sessionId: 's2'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(service.calls.length, 2, reason: 'one request per account');
+    expect(
+      service.calls.map((i) => i.agentId).toSet(),
+      {AgentIds.claudeCode, AgentIds.codex},
+    );
+    final codexAccount = usageAccountKey(
+      agentInstallation(id: 'a2', agentId: AgentIds.codex),
+    );
+    expect(policyOf(container).isPolling, isTrue);
+    expect(
+      container.read(usageRefreshProvider(codexAccount).notifier).isPolling,
+      isTrue,
+      reason: 'a second quota needs a second schedule, not a share of one',
+    );
+    setFocus(container, focused: false);
+    await tester.pump();
+  });
+
   testWidgets('a status change while blurred reads nothing', (tester) async {
     final container = await pumpChip(tester);
     setFocus(container, focused: false);
     await tester.pump();
 
+    clock.now = clock.now.add(const Duration(hours: 1));
     publish(container, const SessionChange.statusChanged('s1'));
     await tester.pump();
     await tester.pump();
@@ -223,24 +424,65 @@ void main() {
     final policy = policyOf(container);
     expect(policy.isPolling, isTrue);
 
-    // The app's own way of losing the chip: focus a pane running an agent we
-    // have no usage endpoint for. Nothing watches the policy any more.
-    container.read(selectedSessionIdProvider.notifier).select('other');
+    // The app's own way of losing the chip: the pane on screen runs an agent
+    // we have no usage endpoint for. Nothing watches the policy any more.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(body: UsageChip(sessionId: 'other')),
+        ),
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 1));
 
     expect(find.byIcon(AppIcons.circleHalf), findsNothing);
     expect(
       policy.isPolling,
       isFalse,
-      reason: 'a leaked 60s timer holds the container alive forever',
+      reason: 'a leaked timer holds the container alive forever',
     );
+  });
+
+  testWidgets('the last pane closing leaves no timer, and the first to '
+      'close leaves it', (tester) async {
+    final container = await pumpChip(tester, sessions: 2);
+    final policy = policyOf(container);
+    expect(policy.isPolling, isTrue);
+
+    Future<void> show(int chips) => tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                for (var i = 1; i <= chips; i++) UsageChip(sessionId: 's$i'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await show(1);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(
+      policy.isPolling,
+      isTrue,
+      reason: 'one pane closing must not stop the account its sibling shares',
+    );
+
+    await show(0);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(policy.isPolling, isFalse, reason: 'nothing outlives the last chip');
   });
 
   testWidgets('the timer dies with the widget tree', (tester) async {
     // Riverpod cancels its own scheduled auto-dispose when the surrounding
     // scope unmounts, so the chip's `dispose` is the only hook that always
-    // runs — and a 60-second timer that outlived the tree is what failed
-    // eleven unrelated tests in the suite.
+    // runs — and a timer that outlived the tree is what failed eleven
+    // unrelated tests in the suite.
     final container = await pumpChip(tester);
     final policy = policyOf(container);
     expect(policy.isPolling, isTrue);
@@ -278,16 +520,15 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: Center(child: UsageChip())),
+          home: Scaffold(body: Center(child: UsageChip(sessionId: 's1'))),
         ),
       ),
     );
-    await tester.pump(kUsageRefreshInterval * 3);
+    await tester.pump(const Duration(minutes: 30));
 
     expect(service.calls, isEmpty);
   });

@@ -2,7 +2,6 @@ import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
-import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -34,9 +33,11 @@ import '../../support/window_matrix.dart';
 ///
 /// So the obligation inverts, and is worth keeping either way. The row must not
 /// repaint for a model change *at all* now — no chip of its own to justify it —
-/// and it must still hold at 720x560 with the quota on it. Counted, never
-/// timed, because the suite runs at `--concurrency=4` and a wall-clock
-/// assertion over a few milliseconds is a coin toss.
+/// and it must still hold at 720x560. The quota has since followed the model
+/// out of this row for the same reason, so both halves of the middle group are
+/// gone and this file watches that neither comes back. Counted, never timed,
+/// because the suite runs at `--concurrency=4` and a wall-clock assertion over
+/// a few milliseconds is a coin toss.
 class _StaticSettings extends SettingsController {
   _StaticSettings(this._settings);
   final Settings _settings;
@@ -60,13 +61,12 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(database: db, usageService: service),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
         settingsControllerProvider.overrideWith(
           () => _StaticSettings(const Settings()),
         ),
-        agentUsageServiceProvider.overrideWithValue(service),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
@@ -121,7 +121,7 @@ void main() {
     expect(
       UsageChip.debugBuildCount,
       0,
-      reason: 'and the quota is about the account, not the session',
+      reason: 'and the quota has followed it out of this row entirely',
     );
     await quiesce(tester, container);
   });
@@ -146,7 +146,7 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('the row holds at the minimum window with the quota on it', (
+  testWidgets('the row holds at the minimum window with both chips gone', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
