@@ -590,6 +590,22 @@ void main() {
       expect(SessionDao(db).getById(live), isNotNull);
     });
 
+    test('a row nothing could judge gets neither verb', () async {
+      // The mirror of the removal guard, and it matters as much: an
+      // unreachable store may still hold that conversation.
+      final db = seededDatabase();
+      addTearDown(db.close);
+      final container = containerOver(db, locatable: false);
+      final id = seedDeadRow(container);
+
+      final notifier = container.read(unresumableSessionsProvider.notifier);
+      await notifier.refresh();
+      expect(container.read(unresumableSessionsProvider).uncertain, hasLength(1));
+
+      await expectLater(notifier.restart(id), throwsA(isA<StateError>()));
+      expect(SessionDao(db).getById(id)!.paneId, isNull);
+    });
+
     test('a restart naming nothing is an ordinary create', () async {
       final db = seededDatabase();
       addTearDown(db.close);

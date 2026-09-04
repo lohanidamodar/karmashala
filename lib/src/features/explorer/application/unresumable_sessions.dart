@@ -9,6 +9,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/unkept_promise.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import 'bulk_session_delete.dart';
 
 /// One row of the review, with the verdict that was actually reached for it.
@@ -220,7 +221,20 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
   /// age, its pins, its notes, its place in a lineage — is what a delete would
   /// have thrown away, and reuse is already how the launcher continues a
   /// session (see `SessionLaunchRequest.restartSessionId`).
+  ///
+  /// Only a row this reading found [PromiseVerdict.unkept]. The restriction is
+  /// the same one [remove] has and it matters as much in this direction: an
+  /// `unknown` verdict means the store was unreachable, so the conversation may
+  /// well be there and resumable once the distribution is running — and
+  /// starting a second one over the row would abandon it. A row we cannot speak
+  /// for gets neither verb.
   Future<Session> restart(String sessionId) async {
+    if (!state.removable.any((row) => row.session.id == sessionId)) {
+      throw StateError(
+        'This session was not found unresumable by the current reading, so '
+        'nothing may be started over it. Check again first.',
+      );
+    }
     final row = ref.read(sessionDaoProvider).getById(sessionId);
     if (row == null) {
       throw StateError('That session is no longer in the workspace.');
@@ -272,9 +286,20 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
 
   /// The rows worth reading a store for — the free half.
   ///
-  /// Every lookup here is in memory: one `getAll()`, a map of installations
-  /// built once, and one pane lookup per row. Counted by
-  /// `unresumable_sessions_cost_test.dart`, which asserts it stays flat.
+  /// **Three queries, whatever the workspace holds**: the sessions, the
+  /// installations and the repositories, each read once into a map. Everything
+  /// per row after that is a map lookup or a read of the terminal controller's
+  /// own in-memory pane table. No disk, no subprocess, and nothing that grows
+  /// the statement count with the row count — which is the property
+  /// `unresumable_scale_cost_test.dart` counts, and the reason this can run
+  /// over a workspace of any size on a keypress.
+  ///
+  /// The pane check is deliberately **not** `SessionLauncher.livePaneFor`,
+  /// which would re-read the row we are already holding: one `getById` per row
+  /// is exactly the shape of cost this whole design exists to avoid. The rule
+  /// it applies is the same one, spelled out below against the same
+  /// `TerminalInstance.liveness` — a detached pane is live, a pane restored
+  /// from disk is not.
   List<_Candidate> _screen() {
     final now = ref.read(clockProvider).nowUtc();
     final registry = ref.read(agentRegistryProvider);
@@ -283,18 +308,23 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
           in ref.read(agentInstallationDaoProvider).getAll())
         installation.id: installation,
     };
-    final launcher = ref.read(sessionLauncherProvider);
-    final repositories = ref.read(repositoryDaoProvider);
+    final repositories = {
+      for (final repository in ref.read(repositoryDaoProvider).getAll())
+        repository.id: repository,
+    };
+    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final out = <_Candidate>[];
     for (final session in ref.read(sessionDaoProvider).getAll()) {
       final installation = installations[session.agentInstallationId];
       if (installation == null) continue;
       final descriptor = registry.byId(installation.agentId);
+      final paneId = session.paneId;
+      final pane = paneId == null ? null : terminals.instanceFor(paneId);
       final screening = screenSessionPromise(
         session,
         agentAssignsSessionId:
             descriptor?.launch.sessionIdAssignment.isSupported ?? false,
-        hostedLive: launcher.livePaneFor(session.id) != null,
+        hostedLive: pane != null && pane.liveness.value.isLive,
         now: now,
       );
       if (screening != PromiseScreening.candidate) continue;
@@ -304,7 +334,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
       final directory =
           session.workingDirectory ??
           session.worktree ??
-          repositories.getById(session.repositoryId)?.path;
+          repositories[session.repositoryId]?.path;
       if (directory == null) continue;
       out.add(
         _Candidate(
