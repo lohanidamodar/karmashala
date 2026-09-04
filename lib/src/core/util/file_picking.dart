@@ -141,9 +141,11 @@ void _report(String kind, String what, String? chosen, Stopwatch elapsed) {
   );
 }
 
-/// Returns null rather than rethrowing: three of the call sites had no catch at
-/// all, so a picker the host refuses used to take the enclosing callback with
-/// it and leave the form looking as though nothing had been pressed.
+/// Returns null rather than rethrowing. Counted at the move: of the eight
+/// picker calls in the app, seven had no catch anywhere around them — only the
+/// composer's image attach did — so a picker the host refuses used to take the
+/// enclosing callback with it and leave the form looking as though nothing had
+/// been pressed.
 void _fail(
   String kind,
   String what,
