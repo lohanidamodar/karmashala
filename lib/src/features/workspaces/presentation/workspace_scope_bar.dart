@@ -27,6 +27,15 @@ import 'workspaces_dialog.dart';
 /// One dense row, [Chrome.row] high, on the same gutter as the search field
 /// under it: at 720x560 the Explorer is a narrow column and a second slab of
 /// chrome would cost a project row.
+///
+/// **Its glyph is never [AppIcons.treeStructure].** That mark is the Explorer
+/// *surface* — the title-bar toggle, and the pane header ~30px above this row —
+/// and this bar used to draw it too, in the same 16px column, which is why the
+/// owner read the corner as "the same icon repeated 3 times". The bar now
+/// carries the glyph of whichever menu row is selected, so the closed control
+/// and the open menu say the same thing: [AppIcons.folders] for every project,
+/// [AppIcons.stack] for a context, [AppIcons.minusCircle] for the projects
+/// filed under nothing.
 class WorkspaceScopeBar extends ConsumerWidget {
   const WorkspaceScopeBar({super.key});
 
@@ -52,96 +61,114 @@ class WorkspaceScopeBar extends ConsumerWidget {
         ? 'No context'
         : current?.name ?? 'All projects';
     final narrowed = !scope.isAll;
+    final glyph = scope.isAll
+        ? AppIcons.folders
+        : scope.unassignedOnly
+        ? AppIcons.minusCircle
+        : AppIcons.stack;
 
-    return PopupMenuButton<String>(
-      // What the narrowed-to context is *for*, where there is nowhere to draw
-      // it: the bar is one line and the name has to carry it. It is also the
-      // control's accessible name, so Narrator reads the same words.
-      tooltip: current?.description == null
-          ? 'Filter projects by context'
-          : '${current!.name} — ${current.description}',
-      position: PopupMenuPosition.under,
-      itemBuilder: (context) => [
-        DesktopMenuItem(
-          value: _all,
-          label: 'All projects',
-          icon: AppIcons.treeStructure,
-          selected: scope.isAll,
-        ),
-        if (workspaces.isNotEmpty) const DesktopMenuDivider(),
-        for (final workspace in workspaces)
-          // Two lines, because a name alone does not say what a context is for
-          // — and the answer, or its size when nobody has said, is exactly one
-          // short line long.
-          DesktopMenuDetailItem(
-            value: workspace.id,
-            label: workspace.name,
-            detail: describeWorkspace(
-              workspace,
-              projectCount: counts[workspace.id] ?? 0,
-            ),
-            detailMaxLines: 1,
-            icon: AppIcons.folder,
-            selected: scope.workspaceId == workspace.id,
-          ),
-        if (workspaces.isNotEmpty)
+    // The inset sits outside the button so the ink is a rounded chip in a
+    // gutter rather than a band flush to the pane edges. The 4px comes off the
+    // container's own padding rather than off the label: this row's name
+    // already ellipsises at the pane's 200px floor, and moving the gutter
+    // outward would have cost it another 8px.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+      child: PopupMenuButton<String>(
+        // What the narrowed-to context is *for*, where there is nowhere to draw
+        // it: the bar is one line and the name has to carry it. It is also the
+        // control's accessible name, so Narrator reads the same words.
+        tooltip: current?.description == null
+            ? 'Filter projects by context'
+            : '${current!.name} — ${current.description}',
+        position: PopupMenuPosition.under,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        itemBuilder: (context) => [
           DesktopMenuItem(
-            value: _unassigned,
-            label: 'No context',
-            icon: AppIcons.minusCircle,
-            selected: scope.unassignedOnly,
+            value: _all,
+            label: 'All projects',
+            icon: AppIcons.folders,
+            selected: scope.isAll,
           ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: _manage,
-          label: workspaces.isEmpty ? 'New context' : 'Manage contexts',
-          icon: AppIcons.gearSix,
-        ),
-      ],
-      onSelected: (value) {
-        final controller = ref.read(workspaceScopeProvider.notifier);
-        switch (value) {
-          case _manage:
-            WorkspacesDialog.show(context);
-          case _all:
-            controller.select(WorkspaceScope.all);
-          case _unassigned:
-            controller.select(WorkspaceScope.unassigned);
-          default:
-            controller.select(WorkspaceScope.of(value));
-        }
-      },
-      child: Container(
-        height: Chrome.row,
-        padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-        alignment: Alignment.centerLeft,
-        child: Row(
-          children: [
-            Icon(
-              narrowed ? AppIcons.folder : AppIcons.treeStructure,
-              size: Chrome.icon,
-              // The one accent, and only while the list is actually narrowed: a
-              // filter you have forgotten is on is why a project looks lost.
-              color: narrowed ? scheme.primary : scheme.onSurfaceVariant,
+          if (workspaces.isNotEmpty) const DesktopMenuDivider(),
+          for (final workspace in workspaces)
+            // Two lines, because a name alone does not say what a context is
+            // for — and the answer, or its size when nobody has said, is
+            // exactly one short line long.
+            DesktopMenuDetailItem(
+              value: workspace.id,
+              label: workspace.name,
+              detail: describeWorkspace(
+                workspace,
+                projectCount: counts[workspace.id] ?? 0,
+              ),
+              detailMaxLines: 1,
+              icon: AppIcons.stack,
+              selected: scope.workspaceId == workspace.id,
             ),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: narrowed ? scheme.primary : scheme.onSurface,
-                  fontWeight: narrowed ? FontWeight.w600 : null,
+          if (workspaces.isNotEmpty)
+            DesktopMenuItem(
+              value: _unassigned,
+              label: 'No context',
+              icon: AppIcons.minusCircle,
+              selected: scope.unassignedOnly,
+            ),
+          const DesktopMenuDivider(),
+          // The only door to managing contexts in the whole app — the command
+          // palette selects one but cannot create or rename one — so it stays
+          // here rather than folding into a surface that already has three.
+          DesktopMenuItem(
+            value: _manage,
+            label: workspaces.isEmpty ? 'New context' : 'Manage contexts',
+            icon: AppIcons.gearSix,
+          ),
+        ],
+        onSelected: (value) {
+          final controller = ref.read(workspaceScopeProvider.notifier);
+          switch (value) {
+            case _manage:
+              WorkspacesDialog.show(context);
+            case _all:
+              controller.select(WorkspaceScope.all);
+            case _unassigned:
+              controller.select(WorkspaceScope.unassigned);
+            default:
+              controller.select(WorkspaceScope.of(value));
+          }
+        },
+        child: Container(
+          height: Chrome.row,
+          padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Icon(
+                glyph,
+                size: Chrome.icon,
+                // The one accent, and only while the list is actually narrowed:
+                // a filter you have forgotten is on is why a project looks
+                // lost.
+                color: narrowed ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: narrowed ? scheme.primary : scheme.onSurface,
+                    fontWeight: narrowed ? FontWeight.w600 : null,
+                  ),
                 ),
               ),
-            ),
-            Icon(
-              AppIcons.caretDown,
-              size: Chrome.icon,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
+              Icon(
+                AppIcons.caretDown,
+                size: Chrome.icon,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

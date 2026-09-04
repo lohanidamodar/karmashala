@@ -107,7 +107,7 @@ List<PopupMenuEntry<ProjectScope>> projectScopeMenuItems(
   DesktopMenuItem(
     value: ProjectScope.all,
     label: 'All projects',
-    icon: AppIcons.treeStructure,
+    icon: AppIcons.folders,
     selected: selected.isAll,
   ),
   DesktopMenuItem(
