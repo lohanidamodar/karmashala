@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/logging/app_logger.dart';
 import '../../core/process/command_runner_providers.dart';
+import '../../core/util/clock_provider.dart';
 import '../agents/application/agent_hook_intake.dart';
 import '../agents/application/agent_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
@@ -52,6 +53,7 @@ import 'control_server_status.dart';
 import 'device_tools.dart';
 import 'handshake_file_permissions.dart';
 import 'instructions_tools.dart';
+import 'launch_dedupe.dart';
 import 'launcher_mcp.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
@@ -252,6 +254,21 @@ class LauncherControlServer implements SessionMcp {
     _container,
     _callers,
     logger: _logger,
+  );
+
+  /// One agent per request, however many times the request arrives.
+  ///
+  /// A launch outlives the MCP client's own patience: on a repository under
+  /// `/mnt/c`, creating a worktree alone takes longer than the 60s Claude Code
+  /// waits, so it timed out and re-sent `open_new_session` verbatim — and a
+  /// second real agent started. Nothing in that retry marks it as one, so the
+  /// request itself is the key. See [LaunchDedupe].
+  late final LaunchDedupe _launches = LaunchDedupe(
+    clock: _container.read(clockProvider),
+    onCollapsed: (tool) => _logger.warning(
+      'A repeat $tool was collapsed onto the identical launch already made; '
+      'nothing new was started. The caller most likely timed out and retried.',
+    ),
   );
 
   /// The MCP endpoint URL for an unattributed caller, or null when nothing is
@@ -1044,7 +1061,28 @@ class LauncherControlServer implements SessionMcp {
   bool _constantTimeEquals(String? actual, String expected) =>
       constantTimeEquals(actual, expected);
 
+  /// One RPC, guarded against being made twice.
+  ///
+  /// Only the tools that start something go through the ledger — everything
+  /// else is a read, or a write already safe to repeat, and collapsing those
+  /// would answer a genuine second call with a stale result.
   Future<Object?> _dispatch(
+    String? tool,
+    Map<String, dynamic> args, [
+    String? callerSessionId,
+  ]) {
+    if (tool != null && startsAnAgent(tool, args)) {
+      return _launches.run(
+        tool: tool,
+        arguments: args,
+        callerSessionId: callerSessionId,
+        start: () => _invoke(tool, args, callerSessionId),
+      );
+    }
+    return _invoke(tool, args, callerSessionId);
+  }
+
+  Future<Object?> _invoke(
     String? tool,
     Map<String, dynamic> args, [
     String? callerSessionId,
