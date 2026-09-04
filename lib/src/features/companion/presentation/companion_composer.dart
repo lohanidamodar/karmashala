@@ -10,7 +10,7 @@ import '../client/companion_gateway.dart';
 class CompanionComposer extends StatefulWidget {
   const CompanionComposer({
     required this.onSend,
-    this.hintText = 'Message the agent…',
+    this.hintText = 'Send a message…',
     this.enabled = true,
     this.controller,
     super.key,
@@ -117,47 +117,84 @@ class _CompanionComposerState extends State<CompanionComposer> {
           child: Container(
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(24),
+              // A capsule the height of the target floor, derived from it
+              // rather than picked: the pill stays a capsule at one line and
+              // reads as a rounded card once the text grows past it.
+              borderRadius: BorderRadius.circular(Touch.target / 2),
               border: Border.all(
                 color: scheme.outlineVariant.withValues(alpha: 0.6),
               ),
             ),
-            padding: const EdgeInsets.only(left: 14, right: 4, top: 4, bottom: 4),
+            padding: const EdgeInsets.only(
+              left: Insets.md,
+              right: Insets.xs,
+              top: Insets.xs,
+              bottom: Insets.xs,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: TextField(
-                      controller: _input,
-                      enabled: canType,
-                      minLines: 1,
-                      maxLines: 5,
-                      // The keyboard's own key has to submit, and on Android
-                      // the *input type* is what decides that: an IME reads
-                      // `multiline` as "this field takes newlines" and draws
-                      // Return instead of the action key, so `onSubmitted` is
-                      // never called and the send lands as a line break —
-                      // "it only types the message but don't send".
-                      // `TextField` picks that type for itself for any
-                      // `maxLines != 1`, so the single-line type is named
-                      // here: the box still grows to [maxLines], and Enter is
-                      // Send. The desktop composer answers the same problem
-                      // the other way, intercepting a hardware Enter, which
-                      // is a key a soft keyboard does not deliver.
-                      keyboardType: TextInputType.text,
-                      textInputAction: TextInputAction.send,
-                      focusNode: _focus,
-                      onSubmitted: (_) => _send(),
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        hintText: widget.hintText,
-                        hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        ),
+                  child: TextField(
+                    controller: _input,
+                    enabled: canType,
+                    minLines: 1,
+                    maxLines: 5,
+                    // The keyboard's own key has to submit, and on Android
+                    // the *input type* is what decides that: an IME reads
+                    // `multiline` as "this field takes newlines" and draws
+                    // Return instead of the action key, so `onSubmitted` is
+                    // never called and the send lands as a line break —
+                    // "it only types the message but don't send".
+                    // `TextField` picks that type for itself for any
+                    // `maxLines != 1`, so the single-line type is named
+                    // here: the box still grows to [maxLines], and Enter is
+                    // Send. The desktop composer answers the same problem
+                    // the other way, intercepting a hardware Enter, which
+                    // is a key a soft keyboard does not deliver.
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.send,
+                    focusNode: _focus,
+                    onSubmitted: (_) => _send(),
+                    // Named rather than inherited, because the hint has to
+                    // match it: the box's default is `bodyLarge` (16) and
+                    // the hint was `bodyMedium` (14), so the field's text
+                    // changed size the moment anything was typed into it.
+                    style: theme.textTheme.bodyLarge,
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      // `filled: true` in the app's `inputDecorationTheme`
+                      // still paints with `border: InputBorder.none` — the
+                      // none-border's outer path is a plain rect — so a
+                      // hard-edged `surfaceContainerLowest` box was sitting
+                      // inside the rounded pill. The pill is the surface.
+                      filled: false,
+                      isDense: true,
+                      // Measured at 390x844: `EdgeInsets.zero` here made the
+                      // field **24px** tall inside an 83px bar — half the
+                      // touch floor, on the one control the whole screen
+                      // exists for, and the "prompt field is very small"
+                      // report. A 16px line plus this padding is exactly
+                      // [Touch.target], so the box is a target by
+                      // construction rather than by whatever the text
+                      // happened to measure.
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: Insets.md,
+                      ),
+                      // Short enough to be one line at 16px on a 390px
+                      // phone: 'Message the agent…' measures 297 against the
+                      // 276 the field gets there, so it wrapped, and a
+                      // two-line placeholder made the bar 24px taller than
+                      // the box it was labelling. A refusal is a sentence and
+                      // still wraps, which is right — that one has to be read
+                      // rather than glanced at.
+                      hintText: widget.hintText,
+                      // No alpha on the muted grey: `onSurfaceVariant` at
+                      // 70% on `surfaceContainerLow` measures about 3:1,
+                      // under the 4.5:1 body-text floor, and this hint is
+                      // the field's only label.
+                      hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ),

@@ -1,5 +1,7 @@
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/features/companion/presentation/companion_composer.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -150,6 +152,83 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(fake.sentPrompts, isEmpty);
+    });
+  });
+
+  // --- The box a thumb writes in --------------------------------------------
+  //
+  // The owner, of the desktop's: "message enter prompt field is very small and
+  // too much spacing". The phone's had the same shape of problem for a
+  // different reason — measured at 390x844, `contentPadding: EdgeInsets.zero`
+  // left the field **24px** tall inside an 83px bar, so the control the whole
+  // screen exists for was half the touch floor while the bar around it was
+  // not.
+  group('the message box is a target, not a strip', () {
+    for (final (name, size) in [
+      ('phone', kPhoneSize),
+      ('tablet', kTabletSize),
+    ]) {
+      testWidgets('$name: the field clears the touch floor', (tester) async {
+        await pumpPhone(
+          tester,
+          gateway: gateway(),
+          home: const SessionViewScreen(sessionId: 's1'),
+          size: size,
+        );
+
+        final field = find.byType(TextField);
+        expect(
+          tester.getSize(field).height,
+          greaterThanOrEqualTo(Touch.target),
+          reason: 'tapping the box has to be as easy as tapping Send',
+        );
+        // And the box is the tall thing in the bar, not the chrome around it.
+        final bar = tester.getSize(find.byType(CompanionComposer));
+        expect(
+          tester.getSize(field).height * 2,
+          greaterThan(bar.height),
+          reason: 'more than half the composer is the field itself',
+        );
+      });
+    }
+
+    testWidgets('the hint is the size of the text that replaces it', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      // The hint was a step down the ramp from the typed text, so the field's
+      // text changed size the moment anything was typed into it.
+      expect(
+        field.decoration?.hintStyle?.fontSize,
+        field.style?.fontSize,
+      );
+      // Not the app's smallest step, either: this is read at arm's length.
+      final theme = Theme.of(tester.element(find.byType(TextField)));
+      expect(field.style?.fontSize, theme.textTheme.bodyLarge?.fontSize);
+    });
+
+    testWidgets('the pill is the only surface the box paints on', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+
+      // `inputDecorationTheme` sets `filled: true`, and a filled decoration
+      // still paints under `InputBorder.none` — its outer path is a plain
+      // rect — which put a hard-edged box inside the rounded capsule.
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).decoration?.filled,
+        isFalse,
+      );
     });
   });
 }

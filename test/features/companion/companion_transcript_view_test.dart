@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
@@ -369,6 +370,85 @@ void main() {
       expect(
         find.textContaining('their terminal is the session'),
         findsOneWidget,
+      );
+    });
+  });
+
+  // --- What a message spends its height on ---------------------------------
+  //
+  // Measured at 390x844: a copy `IconButton` at the touch floor made every
+  // tile's gutter 48px tall to carry an 11px label, so a one-line message
+  // spent 72px of the list on 20px of text and three of them took a fifth of
+  // the transcript viewport on chrome.
+  group('a message spends its height on its text', () {
+    const three = [
+      CompanionChatMessage(role: 'user', text: 'one'),
+      CompanionChatMessage(role: 'agent', text: 'two'),
+      CompanionChatMessage(role: 'tool', text: 'three'),
+    ];
+
+    Size gutterOf(WidgetTester tester, String label) => tester.getSize(
+      find.ancestor(of: find.text(label), matching: find.byType(Row)).first,
+    );
+
+    for (final (name, size) in [
+      ('phone', kPhoneSize),
+      ('tablet', kTabletSize),
+    ]) {
+      testWidgets('$name: the gutter is sized by its label', (tester) async {
+        await pumpPhone(
+          tester,
+          gateway: gatewayWith(three),
+          home: const SessionViewScreen(sessionId: 's1'),
+          size: size,
+        );
+        await tester.pump();
+
+        for (final label in ['YOU', 'AGENT', 'TOOL']) {
+          expect(
+            gutterOf(tester, label).height,
+            lessThan(Touch.target),
+            reason: '$label: a row of chrome must not cost a whole target',
+          );
+        }
+      });
+    }
+
+    testWidgets('every message is still selectable, which is the copy', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: gatewayWith(three),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      // What the copy button was for. `MarkdownMessage` is already
+      // `selectable: true` and its own long press raises the platform's
+      // selection toolbar — a target the system draws, at its own sizes —
+      // so a tool row is selectable too rather than being the one role a
+      // reader cannot get text out of.
+      expect(find.byType(SelectableText), findsWidgets);
+    });
+
+    testWidgets('message text is not the app\'s smallest step', (tester) async {
+      await pumpPhone(
+        tester,
+        gateway: gatewayWith(three),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      final theme = Theme.of(tester.element(find.byType(ListView)));
+      final tool = tester.widget<SelectableText>(
+        find.widgetWithText(SelectableText, 'three'),
+      );
+      expect(
+        tool.style?.fontSize,
+        theme.textTheme.bodyMedium?.fontSize,
+        reason: 'a tool row was `bodySmall`, the ramp\'s 12, on the phone\'s '
+            'most-read screen',
       );
     });
   });

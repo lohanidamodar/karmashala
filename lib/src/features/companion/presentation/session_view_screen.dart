@@ -137,7 +137,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
               controller: _composer,
               enabled: canPrompt,
               hintText: canPrompt
-                  ? 'Message the agent…'
+                  ? 'Send a message…'
                   : 'This phone was not granted prompt rights.',
               onSend: (text) => gateway.sendPrompt(sessionId, text),
             ),
