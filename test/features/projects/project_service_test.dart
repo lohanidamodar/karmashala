@@ -37,7 +37,8 @@ void main() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv(id: localHostEnvironmentId))
-      ..upsert(wslEnv());
+      ..upsert(wslEnv())
+      ..upsert(sshEnvFixture());
     projectDao = ProjectDao(db);
     repositoryDao = RepositoryDao(db);
     discovery = FakeRepositoryDiscoveryService();
@@ -259,7 +260,10 @@ void main() {
       expect(runner.requests.length, 1);
       expect(runner.requests.first.executable, 'sh');
       expect(runner.requests.first.arguments.last, contains('git clone'));
-      expect(runner.requests.first.arguments.last, contains('~/karmashala/my-repo'));
+      expect(
+        runner.requests.first.arguments.last,
+        contains("TARGET=\"\$HOME\"/'karmashala/my-repo'"),
+      );
     });
 
     test('verifies remote folder existence when git repo is not provided', () async {
@@ -300,4 +304,3 @@ void main() {
     });
   });
 }
-

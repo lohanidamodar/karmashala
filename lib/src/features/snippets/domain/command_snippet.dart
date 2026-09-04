@@ -131,6 +131,7 @@ String shellTagLabel(String? shellId) => switch (shellId) {
   'commandPrompt' => 'Command Prompt',
   'wsl' => 'WSL',
   'posix' => 'POSIX shell',
+  'ssh' => 'SSH',
   // A tag from a build that knew more shells than this one. Shown as itself
   // rather than hidden: the library dialog is where it gets fixed.
   final other => other,

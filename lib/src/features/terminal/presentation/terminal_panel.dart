@@ -79,6 +79,9 @@ class TerminalActions {
         .read(executionEnvironmentDaoProvider)
         .getById(repo.path.environmentId);
     final repoIsWindows = env?.kind == EnvironmentKind.windowsNative;
+    if (profile.shell == TerminalShell.ssh) {
+      return env?.sshHostId == profile.sshHostId ? repo.path.path : null;
+    }
     if (profile.shell == TerminalShell.wsl) return repo.path.path;
     return repoIsWindows ? repo.path.path : null;
   }

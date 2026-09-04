@@ -50,12 +50,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('an SSH environment is not offered as a target', (tester) async {
+  testWidgets('an SSH environment is offered as a target', (tester) async {
     await pumpDialog(tester);
 
-    // `PathTranslator` refuses Windows ⇄ SSH by design, so an SSH row could
-    // only ever get as far as `_create()` and come back as a raw exception.
-    expect(find.textContaining('build-box'), findsNothing);
+    expect(find.text('SSH · build-box'), findsOneWidget);
   });
 
   testWidgets('WSL rows are labelled WSL and Windows is labelled Windows', (

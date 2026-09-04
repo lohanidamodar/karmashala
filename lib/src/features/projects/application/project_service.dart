@@ -203,10 +203,14 @@ class ProjectService {
       final runner = runnerFactory!.forEnvironment(target);
       if (target.kind == EnvironmentKind.ssh ||
           target.kind == EnvironmentKind.wsl) {
-        final posixEscaped = "'${path.replaceAll("'", r"'\''")}'";
+        final targetExpression = path == '~'
+            ? r'"$HOME"'
+            : path.startsWith('~/')
+            ? '${r'"$HOME"'}/${_posixQuote(path.substring(2))}'
+            : _posixQuote(path);
         final cloneEscaped = "'${url.replaceAll("'", r"'\''")}'";
         final cloneScript = '''
-TARGET=$posixEscaped
+TARGET=$targetExpression
 if [ -d "\$TARGET/.git" ]; then
   echo "EXISTS"
 else
@@ -333,6 +337,9 @@ cd "\$TARGET" && pwd
 
     return ProjectCreationResult(project: project, repositories: repositories);
   }
+
+  static String _posixQuote(String value) =>
+      "'${value.replaceAll("'", r"'\''")}'";
 
   /// Re-runs discovery for an existing [project] and persists any repositories
   /// not already recorded. Returns the newly added rows.

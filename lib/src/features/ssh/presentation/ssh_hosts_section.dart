@@ -72,11 +72,9 @@ class _HostCard extends ConsumerWidget {
 
     void openTerminal() {
       ref.read(terminalSessionsControllerProvider.notifier).openTab(
-            profile: TerminalProfile.ssh(
-              host.id,
-              hostName: host.name,
-            ),
-          );
+        TerminalProfile.ssh(host.id, hostName: host.name),
+        workingDirectory: host.defaultDirectory?.path,
+      );
       ref.read(terminalVisibleProvider.notifier).set(true);
     }
 
@@ -188,7 +186,7 @@ class _HostCard extends ConsumerWidget {
                 children: [
                   FilledButton.tonalIcon(
                     onPressed: openTerminal,
-                    icon: const Icon(AppIcons.terminal, size: 16),
+                    icon: const Icon(AppIcons.terminal),
                     label: const Text('Terminal'),
                   ),
                   TextButton.icon(
@@ -196,23 +194,23 @@ class _HostCard extends ConsumerWidget {
                       context,
                       initialEnvironmentId: host.environmentId,
                     ),
-                    icon: const Icon(AppIcons.folderPlus, size: 16),
+                    icon: const Icon(AppIcons.folderPlus),
                     label: const Text('New project'),
                   ),
                   TextButton.icon(
                     onPressed: () =>
                         RemoteFileBrowserDialog.show(context, host: host),
-                    icon: const Icon(AppIcons.folderOpen, size: 16),
+                    icon: const Icon(AppIcons.folderOpen),
                     label: const Text('Browse files'),
                   ),
                   TextButton.icon(
                     onPressed: () => SshHostDialog.show(context, existing: host),
-                    icon: const Icon(AppIcons.pencilSimple, size: 16),
+                    icon: const Icon(AppIcons.pencilSimple),
                     label: const Text('Edit'),
                   ),
                   TextButton.icon(
                     onPressed: () => _remove(context, ref),
-                    icon: const Icon(AppIcons.trash, size: 16),
+                    icon: const Icon(AppIcons.trash),
                     label: const Text('Remove'),
                     style: TextButton.styleFrom(
                       foregroundColor: theme.colorScheme.error,

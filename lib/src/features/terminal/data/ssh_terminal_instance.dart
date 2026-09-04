@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
@@ -15,7 +14,7 @@ import '../domain/enter_key_encoding.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/osc_router.dart';
 import '../domain/pane_liveness.dart';
-import '../domain/working_directory_osc.dart';
+import '../domain/scrollback_limits.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'pty_output_coalescer.dart';
@@ -29,21 +28,28 @@ import 'terminal_instance.dart';
 /// a tmux session. When the terminal is closed locally (or the SSH connection
 /// drops), the tmux session detaches and stays running remotely. Re-opening
 /// the session attaches back to the running tmux session.
-class SshTerminalInstance implements TerminalInstance {
+class SshTerminalInstance
+    implements
+        TerminalInstance,
+        ReapableTerminalInstance,
+        TieredTerminalInstance,
+        ParkableTerminalInstance,
+        AdoptableTerminalInstance {
   SshTerminalInstance({
     required this.id,
     required this.title,
     required this.profileId,
     required this.host,
     required this.connection,
-    this.workingDirectory,
+    String? workingDirectory,
     this.agentLaunch,
     this.adoptTerminal,
     String? restoredScrollback,
+    TerminalIngestBudget? ingestBudget,
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('terminal.ssh'),
-       _cwd = WorkingDirectoryTracker(workingDirectory) {
-    terminal = adoptTerminal ?? Terminal(maxLines: kDefaultTerminalMaxLines)
+       _cwd = WorkingDirectoryTracker(workingDirectory, hostname: host.host) {
+    terminal = adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines)
       ..inputHandler = const KarmashalaInputHandler()
       ..onPrivateOSC = _osc.dispatch
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
@@ -121,7 +127,7 @@ class SshTerminalInstance implements TerminalInstance {
   CommandBlockRecorder? commandBlocks;
 
   final ValueNotifier<PaneLiveness> _liveness = ValueNotifier(
-    PaneLiveness.running,
+    PaneLiveness.live,
   );
 
   @override
@@ -143,6 +149,7 @@ class SshTerminalInstance implements TerminalInstance {
   StreamSubscription<List<int>>? _stdoutSubscription;
   StreamSubscription<List<int>>? _stderrSubscription;
   bool _disposed = false;
+  bool _exited = false;
   Completer<void>? _reap;
 
   @override
@@ -150,8 +157,18 @@ class SshTerminalInstance implements TerminalInstance {
 
   void _recordGreeting(String submitted) {
     if (_greetingLines != null || !submitted.contains('\r')) return;
-    _greetingLines = terminalNonBlankLines(terminal);
+    _greetingLines = nonBlankLineCount(terminal);
   }
+
+  @override
+  IngestTier get ingestTier => _tier;
+
+  @override
+  String? get parkedScrollback => _cold.parkedScrollback;
+
+  @override
+  Terminal? get adoptableBuffer =>
+      _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
 
   void _onDataBytes(List<int> bytes) {
     if (_disposed) return;
@@ -193,6 +210,7 @@ class SshTerminalInstance implements TerminalInstance {
       client = await connection.client();
     } on Object catch (e) {
       if (_disposed) return;
+      _exited = true;
       _emit('\r\n\x1b[31mCould not connect to ${host.address}: $e\x1b[0m\r\n');
       _liveness.value = PaneLiveness.exited;
       return;
@@ -225,6 +243,7 @@ class SshTerminalInstance implements TerminalInstance {
 
       unawaited(
         session.done.then((_) {
+          _exited = true;
           if (_disposed) return;
           final code = session.exitCode ?? 0;
           _exitCode = code;
@@ -234,6 +253,7 @@ class SshTerminalInstance implements TerminalInstance {
       );
     } on Object catch (e) {
       if (_disposed) return;
+      _exited = true;
       _logger.error('Failed to start remote session on ${host.address}: $e');
       _emit('\r\n\x1b[31mFailed to start remote session: $e\x1b[0m\r\n');
       _liveness.value = PaneLiveness.exited;
@@ -242,58 +262,12 @@ class SshTerminalInstance implements TerminalInstance {
 
   /// Builds the remote shell script that detects `tmux` and either starts or
   /// reattaches to a tmux session, or falls back to standard execution.
-  String _buildRemoteScript() {
-    final tmuxSessionName = _sanitizedTmuxName();
-    final cwd = workingDirectory?.trim();
-    final cdSnippet = (cwd != null && cwd.isNotEmpty)
-        ? 'cd ${_posixQuote(cwd)} 2>/dev/null || true'
-        : '';
-
-    final launch = agentLaunch;
-    if (launch != null) {
-      final cmdParts = [launch.executable, ...launch.commandArguments];
-      final rawCommand = cmdParts.map(_posixQuote).join(' ');
-      final agentRunCommand = (cwd != null && cwd.isNotEmpty)
-          ? 'cd ${_posixQuote(cwd)} && exec $rawCommand'
-          : 'exec $rawCommand';
-
-      return '''
-$cdSnippet
-TMUX_SESSION="$tmuxSessionName"
-if command -v tmux >/dev/null 2>&1; then
-  if tmux has-session -t "\$TMUX_SESSION" 2>/dev/null; then
-    exec tmux attach-session -t "\$TMUX_SESSION"
-  else
-    exec tmux new-session -s "\$TMUX_SESSION" ${cwd != null && cwd.isNotEmpty ? '-c ${_posixQuote(cwd)}' : ''} ${_posixQuote(agentRunCommand)}
-  fi
-else
-  $agentRunCommand
-fi
-''';
-    }
-
-    // Interactive general shell:
-    return '''
-$cdSnippet
-TMUX_SESSION="$tmuxSessionName"
-if command -v tmux >/dev/null 2>&1; then
-  exec tmux new-session -A -s "\$TMUX_SESSION" ${cwd != null && cwd.isNotEmpty ? '-c ${_posixQuote(cwd)}' : ''}
-else
-  exec "\${SHELL:-bash}" -l
-fi
-''';
-  }
-
-  String _sanitizedTmuxName() {
-    final raw = agentLaunch?.sessionId != null
-        ? 'karmashala_${agentLaunch!.sessionId}'
-        : 'karmashala_${host.id}_shell';
-    // Tmux session names cannot contain dots or colons:
-    return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-  }
-
-  static String _posixQuote(String value) =>
-      "'${value.replaceAll("'", r"'\''")}'";
+  String _buildRemoteScript() => buildSshTerminalScript(
+    paneId: id,
+    hostId: host.id,
+    workingDirectory: workingDirectory,
+    agentLaunch: agentLaunch,
+  );
 
   @override
   void dispose() {
@@ -323,3 +297,75 @@ fi
     }
   }
 }
+
+/// Builds the command handed to the remote login shell.
+///
+/// Kept pure so quoting and tmux identity can be verified without opening a
+/// socket. SSH transmits one command string, so every dynamic value must cross
+/// the shell boundary through [_posixQuote].
+@visibleForTesting
+String buildSshTerminalScript({
+  required String paneId,
+  required String hostId,
+  String? workingDirectory,
+  AgentPaneLaunch? agentLaunch,
+}) {
+  final cwd = workingDirectory?.trim();
+  final hasCwd = cwd != null && cwd.isNotEmpty;
+  final tmuxSessionName = _sshTmuxSessionName(
+    paneId: paneId,
+    hostId: hostId,
+    agentSessionId: agentLaunch?.sessionId,
+  );
+  final cdSnippet = hasCwd
+      ? 'cd ${_posixQuote(cwd)} 2>/dev/null || true'
+      : '';
+
+  if (agentLaunch case final launch?) {
+    final cmdParts = [launch.executable, ...launch.commandArguments];
+    final rawCommand = cmdParts.map(_posixQuote).join(' ');
+    final agentRunCommand = hasCwd
+        ? 'cd ${_posixQuote(cwd)} && exec $rawCommand'
+        : 'exec $rawCommand';
+
+    return '''
+$cdSnippet
+TMUX_SESSION="$tmuxSessionName"
+if command -v tmux >/dev/null 2>&1; then
+  if tmux has-session -t "\$TMUX_SESSION" 2>/dev/null; then
+    exec tmux attach-session -t "\$TMUX_SESSION"
+  else
+    exec tmux new-session -s "\$TMUX_SESSION" ${hasCwd ? '-c ${_posixQuote(cwd)}' : ''} ${_posixQuote(agentRunCommand)}
+  fi
+else
+  $agentRunCommand
+fi
+''';
+  }
+
+  return '''
+$cdSnippet
+TMUX_SESSION="$tmuxSessionName"
+if command -v tmux >/dev/null 2>&1; then
+  exec tmux new-session -A -s "\$TMUX_SESSION" ${hasCwd ? '-c ${_posixQuote(cwd)}' : ''}
+else
+  exec "\${SHELL:-bash}" -l
+fi
+''';
+}
+
+String _sshTmuxSessionName({
+  required String paneId,
+  required String hostId,
+  String? agentSessionId,
+}) {
+  // A session id keeps an agent attached to its remote process across local
+  // pane replacement. A pane id gives each plain shell its own tmux session;
+  // using only the host id made every terminal on one host share input.
+  final raw = agentSessionId != null
+      ? 'karmashala_$agentSessionId'
+      : 'karmashala_${hostId}_$paneId';
+  return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+}
+
+String _posixQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";

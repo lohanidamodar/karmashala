@@ -124,9 +124,10 @@ class LocalRepositoryDiscoveryService implements RepositoryDiscoveryService {
   }
 }
 
-/// A [RepositoryDiscoveryService] that routes discovery to [LocalRepositoryDiscoveryService]
-/// for local/WSL environments, and runs remote discovery via [CommandRunner] for SSH environments.
-class EnvironmentAwareRepositoryDiscoveryService implements RepositoryDiscoveryService {
+/// A [RepositoryDiscoveryService] that uses the local filesystem for host
+/// paths and a command runner for POSIX paths in WSL and SSH environments.
+class EnvironmentAwareRepositoryDiscoveryService
+    implements RepositoryDiscoveryService {
   const EnvironmentAwareRepositoryDiscoveryService({
     required this.localDiscovery,
     required this.runnerFactory,
@@ -143,24 +144,32 @@ class EnvironmentAwareRepositoryDiscoveryService implements RepositoryDiscoveryS
     int maxDepth = 5,
   }) async {
     final env = environments.getById(root.environmentId);
-    if (env != null && env.kind == EnvironmentKind.ssh) {
-      return _discoverSsh(root, env, maxDepth: maxDepth);
+    if (env != null &&
+        (env.kind == EnvironmentKind.ssh || env.kind == EnvironmentKind.wsl)) {
+      return _discoverPosix(root, env, maxDepth: maxDepth);
     }
     return localDiscovery.discover(root, maxDepth: maxDepth);
   }
 
-  Future<List<DiscoveredRepository>> _discoverSsh(
+  Future<List<DiscoveredRepository>> _discoverPosix(
     EnvironmentPath root,
     ExecutionEnvironment env, {
     int maxDepth = 5,
   }) async {
     final runner = runnerFactory.forEnvironment(env);
+    final findDepth = maxDepth < 0 ? 1 : maxDepth + 1;
     final escaped = "'${root.path.replaceAll("'", r"'\''")}'";
+    final skipped = _skippedDirectories
+        .map((name) => '-name ${_posixQuote(name)}')
+        .join(' -o ');
+    final prune = r'\( -type d \( ' + skipped + r' \) -prune \) -o';
     final script = '''
-if [ -e $escaped/.git ]; then
-  echo $escaped
+ROOT=$escaped
+if [ ! -d "\$ROOT" ]; then
+  echo "Repository root does not exist: \$ROOT" >&2
+  exit 2
 fi
-find $escaped -maxdepth $maxDepth -name .git 2>/dev/null
+find "\$ROOT" -maxdepth $findDepth $prune -name .git -print
 ''';
     final result = await runner.run(
       CommandRequest(
@@ -168,6 +177,14 @@ find $escaped -maxdepth $maxDepth -name .git 2>/dev/null
         arguments: ['-c', script],
       ),
     );
+    if (!result.ok) {
+      final detail = result.stderr.trim();
+      throw RepositoryDiscoveryException(
+        detail.isEmpty
+            ? 'Could not scan ${root.path} in ${env.name}.'
+            : detail,
+      );
+    }
 
     final seen = <String>{};
     final found = <DiscoveredRepository>[];
@@ -198,4 +215,6 @@ find $escaped -maxdepth $maxDepth -name .git 2>/dev/null
     found.sort((a, b) => a.path.path.compareTo(b.path.path));
     return found;
   }
+  static String _posixQuote(String value) =>
+      "'${value.replaceAll("'", r"'\''")}'";
 }

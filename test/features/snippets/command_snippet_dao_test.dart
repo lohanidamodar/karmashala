@@ -158,17 +158,7 @@ void main() {
       }
     });
 
-    test('there is no SSH pane for an SSH tag to be about', () {
-      // The whole answer to "what does an SSH pane see". A pane is launched
-      // from a `TerminalProfile`, and `terminalProfilesFor` never makes one for
-      // an SSH environment — `EnvironmentKind.ssh` belongs to sessions and
-      // commands, not to a PTY. So an SSH tag would be a tag no pane could
-      // match, and someone who types `ssh` *inside* a pane has changed the far
-      // end in a way nothing here observes, which is exactly when an untagged
-      // snippet is the honest answer.
-      //
-      // If an SSH profile is ever added, this fails and forces the tag question
-      // to be answered rather than silently defaulting.
+    test('an SSH environment contributes a real SSH pane and tag', () {
       final profiles = terminalProfilesFor([
         windowsEnv(),
         sshEnvFixture(),
@@ -177,10 +167,15 @@ void main() {
 
       expect(
         profiles.map((p) => p.shell).toSet(),
-        {TerminalShell.powerShell, TerminalShell.commandPrompt,
-          TerminalShell.wsl},
+        {
+          TerminalShell.powerShell,
+          TerminalShell.commandPrompt,
+          TerminalShell.wsl,
+          TerminalShell.ssh,
+        },
       );
-      expect(TerminalShell.values, hasLength(4));
+      expect(TerminalShell.values, hasLength(5));
+      expect(shellTagLabel(TerminalShell.ssh.name), 'SSH');
     });
   });
 

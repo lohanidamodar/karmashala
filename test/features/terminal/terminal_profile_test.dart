@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/terminal/data/ssh_terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 
@@ -134,6 +136,85 @@ void main() {
       expect(restored.sshHostId, 'server1');
       expect(restored.id, 'ssh:server1');
     });
+
+    test('an SSH profile is never reinterpreted as a local launch', () {
+      expect(
+        () => LaunchContext.forProfile(
+          TerminalProfile.ssh('server1'),
+          hostIsWindows: true,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => LaunchContext.forProfile(
+          TerminalProfile.ssh('server1'),
+          hostIsWindows: false,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('SSH terminal commands', () {
+    test('plain panes on one host use distinct persistent tmux sessions', () {
+      final first = buildSshTerminalScript(paneId: 'pane-1', hostId: 'host:1');
+      final second = buildSshTerminalScript(paneId: 'pane-2', hostId: 'host:1');
+
+      expect(first, contains('TMUX_SESSION="karmashala_host_1_pane-1"'));
+      expect(second, contains('TMUX_SESSION="karmashala_host_1_pane-2"'));
+      expect(first, isNot(second));
+    });
+
+    test('restoring a pane reuses its tmux session', () {
+      final before = buildSshTerminalScript(paneId: 'pane-1', hostId: 'host-1');
+      final restored = buildSshTerminalScript(
+        paneId: 'pane-1',
+        hostId: 'host-1',
+      );
+
+      expect(restored, before);
+    });
+
+    test('agent session identity survives pane replacement', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'codex',
+        executable: 'codex',
+        arguments: ['resume', 'conversation-1'],
+        sessionId: 'session:1',
+      );
+
+      final first = buildSshTerminalScript(
+        paneId: 'old-pane',
+        hostId: 'host-1',
+        agentLaunch: launch,
+      );
+      final replacement = buildSshTerminalScript(
+        paneId: 'new-pane',
+        hostId: 'host-1',
+        agentLaunch: launch,
+      );
+
+      expect(first, contains('TMUX_SESSION="karmashala_session_1"'));
+      expect(replacement, contains('TMUX_SESSION="karmashala_session_1"'));
+    });
+
+    test('quotes remote directories and every agent argument', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'codex',
+        executable: 'code x',
+        arguments: ['run', "hello'; touch /tmp/pwn"],
+        sessionId: 'session-1',
+      );
+
+      final script = buildSshTerminalScript(
+        paneId: 'pane-1',
+        hostId: 'host-1',
+        workingDirectory: "/srv/work dir's",
+        agentLaunch: launch,
+      );
+
+      expect(script, contains(r"cd '/srv/work dir'\''s'"));
+      expect(script, contains("'code x' 'run' 'hello'\\''; touch /tmp/pwn'"));
+    });
   });
 }
-

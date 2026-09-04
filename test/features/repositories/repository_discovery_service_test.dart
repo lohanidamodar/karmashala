@@ -1,9 +1,15 @@
 import 'dart:io';
 
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+import '../../support/fake_command_runner.dart';
+import '../../support/fixtures.dart';
 
 void main() {
   late Directory tmp;
@@ -74,5 +80,96 @@ void main() {
       () => service.discover(rootAt(p.join(tmp.path, 'nope'))),
       throwsA(isA<RepositoryDiscoveryException>()),
     );
+  });
+
+  group('environment-aware discovery', () {
+    late AppDatabase db;
+
+    setUp(() => db = AppDatabase.memory());
+    tearDown(() => db.close());
+
+    EnvironmentAwareRepositoryDiscoveryService remoteService(
+      FakeCommandRunner runner,
+    ) {
+      final remote = sshEnvFixture();
+      final environments = ExecutionEnvironmentDao(db)..upsert(remote);
+      return EnvironmentAwareRepositoryDiscoveryService(
+        localDiscovery: const LocalRepositoryDiscoveryService(),
+        runnerFactory: FakeCommandRunnerFactory(
+          byEnvironmentId: {remote.id: runner},
+        ),
+        environments: environments,
+      );
+    }
+
+    test('one remote scan finds roots and prunes dependency trees', () async {
+      final runner = FakeCommandRunner(
+        environmentId: 'ssh:h1',
+        responder: (_) => const CommandResult(
+          exitCode: 0,
+          stdout: '/srv/work/.git\n'
+              '/srv/work/apps/client/.git\n'
+              '/srv/work/node_modules/vendor/.git\n',
+          stderr: '',
+        ),
+      );
+
+      final found = await remoteService(runner).discover(
+        const EnvironmentPath(environmentId: 'ssh:h1', path: '/srv/work'),
+        maxDepth: 2,
+      );
+
+      expect(found.map((repo) => repo.path.path), [
+        '/srv/work',
+        '/srv/work/apps/client',
+      ]);
+      expect(runner.requests, hasLength(1));
+      final script = runner.requests.single.arguments.last;
+      expect(script, contains('-maxdepth 3'));
+      expect(script, contains("-name 'node_modules'"));
+      expect(script, contains('-prune'));
+    });
+
+    test('a failed remote scan is not mistaken for an empty project', () async {
+      final runner = FakeCommandRunner(
+        environmentId: 'ssh:h1',
+        responder: (_) => const CommandResult(
+          exitCode: 2,
+          stdout: '',
+          stderr: 'Repository root does not exist: /missing',
+        ),
+      );
+
+      await expectLater(
+        remoteService(runner).discover(
+          const EnvironmentPath(
+            environmentId: 'ssh:h1',
+            path: '/missing',
+          ),
+        ),
+        throwsA(isA<RepositoryDiscoveryException>()),
+      );
+      expect(runner.requests, hasLength(1));
+    });
+
+    test('WSL paths are scanned inside their distribution', () async {
+      final environment = wslEnv();
+      final environments = ExecutionEnvironmentDao(db)..upsert(environment);
+      final runner = FakeCommandRunner(environmentId: environment.id);
+      final service = EnvironmentAwareRepositoryDiscoveryService(
+        localDiscovery: const LocalRepositoryDiscoveryService(),
+        runnerFactory: FakeCommandRunnerFactory(
+          byEnvironmentId: {environment.id: runner},
+        ),
+        environments: environments,
+      );
+
+      await service.discover(
+        EnvironmentPath(environmentId: environment.id, path: '/src/work'),
+      );
+
+      expect(runner.requests, hasLength(1));
+      expect(runner.requests.single.executable, 'sh');
+    });
   });
 }

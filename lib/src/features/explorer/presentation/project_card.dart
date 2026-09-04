@@ -378,8 +378,7 @@ class ProjectCard extends StatelessWidget {
             ),
             child: Text(
               environmentBadge!,
-              style: TextStyle(
-                fontSize: 10,
+              style: muted?.copyWith(
                 color: scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),

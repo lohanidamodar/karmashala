@@ -109,6 +109,13 @@ class LaunchContext {
     required bool hostIsWindows,
     String? posixShell,
   }) {
+    if (profile.shell == TerminalShell.ssh) {
+      throw ArgumentError.value(
+        profile.id,
+        'profile',
+        'SSH profiles must be launched by the SSH terminal backend',
+      );
+    }
     if (!hostIsWindows) {
       // The profile's own shell wins over the ambient `$SHELL`: picking zsh in
       // settings has to actually open zsh. Off Windows every profile used to
@@ -127,6 +134,7 @@ class LaunchContext {
       // host. Its shell path means nothing here, so the host default is the
       // honest answer.
       TerminalShell.posix => const LaunchContext.powerShell(),
+      TerminalShell.ssh => throw StateError('handled above'),
     };
   }
 

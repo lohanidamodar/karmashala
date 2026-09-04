@@ -89,6 +89,17 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
               restoredScrollback: restoredScrollback,
             );
           }
+          return ErrorTerminalInstance(
+            id: id,
+            title: agentLaunch?.title ?? 'SSH terminal',
+            profileId: profile.id,
+            message: 'The saved SSH host "$sshHostId" no longer exists.',
+            workingDirectory:
+                workingDirectory ?? agentLaunch?.workingDirectory,
+            agentLaunch: agentLaunch,
+            restoredScrollback: restoredScrollback,
+            adoptTerminal: adoptTerminal,
+          );
         }
 
         return createPtyTerminalInstance(
@@ -2239,6 +2250,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (instance.agentLaunch != null) return const {};
     final profile = terminalProfileFromId(instance.profileId);
     if (profile == null) return const {};
+    // SSH panes do not launch through a local executable. Besides having no
+    // launcher name to suppress, asking `ptyLaunchFor` for one would try to
+    // reinterpret a remote profile as a host process.
+    if (profile.shell == TerminalShell.ssh) return const {};
     final launch = ptyLaunchFor(profile);
     return {
       _basename(launch.executable).toLowerCase(),
