@@ -74,9 +74,9 @@ class AgentHookReceiver {
     // Claude Code's `Notification` payload has a `message`; this used to be
     // decoded for the session id and discarded, which is why an approval could
     // be announced but never explained.
-    final message = spec == null || spec.messagePath.isEmpty
+    final message = spec == null
         ? ''
-        : _stringAt(spec.messagePath, body);
+        : _extractMessage(spec, body, declared);
 
     final report = AgentStatusReport(
       agentId: id,
@@ -94,6 +94,26 @@ class AgentHookReceiver {
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
+  }
+
+  String _extractMessage(
+    AgentHookSpec spec,
+    String body,
+    AgentHookMeaning? declared,
+  ) {
+    final candidatePaths = spec.messagePaths.isNotEmpty
+        ? spec.messagePaths
+        : (spec.messagePath.isNotEmpty
+            ? [spec.messagePath]
+            : const <List<String>>[]);
+    for (final path in candidatePaths) {
+      final text = _stringAt(path, body).trim();
+      if (text.isNotEmpty) return text;
+    }
+    if (declared?.fallbackMessage != null) {
+      return declared!.fallbackMessage!;
+    }
+    return '';
   }
 
   /// What [message] says the agent is waiting on, per [spec]'s own rules.
@@ -127,9 +147,20 @@ class AgentHookReceiver {
       return '';
     }
     for (final segment in path) {
-      if (value is! Map) return '';
-      value = value[segment];
+      if (value is Map) {
+        value = value[segment];
+      } else if (value is List) {
+        final index = int.tryParse(segment);
+        if (index == null || index < 0 || index >= value.length) return '';
+        value = value[index];
+      } else {
+        return '';
+      }
     }
-    return value is String ? value : '';
+    if (value is String) return value;
+    if (value is List && value.isNotEmpty && value.first is String) {
+      return value.first as String;
+    }
+    return '';
   }
 }

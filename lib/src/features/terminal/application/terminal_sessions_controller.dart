@@ -418,6 +418,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     state = _snapshot();
   }
 
+  /// Notifies title providers that an underlying session title changed.
+  void notifyTitleChanged() {
+    _titleRevision++;
+    _titles.clear();
+    state = _snapshot();
+  }
+
   /// Drops the projections and indexes derived from [_tabs].
   ///
   /// Called at every one of the seven places the tab list changes shape. It is

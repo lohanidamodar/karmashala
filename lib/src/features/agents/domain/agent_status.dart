@@ -292,10 +292,14 @@ class AgentHookMeaning {
   const AgentHookMeaning(
     this.status, {
     this.waiting = AgentWaitKind.unrecorded,
+    this.fallbackMessage,
   });
 
   final AgentActivityStatus status;
   final AgentWaitKind waiting;
+
+  /// An explanatory message when the hook payload carries no description of its own.
+  final String? fallbackMessage;
 
   @override
   String toString() => 'AgentHookMeaning(${status.name}, ${waiting.name})';
@@ -311,6 +315,7 @@ class AgentHookSpec {
     this.sessionIdPath = const ['session_id'],
     this.cwdPath = const ['cwd'],
     this.messagePath = const [],
+    this.messagePaths = const [],
     this.messageWaiting = const {},
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
@@ -361,6 +366,10 @@ class AgentHookSpec {
   /// say "an approval is pending" and never what for. Empty means we quote
   /// nothing rather than inventing a description.
   final List<String> messagePath;
+
+  /// Candidate paths for extracting human-readable descriptions, in priority order.
+  /// When non-empty, the first path yielding a non-empty string is chosen.
+  final List<List<String>> messagePaths;
 
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;
