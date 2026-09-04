@@ -597,6 +597,35 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
+  /// Moves tab [tabId] to position [toIndex], sliding the rest along.
+  ///
+  /// The verb behind dragging a chip along the workbench strip, and the one the
+  /// strip had no equivalent of at all: *"move to re-arrange tab — all should
+  /// work like normal applications"*. Remove-then-insert rather than a swap,
+  /// because that is what an insertion point means — dropping the last tab on
+  /// the first pushes the others right rather than exchanging two of them,
+  /// which is what every browser does.
+  ///
+  /// **Only the order.** It does not activate the tab it moved: [activateTab]
+  /// restarts the panes a tab was left holding ([_restoreLivePanesIn]), and
+  /// tidying a strip must not spawn a shell. Nothing here touches focus either.
+  ///
+  /// Returns whether anything moved, so a drop onto the place a tab already
+  /// occupies costs no publish and no layout write. Ordinals are the store's
+  /// own business — see `_writeChangedRows` — so [persistStructure] is all this
+  /// owes for the new order to survive a restart.
+  bool reorderTab(String tabId, int toIndex) {
+    final from = _tabs.indexWhere((tab) => tab.id == tabId);
+    if (from < 0 || _tabs.length < 2) return false;
+    final to = toIndex.clamp(0, _tabs.length - 1);
+    if (from == to) return false;
+    _tabs.insert(to, _tabs.removeAt(from));
+    _tabsMutated();
+    _publish();
+    persistStructure();
+    return true;
+  }
+
   /// Closes tab [id].
   ///
   /// Closing a tab is a *view* action, so by default every pane in it that still
