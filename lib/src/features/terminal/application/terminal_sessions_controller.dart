@@ -551,18 +551,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// they do to a shell. Returns the new pane's id.
   ({String tabId, String paneId}) openAgentTab(AgentPaneLaunch launch) {
     final tabId = _newId();
-    final paneId = _newId();
-    _adopt(
-      paneId,
-      ref.read(terminalInstanceFactoryProvider)(
-        id: paneId,
-        // Unused for an agent pane, but the factory's contract requires one and
-        // a bogus profile would be worse than the host default.
-        profile: TerminalProfile.powerShell,
-        workingDirectory: launch.workingDirectory,
-        agentLaunch: launch,
-      ),
-    );
+    final paneId = _createAgentPane(launch);
     _tabs.add(
       TerminalTab(
         id: tabId,
@@ -576,6 +565,47 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     persistStructure();
     _focusActivePane();
     return (tabId: tabId, paneId: paneId);
+  }
+
+  /// Opens an agent session in an empty split region without creating a tab.
+  ///
+  /// Returns null when [slotPaneId] is stale or occupied, letting the caller
+  /// fall back to [openAgentTab]. The pane is created only after the slot is
+  /// validated, so that fallback never starts the agent twice.
+  ({String tabId, String paneId})? openAgentInSlot(
+    String slotPaneId,
+    AgentPaneLaunch launch,
+  ) {
+    final tab = _tabContaining(slotPaneId);
+    if (tab == null || !_isEmptyRegion(slotPaneId)) return null;
+
+    final paneId = _createAgentPane(launch);
+    _replaceTab(
+      tab.copyWith(
+        layout: tab.layout.replaceRegion(slotPaneId, PaneGroup.of(paneId)),
+        focusedPaneId: paneId,
+      ),
+    );
+    _activeTabId = tab.id;
+    _focusActivePane();
+    persistStructure();
+    return (tabId: tab.id, paneId: paneId);
+  }
+
+  String _createAgentPane(AgentPaneLaunch launch) {
+    final paneId = _newId();
+    _adopt(
+      paneId,
+      ref.read(terminalInstanceFactoryProvider)(
+        id: paneId,
+        // Unused for an agent pane, but the factory's contract requires one and
+        // a bogus profile would be worse than the host default.
+        profile: TerminalProfile.powerShell,
+        workingDirectory: launch.workingDirectory,
+        agentLaunch: launch,
+      ),
+    );
+    return paneId;
   }
 
   void activateTab(String id) {

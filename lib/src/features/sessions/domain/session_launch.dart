@@ -97,6 +97,7 @@ class SessionLaunchRequest {
     this.modelOverride,
     this.view,
     this.externalTerminal,
+    this.targetPaneId,
   });
 
   final Repository repository;
@@ -193,4 +194,13 @@ class SessionLaunchRequest {
   /// `null` takes the configured default, which is what every in-app caller
   /// should do — the parameter exists for the dialog, where the user picked one.
   final SystemTerminal? externalTerminal;
+
+  /// An empty terminal region this in-app launch should occupy.
+  ///
+  /// Null keeps the ordinary behaviour of opening a new workbench tab. A
+  /// stale or already-filled id also falls back to a new tab: the session must
+  /// not fail merely because its destination disappeared while a dialog was
+  /// open. External launches ignore this because their process has no in-app
+  /// pane.
+  final String? targetPaneId;
 }

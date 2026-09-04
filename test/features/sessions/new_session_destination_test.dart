@@ -10,6 +10,9 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,7 +123,11 @@ void main() {
   }
 
   /// Opens the dialog on a real route, so Cancel and Start can actually pop it.
-  Future<void> open(WidgetTester tester, ProviderContainer container) async {
+  Future<void> open(
+    WidgetTester tester,
+    ProviderContainer container, {
+    String? targetPaneId,
+  }) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -128,7 +135,10 @@ void main() {
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
-                onPressed: () => NewSessionDialog.show(context),
+                onPressed: () => NewSessionDialog.show(
+                  context,
+                  targetPaneId: targetPaneId,
+                ),
                 child: const Text('open'),
               ),
             ),
@@ -256,6 +266,37 @@ void main() {
 
       expect(SessionDao(db).getByRepository('wt1'), hasLength(1));
     });
+  });
+
+  testWidgets('an empty split receives the new in-app session', (tester) async {
+    final container = containerFor(selected: 'r1');
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final host = terminals.openTab(TerminalProfile.powerShell);
+    final shellPane = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .layout
+        .panes
+        .single;
+    final slot = terminals.splitPane(SplitAxis.horizontal)!;
+    await open(tester, container, targetPaneId: slot);
+
+    await tester.tap(startButton());
+    await tester.pumpAndSettle();
+
+    final state = container.read(terminalSessionsControllerProvider);
+    expect(state.tabs, hasLength(1), reason: 'no extra workbench tab is made');
+    expect(state.activeTab!.id, host);
+    expect(state.activeTab!.layout.panes, hasLength(2));
+    expect(state.activeTab!.layout.panes, contains(shellPane));
+    expect(state.activeTab!.layout.panes, isNot(contains(slot)));
+    final agentPane = state.activeTab!.layout.panes.singleWhere(
+      (paneId) => paneId != shellPane,
+    );
+    expect(terminals.instanceFor(agentPane)?.agentLaunch, isNotNull);
+    expect(SessionDao(db).getByRepository('r1').single.paneId, agentPane);
   });
 
   group('a workspace with nothing to run in', () {

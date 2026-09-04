@@ -1413,9 +1413,12 @@ class SessionLauncher {
     final resumedTab = dormant == null
         ? null
         : terminals.startAgentInPane(dormant, launch);
-    final opened = resumedTab == null
-        ? terminals.openAgentTab(launch)
-        : (tabId: resumedTab, paneId: dormant!);
+    final slotted = dormant == null && request.targetPaneId != null
+        ? terminals.openAgentInSlot(request.targetPaneId!, launch)
+        : null;
+    final opened = resumedTab != null
+        ? (tabId: resumedTab, paneId: dormant!)
+        : slotted ?? terminals.openAgentTab(launch);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
     _ref.read(terminalVisibleProvider.notifier).set(true);
     // Deliberately after the pane is claimed, so it reports what happened

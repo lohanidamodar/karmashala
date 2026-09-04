@@ -37,12 +37,19 @@ import 'session_destination_picker.dart';
 /// and the Changes, GitHub and Repository panels beside it would be describing
 /// two different checkouts.
 class NewSessionDialog extends ConsumerStatefulWidget {
-  const NewSessionDialog({super.key});
+  const NewSessionDialog({this.targetPaneId, super.key});
 
-  static Future<void> show(BuildContext context) => showDialog<void>(
+  /// Opens the session flow, optionally placing an in-app session in an empty
+  /// split instead of creating another workbench tab.
+  static Future<void> show(
+    BuildContext context, {
+    String? targetPaneId,
+  }) => showDialog<void>(
     context: context,
-    builder: (_) => const NewSessionDialog(),
+    builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
   );
+
+  final String? targetPaneId;
 
   @override
   ConsumerState<NewSessionDialog> createState() => _NewSessionDialogState();
@@ -111,6 +118,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   : SessionSurface.pane,
               useWorktree: _useWorktree,
               externalTerminal: _terminal,
+              targetPaneId: widget.targetPaneId,
             ),
           );
       // Now — and only now — the app follows. `selectNative` is the same rule

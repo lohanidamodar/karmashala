@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/presentation/empty_pane_region.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
+import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -79,6 +80,25 @@ void main() {
       expect(controller.instanceFor(paneId), isNotNull);
     }
     expect(find.byType(EmptyPaneRegion), findsNothing);
+  });
+
+  testWidgets('the empty state offers a session targeted at that region', (
+    tester,
+  ) async {
+    final container = workbenchContainer();
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    controller.openTab(TerminalProfile.powerShell);
+
+    await pumpWorkbench(tester, container);
+    controller.splitPane(SplitAxis.horizontal);
+    await tester.pump();
+    await tester.tap(find.text('New agent session'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NewSessionDialog), findsOneWidget);
+    expect(find.text('Choose where and how the coding agent should run.'), findsOneWidget);
   });
 
   testWidgets('closing the empty region collapses the split', (tester) async {

@@ -24,6 +24,7 @@ class EmptyPaneRegion extends ConsumerWidget {
     required this.paneId,
     required this.focused,
     this.onNewTerminal,
+    this.onNewSession,
     this.onClose,
     this.onMoveTabHere,
     super.key,
@@ -38,6 +39,7 @@ class EmptyPaneRegion extends ConsumerWidget {
   final bool focused;
 
   final VoidCallback? onNewTerminal;
+  final VoidCallback? onNewSession;
   final VoidCallback? onClose;
 
   /// Opens the list of tabs that can be moved in here. `null` while there is no
@@ -136,6 +138,17 @@ class EmptyPaneRegion extends ConsumerWidget {
                                 size: Chrome.icon,
                               ),
                               label: const Text('New terminal'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: onNewSession,
+                              icon: const Icon(
+                                AppIcons.chatCircleDots,
+                                size: Chrome.icon,
+                              ),
+                              // Distinct from the default title of an agent
+                              // pane beside it. A fresh split must not print
+                              // "New session" as both content and an action.
+                              label: const Text('New agent session'),
                             ),
                             // The keyboard-reachable half of the drag. A feature
                             // you can only reach by dragging is one some people

@@ -147,6 +147,44 @@ void main() {
       expect(state.tabs, hasLength(1), reason: 'it filled a region, not a tab');
     });
 
+    test('a new agent session can be opened straight into it', () {
+      final (:container, :created) = countingContainer();
+      final controller = controllerOf(container);
+      final host = controller.openTab(TerminalProfile.powerShell);
+      final first = activeTab(container).layout.panes.single;
+      final slot = controller.splitPane(SplitAxis.horizontal)!;
+
+      final opened = controller.openAgentInSlot(
+        slot,
+        const AgentPaneLaunch(
+          agentId: 'codex',
+          executable: 'codex',
+          sessionId: 'session-1',
+        ),
+      )!;
+
+      expect(created, hasLength(2), reason: 'one shell and one agent');
+      expect(opened.tabId, host, reason: 'the split is filled in place');
+      expect(activeTab(container).layout.panes, [first, opened.paneId]);
+      expect(activeTab(container).focusedPaneId, opened.paneId);
+      expect(controller.instanceFor(opened.paneId)!.agentLaunch?.agentId, 'codex');
+    });
+
+    test('a stale session target starts nothing', () {
+      final (:container, :created) = countingContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+
+      expect(
+        controller.openAgentInSlot(
+          'missing',
+          const AgentPaneLaunch(agentId: 'codex', executable: 'codex'),
+        ),
+        isNull,
+      );
+      expect(created, hasLength(1), reason: 'validation happens before spawn');
+    });
+
     test('a tab moved in brings the very same session, not a new one', () {
       final (:container, :created) = countingContainer();
       final controller = controllerOf(container);

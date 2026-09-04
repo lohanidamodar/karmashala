@@ -12,6 +12,7 @@ import '../../explorer/application/explorer_actions.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../sessions/presentation/new_session_dialog.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
 import '../application/terminal_scroll.dart';
@@ -544,6 +545,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         paneId: paneId,
         focused: focused,
         onNewTerminal: () => _actions.openInSlot(paneId),
+        onNewSession: () => NewSessionDialog.show(
+          context,
+          targetPaneId: paneId,
+        ),
         onClose: () => _sessions.closePane(paneId),
         onMoveTabHere: _canMoveATabHere(paneId)
             ? () => TabPicker.show(
