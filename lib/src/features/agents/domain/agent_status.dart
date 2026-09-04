@@ -292,10 +292,14 @@ class AgentHookMeaning {
   const AgentHookMeaning(
     this.status, {
     this.waiting = AgentWaitKind.unrecorded,
+    this.fallbackMessage,
   });
 
   final AgentActivityStatus status;
   final AgentWaitKind waiting;
+
+  /// An explanatory message when the hook payload carries no description of its own.
+  final String? fallbackMessage;
 
   @override
   String toString() => 'AgentHookMeaning(${status.name}, ${waiting.name})';

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart';
 
 import '../../agents/domain/agent_ids.dart';
 import '../domain/detected_session.dart';
@@ -64,6 +65,9 @@ class CliSessionMutator {
     if (title.isEmpty) {
       throw ArgumentError('Title cannot be empty');
     }
+    if (session.cli == AgentIds.antigravity) {
+      return _renameAntigravity(session, title);
+    }
     return session.cli == AgentIds.codex
         ? _renameCodex(session, title)
         : _renameClaude(session, title);
@@ -123,9 +127,13 @@ class CliSessionMutator {
       }
       if (removed.isEmpty) continue;
       try {
-        await (cli == AgentIds.codex
-            ? _pruneCodexIndex(storeHome, removed)
-            : _pruneClaudeIndex(storeHome, removed));
+        if (cli == AgentIds.antigravity) {
+          await _pruneAntigravityIndex(storeHome, removed);
+        } else if (cli == AgentIds.codex) {
+          await _pruneCodexIndex(storeHome, removed);
+        } else {
+          await _pruneClaudeIndex(storeHome, removed);
+        }
       } catch (error) {
         // The transcripts are gone either way; a stale index entry is a lesser
         // problem than a silent one, so it is still reported.
@@ -255,6 +263,108 @@ class CliSessionMutator {
       return decoded is Map<String, dynamic> ? decoded : null;
     } on FormatException {
       return null;
+    }
+  }
+
+  // --- Antigravity ----------------------------------------------------------
+
+  Future<void> _renameAntigravity(DetectedSession session, String title) async {
+    final annotationsDir = Directory(p.join(session.storeHome, 'annotations'));
+    if (!await annotationsDir.exists()) {
+      await annotationsDir.create(recursive: true);
+    }
+    final file = File(p.join(annotationsDir.path, '${session.sessionId}.pbtxt'));
+    final escaped = _escapeProtobufString(title);
+    await file.writeAsString('title:"$escaped"\n');
+    indexWrites++;
+
+    final summariesPath = p.join(session.storeHome, 'conversation_summaries.db');
+    if (await File(summariesPath).exists()) {
+      Database? db;
+      try {
+        db = sqlite3.open(summariesPath);
+        db.execute(
+          'UPDATE conversation_summaries SET title = ? WHERE conversation_id = ?',
+          [title, session.sessionId],
+        );
+        indexWrites++;
+      } catch (_) {
+      } finally {
+        db?.close();
+      }
+    }
+  }
+
+  static String _escapeProtobufString(String s) {
+    return s
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\t', r'\t');
+  }
+
+  Future<void> _pruneAntigravityIndex(
+    String storeHome,
+    Set<String> sessionIds,
+  ) async {
+    storeScans++;
+    for (final id in sessionIds) {
+      try {
+        final annotation = File(p.join(storeHome, 'annotations', '$id.pbtxt'));
+        if (await annotation.exists()) {
+          await annotation.delete();
+          indexWrites++;
+        }
+      } catch (_) {}
+      try {
+        final presence = File(p.join(storeHome, 'presence', '$id.lock'));
+        if (await presence.exists()) {
+          await presence.delete();
+          indexWrites++;
+        }
+      } catch (_) {}
+    }
+
+    final summariesPath = p.join(storeHome, 'conversation_summaries.db');
+    if (await File(summariesPath).exists()) {
+      Database? db;
+      try {
+        db = sqlite3.open(summariesPath);
+        for (final id in sessionIds) {
+          db.execute(
+            'DELETE FROM conversation_summaries WHERE conversation_id = ?',
+            [id],
+          );
+        }
+        indexWrites++;
+      } catch (_) {
+      } finally {
+        db?.close();
+      }
+    }
+
+    final lastConvPath = p.join(storeHome, 'cache', 'last_conversations.json');
+    final lastConvFile = File(lastConvPath);
+    if (await lastConvFile.exists()) {
+      try {
+        final raw = await lastConvFile.readAsString();
+        final map = jsonDecode(raw);
+        if (map is Map<String, dynamic>) {
+          var modified = false;
+          final updated = Map<String, dynamic>.from(map);
+          for (final entry in map.entries) {
+            if (sessionIds.contains(entry.value.toString())) {
+              updated.remove(entry.key);
+              modified = true;
+            }
+          }
+          if (modified) {
+            await lastConvFile.writeAsString(jsonEncode(updated));
+            indexWrites++;
+          }
+        }
+      } catch (_) {}
     }
   }
 }

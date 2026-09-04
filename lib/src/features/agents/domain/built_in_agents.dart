@@ -1688,10 +1688,16 @@ const _antigravity = AgentDescriptor(
     // protojson, so camelCase — nothing like Claude Code's `session_id`, and
     // this is the id `--conversation` resumes.
     sessionIdPath: ['conversationId'],
-    // `workspacePaths` arrives as `[]` from the CLI, so there is nothing to
-    // read. Adoption falls back to the oldest unclaimed pane, which costs
-    // precision and never correctness.
-    cwdPath: [],
+    // `workspacePaths` arrives as a list of paths; _stringAt unwraps the first
+    // element when matching the candidate pane.
+    cwdPath: ['workspacePaths'],
+    // Descriptions for notifications and inbox: prefer error message on
+    // failure, finalModelOutput on completion, or lastUserInput.
+    messagePaths: [
+      ['error'],
+      ['finalModelOutput'],
+      ['lastUserInput'],
+    ],
     // **No `PreToolUse`, and that is measured rather than cautious.** A status
     // callback has no permission decision to make, so the only honest thing it
     // can answer is `{}` — and with `{}` a live run refused the tool outright:
@@ -1751,18 +1757,31 @@ const _antigravity = AgentDescriptor(
       // The user stopped it themselves. Not a failure — they are already
       // looking at the session.
       'USER_CANCELED': AgentHookMeaning(AgentActivityStatus.idle),
-      'ERROR': AgentHookMeaning(AgentActivityStatus.failed),
+      'ERROR': AgentHookMeaning(
+        AgentActivityStatus.failed,
+        fallbackMessage: 'Execution failed',
+      ),
       // The run hit a ceiling with work outstanding. The CLI's own shipped
       // hooks doc calls this family "stopped due to error" and puts an `error`
       // string beside it.
-      'MAX_INVOCATIONS': AgentHookMeaning(AgentActivityStatus.failed),
-      'MAX_FORCED_INVOCATIONS': AgentHookMeaning(AgentActivityStatus.failed),
-      'MAX_TOKEN_BUDGET_EXCEEDED': AgentHookMeaning(AgentActivityStatus.failed),
+      'MAX_INVOCATIONS': AgentHookMeaning(
+        AgentActivityStatus.failed,
+        fallbackMessage: 'Maximum invocations reached',
+      ),
+      'MAX_FORCED_INVOCATIONS': AgentHookMeaning(
+        AgentActivityStatus.failed,
+        fallbackMessage: 'Maximum forced invocations reached',
+      ),
+      'MAX_TOKEN_BUDGET_EXCEEDED': AgentHookMeaning(
+        AgentActivityStatus.failed,
+        fallbackMessage: 'Maximum token budget exceeded',
+      ),
     },
     // `PreInvocation` and `PostInvocation` payloads carry no
     // `terminationReason`, so they fall through to these untouched — the
     // property that makes reading the subtype a descriptor-only change.
     eventStatus: {
+      'SessionStart': AgentActivityStatus.working,
       'PreInvocation': AgentActivityStatus.working,
       'PostInvocation': AgentActivityStatus.working,
       'Stop': AgentActivityStatus.idle,

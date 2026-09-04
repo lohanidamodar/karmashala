@@ -315,10 +315,21 @@ class SessionAdoptionService {
       return '';
     }
     for (final segment in path) {
-      if (value is! Map) return '';
-      value = value[segment];
+      if (value is Map) {
+        value = value[segment];
+      } else if (value is List) {
+        final index = int.tryParse(segment);
+        if (index == null || index < 0 || index >= value.length) return '';
+        value = value[index];
+      } else {
+        return '';
+      }
     }
-    return value is String ? value : '';
+    if (value is String) return value;
+    if (value is List && value.isNotEmpty && value.first is String) {
+      return value.first as String;
+    }
+    return '';
   }
 
   /// The rationed half: look at pane screens, then at the CLI stores.

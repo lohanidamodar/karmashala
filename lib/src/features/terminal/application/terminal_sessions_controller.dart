@@ -134,6 +134,7 @@ class TerminalSessionsState {
     this.detached = const [],
     this.liveness = const {},
     this.workingDirectories = const {},
+    this.titleRevision = 0,
   });
 
   final List<TerminalTab> tabs;
@@ -154,6 +155,10 @@ class TerminalSessionsState {
   /// [liveness] is one: a `cd` in a background pane must not rebuild the tab
   /// strip.
   final Map<String, String?> workingDirectories;
+
+  /// Incremented on every publish so title and metadata watchers can detect
+  /// mutations even when tab layout is structurally identical.
+  final int titleRevision;
 
   bool get isEmpty => tabs.isEmpty;
 
@@ -189,7 +194,8 @@ class TerminalSessionsState {
           other.activeTabId == activeTabId &&
           identical(other.detached, detached) &&
           identical(other.liveness, liveness) &&
-          identical(other.workingDirectories, workingDirectories);
+          identical(other.workingDirectories, workingDirectories) &&
+          other.titleRevision == titleRevision;
 
   @override
   int get hashCode => Object.hash(
@@ -198,6 +204,7 @@ class TerminalSessionsState {
     identityHashCode(detached),
     identityHashCode(liveness),
     identityHashCode(workingDirectories),
+    titleRevision,
   );
 }
 
@@ -300,6 +307,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// this, a hundred tabs would be a hundred queries a frame.
   final Map<String, String> _titles = {};
 
+  /// Monotonically increasing revision number incremented on every publish.
+  int _titleRevision = 0;
+
   /// Whether the user has closed a tab, a pane or a session since the layout
   /// was restored.
   ///
@@ -398,11 +408,20 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       for (final entry in _instances.entries)
         entry.key: entry.value.workingDirectory,
     }),
+    titleRevision: _titleRevision,
   );
 
   void _publish() {
+    _titleRevision++;
     _titles.clear();
     _applyIngestTiers();
+    state = _snapshot();
+  }
+
+  /// Notifies title providers that an underlying session title changed.
+  void notifyTitleChanged() {
+    _titleRevision++;
+    _titles.clear();
     state = _snapshot();
   }
 
@@ -2590,6 +2609,28 @@ final terminalPaneInstanceProvider = Provider.autoDispose
       return ref
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId);
+    });
+
+/// The title of tab [tabId], reactive to session renames and OSC updates.
+final terminalTabTitleProvider = Provider.autoDispose
+    .family<String, String>((ref, tabId) {
+      ref.watch(
+        terminalSessionsControllerProvider.select((s) => s.titleRevision),
+      );
+      return ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .titleForTab(tabId);
+    });
+
+/// The title of pane [paneId], reactive to session renames and OSC updates.
+final terminalPaneTitleProvider = Provider.autoDispose
+    .family<String, String>((ref, paneId) {
+      ref.watch(
+        terminalSessionsControllerProvider.select((s) => s.titleRevision),
+      );
+      return ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .titleForPane(paneId);
     });
 
 /// Whether the terminal is the surface the workbench is showing.

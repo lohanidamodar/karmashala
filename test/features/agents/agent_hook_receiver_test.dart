@@ -586,7 +586,7 @@ void main() {
     test('an invocation event carries no reason and still reads working', () {
       // The property that makes this a descriptor-only change: an event whose
       // payload has no `terminationReason` falls through to `eventStatus`.
-      for (final event in ['PreInvocation', 'PostInvocation']) {
+      for (final event in ['SessionStart', 'PreInvocation', 'PostInvocation']) {
         final report = receiver.handle(
           agentId: 'antigravity',
           event: event,
@@ -594,6 +594,55 @@ void main() {
         );
         expect(report.status, AgentActivityStatus.working, reason: event);
         expect(report.detail, event, reason: event);
+      }
+    });
+
+    test('Antigravity Stop extracts error message as evidence when present', () {
+      final report = receiver.handle(
+        agentId: 'antigravity',
+        event: 'Stop',
+        body: jsonEncode({
+          'conversationId': 'c1',
+          'terminationReason': 'ERROR',
+          'error': 'API quota limit exceeded',
+        }),
+      );
+      expect(report.status, AgentActivityStatus.failed);
+      expect(report.evidence, ['API quota limit exceeded']);
+    });
+
+    test('Antigravity Stop extracts finalModelOutput as evidence on success', () {
+      final report = receiver.handle(
+        agentId: 'antigravity',
+        event: 'Stop',
+        body: jsonEncode({
+          'conversationId': 'c1',
+          'terminationReason': 'NO_TOOL_CALL',
+          'finalModelOutput': 'Task complete. All tests pass.',
+        }),
+      );
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.evidence, ['Task complete. All tests pass.']);
+    });
+
+    test('Antigravity Stop uses fallbackMessage when error and finalModelOutput are empty', () {
+      final expectedFallbacks = {
+        'MAX_INVOCATIONS': 'Maximum invocations reached',
+        'MAX_FORCED_INVOCATIONS': 'Maximum forced invocations reached',
+        'MAX_TOKEN_BUDGET_EXCEEDED': 'Maximum token budget exceeded',
+        'ERROR': 'Execution failed',
+      };
+      for (final entry in expectedFallbacks.entries) {
+        final report = receiver.handle(
+          agentId: 'antigravity',
+          event: 'Stop',
+          body: jsonEncode({
+            'conversationId': 'c1',
+            'terminationReason': entry.key,
+          }),
+        );
+        expect(report.status, AgentActivityStatus.failed, reason: entry.key);
+        expect(report.evidence, [entry.value], reason: entry.key);
       }
     });
   });

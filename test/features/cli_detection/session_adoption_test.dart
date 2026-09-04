@@ -104,6 +104,13 @@ Harness harness({AppDatabase? database, bool installAgents = true}) {
             agentId: AgentIds.codex,
             path: r'C:\Users\me\.bin\codex.exe',
           ),
+        )
+        ..insert(
+          agentInstallation(
+            id: 'a3',
+            agentId: AgentIds.antigravity,
+            path: r'C:\Users\me\.bin\agy.cmd',
+          ),
         );
     }
   }
@@ -820,6 +827,21 @@ void main() {
         h.sessions.getById('s-old')!.workingDirectory?.path,
         r'C:\src\demo\app\tool',
       );
+    });
+
+    test('adopts Antigravity session from hook payload with workspacePaths list', () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'agy', directory: _repoPath);
+      h.service.onHookPayload(
+        agentId: AgentIds.antigravity,
+        sessionId: 'agy-session-1',
+        body: '{"conversationId":"agy-session-1","workspacePaths":["$_repoPath"]}',
+      );
+
+      final row = h.sessions.getAll().single;
+      expect(row.externalSessionId, 'agy-session-1');
+      expect(row.paneId, 'pane-1');
+      expect(row.workingDirectory?.path, _repoPath);
     });
   });
 }

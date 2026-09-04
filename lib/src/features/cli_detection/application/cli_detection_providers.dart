@@ -175,9 +175,14 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
     // twenty-eight watchers of the revision counter — several of them with a
     // full `SELECT * FROM sessions` on the UI isolate. It says only what it
     // knows: this row is called something else now.
-    onRenamed: (sessionId, _) => ref
-        .read(sessionsRevisionProvider.notifier)
-        .changed(SessionChange.renamed(sessionId)),
+    onRenamed: (sessionId, _) {
+      ref
+          .read(sessionsRevisionProvider.notifier)
+          .changed(SessionChange.renamed(sessionId));
+      ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .notifyTitleChanged();
+    },
   );
 });
 

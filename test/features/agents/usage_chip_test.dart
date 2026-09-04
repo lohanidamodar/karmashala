@@ -187,7 +187,7 @@ void main() {
   testWidgets('is absent entirely for an agent we have no endpoint for', (
     tester,
   ) async {
-    final container = await pumpChip(tester, agentId: AgentIds.antigravity);
+    final container = await pumpChip(tester, agentId: 'unknownAgent');
 
     expect(find.byType(UsageChip), findsOneWidget);
     expect(

@@ -125,6 +125,32 @@ void main() {
     });
   });
 
+  group('parseAntigravityUsage', () {
+    test('maps allowedTiers to usage windows with token expiry reset', () {
+      final expiry = DateTime.utc(2026, 7, 28, 13);
+      final usage = parseAntigravityUsage({
+        'allowedTiers': [
+          {
+            'id': 'standard-tier',
+            'name': 'Gemini Code Assist',
+            'description': 'Unlimited coding assistant',
+          },
+        ],
+      }, now, email: 'dev@google.com', tokenExpiry: expiry);
+
+      expect(usage.email, 'dev@google.com');
+      expect(usage.windows.map((w) => w.label).toList(), ['Gemini Code Assist']);
+      expect(usage.windows.first.percent, 0.0);
+      expect(usage.windows.first.resetsAt, expiry);
+    });
+
+    test('falls back to default Code Assist window when allowedTiers is empty', () {
+      final usage = parseAntigravityUsage({}, now, email: 'test@example.com');
+      expect(usage.windows.first.label, 'Gemini Code Assist');
+      expect(usage.email, 'test@example.com');
+    });
+  });
+
   group('parseRetryAfter', () {
     test('reads the delay form', () {
       expect(parseRetryAfter('120', now), const Duration(minutes: 2));
@@ -345,7 +371,7 @@ void main() {
         service,
         installation: agentInstallation(
           id: 'a9',
-          agentId: AgentIds.antigravity,
+          agentId: 'unknownAgent',
         ),
       );
 

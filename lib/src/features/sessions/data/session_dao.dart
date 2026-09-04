@@ -312,6 +312,49 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// All external session IDs currently held by active sessions.
+  ///
+  /// Projects one column instead of deserializing full session objects.
+  Set<String> heldExternalSessionIds({String? excludingSessionId}) {
+    final results = excludingSessionId == null
+        ? _db.query(
+            'SELECT external_session_id FROM sessions '
+            "WHERE external_session_id IS NOT NULL AND external_session_id != '';",
+          )
+        : _db.query(
+            'SELECT external_session_id FROM sessions '
+            'WHERE id != ? '
+            "AND external_session_id IS NOT NULL AND external_session_id != '';",
+            [excludingSessionId],
+          );
+    return {
+      for (final row in results)
+        if (row['external_session_id'] is String)
+          row['external_session_id'] as String,
+    };
+  }
+
+  /// Active, non-archived sessions that have an external session ID and
+  /// whose title was not typed by the user, waiting for title synchronization.
+  List<Session> getWaitingForTitleSync() {
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE archived_at IS NULL AND title_by_user = 0 '
+      "AND external_session_id IS NOT NULL AND external_session_id != '' "
+      'ORDER BY created_at, id;',
+    );
+    return rows.map(_fromRow).toList();
+  }
+
+  /// Active, non-archived sessions that are still waiting for an external session ID.
+  List<Session> getUnattributed() {
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE archived_at IS NULL '
+      "AND (external_session_id IS NULL OR external_session_id = '') "
+      'ORDER BY created_at, id;',
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   /// The rows named by [ids], oldest first, in one indexed query.
   ///
   /// For the callers that already know which handful of sessions they are

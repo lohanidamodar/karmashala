@@ -90,7 +90,8 @@ class AgentsPage extends ConsumerWidget {
               .where(
                 (i) =>
                     i.agentId == AgentIds.claudeCode ||
-                    i.agentId == AgentIds.codex,
+                    i.agentId == AgentIds.codex ||
+                    i.agentId == AgentIds.antigravity,
               )
               .toList(),
         ),

@@ -90,7 +90,7 @@ class AgentHookReceiver {
     // discarded, which is why an approval could be announced but never
     // explained; reading only `message` then left every finished turn with a
     // session name and nothing else.
-    final message = spec == null ? '' : _messageIn(spec, payload);
+    final message = spec == null ? '' : _messageIn(spec, payload, declared);
 
     final report = AgentStatusReport(
       agentId: id,
@@ -136,12 +136,24 @@ class AgentHookReceiver {
   /// First non-empty wins. A path that is absent on this event is not a
   /// failure: the paths describe an agent's whole hook surface, and no one
   /// event carries all of them.
-  static String _messageIn(AgentHookSpec spec, Object? payload) {
+  /// Falls back to [AgentHookMeaning.fallbackMessage] when the payload carries
+  /// no prose of its own.
+  ///
+  /// Antigravity's hooks are the case: the event *name* is the whole message —
+  /// `Execution failed`, `Maximum token budget exceeded` — and there is no
+  /// field to read one out of. A wording the app supplies for an event whose
+  /// meaning it declared is not an invented description; it is the description,
+  /// and without it those events reach the user as a session name alone.
+  static String _messageIn(
+    AgentHookSpec spec,
+    Object? payload,
+    AgentHookMeaning? declared,
+  ) {
     for (final path in spec.messagePaths) {
       final value = _stringAt(path, payload);
       if (value.isNotEmpty) return value;
     }
-    return '';
+    return declared?.fallbackMessage ?? '';
   }
 
   /// Whether [event]'s payload says work this session is waiting on is still
@@ -185,8 +197,25 @@ class AgentHookReceiver {
   /// Empty for a missing key, a non-string value or an unparseable body — all
   /// of which mean "the agent did not tell us", which the caller renders as
   /// nothing rather than as a placeholder.
+  /// A **list of one string** reads as that string.
+  ///
+  /// Antigravity sends the working directory as `workspacePaths`, a JSON array,
+  /// and there is no index to name in the path because the CLI sends one entry
+  /// — a session has one workspace. Without this, `cwdPath` reads nothing and
+  /// adoption falls back to the oldest pane, which is the wrong pane whenever
+  /// more than one is open.
+  ///
+  /// Narrow on purpose: only when the path's own destination is a list whose
+  /// first element is a string. A path that names an index (`['a', '0']`)
+  /// still resolves through [_valueAt] as it always did, and every string-valued
+  /// key — Claude Code's `message` and `last_assistant_message` among them — is
+  /// untouched.
   static String _stringAt(List<String> path, Object? payload) {
     final value = _valueAt(path, payload);
-    return value is String ? value : '';
+    if (value is String) return value;
+    if (value is List && value.isNotEmpty && value.first is String) {
+      return value.first as String;
+    }
+    return '';
   }
 }

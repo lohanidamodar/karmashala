@@ -99,6 +99,61 @@ class AntigravityConversation {
   String toString() => 'AntigravityConversation($id)';
 }
 
+/// Cache for Antigravity store artifacts so unchanged files are not re-read
+/// on every sweep.
+class AntigravityStoreCache {
+  AntigravityStoreCache();
+
+  static final AntigravityStoreCache shared = AntigravityStoreCache();
+
+  final Map<String, _HistoryCacheEntry> _historyByStore = {};
+  final Map<String, _FileCacheEntry<Map<String, String>>> _lastConvsByStore = {};
+  final Map<String, _FileCacheEntry<Map<String, AntigravityConversationSummary>>>
+      _summariesByStore = {};
+  final Map<String, _TitleCacheEntry> _titlesByPath = {};
+
+  void clear() {
+    _historyByStore.clear();
+    _lastConvsByStore.clear();
+    _summariesByStore.clear();
+    _titlesByPath.clear();
+  }
+}
+
+class _HistoryCacheEntry {
+  const _HistoryCacheEntry({
+    required this.length,
+    required this.modified,
+    required this.workspaces,
+  });
+
+  final int length;
+  final DateTime modified;
+  final Map<String, String> workspaces;
+}
+
+class _FileCacheEntry<T> {
+  const _FileCacheEntry({
+    required this.length,
+    required this.modified,
+    required this.data,
+  });
+
+  final int length;
+  final DateTime modified;
+  final T data;
+}
+
+class _TitleCacheEntry {
+  const _TitleCacheEntry({
+    required this.modified,
+    required this.title,
+  });
+
+  final DateTime modified;
+  final String? title;
+}
+
 /// Reads the Antigravity CLI's store at `~/.gemini/antigravity-cli`.
 ///
 /// Every source is opened read-only and every failure is swallowed into an
@@ -106,11 +161,20 @@ class AntigravityConversation {
 /// status poll that throws because a file was mid-write would be worse than one
 /// that says "not recorded".
 class AntigravityStoreReader {
-  const AntigravityStoreReader({this.countSteps = true});
+  const AntigravityStoreReader({
+    this.countSteps = true,
+    this.cache,
+  });
 
   /// Whether to open each conversation file to count its steps. Off makes the
   /// sweep a directory listing plus two small files.
   final bool countSteps;
+
+  /// Injected cache for testing or scoping; defaults to [AntigravityStoreCache.shared].
+  final AntigravityStoreCache? cache;
+
+  AntigravityStoreCache get _effectiveCache =>
+      cache ?? AntigravityStoreCache.shared;
 
   /// Every conversation in [storeHome], newest first.
   Future<List<AntigravityConversation>> read(String storeHome) async {
@@ -119,6 +183,8 @@ class AntigravityStoreReader {
 
     final workspaces = await readWorkspacesByConversation(storeHome);
     final summaries = await readSummaries(storeHome);
+    final titles = await readTitles(storeHome);
+    final presenceIds = await readPresenceIds(storeHome);
 
     final conversations = <AntigravityConversation>[];
     await for (final entity in dir.list()) {
@@ -142,15 +208,13 @@ class AntigravityStoreReader {
           filePath: entity.path,
           storeHome: storeHome,
           workspace: workspaces[id],
-          title: await readTitle(storeHome, id),
+          title: titles[id],
           preview: summary?.preview ?? '',
           stepCount: countSteps
               ? await readStepCount(entity.path) ?? summary?.stepCount
               : summary?.stepCount,
           modifiedAt: modified,
-          hasPresenceFile: await File(
-            p.join(storeHome, 'presence', '$id.lock'),
-          ).exists(),
+          hasPresenceFile: presenceIds.contains(id),
         ),
       );
     }
@@ -180,13 +244,26 @@ class AntigravityStoreReader {
     final file = File(p.join(storeHome, 'cache', 'last_conversations.json'));
     try {
       if (!await file.exists()) return const {};
+      final stat = await file.stat();
+      final cached = _effectiveCache._lastConvsByStore[storeHome];
+      if (cached != null &&
+          cached.length == stat.size &&
+          cached.modified == stat.modified) {
+        return cached.data;
+      }
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map) return const {};
-      return {
+      final result = {
         for (final entry in decoded.entries)
           if (entry.key is String && entry.value is String)
             entry.key as String: entry.value as String,
       };
+      _effectiveCache._lastConvsByStore[storeHome] = _FileCacheEntry(
+        length: stat.size,
+        modified: stat.modified,
+        data: result,
+      );
+      return result;
     } on FileSystemException {
       return const {};
     } on FormatException {
@@ -201,14 +278,65 @@ class AntigravityStoreReader {
   /// name the same conversation — `--add-dir` and a resume from elsewhere both
   /// do it — so a conversation claimed by more than one directory is left out
   /// rather than arbitrarily assigned one of them.
+  /// `history.jsonl`: extracts workspace directories keyed by conversation id.
+  Future<Map<String, String>> readHistoryWorkspaces(String storeHome) async {
+    final file = File(p.join(storeHome, 'history.jsonl'));
+    try {
+      if (!await file.exists()) return const {};
+      final stat = await file.stat();
+      final cached = _effectiveCache._historyByStore[storeHome];
+      if (cached != null &&
+          cached.length == stat.size &&
+          cached.modified == stat.modified) {
+        return cached.workspaces;
+      }
+      final lines = await file.readAsLines();
+      final byId = <String, String>{};
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || !trimmed.startsWith('{')) continue;
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is Map<String, dynamic>) {
+            final cid = decoded['conversationId'];
+            final ws = decoded['workspace'];
+            if (cid is String && ws is String && cid.isNotEmpty && ws.isNotEmpty) {
+              byId[cid] = ws;
+            }
+          }
+        } on FormatException {
+          continue;
+        }
+      }
+      _effectiveCache._historyByStore[storeHome] = _HistoryCacheEntry(
+        length: stat.size,
+        modified: stat.modified,
+        workspaces: byId,
+      );
+      return byId;
+    } on FileSystemException {
+      return const {};
+    }
+  }
+
+  /// [readLastConversations] inverted: conversation id → the directory it was
+  /// last used in, supplemented by [readHistoryWorkspaces].
+  ///
+  /// One directory can only name one conversation, but two directories could
+  /// name the same conversation — `--add-dir` and a resume from elsewhere both
+  /// do it — so a conversation claimed by more than one directory is left out
+  /// rather than arbitrarily assigned one of them.
   Future<Map<String, String>> readWorkspacesByConversation(
     String storeHome,
   ) async {
+    final historyWorkspaces = await readHistoryWorkspaces(storeHome);
     final byDirectory = await readLastConversations(storeHome);
-    final byConversation = <String, String>{};
+    final byConversation = <String, String>{...historyWorkspaces};
     final ambiguous = <String>{};
     for (final entry in byDirectory.entries) {
-      if (byConversation.containsKey(entry.value)) {
+      if (byConversation.containsKey(entry.value) &&
+          byConversation[entry.value] != entry.key &&
+          !historyWorkspaces.containsKey(entry.value)) {
         ambiguous.add(entry.value);
         continue;
       }
@@ -218,6 +346,61 @@ class AntigravityStoreReader {
       byConversation.remove(id);
     }
     return byConversation;
+  }
+
+  /// Reads all conversation titles in [storeHome], keyed by conversation id.
+  Future<Map<String, String>> readTitles(String storeHome) async {
+    final dir = Directory(p.join(storeHome, 'annotations'));
+    try {
+      if (!await dir.exists()) return const {};
+      final titles = <String, String>{};
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (!name.endsWith('.pbtxt')) continue;
+        final id = name.substring(0, name.length - '.pbtxt'.length);
+        if (id.isEmpty) continue;
+        try {
+          final stat = await entity.stat();
+          final cached = _effectiveCache._titlesByPath[entity.path];
+          if (cached != null && cached.modified == stat.modified) {
+            if (cached.title != null) titles[id] = cached.title!;
+            continue;
+          }
+          final content = await entity.readAsString();
+          final title = _titleIn(content);
+          _effectiveCache._titlesByPath[entity.path] = _TitleCacheEntry(
+            modified: stat.modified,
+            title: title,
+          );
+          if (title != null) titles[id] = title;
+        } on FileSystemException {
+          // Ignored
+        }
+      }
+      return titles;
+    } on FileSystemException {
+      return const {};
+    }
+  }
+
+  /// Every conversation id in [storeHome] that has a presence file.
+  Future<Set<String>> readPresenceIds(String storeHome) async {
+    final dir = Directory(p.join(storeHome, 'presence'));
+    try {
+      if (!await dir.exists()) return const {};
+      final ids = <String>{};
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (!name.endsWith('.lock')) continue;
+        final id = name.substring(0, name.length - '.lock'.length);
+        if (id.isNotEmpty) ids.add(id);
+      }
+      return ids;
+    } on FileSystemException {
+      return const {};
+    }
   }
 
   /// The name `/rename` gave conversation [id], or `null` when it has none.
@@ -233,7 +416,17 @@ class AntigravityStoreReader {
     final file = File(p.join(storeHome, 'annotations', '$id.pbtxt'));
     try {
       if (!await file.exists()) return null;
-      return _titleIn(await file.readAsString());
+      final stat = await file.stat();
+      final cached = _effectiveCache._titlesByPath[file.path];
+      if (cached != null && cached.modified == stat.modified) {
+        return cached.title;
+      }
+      final title = _titleIn(await file.readAsString());
+      _effectiveCache._titlesByPath[file.path] = _TitleCacheEntry(
+        modified: stat.modified,
+        title: title,
+      );
+      return title;
     } on FileSystemException {
       return null;
     }
@@ -268,7 +461,15 @@ class AntigravityStoreReader {
     String storeHome,
   ) async {
     final path = p.join(storeHome, 'conversation_summaries.db');
-    if (!await File(path).exists()) return const {};
+    final file = File(path);
+    if (!await file.exists()) return const {};
+    final stat = await file.stat();
+    final cached = _effectiveCache._summariesByStore[storeHome];
+    if (cached != null &&
+        cached.length == stat.size &&
+        cached.modified == stat.modified) {
+      return cached.data;
+    }
     Database? db;
     try {
       db = sqlite3.open(path, mode: OpenMode.readOnly);
@@ -276,7 +477,7 @@ class AntigravityStoreReader {
         'select conversation_id, title, preview, step_count, workspace_uris '
         'from conversation_summaries',
       );
-      return {
+      final result = {
         for (final row in rows)
           if (row['conversation_id'] is String)
             row['conversation_id'] as String: AntigravityConversationSummary(
@@ -288,6 +489,12 @@ class AntigravityStoreReader {
               workspaceUris: _text(row['workspace_uris']),
             ),
       };
+      _effectiveCache._summariesByStore[storeHome] = _FileCacheEntry(
+        length: stat.size,
+        modified: stat.modified,
+        data: result,
+      );
+      return result;
     } on SqliteException {
       return const {};
     } finally {

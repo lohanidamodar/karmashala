@@ -101,6 +101,12 @@ class AgentUsageService {
   static final _codexUsageUrl = Uri.parse(
     'https://chatgpt.com/backend-api/wham/usage',
   );
+  static final _googleTokenInfoUrl = Uri.parse(
+    'https://oauth2.googleapis.com/tokeninfo',
+  );
+  static final _googleCodeAssistUrl = Uri.parse(
+    'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
+  );
 
   /// The last reading taken for this account, however old, or null if none was
   /// taken in this run.
@@ -187,10 +193,12 @@ class AgentUsageService {
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
-    // An allowlist: only the two agents whose usage endpoint we speak. Any
+    // An allowlist: only the agents whose usage endpoint we speak. Any
     // other agent — including one we have never heard of — is told plainly.
     final agentId = installation.agentId;
-    if (agentId != AgentIds.claudeCode && agentId != AgentIds.codex) {
+    if (agentId != AgentIds.claudeCode &&
+        agentId != AgentIds.codex &&
+        agentId != AgentIds.antigravity) {
       throw UsageException(
         'Usage is not available for '
         '${AgentRegistry.builtIn.displayNameFor(agentId)}.',
@@ -224,9 +232,14 @@ class AgentUsageService {
     final ctx = storePathContextFor(kind);
     final localMac = _hostIsMacOS && kind != null && isLocalHost(kind);
 
-    return agentId == AgentIds.claudeCode
-        ? _fetchClaude(store, ctx, keychain: localMac)
-        : _fetchCodex(store, ctx);
+    return switch (agentId) {
+      AgentIds.claudeCode => _fetchClaude(store, ctx, keychain: localMac),
+      AgentIds.codex => _fetchCodex(store, ctx),
+      AgentIds.antigravity => _fetchAntigravity(store, ctx),
+      _ => throw UsageException(
+          'Usage is not available for ${AgentRegistry.builtIn.displayNameFor(agentId)}.',
+        ),
+    };
   }
 
   Future<AgentUsage> _fetchClaude(
@@ -241,11 +254,20 @@ class AgentUsageService {
         kind: UsageFailureKind.notAsked,
       );
     }
+
+    // Read email from .claude.json if available
+    String? email;
+    final configFile = ctx.join(ctx.dirname(home), '.claude.json');
+    final config = await _readJson(configFile);
+    final oauthAccount = config?['oauthAccount'];
+    if (oauthAccount is Map<String, dynamic>) {
+      email = oauthAccount['emailAddress'] as String?;
+    }
     // On macOS there is no credentials file: Claude Code keeps `claudeAiOauth`
     // in the login Keychain. Same object, different cupboard.
     if (!keychain) {
       final creds = await _readJson(ctx.join(home, '.credentials.json'));
-      return _claudeUsage(_tokenIn(creds));
+      return _claudeUsage(_tokenIn(creds), email: email);
     }
 
     final read = await _keychain.read();
@@ -263,7 +285,7 @@ class AgentUsageService {
       );
     }
     try {
-      return await _claudeUsage(_tokenIn(_decode(read.secret)));
+      return await _claudeUsage(_tokenIn(_decode(read.secret)), email: email);
     } on UsageException {
       // The copy being held was rejected, so it is wrong whatever the memo's
       // clock says. Dropping it here is what keeps the memo from turning a
@@ -283,7 +305,7 @@ class AgentUsageService {
         : null;
   }
 
-  Future<AgentUsage> _claudeUsage(String? token) async {
+  Future<AgentUsage> _claudeUsage(String? token, {String? email}) async {
     if (token == null) {
       throw UsageException(
         'Not signed in to Claude in this environment.',
@@ -294,7 +316,7 @@ class AgentUsageService {
       'Authorization': 'Bearer $token',
       'anthropic-beta': 'oauth-2025-04-20',
     });
-    return parseClaudeUsage(json, clock.nowUtc());
+    return parseClaudeUsage(json, clock.nowUtc(), email: email);
   }
 
   Future<AgentUsage> _fetchCodex(CliStore store, p.Context ctx) async {
@@ -316,10 +338,86 @@ class AgentUsageService {
         kind: UsageFailureKind.auth,
       );
     }
+    final idToken = tokens is Map<String, dynamic>
+        ? tokens['id_token'] as String?
+        : null;
+    final emailFromJwt = _emailFromJwt(idToken);
+
     final json = await _getJson(_codexUsageUrl, {
       'Authorization': 'Bearer $token',
     });
-    return parseCodexUsage(json, clock.nowUtc());
+    return parseCodexUsage(
+      json,
+      clock.nowUtc(),
+      email: (json['email'] as String?) ?? emailFromJwt,
+    );
+  }
+
+  Future<AgentUsage> _fetchAntigravity(CliStore store, p.Context ctx) async {
+    final home = store.antigravityHome;
+    if (home == null) {
+      throw UsageException('No Antigravity store for this install.');
+    }
+    final tokenFile = ctx.join(home, 'antigravity-oauth-token');
+    final auth = await _readJson(tokenFile);
+    final tokenObj = auth?['token'];
+    final token = tokenObj is Map<String, dynamic>
+        ? tokenObj['access_token'] as String?
+        : null;
+    if (token == null || token.isEmpty) {
+      throw UsageException('Not signed in to Antigravity in this environment.');
+    }
+
+    DateTime? tokenExpiry;
+    final expiryStr = tokenObj is Map<String, dynamic>
+        ? tokenObj['expiry'] as String?
+        : null;
+    if (expiryStr != null) {
+      tokenExpiry = DateTime.tryParse(expiryStr);
+      if (tokenExpiry != null && clock.nowUtc().isAfter(tokenExpiry)) {
+        throw UsageException(
+          'Access token expired. Run the agent once to refresh, then retry.',
+        );
+      }
+    }
+
+    String? email;
+    try {
+      final tokenInfo = await _getJson(_googleTokenInfoUrl, {
+        'Authorization': 'Bearer $token',
+      });
+      email = tokenInfo['email'] as String?;
+    } catch (_) {
+      // Non-fatal if tokeninfo cannot be retrieved
+    }
+
+    final json = await _postJson(
+      _googleCodeAssistUrl,
+      {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      const {},
+    );
+
+    return parseAntigravityUsage(
+      json,
+      clock.nowUtc(),
+      email: email,
+      tokenExpiry: tokenExpiry,
+    );
+  }
+
+  static String? _emailFromJwt(String? jwt) {
+    if (jwt == null) return null;
+    final parts = jwt.split('.');
+    if (parts.length < 2) return null;
+    try {
+      var payload = parts[1];
+      payload += '=' * (-payload.length % 4);
+      final decoded = jsonDecode(utf8.decode(base64Url.decode(payload)));
+      if (decoded is Map<String, dynamic>) {
+        return decoded['email'] as String?;
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Decodes a credentials blob that did not come from a file.
@@ -424,6 +522,42 @@ class AgentUsageService {
       client.close(force: true);
     }
   }
+
+  Future<Map<String, dynamic>> _postJson(
+    Uri url,
+    Map<String, String> headers,
+    Object body,
+  ) async {
+    final client = _newClient();
+    try {
+      final request = await client.postUrl(url);
+      headers.forEach(request.headers.set);
+      request.write(jsonEncode(body));
+      final response = await request.close();
+      final resBody = await response.transform(utf8.decoder).join();
+      if (response.statusCode == 401) {
+        throw UsageException(
+          'Access token expired. Run the agent once to refresh, then retry.',
+        );
+      }
+      if (response.statusCode != 200) {
+        throw UsageException(
+          'Usage request failed (HTTP ${response.statusCode}).',
+        );
+      }
+      final decoded = jsonDecode(resBody);
+      if (decoded is! Map<String, dynamic>) {
+        throw UsageException('Unexpected usage response shape.');
+      }
+      return decoded;
+    } on UsageException {
+      rethrow;
+    } catch (e) {
+      throw UsageException('Could not reach the usage service: $e');
+    } finally {
+      client.close(force: true);
+    }
+  }
 }
 
 /// `Retry-After`, in either form RFC 9110 allows: a delay in seconds, or an
@@ -455,7 +589,11 @@ Duration? parseRetryAfter(String? header, DateTime now) {
 /// in `limits[]` (e.g. a model-scoped weekly cap), and paid `extra_usage` when
 /// enabled. The `session` entry in `limits[]` mirrors `five_hour`, so it is
 /// dropped to avoid a duplicate row.
-AgentUsage parseClaudeUsage(Map<String, dynamic> json, DateTime now) {
+AgentUsage parseClaudeUsage(
+  Map<String, dynamic> json,
+  DateTime now, {
+  String? email,
+}) {
   final windows = <UsageWindow>[];
 
   void addNamed(String key, String label) {
@@ -512,12 +650,16 @@ AgentUsage parseClaudeUsage(Map<String, dynamic> json, DateTime now) {
     );
   }
 
-  return AgentUsage(windows: windows, fetchedAt: now);
+  return AgentUsage(windows: windows, fetchedAt: now, email: email);
 }
 
 /// Parses Codex's `/backend-api/wham/usage` response. The two rate-limit
 /// windows become 5-hour / 7-day [UsageWindow]s.
-AgentUsage parseCodexUsage(Map<String, dynamic> json, DateTime now) {
+AgentUsage parseCodexUsage(
+  Map<String, dynamic> json,
+  DateTime now, {
+  String? email,
+}) {
   final windows = <UsageWindow>[];
   final rateLimit = json['rate_limit'];
   if (rateLimit is Map<String, dynamic>) {
@@ -540,7 +682,45 @@ AgentUsage parseCodexUsage(Map<String, dynamic> json, DateTime now) {
   return AgentUsage(
     windows: windows,
     fetchedAt: now,
-    email: json['email'] as String?,
+    email: email ?? (json['email'] as String?),
+  );
+}
+
+/// Parses Antigravity / Gemini Code Assist's `loadCodeAssist` response.
+AgentUsage parseAntigravityUsage(
+  Map<String, dynamic> json,
+  DateTime now, {
+  String? email,
+  DateTime? tokenExpiry,
+}) {
+  final windows = <UsageWindow>[];
+  final tiers = json['allowedTiers'];
+  if (tiers is List && tiers.isNotEmpty) {
+    for (final tier in tiers) {
+      if (tier is Map<String, dynamic>) {
+        final name = tier['name'] as String? ?? 'Gemini Code Assist';
+        windows.add(
+          UsageWindow(
+            label: name,
+            percent: 0.0,
+            resetsAt: tokenExpiry,
+          ),
+        );
+      }
+    }
+  } else {
+    windows.add(
+      UsageWindow(
+        label: 'Gemini Code Assist',
+        percent: 0.0,
+        resetsAt: tokenExpiry,
+      ),
+    );
+  }
+  return AgentUsage(
+    windows: windows,
+    fetchedAt: now,
+    email: email,
   );
 }
 
