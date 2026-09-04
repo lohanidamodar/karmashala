@@ -2,6 +2,7 @@ import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala/src/app/widgets/row_menu.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/checkout_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_row.dart';
@@ -52,7 +53,7 @@ void main() {
         summary: const ProjectSummary(sessions: 2),
         onTap: () {},
         onNewSession: () {},
-        menuItems: menu(),
+        menuItemsBuilder: menu,
         onMenu: picked.add,
       ),
       CheckoutRow(
@@ -61,7 +62,7 @@ void main() {
         title: 'karmashala-app',
         expanded: true,
         onTap: () {},
-        menuItems: menu(),
+        menuItemsBuilder: menu,
         onMenu: picked.add,
       ),
       SessionCard(
@@ -71,7 +72,7 @@ void main() {
         agentLabel: 'Claude Code  ·  running',
         title: 'Benchmark arcade games',
         onTap: () {},
-        menuItems: menu(),
+        menuItemsBuilder: menu,
         onMenu: picked.add,
       ),
       SessionCard(
@@ -81,7 +82,7 @@ void main() {
         agentLabel: 'Claude Code  ·  running',
         title: 'A subagent of it',
         onTap: () {},
-        menuItems: menu(),
+        menuItemsBuilder: menu,
         onMenu: picked.add,
       ),
     ],
@@ -418,6 +419,124 @@ void main() {
         build: () => host(rows()),
         because: 'every row control keeps a name and stays reachable by Tab',
       );
+    });
+  });
+
+  /// What a pointer crossing a row actually costs, counted rather than timed.
+  ///
+  /// The owner's report was *"hovering on right click menu on explorer also
+  /// lags the ui"*, and there were two reasons. A row held `_hovered` in
+  /// `State` and called `setState`, which re-ran its builder — and a row's
+  /// builder is the **whole card**: three lines, every chip, the whereabouts
+  /// note, the stat, the worktree glyph. Crossing one row rebuilt all of it
+  /// twice, once in and once out, to decide whether one 20px button is drawn,
+  /// and dragging down a list did it per row on the way past. Meanwhile every
+  /// row eagerly built a `List<PopupMenuEntry>` on every build — eight-plus
+  /// entries each, for a menu open on one row at most.
+  ///
+  /// These count builds. A wall-clock assertion on a hover is exactly the
+  /// flaky test this repository refuses.
+  group('what a hover costs', () {
+    /// A row that reports how often its content and its menu are built.
+    Widget countingRow({
+      required void Function() onContentBuild,
+      required void Function() onMenuBuild,
+    }) {
+      List<PopupMenuEntry<String>> items() {
+        onMenuBuild();
+        return menu();
+      }
+
+      return ExplorerRow(
+        kind: ExplorerRowKind.session,
+        depth: 0,
+        selected: false,
+        onTap: () {},
+        menuItemsBuilder: items,
+        onMenu: picked.add,
+        builder: (context) {
+          onContentBuild();
+          return Row(
+            children: [
+              const Expanded(child: Text('Benchmark arcade games')),
+              RowMenuButton(
+                tooltip: 'Session actions',
+                itemBuilder: items,
+                onSelected: picked.add,
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    testWidgets('a pointer crossing the row rebuilds none of its content', (
+      tester,
+    ) async {
+      var content = 0;
+      var menus = 0;
+      picked.clear();
+      tester.view.physicalSize = desktop;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        host(
+          countingRow(
+            onContentBuild: () => content++,
+            onMenuBuild: () => menus++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(content, 1, reason: 'the card is drawn once');
+      expect(menus, 0, reason: 'no menu has been opened');
+
+      final gesture = await hover(tester, find.text('Benchmark arcade games'));
+      // The hover did the one thing it is for.
+      expect(find.byTooltip('Session actions'), findsOneWidget);
+      expect(
+        content,
+        1,
+        reason: 'the button appeared without rebuilding the card around it',
+      );
+
+      await gesture.moveTo(const Offset(1200, 800));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Session actions'), findsNothing);
+      expect(content, 1, reason: 'and leaving costs nothing either');
+      expect(menus, 0, reason: 'still nothing has opened a menu');
+    });
+
+    testWidgets('a row builds its menu when the menu opens, and not before', (
+      tester,
+    ) async {
+      var content = 0;
+      var menus = 0;
+      picked.clear();
+      tester.view.physicalSize = desktop;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        host(
+          countingRow(
+            onContentBuild: () => content++,
+            onMenuBuild: () => menus++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(menus, 0);
+
+      await tester.tap(
+        find.text('Benchmark arcade games'),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Rename'), findsOneWidget);
+      expect(menus, 1, reason: 'built once, by the gesture that opened it');
+      expect(content, 1, reason: 'and the card was not redrawn for it');
     });
   });
 }

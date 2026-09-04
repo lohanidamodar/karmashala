@@ -606,7 +606,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         // Starts one; the menu below is where the dialog lives.
         onNewSession: () => _startWithDefaults(project),
         onTogglePin: () => _togglePin(project),
-        menuItems: [
+        menuItemsBuilder: () => [
           DesktopMenuItem(
             value: 'new-session',
             label: 'New session…',

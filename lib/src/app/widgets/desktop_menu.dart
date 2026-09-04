@@ -275,17 +275,23 @@ class _HeaderLabel extends StatelessWidget {
 /// not on a row at all: a terminal's body, a tab chip, a pane strip.
 class ContextMenuRegion extends StatelessWidget {
   const ContextMenuRegion({
-    required this.menuItems,
+    required this.itemBuilder,
     required this.onSelected,
     required this.child,
     super.key,
   });
 
-  final List<PopupMenuEntry<String>> menuItems;
+  /// Called when the menu opens, and not before. It used to be a `List`, built
+  /// on every build of every row for a menu that opens on one row at most —
+  /// see `RowMenuItemBuilder` in `row_menu.dart` for what that cost.
+  final List<PopupMenuEntry<String>> Function() itemBuilder;
+
   final ValueChanged<String> onSelected;
   final Widget child;
 
   Future<void> _show(BuildContext context, Offset position) async {
+    final items = itemBuilder();
+    if (items.isEmpty) return;
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (overlay == null) return;
@@ -295,7 +301,7 @@ class ContextMenuRegion extends StatelessWidget {
         Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
-      items: menuItems,
+      items: items,
     );
     if (selected != null) onSelected(selected);
   }

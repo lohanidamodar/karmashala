@@ -172,7 +172,7 @@ class _InboxRow extends ConsumerWidget {
 
     return RowContextMenu(
       menuLabel: 'Actions for “${item.label}”',
-      menuItems: [
+      itemBuilder: () => [
         DesktopMenuItem(
           value: 'open',
           label: 'Open the session',
@@ -196,7 +196,7 @@ class _InboxRow extends ConsumerWidget {
         'continue' => ContinueWithDialog.show(context, item.session.openId),
         _ => onDismiss(),
       },
-      builder: (context, _) => InkWell(
+      builder: (context) => InkWell(
         onTap: onOpen,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.xs, 6),

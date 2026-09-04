@@ -229,7 +229,7 @@ class _VariableCard extends ConsumerWidget {
     final scheme = theme.colorScheme;
     return RowContextMenu(
       menuLabel: 'Actions for ${variable.name}',
-      menuItems: [
+      itemBuilder: () => [
         DesktopMenuItem(
           value: 'edit',
           label: variable.secret ? 'Replace' : 'Edit',
@@ -257,7 +257,7 @@ class _VariableCard extends ConsumerWidget {
             .setVariableEnabled(variable.id, !variable.enabled),
         _ => _remove(context, ref),
       },
-      builder: (context, _) => Card(
+      builder: (context) => Card(
         margin: const EdgeInsets.only(bottom: Insets.sm),
         child: Padding(
           padding: const EdgeInsets.all(Insets.md),

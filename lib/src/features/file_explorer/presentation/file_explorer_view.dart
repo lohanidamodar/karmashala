@@ -329,9 +329,9 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
       selected: selected,
       child: RowContextMenu(
         menuLabel: 'Actions for ${entry.name}',
-        menuItems: _menuItems(),
+        itemBuilder: _menuItems,
         onSelected: _onMenu,
-        builder: (context, _) => row,
+        builder: (context) => row,
       ),
     );
     if (!isDir || !_expanded) return menu;

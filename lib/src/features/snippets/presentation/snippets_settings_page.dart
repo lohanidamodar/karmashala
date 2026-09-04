@@ -96,7 +96,7 @@ class _SnippetCard extends ConsumerWidget {
     final theme = Theme.of(context);
     return RowContextMenu(
       menuLabel: 'Actions for ${snippet.label}',
-      menuItems: [
+      itemBuilder: () => [
         DesktopMenuItem(
           value: 'edit',
           label: 'Edit',
@@ -113,7 +113,7 @@ class _SnippetCard extends ConsumerWidget {
       onSelected: (value) => value == 'edit'
           ? _editSnippet(context, ref, snippet)
           : _deleteSnippet(context, ref, snippet),
-      builder: (context, _) => Card(
+      builder: (context) => Card(
         margin: const EdgeInsets.only(bottom: Insets.sm),
         child: Padding(
           padding: const EdgeInsets.all(Insets.md),

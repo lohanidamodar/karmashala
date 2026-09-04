@@ -421,9 +421,9 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
 
     return RowContextMenu(
       menuLabel: menuLabel,
-      menuItems: _menuItems(),
+      itemBuilder: _menuItems,
       onSelected: _act,
-      builder: (context, menuVisible) => Padding(
+      builder: (context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,9 +507,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
             // companion runs this pane — it is always drawn, because there is
             // no right-click and no hover there to reveal it with.
             RowMenuButton(
-              visible: menuVisible,
               tooltip: menuLabel,
-              items: _menuItems(),
+              itemBuilder: _menuItems,
               onSelected: _act,
             ),
           ],

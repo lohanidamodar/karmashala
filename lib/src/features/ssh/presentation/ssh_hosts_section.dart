@@ -64,7 +64,7 @@ class _HostCard extends ConsumerWidget {
 
     return RowContextMenu(
       menuLabel: 'Actions for ${host.name}',
-      menuItems: [
+      itemBuilder: () => [
         DesktopMenuItem(
           value: 'browse',
           label: 'Browse files',
@@ -88,7 +88,7 @@ class _HostCard extends ConsumerWidget {
         'edit' => SshHostDialog.show(context, existing: host),
         _ => _remove(context, ref),
       },
-      builder: (context, _) => Card(
+      builder: (context) => Card(
         margin: const EdgeInsets.only(bottom: Insets.sm),
         child: Padding(
           padding: const EdgeInsets.all(Insets.md),

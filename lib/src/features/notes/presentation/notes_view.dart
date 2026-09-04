@@ -203,9 +203,9 @@ class _NoteCard extends ConsumerWidget {
 
     return RowContextMenu(
       menuLabel: menuLabel,
-      menuItems: _menuItems(targetTitle),
+      itemBuilder: () => _menuItems(targetTitle),
       onSelected: act,
-      builder: (context, menuVisible) => Padding(
+      builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.sm, 2),
         child: Material(
           color: scheme.surfaceContainerLow,
@@ -269,9 +269,8 @@ class _NoteCard extends ConsumerWidget {
                             : () => _sendBack(context, ref, targetId, targetTitle!),
                       ),
                       RowMenuButton(
-                        visible: menuVisible,
                         tooltip: menuLabel,
-                        items: _menuItems(targetTitle),
+                        itemBuilder: () => _menuItems(targetTitle),
                         onSelected: act,
                       ),
                     ],

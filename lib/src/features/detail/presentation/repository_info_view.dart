@@ -495,7 +495,7 @@ class _WorktreeRow extends ConsumerWidget {
       // key or a screen reader. No `⋮`: the chip is a chip.
       child: RowContextMenu(
         menuLabel: 'Actions for ${worktree.label}',
-        menuItems: [
+        itemBuilder: () => [
           DesktopMenuItem<String>(
             value: 'read',
             label: 'Read this worktree here',
@@ -520,7 +520,7 @@ class _WorktreeRow extends ConsumerWidget {
             );
           }
         },
-        builder: (context, _) => InkWell(
+        builder: (context) => InkWell(
           onTap: id == null || root == null
               ? null
               : () => browseWorktree(
