@@ -1,10 +1,10 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/file_picking.dart';
 import '../application/device_fleet.dart';
 import '../domain/android_device.dart';
 import '../domain/device_driver.dart';
@@ -120,7 +120,8 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     // A directory to save into, not a save dialog: `file_selector`'s save
     // sheet is the one piece of this that is not dependable on every desktop,
     // and the app already asks for a directory in two other places.
-    final directory = await getDirectoryPath(
+    final directory = await pickOneDirectory(
+      what: 'where to save ${entry.name}',
       confirmButtonText: 'Save here',
     );
     if (directory == null || !mounted) return;
@@ -144,7 +145,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final driver = _driver;
     final path = _path;
     if (driver == null || path == null) return;
-    final file = await openFile();
+    final file = await pickOneFile(what: 'a file to copy to the device');
     if (file == null || !mounted) return;
     setState(() => _busy = 'Copying ${file.name} to the device…');
     try {

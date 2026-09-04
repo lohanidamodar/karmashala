@@ -85,6 +85,16 @@ class Diagnostics {
     }
   }
 
+  /// Writes what is queued, now.
+  ///
+  /// [LogFileSink.add] returns immediately and arms a 400 ms timer, and that
+  /// timer is a task for *this* isolate — so a line logged just before the
+  /// isolate stops running never reaches disk, and a hang the user ends with
+  /// Task Manager takes the queue with it. Anything about to do something that
+  /// could hold the isolate should flush first, or its log line is the one that
+  /// goes missing. See `file_picking.dart`, which exists for that reason.
+  Future<void> flushFile() => file?.flush() ?? Future<void>.value();
+
   /// Stops writing to disk, flushing what is queued.
   Future<void> detachFile() async {
     final sink = file;

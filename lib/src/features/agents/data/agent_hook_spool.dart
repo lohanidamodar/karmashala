@@ -54,15 +54,35 @@ class AgentHookSpool {
   /// finds a backlog from an unclean exit spreads it over ticks instead of
   /// holding the isolate for a second.
   ///
+  /// **Asynchronous on purpose, and this is load-bearing.** Every path here is
+  /// a `\\wsl.localhost` UNC path served by a plan9 daemon *inside* the
+  /// distribution, so each operation's latency belongs to that distribution and
+  /// not to this app — and a *synchronous* file operation in Dart has no
+  /// timeout, so one that does not come back holds the isolate for as long as
+  /// it takes. `AgentHookSpoolDrainer` polls this every 400 ms, which makes an
+  /// unbounded synchronous wait a thing the user meets while doing something
+  /// else entirely: see `core/util/file_picking.dart` for the measurement of
+  /// what an occupied isolate does to a native file dialog — it is created and
+  /// never shown, and the window goes Not Responding.
+  ///
+  /// Measured 2026-09-04 on the owner's machine, distribution running and warm:
+  /// `exists` on `\\wsl.localhost\archlinux\home\<user>` 1 ms, `list` of it
+  /// 16 ms, and 84 ms for a name that is not a distribution at all. Nothing
+  /// here is slow *when it answers*; the reason to be off the isolate is the
+  /// case where it does not.
+  ///
   /// Never throws. A directory that is gone, a distribution that stopped
   /// answering mid-listing and a file that was deleted between the listing and
   /// the read are all ordinary here, and each of them means "nothing more this
   /// tick".
-  List<AgentHookSpoolEvent> drain(Directory directory, {int limit = 64}) {
+  Future<List<AgentHookSpoolEvent>> drain(
+    Directory directory, {
+    int limit = 64,
+  }) async {
     final List<FileSystemEntity> entries;
     try {
-      if (!directory.existsSync()) return const [];
-      entries = directory.listSync(followLinks: false);
+      if (!await directory.exists()) return const [];
+      entries = await directory.list(followLinks: false).toList();
     } on FileSystemException {
       return const [];
     }
@@ -72,7 +92,8 @@ class AgentHookSpool {
       if (entry is! File) continue;
       if (p.extension(entry.path) != '.json') continue;
       try {
-        files.add((entry.statSync().modified, p.basename(entry.path), entry));
+        final stat = await entry.stat();
+        files.add((stat.modified, p.basename(entry.path), entry));
       } on FileSystemException {
         continue;
       }
@@ -86,12 +107,12 @@ class AgentHookSpool {
     for (final (modified, _, file) in files.take(limit)) {
       String raw;
       try {
-        raw = file.readAsStringSync();
+        raw = await file.readAsString();
       } on FileSystemException {
         continue;
       }
       try {
-        file.deleteSync();
+        await file.delete();
       } on FileSystemException {
         // Read but not removable: skip it rather than report it twice on every
         // tick for the rest of the run.
