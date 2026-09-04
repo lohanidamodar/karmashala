@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
@@ -68,21 +70,27 @@ void main() {
         environment: wslEnv(distro: 'Ubuntu'),
         cwd: EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
       );
-      expect(cmd, [
+      // `wsl.exe … --` hands the command line *tail* to the distribution's
+      // login shell rather than handing it an argv, so the command crosses
+      // base64-encoded and POSIX-quoted — see `encodedPosixShellCommand`.
+      expect(cmd.take(7), [
         'wsl.exe',
         '-d',
         'Ubuntu',
         '--cd',
         '/home/me/app',
         '--',
-        'codex',
-        '--sandbox',
-        'workspace-write',
-        '--ask-for-approval',
-        'on-request',
-        'resume',
-        'sid',
+        'eval',
       ]);
+      expect(
+        utf8.decode(
+          base64Decode(
+            RegExp(r"'([A-Za-z0-9+/=]+)'").firstMatch(cmd.last)!.group(1)!,
+          ),
+        ),
+        "exec 'codex' '--sandbox' 'workspace-write' '--ask-for-approval' "
+        "'on-request' 'resume' 'sid'",
+      );
     });
   });
 
