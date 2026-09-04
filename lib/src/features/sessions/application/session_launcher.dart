@@ -964,6 +964,22 @@ class SessionLauncher {
 
   /// Creates the session row and starts it on the requested surface.
   Future<SessionLaunchResult> launch(SessionLaunchRequest request) async {
+    // First, and before anything is *asked* as well as before anything is
+    // written: a restart is the statement that there is no conversation to
+    // continue, so carrying a resume or a fork alongside it asks for one
+    // conversation to be continued and replaced at once. Refused on the shape
+    // of the request alone — a request that makes no sense must not need a
+    // store read to be turned down, and the reuse below silently prefers the
+    // resume, so falling through would hand the user the other thing.
+    if (request.restartSessionId != null &&
+        (request.resumeExternalSessionId != null ||
+            request.forkExternalSessionId != null)) {
+      throw ArgumentError(
+        'A launch cannot restart a session and also resume or fork a '
+        'conversation.',
+      );
+    }
+
     // Before anything is written: a resume of a conversation we are still
     // running would be a second agent on it. Callers that can reopen the running
     // view do so and never get here; this is the backstop for the ones that
@@ -1034,7 +1050,10 @@ class SessionLauncher {
     // resolve the mode from the setting alone and then write it over the row it
     // was about to reuse, so every resume silently discarded the mode chosen on
     // the composer chip.
-    final reused = _reusableRowForResume(request);
+    // Or the row a restart is re-promising. The two are mutually exclusive by
+    // the guard above, so this is an `??` and not a precedence decision.
+    final reused =
+        _reusableRowForResume(request) ?? _reusableRowForRestart(request);
 
     // What was **decided** for this session, in priority order: a caller that
     // resolved one for this launch (a handoff's carry, a review's cap, an MCP
@@ -1353,6 +1372,32 @@ class SessionLauncher {
       return candidate;
     }
     return null;
+  }
+
+  /// The row a [SessionLaunchRequest.restartSessionId] launch continues *as*.
+  ///
+  /// Every guard [_reusableRowForResume] applies, for the same reasons, plus
+  /// one this half needs and that one cannot express: the row is named
+  /// directly rather than found by conversation id, because a restart's whole
+  /// premise is that no conversation exists to look it up by.
+  ///
+  /// Reusing rather than inserting is what makes this different from the advice
+  /// it replaces. `assignsOwnId` stays true — no resume, no fork — so the
+  /// launch stamps the row's own id as the conversation id again, which is the
+  /// same promise the row already carries. Nothing has to rewrite it.
+  Session? _reusableRowForRestart(SessionLaunchRequest request) {
+    final rowId = request.restartSessionId;
+    if (rowId == null || rowId.isEmpty) return null;
+    if (request.useWorktree || request.parentSessionId != null) return null;
+    final candidate = _ref.read(sessionDaoProvider).getById(rowId);
+    if (candidate == null || candidate.isArchived) return null;
+    if (candidate.repositoryId != request.repository.id) return null;
+    if (candidate.agentInstallationId != request.installation.id) return null;
+    if (candidate.surface != request.surface) return null;
+    // A pane of ours is running it, so there is a conversation after all and
+    // starting a second one over this row would abandon the live one.
+    if (livePaneFor(candidate.id) != null) return null;
+    return candidate;
   }
 
   SessionLaunchResult _startInPane(

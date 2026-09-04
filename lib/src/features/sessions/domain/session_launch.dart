@@ -89,6 +89,7 @@ class SessionLaunchRequest {
     this.workingDirectory,
     this.additionalRepositories = const [],
     this.resumeExternalSessionId,
+    this.restartSessionId,
     this.firstMessage,
     this.parentSessionId,
     this.parentLink,
@@ -149,6 +150,29 @@ class SessionLaunchRequest {
 
   /// The CLI's own session id to resume, when continuing one it already wrote.
   final String? resumeExternalSessionId;
+
+  /// A workspace row to **start a fresh conversation in**, keeping the row.
+  ///
+  /// The other end of `SessionConversationMissing`. A row whose agent takes
+  /// `--session-id` records the promised conversation id at launch, and a launch
+  /// that failed — or a session nothing was ever said in — leaves that promise
+  /// unkept: the row names a conversation the CLI does not have, and every
+  /// resume of it is refused. `resumeMissingConversationMessage` already told
+  /// the user to "start a new session in this repository", which is right and
+  /// throws away the row they were looking at: its title, its age, its place in
+  /// a lineage.
+  ///
+  /// This is that advice as an action. It is deliberately **not** a resume —
+  /// there is nothing to resume, which is the entire problem — so
+  /// [resumeExternalSessionId] must be null and the launcher refuses both
+  /// together. The row is reused exactly as a resume reuses one, and because
+  /// the promised id *is* the row's own id, the promise is simply made again to
+  /// a CLI that can keep it. Nothing about the row changes but its status.
+  ///
+  /// Ignored when it names no reusable row (archived, in another repository, on
+  /// another installation, or one a pane of ours is running), which falls back
+  /// to the ordinary create rather than failing.
+  final String? restartSessionId;
 
   /// Sent as soon as the session is up. One code path, guarded once.
   final String? firstMessage;
