@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/rendering.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
@@ -9,6 +12,7 @@ import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/detail/presentation/workbench_session_view.dart';
 import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
+import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_status_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
@@ -639,6 +643,46 @@ class _NoPaneForSession extends ConsumerWidget {
 /// to the middle of a two-run block. Every control on the row is the same
 /// height by construction (`kBarControlPad`), so aligning to the start and
 /// aligning to the centre are the same thing while there is one run.
+///
+/// **The height is reserved across a session change.** Everything in this bar
+/// that has any height is per-session and asynchronous, and
+/// `sessionDeliveryProvider` is an `autoDispose` *family*: switching terminal
+/// tabs switches the key, so — unlike the refresh `a01cd1f7` fixed — there is
+/// no previous value to carry and the bar genuinely knows nothing about the
+/// session it has just been handed. The facts line takes itself away, the
+/// actions fold to the "could not tell" set and stop wrapping, the bar drops to
+/// its floor, and the terminal above it is `Expanded`: it takes the pixels,
+/// resizes its character grid and reflows. Then git and `gh` answer and all of
+/// it happens again in reverse. Measured across one tab switch, before / while
+/// reading / after:
+///
+/// | window | bar        | terminal rows | grid resizes |
+/// |--------|------------|---------------|--------------|
+/// | 1400px | 51 → 31 → 51 | 50 → 51 → 50 | 2 |
+/// | 900px  | 79 → 57 → 79 | 48 → 49 → 48 | 2 |
+/// | 800px  | 99 → 57 → 99 | 47 → 49 → 47 | 2 |
+/// | 720px  | 127 → 57 → 127 | 45 → 49 → 45 | 2 |
+///
+/// — which is the owner's *"the terminal blinks when switching tabs"*, and at
+/// the app's minimum window it is the same 70-odd pixels the focus blink cost.
+///
+/// So the bar keeps the height it last settled at until it has been told what
+/// this session is ([_HeldHeight]). It is the *box* that is held, not the
+/// content: the strip below draws this session's actions honestly and from the
+/// first frame, and pressing one acts on this session. A reservation rather
+/// than better data on purpose — it does not care *why* a child would take less
+/// room this frame, so a fourth per-session control, a remount, or a provider
+/// nobody has written yet all cost nothing.
+///
+/// **What it cannot be is a constant.** The settled bar is 51px on a wide
+/// window and 127px on the narrowest one the app supports, because the actions
+/// legitimately wrap to three runs there — so a fixed height would either waste
+/// 76px of terminal at 1400px or need somewhere else to put two thirds of the
+/// delivery actions. That trade (one run, everything else behind an overflow,
+/// like the tab strip's [TabPicker]) would make the bar genuinely rigid and is
+/// the only thing that would also stop it growing when a *poll* changes the
+/// action set; it is a redesign of the strip, not a fix to the blink, and it is
+/// not taken here.
 class _SessionBar extends ConsumerWidget {
   const _SessionBar({
     required this.session,
@@ -664,6 +708,17 @@ class _SessionBar extends ConsumerWidget {
     // surface to switch to, and an empty bar would be 30 pixels of nothing.
     if (sessionId == null && selected == null) return const SizedBox.shrink();
 
+    // Whether the bar has been told what it is describing yet. Only "never had
+    // an answer for *this* session" counts: a refresh keeps its previous value
+    // (`a01cd1f7`) and moves nothing, and a read that failed has answered.
+    final reading =
+        sessionId != null &&
+        ref.watch(
+          sessionDeliveryProvider(
+            sessionId,
+          ).select((d) => d.isLoading && !d.hasValue),
+        );
+
     final scheme = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -677,95 +732,182 @@ class _SessionBar extends ConsumerWidget {
             horizontal: Insets.sm,
             vertical: 2,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Full width and above everything, so the facts read as a caption
-              // over the row rather than as the first item in it.
-              if (sessionId != null) ...[
-                DeliveryStateLine(sessionId: sessionId),
-                // Whatever this session has just been told, in this session's
-                // bar. Full width for the same reason, and directly over the
-                // chips that post it.
-                SessionNoticeLine(sessionId: sessionId),
-              ],
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  // Whether a third control fits beside the permission mode and
-                  // the delivery actions. Measured rather than guessed: at
-                  // 720px — the smallest window the app supports — the row is
-                  // already 14px over with the model chip squeezed to its
-                  // glyphs, and 23px over at the 1.3x text step. Scaled by the
-                  // text step for the same reason: the two fixed controls grow
-                  // with it and the room does not.
-                  final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-                  final roomForModel = constraints.maxWidth > 820 * scale;
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (sessionId == null)
-                        const Spacer()
-                      else ...[
-                        PermissionModeChip(sessionId: sessionId),
-                        const SizedBox(width: Insets.xs),
-                        // Beside the permission chip because they are the same kind
-                        // of fact: what *this* session runs under, changed from
-                        // where the session is. It used to live in the window's
-                        // status bar next to the account quota, which put a
-                        // per-session control among window-wide ones and left it
-                        // describing whichever session the app thought was focused.
-                        // Flexible, and the only control here that is. The
-                        // delivery actions do not shrink — they wrap to a second
-                        // run, which is what put `Commit` a row above its own peers
-                        // — and the permission mode is a fixed vocabulary. A model
-                        // name is neither: it is the one label here whose width
-                        // nobody can predict, so it is the one that gives way. One
-                        // part against the strip's eight leaves it the ~118px it
-                        // wants at the fullest bar without letting it push the
-                        // actions onto a second run.
-                        //
-                        // Absent rather than crushed below that: the chat surface
-                        // carries the same chip at full width, so a narrow terminal
-                        // loses a shortcut, not the control.
-                        if (roomForModel) ...[
-                          Flexible(
-                            child: SessionModelChip(
+          // Inside the [Container], so the bar's own surface grows with the
+          // reservation instead of leaving the terminal showing through under
+          // it.
+          child: _HeldHeight(
+            hold: reading,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Full width and above everything, so the facts read as a caption
+                // over the row rather than as the first item in it.
+                if (sessionId != null) ...[
+                  DeliveryStateLine(sessionId: sessionId),
+                  // Whatever this session has just been told, in this session's
+                  // bar. Full width for the same reason, and directly over the
+                  // chips that post it.
+                  SessionNoticeLine(sessionId: sessionId),
+                ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Whether a third control fits beside the permission mode and
+                    // the delivery actions. Measured rather than guessed: at
+                    // 720px — the smallest window the app supports — the row is
+                    // already 14px over with the model chip squeezed to its
+                    // glyphs, and 23px over at the 1.3x text step. Scaled by the
+                    // text step for the same reason: the two fixed controls grow
+                    // with it and the room does not.
+                    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+                    final roomForModel = constraints.maxWidth > 820 * scale;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (sessionId == null)
+                          const Spacer()
+                        else ...[
+                          PermissionModeChip(sessionId: sessionId),
+                          const SizedBox(width: Insets.xs),
+                          // Beside the permission chip because they are the same kind
+                          // of fact: what *this* session runs under, changed from
+                          // where the session is. It used to live in the window's
+                          // status bar next to the account quota, which put a
+                          // per-session control among window-wide ones and left it
+                          // describing whichever session the app thought was focused.
+                          // Flexible, and the only control here that is. The
+                          // delivery actions do not shrink — they wrap to a second
+                          // run, which is what put `Commit` a row above its own peers
+                          // — and the permission mode is a fixed vocabulary. A model
+                          // name is neither: it is the one label here whose width
+                          // nobody can predict, so it is the one that gives way. One
+                          // part against the strip's eight leaves it the ~118px it
+                          // wants at the fullest bar without letting it push the
+                          // actions onto a second run.
+                          //
+                          // Absent rather than crushed below that: the chat surface
+                          // carries the same chip at full width, so a narrow terminal
+                          // loses a shortcut, not the control.
+                          if (roomForModel) ...[
+                            Flexible(
+                              child: SessionModelChip(
+                                sessionId: sessionId,
+                                maxLabelWidth: 72,
+                              ),
+                            ),
+                            const SizedBox(width: Insets.sm),
+                          ],
+                          // The delivery actions take the room the other two do not:
+                          // they are the part that has something new to say as the
+                          // work moves, and the part that wraps when there is no room
+                          // left. They wrap *within* this box, so a second run stays
+                          // inside the group instead of pushing the ends around.
+                          Expanded(
+                            flex: 8,
+                            child: DeliveryStrip(
                               sessionId: sessionId,
-                              maxLabelWidth: 72,
+                              hostedOnTerminal: true,
                             ),
                           ),
-                          const SizedBox(width: Insets.sm),
                         ],
-                        // The delivery actions take the room the other two do not:
-                        // they are the part that has something new to say as the
-                        // work moves, and the part that wraps when there is no room
-                        // left. They wrap *within* this box, so a second run stays
-                        // inside the group instead of pushing the ends around.
-                        Expanded(
-                          flex: 8,
-                          child: DeliveryStrip(
-                            sessionId: sessionId,
-                            hostedOnTerminal: true,
+                        if (selected != null) ...[
+                          const SizedBox(width: Insets.sm),
+                          _ViewToggle(
+                            onTerminal: onTerminal,
+                            onChat: onChat,
+                            onTerminalView: onTerminalView,
                           ),
-                        ),
+                        ],
                       ],
-                      if (selected != null) ...[
-                        const SizedBox(width: Insets.sm),
-                        _ViewToggle(
-                          onTerminal: onTerminal,
-                          onChat: onChat,
-                          onTerminalView: onTerminalView,
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A box that keeps the height it last laid out at, while [hold] is set.
+///
+/// The [_SessionBar]'s reservation, and nothing more general than that: it does
+/// not animate, it does not shrink-wrap, and it has no opinion about what its
+/// child draws. While [hold] is set it is at least as tall as the last height
+/// its child asked for while [hold] was *not* set; the child is still laid out
+/// against the real constraints and still painted at the top, so a shorter
+/// child leaves empty bar under itself rather than being stretched.
+///
+/// A render object rather than a `GlobalKey` and a post-frame measure, because
+/// the frame that matters is the one the switch produces: measuring after the
+/// fact would let the bar collapse for exactly the frame the reservation exists
+/// to cover, and would cost a rebuild for every height it ever settles at.
+///
+/// The remembered height belongs to the **width** it was measured at — a
+/// different width is a different wrapping question, and an answer from the old
+/// one would be a guess. Dragging the window while a session is being read
+/// therefore gets no reservation, which is right: a window resize is already
+/// resizing the grid on purpose.
+class _HeldHeight extends SingleChildRenderObjectWidget {
+  const _HeldHeight({required this.hold, required super.child});
+
+  final bool hold;
+
+  @override
+  _RenderHeldHeight createRenderObject(BuildContext context) =>
+      _RenderHeldHeight(hold);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderHeldHeight renderObject,
+  ) => renderObject.hold = hold;
+}
+
+class _RenderHeldHeight extends RenderProxyBox {
+  _RenderHeldHeight(this._hold);
+
+  bool _hold;
+  set hold(bool value) {
+    if (_hold == value) return;
+    _hold = value;
+    markNeedsLayout();
+  }
+
+  /// The height the child last asked for while nothing was being held, and the
+  /// width it asked for it at.
+  double? _settledHeight;
+  double? _settledWidth;
+
+  /// The floor [_settledHeight] imposes under [constraints], if any.
+  double _floor(BoxConstraints constraints) =>
+      _hold && _settledWidth == constraints.maxWidth ? _settledHeight ?? 0 : 0;
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    child.layout(constraints, parentUsesSize: true);
+    if (_settledWidth != constraints.maxWidth) {
+      _settledWidth = constraints.maxWidth;
+      _settledHeight = null;
+    }
+    if (!_hold) _settledHeight = child.size.height;
+    size = constraints.constrain(
+      Size(child.size.width, math.max(child.size.height, _floor(constraints))),
+    );
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final natural = super.computeDryLayout(constraints);
+    return constraints.constrain(
+      Size(natural.width, math.max(natural.height, _floor(constraints))),
     );
   }
 }
