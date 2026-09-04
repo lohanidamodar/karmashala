@@ -85,13 +85,12 @@ class AgentHookReceiver {
     final status = _inFlight(spec, name, payload)
         ? AgentActivityStatus.working
         : declaredStatus;
-    // The agent's own description of what it wants, when its hooks carry one.
-    // Claude Code's `Notification` payload has a `message`; this used to be
-    // decoded for the session id and discarded, which is why an approval could
-    // be announced but never explained.
-    final message = spec == null || spec.messagePath.isEmpty
-        ? ''
-        : _stringAt(spec.messagePath, payload);
+    // The agent's own description of what it wants or of what it just did, when
+    // its hooks carry one. This used to be decoded for the session id and
+    // discarded, which is why an approval could be announced but never
+    // explained; reading only `message` then left every finished turn with a
+    // session name and nothing else.
+    final message = spec == null ? '' : _messageIn(spec, payload);
 
     final report = AgentStatusReport(
       agentId: id,
@@ -101,7 +100,12 @@ class AgentHookReceiver {
       observedAt: observedAt ?? clock.nowUtc(),
       detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
-      waiting: spec == null
+      // Only a session that stopped *for the user* has anything to be waiting
+      // on, so nothing else is asked the question. Without that guard the prose
+      // rules would run over a finished turn's own summary, and an agent that
+      // wrote "it needs your permission" in a sentence would have claimed an
+      // open prompt on the strength of its own prose.
+      waiting: spec == null || status != AgentActivityStatus.awaitingApproval
           ? AgentWaitKind.unrecorded
           : kind.isEmpty
           ? _waitKind(spec, message)
@@ -125,6 +129,19 @@ class AgentHookReceiver {
       if (lower.contains(entry.key.toLowerCase())) return entry.value;
     }
     return AgentWaitKind.unrecorded;
+  }
+
+  /// The agent's own words in [payload], per [spec]'s candidate paths.
+  ///
+  /// First non-empty wins. A path that is absent on this event is not a
+  /// failure: the paths describe an agent's whole hook surface, and no one
+  /// event carries all of them.
+  static String _messageIn(AgentHookSpec spec, Object? payload) {
+    for (final path in spec.messagePaths) {
+      final value = _stringAt(path, payload);
+      if (value.isNotEmpty) return value;
+    }
+    return '';
   }
 
   /// Whether [event]'s payload says work this session is waiting on is still

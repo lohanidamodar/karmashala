@@ -14,9 +14,15 @@
 /// Null when the source gave nothing. Never synthesised: an absent second line
 /// reads as "not recorded", which is the rule `AgentStatusReport.evidence`
 /// holds itself to.
+/// **Folded onto one line, and that is not the same as picking it apart.** A
+/// grid row arrives already one line; a hook message does not — Claude Code's
+/// `last_assistant_message` is whole paragraphs, blank lines and bullets, and a
+/// toast body given those paints its first line and drops the rest. Runs of
+/// whitespace become one space so the whole quote reaches the clip, which is
+/// the only place a decision about what to drop belongs.
 String? evidenceLine(List<String> evidence, {int max = 120}) {
   final quoted = evidence
-      .map((line) => line.trim())
+      .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
       .where((line) => line.isNotEmpty)
       .join(' · ');
   if (quoted.isEmpty) return null;

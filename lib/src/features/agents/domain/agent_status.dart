@@ -310,7 +310,7 @@ class AgentHookSpec {
     this.entryStyle = AgentHookEntryStyle.grouped,
     this.sessionIdPath = const ['session_id'],
     this.cwdPath = const ['cwd'],
-    this.messagePath = const [],
+    this.messagePaths = const [],
     this.messageWaiting = const {},
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
@@ -353,15 +353,24 @@ class AgentHookSpec {
   /// to the oldest unclaimed pane rather than refusing.
   final List<String> cwdPath;
 
-  /// Where a human-readable description of *what the agent wants* sits in the
-  /// payload, or empty when this agent's hooks carry none.
+  /// Where a human-readable description of *what the agent is doing or wants*
+  /// sits in the payload — **candidate paths, tried in order**, the first
+  /// holding a non-empty string winning. Empty when this agent's hooks carry
+  /// none.
   ///
-  /// The only thing that ever tells us what is being approved in words the
-  /// agent itself chose. Claude Code's `Notification` payload has a `message`;
-  /// it used to be decoded and thrown away, which left the whole app able to
-  /// say "an approval is pending" and never what for. Empty means we quote
-  /// nothing rather than inventing a description.
-  final List<String> messagePath;
+  /// The only thing that ever tells us what is being approved, or what was
+  /// finished, in words the agent itself chose. Empty means we quote nothing
+  /// rather than inventing a description.
+  ///
+  /// A list rather than one path because the field is per **event**, not per
+  /// agent, and no single key covers a CLI's whole hook surface. Claude Code
+  /// 2.1.260 puts the prose under `message` on `Notification` and under
+  /// `last_assistant_message` on `Stop`, `StopFailure` and `SubagentStop` — so
+  /// reading only the first left every "Agent finished" toast with a session
+  /// name and nothing else, which is the half of the question the user actually
+  /// asked. No event carries both, so order is a fallback rather than a
+  /// precedence anyone has to reason about.
+  final List<List<String>> messagePaths;
 
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;

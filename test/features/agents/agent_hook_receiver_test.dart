@@ -214,6 +214,83 @@ void main() {
     expect(reports.latest('claudeCode', ''), isNull);
   });
 
+  group('what the agent said, not just that it said something', () {
+    test('a finished turn quotes its own last message', () {
+      // Captured verbatim from Claude Code 2.1.260 on 2026-09-04. Before this
+      // the payload was read for `message`, which `Stop` does not have, so
+      // every completion toast was a session name and nothing else.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Stop',
+          'stop_hook_active': false,
+          'last_assistant_message':
+              'I ran the echo command, which printed "hi" to the terminal.',
+          'background_tasks': <Object?>[],
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.evidence, [
+        'I ran the echo command, which printed "hi" to the terminal.',
+      ]);
+    });
+
+    test('a broken turn quotes the message it broke on', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'StopFailure',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'StopFailure',
+          'error': 'rate_limit',
+          'last_assistant_message': 'API Error: rate limit exceeded',
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.failed);
+      expect(report.evidence, ['API Error: rate limit exceeded']);
+    });
+
+    test('a Notification still quotes the key it has always quoted', () {
+      // Both keys are declared; no event carries both, so the order is a
+      // fallback rather than a precedence.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: notification(
+          'permission_prompt',
+          'Claude needs your permission to use Bash',
+        ),
+      );
+
+      expect(report.evidence, ['Claude needs your permission to use Bash']);
+    });
+
+    test('a finished turn is never read as an open prompt', () {
+      // The prose rules exist to tell a permission request from an idle nudge,
+      // and both are `awaitingApproval`. Run over a *summary* they would let an
+      // agent claim an open prompt by writing a sentence about one — and the
+      // wait kind is what puts an Enter-typing button on screen.
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Stop',
+          'last_assistant_message':
+              'Done. Note that the next step needs your permission to run.',
+        }),
+      );
+
+      expect(report.status, AgentActivityStatus.idle);
+      expect(report.waiting, AgentWaitKind.unrecorded);
+      expect(report.hasOpenPrompt, isFalse);
+    });
+  });
+
   group('a Stop that only paused the turn', () {
     /// A `Stop` payload as Claude Code 2.1.260 actually sends it, with
     /// [running] entries in `background_tasks`. The two captured on 2026-09-04

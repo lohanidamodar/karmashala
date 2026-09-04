@@ -312,10 +312,29 @@ const _claudeCode = AgentDescriptor(
   statusStrategy: AgentStatusStrategy.hooks,
   hooks: AgentHookSpec(
     configFileName: 'settings.json',
-    // Claude Code's `Notification` payload carries a `message` describing what
-    // it wants. It was decoded for the session id and dropped, which is why the
-    // app could say an approval was pending and never what for.
-    messagePath: ['message'],
+    // **Two keys, because Claude Code's prose lives under two names.**
+    //
+    // `Notification` carries a `message` describing what it wants. It was
+    // decoded for the session id and dropped, which is why the app could say an
+    // approval was pending and never what for.
+    //
+    // `Stop`, `StopFailure` and `SubagentStop` carry `last_assistant_message`
+    // instead, and 2.1.260's own schema says why it is there: *"Text content of
+    // the last assistant message before stopping. Avoids the need to read and
+    // parse the transcript file."* That is the answer to "what finished", and
+    // reading only `message` meant every completion toast was a session name
+    // and nothing else. Captured whole on 2026-09-04 from a real `-p` turn:
+    //
+    //   {"hook_event_name":"Stop","stop_hook_active":false,
+    //    "last_assistant_message":"I ran the echo command, which printed
+    //      \"hi\" to the terminal.",
+    //    "background_tasks":[],"session_crons":[]}
+    //
+    // No event carries both, so the order is a fallback and not a precedence.
+    messagePaths: [
+      ['message'],
+      ['last_assistant_message'],
+    ],
     // The prose fallback, kept only for a CLI whose payload carries no
     // `notification_type` — see [eventKindMeaning], which is the field this was
     // guessing at.
@@ -989,7 +1008,9 @@ const _codex = AgentDescriptor(
     // contributes nothing to the other three, whose payloads have no such
     // field. Composing a description out of the rest of the payload is what
     // `evidence` exists to prevent.
-    messagePath: ['tool_name'],
+    messagePaths: [
+      ['tool_name'],
+    ],
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,

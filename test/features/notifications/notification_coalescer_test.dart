@@ -132,6 +132,45 @@ void main() {
     expect(request.body.length, lessThan(140));
   });
 
+  test('a finished agent says what it finished', () {
+    // "Agent finished" over a session name is the half of the question the
+    // owner did not ask. Claude Code's `Stop` hook carries
+    // `last_assistant_message` for exactly this.
+    final request = _coalescer.summarize([
+      _event(
+        'a',
+        NotificationReason.finished,
+        label: 'Fix login',
+        evidence: const [
+          'I ran the echo command, which printed "hi" to the terminal.',
+        ],
+      ),
+    ])!;
+
+    expect(request.title, 'Agent finished');
+    expect(
+      request.body,
+      'Fix login — I ran the echo command, which printed "hi" to the '
+          'terminal.',
+    );
+  });
+
+  test('a quote that spans paragraphs still fits on one line', () {
+    // A grid row arrives one line already; an assistant's own summary does not.
+    // A toast body given raw newlines paints the first line and drops the rest,
+    // so the clip — not the renderer — decides what is lost.
+    final request = _coalescer.summarize([
+      _event(
+        'a',
+        NotificationReason.finished,
+        label: 'S',
+        evidence: const ['Done.\n\n- built the app\n- ran the tests\n'],
+      ),
+    ])!;
+
+    expect(request.body, 'S — Done. - built the app - ran the tests');
+  });
+
   test('no evidence leaves the body exactly as it was', () {
     final request = _coalescer.summarize([
       _event('a', NotificationReason.finished, label: 'Fix login'),
