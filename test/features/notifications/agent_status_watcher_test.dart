@@ -334,6 +334,30 @@ void main() {
       await pumpMicrotasks();
     }
 
+    test('Codex Stop reaches Karmashala notifications immediately', () async {
+      const codexKey = AgentSessionKey(AgentIds.codex, 'codex-cli-1');
+      const codexSession = WatchedSession(
+        key: codexKey,
+        label: 'Audit notifications',
+        openId: 'codex-row-1',
+        imported: true,
+      );
+      watched = [codexSession];
+      final watcher = build();
+
+      await hookArrives('UserPromptSubmit', forKey: codexKey);
+      expect(notified, isEmpty, reason: 'starting a Codex turn is not news');
+
+      await hookArrives('Stop', forKey: codexKey);
+
+      expect(notified, hasLength(1));
+      expect(notified.single.reason, NotificationReason.finished);
+      expect(notified.single.session, codexSession);
+      expect(watcher.lastStatusOf(codexKey), AgentActivityStatus.idle);
+      expect(attention, isEmpty, reason: 'a completed turn needs no response');
+      expect(inboxUpdates.last.news.single.reason, NotificationReason.finished);
+    });
+
     test('an approval request is delivered without waiting for a poll', () async {
       final watcher = build();
       await hookArrives('PreToolUse');
