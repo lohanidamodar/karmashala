@@ -413,12 +413,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 active: active,
                 hasTerminal: hasTerminal,
               ),
-              onSuggestionTap: (prompt) {
-                _composer.text = prompt;
-                _composer.selection = TextSelection.collapsed(
-                  offset: prompt.length,
-                );
-              },
             ),
           ),
         ),
