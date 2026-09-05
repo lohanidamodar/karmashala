@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.14.0 (2026-09-04)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.15.0 (2026-09-05)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,114 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.15.0 — 2026-09-05 (build 28)
+
+**Karmashala stops reading Codex's files and starts talking to Codex.** The CLI
+ships an app-server — JSON-RPC over `codex app-server --listen stdio://` — and
+it answers `thread/list` out of its own state database in **15–49 ms**, against
+a walk that opened every rollout under a date tree. Two user-visible defects
+fall out of that change, and one that looked like a third turned out to be the
+opposite of what it seemed.
+
+### A session's label was Codex's preamble, not the user's words
+
+`_extractUserMessage` took the first `role:user` `input_text` in a rollout,
+which on a real Codex session is an injected preamble. Measured against the
+owner's store: **15 of 16 sessions differed**, and 10 of the 16 have no name, so
+that preamble *was* their whole display title.
+
+```
+ours='<recommended_plugins> Here is a list of plugins that'
+srvr='You are one judge on a panel scoring content ideas f'
+
+ours='# AGENTS.md instructions for /mnt/c/Users/dlohani/pr'
+srvr='review whole codebase with a goal to make correct, p'
+```
+
+`thread/list` returns the real first message.
+
+### A rename typed into Karmashala never reached Codex
+
+The mirror image of the reported symptom, and the reason it resisted diagnosis.
+`session_index.jsonl` is a **write-through mirror Codex maintains and never
+reads**; `state_5.sqlite`'s `threads.name` is authoritative. Proven by planting
+a sentinel in each under an isolated `CODEX_HOME`: the file's was ignored and
+left untouched on disk, the database's came straight back.
+
+So `_renameCodex`, which rewrote that file, wrote somewhere Codex would never
+look and would overwrite on its next naming event. `renameNative` was worse —
+it wrote the row and propagated to no store at all, so a Codex session launched
+by Karmashala and renamed here reached nothing.
+
+Both now call `thread/name/set`. A Codex that cannot be reached leaves the local
+rename applied and writes **nothing**; the tests assert that as a positive,
+because a consolation write is exactly how the original bug looked fixed.
+
+### Parity, because the default silently drops sessions
+
+`thread/list` with `sourceKinds` omitted applies an "interactive sources"
+default and answered **11 of 16** real threads on the owner's store — the `exec`
+ones vanished. Every kind is now sent explicitly, and a test asserts the full
+list on every page. Verified live: 16 threads, matching the 16 rollout files
+exactly, same ids and same six names. On the Windows install, 45 threads
+against 51 files on disk — the six extra are a pre-`session_meta` rollout format
+from 2025 carrying no `cwd`, which the file walk has never surfaced either.
+
+The walk stays as a per-install fallback, chosen per Codex rather than globally,
+with a backoff counted in scans rather than seconds.
+
+### Expanding a project no longer scans the CLI stores
+
+Expanding scanned every store — and so did merely *selecting* a project, so an
+expand cost two walks. Five expands went from **5 scans to 0**. The import now
+runs once per app lifecycle, after the first frame, on a `karmashala.store-scan`
+isolate, with a refresh kept in each project's menu and a freshness stamp that
+is only written by work that actually re-read the stores.
+
+The Claude store turned out to be *addressable* — a working directory maps to
+the `projects/` subdirectory name Claude writes it under — so that walk narrows
+instead of listing 663 files across 2.6 GB.
+
+**No date cutoff for Codex.** A day folder's mtime moves when a rollout is
+created but not when one is appended to, so a mtime-gated walk would silently
+drop every resumed conversation. Measured, rejected, and recorded where the next
+person will look.
+
+### Creating a process no longer blocks the thread that draws
+
+`Process.run` only looks asynchronous: `CreateProcessW` runs on the **calling**
+thread before the future exists. Spawning moved to a worker isolate, git probes
+are bounded and kept out of the frame that draws them, and two questions that
+were being answered by spawning `git` — "is this a repository?" and "what is
+origin?" — are now read off the filesystem. A checkout's status reads as
+`--porcelain=v2`, so ahead/behind come from a call the row already makes.
+
+A pane whose folder is not a repository says so, instead of showing a
+`GitException` after Riverpod's ten retries had spent 38 seconds behind a
+spinner.
+
+### Fixed, smaller
+
+- A rollout rewritten in place to the same length was served from cache forever;
+  mtime is now compared when the size is unchanged.
+- A non-ASCII thread name reached Codex as `?`, because `ProcessHandle`'s stdin
+  defaults to the ANSI code page on Windows. The protocol line is escaped.
+- An agent nobody installed no longer reports as a broken machine.
+
+### Known, not fixed
+
+`thread/list` lowercases the `cwd` it returns on WSL — 13 of 16 rows come back
+`/mnt/c/users/...`. Attribution is unaffected, since the merge key lowercases on
+every branch, but a WSL Codex project's **displayed** path changes case. Windows
+rows keep theirs. Left alone rather than re-casing a value the server owns.
+
+The `cwd` staleness this change also guards against — Codex re-stamps `cwd` in
+every turn while the rollout's header keeps the original — was **not observable**
+in the owner's store: no rollout there has a `turn_context` cwd differing from
+its `session_meta` one. That half is preventive, not corrective.
 
 ---
 
