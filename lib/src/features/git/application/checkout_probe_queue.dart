@@ -40,6 +40,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// what the app always uses; tests neutralise it through `headlessProbeGate`
 /// because a `ProviderContainer` with no widget tree pumps no frames, and an
 /// un-pumped `endOfFrame` never completes.
+///
+/// **What this gate is still for, now that the spawn has moved.** Everything
+/// above described a `Process.run` reached from the build phase; the creation
+/// itself no longer happens on this isolate at all — `LocalCommandRunner` and
+/// `WslCommandRunner` hand the request to a worker isolate, and
+/// `core/process/process_spawner.dart` says why. What is left on the frame's
+/// thread is the request, the port hop and the decoding of what comes back,
+/// which is real but is not the two hundred milliseconds a `wsl.exe` cost.
+/// The gate stays because the *rest* of that work still belongs after the
+/// frame rather than inside it, and because deferring the ask is what keeps a
+/// pane of rows from filling the worker's queue during a build. The
+/// measurements above are the ones that were taken; they are not re-taken
+/// here.
 final probeGateProvider = Provider<Future<void> Function()>(
   (ref) => () => SchedulerBinding.instance.endOfFrame,
 );
@@ -75,6 +88,14 @@ final probeGateProvider = Provider<Future<void> Function()>(
 ///   user watching the top of a pane fill in actually sees — while capping the
 ///   `CreateProcessW` burst charged to the isolate at four instead of
 ///   twenty-eight.
+///
+/// That last clause is now the *worker* isolate's burst rather than the UI
+/// isolate's, and the bound is worth keeping for the reason it was measured
+/// for: twenty-eight `git` processes alive together across `\\wsl.localhost`
+/// is a load on the share and on the machine, whichever isolate asked for
+/// them. What the bound never did is fix the stall — a limit on how many
+/// probes are *in flight* cannot help when every creation passes through the
+/// asking isolate one at a time regardless.
 ///
 /// Counted rather than timed, and a count rather than a duration for the
 /// reason `checkout_scale_cost_test.dart` gives at length: milliseconds on a

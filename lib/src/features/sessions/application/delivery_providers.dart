@@ -157,10 +157,12 @@ final repositoryOriginProvider = FutureProvider.autoDispose
 /// it by [repositoryOriginProvider]. Recomputed when the workspace mutates,
 /// which is the signal the rest of the Explorer already rebuilds on.
 ///
-/// **None of those processes starts in the frame that asked for them.** Every
-/// one goes through [checkoutProbeQueueProvider], which waits for the frame to
-/// finish first — see `checkout_probe_queue.dart` for why a `Process.run` is
-/// charged to the frame that calls it. So a row paints with no branch chip and
+/// **None of those processes starts in the frame that asked for them, and none
+/// of them is created on this isolate at all.** Every one goes through
+/// [checkoutProbeQueueProvider], which waits for the frame to finish first, and
+/// then through the worker isolate in `core/process/process_spawner.dart`,
+/// which is where the creation is charged — see `checkout_probe_queue.dart` for
+/// what each of the two still buys. So a row paints with no branch chip and
 /// no `+N −M`, and fills in once the window is up; `SessionDiffStat` already
 /// reads a missing answer as "not measured", never as "no branch".
 ///
