@@ -72,10 +72,8 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
               tooltip: 'Refresh',
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
-              // The probe as well as the changes, because the probe is what
-              // decides whether git is asked at all: without this, a folder
-              // that has just had `git init` run in it would keep answering
-              // "not a git repository" until the checkout was reselected.
+              // The probe as well, or a folder that has just had `git init` run
+              // in it would keep answering from the cached verdict.
               onPressed: () {
                 ref.invalidate(checkoutGitPresenceProvider);
                 ref.invalidate(repositoryChangesProvider);
@@ -924,18 +922,14 @@ class _ThreadCard extends StatelessWidget {
   }
 }
 
-/// **What this pane says when there is no diff to draw, and why it is three
-/// things and not one.**
+/// **What this pane says when there is no diff to draw — three things, not
+/// one.**
 ///
-/// It used to be one: `GitException: git status failed: fatal: not a git
-/// repository (or any of the parent directories): .git`, in a red box, after a
-/// spin long enough for the owner to report it as a hang. Two faults in one
-/// sentence — an internal type name standing in for an ordinary fact about a
-/// folder, and the same red box for a folder that is fine as for a git that is
-/// broken.
-///
-/// [gitTroubleOf] is the single place the three are told apart, so this pane
-/// and the Repository pane cannot word the same failure two ways.
+/// It used to be `GitException: git status failed: fatal: not a git repository
+/// …` in a red box: an internal type name standing in for an ordinary fact, and
+/// the same red box for a folder that is fine as for a git that is broken.
+/// [gitTroubleOf] is the single place the three are told apart, so this pane and
+/// the Repository pane cannot word the same failure two ways.
 class _NoChangesToRead extends StatelessWidget {
   const _NoChangesToRead({required this.error});
 
@@ -943,8 +937,8 @@ class _NoChangesToRead extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (gitTroubleOf(error)) {
-    // Calm, and on the same muted ramp as "No working-tree changes." beside it
-    // — because it is the same kind of statement: nothing is wrong here.
+    // The same muted surface as "No working-tree changes." beside it, because
+    // it is the same kind of statement: nothing is wrong here.
     GitTrouble.notARepository => const PanePlaceholder(
       message: notARepositoryMessage,
       icon: AppIcons.folder,
@@ -953,8 +947,6 @@ class _NoChangesToRead extends StatelessWidget {
       message: gitUnreachableMessage,
       icon: AppIcons.linkBreak,
     ),
-    // A real error keeps the red box and git's own words, which are the most
-    // useful thing anybody can be shown about one.
     GitTrouble.failed => _ErrorBox(message: '$error'),
   };
 }

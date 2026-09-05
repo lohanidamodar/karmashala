@@ -30,26 +30,19 @@ import '../terminal/fake_instance.dart';
 /// The owner's report: *"the side panes, when session i selected is not a git it
 /// stays loading for a long time and then shows git exception, it should be
 /// handled correctly in repo, changes etc panes."* What was on screen was
+/// `GitException: git status failed: fatal: not a git repository …` in a red
+/// box — an internal type name for the most ordinary situation an agent works
+/// in, and one red box for both a folder that is fine and a git that is broken.
 ///
-/// ```txt
-/// GitException: git status failed: fatal: not a git repository
-/// (or any of the parent directories): .git
-/// ```
+/// Three states, told apart in one place (`gitTroubleOf`) so the panes cannot
+/// word the same failure two ways, and separated the way §19 separates a health
+/// row's: an unobserved state must not borrow an observed one's words.
 ///
-/// in a red box. Two faults in one sentence: an internal type name standing in
-/// for the most ordinary situation an agent works in, and the same red box for
-/// a folder that is fine as for a git that is broken.
-///
-/// So three states, told apart in one place (`gitTroubleOf`) so the two panes
-/// cannot word the same failure two ways, and separated the way §19 separates a
-/// health row's — an unobserved state must not borrow the words of an observed
-/// one:
-///
-/// | state             | observed?              | how it reads               |
-/// | ----------------- | ---------------------- | -------------------------- |
-/// | not a repository  | yes, a fact            | calm, muted, a folder icon |
-/// | could not reached | no — we do not know    | calm, muted, a broken link |
-/// | git failed        | yes, a fault           | the red box, git's words   |
+/// | state            | observed?           | how it reads               |
+/// | ---------------- | ------------------- | -------------------------- |
+/// | not a repository | yes, a fact         | calm, muted, a folder icon |
+/// | could not reach  | no — we don't know  | calm, muted, a broken link |
+/// | git failed       | yes, a fault        | the red box, git's words   |
 void main() {
   /// §11's compact cell. These are side panes that are dragged narrow, so the
   /// phone width is also the realistic narrow-panel width.
@@ -79,24 +72,17 @@ void main() {
     'git status failed: fatal: detected dubious ownership in repository',
   );
 
-  /// Every git provider failing the same way, which is what actually happens: a
-  /// folder with no git in it has nothing for any of them.
-  ///
-  /// The list is inline rather than a named local for the reason
-  /// [headlessProbeGate] gives: `Override` is a sealed type Riverpod's public
-  /// library does not export, so a helper returning one is untypeable.
   /// Past `defaultRetry`'s ten attempts, whose backoff sums to 38.2 s.
   ///
-  /// Only [GitTrouble.failed] retries at all, and what these assert is that the
-  /// panes read the same either side of that: a retrying failure is an
-  /// `AsyncLoading` *carrying* its error, which both panes report immediately
-  /// and neither forgets when the retries run out. The two *settled* verdicts —
-  /// a folder with no git, a checkout that could not be reached — never reach
-  /// this line's worth of clock at all, which is the whole point of
-  /// `_retryOnlyRealFailures`.
+  /// Only [GitTrouble.failed] retries at all, and this proves the panes read
+  /// the same either side of it. The two settled verdicts never reach this
+  /// clock, which is the point of `_retryOnlyRealFailures`.
   Future<void> pastTheRetries(WidgetTester tester) =>
       tester.pump(const Duration(minutes: 2));
 
+  /// Every git provider failing the same way, which is what actually happens: a
+  /// folder with no git in it has nothing for any of them. Inline for the
+  /// reason [headlessProbeGate] gives — `Override` is not exported.
   ProviderContainer containerFailingWith(Object error) {
     final container = ProviderContainer(
       overrides: [
@@ -143,9 +129,8 @@ void main() {
     testWidgets('a checkout that could not be reached says so instead', (
       tester,
     ) async {
-      // The difference that matters: this one is not a statement about the
-      // folder at all. A stopped WSL distribution must never read as "your
-      // repository is not a repository".
+      // A stopped WSL distribution must never read as "your repository is not
+      // a repository".
       await pump(tester, unreachable);
 
       expect(find.text(gitUnreachableMessage), findsOneWidget);
@@ -216,9 +201,8 @@ void main() {
 
     testWidgets('a real failure shows git\'s own words, once', (tester) async {
       await pump(tester, failed);
-      // Straight away, and not after the 38 s of retry backoff — the two panes
-      // have to say the same thing at the same time, and the Changes pane's
-      // `.when` reports a retrying failure at once.
+      // Straight away, not after the 38 s of backoff: the two panes have to say
+      // the same thing at the same time.
       expect(find.textContaining('dubious ownership'), findsOneWidget);
 
       await pastTheRetries(tester);
@@ -228,9 +212,8 @@ void main() {
     testWidgets('a row that fails on its own is named, not "unavailable"', (
       tester,
     ) async {
-      // The section-wide note is read off the worktree listing; a remote that
-      // failed while everything else answered still has to say which of the
-      // three it was, in the same words.
+      // The section-wide note comes off the worktree listing; a remote that
+      // failed alone still has to name which of the three it was.
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),

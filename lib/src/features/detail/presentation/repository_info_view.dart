@@ -203,14 +203,12 @@ class _RevealButton extends ConsumerWidget {
 /// so a `git worktree list` landing repainted the commit log beside it.
 ///
 /// **Unless there is no git to detail**, and then the whole section is one
-/// sentence: Branch, Remote, Worktrees and Recent commits each answering "not a
-/// git repository" in a 240px panel is the same fact spelled four times. The
-/// verdict is read once, from [selectedCheckoutGitTroubleProvider].
+/// sentence read from [selectedCheckoutGitTroubleProvider]: four rows each
+/// saying "not a git repository" in a 240px panel is one fact spelled four
+/// times.
 ///
-/// This is the one watch the three-widgets split above deliberately kept out of
-/// here, and it does not undo it: the three children are `const`, so an
-/// identical instance rebuilds none of them — the Column and the GIT label are
-/// all that repaint when the verdict moves, and it moves once per selection.
+/// The one watch back in this build does not undo the split above: the three
+/// children are `const`, so an identical instance rebuilds none of them.
 class _GitDetails extends ConsumerWidget {
   const _GitDetails();
 
@@ -237,13 +235,11 @@ class _GitDetails extends ConsumerWidget {
   }
 }
 
-/// The GIT section when git has nothing to say about this checkout — a plain
-/// paragraph on the muted ramp, with no error colour and no exception name.
+/// The GIT section when git has nothing to say — a plain paragraph on the muted
+/// ramp, with no error colour and no exception name.
 ///
-/// A wrapping paragraph rather than a value in a [_kv] row, because this pane
-/// can be dragged to 240px and that row's label column would leave a sentence
-/// about 170px to live in. Selectable for the same reason every other value
-/// here is: the words are worth pasting into a message to an agent.
+/// A wrapping paragraph rather than a [_kv] row: this pane drags down to 240px,
+/// where that row's label column would leave a sentence about 170px.
 class _GitTroubleNote extends StatelessWidget {
   const _GitTroubleNote({required this.report});
 
@@ -252,9 +248,8 @@ class _GitTroubleNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // The muted ramp for all three, the failure included: this is a detail
-    // panel, and its job is to state what is so. The red box lives in the
-    // Changes pane, where the failure is the whole content of the surface.
+    // The muted ramp for all three, the failure included: the red box lives in
+    // the Changes pane, where a failure is the whole content of the surface.
     final muted = theme.colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -265,8 +260,7 @@ class _GitTroubleNote extends StatelessWidget {
             // Nudged onto the first line's text rather than its box.
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              // Not colour alone (§5): the three states differ by glyph and by
-              // sentence, both of which survive a monochrome screen.
+              // Glyph and sentence, never colour alone (§5).
               switch (report.trouble) {
                 GitTrouble.notARepository => AppIcons.folder,
                 GitTrouble.unreachable => AppIcons.linkBreak,
@@ -303,15 +297,12 @@ class _BranchAndRemote extends ConsumerWidget {
     final branch = ref.watch(currentBranchProvider);
     final remote = ref.watch(repoRemoteUrlProvider);
 
-    // A per-row failure the section-wide note did not swallow — the remote
-    // failing on its own while the branch answered, say. Named by
-    // [gitTroubleOf] rather than by a flat `unavailable`, which covered all
-    // three states with one word, so the three read the same here as they do
-    // everywhere else.
+    // A row that failed on its own, the remote while the branch answered say.
+    // Named rather than a flat `unavailable`, which covered all three states
+    // with one word. `.error` before the loading case: see
+    // `selectedCheckoutGitTroubleProvider`.
     String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
       AsyncData(:final value) => value ?? fallback,
-      // See `selectedCheckoutGitTroubleProvider` for why this is `.error` and
-      // why it comes before the loading case.
       AsyncValue(:final error?) => gitTroubleLabel(gitTroubleOf(error)),
       _ => '…',
     };
@@ -415,9 +406,8 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
           itemBuilder: (context, index) => row(value[index]),
         ),
       ),
-      // Before the bare loading, and by `.error` rather than by an `AsyncError`
-      // pattern, for the reason `selectedCheckoutGitTroubleProvider` gives: a
-      // failure being retried is an `AsyncLoading` carrying its error.
+      // `.error` before the bare loading: a failure being retried is an
+      // `AsyncLoading` carrying its error.
       AsyncValue(:final error?) => _dim(
         theme,
         gitTroubleLabel(gitTroubleOf(error)),

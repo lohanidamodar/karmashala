@@ -10,19 +10,14 @@ import '../../support/fixtures.dart';
 
 /// **"Is this a git repository?", answered off the filesystem.**
 ///
-/// The reported bug is a session whose folder is not a repository: the panes
-/// spin, then show `GitException: git status failed: fatal: not a git
-/// repository (or any of the parent directories): .git`. Git answers that in
-/// 132 ms; the spawn in front of it costs 90 ms locally, 208–439 ms through
-/// `wsl.exe`, and 17.8 s for a cold distribution. This reader spends `stat`s
-/// instead, and the assertions below are all about *how many* — never about how
-/// long, which at `--concurrency=4` would be a coin toss.
+/// Git answers it in 132 ms; the spawn in front of it costs 90 ms locally,
+/// 208–439 ms through `wsl.exe`, 17.8 s for a cold distribution. This reader
+/// spends `stat`s instead, and every assertion here is about *how many* — never
+/// how long, which at `--concurrency=4` would be a coin toss.
 ///
-/// The trap the whole file is written around is git's **parent search**: a
-/// subfolder of a checkout is in a repository with no `.git` of its own, so a
-/// reader that only looked where it was pointed would call most of a real
-/// project untracked. That is a worse bug than the one being fixed, and the
-/// three "…inside a repository" cases below are what stop it coming back.
+/// The trap it is written around is git's **parent search**: a subfolder of a
+/// checkout is in a repository with no `.git` of its own, and calling that
+/// untracked would be a worse bug than the one being fixed.
 void main() {
   GitPresenceReader readerFor(_StatFiles files) =>
       GitPresenceReader(
@@ -60,9 +55,8 @@ void main() {
         await readerFor(files).read(r'C:\Users\me\notes'),
         GitPresence.notARepository,
       );
-      // Every ancestor was asked, and the folder itself last — that final stat
-      // is the proof the filesystem was answering, without which every one of
-      // the nulls above it would be indistinguishable from a dead share.
+      // Every ancestor, and the folder itself last — that final stat is the
+      // proof the filesystem was answering at all.
       expect(files.stats, [
         r'C:\Users\me\notes\.git',
         r'C:\Users\me\.git',

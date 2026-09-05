@@ -19,29 +19,21 @@ import '../../support/fixtures.dart';
 
 /// **What a folder that is not a git repository costs, counted in processes.**
 ///
-/// The reported bug: selecting a session whose folder is not a repository left
-/// the Repository and Changes panes spinning for a long time and then showed a
-/// raw `GitException`. Two costs were hiding in that, and both are counted here
-/// rather than timed — the suite runs at `--concurrency=4`, so a wall-clock
-/// assertion over a few hundred milliseconds is a coin toss, while spawns and
-/// `stat`s are countable exactly.
+/// Counted rather than timed: at `--concurrency=4` a wall-clock assertion over
+/// a few hundred milliseconds is a coin toss, while spawns are exact.
 ///
 /// | to reach "not a git repository" | before | after |
 /// | ------------------------------- | -----: | ----: |
 /// | filesystem can see the folder   |     11 |     0 |
 /// | filesystem could not (WSL, SSH) |     11 |     1 |
 ///
-/// Eleven, not one, because Riverpod 3 retries a failed provider ten times on
-/// its own — and while it is retrying the element carries its error *inside* an
-/// `AsyncLoading`, so the pane draws a spinner for the whole 38 s of backoff.
-/// That is the "stays loading for a long time" half of the report, and it needed
-/// its own fix: `NotAGitRepository` is an `Exception` too, so the probe alone
-/// would have made the calm message take exactly as long to appear.
+/// Eleven, not one, because Riverpod 3 retries a failed provider ten times, and
+/// a retrying element carries its error *inside* an `AsyncLoading` — the
+/// spinner for the whole 38 s of backoff, which is the "stays loading for a
+/// long time" half of the report.
 ///
-/// The second row is the backstop, and it matters as much as the first: the
-/// probe is allowed to answer `unknown` whenever it is unsure, so the states
-/// have to be reachable from git's own refusal too, at one process and no
-/// retries.
+/// The second row is the backstop: the probe may answer `unknown` whenever it
+/// is unsure, so the states must be reachable from git's own refusal too.
 void main() {
   late AppDatabase db;
   late FakeCommandRunner git;
@@ -118,10 +110,8 @@ void main() {
     test('every one of the four reaches it, and none of them spawns', () async {
       final container = containerWith(plainFolder);
 
-      // The four the Repository and Changes panes draw. Each already had a null
-      // or an empty list with a different meaning — "no remote", "detached",
-      // "no other worktrees", "no changes" — so none of them could have said
-      // this by returning one.
+      // Each already had a null or an empty list meaning something else — "no
+      // remote", "detached", "no other worktrees", "no changes".
       for (final read in [
         () => container.read(repositoryChangesProvider.future),
         () => container.read(currentBranchProvider.future),
@@ -136,10 +126,8 @@ void main() {
     });
 
     test('a subfolder of a clone is a repository, and git is asked', () async {
-      // The trap this whole change is written around: git searches parent
-      // directories, so a folder with no `.git` of its own is still in a
-      // repository. Reporting "not a git repository" here would be worse than
-      // the bug being fixed.
+      // The trap: git searches parent directories, so a folder with no `.git`
+      // of its own is still in a repository.
       git.responder = (_) =>
           const CommandResult(exitCode: 0, stdout: ' M a.dart\n', stderr: '');
       final container = containerWith(insideAClone);
@@ -203,9 +191,8 @@ void main() {
     });
 
     testWidgets('a real failure still gets its retries', (tester) async {
-      // The control. A contended index lock genuinely can come good on its own,
-      // so it keeps the default policy — a zero above must not be bought by
-      // switching retry off everywhere.
+      // The control: a zero above must not be bought by switching retry off
+      // everywhere.
       git.responder = (_) => const CommandResult(
         exitCode: 128,
         stdout: '',
@@ -263,10 +250,8 @@ void main() {
         ),
       );
 
-      // A `testWidgets`, and past the retries: this is the one case that
-      // retries at all, and the verdict has to survive them rather than being
-      // forgotten when the backoff runs out. The two settled verdicts answer on
-      // the first pass and need no clock.
+      // Past the retries — this is the one case that retries at all, and the
+      // verdict has to survive them.
       await tester.pump(const Duration(minutes: 2));
 
       final report = container.read(selectedCheckoutGitTroubleProvider);

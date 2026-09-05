@@ -824,9 +824,7 @@ class _ProbeFiles implements GitFiles {
       throw UnimplementedError('nothing on this path stats');
 
   /// By shape, like [readString], and **not recorded**: this is the presence
-  /// probe's question and the counts below are the delivery reading's. Every
-  /// seeded clone here is a real repository, so a caller that does ask gets the
-  /// answer the rest of this fake gives.
+  /// probe's question and the counts below are the delivery reading's.
   @override
   Future<PathEntry> typeOf(String path) async {
     if (path.endsWith(r'\.git')) {

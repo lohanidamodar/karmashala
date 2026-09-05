@@ -7,16 +7,10 @@ import '../../environments/domain/execution_environment.dart';
 
 /// What is at a path, as far as this process can see.
 ///
-/// Three cases and not four: [none] means *nothing is there* **and** *the
-/// lookup failed*, for the same reason [GitFiles.readString] answers one null
-/// for three failures. A `\\wsl.localhost` share whose distribution has gone
-/// away reports the same nothing an empty folder does, and a second question
-/// asked of the same share is no more trustworthy than the first.
-///
-/// So a [none] is never on its own an absence. `GitPresenceReader` is built
-/// around that: it concludes "there is no `.git` here" only alongside a
-/// [directory] answer for the folder itself, which is the proof that the
-/// filesystem was answering at all.
+/// [none] is *nothing is there* **and** *the lookup failed*, for the reason
+/// [GitFiles.readString] answers one null for three failures — a dead
+/// `\\wsl.localhost` share reports the same nothing an empty folder does. So a
+/// [none] is never on its own an absence; see `GitPresenceReader`.
 enum PathEntry { none, file, directory }
 
 /// The few filesystem operations this feature needs, behind an interface so a
@@ -49,12 +43,9 @@ abstract interface class GitFiles {
 
   /// What is at [path] — see [PathEntry].
   ///
-  /// The one place this feature spends a `stat`, and it is here because
-  /// **proving an absence is the one question a read cannot answer**. A null
-  /// from [readString] of `<dir>/.git/config` cannot tell "there is no `.git`
-  /// here" from "`.git` is a directory whose config I could not open", and the
-  /// first is a fact to show the user while the second has to be handed to
-  /// git. One `stat` separates them; a second read never could.
+  /// The one `stat` this feature spends, because proving an absence is the one
+  /// question a read cannot answer: a null from `<dir>/.git/config` cannot tell
+  /// "there is no `.git`" from "`.git` is a directory I could not open".
   Future<PathEntry> typeOf(String path);
 }
 
@@ -91,18 +82,15 @@ class HostGitFiles implements GitFiles {
   @override
   Future<PathEntry> typeOf(String path) async {
     try {
-      // Links are followed, so a `.git` that is a symlink to a real git
-      // directory reports [PathEntry.directory] — which is what git makes of
-      // it too. A dangling one reports nothing, like anything else that is not
-      // there.
+      // Links are followed, so a `.git` symlinked to a real git directory reads
+      // as a directory — which is what git makes of it too.
       return switch (await FileSystemEntity.type(path)) {
         FileSystemEntityType.file => PathEntry.file,
         FileSystemEntityType.directory => PathEntry.directory,
         _ => PathEntry.none,
       };
     } on FileSystemException {
-      // A share that has gone away, or a path this OS will not even parse. See
-      // [PathEntry] for why that is the same answer as an empty folder.
+      // A dead share, or a path this OS will not parse. See [PathEntry].
       return PathEntry.none;
     }
   }
