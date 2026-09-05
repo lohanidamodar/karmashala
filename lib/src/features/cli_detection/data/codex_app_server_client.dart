@@ -311,7 +311,7 @@ class CodexAppServerClient {
     }
     _info = CodexAppServerInfo.fromResult(init.value!);
     handle.writeLine(
-      jsonEncode({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}}),
+      _encode({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}}),
     );
     return handle;
   }
@@ -348,7 +348,7 @@ class CodexAppServerClient {
     _pending[id] = completer;
     try {
       handle.writeLine(
-        jsonEncode({
+        _encode({
           'jsonrpc': '2.0',
           'id': id,
           'method': method,
@@ -380,6 +380,27 @@ class CodexAppServerClient {
         );
       },
     );
+  }
+
+  /// One request line, in **pure ASCII**.
+  ///
+  /// A [ProcessHandle]'s stdin is a `dart:io` sink and defaults to
+  /// `systemEncoding`, which on a Windows host is the ANSI code page — a
+  /// Devanagari or accented thread name written through it reaches Codex as
+  /// `?`. Escaping every non-ASCII code unit to `\uXXXX` is valid JSON, is
+  /// what the encoding cannot corrupt, and keeps the fix here rather than in a
+  /// sink every agent session shares.
+  static String _encode(Map<String, Object?> message) {
+    final json = jsonEncode(message);
+    final out = StringBuffer();
+    for (final unit in json.codeUnits) {
+      if (unit < 0x20 || unit > 0x7e) {
+        out.write('\\u${unit.toRadixString(16).padLeft(4, '0')}');
+      } else {
+        out.writeCharCode(unit);
+      }
+    }
+    return out.toString();
   }
 
   void _onLine(String line) {

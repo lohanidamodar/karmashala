@@ -78,6 +78,23 @@ void main() {
     });
   });
 
+  test('a name with non-ASCII characters crosses as escaped ASCII', () async {
+    final server = FakeCodexAppServer();
+    final client = _clientFor(server);
+    addTearDown(client.close);
+
+    await client.setThreadName('t1', 'नाम — caf\u00e9');
+
+    // A ProcessHandle's stdin defaults to `systemEncoding`, which on a Windows
+    // host is the ANSI code page: anything outside it reaches Codex as `?`.
+    expect(
+      server.written.last.codeUnits.every((unit) => unit < 0x80),
+      isTrue,
+      reason: 'the line must survive an encoding that cannot spell the name',
+    );
+    expect(server.lastNameSet, {'threadId': 't1', 'name': 'नाम — caf\u00e9'});
+  });
+
   test('an unknown method is a typed failure, not a hang', () async {
     // Measured against Codex 0.145.0 and 0.153.4: the error that names the 151
     // valid methods arrives with **no id**, because the request never parsed
