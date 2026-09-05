@@ -242,6 +242,143 @@ void main() {
       expect(subcommands(), ['remote get-url', 'rev-parse --abbrev-ref']);
     });
   });
+
+  /// **Which runner a checkout gets, decided by where its files are.**
+  ///
+  /// Measured on the owner's machine, one repository and one `git` command:
+  /// 101 ms from Windows, 3699 ms warm and 17786 ms cold from WSL over
+  /// `/mnt/c`, 9 ms for a WSL-native checkout from WSL. Git stats thousands of
+  /// files and every one crosses DrvFs, so a checkout on the Windows disk is
+  /// asked from Windows however its sessions are configured to run.
+  ///
+  /// Counted in runners and requests, never in milliseconds.
+  group('a read follows the files, not the session', () {
+    late FakeCommandRunner windows;
+    late FakeCommandRunner wsl;
+
+    ChangesService serviceOver(AppDatabase over) => ChangesService(
+      runnerFactory: FakeCommandRunnerFactory(
+        byEnvironmentId: {'windows': windows, 'wsl:Ubuntu': wsl},
+      ),
+      environmentDao: ExecutionEnvironmentDao(over),
+    );
+
+    setUp(() {
+      windows = FakeCommandRunner(environmentId: 'windows');
+      wsl = FakeCommandRunner(environmentId: 'wsl:Ubuntu');
+      ExecutionEnvironmentDao(db).upsert(wslEnv());
+    });
+
+    test('a Windows-hosted checkout in a WSL environment gets Windows '
+        'git', () async {
+      await serviceOver(db).changes(
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
+      );
+
+      expect(windows.requests.single.arguments, [
+        '-C',
+        r'C:\app',
+        'status',
+        '--porcelain=v1',
+      ]);
+      expect(wsl.requests, isEmpty);
+    });
+
+    test('every read-only question follows it, not only the first', () async {
+      const repo = EnvironmentPath(
+        environmentId: 'wsl:Ubuntu',
+        path: '/mnt/c/app',
+      );
+      final service = serviceOver(db);
+      await service.currentBranch(repo);
+      await service.remoteUrl(repo);
+      await service.log(repo);
+      await service.diff(repo);
+
+      expect(windows.requests, hasLength(4));
+      expect(windows.requests.map((r) => r.arguments[1]).toSet(), {r'C:\app'});
+      expect(wsl.requests, isEmpty);
+    });
+
+    test('a WSL-native checkout stays in its distribution', () async {
+      await serviceOver(db).changes(
+        const EnvironmentPath(
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/app',
+        ),
+      );
+
+      expect(wsl.requests.single.arguments, [
+        '-C',
+        '/home/me/app',
+        'status',
+        '--porcelain=v1',
+      ]);
+      expect(windows.requests, isEmpty);
+    });
+
+    test('a write stays in the environment the checkout is filed '
+        'under', () async {
+      await serviceOver(db).mergeBranch(
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
+        'session/s1',
+      );
+
+      expect(wsl.requests.single.arguments, [
+        '-C',
+        '/mnt/c/app',
+        'merge',
+        '--no-ff',
+        'session/s1',
+      ]);
+      expect(windows.requests, isEmpty);
+    });
+
+    test('no local host row falls back to the row the checkout '
+        'names', () async {
+      ExecutionEnvironmentDao(db).delete('windows');
+
+      await serviceOver(db).changes(
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
+      );
+
+      expect(wsl.requests.single.arguments[1], '/mnt/c/app');
+      expect(windows.requests, isEmpty);
+    });
+
+    test('a stale WSL row on a macOS or Linux host is left alone', () async {
+      // `EnvironmentDiscoveryService` only writes `wsl:` rows on Windows, so
+      // this is a database carried to another machine. The guard is the host
+      // row's `EnvironmentKind`, never `Platform` — §18.
+      ExecutionEnvironmentDao(db).upsert(posixEnv());
+
+      await serviceOver(db).changes(
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/mnt/c/app'),
+      );
+
+      expect(wsl.requests.single.arguments[1], '/mnt/c/app');
+      expect(windows.requests, isEmpty);
+    });
+
+    test('a macOS checkout reaches the same code and is unchanged', () async {
+      ExecutionEnvironmentDao(db).upsert(posixEnv());
+
+      await serviceOver(db).changes(
+        const EnvironmentPath(
+          environmentId: 'windows',
+          path: '/Users/me/app',
+        ),
+      );
+
+      expect(windows.requests.single.arguments, [
+        '-C',
+        '/Users/me/app',
+        'status',
+        '--porcelain=v1',
+      ]);
+      expect(wsl.requests, isEmpty);
+    });
+  });
 }
 
 /// [GitFiles] over a map, recording what was read. A missing key reads as null,

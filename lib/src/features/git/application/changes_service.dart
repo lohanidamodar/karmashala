@@ -1,8 +1,11 @@
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/execution_environment.dart';
+import '../../environments/domain/local_environment.dart';
 import '../data/git_files.dart';
 import '../data/git_origin_reader.dart';
+import '../data/git_probe_target.dart';
 import '../data/git_service.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
@@ -15,9 +18,10 @@ import '../domain/working_tree_status.dart';
 /// why the notice is a callback and not the index itself.
 typedef WorkingTreeChanged = void Function(EnvironmentPath repo);
 
-/// High-level access to a repository's working-tree changes and diffs, resolving
-/// the correct runner for the repository's environment. Git is the source of
-/// truth and there is no editor (ADR 0004).
+/// High-level access to a repository's working-tree changes and diffs,
+/// resolving the runner each call needs: a read by where the checkout's files
+/// live, a write by the row it is filed under — see [_ask]. Git is the source
+/// of truth and there is no editor (ADR 0004).
 ///
 /// **Almost read-only, and that is a rule rather than an accident.** Committing
 /// and pushing are things the *agent* does: the delivery strip's `Commit` and
@@ -52,26 +56,52 @@ class ChangesService {
   /// See [WorkingTreeChanged]. Null in a test that only asserts git arguments.
   final WorkingTreeChanged? onWorkingTreeChanged;
 
-  GitService _gitFor(EnvironmentPath repo) {
+  ExecutionEnvironment _environmentOf(EnvironmentPath repo) {
     final env = environmentDao.getById(repo.environmentId);
     if (env == null) {
       throw GitException('Unknown environment: ${repo.environmentId}');
     }
-    return GitService(runnerFactory.forEnvironment(env));
+    return env;
   }
+
+  /// Runs a **read-only** question against the runner that owns [repo]'s files
+  /// rather than the row it is filed under — see [gitProbeTargetFor] for the
+  /// measurement, and for every case that falls back to the row.
+  ///
+  /// The three writes below keep [_gitFor]: a merge runs the checkout's own
+  /// git, with that side's config and filters. Nothing here returns an
+  /// [EnvironmentPath], so a moved read cannot hand a Windows-spelled path back
+  /// to a session that chose WSL — which is why `WorktreeService` is untouched.
+  Future<T> _ask<T>(
+    EnvironmentPath repo,
+    Future<T> Function(GitService git, EnvironmentPath at) question,
+  ) {
+    final target = gitProbeTargetFor(
+      repo,
+      _environmentOf(repo),
+      windowsHost: () => environmentDao.getById(localHostEnvironmentId),
+    );
+    return question(
+      GitService(runnerFactory.forEnvironment(target.environment)),
+      target.path,
+    );
+  }
+
+  GitService _gitFor(EnvironmentPath repo) =>
+      GitService(runnerFactory.forEnvironment(_environmentOf(repo)));
 
   /// Changed files in [repo].
   Future<List<FileChange>> changes(EnvironmentPath repo) =>
-      _gitFor(repo).status(repo);
+      _ask(repo, (git, at) => git.status(at));
 
   /// The branch, its upstream, their divergence and the changed files, in one
   /// process. What a delivery row reads.
   Future<WorkingTreeStatus> statusWithBranch(EnvironmentPath repo) =>
-      _gitFor(repo).statusWithBranch(repo);
+      _ask(repo, (git, at) => git.statusWithBranch(at));
 
   /// The default branch this clone recorded for `origin`, or `null`.
   Future<String?> originHead(EnvironmentPath repo) =>
-      _gitFor(repo).originHead(repo);
+      _ask(repo, (git, at) => git.originHead(at));
 
   /// Both of [repo]'s `origin` facts — the URL and the default branch — from
   /// **two file reads rather than two subprocesses**, falling back to git for
@@ -98,75 +128,71 @@ class ChangesService {
   /// decides whether the files are reachable at all, and this is the layer that
   /// holds it.
   Future<RepositoryOrigin> originFacts(EnvironmentPath repo) async {
-    final env = environmentDao.getById(repo.environmentId);
-    if (env == null) {
-      throw GitException('Unknown environment: ${repo.environmentId}');
-    }
     final reading = await GitOriginReader(
       files: files,
-      hostPathOf: hostPathMapperFor(env),
+      hostPathOf: hostPathMapperFor(_environmentOf(repo)),
     ).read(repo.path);
 
-    // `_gitFor` only where a fact is missing, so a repository whose files
+    // `_ask` only where a fact is missing, so a repository whose files
     // answered never builds a runner it has nothing to run.
     final url = reading.url.known
         ? reading.url.value
-        : await _gitFor(repo).remoteUrl(repo);
+        : await _ask(repo, (git, at) => git.remoteUrl(at));
     if (url == null) return RepositoryOrigin.none;
     return RepositoryOrigin(
       url: url,
       head: reading.head.known
           ? reading.head.value
-          : await _gitFor(repo).originHead(repo),
+          : await _ask(repo, (git, at) => git.originHead(at)),
     );
   }
 
   /// The current branch of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) =>
-      _gitFor(repo).currentBranch(repo);
+      _ask(repo, (git, at) => git.currentBranch(at));
 
   /// The `origin` remote URL of [repo], or `null` if there is none.
   Future<String?> remoteUrl(EnvironmentPath repo) =>
-      _gitFor(repo).remoteUrl(repo);
+      _ask(repo, (git, at) => git.remoteUrl(at));
 
   /// Commits on [repo]'s current branch that [base] does not have; `null` when
   /// git could not answer.
   Future<int?> commitsAhead(EnvironmentPath repo, {required String base}) =>
-      _gitFor(repo).commitsAhead(repo, base: base);
+      _ask(repo, (git, at) => git.commitsAhead(at, base: base));
 
   /// Lines added and removed in [repo], against [base] when one is given.
   Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) =>
-      _gitFor(repo).diffStat(repo, base: base);
+      _ask(repo, (git, at) => git.diffStat(at, base: base));
 
   /// How [repo] stands against [base] in both directions; `null` when git could
   /// not answer.
   Future<AheadBehind?> aheadBehind(
     EnvironmentPath repo, {
     required String base,
-  }) => _gitFor(repo).aheadBehind(repo, base: base);
+  }) => _ask(repo, (git, at) => git.aheadBehind(at, base: base));
 
   /// Resolves [rev] in [repo], or `null` when it names nothing. Asking for
   /// `refs/heads/<name>` is how "does this branch exist" is asked.
   Future<String?> revParse(EnvironmentPath repo, String rev) =>
-      _gitFor(repo).revParse(repo, rev);
+      _ask(repo, (git, at) => git.revParse(at, rev));
 
   /// The remote-tracking branches holding [rev]; `null` when git could not
   /// answer, empty when nothing outside this machine has those commits.
   Future<List<String>?> remoteBranchesContaining(
     EnvironmentPath repo,
     String rev,
-  ) => _gitFor(repo).remoteBranchesContaining(repo, rev);
+  ) => _ask(repo, (git, at) => git.remoteBranchesContaining(at, rev));
 
   /// The upstream of [branch] in [repo] (`origin/work`), or `null`.
   Future<String?> upstreamOf(EnvironmentPath repo, String branch) =>
-      _gitFor(repo).upstreamOf(repo, branch);
+      _ask(repo, (git, at) => git.upstreamOf(at, branch));
 
   /// Unified diff for [repo], optionally limited to [path] / staged changes.
   Future<String> diff(
     EnvironmentPath repo, {
     String? path,
     bool staged = false,
-  }) => _gitFor(repo).diff(repo, path: path, staged: staged);
+  }) => _ask(repo, (git, at) => git.diff(at, path: path, staged: staged));
 
   /// The content fingerprint of each of [paths] as they stand on disk, for the
   /// review-thread anchors. A path git could not hash is absent from the map,
@@ -174,11 +200,11 @@ class ChangesService {
   Future<Map<String, String>> blobShas(
     EnvironmentPath repo,
     List<String> paths,
-  ) => _gitFor(repo).hashObjects(repo, paths);
+  ) => _ask(repo, (git, at) => git.hashObjects(at, paths));
 
   /// Recent commits for [repo].
   Future<List<GitCommit>> log(EnvironmentPath repo, {int limit = 20}) =>
-      _gitFor(repo).log(repo, limit: limit);
+      _ask(repo, (git, at) => git.log(at, limit: limit));
 
   /// Merges [branch] into [repo]'s checked-out branch. The one write here; see
   /// the class doc for why it is the only one.
