@@ -1,4 +1,7 @@
+import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_factory.dart';
+import 'package:karmashala/src/core/process/process_spawn.dart';
+import 'package:karmashala/src/core/process/process_spawner.dart';
 import 'package:karmashala/src/core/process/ssh_command_runner.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
@@ -72,6 +75,38 @@ void main() {
     expect(
       () => CommandRunnerFactory(sshConnections: pool).forEnvironment(orphan),
       throwsA(isA<ArgumentError>()),
+    );
+  });
+
+  test('an SSH command creates no process, here or on a worker', () async {
+    SshHostDao(db).upsert(saved);
+    final runner = CommandRunnerFactory(
+      sshConnections: pool,
+    ).forEnvironment(remote);
+    final spawnsHere = processSpawnsOnThisIsolate;
+    final workerBefore = sharedProcessSpawner.isWorkerRunning;
+
+    // `saved` uses key authentication and names no key, so the connection is
+    // refused before a socket is opened — a failure, but one that has been all
+    // the way through `SshCommandRunner.run`.
+    await expectLater(
+      runner.run(const CommandRequest(executable: 'uname')),
+      throwsA(isA<CommandException>()),
+    );
+
+    expect(
+      processSpawnsOnThisIsolate,
+      spawnsHere,
+      reason: 'dartssh2 opens a channel on a socket; there is no process',
+    );
+    expect(
+      sharedProcessSpawner.isWorkerRunning,
+      workerBefore,
+      reason:
+          'the worker isolate exists to move process creation off the isolate '
+          'that draws. Routing SSH through it would start one to carry a '
+          'command that never becomes a process — a hop bought for nothing, '
+          'and a second place for a remote command to fail',
     );
   });
 

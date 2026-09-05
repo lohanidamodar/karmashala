@@ -3,6 +3,8 @@ import 'dart:io';
 import 'command_runner.dart';
 import 'io_process_handle.dart';
 import 'process_handle.dart';
+import 'process_spawn.dart';
+import 'process_spawner.dart';
 
 /// A `wsl.exe` invocation: the Windows-side executable and arguments that run a
 /// command inside a specific WSL distribution.
@@ -10,6 +12,15 @@ class WslInvocation {
   const WslInvocation(this.executable, this.arguments);
   final String executable;
   final List<String> arguments;
+
+  /// The invocation as a request for the **Windows host** to create.
+  ///
+  /// The distribution's working directory is already an argument (`--cd`), so
+  /// there is no `EnvironmentPath` left to carry: what remains is a plain
+  /// `wsl.exe` command line, which is precisely what makes it something a
+  /// spawner can be handed. No `runInShell` — see [buildWslInvocation].
+  CommandRequest get hostRequest =>
+      CommandRequest(executable: executable, arguments: arguments);
 }
 
 /// Builds the `wsl.exe` command line to run [request] inside [distribution].
@@ -40,10 +51,26 @@ WslInvocation buildWslInvocation(String distribution, CommandRequest request) {
 
 /// Runs commands inside a named WSL distribution by invoking `wsl.exe` on the
 /// Windows host.
+///
+/// **The expensive runner, and the reason the spawner exists.** Measured on the
+/// owner's machine, spawning `wsl.exe -d <distro> -- true` — a command that does
+/// nothing — cost 208, 439 and 328 ms across three runs, against ~90 ms for
+/// `git.exe`. Expanding one project fires about thirty probes; on this runner
+/// that used to be seconds of an unpainted interface, because the creation is
+/// charged to the isolate that asks. [run] now asks from a worker isolate.
+///
+/// It is still selected by `EnvironmentKind.wsl` and never by a platform check,
+/// so a macOS or Linux build cannot reach it — `EnvironmentKind.wsl` rows only
+/// exist where the host is Windows. Nothing about routing the creation through
+/// a spawner changes that: the spawner is chosen by neither kind nor platform,
+/// because a spawn on the UI isolate is a spawn on the UI isolate everywhere.
 class WslCommandRunner implements CommandRunner {
+  /// [spawner] is where this runner's processes are created; `null` means the
+  /// app-wide [sharedProcessSpawner].
   const WslCommandRunner({
     required this.environmentId,
     required this.distribution,
+    this.spawner,
   });
 
   @override
@@ -52,18 +79,14 @@ class WslCommandRunner implements CommandRunner {
   /// The WSL distribution name (e.g. `Ubuntu`).
   final String distribution;
 
+  final ProcessSpawner? spawner;
+
   @override
   Future<CommandResult> run(CommandRequest request) async {
     final invocation = buildWslInvocation(distribution, request);
     try {
-      final result = await Process.run(
-        invocation.executable,
-        invocation.arguments,
-      );
-      return CommandResult(
-        exitCode: result.exitCode,
-        stdout: result.stdout as String,
-        stderr: result.stderr as String,
+      return await (spawner ?? sharedProcessSpawner).run(
+        invocation.hostRequest,
       );
     } on ProcessException catch (e) {
       throw CommandException(
@@ -77,11 +100,7 @@ class WslCommandRunner implements CommandRunner {
   Future<ProcessHandle> start(CommandRequest request) async {
     final invocation = buildWslInvocation(distribution, request);
     try {
-      final process = await Process.start(
-        invocation.executable,
-        invocation.arguments,
-      );
-      return IoProcessHandle(process);
+      return IoProcessHandle(await spawnStreaming(invocation.hostRequest));
     } on ProcessException catch (e) {
       throw CommandException(
         'Failed to start "${request.executable}" in WSL "$distribution"',

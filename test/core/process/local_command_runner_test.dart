@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:karmashala/src/core/process/process_spawner.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// `runInShell` reaching the operating system, not merely being stored.
@@ -18,8 +19,19 @@ import 'package:flutter_test/flutter_test.dart';
 /// that honours the flag from one that drops it. A built-in has no file behind
 /// it at all, so the two answers differ — which is the whole property under
 /// test.
+///
+/// Since the creation moved to a worker isolate these also witness the
+/// *boundary*: the flag is now read at a `Process.run` on another isolate, so a
+/// `runInShell` lost in transit would answer `ver` the way a runner that
+/// dropped it always did. `process_spawn_isolate_test.dart` owns the claim
+/// about which isolate; this owns the claim that the request arrives whole.
 void main() {
   const runner = LocalCommandRunner();
+
+  // The default runner uses the app-wide worker, so this suite is what starts
+  // it. Left running, it would outlive the isolate the suite ran in.
+  tearDownAll(sharedProcessSpawner.shutdown);
+
   final windowsOnly = !Platform.isWindows
       ? 'A cmd.exe built-in is a Windows shell case'
       : null;

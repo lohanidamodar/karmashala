@@ -4,16 +4,29 @@ import '../../features/environments/domain/local_environment.dart';
 import 'command_runner.dart';
 import 'io_process_handle.dart';
 import 'process_handle.dart';
+import 'process_spawn.dart';
+import 'process_spawner.dart';
 
-/// Runs commands on the **local host** — Windows, macOS or Linux — via
-/// `dart:io` `Process`.
+/// Runs commands on the **local host** — Windows, macOS or Linux.
 ///
-/// This is the only place (besides [WslCommandRunner]) that touches `Process`;
-/// features go through the [CommandRunner] interface. There is nothing
-/// OS-specific left in here: what differs between hosts is the *request* (see
-/// `locateRequest`), not how a process is started.
+/// This is the only place (besides `WslCommandRunner`) that describes a process
+/// to create; features go through the [CommandRunner] interface. There is
+/// nothing OS-specific left in here: what differs between hosts is the
+/// *request* (see `locateRequest`), not how a process is started.
+///
+/// [run] hands the request to a [ProcessSpawner], which in the app means the
+/// creation happens on a worker isolate rather than on the one drawing the
+/// interface — see `process_spawner.dart` for why that is the whole fix, and
+/// why it is not a Windows-only one. [start] cannot: a live [Process] does not
+/// cross an isolate boundary.
 class LocalCommandRunner implements CommandRunner {
-  const LocalCommandRunner();
+  /// [spawner] is where this runner's processes are created; `null` means the
+  /// app-wide [sharedProcessSpawner]. Nullable rather than defaulted so
+  /// `const LocalCommandRunner()` still compiles at the three places that
+  /// compose one, including `main()` before any container exists.
+  const LocalCommandRunner({this.spawner});
+
+  final ProcessSpawner? spawner;
 
   @override
   String get environmentId => localHostEnvironmentId;
@@ -21,26 +34,10 @@ class LocalCommandRunner implements CommandRunner {
   @override
   Future<CommandResult> run(CommandRequest request) async {
     try {
-      final result = await Process.run(
-        request.executable,
-        request.arguments,
-        workingDirectory: request.workingDirectory?.path,
-        // Honoured here as well as in [start]: dropping it meant an executable
-        // only the shell can resolve — an app-execution alias, or a `.cmd`
-        // shim such as an npm-global `claude.cmd` — could be started but never
-        // probed, and the probe's failure looked like "not installed".
-        runInShell: request.runInShell,
-        // wsl.exe and several Windows tools emit UTF-16; decode leniently and
-        // let callers strip control characters as needed (see Loop 3 parser).
-        stdoutEncoding: const SystemEncoding(),
-        stderrEncoding: const SystemEncoding(),
-      );
-      return CommandResult(
-        exitCode: result.exitCode,
-        stdout: result.stdout as String,
-        stderr: result.stderr as String,
-      );
+      return await (spawner ?? sharedProcessSpawner).run(request);
     } on ProcessException catch (e) {
+      // Thrown by the creation itself, wherever it happened, and carried back
+      // across the boundary as itself so this message is unchanged.
       throw CommandException(
         'Failed to run "${request.executable}" on ${Platform.operatingSystem}',
         cause: e,
@@ -51,13 +48,7 @@ class LocalCommandRunner implements CommandRunner {
   @override
   Future<ProcessHandle> start(CommandRequest request) async {
     try {
-      final process = await Process.start(
-        request.executable,
-        request.arguments,
-        workingDirectory: request.workingDirectory?.path,
-        runInShell: request.runInShell,
-      );
-      return IoProcessHandle(process);
+      return IoProcessHandle(await spawnStreaming(request));
     } on ProcessException catch (e) {
       throw CommandException(
         'Failed to start "${request.executable}" on ${Platform.operatingSystem}',
