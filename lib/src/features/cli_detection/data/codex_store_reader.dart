@@ -59,6 +59,20 @@ class CodexStoreReader implements StoreSessionReader {
   /// expensive store, and why [slots] and the rollout cache both matter more
   /// here than for Claude — the recursion below is over `YYYY/MM/DD/`, which is
   /// the store's own shape and stays.
+  ///
+  /// **There is no date cutoff, and a folder-mtime one does not work.** The
+  /// date in the path is when a rollout was *created*, so a conversation
+  /// started on Monday and resumed today still lives under Monday. A day
+  /// folder's mtime does not save it — measured 2026-09-05: creating a file in
+  /// a directory moves its mtime, **appending to one already there does not**.
+  /// So a mtime-gated walk would silently drop every resumed session, which is
+  /// worse than walking the whole tree.
+  ///
+  /// The way out is not a cutoff but a better source: `codex app-server`
+  /// answers `thread/list` with `useStateDbOnly: true` — id, cwd, current name,
+  /// timestamps and the rollout path, from Codex's own index, measured at
+  /// 15-49 ms against a ~1.7 s one-off spawn. It is a [StoreSessionReader] like
+  /// this one, so it drops in beside it with this as the fallback.
   @override
   Future<List<DetectedSession>> read(
     String codexHome,

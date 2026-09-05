@@ -183,25 +183,38 @@ void main() {
   });
 
   group('staleness is visible', () {
-    testWidgets('the refresh says how old the reading is', (tester) async {
-      seed(projects: 1);
-      await tester.pumpWidget(app());
-      await tester.pumpAndSettle();
+    // Both form factors: the label grew, and a project row is drawn stacked on
+    // a phone and on one line on a desktop.
+    for (final size in const [Size(390, 844), Size(1440, 900)]) {
+      testWidgets('the refresh says how old the reading is at $size', (
+        tester,
+      ) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        seed(projects: 1);
+        await tester.pumpWidget(app());
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(ProjectCard), buttons: kSecondaryButton);
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Refresh CLI sessions · never checked'),
-        findsOneWidget,
-        reason: '§19: before a reading, say there is none',
-      );
-      await tester.tap(find.text('Refresh CLI sessions · never checked'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(ProjectCard), buttons: kSecondaryButton);
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Refresh CLI sessions · never checked'),
+          findsOneWidget,
+          reason: '§19: before a reading, say there is none',
+        );
+        await tester.tap(find.text('Refresh CLI sessions · never checked'));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(ProjectCard), buttons: kSecondaryButton);
-      await tester.pumpAndSettle();
-      expect(find.text('Refresh CLI sessions · checked just now'), findsOneWidget);
-    });
+        await tester.tap(find.byType(ProjectCard), buttons: kSecondaryButton);
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Refresh CLI sessions · checked just now'),
+          findsOneWidget,
+        );
+      });
+    }
 
     testWidgets('an empty project does not claim it has no sessions', (
       tester,

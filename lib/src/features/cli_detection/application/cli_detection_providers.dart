@@ -423,7 +423,9 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
   Future<List<DetectedProject>> _load() async {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
     final sessions = await scanCliStores(ref);
-    ref.read(cliSessionsCheckedProvider.notifier).stampAll();
+    // Deliberately no freshness stamp. This listed the stores; it imported
+    // nothing, and the stamp means "your session list was brought up to date",
+    // not "somebody looked". Claiming otherwise is the §19 lie.
     return mergeDetectedProjects(sessions, {
       for (final e in environments) e.id: e,
     });

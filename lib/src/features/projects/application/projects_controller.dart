@@ -152,6 +152,9 @@ class ProjectsController extends Notifier<List<Project>> {
     ref.read(selectedImportedSessionIdProvider.notifier).select(null);
 
     final summary = ref.read(projectImportServiceProvider).importAll(detected);
+    // Every store was read and everything in them imported, so this reading
+    // does speak for the whole workspace.
+    ref.read(cliSessionsCheckedProvider.notifier).stampAll();
     ref.read(sessionsRevisionProvider.notifier).bump();
     _refresh();
     return summary;
