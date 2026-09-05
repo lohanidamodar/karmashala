@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
@@ -435,6 +436,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       if (!_disposed) _publish();
     });
     _restoreLayout();
+    // Once, here: a restore rebuilds the tab list from the store, and the tree
+    // has to be in step with it before the first snapshot goes out.
+    _reconcileWorkspace();
     _autosave.start();
     return _snapshot();
   }
@@ -458,10 +462,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     await Future.wait(_disposeAll());
   }
 
+  /// A projection of the controller's fields, and **nothing else**. Called from
+  /// `build()` as well as from every publish, so anything with a side effect
+  /// would be a write on a read path — see [_publish].
   TerminalSessionsState _snapshot() {
-    // Every tab verb goes through [_tabs]; the tree is brought back in step
-    // here rather than at a dozen call sites.
-    _reconcileWorkspace();
     return TerminalSessionsState(
       tabs: _tabsView ??= List.unmodifiable(_tabs),
       activeTabId: _activeTabId,
@@ -481,14 +485,47 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   }
 
   void _publish() {
+    _warnIfPublishingDuringBuild();
+    // Every tab verb ends at the tab list, and the group tree is brought back
+    // in step with it here — on the way *out*, in a write, rather than inside
+    // [_snapshot], which `build()` also calls. A reconciler reachable from a
+    // read is one that can write at a moment the framework cannot let anybody
+    // see, which Riverpod refuses in debug and swallows in release.
+    _reconcileWorkspace();
     _titleRevision++;
     _titles.clear();
     _applyIngestTiers();
     state = _snapshot();
   }
 
+  /// Says **where** a publish landed inside a build, in debug only.
+  ///
+  /// Riverpod's own "tried to modify a provider while the widget tree was
+  /// building" names no location, which makes it a bug that has to be hunted
+  /// rather than read. This controller is the busiest writer in the app, so it
+  /// carries the sign: inside an `assert`, so a release build pays nothing.
+  void _warnIfPublishingDuringBuild() {
+    assert(() {
+      // The controller is deliberately usable without a widget tree — most of
+      // its own tests drive it that way — and asking for the binding there
+      // throws rather than answering.
+      final binding = _bindingOrNull();
+      if (binding?.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+        _log.warning(
+          'The terminal published while the widget tree was building. '
+          'Riverpod cannot promise anybody sees this, so the layout may go '
+          'stale. The stack below is the write.',
+          null,
+          StackTrace.current,
+        );
+      }
+      return true;
+    }());
+  }
+
   /// Notifies title providers that an underlying session title changed.
   void notifyTitleChanged() {
+    _warnIfPublishingDuringBuild();
     _titleRevision++;
     _titles.clear();
     state = _snapshot();
