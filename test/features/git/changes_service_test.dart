@@ -245,13 +245,8 @@ void main() {
 
   /// **Which runner a checkout gets, decided by where its files are.**
   ///
-  /// Measured on the owner's machine, one repository and one `git` command:
-  /// 101 ms from Windows, 3699 ms warm and 17786 ms cold from WSL over
-  /// `/mnt/c`, 9 ms for a WSL-native checkout from WSL. Git stats thousands of
-  /// files and every one crosses DrvFs, so a checkout on the Windows disk is
-  /// asked from Windows however its sessions are configured to run.
-  ///
-  /// Counted in runners and requests, never in milliseconds.
+  /// `GitProbeTarget` carries the measurement that picks it. Counted here in
+  /// runners and requests, never in milliseconds.
   group('a read follows the files, not the session', () {
     late FakeCommandRunner windows;
     late FakeCommandRunner wsl;

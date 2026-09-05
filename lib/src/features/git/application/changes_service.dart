@@ -65,13 +65,13 @@ class ChangesService {
   }
 
   /// Runs a **read-only** question against the runner that owns [repo]'s files
-  /// rather than the row it is filed under — see [gitProbeTargetFor] for the
-  /// measurement, and for every case that falls back to the row.
+  /// rather than the row it is filed under; [gitProbeTargetFor] has the
+  /// measurement and every case that falls back to the row.
   ///
-  /// The three writes below keep [_gitFor]: a merge runs the checkout's own
+  /// The three writes below keep [_gitFor] — a merge runs the checkout's own
   /// git, with that side's config and filters. Nothing here returns an
-  /// [EnvironmentPath], so a moved read cannot hand a Windows-spelled path back
-  /// to a session that chose WSL — which is why `WorktreeService` is untouched.
+  /// [EnvironmentPath], so a moved read cannot hand a Windows-spelled path to a
+  /// session that chose WSL; that is why `WorktreeService` is untouched.
   Future<T> _ask<T>(
     EnvironmentPath repo,
     Future<T> Function(GitService git, EnvironmentPath at) question,

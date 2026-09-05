@@ -14,31 +14,23 @@ class GitProbeTarget {
 
 /// **Where a read-only git question is cheapest to ask: where the files are.**
 ///
-/// Measured on the owner's machine, one repository and one `git` command:
-/// 101 ms warm from Windows, **3699 ms warm and 17786 ms cold** from WSL over
-/// `/mnt/c`, and 9 ms for a WSL-native checkout from WSL. Git stats thousands
-/// of files and every one of them crosses DrvFs, so the 37x is the translation
-/// layer rather than git. A checkout on the Windows disk is therefore probed by
-/// Windows git even when its sessions run in WSL — which is the shape the owner
-/// isolated: *"one project was in windows but accessed via wsl and all sessions
-/// wsl, this is the one that lagged."*
+/// One repository, one `git` command, measured on the owner's machine: 101 ms
+/// warm from Windows, **3699 ms warm and 17786 ms cold** from WSL over
+/// `/mnt/c`, 9 ms for a WSL-native checkout from WSL. Git stats thousands of
+/// files and every one crosses DrvFs, so the 37x is the translation layer.
 ///
-/// **Matched:** `/mnt/<drive>/…` in an [EnvironmentKind.wsl] row. That is WSL's
-/// default automount and the only path shape that names a Windows file without
-/// asking the distribution anything — [PathTranslator.wslMountToWindowsDrive]
+/// **Matched:** `/mnt/<drive>/…` in an [EnvironmentKind.wsl] row — WSL's
+/// default automount, and the only shape that names a Windows file without
+/// asking the distribution anything. [PathTranslator.wslMountToWindowsDrive]
 /// both recognises and converts it.
 ///
-/// **Not matched, deliberately:** a distribution whose `[automount] root` is
-/// somewhere else (`/windir/c/…`), because reading `wsl.conf` costs the spawn
-/// this exists to avoid; every non-`/mnt` path, which is a real ext4 file and
-/// already 9 ms where it is; and `\\wsl.localhost\…`, the reverse direction —
-/// §18 measures that share as working but slow, so moving a probe onto it would
-/// be moving it the wrong way.
+/// **Not matched:** a `[automount] root` set elsewhere (`/windir/c/…`), since
+/// reading `wsl.conf` costs the spawn this avoids; any non-`/mnt` path, already
+/// 9 ms where it is; and `\\wsl.localhost\…`, the reverse direction, which §18
+/// measures as slow — moving a probe onto it goes the wrong way.
 ///
-/// Every uncertainty answers [environment] unchanged, which is what the app did
-/// before this existed: no local host row, a host row that is not Windows, an
-/// unrecognised mount, a WSL row with no distribution, SSH. [windowsHost] is a
-/// callback so a checkout that is not in WSL never spends the lookup.
+/// Every other case answers [environment] unchanged, as the app did before.
+/// [windowsHost] is a callback so a non-WSL checkout never spends the lookup.
 GitProbeTarget gitProbeTargetFor(
   EnvironmentPath checkout,
   ExecutionEnvironment environment, {
