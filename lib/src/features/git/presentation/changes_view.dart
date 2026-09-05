@@ -12,6 +12,8 @@ import '../application/review_threads.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
+import '../data/git_presence_reader.dart';
+import '../domain/git_presence.dart';
 import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import 'worktree_browse.dart';
@@ -70,7 +72,14 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
               tooltip: 'Refresh',
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
-              onPressed: () => ref.invalidate(repositoryChangesProvider),
+              // The probe as well as the changes, because the probe is what
+              // decides whether git is asked at all: without this, a folder
+              // that has just had `git init` run in it would keep answering
+              // "not a git repository" until the checkout was reselected.
+              onPressed: () {
+                ref.invalidate(checkoutGitPresenceProvider);
+                ref.invalidate(repositoryChangesProvider);
+              },
             ),
             const _SendReviewThreadsButton(),
           ],
@@ -258,7 +267,7 @@ class _ChangedFiles extends ConsumerWidget {
         .watch(repositoryChangesProvider)
         .when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => _ErrorBox(message: '$e'),
+          error: (e, _) => _NoChangesToRead(error: e),
           data: (files) => files.isEmpty
               ? const PanePlaceholder(
                   message: 'No working-tree changes.',
@@ -913,6 +922,41 @@ class _ThreadCard extends StatelessWidget {
       ],
     );
   }
+}
+
+/// **What this pane says when there is no diff to draw, and why it is three
+/// things and not one.**
+///
+/// It used to be one: `GitException: git status failed: fatal: not a git
+/// repository (or any of the parent directories): .git`, in a red box, after a
+/// spin long enough for the owner to report it as a hang. Two faults in one
+/// sentence — an internal type name standing in for an ordinary fact about a
+/// folder, and the same red box for a folder that is fine as for a git that is
+/// broken.
+///
+/// [gitTroubleOf] is the single place the three are told apart, so this pane
+/// and the Repository pane cannot word the same failure two ways.
+class _NoChangesToRead extends StatelessWidget {
+  const _NoChangesToRead({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) => switch (gitTroubleOf(error)) {
+    // Calm, and on the same muted ramp as "No working-tree changes." beside it
+    // — because it is the same kind of statement: nothing is wrong here.
+    GitTrouble.notARepository => const PanePlaceholder(
+      message: notARepositoryMessage,
+      icon: AppIcons.folder,
+    ),
+    GitTrouble.unreachable => const PanePlaceholder(
+      message: gitUnreachableMessage,
+      icon: AppIcons.linkBreak,
+    ),
+    // A real error keeps the red box and git's own words, which are the most
+    // useful thing anybody can be shown about one.
+    GitTrouble.failed => _ErrorBox(message: '$error'),
+  };
 }
 
 /// The house error box, hung at the top of whatever pane it fills rather than

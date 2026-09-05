@@ -328,17 +328,18 @@ final selectedCheckoutGitTroubleProvider = Provider.autoDispose<
       GitPresence.notARepository) {
     return const GitTroubleReport(GitTrouble.notARepository);
   }
-  return switch (ref.watch(repoWorktreesProvider)) {
-    AsyncError(:final error) => switch (gitTroubleOf(error)) {
-      // git's own text is the useful part of a real failure, and nothing but
-      // noise beside the two states this app words for itself.
-      GitTrouble.failed => GitTroubleReport(
-        GitTrouble.failed,
-        detail: '$error',
-      ),
-      final trouble => GitTroubleReport(trouble),
-    },
-    _ => null,
+  // `.error` rather than an `AsyncError` pattern, deliberately: a failure
+  // Riverpod is still retrying is an `AsyncLoading` *carrying* its error, and
+  // this section must not go quiet for the 38 s of backoff while the Changes
+  // pane beside it already says what happened — `.when` skips the loading
+  // branch on a refresh, which is the same judgement in Riverpod's own words.
+  final error = ref.watch(repoWorktreesProvider).error;
+  if (error == null) return null;
+  return switch (gitTroubleOf(error)) {
+    // git's own text is the useful part of a real failure, and nothing but
+    // noise beside the two states this app words for itself.
+    GitTrouble.failed => GitTroubleReport(GitTrouble.failed, detail: '$error'),
+    final trouble => GitTroubleReport(trouble),
   };
 });
 

@@ -263,11 +263,10 @@ void main() {
         ),
       );
 
-      // A `testWidgets`, and past the retries, because a failure that is still
-      // being retried is an `AsyncLoading` — the section keeps its `…` rather
-      // than reporting a fault it has not finished establishing, which is the
-      // point of retrying at all. It is also why this is the only case here
-      // that needs a clock: the two settled verdicts answer on the first pass.
+      // A `testWidgets`, and past the retries: this is the one case that
+      // retries at all, and the verdict has to survive them rather than being
+      // forgotten when the backoff runs out. The two settled verdicts answer on
+      // the first pass and need no clock.
       await tester.pump(const Duration(minutes: 2));
 
       final report = container.read(selectedCheckoutGitTroubleProvider);
