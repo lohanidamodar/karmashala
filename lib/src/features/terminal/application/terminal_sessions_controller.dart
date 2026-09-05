@@ -24,6 +24,7 @@ import '../domain/agent_pane_launch.dart';
 import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
+import '../domain/workspace_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/persistence_telemetry.dart';
 import '../domain/pane_restart.dart';
@@ -166,6 +167,8 @@ class TerminalSessionsState {
   const TerminalSessionsState({
     this.tabs = const [],
     this.activeTabId,
+    this.workspace,
+    this.focusedGroupId,
     this.detached = const [],
     this.liveness = const {},
     this.workingDirectories = const {},
@@ -174,6 +177,14 @@ class TerminalSessionsState {
 
   final List<TerminalTab> tabs;
   final String? activeTabId;
+
+  /// How the middle workspace is divided, and which tabs are in each group —
+  /// see [WorkspaceLayout]. Null while there is nothing open.
+  final WorkspaceLayout? workspace;
+
+  /// The group the keyboard is in. [activeTabId] is its tab on screen, and is
+  /// null exactly when that group is still empty.
+  final String? focusedGroupId;
 
   /// Sessions kept running with no tab showing them, newest last.
   final List<DetachedSession> detached;
@@ -227,6 +238,8 @@ class TerminalSessionsState {
       other is TerminalSessionsState &&
           identical(other.tabs, tabs) &&
           other.activeTabId == activeTabId &&
+          identical(other.workspace, workspace) &&
+          other.focusedGroupId == focusedGroupId &&
           identical(other.detached, detached) &&
           identical(other.liveness, liveness) &&
           identical(other.workingDirectories, workingDirectories) &&
@@ -236,6 +249,8 @@ class TerminalSessionsState {
   int get hashCode => Object.hash(
     identityHashCode(tabs),
     activeTabId,
+    identityHashCode(workspace),
+    focusedGroupId,
     identityHashCode(detached),
     identityHashCode(liveness),
     identityHashCode(workingDirectories),
@@ -253,6 +268,14 @@ class TerminalSessionsState {
 class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   final List<TerminalTab> _tabs = [];
   String? _activeTabId;
+
+  /// The workspace split tree — see [WorkspaceLayout]. Kept in step with
+  /// [_tabs] by [_reconcileWorkspace] rather than by every tab verb.
+  WorkspaceLayout? _workspace;
+
+  /// The group [_activeTabId] belongs to, or the empty group the user split
+  /// into and has not filled yet.
+  String? _focusedGroupId;
 
   final Map<String, TerminalInstance> _instances = {};
 
@@ -431,20 +454,27 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     await Future.wait(_disposeAll());
   }
 
-  TerminalSessionsState _snapshot() => TerminalSessionsState(
-    tabs: _tabsView ??= List.unmodifiable(_tabs),
-    activeTabId: _activeTabId,
-    detached: _detachedView ??= List.unmodifiable(_detached),
-    liveness: _livenessView ??= Map.unmodifiable({
-      for (final entry in _instances.entries)
-        entry.key: entry.value.liveness.value,
-    }),
-    workingDirectories: _directoriesView ??= Map.unmodifiable({
-      for (final entry in _instances.entries)
-        entry.key: entry.value.workingDirectory,
-    }),
-    titleRevision: _titleRevision,
-  );
+  TerminalSessionsState _snapshot() {
+    // Every tab verb goes through [_tabs]; the tree is brought back in step
+    // here rather than at a dozen call sites.
+    _reconcileWorkspace();
+    return TerminalSessionsState(
+      tabs: _tabsView ??= List.unmodifiable(_tabs),
+      activeTabId: _activeTabId,
+      workspace: _workspace,
+      focusedGroupId: _focusedGroupId,
+      detached: _detachedView ??= List.unmodifiable(_detached),
+      liveness: _livenessView ??= Map.unmodifiable({
+        for (final entry in _instances.entries)
+          entry.key: entry.value.liveness.value,
+      }),
+      workingDirectories: _directoriesView ??= Map.unmodifiable({
+        for (final entry in _instances.entries)
+          entry.key: entry.value.workingDirectory,
+      }),
+      titleRevision: _titleRevision,
+    );
+  }
 
   void _publish() {
     _titleRevision++;
@@ -549,6 +579,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabs.clear();
     _detached.clear();
     _activeTabId = null;
+    _workspace = null;
+    _focusedGroupId = null;
     _tabsMutated();
     _detachedMutated();
     _livenessMutated();
@@ -699,12 +731,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// own business — see `_writeChangedRows` — so [persistStructure] is all this
   /// owes for the new order to survive a restart.
   bool reorderTab(String tabId, int toIndex) {
-    final from = _tabs.indexWhere((tab) => tab.id == tabId);
-    if (from < 0 || _tabs.length < 2) return false;
-    final to = toIndex.clamp(0, _tabs.length - 1);
-    if (from == to) return false;
-    _tabs.insert(to, _tabs.removeAt(from));
-    _tabsMutated();
+    // Within its own group: [toIndex] is a position in the strip the chip was
+    // dragged along, and every group has a strip of its own now.
+    final tree = _workspace;
+    if (tree == null || _tabById(tabId) == null) return false;
+    final next = tree.reorderInGroup(tabId, toIndex);
+    if (identical(next, tree)) return false;
+    _workspace = next;
     _publish();
     persistStructure();
     return true;
@@ -757,13 +790,273 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     if (closing.contains(_activeTabId)) {
       _activeTabId =
-          _tabById(activate)?.id ?? (_tabs.isEmpty ? null : _tabs.last.id);
+          _tabById(activate)?.id ??
+          _survivorInFocusedGroup(closing) ??
+          (_tabs.isEmpty ? null : _tabs.last.id);
     }
     _publish();
     persistStructure();
     // Closing the active tab hands the keyboard to whichever tab took its
     // place, rather than leaving it nowhere.
     _focusActivePane();
+  }
+
+  // --- workspace groups ------------------------------------------------------
+
+  /// The group the keyboard is in, or null before anything is open.
+  WorkspaceGroup? get _focusedGroup =>
+      _workspace?.groupById(_focusedGroupId ?? '');
+
+  /// Whether [group] is room the user cleared and has not filled yet.
+  bool _isEmptyGroup(WorkspaceGroup group) =>
+      group.panes.length == 1 && isEmptyGroupSlot(group.panes.first);
+
+  /// Whether group [groupId] is still empty.
+  bool isEmptyGroup(String groupId) {
+    final group = _workspace?.groupById(groupId);
+    return group != null && _isEmptyGroup(group);
+  }
+
+  /// The tabs in group [groupId], in the order its strip shows them.
+  List<TerminalTab> tabsInGroup(String groupId) {
+    final group = _workspace?.groupById(groupId);
+    if (group == null) return const [];
+    return [
+      for (final id in group.panes) ?_tabById(id),
+    ];
+  }
+
+  /// The tab group [groupId] is showing, or null while it is empty.
+  String? activeTabInGroup(String groupId) {
+    final group = _workspace?.groupById(groupId);
+    if (group == null || _isEmptyGroup(group)) return null;
+    return group.activePaneId;
+  }
+
+  /// Divides the focused group along [axis], leaving the new group **empty**
+  /// and focused. Returns its id, or null when there is nothing to divide.
+  ///
+  /// The unit of splitting is the whole middle workspace, not the terminal area
+  /// inside one tab: the new group gets a tab strip, a surface and a status bar
+  /// of its own. The report: *"not like only split the terminal space. split
+  /// the whole middle workspace"*.
+  ///
+  /// **A split still starts nothing**, for the reason `splitPane` gives one
+  /// level down. The room is empty until a tab is dragged in or a terminal is
+  /// opened in it, and while the empty group has focus there is no active tab —
+  /// which is the honest answer to "what am I typing into", not a gap.
+  String? splitWorkspace(SplitAxis axis) {
+    final tree = _workspace;
+    final group = _focusedGroup;
+    if (tree == null || group == null || _isEmptyGroup(group)) return null;
+
+    final slot = emptyGroupSlotId(_newId());
+    final next = tree.split(group.activePaneId, axis, slot, _newId());
+    _workspace = next;
+    _focusedGroupId = next.groupOf(slot)?.id;
+    _activeTabId = null;
+    _publish();
+    persistStructure();
+    return _focusedGroupId;
+  }
+
+  /// Gives the keyboard to group [groupId] and to the tab it is showing.
+  void focusGroup(String groupId) {
+    if (_focusedGroupId == groupId) return;
+    final group = _workspace?.groupById(groupId);
+    if (group == null) return;
+    _focusedGroupId = groupId;
+    _activeTabId = _isEmptyGroup(group) ? null : group.activePaneId;
+    _publish();
+    _focusActivePane();
+  }
+
+  /// Moves the keyboard to the group next to the focused one in [direction].
+  ///
+  /// Answered off the tree's geometry, which is what
+  /// [PaneLayout.paneInDirection] already does for panes: the id it hands back
+  /// is a tab (or an empty group's slot), so the group holding it is the one on
+  /// that side.
+  bool moveGroupFocus(PaneDirection direction) {
+    final tree = _workspace;
+    final group = _focusedGroup;
+    if (tree == null || group == null) return false;
+    final landed = tree.paneInDirection(group.activePaneId, direction);
+    final target = landed == null ? null : tree.groupOf(landed);
+    if (target == null || target.id == group.id) return false;
+    focusGroup(target.id);
+    return true;
+  }
+
+  /// Whether [tabId] could be dropped on group [groupId]'s strip.
+  ///
+  /// A tab already in that group is refused: moving it there would change
+  /// nothing, and its position along the strip is [reorderTab]'s business.
+  bool canMoveTabToGroup(String tabId, String groupId) {
+    final group = _workspace?.groupById(groupId);
+    return group != null &&
+        _tabById(tabId) != null &&
+        !group.panes.contains(tabId);
+  }
+
+  /// Moves [tabId] into group [groupId], at [index] along its strip when one is
+  /// given, and shows it there.
+  ///
+  /// Nothing is closed, detached or relaunched: the tab keeps its panes, its
+  /// processes and its scrollback and only changes which strip it hangs in. The
+  /// group it leaves collapses when it was its last tab, which is what VS Code
+  /// does to an emptied editor group.
+  bool moveTabToGroup(String tabId, String groupId, {int? index}) {
+    if (!canMoveTabToGroup(tabId, groupId)) return false;
+    final tree = _workspace!;
+    final anchor = tree.groupById(groupId)!.activePaneId;
+    final without = tree.close(tabId);
+    // Only reachable if the tab was the last thing in the tree, and then the
+    // target group could not have existed to move it into.
+    if (without == null) return false;
+
+    // The group keeps its id when the tab fills it: filling a group is not
+    // making a new one, and everything on screen — the strip, the bar, the
+    // widget's own element — is addressed by that id.
+    final landed = isEmptyGroupSlot(anchor)
+        ? without.replaceRegion(anchor, PaneGroup(groupId, panes: [tabId]))
+        : without.addPane(anchor, tabId);
+    _workspace = index == null ? landed : landed.reorderInGroup(tabId, index);
+    _activeTabId = tabId;
+    _publish();
+    persistStructure();
+    _focusActivePane();
+    return true;
+  }
+
+  /// Closes group [groupId] — its tabs with it — leaving the split it was in
+  /// to collapse. Refuses to close the only group there is.
+  bool closeGroup(String groupId, {bool detach = true}) {
+    final tree = _workspace;
+    final group = tree?.groupById(groupId);
+    if (tree == null || group == null || tree.groups.length < 2) return false;
+
+    if (!_isEmptyGroup(group)) {
+      // The tabs are what the group is; taking them out empties it and
+      // reconciliation collapses what is left.
+      closeTabs(List.of(group.panes), detach: detach);
+      return true;
+    }
+    final next = tree.withoutMissing({
+      for (final id in tree.panes)
+        if (!group.panes.contains(id)) id,
+    });
+    if (next == null) return false;
+    _workspace = next;
+    if (_focusedGroupId == groupId) _focusedGroupId = null;
+    _publish();
+    persistStructure();
+    _focusActivePane();
+    return true;
+  }
+
+  /// A tab left in the focused group once [closing] has gone.
+  ///
+  /// Closing a tab must not hand the keyboard to whichever group happens to
+  /// hold the last tab in the window; it stays where the user was working until
+  /// that group runs out of tabs altogether.
+  String? _survivorInFocusedGroup(Set<String> closing) {
+    final group = _focusedGroup;
+    if (group == null) return null;
+    for (final id in group.panes) {
+      if (!closing.contains(id) && !isEmptyGroupSlot(id)) return id;
+    }
+    return null;
+  }
+
+  /// Brings the workspace tree back in step with [_tabs].
+  ///
+  /// Tabs are opened, closed, merged and pulled apart by a dozen verbs, and
+  /// every one of them ends at the tab list. Rather than teach each of them
+  /// about groups, the tree is reconciled from the list here, on the way to
+  /// every published snapshot: a tab the list has lost leaves its group, a tab
+  /// the tree has never seen joins the focused one, and a group left with
+  /// nothing collapses.
+  ///
+  /// The tree is only ever *replaced* when it actually changed — consumers
+  /// compare it by identity, so rebuilding an equal tree every publish would
+  /// wake all of them.
+  void _reconcileWorkspace() {
+    final live = {for (final tab in _tabs) tab.id};
+    var tree = _workspace;
+
+    if (tree != null) {
+      final keep = {
+        for (final id in tree.panes)
+          if (live.contains(id) || isEmptyGroupSlot(id)) id,
+      };
+      if (keep.length != tree.panes.length) {
+        tree = keep.isEmpty ? null : tree.withoutMissing(keep);
+      }
+    }
+    for (final tab in _tabs) {
+      if (tree != null && tree.contains(tab.id)) continue;
+      tree = _withTabPlaced(tree, tab.id);
+    }
+    if (!identical(tree, _workspace)) _workspace = tree;
+    _repairFocusedGroup();
+    _syncTabOrder();
+  }
+
+  /// [tree] with [tabId] in the focused group — filling it when it was the
+  /// empty room a split cleared, joining its strip otherwise.
+  WorkspaceLayout _withTabPlaced(WorkspaceLayout? tree, String tabId) {
+    if (tree == null) return PaneLayout.single(tabId);
+    final group = tree.groupById(_focusedGroupId ?? '') ?? tree.groups.last;
+    final anchor = group.activePaneId;
+    // Its own id, not a fresh one: see [moveTabToGroup].
+    return _isEmptyGroup(group)
+        ? tree.replaceRegion(anchor, PaneGroup(group.id, panes: [tabId]))
+        : tree.addPane(anchor, tabId);
+  }
+
+  /// Restates the invariant tying [_activeTabId], [_focusedGroupId] and the
+  /// tree together: the active tab is the focused group's, and it is null
+  /// exactly when that group is empty.
+  void _repairFocusedGroup() {
+    final tree = _workspace;
+    if (tree == null) {
+      _focusedGroupId = null;
+      return;
+    }
+    final active = _activeTabId;
+    if (active != null && tree.contains(active)) {
+      if (tree.groupOf(active)!.activePaneId != active) {
+        _workspace = tree.activate(active);
+      }
+      _focusedGroupId = _workspace!.groupOf(active)!.id;
+      return;
+    }
+    final focused = tree.groupById(_focusedGroupId ?? '') ?? tree.groups.first;
+    _focusedGroupId = focused.id;
+    _activeTabId = _isEmptyGroup(focused) ? null : focused.activePaneId;
+  }
+
+  /// Re-orders [_tabs] to follow the tree, so "the tabs, left to right" means
+  /// the same thing to a strip, to a bulk close and to the store's ordinals.
+  void _syncTabOrder() {
+    final tree = _workspace;
+    if (tree == null || _tabs.length < 2) return;
+    final order = <String, int>{};
+    for (final (index, id) in tree.panes.indexed) {
+      order[id] = index;
+    }
+    const last = 1 << 30;
+    final sorted = [..._tabs]
+      ..sort((a, b) => (order[a.id] ?? last).compareTo(order[b.id] ?? last));
+    for (var i = 0; i < sorted.length; i++) {
+      if (identical(sorted[i], _tabs[i])) continue;
+      _tabs
+        ..clear()
+        ..addAll(sorted);
+      _tabsMutated();
+      return;
+    }
   }
 
   /// Divides the active tab's focused pane along [axis], leaving the new region
@@ -2693,6 +2986,48 @@ final terminalSessionsControllerProvider =
 final terminalTabsProvider = Provider<List<TerminalTab>>(
   (ref) => ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs)),
 );
+
+/// How the middle workspace is divided into groups — see [WorkspaceLayout].
+///
+/// Null before anything is open. Compared by identity, like the tab list beside
+/// it, so a publish that did not move a group wakes nobody.
+final workspaceLayoutProvider = Provider<WorkspaceLayout?>(
+  (ref) =>
+      ref.watch(terminalSessionsControllerProvider.select((s) => s.workspace)),
+);
+
+/// The group the keyboard is in.
+final focusedWorkspaceGroupProvider = Provider<String?>(
+  (ref) => ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.focusedGroupId),
+  ),
+);
+
+/// The tabs in one group, in the order its strip shows them.
+///
+/// A family, so opening a tab in one group leaves the other groups' strips
+/// alone. It recomputes only when the tree or the tab list moves — the two
+/// things that can change the answer.
+final workspaceGroupTabsProvider = Provider.autoDispose
+    .family<List<TerminalTab>, String>((ref, groupId) {
+      ref.watch(
+        terminalSessionsControllerProvider.select((s) => (s.workspace, s.tabs)),
+      );
+      return ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .tabsInGroup(groupId);
+    });
+
+/// The tab group [groupId] is showing, or null while the group is empty.
+final workspaceGroupActiveTabProvider = Provider.autoDispose
+    .family<String?, String>((ref, groupId) {
+      ref.watch(
+        terminalSessionsControllerProvider.select((s) => s.workspace),
+      );
+      return ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .activeTabInGroup(groupId);
+    });
 
 /// Which tab is in front.
 final terminalActiveTabIdProvider = Provider<String?>(

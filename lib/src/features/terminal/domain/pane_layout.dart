@@ -223,6 +223,42 @@ class PaneLayout {
   PaneLayout addPane(String targetPaneId, String paneId) =>
       addPanes(targetPaneId, [paneId]);
 
+  /// The region with [groupId], or `null` when this layout has none.
+  PaneGroup? groupById(String groupId) {
+    for (final group in groups) {
+      if (group.id == groupId) return group;
+    }
+    return null;
+  }
+
+  /// Moves [paneId] to [toIndex] within its own region, leaving the tree's
+  /// shape and the front pane alone.
+  ///
+  /// What dragging a tab along the strip it is already in is made of. The tree
+  /// is untouched, so nothing is normalized.
+  PaneLayout reorderInGroup(String paneId, int toIndex) {
+    final group = groupOf(paneId);
+    if (group == null || group.panes.length < 2) return this;
+    final from = group.panes.indexOf(paneId);
+    final to = toIndex.clamp(0, group.panes.length - 1);
+    if (from == to) return this;
+    final panes = List.of(group.panes)
+      ..removeAt(from)
+      ..insert(to, paneId);
+    return PaneLayout(
+      _mapGroups(
+        root,
+        (candidate) => identical(candidate, group)
+            ? PaneGroup(
+                group.id,
+                panes: panes,
+                activePaneId: group.activePaneId,
+              )
+            : candidate,
+      ),
+    );
+  }
+
   /// Brings [paneId] to the front of its own region. The layout's shape does
   /// not change, so nothing is normalized.
   PaneLayout activate(String paneId) {
