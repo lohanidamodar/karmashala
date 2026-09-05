@@ -53,6 +53,7 @@ While making changes:
 - Use package and framework APIs instead of ad hoc implementations when the
   project already has a standard way to solve the problem.
 - Keep generated or mechanical changes separate from logic changes when possible.
+- DO not write too long and too verbose comments
 
 After making changes:
 
