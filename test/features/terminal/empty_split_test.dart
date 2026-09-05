@@ -191,16 +191,16 @@ void main() {
       controller.openTab(TerminalProfile.powerShell);
       final host = activeTab(container).id;
       final kept = activeTab(container).layout.panes.single;
-      final movedTab = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
       final movedPane = activeTab(container).layout.panes.single;
       final instance = controller.instanceFor(movedPane)!;
       controller.activateTab(host);
       final slot = controller.splitPane(SplitAxis.horizontal)!;
 
-      expect(controller.moveTabIntoSlot(movedTab, slot), isTrue);
+      expect(controller.movePaneIntoRegion(movedPane, slot), isTrue);
 
       final state = container.read(terminalSessionsControllerProvider);
-      expect(state.tabs, hasLength(1), reason: 'the tab left the strip');
+      expect(state.tabs, hasLength(1), reason: 'the tab it left is empty');
       expect(state.activeTab!.id, host);
       expect(state.activeTab!.layout.panes, [kept, movedPane]);
       expect(created, hasLength(2), reason: 'moving is not launching');
@@ -209,46 +209,18 @@ void main() {
       expect((instance as FakeTerminalInstance).disposed, isFalse);
     });
 
-    test('a tab that is itself split moves in whole', () {
-      final (:container, created: _) = countingContainer();
-      final controller = controllerOf(container);
-      controller.openTab(TerminalProfile.powerShell);
-      final host = activeTab(container).id;
-      final kept = activeTab(container).layout.panes.single;
-
-      final movedTab = controller.openTab(TerminalProfile.commandPrompt);
-      final left = activeTab(container).layout.panes.single;
-      final rightSlot = controller.splitPane(SplitAxis.vertical)!;
-      final right = controller.openInSlot(
-        rightSlot,
-        TerminalProfile.powerShell,
-      )!;
-
-      controller.activateTab(host);
-      final slot = controller.splitPane(SplitAxis.horizontal)!;
-      expect(controller.moveTabIntoSlot(movedTab, slot), isTrue);
-
-      final tab = activeTab(container);
-      expect(tab.layout.panes, [kept, left, right]);
-      expect(
-        (tab.layout.root as PaneSplit).children[1],
-        isA<PaneSplit>(),
-        reason: 'the moved tab keeps its own rows inside the new column',
-      );
-    });
-
     test('and back out again into a tab of its own, collapsing the split', () {
       final (:container, created: _) = countingContainer();
       final controller = controllerOf(container);
       controller.openTab(TerminalProfile.powerShell);
       final host = activeTab(container).id;
       final kept = activeTab(container).layout.panes.single;
-      final movedTab = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
       final movedPane = activeTab(container).layout.panes.single;
       final instance = controller.instanceFor(movedPane)!;
       controller.activateTab(host);
       final slot = controller.splitPane(SplitAxis.horizontal)!;
-      controller.moveTabIntoSlot(movedTab, slot);
+      controller.movePaneIntoRegion(movedPane, slot);
 
       final newTab = controller.movePaneToNewTab(movedPane)!;
 

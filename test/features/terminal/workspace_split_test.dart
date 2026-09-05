@@ -181,6 +181,65 @@ void main() {
     });
   });
 
+  group('a tab dropped on an edge makes a group, never a bare region', () {
+    test('the tab lands in a new group beside the one it was dropped on', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final host = controller.openTab(TerminalProfile.powerShell);
+      final dropped = controller.openTab(TerminalProfile.powerShell);
+      final hostGroup = stateOf(container).focusedGroupId!;
+
+      expect(
+        controller.moveTabBesideGroup(dropped, hostGroup, SplitAxis.vertical),
+        isTrue,
+      );
+
+      final state = stateOf(container);
+      expect(state.workspace!.groups, hasLength(2));
+      expect(controller.tabsInGroup(hostGroup).map((tab) => tab.id), [host]);
+      final made = state.workspace!.groups
+          .firstWhere((group) => group.id != hostGroup);
+      expect(made.panes, [dropped]);
+      expect(state.activeTabId, dropped);
+      // The tab it divided is untouched: a *tab* split is not a pane split.
+      expect(
+        state.tabs.firstWhere((tab) => tab.id == host).layout.panes,
+        hasLength(1),
+      );
+    });
+
+    test('insertBefore puts the new group on the leading side', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final host = controller.openTab(TerminalProfile.powerShell);
+      final dropped = controller.openTab(TerminalProfile.powerShell);
+      final hostGroup = stateOf(container).focusedGroupId!;
+
+      controller.moveTabBesideGroup(
+        dropped,
+        hostGroup,
+        SplitAxis.horizontal,
+        insertBefore: true,
+      );
+
+      expect(stateOf(container).workspace!.panes, [dropped, host]);
+    });
+
+    test('the only tab of a group cannot be dropped beside itself', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final only = controller.openTab(TerminalProfile.powerShell);
+      final groupId = stateOf(container).focusedGroupId!;
+
+      expect(controller.canMoveTabBesideGroup(only, groupId), isFalse);
+      expect(
+        controller.moveTabBesideGroup(only, groupId, SplitAxis.horizontal),
+        isFalse,
+      );
+      expect(stateOf(container).workspace!.groups, hasLength(1));
+    });
+  });
+
   group('focus', () {
     test('moves to the group next door and takes the active tab with it', () {
       final container = makeContainer();

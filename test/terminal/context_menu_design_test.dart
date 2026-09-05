@@ -102,8 +102,9 @@ void main() {
     // The chip only exists where a region stacks panes now — a split whose
     // regions hold one pane each draws no header at all.
     final host = terminals().state.activeTab!;
-    final guest = terminals().openTab(TerminalProfile.commandPrompt);
-    terminals().moveTabIntoSlot(guest, host.layout.panes.single);
+    terminals().openTab(TerminalProfile.commandPrompt);
+    final guestPane = terminals().state.activeTab!.layout.panes.single;
+    terminals().movePaneIntoRegion(guestPane, host.layout.panes.single);
     await tester.pumpAndSettle();
     expect(find.byType(PaneTabChip), findsNWidgets(2));
 

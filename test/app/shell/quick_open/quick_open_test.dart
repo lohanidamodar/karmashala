@@ -409,11 +409,11 @@ void main() {
     expect(find.textContaining('Fix login redirect'), findsOneWidget);
   });
 
-  testWidgets('the palette is the keyboard\'s way into and out of a split', (
+  testWidgets('the palette is the keyboard\'s way into and out of a group', (
     tester,
   ) async {
-    // Splitting leaves an empty region and dragging a tab into it is a mouse
-    // gesture; these two commands are the same verbs without one. A feature
+    // Splitting the workspace leaves an empty group and dragging a tab into it
+    // is a mouse gesture; this command is the same verb without one. A feature
     // reachable only by dragging is one some people cannot reach at all.
     late ProviderContainer scope;
     await open(tester, before: (container) {
@@ -426,33 +426,27 @@ void main() {
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\dev-server',
       );
-      terminals
-        ..activateTab(
-          container.read(terminalSessionsControllerProvider).tabs.first.id,
-        )
-        ..splitPane(SplitAxis.horizontal);
+      terminals.splitWorkspace(SplitAxis.horizontal);
     });
 
     await type(tester, 'move a tab into');
-    await tester.tap(find.text('Move a tab into the empty split…'));
+    await tester.tap(find.text('Move a tab into the empty group…'));
     await tester.pumpAndSettle();
 
-    // One row, because the tab holding the region cannot be moved into it.
     expect(find.byType(TabPicker), findsOneWidget);
-    expect(find.text('1 tab'), findsOneWidget);
+    expect(find.text('2 tabs'), findsOneWidget);
     await press(tester, LogicalKeyboardKey.enter);
 
     final state = scope.read(terminalSessionsControllerProvider);
-    expect(state.tabs, hasLength(1), reason: 'the tab moved into the split');
-    expect(state.activeTab!.layout.panes, hasLength(2));
+    expect(state.tabs, hasLength(2), reason: 'a tab moved, none was consumed');
+    expect(state.workspace!.groups, hasLength(2));
   });
 
-  testWidgets('a region that is already occupied is a destination too', (
+  testWidgets('and the empty region one level down takes a pane', (
     tester,
   ) async {
-    // Once a region has a header of its own it can hold more than one tab, so
-    // the keyboard has to be able to put one there — not only into an empty
-    // region, which was all a drag could reach before.
+    // A region holds panes; a group holds tabs. Two structures, two commands,
+    // and the titles say which — see `WorkspaceLayout`.
     late ProviderContainer scope;
     await open(tester, before: (container) {
       scope = container;
@@ -461,26 +455,21 @@ void main() {
       );
       terminals.openTab(TerminalProfile.powerShell);
       terminals.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
-      terminals.openTab(
-        TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\dev-server',
-      );
-      terminals.activateTab(
-        container.read(terminalSessionsControllerProvider).tabs.first.id,
-      );
+      terminals.splitPane(SplitAxis.vertical);
     });
 
-    await type(tester, 'move a tab into');
-    expect(find.text('Move a tab into the empty split…'), findsNothing);
-    await tester.tap(find.text('Move a tab into this split…'));
+    await type(tester, 'move a pane into');
+    await tester.tap(find.text('Move a pane into the empty region…'));
     await tester.pumpAndSettle();
     await press(tester, LogicalKeyboardKey.enter);
 
     final state = scope.read(terminalSessionsControllerProvider);
-    expect(state.tabs, hasLength(1), reason: 'the tab left the strip');
+    expect(state.tabs, hasLength(1), reason: 'no tab was consumed');
     final layout = state.activeTab!.layout;
-    expect(layout.groups, hasLength(2), reason: 'it joined, not split');
-    expect(layout.panes, hasLength(3));
+    // The pane filled the room, so the region it left collapsed and the slot
+    // id retired with it: two regions, two real panes.
+    expect(layout.groups, hasLength(2));
+    expect(layout.panes, hasLength(2));
   });
 
   testWidgets('and it moves a pane from one region into another', (
@@ -498,7 +487,7 @@ void main() {
     });
 
     await type(tester, 'move this pane into');
-    await tester.tap(find.text('Move this pane into another split…'));
+    await tester.tap(find.text('Move this pane into another region…'));
     await tester.pumpAndSettle();
     await press(tester, LogicalKeyboardKey.enter);
 

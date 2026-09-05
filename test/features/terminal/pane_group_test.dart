@@ -181,13 +181,13 @@ void main() {
     test('joins that region rather than needing an empty one', () {
       final host = controller.openTab(TerminalProfile.powerShell);
       final kept = activeTab().layout.panes.single;
-      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
       final guestPane = activeTab().layout.panes.single;
       final instance = controller.instanceFor(guestPane)!;
       controller.activateTab(host);
 
-      expect(controller.canMoveTabIntoSlot(guest, kept), isTrue);
-      expect(controller.moveTabIntoSlot(guest, kept), isTrue);
+      expect(controller.canMovePaneIntoRegion(guestPane, kept), isTrue);
+      expect(controller.movePaneIntoRegion(guestPane, kept), isTrue);
 
       final state = container.read(terminalSessionsControllerProvider);
       expect(state.tabs, hasLength(1), reason: 'the tab left the strip');
@@ -208,13 +208,13 @@ void main() {
       // focus was sitting in that region, would hand the keyboard to it.
       final host = controller.openTab(TerminalProfile.powerShell);
       final kept = activeTab().layout.panes.single;
-      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
       final guestPane = activeTab().layout.panes.single;
       final slot = controller.splitPane(SplitAxis.horizontal)!;
       expect(activeTab().focusedPaneId, slot, reason: 'focus is in the room');
       controller.activateTab(host);
 
-      expect(controller.moveTabIntoSlot(guest, kept), isTrue);
+      expect(controller.movePaneIntoRegion(guestPane, kept), isTrue);
 
       final tab = activeTab();
       expect(tab.layout.groups.single.panes, [kept, guestPane]);
@@ -222,10 +222,10 @@ void main() {
       expect(tab.focusedPaneId, guestPane);
     });
 
-    test('a region of the tab being moved is not a place to move it', () {
+    test('the region a pane is already in is not a place to move it', () {
       controller.openTab(TerminalProfile.powerShell);
       final own = activeTab().layout.panes.single;
-      expect(controller.canMoveTabIntoSlot(activeTab().id, own), isFalse);
+      expect(controller.canMovePaneIntoRegion(own, own), isFalse);
     });
   });
 
@@ -299,9 +299,9 @@ void main() {
 
     test('refuses to move a pane into the region it is already in', () {
       final (left, _) = twoRegions();
-      final stacked = controller.openTab(TerminalProfile.powerShell);
+      controller.openTab(TerminalProfile.powerShell);
       final stackedPane = activeTab().layout.panes.single;
-      controller.moveTabIntoSlot(stacked, left);
+      controller.movePaneIntoRegion(stackedPane, left);
 
       expect(controller.canMovePaneIntoRegion(stackedPane, left), isFalse);
       expect(controller.movePaneIntoRegion(stackedPane, left), isFalse);
@@ -334,9 +334,9 @@ void main() {
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;
-      final guest = controller.openTab(TerminalProfile.powerShell);
+      controller.openTab(TerminalProfile.powerShell);
       final guestPane = activeTab().layout.panes.single;
-      controller.moveTabIntoSlot(guest, right);
+      controller.movePaneIntoRegion(guestPane, right);
 
       // One of two in the region: the region stays, the split stays.
       controller.closePane(guestPane, detach: false);
@@ -352,10 +352,10 @@ void main() {
     test('the pane behind it comes forward, and takes the keyboard', () {
       controller.openTab(TerminalProfile.powerShell);
       final first = activeTab().layout.panes.single;
-      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
       final guestPane = activeTab().layout.panes.single;
       controller.activateTab(activeTab().id);
-      controller.moveTabIntoSlot(guest, first);
+      controller.movePaneIntoRegion(guestPane, first);
       expect(activeTab().focusedPaneId, guestPane);
 
       controller.closePane(guestPane, detach: false);
@@ -367,9 +367,9 @@ void main() {
     test('a pane that exits cleanly beside a stack-mate takes itself off', () async {
       controller.openTab(TerminalProfile.powerShell);
       final first = activeTab().layout.panes.single;
-      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
       final guestPane = activeTab().layout.panes.single;
-      controller.moveTabIntoSlot(guest, first);
+      controller.movePaneIntoRegion(guestPane, first);
 
       (controller.instanceFor(guestPane)! as FakeTerminalInstance)
           .exitCleanly();
@@ -403,7 +403,7 @@ void main() {
             .layout
             .panes
             .single;
-        final guest = controller.openTab(TerminalProfile.commandPrompt);
+        controller.openTab(TerminalProfile.commandPrompt);
         guestPane = container
             .read(terminalSessionsControllerProvider)
             .activeTab!
@@ -412,7 +412,7 @@ void main() {
             .single;
         controller.activateTab(tabId);
         controller.splitPane(SplitAxis.horizontal);
-        controller.moveTabIntoSlot(guest, hostPane);
+        controller.movePaneIntoRegion(guestPane, hostPane);
         controller.persistLayout();
         container.dispose();
       }
@@ -450,7 +450,7 @@ void main() {
             .layout
             .panes
             .single;
-        final guest = controller.openTab(TerminalProfile.commandPrompt);
+        controller.openTab(TerminalProfile.commandPrompt);
         guestPane = container
             .read(terminalSessionsControllerProvider)
             .activeTab!
@@ -458,7 +458,7 @@ void main() {
             .panes
             .single;
         controller.activateTab(tabId);
-        controller.moveTabIntoSlot(guest, hostPane);
+        controller.movePaneIntoRegion(guestPane, hostPane);
         controller.persistLayout();
         container.dispose();
       }

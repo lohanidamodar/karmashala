@@ -46,27 +46,29 @@ void main() {
     return result;
   }
 
-  testWidgets('a tab can be moved into an occupied region without a drag', (
+  testWidgets('a pane can be moved into another region without a drag', (
     tester,
   ) async {
-    final host = controller.openTab(TerminalProfile.powerShell);
+    // Panes, not tabs: a region holds panes, and a tab belongs in a workspace
+    // group's strip where it keeps the status bar it owns.
+    controller.openTab(TerminalProfile.powerShell);
     final left = activeTab().layout.panes.single;
-    controller.openTab(TerminalProfile.commandPrompt);
-    final guestPane = activeTab().layout.panes.single;
-    controller.activateTab(host);
-    controller.openInSlot(
+    final right = controller.openInSlot(
       controller.splitPane(SplitAxis.horizontal)!,
       TerminalProfile.powerShell,
+    )!;
+
+    final entries = await withRef(
+      tester,
+      (ref) => panesMovableInto(ref, left),
     );
 
-    final entries = await withRef(tester, (ref) => tabsMovableInto(ref, left));
-
-    expect(entries, hasLength(1), reason: 'the guest, not the host itself');
+    expect(entries, hasLength(1), reason: 'the other region, not this one');
     entries.single.item.onSelect();
     await tester.pump();
 
     expect(container.read(terminalSessionsControllerProvider).tabs, hasLength(1));
-    expect(activeTab().layout.groupOf(left)!.panes, [left, guestPane]);
+    expect(activeTab().layout.groupOf(left)!.panes, [left, right]);
   });
 
   testWidgets('a pane can be moved to another region without a drag', (
@@ -143,10 +145,10 @@ void main() {
   test('the panes stacked in a region can be cycled', () {
     final host = controller.openTab(TerminalProfile.powerShell);
     final first = activeTab().layout.panes.single;
-    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.openTab(TerminalProfile.commandPrompt);
     final second = activeTab().layout.panes.single;
     controller.activateTab(host);
-    controller.moveTabIntoSlot(guest, first);
+    controller.movePaneIntoRegion(second, first);
     expect(activeTab().focusedPaneId, second);
 
     controller.nextPaneInRegion();

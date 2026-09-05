@@ -7,6 +7,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../domain/terminal_drag.dart';
+import '../domain/workspace_layout.dart';
 
 /// A region of a split with nothing in it yet.
 ///
@@ -31,6 +32,7 @@ class EmptyPaneRegion extends ConsumerWidget {
     this.onNewSession,
     this.onClose,
     this.onMoveTabHere,
+    this.moveLabel = 'Move a pane here…',
     super.key,
   });
 
@@ -62,9 +64,13 @@ class EmptyPaneRegion extends ConsumerWidget {
   final VoidCallback? onNewSession;
   final VoidCallback? onClose;
 
-  /// Opens the list of tabs that can be moved in here. `null` while there is no
-  /// other tab to move.
+  /// Opens the list of things that can be moved in here. `null` while there is
+  /// nothing to move.
   final VoidCallback? onMoveTabHere;
+
+  /// What that button says. A region takes panes and a group takes tabs, and
+  /// the word has to be the right one — see [WorkspaceLayout].
+  final String moveLabel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -79,7 +85,11 @@ class EmptyPaneRegion extends ConsumerWidget {
       onWillAcceptWithDetails: (details) =>
           accepts?.call(details.data) ??
           switch (details.data) {
-            TabDrag(:final tabId) => sessions.canMoveTabIntoSlot(tabId, paneId),
+            // A region takes **panes**. A tab carries a session, a view and a
+            // status strip together and only a workspace group can host that,
+            // so a tab dropped here would land in a room with no strip and no
+            // bar — the shape this restructure exists to remove.
+            TabDrag() => false,
             PaneDrag(paneId: final moved) => sessions.canMovePaneIntoRegion(
               moved,
               paneId,
@@ -91,8 +101,8 @@ class EmptyPaneRegion extends ConsumerWidget {
           return;
         }
         switch (details.data) {
-          case TabDrag(:final tabId):
-            sessions.moveTabIntoSlot(tabId, paneId);
+          case TabDrag():
+            break;
           case PaneDrag(paneId: final moved):
             sessions.movePaneIntoRegion(moved, paneId);
         }
@@ -186,7 +196,7 @@ class EmptyPaneRegion extends ConsumerWidget {
                                 AppIcons.listMagnifyingGlass,
                                 size: Chrome.icon,
                               ),
-                              label: const Text('Move a tab here…'),
+                              label: Text(moveLabel),
                             ),
                             TextButton(
                               onPressed: onClose,
@@ -207,32 +217,32 @@ class EmptyPaneRegion extends ConsumerWidget {
   }
 }
 
-/// The tabs that can be moved into the empty region [slotPaneId], as
+/// The **panes** that can be moved into the empty region [slotPaneId], as
 /// [TabPicker] lists them.
 ///
-/// The keyboard's way to do what a drag does. Built here rather than borrowed
-/// from the workbench's own tab list so the terminal does not import the shell
-/// that draws it, and because this list is a different question: not "which
-/// tabs are there", but "which tabs could land here".
-List<TabEntry> tabsMovableInto(WidgetRef ref, String slotPaneId) {
+/// The keyboard's way to do what a drag does. Panes rather than tabs: a region
+/// is a division inside one tab and holds panes, and a tab belongs in a
+/// workspace group's strip — see [WorkspaceLayout] for the two words.
+List<TabEntry> panesMovableInto(WidgetRef ref, String slotPaneId) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);
   return [
     for (final tab in terminals.tabs)
-      if (sessions.canMoveTabIntoSlot(tab.id, slotPaneId))
-        TabEntry(
-          item: QuickOpenItem(
-            id: 'move-tab/${tab.id}',
-            group: QuickOpenGroup.tabs,
-            title: sessions.titleForTab(tab.id),
-            // The directory tells two `zsh` tabs apart, which is the whole
-            // reason the picker exists rather than a menu.
-            subtitle: sessions.instanceFor(tab.focusedPaneId)?.workingDirectory,
-            icon: AppIcons.terminal,
-            onSelect: () => sessions.moveTabIntoSlot(tab.id, slotPaneId),
+      for (final paneId in tab.layout.panes)
+        if (sessions.canMovePaneIntoRegion(paneId, slotPaneId))
+          TabEntry(
+            item: QuickOpenItem(
+              id: 'move-pane/$paneId',
+              group: QuickOpenGroup.tabs,
+              title: sessions.titleForPane(paneId),
+              // The directory tells two `zsh` panes apart, which is the whole
+              // reason the picker exists rather than a menu.
+              subtitle: sessions.instanceFor(paneId)?.workingDirectory,
+              icon: AppIcons.terminal,
+              onSelect: () => sessions.movePaneIntoRegion(paneId, slotPaneId),
+            ),
+            active: false,
           ),
-          active: false,
-        ),
   ];
 }
 

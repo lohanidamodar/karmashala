@@ -598,6 +598,9 @@ class _EmptyGroup extends ConsumerWidget {
       focused: focused,
       title: 'Empty group',
       closeLabel: 'Close group',
+      // A group takes **tabs**; the region one level down takes panes. One word
+      // per concept — see [WorkspaceLayout].
+      moveLabel: 'Move a tab here…',
       accepts: (TerminalDrag drag) => switch (drag) {
         TabDrag(:final tabId) => sessions.canMoveTabToGroup(tabId, groupId),
         // A pane leaves its split as a tab of its own, which then lands here.
@@ -1731,10 +1734,13 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
           final ctrl = HardwareKeyboard.instance.isControlPressed ||
               HardwareKeyboard.instance.isMetaPressed ||
               _ctrlPressed;
-          if (ctrl && tabId != widget.tab.id) {
-            sessions.splitPaneWithTab(
-              widget.tab.focusedPaneId,
+          // Ctrl-drop divides the **workspace** and puts the tab in the new
+          // group, not the tab it was dropped on: a tab carries a session, a
+          // view and a status strip together, and only a group can host that.
+          if (ctrl && tabId != widget.tab.id && widget.groupId != null) {
+            sessions.moveTabBesideGroup(
               tabId,
+              widget.groupId!,
               SplitAxis.horizontal,
               insertBefore: _dropLeading,
             );

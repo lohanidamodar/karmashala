@@ -40,35 +40,35 @@ Future<void> pumpWorkbench(
 
 void main() {
   group('TerminalSessionsController split APIs', () {
-    test('splitPaneWithTab merges source tab into target pane as a split', () {
+    test('a tab dropped on an edge makes a group, not a region', () {
+      // It used to merge the dropped tab into the target *tab* as a bare pane
+      // division, which left it with no strip and no status bar of its own —
+      // the shape the whole group restructure exists to remove. A tab carries
+      // a session, a view and a status strip together, and only a group hosts
+      // that.
       final container = workbenchContainer();
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
       );
 
-      final tab1 = controller.openTab(TerminalProfile.powerShell);
-      final pane1 = controller.state.tabs.first.focusedPaneId;
-
+      controller.openTab(TerminalProfile.powerShell);
+      final host = controller.state.focusedGroupId!;
       final tab2 = controller.openTab(TerminalProfile.commandPrompt);
-      final pane2 = controller.state.tabs.last.focusedPaneId;
 
-      expect(controller.state.tabs.length, 2);
-      expect(controller.canSplitPaneWithTab(pane1, tab2), isTrue);
-      expect(controller.canSplitPaneWithTab(pane1, tab1), isFalse);
-
-      final success = controller.splitPaneWithTab(
-        pane1,
-        tab2,
-        SplitAxis.horizontal,
+      expect(controller.canMoveTabBesideGroup(tab2, host), isTrue);
+      expect(
+        controller.moveTabBesideGroup(tab2, host, SplitAxis.horizontal),
+        isTrue,
       );
-      expect(success, isTrue);
 
-      final tabs = controller.state.tabs;
-      expect(tabs.length, 1);
-      final mergedTab = tabs.single;
-      expect(mergedTab.layout.panes, containsAll([pane1, pane2]));
-      expect(mergedTab.focusedPaneId, pane2);
-      expect(controller.titleForTab(mergedTab.id), 'PowerShell | Command Prompt');
+      final state = controller.state;
+      expect(state.tabs, hasLength(2), reason: 'both tabs are still tabs');
+      expect(state.workspace!.groups, hasLength(2));
+      expect(state.activeTabId, tab2);
+      // Neither tab was divided: this is a workspace split.
+      for (final tab in state.tabs) {
+        expect(tab.layout.panes, hasLength(1));
+      }
     });
 
     test('splitPaneWithPane splits panes within same tab', () {
@@ -182,9 +182,15 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
 
-      // Should now be merged into 1 tab with both panes split.
-      expect(controller.state.tabs.length, 1);
-      expect(controller.state.tabs.single.layout.panes, containsAll([pane1, pane2]));
+      // Both are still tabs; the **workspace** divided, so the dropped tab has
+      // a strip and a status bar of its own.
+      expect(controller.state.tabs.length, 2);
+      expect(controller.state.workspace!.groups, hasLength(2));
+      expect(controller.state.workspace!.panes, hasLength(2));
+      for (final tab in controller.state.tabs) {
+        expect(tab.layout.panes, hasLength(1));
+      }
+      expect([pane1, pane2], hasLength(2));
     });
 
     testWidgets('holding Ctrl while dragging tab onto another tab splits them', (
@@ -218,9 +224,10 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
 
-      // Tabs should have split into 1 tab.
-      expect(controller.state.tabs.length, 1);
-      expect(controller.state.tabs.single.layout.panes, containsAll([pane1, pane2]));
+      // Ctrl-drop divides the workspace too: two tabs, two groups.
+      expect(controller.state.tabs.length, 2);
+      expect(controller.state.workspace!.groups, hasLength(2));
+      expect([pane1, pane2], hasLength(2));
     });
 
     testWidgets('dragging tab without Ctrl reorders tabs (left half inserts before, right half after)', (

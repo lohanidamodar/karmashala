@@ -933,6 +933,55 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return true;
   }
 
+  /// Whether [tabId] could be dropped on an edge of group [groupId] to make a
+  /// new group beside it.
+  bool canMoveTabBesideGroup(String tabId, String groupId) {
+    final group = _workspace?.groupById(groupId);
+    if (group == null || _tabById(tabId) == null) return false;
+    // A group made only of the tab that is leaving it would be the group it
+    // left, one divider later.
+    return !(group.panes.length == 1 && group.panes.first == tabId);
+  }
+
+  /// Divides group [groupId] along [axis] and puts [tabId] in the new group.
+  ///
+  /// **What dropping a tab on the edge of a pane does.** It used to divide the
+  /// *tab* — `splitPaneWithTab` — which left the dropped tab in a bare region
+  /// with no strip and no status bar of its own. That is the shape the owner
+  /// reported surviving: *"the previous one without the header/status bar
+  /// survived while dragging a tab and dropping it below"*. A tab owns a
+  /// session, a view and a status strip as one thing, and only a group can host
+  /// that, so a tab can never land in a region again. Panes still can — that is
+  /// what a region is for, and `splitPaneWithPane` still does it.
+  bool moveTabBesideGroup(
+    String tabId,
+    String groupId,
+    SplitAxis axis, {
+    bool insertBefore = false,
+  }) {
+    if (!canMoveTabBesideGroup(tabId, groupId)) return false;
+    final tree = _workspace!;
+    final without = tree.close(tabId);
+    // Unreachable: the tab cannot be the only thing in the tree and also leave
+    // a group behind to divide.
+    if (without == null) return false;
+    final anchor = without.groupById(groupId)?.activePaneId;
+    if (anchor == null) return false;
+
+    _workspace = without.splitWithNode(
+      anchor,
+      axis,
+      PaneGroup(_newId(), panes: [tabId]),
+      _newId(),
+      insertBefore: insertBefore,
+    );
+    _activeTabId = tabId;
+    _publish();
+    persistStructure();
+    _focusActivePane();
+    return true;
+  }
+
   /// Closes group [groupId] — its tabs with it — leaving the split it was in
   /// to collapse. Refuses to close the only group there is.
   bool closeGroup(String groupId, {bool detach = true}) {
@@ -1136,16 +1185,25 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return null;
   }
 
-  /// The focused pane, when it names a region an incoming tab could join —
-  /// what the palette calls "this split".
-  ///
-  /// Only while the tab has more than one region: dropping a tab into the only
-  /// region there is would be stacking rather than splitting, and offering it
-  /// under that name would be a lie about what happens.
-  String? regionForIncomingTab() {
+  /// The empty **workspace group**, if the user has cleared one — what the
+  /// palette offers to move a tab into.
+  String? emptyWorkspaceGroup() {
+    for (final group in _workspace?.groups ?? const <WorkspaceGroup>[]) {
+      if (_isEmptyGroup(group)) return group.id;
+    }
+    return null;
+  }
+
+  /// Whether there is a focused group with a tab in it to divide.
+  bool canSplitWorkspace() {
+    final group = _focusedGroup;
+    return group != null && !_isEmptyGroup(group);
+  }
+
+  /// Whether the focused pane could be divided inside its own tab.
+  bool focusedPaneIsSplittable() {
     final tab = _activeTab;
-    if (tab == null || tab.layout.groups.length < 2) return null;
-    return tab.focusedPaneId;
+    return tab != null && !_isEmptyRegion(tab.focusedPaneId);
   }
 
   /// The focused pane, when it is one that could be pulled out of its split
@@ -1180,122 +1238,6 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _focusActivePane();
     persistStructure();
     return paneId;
-  }
-
-  /// Whether tab [tabId] could be moved into the region holding [slotPaneId].
-  ///
-  /// Asked by the drop target before it lights up, so a drag that cannot land
-  /// says so instead of silently doing nothing. The only refusal left is a tab
-  /// dropped into a region of *itself*: it would have to contain the region it
-  /// was being put inside. An occupied region takes a tab as readily as an
-  /// empty one now — that is what a region having a header of its own is for.
-  bool canMoveTabIntoSlot(String tabId, String slotPaneId) {
-    final target = _tabContaining(slotPaneId);
-    return target != null && target.id != tabId && _tabById(tabId) != null;
-  }
-
-  /// Moves everything in tab [tabId] into the region holding [slotPaneId],
-  /// taking that tab out of the strip. Returns whether it moved.
-  ///
-  /// This is the drop half of "drag a tab into a split", and deliberately *not*
-  /// a close followed by an open: nothing is detached, disposed or relaunched,
-  /// so the session the user dragged is the same object, mid-command and all,
-  /// on the other side of the move.
-  ///
-  /// **An empty region takes the tab whole.** [PaneLayout.replaceRegion] puts
-  /// the source's sub-tree where the region was and normalization flattens it
-  /// into the parent when the axes agree, so a tab that is itself split keeps
-  /// its own rows.
-  ///
-  /// **An occupied region takes its panes as tabs.** A stack has no room for
-  /// the source's splits, and "put these in here" is the honest reading of the
-  /// gesture: every session survives, side by side becomes one behind the
-  /// other, and any of them can be dragged straight back out of the header it
-  /// now has.
-  bool moveTabIntoSlot(String tabId, String slotPaneId) {
-    if (!canMoveTabIntoSlot(tabId, slotPaneId)) return false;
-    final target = _tabContaining(slotPaneId)!;
-    final source = _tabById(tabId)!;
-
-    _tabs.removeWhere((tab) => tab.id == source.id);
-    _tabsMutated();
-    final index = _tabIndex[target.id];
-    if (index == null) return false;
-    final merged = _isEmptyRegion(slotPaneId)
-        ? target.layout.replaceRegion(slotPaneId, source.layout.root)
-        // Its sessions, not its rooms. An empty region of the moved tab is
-        // space somebody cleared *there*; stacked into a header it would be a
-        // tab with nothing behind it, and the room it stood for is gone anyway
-        // now that the tab it divided has been folded into another.
-        : target.layout.addPanes(slotPaneId, [
-            for (final paneId in source.layout.panes)
-              if (!_isEmptyRegion(paneId)) paneId,
-          ]);
-    // The pane the moved tab was showing keeps the keyboard and the front of
-    // its region: it is the thing the user was just looking at, and it has only
-    // changed address. Unless it was an empty region that did not come — then
-    // the front of the region it landed in is what is actually on screen.
-    final focused = merged.contains(source.focusedPaneId)
-        ? source.focusedPaneId
-        : merged.groupOf(slotPaneId)?.activePaneId ?? merged.visiblePanes.first;
-    _tabs[index] = target.copyWith(
-      layout: merged.activate(focused),
-      focusedPaneId: focused,
-    );
-    _tabsMutated();
-    _activeTabId = target.id;
-    _publish();
-    persistStructure();
-    _focusActivePane();
-    return true;
-  }
-
-  /// Whether [sourceTabId] can be dropped onto [targetPaneId] to split it.
-  bool canSplitPaneWithTab(String targetPaneId, String sourceTabId) {
-    final target = _tabContaining(targetPaneId);
-    final source = _tabById(sourceTabId);
-    return target != null && source != null && target.id != sourceTabId;
-  }
-
-  /// Splits the region holding [targetPaneId] with the entire layout of [sourceTabId].
-  ///
-  /// Removes [sourceTabId] from the tab strip and inserts its layout next to [targetPaneId]
-  /// along [axis] (before if [insertBefore] is true, else after).
-  bool splitPaneWithTab(
-    String targetPaneId,
-    String sourceTabId,
-    SplitAxis axis, {
-    bool insertBefore = false,
-  }) {
-    if (!canSplitPaneWithTab(targetPaneId, sourceTabId)) return false;
-    final target = _tabContaining(targetPaneId)!;
-    final source = _tabById(sourceTabId)!;
-
-    _tabs.removeWhere((t) => t.id == source.id);
-    _tabsMutated();
-
-    final targetIndex = _tabIndex[target.id];
-    if (targetIndex == null) return false;
-
-    final updatedLayout = target.layout.splitWithNode(
-      targetPaneId,
-      axis,
-      source.layout.root,
-      _newId(),
-      insertBefore: insertBefore,
-    );
-
-    final focused = source.focusedPaneId;
-    _tabs[targetIndex] = target.copyWith(
-      layout: updatedLayout.activate(focused),
-      focusedPaneId: focused,
-    );
-    _tabsMutated();
-    _activeTabId = target.id;
-    _publish();
-    persistStructure();
-    _focusActivePane();
-    return true;
   }
 
   /// Whether [sourcePaneId] can be dropped onto [targetPaneId] to split it.

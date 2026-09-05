@@ -565,10 +565,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           targetPaneId: paneId,
         ),
         onClose: () => _sessions.closePane(paneId),
-        onMoveTabHere: _canMoveATabHere(paneId)
+        onMoveTabHere: _canMoveAPaneHere(paneId)
             ? () => TabPicker.show(
                 context,
-                (ref) => tabsMovableInto(ref, paneId),
+                (ref) => panesMovableInto(ref, paneId),
               )
             : null,
       );
@@ -685,15 +685,20 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
 
     return _PaneDropTarget(
       paneId: paneId,
+      groupId: widget.groupId,
       child: paneWithActions,
     );
   }
 
-  /// Whether any tab could be moved into the empty region [paneId] — false
-  /// while it is the only tab there is, when the offer would lead nowhere.
-  bool _canMoveATabHere(String paneId) {
+  /// Whether any pane could be moved into the empty region [paneId] — false
+  /// while there is none to move, when the offer would lead nowhere.
+  bool _canMoveAPaneHere(String paneId) {
     final tabs = ref.read(terminalSessionsControllerProvider).tabs;
-    return tabs.any((tab) => _sessions.canMoveTabIntoSlot(tab.id, paneId));
+    return tabs.any(
+      (tab) => tab.layout.panes.any(
+        (candidate) => _sessions.canMovePaneIntoRegion(candidate, paneId),
+      ),
+    );
   }
 
 
@@ -1208,10 +1213,18 @@ enum _SplitDropZone { left, right, top, bottom }
 class _PaneDropTarget extends ConsumerStatefulWidget {
   const _PaneDropTarget({
     required this.paneId,
+    required this.groupId,
     required this.child,
   });
 
   final String paneId;
+
+  /// The workspace group this pane is in. A **tab** dropped on an edge divides
+  /// that group and lands in the new one; a **pane** divides the tab, which is
+  /// what a region is for. See
+  /// [TerminalSessionsController.moveTabBesideGroup].
+  final String? groupId;
+
   final Widget child;
 
   @override
@@ -1244,9 +1257,10 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) {
         final data = details.data;
+        final group = widget.groupId;
         final accepts = switch (data) {
           TabDrag(:final tabId) =>
-            sessions.canSplitPaneWithTab(widget.paneId, tabId),
+            group != null && sessions.canMoveTabBesideGroup(tabId, group),
           PaneDrag(:final paneId) =>
             sessions.canSplitPaneWithPane(widget.paneId, paneId),
         };
@@ -1271,12 +1285,14 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
 
         switch (details.data) {
           case TabDrag(:final tabId):
-            sessions.splitPaneWithTab(
-              widget.paneId,
-              tabId,
-              axis,
-              insertBefore: insertBefore,
-            );
+            if (widget.groupId case final group?) {
+              sessions.moveTabBesideGroup(
+                tabId,
+                group,
+                axis,
+                insertBefore: insertBefore,
+              );
+            }
           case PaneDrag(:final paneId):
             sessions.splitPaneWithPane(
               widget.paneId,

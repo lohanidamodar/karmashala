@@ -227,16 +227,17 @@ void main() {
     );
   });
 
-  testWidgets('a tab still drags into a region of a split', (tester) async {
+  testWidgets('a tab dropped on a pane makes a group beside it', (tester) async {
     // The verb that already existed, driven the way a mouse drives it rather
     // than with one synthetic jump — reordering must not have taken the drop
-    // that moves a tab into a split away from it.
+    // that divides the workspace away from it.
     //
-    // Where it lands changed with the redesign: the target is the pane itself,
-    // not a header the region no longer draws, and the tab arrives as a region
-    // *beside* the one it was dropped on rather than stacked behind it. What
-    // has not changed is the point of the gesture — the tab leaves the strip
-    // and the session it carried keeps running, mid-command and all.
+    // Where it lands changed twice. It is the pane itself rather than a header
+    // the region no longer draws, and the tab now arrives in a **workspace
+    // group** of its own rather than as a bare region: a tab carries a session,
+    // a view and a status strip together, and only a group hosts that. What has
+    // not changed is the point of the gesture — the session it carried keeps
+    // running, mid-command and all.
     final container = harness();
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
@@ -275,15 +276,16 @@ void main() {
     await drop(tester, gesture);
 
     final state = container.read(terminalSessionsControllerProvider);
-    expect(state.tabs, hasLength(1), reason: 'it left the strip');
-    final layout = state.activeTab!.layout;
-    expect(layout.panes, contains(guestPane), reason: 'and joined the split');
+    expect(state.tabs, hasLength(2), reason: 'it is still a tab');
     expect(
-      layout.groupOf(guestPane)!.panes,
-      [guestPane],
-      reason: 'as a region of its own — dropping on a pane splits it',
+      state.workspace!.groups,
+      hasLength(2),
+      reason: 'the workspace divided, so the tab has a strip and a bar',
     );
-    expect(layout.groupOf(left)!.panes, [left]);
+    // The tab it was dropped on kept its own two panes; nothing about it moved.
+    final hostTab = state.tabs.firstWhere((tab) => tab.layout.contains(left));
+    expect(hostTab.layout.panes, hasLength(2));
+    expect(hostTab.id, host);
     expect(
       controller.instanceFor(guestPane),
       same(guestInstance),

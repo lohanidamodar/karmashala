@@ -141,7 +141,10 @@ bool _accepts(
   TerminalDrag drag,
   String anchorPaneId,
 ) => switch (drag) {
-  TabDrag(:final tabId) => sessions.canMoveTabIntoSlot(tabId, anchorPaneId),
+  // Panes only. A region header names the panes stacked in one tab; a **tab**
+  // belongs in a workspace group's strip, where it keeps the status bar it
+  // owns. See `WorkspaceLayout` for the two words.
+  TabDrag() => false,
   PaneDrag(:final paneId) =>
     sessions.canMovePaneIntoRegion(paneId, anchorPaneId),
 };
@@ -151,7 +154,7 @@ void _drop(
   TerminalDrag drag,
   String anchorPaneId,
 ) => switch (drag) {
-  TabDrag(:final tabId) => sessions.moveTabIntoSlot(tabId, anchorPaneId),
+  TabDrag() => false,
   PaneDrag(:final paneId) =>
     sessions.movePaneIntoRegion(paneId, anchorPaneId),
 };
