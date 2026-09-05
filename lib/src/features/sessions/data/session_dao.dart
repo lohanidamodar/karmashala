@@ -83,9 +83,9 @@ class SessionDao {
   /// Updates only the [title] of session [id].
   /// Renames session [id].
   ///
-  /// [byUser] records that the *user* chose this name. File-based CLI syncs
-  /// preserve it; Codex may supersede it with a later authoritative rename.
-  /// The sync itself passes false so a second CLI-side rename still lands.
+  /// [byUser] records that the *user* chose this name, which is what stops the
+  /// CLI rename sync ever replacing it. The sync itself passes false: a title it
+  /// copied in stays the CLI's to change, so a second `/rename` still lands.
   void updateTitle(String id, String title, {bool byUser = false}) {
     _db.execute(
       'UPDATE sessions SET title = ?, title_by_user = ? WHERE id = ?;',
@@ -334,12 +334,11 @@ class SessionDao {
     };
   }
 
-  /// Active, non-archived sessions with an external session ID. User-titled
-  /// rows are omitted unless [includeUserTitles] is requested.
-  List<Session> getWaitingForTitleSync({bool includeUserTitles = false}) {
+  /// Active, non-archived sessions that have an external session ID and
+  /// whose title was not typed by the user, waiting for title synchronization.
+  List<Session> getWaitingForTitleSync() {
     final rows = _db.query(
-      'SELECT * FROM sessions WHERE archived_at IS NULL '
-      '${includeUserTitles ? '' : 'AND title_by_user = 0 '} '
+      'SELECT * FROM sessions WHERE archived_at IS NULL AND title_by_user = 0 '
       "AND external_session_id IS NOT NULL AND external_session_id != '' "
       'ORDER BY created_at, id;',
     );

@@ -64,8 +64,9 @@ class SessionActions {
   /// launched *by* Karmashala and renamed *in* Karmashala reached no store at
   /// all.
   Future<void> renameNative(String id, String title) async {
-    // `byUser`: this is the one event that makes a title the user's. File-based
-    // CLI sync preserves it; Codex may report a newer authoritative rename.
+    // `byUser`: this is the one event that makes a title the user's, and
+    // recording it is what stops the CLI rename sync taking it back — for the
+    // life of the row, not just this run of the app.
     _ref.read(sessionDaoProvider).updateTitle(id, title, byUser: true);
     // The narrowest fact the app publishes, and the most frequent: nothing but
     // this row's name moved. See `session_signal_cost_test.dart` for what the

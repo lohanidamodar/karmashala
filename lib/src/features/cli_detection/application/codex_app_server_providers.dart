@@ -31,11 +31,14 @@ final codexAppServersProvider = Provider<CodexAppServers>((ref) {
           row.agentInstallationId,
           () => installations.getById(row.agentInstallationId)?.agentId,
         );
-        if (agentId != AgentIds.codex || row.title == update.name) {
+        // A title the user typed here is never replaced — the same rule the
+        // slow title sync keeps. Codex owns the name only until someone
+        // renames the row in Karmashala.
+        if (agentId != AgentIds.codex ||
+            row.title == update.name ||
+            row.titleByUser) {
           continue;
         }
-        // An explicit Codex-side rename is the newest choice. Passing false
-        // leaves the title open to a later rename from Codex as well.
         sessions.updateTitle(row.id, update.name);
         ref
             .read(sessionsRevisionProvider.notifier)

@@ -1,4 +1,3 @@
-import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../sessions/data/session_dao.dart';
 import '../../sessions/domain/session.dart';
@@ -38,11 +37,11 @@ const Set<String> kAppGeneratedSessionTitles = {'New session', 'Session'};
 /// and it stays waiting while it carries a name this service wrote and its
 /// session is still running — so a second `/rename` in the CLI lands too.
 ///
-/// The moment the user renames in the app, the row stops waiting for file-based
-/// CLIs: their title is neither a placeholder nor the one we last wrote. Codex
-/// is the exception because Karmashala sends its own rename to
-/// `thread/name/set`; a later different name returned by `thread/list` is a
-/// newer Codex-side rename and is authoritative.
+/// The moment the user renames in the app, the row stops waiting, permanently:
+/// their title is neither a placeholder nor the one we last wrote. That is the
+/// one direction this must never get wrong. A conversation renamed in the CLI
+/// *and* in the app is a genuine conflict, and the answer is the name typed into
+/// the app the user is looking at.
 ///
 /// ## What it costs
 ///
@@ -56,7 +55,6 @@ class SessionTitleSyncService {
     required this.sessionDao,
     required this.agents,
     required this.scanStores,
-    this.agentIdFor,
     this.onRenamed,
   });
 
@@ -65,10 +63,6 @@ class SessionTitleSyncService {
 
   /// One pass over every CLI store — the same scan adoption uses.
   final Future<List<DetectedSession>> Function() scanStores;
-
-  /// Resolves the CLI behind a native row. Codex's protocol name is
-  /// authoritative even when the row was previously named in Karmashala.
-  final String? Function(Session session)? agentIdFor;
 
   /// Called with each row this renamed, so the workspace can redraw.
   final void Function(String sessionId, String title)? onRenamed;
@@ -124,28 +118,17 @@ class SessionTitleSyncService {
     return renamed;
   }
 
-  List<Session> _waiting() {
-    final agentIdsByInstallation = <String, String?>{};
-    return [
-      for (final row in sessionDao.getWaitingForTitleSync(includeUserTitles: true))
-        if (_waitingForAName(row, agentIdsByInstallation)) row,
-    ];
-  }
+  List<Session> _waiting() => [
+    for (final row in sessionDao.getWaitingForTitleSync())
+      if (_waitingForAName(row)) row,
+  ];
 
-  bool _waitingForAName(
-    Session row,
-    Map<String, String?> agentIdsByInstallation,
-  ) {
-    // A user title settles file-based CLIs. Codex is different: an in-app
-    // rename is mirrored to its authoritative state database, so a later
-    // differing protocol result is a newer rename made inside Codex.
-    if (row.titleByUser) {
-      final agentId = agentIdsByInstallation.putIfAbsent(
-        row.agentInstallationId,
-        () => agentIdFor?.call(row),
-      );
-      return agentId == AgentIds.codex && row.status == SessionStatus.running;
-    }
+  bool _waitingForAName(Session row) {
+    // The user typed this one. The only thing that ever stops the sync, and
+    // now the *recorded* one: this used to be inferred from [_written], which
+    // lives only as long as the app does — so after a restart every title
+    // looked user-set and a second `/rename` was never copied in again.
+    if (row.titleByUser) return false;
     final title = row.title.trim();
     if (title.isEmpty) return true;
     if (kAppGeneratedSessionTitles.contains(title)) return true;

@@ -83,12 +83,10 @@ void main() {
   SessionTitleSyncService service(
     List<DetectedSession> Function() detected, {
     void Function(String, String)? onRenamed,
-    String? Function(Session)? agentIdFor,
   }) => SessionTitleSyncService(
     sessionDao: dao,
     agents: AgentRegistry.builtIn,
     scanStores: () async => detected(),
-    agentIdFor: agentIdFor,
     onRenamed: onRenamed,
   );
 
@@ -151,17 +149,19 @@ void main() {
       expect(sync.wantsStoreSweep, isFalse);
     });
 
-    test('a later explicit Codex rename supersedes the app title', () async {
+    test('a title the user typed here survives a Codex rename', () async {
+      // Codex is not an exception to the `byUser` rule. A name typed into the
+      // app the user is looking at is the answer to that conflict, and the row
+      // stops waiting permanently — for Codex exactly as for a file-based CLI.
       dao.insert(row(title: 'Old app title', titleByUser: true));
       final sync = service(
         () => [found(cli: AgentIds.codex, title: 'Renamed in Codex')],
-        agentIdFor: (_) => AgentIds.codex,
       );
 
-      expect(await sync.sync(), 1);
+      expect(await sync.sync(), 0);
       final updated = dao.getById('s1')!;
-      expect(updated.title, 'Renamed in Codex');
-      expect(updated.titleByUser, isFalse);
+      expect(updated.title, 'Old app title');
+      expect(updated.titleByUser, isTrue);
     });
 
     test('a preview, which is a summary and not a name', () async {
