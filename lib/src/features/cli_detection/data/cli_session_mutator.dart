@@ -47,8 +47,9 @@ class CliDeleteReport {
 ///   resume-index entry.
 /// * **Codex** rename asks the running CLI, over its app-server, to do it —
 ///   see [_renameCodex] for why the file this used to write is the wrong place.
-///   Delete still edits `<codexHome>/session_index.jsonl` and removes the
-///   rollout file.
+///   Delete still prunes `<codexHome>/session_index.jsonl` and removes the
+///   rollout file: that file is a mirror Codex ignores when *reading a name*,
+///   but pruning it is how a deleted session stops being listed by us.
 class CliSessionMutator {
   CliSessionMutator();
 
@@ -68,8 +69,9 @@ class CliSessionMutator {
 
   /// Renames one session in its CLI's own store.
   ///
-  /// [codex] is how a Codex rename reaches the CLI that owns the name; without
-  /// one only the mirror file can be updated, which Codex does not read.
+  /// [codex] is how a Codex rename reaches the CLI that owns the name. Without
+  /// one a Codex rename cannot happen at all — it is logged and skipped, never
+  /// faked by writing a file Codex ignores.
   Future<void> rename(
     DetectedSession session,
     String newTitle, {
@@ -225,31 +227,26 @@ class CliSessionMutator {
 
   // --- Codex ----------------------------------------------------------------
 
-  File _codexIndex(DetectedSession session) =>
-      File(p.join(session.storeHome, 'session_index.jsonl'));
-
-  /// Asks Codex itself to name the thread, and only falls back to the file.
+  /// Asks Codex itself to name the thread.
   ///
-  /// **`session_index.jsonl` is a derived mirror Codex writes and never reads.**
-  /// Established by planting a sentinel in it under a scratch `CODEX_HOME`:
-  /// `thread/list` ignored it (with `useStateDbOnly` either way) and left it
-  /// untouched, while a sentinel planted in `state_5.sqlite`'s `threads.name`
-  /// *was* returned. So the rewrite this method used to do looked right locally
-  /// and was overwritten by Codex's next naming event — the reported bug.
+  /// **`<codexHome>/session_index.jsonl` is a derived mirror Codex writes and
+  /// never reads.** Established by planting a sentinel in it under a scratch
+  /// `CODEX_HOME`: `thread/list` ignored it (with `useStateDbOnly` either way)
+  /// and left it untouched, while a sentinel planted in `state_5.sqlite`'s
+  /// `threads.name` *was* returned. So the rewrite this method used to do
+  /// looked right locally and was overwritten by Codex's next naming event —
+  /// the reported bug. Nothing here touches that file any more.
   ///
   /// `thread/name/set` is the authoritative write. Verified round-trip against
   /// the owner's own store: it answered `{}`, `threads.name` held the new name,
-  /// **and** a fresh `session_index.jsonl` line was appended — so the file-based
-  /// read path stays correct without this method touching the file.
+  /// **and** Codex appended a fresh `session_index.jsonl` line itself — so the
+  /// app's file-based read path stays correct without this method writing one.
   ///
-  /// Best-effort throughout. The local rename is already applied and on screen;
-  /// a Codex that is not installed, not reachable or too old must not undo it.
-  ///
-  /// The file write survives only for callers that supply no [servers] — there
-  /// is one left, `DetectedProjectsController.renameSession` — and for a Codex
-  /// that could not be reached. It keeps *our* view of the name consistent until
-  /// Codex has an opinion of its own; it is the whole method's fallback, not its
-  /// path, and it goes when the last unwired caller is wired.
+  /// Best-effort, and silent about it beyond a log line: the local rename is
+  /// already applied and on screen, and a Codex that is absent, unreachable or
+  /// too old must not undo something the user can see. What it must not do is
+  /// write the mirror instead, which would put a name on screen that Codex is
+  /// about to overwrite — the failure this whole change exists to remove.
   Future<void> _renameCodex(
     DetectedSession session,
     String title,
@@ -259,53 +256,23 @@ class CliSessionMutator {
       session.environmentId,
       storeHome: session.storeHome,
     );
-    if (client != null) {
-      try {
-        final result = await client.setThreadName(session.sessionId, title);
-        if (result.ok) return;
+    if (client == null) {
+      _log.warning('No Codex to rename ${session.sessionId} in');
+      return;
+    }
+    try {
+      final result = await client.setThreadName(session.sessionId, title);
+      if (!result.ok) {
         _log.warning(
           'Codex would not rename ${session.sessionId}: ${result.failure}',
         );
-      } catch (error) {
-        _log.warning('Could not reach Codex to rename ${session.sessionId}', error);
       }
+    } catch (error) {
+      _log.warning(
+        'Could not reach Codex to rename ${session.sessionId}',
+        error,
+      );
     }
-    await _mirrorCodexName(session, title);
-  }
-
-  /// Writes [title] into the derived index, stamped now.
-  ///
-  /// Every historical line for the id used to be rewritten while keeping its own
-  /// stale `updated_at`, which falsified the name history, and an entry appended
-  /// for an unknown id carried no `updated_at` at all. Only the newest line is
-  /// touched now, and both paths are stamped — matching the fresh line Codex
-  /// itself appends.
-  Future<void> _mirrorCodexName(DetectedSession session, String title) async {
-    // A row that never came off disk carries no store home, and there is
-    // nothing to mirror into.
-    if (session.storeHome.isEmpty) return;
-    final index = _codexIndex(session);
-    final lines = await _readIndexLines(index);
-    final stamp = DateTime.now().toUtc().toIso8601String();
-    var newest = -1;
-    for (var i = 0; i < lines.length; i++) {
-      if (_tryDecode(lines[i])?['id'] == session.sessionId) newest = i;
-    }
-    final out = [...lines];
-    final entry = newest < 0 ? null : _tryDecode(out[newest]);
-    final named = jsonEncode({
-      ...?entry,
-      'id': session.sessionId,
-      'thread_name': title,
-      'updated_at': stamp,
-    });
-    if (newest < 0) {
-      out.add(named);
-    } else {
-      out[newest] = named;
-    }
-    await index.writeAsString('${out.join('\n')}\n');
-    indexWrites++;
   }
 
   /// Drops the index entries naming any of [sessionIds] — one read, one write.

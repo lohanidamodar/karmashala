@@ -144,24 +144,33 @@ void main() {
   });
 
   group('a Codex that cannot be reached', () {
-    test('does not throw, and keeps our own view of the name', () async {
+    /// The mirror must come out of every one of these unchanged. Writing it is
+    /// how the original bug *looked* fixed: the name appeared locally and Codex
+    /// overwrote it at its next naming event, so a soft failure has to be a
+    /// genuine no-op on the store, not a consolation write.
+    void expectStoreUntouched(DetectedSession session) => expect(
+      mirror(session),
+      contains('"thread_name":"old"'),
+      reason: 'a name Codex never agreed to must not be written anywhere',
+    );
+
+    test('there being no Codex installed is not an error', () async {
       final session = seedStore();
-      // No Codex installation in this environment, so there is nothing to ask.
       final pool = servers(codexInstalled: false);
       addTearDown(pool.closeAll);
 
       await mutator.rename(session, 'new name', codex: pool);
 
       expect(runner.startRequests, isEmpty);
-      expect(mirror(session), contains('"thread_name":"new name"'));
+      expectStoreUntouched(session);
     });
 
-    test('nor when the app-server refuses the call', () async {
+    test('nor the app-server refusing the call', () async {
       final session = seedStore();
       server = FakeCodexAppServer(
         reply: (server, id, method, params) => jsonEncode({
-          'id': id,
           'error': {'code': -32600, 'message': 'no rollout found for thread id'},
+          'id': id,
         }),
       );
       runner = FakeCommandRunner(processFactory: (_) => server);
@@ -170,10 +179,10 @@ void main() {
 
       await mutator.rename(session, 'new name', codex: pool);
 
-      expect(mirror(session), contains('"thread_name":"new name"'));
+      expectStoreUntouched(session);
     });
 
-    test('nor when the process cannot be started at all', () async {
+    test('nor the process failing to start at all', () async {
       final session = seedStore();
       runner = FakeCommandRunner(
         throwError: const ProcessException('codex.exe', ['app-server']),
@@ -183,79 +192,15 @@ void main() {
 
       await mutator.rename(session, 'new name', codex: pool);
 
-      expect(mirror(session), contains('"thread_name":"new name"'));
+      expectStoreUntouched(session);
     });
 
-    test('and a caller with no pool at all still renames locally', () async {
+    test('nor a caller that supplies no way to reach one', () async {
       final session = seedStore();
 
       await mutator.rename(session, 'new name');
 
-      expect(mirror(session), contains('"thread_name":"new name"'));
-    });
-  });
-
-  group('the mirror this falls back on', () {
-    test('is stamped now, not with the time it last held', () async {
-      final session = seedStore();
-
-      await mutator.rename(session, 'new name');
-
-      final entry =
-          jsonDecode(mirror(session).trim()) as Map<String, dynamic>;
-      expect(
-        entry['updated_at'],
-        isNot('2020-01-01T00:00:00.000Z'),
-        reason:
-            'rewriting a line while keeping its old stamp falsifies the name '
-            'history Codex records',
-      );
-      expect(DateTime.parse(entry['updated_at'] as String).isUtc, isTrue);
-    });
-
-    test('stamps an entry it has to add, too', () async {
-      final session = seedStore();
-      File(p.join(session.storeHome, 'session_index.jsonl')).writeAsStringSync(
-        '${jsonEncode({'id': 'someone-else'})}\n',
-      );
-
-      await mutator.rename(session, 'new name');
-
-      final lines = mirror(session).trim().split('\n');
-      expect(lines, hasLength(2));
-      final added = jsonDecode(lines.last) as Map<String, dynamic>;
-      expect(added['id'], 'u1');
-      expect(added['thread_name'], 'new name');
-      expect(added['updated_at'], isNotNull);
-    });
-
-    test('touches only the newest line for the thread', () async {
-      final session = seedStore();
-      final index = File(p.join(session.storeHome, 'session_index.jsonl'));
-      index.writeAsStringSync(
-        [
-          jsonEncode({
-            'id': 'u1',
-            'thread_name': 'first',
-            'updated_at': '2020-01-01T00:00:00.000Z',
-          }),
-          jsonEncode({
-            'id': 'u1',
-            'thread_name': 'second',
-            'updated_at': '2021-01-01T00:00:00.000Z',
-          }),
-        ].join('\n'),
-      );
-
-      await mutator.rename(session, 'third');
-
-      final lines = index.readAsStringSync().trim().split('\n');
-      expect(
-        jsonDecode(lines.first),
-        containsPair('thread_name', 'first'),
-        reason: 'the history is what happened; only the head is the name now',
-      );
-      expect(jsonDecode(lines.last), containsPair('thread_name', 'third'));
+      expectStoreUntouched(session);
     });
   });
 
