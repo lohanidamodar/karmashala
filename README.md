@@ -25,8 +25,9 @@ into the shell and reachable; caveats are stated inline rather than implied.
   owning them. Titles sync both ways; a title typed here is never overwritten.
 - **Embedded terminals** on a vendored, leak-fixed `flutter_pty`
   ([`packages/flutter_pty/VENDORED.md`](packages/flutter_pty/VENDORED.md)) —
-  ConPTY on Windows, `forkpty` on POSIX — rendered by our `xterm2` fork. Splits,
-  tabs, search, OSC 7/8, panes restored across a restart.
+  ConPTY on Windows, `forkpty` on POSIX — rendered by our `xterm2` fork, pinned
+  to a commit in `pubspec.yaml`. Splits, tabs, search, OSC 7/8, panes restored
+  across a restart.
 - **Environments:** this host, a WSL distribution, or an SSH host. An SSH host
   is a real workspace — clone into it, run sessions on it, browse it over SFTP.
 - **Status by hook, not by poll.** The agents' own hook scripts report into the
@@ -35,8 +36,9 @@ into the shell and reachable; caveats are stated inline rather than implied.
   ([`mcp_tool_catalogue.dart`](lib/src/features/mcp/mcp_tool_catalogue.dart) is
   the list). Served over HTTP by the app, and over stdio by a separate
   `karmashala_mcp` binary
-  ([`mcp_bridge/`](mcp_bridge/bin/karmashala_mcp.dart)) for sessions inside WSL,
-  which cannot reach the host across the WSL switch on every machine.
+  ([`mcp_bridge/`](mcp_bridge/bin/karmashala_mcp.dart)). The bridge exists
+  because a session inside WSL cannot reach the host across the WSL switch on
+  every machine; it is spawned over WSL interop instead.
 - **Device control.** Android over `adb` with a bundled `scrcpy-server` for real
   H.264 mirroring; iOS **Simulators only**, over WebDriverAgent with an MJPEG
   stream. Simulator support requires a macOS host.
@@ -109,11 +111,12 @@ exists only on a Windows host, by construction.
 
 ## Running it
 
-> **Use the Windows Flutter/Dart toolchain, from PowerShell or `cmd`.** A bare
-> `flutter` on a WSL `PATH` resolves to the POSIX script inside the Windows
-> install and swaps a **Linux** Dart SDK into it, breaking the toolchain for
-> every other terminal and agent on the machine. [`CLAUDE.md`](CLAUDE.md) §17
-> spells out the safe invocation.
+> **On a Windows checkout, drive the Windows toolchain from PowerShell or
+> `cmd` — never `flutter` from a WSL shell.** A bare `flutter` on a WSL `PATH`
+> resolves to the POSIX script inside the *Windows* install and makes it
+> download a **Linux** Dart SDK over the top of the Windows one, breaking the
+> toolchain for every other terminal and agent sharing it.
+> [`CLAUDE.md`](CLAUDE.md) §17 gives the safe invocation.
 
 ```powershell
 flutter pub get
@@ -171,7 +174,7 @@ with `KARMASHALA_BRIDGE_HANDSHAKE`, not with `%APPDATA%`.
 | `KARMASHALA_SESSION_ID` | stamped on agent panes; read by the MCP bridge | Which session a process belongs to. The bridge forwards it as `callerSessionId`, which is how agent-spawns-agent depth is capped from the real process tree. |
 | `KARMASHALA_PORT_BASE` | stamped on agent panes | A deterministic per-session port base in `[20000, 32760)`. A namespace a repo's own scripts may read — not a lock or a reservation. |
 | `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`. Overrides only that lookup. |
-| `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the mobile app from this codebase. An APK built **without** it installs, launches and sits on a black screen. |
+| `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the mobile app from this codebase. An APK built **without** it used to install and sit on a black screen; `main()` now refuses on a phone and names the missing define. |
 | `KARMASHALA_VERSION` | build-time `--dart-define` | Stamps the version into every log line. Absent in a plain `flutter run`, which logs "version not recorded" rather than a stale number. |
 | `KARMASHALA_SSH_HOST` / `_USER` / `_KEY` / `_PORT` | the `live-ssh` tests and the SSH benchmark | Where to dial. Unset, they skip themselves with a reason. |
 
@@ -197,7 +200,9 @@ docs/                       # Backlog, design notes, comparisons, profiling repo
 
 ## tool/
 
-None of these are part of `flutter test`. Run them from the repository root.
+None of these run in the default test gate; several are *invoked* through
+`flutter test` but live under `tool/` so discovery cannot pick them up and
+their presence never reads as coverage. Run them from the repository root.
 
 | Path | What it is |
 | --- | --- |
