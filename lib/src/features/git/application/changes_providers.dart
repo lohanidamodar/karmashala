@@ -8,13 +8,16 @@ import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../data/git_files.dart';
+import '../data/git_presence_reader.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
+import '../domain/git_presence.dart';
 import '../domain/git_worktree.dart';
 import 'changes_service.dart';
 import 'git_providers.dart';
 
-/// The filesystem `ChangesService.originFacts` reads `.git` through.
+/// The filesystem `ChangesService.originFacts` and `GitPresenceReader` read
+/// `.git` through.
 ///
 /// A provider so a test can count the reads without a disk — the same reason
 /// `commandRunnerFactoryProvider` is one. The app always uses the real
@@ -150,14 +153,86 @@ final viewedCheckoutProvider = Provider.autoDispose<EnvironmentPath?>((ref) {
   return ref.watch(browsedWorktreeMissingProvider) ? home : pick.path;
 });
 
+/// **Whether a checkout is under git, at the cost of no processes at all.**
+///
+/// The panes' first question, and it used to be asked by running `git` and
+/// reading the `fatal:` that came back — which is where the reported spin came
+/// from. `GitPresenceReader` reads the filesystem instead; see it for what a
+/// spawn costs and for why the walk climbs to the root.
+///
+/// Keyed by the checkout rather than by the repository row, because the
+/// Repository pane asks about the selected checkout and the Changes pane about
+/// whichever worktree is being read, and those are the same directory only
+/// until somebody touches the worktree picker.
+final checkoutGitPresenceProvider = FutureProvider.autoDispose
+    .family<GitPresence, EnvironmentPath>((ref, checkout) async {
+      final env = ref
+          .read(executionEnvironmentDaoProvider)
+          .getById(checkout.environmentId);
+      // No environment row is not a statement about the folder. The git path
+      // has its own `GitException` for that and gets to make it.
+      if (env == null) return GitPresence.unknown;
+      return GitPresenceReader(
+        files: ref.watch(gitFilesProvider),
+        hostPathOf: hostPathMapperFor(env),
+      ).read(checkout.path);
+    });
+
+/// Throws [NotAGitRepository] when the filesystem has **already** said
+/// [checkout] is not under version control, so nothing below spawns a process
+/// to be told the same thing.
+///
+/// It throws rather than returning an empty answer because each provider that
+/// calls it already has a null or an empty list with a different meaning — "no
+/// remote", "detached", "no other worktrees", "no changes" — and a folder with
+/// no git in it is none of those. The throw lands in each pane's existing
+/// `AsyncError` branch, where [gitTroubleOf] turns it into the calm sentence.
+///
+/// **Every caller reads its service before awaiting this**, which is the rule
+/// `delivery_providers.dart` states at each of its own seams: this introduced
+/// the first `await` those providers had, and a `ref.read` on the far side of
+/// one can throw on a disposed `Ref` when the provider was invalidated in the
+/// gap — which is exactly what moving the checkout picker does.
+Future<void> _requireRepository(Ref ref, EnvironmentPath checkout) async {
+  final presence = await ref.watch(
+    checkoutGitPresenceProvider(checkout).future,
+  );
+  if (presence == GitPresence.notARepository) {
+    throw NotAGitRepository(checkout);
+  }
+}
+
+/// **Ask git again only where asking again could change the answer.**
+///
+/// Riverpod 3 retries a failed provider by itself: `defaultRetry` allows ten
+/// attempts, backing off 200 ms, 400, 800 … capped at 6.4 s — **38 seconds**
+/// of `AsyncLoading` in total, because a retrying element carries its error
+/// *inside* a loading state and `.when` therefore draws the spinner. Before the
+/// probe above existed it was also eleven `CreateProcessW` to be told `fatal:`
+/// eleven times.
+///
+/// That is the other half of the report — "stays loading for a long time" — and
+/// the filesystem probe alone would not have fixed it: [NotAGitRepository] is
+/// an `Exception` too, so the calm message would have taken the same 38 seconds
+/// to appear. A verdict does not become a different verdict by being asked
+/// again, so both settled verdicts stop at the first answer. A real failure — a
+/// contended index lock, a transient read — keeps the default policy, because
+/// that one genuinely can come good on its own.
+Duration? _retryOnlyRealFailures(int count, Object error) =>
+    gitTroubleOf(error) == GitTrouble.failed
+    ? ProviderContainer.defaultRetry(count, error)
+    : null;
+
 /// Working-tree changes for the checkout being viewed.
 final repositoryChangesProvider = FutureProvider.autoDispose<List<FileChange>>((
   ref,
 ) async {
   final path = ref.watch(viewedCheckoutProvider);
   if (path == null) return const [];
-  return ref.read(changesServiceProvider).changes(path);
-});
+  final changes = ref.read(changesServiceProvider);
+  await _requireRepository(ref, path);
+  return changes.changes(path);
+}, retry: _retryOnlyRealFailures);
 
 /// The current branch of the selected repository.
 final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
@@ -165,8 +240,13 @@ final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
   if (id == null) return null;
   final repo = ref.read(repositoryDaoProvider).getById(id);
   if (repo == null) return null;
-  return ref.read(changesServiceProvider).currentBranch(repo.path);
-});
+  final changes = ref.read(changesServiceProvider);
+  // A folder with no git in it is not a **detached** checkout, which is what
+  // this provider's null means and what the status bar and the Repository pane
+  // both draw for one.
+  await _requireRepository(ref, repo.path);
+  return changes.currentBranch(repo.path);
+}, retry: _retryOnlyRealFailures);
 
 /// The `origin` remote URL of the selected repository.
 final repoRemoteUrlProvider = FutureProvider.autoDispose<String?>((ref) async {
@@ -174,8 +254,12 @@ final repoRemoteUrlProvider = FutureProvider.autoDispose<String?>((ref) async {
   if (id == null) return null;
   final repo = ref.read(repositoryDaoProvider).getById(id);
   if (repo == null) return null;
-  return ref.read(changesServiceProvider).remoteUrl(repo.path);
-});
+  final changes = ref.read(changesServiceProvider);
+  // Likewise: null here means "a clone with no `origin`", which is a different
+  // thing from a folder that was never cloned.
+  await _requireRepository(ref, repo.path);
+  return changes.remoteUrl(repo.path);
+}, retry: _retryOnlyRealFailures);
 
 /// Recent commits on the branch the viewed checkout has out.
 ///
@@ -189,8 +273,10 @@ final recentCommitsProvider = FutureProvider.autoDispose<List<GitCommit>>((
 ) async {
   final path = ref.watch(viewedCheckoutProvider);
   if (path == null) return const [];
-  return ref.read(changesServiceProvider).log(path, limit: 8);
-});
+  final changes = ref.read(changesServiceProvider);
+  await _requireRepository(ref, path);
+  return changes.log(path, limit: 8);
+}, retry: _retryOnlyRealFailures);
 
 /// The worktrees of the selected repository.
 ///
@@ -205,7 +291,55 @@ final repoWorktreesProvider = FutureProvider.autoDispose<List<GitWorktree>>((
   if (id == null) return const [];
   final repo = ref.read(repositoryDaoProvider).getById(id);
   if (repo == null) return const [];
-  return ref.read(worktreeServiceProvider).list(repo.path);
+  final worktrees = ref.read(worktreeServiceProvider);
+  // Empty here means "one working tree and no others", which every worktree
+  // surface draws as `none`. A folder that is not a repository has neither.
+  await _requireRepository(ref, repo.path);
+  return worktrees.list(repo.path);
+}, retry: _retryOnlyRealFailures);
+
+/// Why the Repository pane has no git facts to show, or null when it has them
+/// — including while it is still finding out.
+///
+/// **One verdict for the whole GIT section.** Branch, Remote, Worktrees and
+/// Recent commits each answering "not a git repository" in a 240px panel is the
+/// same fact spelled four times.
+///
+/// The probe decides it wherever it can, because that reading is about the
+/// *folder* rather than about one git subcommand, and it is the reading the
+/// report was filed about. Where the probe was unsure the verdict comes off
+/// [repoWorktreesProvider], and that choice is load-bearing: it is the selected
+/// checkout's — not the browsed worktree's — and, unlike [currentBranchProvider]
+/// beside it, it **reports a git that could not answer** instead of returning
+/// null. `git rev-parse --abbrev-ref HEAD` is allowed to fail for an ordinary
+/// reason (a repository with no commits yet has no `HEAD` to resolve), so
+/// `currentBranch` folds every non-zero exit into the null it uses for
+/// "detached", and a verdict cannot be recovered from it. `git worktree list`
+/// has no such ordinary failure.
+///
+/// Null while loading, so a pane that has not been told anything yet keeps its
+/// `…` rather than asserting something it has not observed (§19).
+final selectedCheckoutGitTroubleProvider = Provider.autoDispose<
+  GitTroubleReport?
+>((ref) {
+  final checkout = ref.watch(selectedCheckoutPathProvider);
+  if (checkout == null) return null;
+  if (ref.watch(checkoutGitPresenceProvider(checkout)).asData?.value ==
+      GitPresence.notARepository) {
+    return const GitTroubleReport(GitTrouble.notARepository);
+  }
+  return switch (ref.watch(repoWorktreesProvider)) {
+    AsyncError(:final error) => switch (gitTroubleOf(error)) {
+      // git's own text is the useful part of a real failure, and nothing but
+      // noise beside the two states this app words for itself.
+      GitTrouble.failed => GitTroubleReport(
+        GitTrouble.failed,
+        detail: '$error',
+      ),
+      final trouble => GitTroubleReport(trouble),
+    },
+    _ => null,
+  };
 });
 
 /// Unified diff for the selected file in the selected repository.
