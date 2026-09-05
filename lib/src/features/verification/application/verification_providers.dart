@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../browser/application/browser_providers.dart';
@@ -15,6 +14,7 @@ import '../data/verification_dao.dart';
 import '../domain/session_verdict.dart';
 import '../domain/verification_run.dart';
 import 'verification_service.dart';
+import '../../../core/paths/app_support_directory.dart';
 
 final verificationDaoProvider = Provider<VerificationDao>(
   (ref) => VerificationDao(ref.watch(databaseProvider)),
@@ -50,7 +50,7 @@ Directory? _resolvedRoot;
 Future<Directory> resolveVerificationRoot() async {
   final existing = _resolvedRoot;
   if (existing != null) return existing;
-  final support = await getApplicationSupportDirectory();
+  final support = await appSupportDirectory();
   final root = Directory(p.join(support.path, 'verification'));
   await root.create(recursive: true);
   return _resolvedRoot = root;

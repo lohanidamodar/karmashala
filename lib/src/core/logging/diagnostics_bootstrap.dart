@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import 'diagnostics.dart';
 import 'log_file_sink.dart';
+import '../paths/app_support_directory.dart';
 
 /// Where log files live: `<app support>/logs`.
 ///
@@ -16,7 +16,7 @@ import 'log_file_sink.dart';
 /// not somewhere anyone would *find*, which is why Settings → Diagnostics has a
 /// reveal button pointing at it.
 Future<Directory> defaultLogDirectory() async =>
-    Directory(p.join((await getApplicationSupportDirectory()).path, 'logs'));
+    Directory(p.join((await appSupportDirectory()).path, 'logs'));
 
 /// Opens the rotating log file and attaches it to [diagnostics].
 ///

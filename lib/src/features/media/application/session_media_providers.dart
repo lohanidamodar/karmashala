@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -14,6 +13,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/session_media_store.dart';
 import '../domain/session_media_item.dart';
+import '../../../core/paths/app_support_directory.dart';
 
 /// How often the media panel looks for new pictures.
 ///
@@ -40,7 +40,7 @@ const int kSessionMediaSearchAttempts = 6;
 /// paste the panel is showing has to survive a reboot's temp sweep, or the
 /// picture the user came back for is gone.
 final sessionMediaCacheRootProvider = FutureProvider<Directory>((ref) async {
-  final support = await getApplicationSupportDirectory();
+  final support = await appSupportDirectory();
   final root = Directory(p.join(support.path, 'media'));
   await root.create(recursive: true);
   return root;
