@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
@@ -23,7 +24,6 @@ import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
-import 'package:flutter/services.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/domain/pane_liveness.dart';

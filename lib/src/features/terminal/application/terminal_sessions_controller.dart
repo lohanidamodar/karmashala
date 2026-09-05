@@ -1275,6 +1275,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void focusPane(String paneId) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
+    // Already here: a press inside the pane you are already typing in must not
+    // republish the layout. A pane calls this on *every* pointer down, so
+    // without this a click while selecting text rebuilt the whole tab strip.
+    if (_activeTabId == tab.id &&
+        tab.focusedPaneId == paneId &&
+        tab.layout.groupOf(paneId)?.activePaneId == paneId) {
+      _focusActivePane();
+      return;
+    }
     _activeTabId = tab.id;
     _replaceTab(
       tab.copyWith(layout: tab.layout.activate(paneId), focusedPaneId: paneId),
