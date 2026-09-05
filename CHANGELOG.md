@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.15.0 (2026-09-05)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.16.0 (2026-09-05)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,53 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.16.0 — 2026-09-05 (build 29)
+
+### A Codex rename shows the moment Codex makes it
+
+Renaming a conversation inside Codex used to take up to ten seconds to reach
+the sidebar, because the name only arrived on the status registry's store
+sweep. The app-server emits `thread/name/updated` on the same pipe as its
+replies, and the client had been dropping every id-less line — correct for call
+bookkeeping, where a reply that answers nobody could only be charged to the
+wrong request, and wrong for this one message, which is application state. The
+row now updates immediately.
+
+**A title you typed in Karmashala is still never replaced.** This landed as an
+exception to that rule — the argument being that a Codex rename is also the
+user, and newer — and the exception was removed. A name typed into the app in
+front of you is the answer to that conflict, whichever CLI is behind the row.
+The consequence is worth knowing: rename a session here and then rename the
+same conversation in Codex, and the two disagree permanently, because this side
+keeps yours.
+
+### Developer-facing
+
+The gate runs eight testers by default, from `dart_test.yaml` rather than a
+flag, so a local run and automation cannot drift apart. Measured on a quiet
+machine: **5:19 at the old four, 3:24-3:40 at eight, 3:55 at thirty-two** —
+past eight, contention costs more than the parallelism buys.
+
+`docs/BACKLOG.md` records why it had been pinned at four, and why eight is safe
+now: companion tests with fixed 800 ms windows flaked 0.8% per instance at four
+against 26% at eight, caused by a fixture that kept no reference to its socket
+so the VM finaliser closed it mid-window. That was fixed, and eight ran 153
+instances clean afterwards.
+
+It also gains what the test-harness investigation actually produced. Moving
+pure logic tests off `flutter_test` onto `dart test` was built end to end and
+**not** landed, because the finished state measured slower — 326.4s against
+350.5s. `flutter test` shares one incremental compiler across every suite while
+`dart test` compiles per isolate, so the comparison inverts with how much real
+code a test imports; on the same 152 files the two runners were within 2%. The
+priced seam table names the real lever: `app_database.dart` imports
+`path_provider` for a single call and drags Flutter into 158 test files.
+
+`tool/vm_probe.dart` samples a running app's VM service — frames, stalls, heap
+— for when the Dart MCP server will not connect.
 
 ---
 
