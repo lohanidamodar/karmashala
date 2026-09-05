@@ -290,6 +290,13 @@ class CliDetectionService {
   /// [onJob] sees each job's sessions as that job finishes, so Claude's are
   /// usable while Codex is still walking. Callers that only want the total can
   /// ignore it.
+  ///
+  /// **No app-server is asked here, on purpose.** This is the path the *main*
+  /// isolate takes — `detect()`, and the transcript index the status registry
+  /// runs on its slow slot — and starting `codex app-server` costs a ~1 s
+  /// `CreateProcessW` charged to the isolate that calls it. The protocol is
+  /// reached through `runStoreScanJobs`, which the store-scan worker runs; a
+  /// main-isolate read walks the files.
   Future<List<DetectedSession>> readStores(
     List<CliStore> stores, {
     Set<String>? claudeDirectories,
@@ -297,7 +304,6 @@ class CliDetectionService {
     void Function(StoreScanJob job, List<DetectedSession> sessions)? onJob,
   }) async {
     final all = <DetectedSession>[];
-    final appServers = codexAppServersIn(stores);
     for (final job in jobsFor(stores)) {
       final sessions = await runJob(
         job,
@@ -305,7 +311,6 @@ class CliDetectionService {
             ? claudeDirectories
             : null,
         slots: StoreScanSlots(concurrency: concurrency),
-        appServer: appServers[job.environmentId],
       );
       onJob?.call(job, sessions);
       all.addAll(sessions);

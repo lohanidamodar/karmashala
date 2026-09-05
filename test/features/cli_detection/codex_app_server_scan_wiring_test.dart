@@ -153,6 +153,40 @@ void main() {
     expect(detection.codexAppServerReader.fallbacksServed, 0);
   });
 
+  test('a main-isolate read never starts an app-server', () async {
+    // `detect()` and the transcript index run here, and one of them runs on the
+    // status registry's slow slot. A ~1 s CreateProcessW on the isolate that
+    // draws is the lag this whole design exists to avoid, so the walk answers.
+    final home = codexStore('u3');
+    var opened = 0;
+    final detection = CliDetectionService(
+      codexAppServerReader: CodexAppServerReader(
+        fallback: CodexStoreReader(cache: CodexRolloutCache()),
+        openClient: (launch, expectedCodexHome) {
+          opened++;
+          return CodexAppServerClient(
+            connect: () async => FakeCodexAppServer.withThreads(const []),
+          );
+        },
+      ),
+    );
+    addTearDown(detection.codexAppServerReader.close);
+
+    final sessions = await detection.readStores([
+      CliStore(
+        environmentId: 'windows',
+        homesByAgentId: {AgentIds.codex: home},
+        codexAppServer: CodexAppServerLaunch(
+          environment: windowsEnv(),
+          executable: r'C:\codex.exe',
+        ),
+      ),
+    ]);
+
+    expect(opened, 0);
+    expect(sessions.single.sessionId, 'u3', reason: 'the walk still answers');
+  });
+
   test('the launch crosses to the worker isolate as plain data', () async {
     // A `SendPort` refuses anything it cannot copy, so this case is the whole
     // proof that the resolution can happen on the isolate with the DAOs while
