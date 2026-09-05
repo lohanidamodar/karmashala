@@ -161,19 +161,27 @@ workflows for the companion.
 
 ## Environment variables
 
-**There is no data-directory override.** The app resolves its own directory
-through `path_provider`, which on Windows calls `SHGetKnownFolderPath` — so
-setting `%APPDATA%` for a child process does **not** redirect it, and an
-instance launched that way opens the real `karmashala.sqlite`. The MCP bridge is
-the exception: it computes its handshake path from `%APPDATA%` itself, so the
-two disagree under a redirected environment. Point a bridge at another install
-with `KARMASHALA_BRIDGE_HANDSHAKE`, not with `%APPDATA%`.
+**`KARMASHALA_DATA_DIR` is the only way to start against throwaway data, and
+`%APPDATA%` is not a substitute.** Redirecting `%APPDATA%` looks like it should
+work and does nothing: `path_provider` resolves the Windows folder through
+`SHGetKnownFolderPath`, which ignores the environment variable, so an instance
+launched that way silently opens the **real** database and imports into it.
+`appSupportDirectory()`
+([`lib/src/core/paths/app_support_directory.dart`](lib/src/core/paths/app_support_directory.dart))
+is the one resolver, and all seven consumers go through it — the database, the
+log directory, the env vault, the IPC socket, the session media store and the
+verification artifacts. It moves as a set on purpose: a demo instance writing
+its rows to a scratch directory and its socket to the real one would be worse
+than no override at all. The MCP bridge reads the same variable, so it finds
+the handshake the instance actually published instead of connecting to the
+real install.
 
 | Variable | Read by | Effect |
 | --- | --- | --- |
+| `KARMASHALA_DATA_DIR` | the app and the MCP bridge, at launch | Puts the whole per-user data directory somewhere else, created if absent. For screenshots, demos and running a release build against data nobody minds losing. **Not a user setting** — nothing in the app writes it. |
 | `KARMASHALA_SESSION_ID` | stamped on agent panes; read by the MCP bridge | Which session a process belongs to. The bridge forwards it as `callerSessionId`, which is how agent-spawns-agent depth is capped from the real process tree. |
 | `KARMASHALA_PORT_BASE` | stamped on agent panes | A deterministic per-session port base in `[20000, 32760)`. A namespace a repo's own scripts may read — not a lock or a reservation. |
-| `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`. Overrides only that lookup. |
+| `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`, for pointing a bridge at a second install without guessing. Wins over `KARMASHALA_DATA_DIR`, because it names a file rather than a directory. |
 | `KARMASHALA_MODE` | build-time `--dart-define` | `companion` builds the mobile app from this codebase. An APK built **without** it used to install and sit on a black screen; `main()` now refuses on a phone and names the missing define. |
 | `KARMASHALA_VERSION` | build-time `--dart-define` | Stamps the version into every log line. Absent in a plain `flutter run`, which logs "version not recorded" rather than a stale number. |
 | `KARMASHALA_SSH_HOST` / `_USER` / `_KEY` / `_PORT` | the `live-ssh` tests and the SSH benchmark | Where to dial. Unset, they skip themselves with a reason. |
