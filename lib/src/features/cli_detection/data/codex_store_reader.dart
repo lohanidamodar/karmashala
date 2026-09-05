@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
+import 'store_scan_slots.dart';
+import 'store_session_reader.dart';
 
 /// Reads Codex sessions from a `.codex` store directory.
 ///
@@ -38,7 +40,7 @@ class _CachedRollout {
   final int size;
 }
 
-class CodexStoreReader {
+class CodexStoreReader implements StoreSessionReader {
   CodexStoreReader({CodexRolloutCache? cache})
     : _cache = cache ?? CodexRolloutCache.shared;
 
@@ -51,46 +53,73 @@ class CodexStoreReader {
   /// a claim nobody can check.
   int bytesRead = 0;
 
+  /// [directories] is ignored, and cannot be honoured: Codex's paths carry a
+  /// **date**, not a working directory, so which rollouts belong to a
+  /// repository is only knowable by opening them. That is what makes this the
+  /// expensive store, and why [slots] and the rollout cache both matter more
+  /// here than for Claude — the recursion below is over `YYYY/MM/DD/`, which is
+  /// the store's own shape and stays.
+  @override
   Future<List<DetectedSession>> read(
     String codexHome,
-    String environmentId,
-  ) async {
+    String environmentId, {
+    Set<String>? directories,
+    StoreScanSlots? slots,
+  }) async {
     final sessionsDir = Directory(p.join(codexHome, 'sessions'));
     if (!await sessionsDir.exists()) return const [];
 
     final threadNames = await _readThreadNames(codexHome);
-    final sessions = <DetectedSession>[];
+    final found = <DetectedSession?>[];
+    final reads = <Future<void>>[];
 
     await for (final entity in sessionsDir.list(recursive: true)) {
       if (entity is! File) continue;
       final name = p.basename(entity.path);
       if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) continue;
 
-      final FileStat stat;
-      try {
-        stat = await entity.stat();
-      } on Object {
-        continue;
+      final slot = found.length;
+      found.add(null);
+      Future<void> readRollout() async {
+        found[slot] = await _readSession(
+          entity,
+          codexHome,
+          environmentId,
+          threadNames,
+        );
       }
-      final meta = await _readRollout(entity, stat);
-      if (meta == null) continue;
-      final modified = stat.modified;
 
-      sessions.add(
-        DetectedSession(
-          cli: AgentIds.codex,
-          sessionId: meta.id,
-          cwd: EnvironmentPath(environmentId: environmentId, path: meta.cwd),
-          filePath: entity.path,
-          storeHome: codexHome,
-          title: threadNames[meta.id],
-          preview: meta.preview,
-          startedAt: meta.startedAt,
-          modifiedAt: modified,
-        ),
-      );
+      reads.add(slots == null ? readRollout() : slots.run(readRollout));
     }
-    return sessions;
+    await Future.wait(reads);
+    return [for (final session in found) ?session];
+  }
+
+  Future<DetectedSession?> _readSession(
+    File file,
+    String codexHome,
+    String environmentId,
+    Map<String, String> threadNames,
+  ) async {
+    final FileStat stat;
+    try {
+      stat = await file.stat();
+    } on Object {
+      return null;
+    }
+    final meta = await _readRollout(file, stat);
+    if (meta == null) return null;
+    return DetectedSession(
+      cli: AgentIds.codex,
+      sessionId: meta.id,
+      cwd: EnvironmentPath(environmentId: environmentId, path: meta.cwd),
+      filePath: file.path,
+      storeHome: codexHome,
+      title: threadNames[meta.id],
+      preview: meta.preview,
+      startedAt: meta.startedAt,
+      modifiedAt: stat.modified,
+    );
   }
 
   /// The `session_meta` a rollout opens with.

@@ -13,6 +13,8 @@ import '../../environments/domain/execution_environment.dart';
 import '../data/antigravity_store_sessions.dart';
 import '../data/claude_store_reader.dart';
 import '../data/codex_store_reader.dart';
+import '../data/store_scan_slots.dart';
+import '../data/store_session_reader.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'detected_project_merger.dart';
@@ -178,31 +180,75 @@ class CliDetectionService {
   final PathTranslator translator;
   final AgentRegistry registry;
 
+  /// Which reader answers for which on-disk layout. A lookup, not a branch: a
+  /// new agent is a descriptor, and only a genuinely new layout is a reader.
+  Map<AgentStoreFormat, StoreSessionReader> get _readersByFormat => {
+    AgentStoreFormat.claudeJsonl: claudeReader,
+    AgentStoreFormat.codexRollout: codexReader,
+    AgentStoreFormat.antigravityStore: antigravityReader,
+  };
+
+  /// The store reads [stores] needs, **agent-major**: every Claude home, then
+  /// every Codex home, then every Antigravity one.
+  ///
+  /// The order is the registry's own — `builtInAgentDescriptors` already lists
+  /// them that way — and it is the order that matters. Claude's store is
+  /// addressable and cheap; Codex's is the one whose every candidate file has
+  /// to be opened because its paths carry a date rather than a working
+  /// directory. Claude first means the common case is answered while the slow
+  /// store is still walking.
+  List<StoreScanJob> jobsFor(List<CliStore> stores) => [
+    for (final descriptor in registry.descriptors)
+      for (final store in stores)
+        if (store.homesByAgentId[descriptor.id] case final home?)
+          if (descriptor.store!.format != AgentStoreFormat.none)
+            StoreScanJob(
+              agentId: descriptor.id,
+              format: descriptor.store!.format,
+              storeHome: home,
+              environmentId: store.environmentId,
+            ),
+  ];
+
+  /// Runs one job. [directories] and [slots] are passed straight through — see
+  /// [StoreSessionReader.read].
+  Future<List<DetectedSession>> runJob(
+    StoreScanJob job, {
+    Set<String>? directories,
+    StoreScanSlots? slots,
+  }) async {
+    final reader = _readersByFormat[job.format];
+    if (reader == null) return const [];
+    return reader.read(
+      job.storeHome,
+      job.environmentId,
+      directories: directories,
+      slots: slots,
+    );
+  }
+
   /// Reads every store and returns the flat list of detected sessions.
   ///
-  /// Which stores are read, and in which order, comes from the registry; the
-  /// descriptor's [AgentStoreFormat] picks the reader. A new agent using a
-  /// known format needs no code here — only a genuinely new on-disk format
-  /// needs a reader.
-  Future<List<DetectedSession>> readStores(List<CliStore> stores) async {
+  /// [onJob] sees each job's sessions as that job finishes, so Claude's are
+  /// usable while Codex is still walking. Callers that only want the total can
+  /// ignore it.
+  Future<List<DetectedSession>> readStores(
+    List<CliStore> stores, {
+    Set<String>? claudeDirectories,
+    int concurrency = kStoreScanConcurrency,
+    void Function(StoreScanJob job, List<DetectedSession> sessions)? onJob,
+  }) async {
     final all = <DetectedSession>[];
-    for (final store in stores) {
-      for (final descriptor in registry.descriptors) {
-        final home = store.homesByAgentId[descriptor.id];
-        if (home == null) continue;
-        switch (descriptor.store!.format) {
-          case AgentStoreFormat.claudeJsonl:
-            all.addAll(await claudeReader.read(home, store.environmentId));
-          case AgentStoreFormat.codexRollout:
-            all.addAll(await codexReader.read(home, store.environmentId));
-          case AgentStoreFormat.antigravityStore:
-            all.addAll(
-              await antigravityReader.read(home, store.environmentId),
-            );
-          case AgentStoreFormat.none:
-            break; // Store located but not readable yet.
-        }
-      }
+    for (final job in jobsFor(stores)) {
+      final sessions = await runJob(
+        job,
+        directories: job.format == AgentStoreFormat.claudeJsonl
+            ? claudeDirectories
+            : null,
+        slots: StoreScanSlots(concurrency: concurrency),
+      );
+      onJob?.call(job, sessions);
+      all.addAll(sessions);
     }
     return all;
   }
@@ -220,4 +266,21 @@ class CliDetectionService {
       translator: translator,
     );
   }
+}
+
+/// One CLI's store in one environment: the unit the scan queue processes.
+///
+/// Plain data, because it crosses to the worker isolate.
+class StoreScanJob {
+  const StoreScanJob({
+    required this.agentId,
+    required this.format,
+    required this.storeHome,
+    required this.environmentId,
+  });
+
+  final String agentId;
+  final AgentStoreFormat format;
+  final String storeHome;
+  final String environmentId;
 }

@@ -2,6 +2,8 @@ import '../../agents/data/antigravity_store_reader.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
+import 'store_scan_slots.dart';
+import 'store_session_reader.dart';
 
 /// Reads Antigravity conversations from a `.gemini/antigravity-cli` store into
 /// the shape the rest of detection speaks.
@@ -11,7 +13,7 @@ import '../domain/detected_session.dart';
 /// work of opening the store belongs to `AntigravityStoreReader`
 /// (`features/agents/data/`), which is where the file formats are documented;
 /// this is only the mapping.
-class AntigravityStoreSessions {
+class AntigravityStoreSessions implements StoreSessionReader {
   const AntigravityStoreSessions({
     // Step counts open one SQLite file per conversation and nothing in
     // detection shows them, so the sweep stays a directory listing plus two
@@ -21,10 +23,16 @@ class AntigravityStoreSessions {
 
   final AntigravityStoreReader reader;
 
+  /// [directories] and [slots] are ignored: this store is one directory
+  /// listing plus two small files, so there is nothing to narrow and nothing
+  /// that fans out.
+  @override
   Future<List<DetectedSession>> read(
     String storeHome,
-    String environmentId,
-  ) async {
+    String environmentId, {
+    Set<String>? directories,
+    StoreScanSlots? slots,
+  }) async {
     final conversations = await reader.read(storeHome);
     return [
       for (final conversation in conversations)
