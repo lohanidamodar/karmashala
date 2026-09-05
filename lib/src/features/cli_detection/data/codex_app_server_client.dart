@@ -119,12 +119,17 @@ typedef CodexAppServerConnect = Future<ProcessHandle> Function();
 /// * Unsolicited notifications arrive on the same pipe (`remoteControl/status/
 ///   changed` does, immediately after the handshake). They carry no id and are
 ///   dropped.
-/// * An **unknown method** answers `{"error":{"code":-32600,"message":"Invalid
-///   request: unknown variant …"}}` — *with no id*, because the request never
-///   parsed far enough to have one. A domain error (`no rollout found for thread
-///   id …`) does carry its id. So an id-less error is charged to the oldest call
-///   still waiting, which is exact while calls are issued one at a time and
-///   degrades to "some call failed" rather than "a call hangs" if they are not.
+/// * **Every reply that comes back carries its request id**, errors included —
+///   an unknown method, a bad param type, a missing required field, a domain
+///   error. The id is the *last* key, after a `message` that runs to 3.7 KB for
+///   an unknown method (it enumerates every valid one), which is worth knowing
+///   because a probe that truncates its output loses the id and makes the reply
+///   look unattributable. So correlation is by id alone; a reply that cannot be
+///   attributed is dropped rather than charged to a guess.
+/// * **Malformed JSON gets no reply at all.** An unterminated object and a bare
+///   non-JSON line were both swallowed, and the next well-formed request was
+///   still answered — so the connection survives and the caller's timeout is
+///   the whole of the handling that case needs.
 /// * Unknown *params* are ignored silently, so sending a field a older Codex
 ///   does not know is safe.
 ///
@@ -182,8 +187,8 @@ class CodexAppServerClient {
 
   int _nextId = 1;
 
-  /// Insertion-ordered by construction, which is what lets an id-less error be
-  /// charged to the oldest waiter.
+  /// Calls awaiting an answer, by request id — the only thing a reply is
+  /// matched on.
   final Map<int, Completer<CodexAppServerResult>> _pending = {};
 
   /// The last few stderr lines, so a non-zero exit can say what Codex printed.
@@ -427,10 +432,10 @@ class CodexAppServerClient {
 
     final id = decoded['id'];
     final error = decoded['error'];
-    if (id is! int) {
-      if (error != null) _failOldest(_rpcFailure(error));
-      return;
-    }
+    // A notification, or anything else this client did not ask for. Codex
+    // attributes every reply it sends, so a line with no id answers nobody and
+    // guessing an owner for it could only fail the wrong call.
+    if (id is! int) return;
     final completer = _pending.remove(id);
     if (completer == null || completer.isCompleted) return;
     if (error != null) {
@@ -481,14 +486,6 @@ class CodexAppServerClient {
         '${_stderrTail.isEmpty ? '' : ': ${_stderrTail.join(' / ')}'}',
       ),
     );
-  }
-
-  /// Charges an error that named no id to the call that has been waiting
-  /// longest — see the class doc for why an unknown method arrives that way.
-  void _failOldest(CodexAppServerFailure failure) {
-    if (_pending.isEmpty) return;
-    final oldest = _pending.keys.first;
-    _pending.remove(oldest)?.complete(CodexAppServerResult.failed(failure));
   }
 
   void _failPending(CodexAppServerFailure failure) {

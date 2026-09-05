@@ -15,11 +15,18 @@ import '../../support/fake_codex_app_server.dart';
 /// transport is a [CodexAppServerConnect] handing back a [FakeCodexAppServer], so
 /// the suite runs identically on a machine with no Codex installed.
 ///
-/// Every reply below is the shape the real thing was measured to send — no
-/// `jsonrpc` field on a reply, an unsolicited notification straight after the
-/// handshake, and an unknown method answering `-32600` **without an id**. Those
-/// are the three details a plausible-looking hand-written fake gets wrong, and
-/// each of them would have hung or dropped a real call.
+/// Every reply below is the shape the real thing was measured to send: no
+/// `jsonrpc` field, an unsolicited notification straight after the handshake,
+/// and `-32600` for an unknown method — carrying its id, like every other
+/// reply, as the last key after a 3.7 KB message.
+///
+/// That last detail was got wrong here once, and the way it was got wrong is
+/// worth keeping: the probe that "measured" it truncated each printed line at
+/// 400 characters, which cut `"id":77` off the end of the longest error the
+/// server sends, while a short domain error kept its id and made the contrast
+/// look like a rule. Re-measured against both binaries with the raw key list
+/// printed, every error reply carries its id. Nothing here correlates a reply
+/// any other way.
 void main() {
   test('the handshake happens once, in order, however many calls follow', () async {
     final server = FakeCodexAppServer();
@@ -97,10 +104,8 @@ void main() {
   });
 
   test('an unknown method is a typed failure, not a hang', () async {
-    // Measured against Codex 0.145.0 and 0.153.4: the error that names the 151
-    // valid methods arrives with **no id**, because the request never parsed
-    // far enough to have one. Charged to the oldest waiter, or the call waits
-    // out its whole budget for an answer that already came.
+    // The real reply, key order included: `error` first, then the id. Measured
+    // on 0.145.0 and 0.153.4 — `thread/setName` does not exist on either.
     final server = FakeCodexAppServer(
       reply: (server, id, method, params) => jsonEncode({
         'error': {
@@ -108,6 +113,7 @@ void main() {
           'message': 'Invalid request: unknown variant `$method`, expected one '
               'of `initialize`, `thread/name/set`, `thread/list`',
         },
+        'id': id,
       }),
     );
     final client = _clientFor(server);
@@ -121,11 +127,11 @@ void main() {
     expect(result.failure!.message, contains('unknown variant'));
   });
 
-  test('an error that does carry its id fails only that call', () async {
+  test('a domain error is the same shape, and fails only its own call', () async {
     final server = FakeCodexAppServer(
       reply: (server, id, method, params) => jsonEncode({
-        'id': id,
         'error': {'code': -32600, 'message': 'no rollout found for thread id x'},
+        'id': id,
       }),
     );
     final client = _clientFor(server);
@@ -135,6 +141,55 @@ void main() {
 
     expect(result.failure!.kind, CodexAppServerFailureKind.rpcError);
     expect(result.failure!.message, contains('no rollout'));
+  });
+
+  test('an error naming no call is dropped, never charged to a waiting one', () async {
+    // Codex attributes every reply it sends, so this should not arise at all —
+    // and if it ever does, guessing an owner can only fail the wrong call. The
+    // waiting call keeps waiting for the answer that is addressed to it.
+    final server = FakeCodexAppServer(
+      reply: (server, id, method, params) {
+        server.emitStdout(
+          jsonEncode({
+            'error': {'code': -32600, 'message': 'addressed to nobody'},
+          }),
+        );
+        return jsonEncode({'id': id, 'result': <String, Object?>{}});
+      },
+    );
+    final client = _clientFor(server);
+    addTearDown(client.close);
+
+    expect((await client.setThreadName('t1', 'one')).ok, isTrue);
+  });
+
+  test('a request Codex never answers is left to the timeout', () async {
+    // Measured: malformed JSON — an unterminated object, a bare non-JSON line —
+    // draws no reply of any kind, and the next well-formed request is still
+    // answered. So the connection survives and the budget is the whole of the
+    // handling. Nothing else in this client is allowed to invent a failure for
+    // an unanswered call.
+    var answered = 0;
+    final server = FakeCodexAppServer(
+      reply: (server, id, method, params) {
+        answered++;
+        return answered == 1
+            ? null
+            : jsonEncode({'id': id, 'result': <String, Object?>{}});
+      },
+    );
+    final client = _clientFor(server, timeout: const Duration(milliseconds: 50));
+    addTearDown(client.close);
+
+    expect(
+      (await client.setThreadName('t1', 'one')).failure!.kind,
+      CodexAppServerFailureKind.timeout,
+    );
+    expect(
+      (await client.setThreadName('t2', 'two')).ok,
+      isTrue,
+      reason: 'a dropped request must not poison the connection',
+    );
   });
 
   test('a Codex that cannot be started fails as unavailable, never throws', () async {
