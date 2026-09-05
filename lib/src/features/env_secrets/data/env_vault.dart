@@ -9,13 +9,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../mcp/handshake_file_permissions.dart';
 import '../domain/env_variable.dart';
 import 'env_value_cipher.dart';
 import 'local_key_cipher.dart';
+import '../../../core/paths/app_support_directory.dart';
 
 /// Raised when the vault refuses to store something rather than storing it
 /// less well than promised.
@@ -119,7 +119,7 @@ class EnvVault {
   /// the settings page renders. A silent downgrade would be the one thing worse
   /// than no encryption.
   static Future<EnvVault> open({AppLogger? logger}) async {
-    final support = await getApplicationSupportDirectory();
+    final support = await appSupportDirectory();
     EnvValueCipher cipher;
     try {
       cipher = await LocalKeyEnvValueCipher.open(logger: logger);
