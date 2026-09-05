@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -249,6 +250,28 @@ void main() {
       CodexAppServerFailureKind.closed,
     );
     expect(client.connectionsOpened, 1, reason: 'a closed client starts nothing');
+  });
+
+  test('closing while the spawn is in flight still kills it', () async {
+    final server = FakeCodexAppServer();
+    final spawned = Completer<void>();
+    final client = CodexAppServerClient(
+      connect: () async {
+        spawned.complete();
+        return server;
+      },
+    );
+
+    final pending = client.setThreadName('t1', 'one');
+    await spawned.future;
+    await client.close();
+
+    expect((await pending).failure!.kind, CodexAppServerFailureKind.closed);
+    expect(
+      server.killed,
+      isTrue,
+      reason: 'a process that arrived after close must not wait out a timeout',
+    );
   });
 
   test('close fails a call that was still waiting', () async {

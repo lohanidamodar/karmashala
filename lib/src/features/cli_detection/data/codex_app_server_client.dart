@@ -287,6 +287,16 @@ class CodexAppServerClient {
       );
     }
     connectionsOpened++;
+    // Closed while the spawn was in flight: kill it here rather than let it
+    // wait out the handshake budget, which is the one window a process could
+    // outlive `close`.
+    if (_closed) {
+      await handle.kill();
+      throw const CodexAppServerFailure(
+        CodexAppServerFailureKind.closed,
+        'The Codex app-server client was closed while connecting',
+      );
+    }
     _handle = handle;
     _stdout = handle.stdoutLines.listen(_onLine, onError: (Object _) {});
     _stderr = handle.stderrLines.listen(
