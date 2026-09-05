@@ -17,6 +17,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../data/cli_session_mutator.dart';
+import 'codex_app_server_providers.dart';
 import '../data/conversation_store_index.dart';
 import '../data/store_scan_worker.dart';
 import '../data/imported_session_dao.dart';
@@ -442,7 +443,13 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
   }
 
   Future<void> renameSession(DetectedSession session, String newTitle) async {
-    await ref.read(cliSessionMutatorProvider).rename(session, newTitle);
+    await ref
+        .read(cliSessionMutatorProvider)
+        .rename(
+          session,
+          newTitle,
+          codex: ref.read(codexAppServersProvider),
+        );
     await detect();
   }
 

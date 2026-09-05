@@ -8,8 +8,10 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/application/antigravity_resume_providers.dart';
 import '../../agents/data/antigravity_session_resume.dart';
 import '../../agents/domain/agent_descriptor.dart';
+import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/application/codex_app_server_providers.dart';
 import '../../cli_detection/application/detected_project_merger.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
@@ -37,8 +39,9 @@ import 'session_working_directory.dart';
 import '../../environments/domain/environment_label.dart';
 
 /// Rename/delete operations available for **every** session in the app — native
-/// engine sessions and imported CLI sessions alike. Imported operations also
-/// propagate to the originating CLI store (best-effort).
+/// engine sessions and imported CLI sessions alike. Renames and deletes
+/// propagate to the originating CLI store (best-effort), whichever kind of row
+/// they started from.
 class SessionActions {
   SessionActions(this._ref);
   final Ref _ref;
@@ -48,7 +51,18 @@ class SessionActions {
   /// agent's own transcript is none of those things.
   static final _log = AppLogger.named('sessions.actions');
 
-  void renameNative(String id, String title) {
+  /// Renames a native row, and tells the CLI that owns the conversation.
+  ///
+  /// The workspace half is synchronous and complete before the returned future
+  /// is: the row is written and published first, so the name is on screen
+  /// whatever the CLI does next. Only then does [_propagateNativeRename] try to
+  /// reach the store — best-effort, because a Codex that is not installed must
+  /// not undo a rename the user can already see.
+  ///
+  /// This used to stop at the workspace row, which is why a Codex session
+  /// launched *by* Karmashala and renamed *in* Karmashala reached no store at
+  /// all.
+  Future<void> renameNative(String id, String title) async {
     // `byUser`: this is the one event that makes a title the user's, and
     // recording it is what stops the CLI rename sync taking it back — for the
     // life of the row, not just this run of the app.
@@ -57,6 +71,54 @@ class SessionActions {
     // this row's name moved. See `session_signal_cost_test.dart` for what the
     // coarse word used to cost — 108 session reads at a hundred sessions.
     _publish(SessionChange.renamed(id));
+    await _propagateNativeRename(id, title);
+  }
+
+  /// Carries a native row's new title out to the CLI store behind it.
+  ///
+  /// **Codex costs no store walk.** `thread/name/set` needs the thread id and
+  /// nothing else, and the row already carries it as `externalSessionId`, so
+  /// the conversation is named without reading a single file. Every other CLI
+  /// is renamed by editing its transcript, which means finding it — the same
+  /// one pass over the stores [deleteNative] pays.
+  ///
+  /// Never throws. The workspace title is already applied and published.
+  Future<void> _propagateNativeRename(String id, String title) async {
+    final session = _ref.read(sessionDaoProvider).getById(id);
+    final externalId = session?.externalSessionId;
+    if (session == null || externalId == null) return;
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (installation == null) return;
+    final mutator = _ref.read(cliSessionMutatorProvider);
+    try {
+      if (installation.agentId == AgentIds.codex) {
+        await mutator.rename(
+          DetectedSession(
+            cli: AgentIds.codex,
+            sessionId: externalId,
+            cwd: EnvironmentPath(
+              environmentId: installation.environmentId,
+              path: '',
+            ),
+            // No store file is read or written on this path; the app-server is.
+            filePath: '',
+            storeHome: '',
+          ),
+          title,
+          codex: _ref.read(codexAppServersProvider),
+        );
+        return;
+      }
+      final detected = await _detectedSessionById(
+        installation.agentId,
+        externalId,
+      );
+      if (detected != null) await mutator.rename(detected, title);
+    } catch (error) {
+      _log.warning('Could not rename $id in the ${installation.agentId} store', error);
+    }
   }
 
   Future<void> deleteNative(String id, {bool deleteFromCli = true}) async {
@@ -170,7 +232,11 @@ class SessionActions {
     try {
       await _ref
           .read(cliSessionMutatorProvider)
-          .rename(_toDetected(session), title);
+          .rename(
+            _toDetected(session),
+            title,
+            codex: _ref.read(codexAppServersProvider),
+          );
     } catch (_) {
       // CLI store unavailable — the workspace title is still updated.
     }

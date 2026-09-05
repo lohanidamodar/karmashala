@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../domain/detected_session.dart';
+import 'codex_app_servers.dart';
 
 /// What a batched delete could not remove, in the words a notification uses.
 ///
@@ -37,16 +39,21 @@ class CliDeleteReport {
   bool get isComplete => failures.isEmpty;
 }
 
-/// Renames and deletes detected CLI sessions on disk, matching what each CLI
-/// itself does (ported from the reference Karmashala CLI):
+/// Renames and deletes detected CLI sessions, matching what each CLI itself
+/// does (ported from the reference Karmashala CLI):
 ///
 /// * **Claude** rename appends a `{"type":"custom-title",…}` line (what
 ///   `/rename` writes); delete removes the `.jsonl` and any `~/.claude/sessions`
 ///   resume-index entry.
-/// * **Codex** rename/delete edit the `thread_name` / entry in
-///   `<codexHome>/session_index.jsonl`; delete also removes the rollout file.
+/// * **Codex** rename asks the running CLI, over its app-server, to do it —
+///   see [_renameCodex] for why the file this used to write is the wrong place.
+///   Delete still prunes `<codexHome>/session_index.jsonl` and removes the
+///   rollout file: that file is a mirror Codex ignores when *reading a name*,
+///   but pruning it is how a deleted session stops being listed by us.
 class CliSessionMutator {
   CliSessionMutator();
+
+  static final _log = AppLogger.named('cli.sessionMutator');
 
   /// **What a delete actually costs the store.** Counted rather than timed, the
   /// same way `ClaudeStoreReader.bytesRead` is: the unit that matters here is
@@ -60,7 +67,16 @@ class CliSessionMutator {
   int indexWrites = 0;
   int transcriptsDeleted = 0;
 
-  Future<void> rename(DetectedSession session, String newTitle) {
+  /// Renames one session in its CLI's own store.
+  ///
+  /// [codex] is how a Codex rename reaches the CLI that owns the name. Without
+  /// one a Codex rename cannot happen at all — it is logged and skipped, never
+  /// faked by writing a file Codex ignores.
+  Future<void> rename(
+    DetectedSession session,
+    String newTitle, {
+    CodexAppServers? codex,
+  }) {
     final title = newTitle.trim();
     if (title.isEmpty) {
       throw ArgumentError('Title cannot be empty');
@@ -69,7 +85,7 @@ class CliSessionMutator {
       return _renameAntigravity(session, title);
     }
     return session.cli == AgentIds.codex
-        ? _renameCodex(session, title)
+        ? _renameCodex(session, title, codex)
         : _renameClaude(session, title);
   }
 
@@ -211,27 +227,52 @@ class CliSessionMutator {
 
   // --- Codex ----------------------------------------------------------------
 
-  File _codexIndex(DetectedSession session) =>
-      File(p.join(session.storeHome, 'session_index.jsonl'));
-
-  Future<void> _renameCodex(DetectedSession session, String title) async {
-    final index = _codexIndex(session);
-    final lines = await _readIndexLines(index);
-    var found = false;
-    final out = <String>[];
-    for (final line in lines) {
-      final entry = _tryDecode(line);
-      if (entry != null && entry['id'] == session.sessionId) {
-        found = true;
-        out.add(jsonEncode({...entry, 'thread_name': title}));
-      } else {
-        out.add(line);
+  /// Asks Codex itself to name the thread.
+  ///
+  /// **`<codexHome>/session_index.jsonl` is a derived mirror Codex writes and
+  /// never reads.** Established by planting a sentinel in it under a scratch
+  /// `CODEX_HOME`: `thread/list` ignored it (with `useStateDbOnly` either way)
+  /// and left it untouched, while a sentinel planted in `state_5.sqlite`'s
+  /// `threads.name` *was* returned. So the rewrite this method used to do
+  /// looked right locally and was overwritten by Codex's next naming event —
+  /// the reported bug. Nothing here touches that file any more.
+  ///
+  /// `thread/name/set` is the authoritative write. Verified round-trip against
+  /// the owner's own store: it answered `{}`, `threads.name` held the new name,
+  /// **and** Codex appended a fresh `session_index.jsonl` line itself — so the
+  /// app's file-based read path stays correct without this method writing one.
+  ///
+  /// Best-effort, and silent about it beyond a log line: the local rename is
+  /// already applied and on screen, and a Codex that is absent, unreachable or
+  /// too old must not undo something the user can see. What it must not do is
+  /// write the mirror instead, which would put a name on screen that Codex is
+  /// about to overwrite — the failure this whole change exists to remove.
+  Future<void> _renameCodex(
+    DetectedSession session,
+    String title,
+    CodexAppServers? servers,
+  ) async {
+    final client = servers?.forEnvironment(
+      session.environmentId,
+      storeHome: session.storeHome,
+    );
+    if (client == null) {
+      _log.warning('No Codex to rename ${session.sessionId} in');
+      return;
+    }
+    try {
+      final result = await client.setThreadName(session.sessionId, title);
+      if (!result.ok) {
+        _log.warning(
+          'Codex would not rename ${session.sessionId}: ${result.failure}',
+        );
       }
+    } catch (error) {
+      _log.warning(
+        'Could not reach Codex to rename ${session.sessionId}',
+        error,
+      );
     }
-    if (!found) {
-      out.add(jsonEncode({'id': session.sessionId, 'thread_name': title}));
-    }
-    await index.writeAsString('${out.join('\n')}\n');
   }
 
   /// Drops the index entries naming any of [sessionIds] — one read, one write.

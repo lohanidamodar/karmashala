@@ -39,7 +39,11 @@ void main() {
     expect(decoded['sessionId'], 'abc');
   });
 
-  test('Codex rename rewrites thread_name in the index', () async {
+  // `session_index.jsonl` is a mirror Codex writes and never reads, so a rename
+  // goes over the app-server instead — see `codex_rename_test.dart`. With no way
+  // to reach Codex there is nothing to do, and doing the old write anyway is
+  // what made the bug look fixed.
+  test('Codex rename with no way to reach Codex writes nothing', () async {
     final index = File(p.join(tmp.path, '.codex/session_index.jsonl'))
       ..createSync(recursive: true)
       ..writeAsStringSync('{"id":"u1","thread_name":"old"}\n');
@@ -55,7 +59,7 @@ void main() {
     );
 
     await mutator.rename(session, 'new name');
-    expect(index.readAsStringSync(), contains('"thread_name":"new name"'));
+    expect(index.readAsStringSync(), contains('"thread_name":"old"'));
   });
 
   test('Antigravity rename writes annotation file', () async {

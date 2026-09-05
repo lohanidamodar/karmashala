@@ -88,7 +88,7 @@ class NativeSessionRow extends ConsumerWidget {
 
     Future<void> rename() async {
       final name = await _promptRename(context, session.title);
-      if (name != null) actions.renameNative(session.id, name);
+      if (name != null) await actions.renameNative(session.id, name);
     }
 
     Future<void> delete() async {
