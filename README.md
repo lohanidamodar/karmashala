@@ -61,8 +61,11 @@ Run these before committing (from PowerShell):
 ```powershell
 dart format .
 flutter analyze
-flutter test
+flutter test --exclude-tags=live-ssh,live-wsl
 ```
+
+The repository's `dart_test.yaml` runs the broad suite with eight workers. The
+two live tags stay opt-in because they need real SSH/WSL infrastructure.
 
 ## Project layout
 

@@ -1,3 +1,10 @@
+# The suite has hundreds of small files, so tester startup and compilation are
+# the dominant cost. Eight workers cut the Windows gate from 6:19 to 3:55 while
+# keeping the companion/network tests green. Twelve only saved another 42s and
+# has less contention headroom, so keep the safer measured setting as the
+# default for plain `flutter test` runs.
+concurrency: 8
+
 # Test tags. Declaring a tag here is what keeps `flutter test` from warning
 # about it; it changes no default behaviour.
 #
