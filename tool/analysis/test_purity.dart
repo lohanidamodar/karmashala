@@ -15,7 +15,7 @@ final _importRe = RegExp(
   multiLine: true,
 );
 
-late final Map<String, String> packageRoots = _readPackageConfig();
+final Map<String, String> packageRoots = _readPackageConfig();
 
 Map<String, String> _readPackageConfig() {
   final file = File('.dart_tool/package_config.json');

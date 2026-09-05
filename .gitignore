@@ -71,3 +71,6 @@ packages/local_ipc/pubspec.lock
 # build with `No such file or directory`.
 macos/Vendor/wda/
 .claude/worktrees/
+# Android NDK build output for the vendored flutter_pty; the package is
+# in-tree but its native build products are not.
+packages/flutter_pty/android/.cxx/
