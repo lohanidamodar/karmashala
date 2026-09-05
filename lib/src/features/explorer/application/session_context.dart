@@ -41,6 +41,42 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
     SessionChangeKind.membership,
     SessionChangeKind.placement,
   });
+  return sessionInTab(ref, tab);
+});
+
+/// The session running in the pane workspace group [groupId] is showing.
+///
+/// The per-group form of [activePaneSessionIdProvider], and what every group's
+/// own chrome reads — its tab strip, its surface and its status bar. A bar that
+/// asked instead for "the focused session" would look right with one group and
+/// describe somebody else's session the instant there were two: every group
+/// would show the same repository state, the same model and the same usage, all
+/// following whichever pane was clicked last.
+///
+/// Null while the group is still the empty room a split cleared, and for a
+/// plain shell tab that runs no session of ours.
+final workspaceGroupSessionIdProvider = Provider.autoDispose
+    .family<String?, String>((ref, groupId) {
+      final tabs = ref.watch(
+        terminalSessionsControllerProvider.select((s) => s.tabs),
+      );
+      final tabId = ref.watch(workspaceGroupActiveTabProvider(groupId));
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.placement,
+      });
+      for (final tab in tabs) {
+        if (tab.id == tabId) return sessionInTab(ref, tab);
+      }
+      return null;
+    });
+
+/// The session [tab] is running: the focused pane's, and failing that the
+/// oldest pane in the tab that has one.
+///
+/// A shell opened *beside* a session is still a shell opened beside that
+/// session — see [activePaneSessionIdProvider] for why the fallback exists.
+String? sessionInTab(Ref ref, TerminalTab? tab) {
   if (tab == null) return null;
   final siblings = tab.layout.panes.toSet();
   // The indexed query returns only sessions belonging to this tab. The focused
@@ -53,7 +89,7 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
     if (fallback == null && siblings.contains(paneId)) fallback = record.id;
   }
   return fallback;
-});
+}
 
 /// The session the window is about: the one selected in the Explorer, or — when
 /// nothing is selected — whatever the terminal tab on screen is running.

@@ -955,6 +955,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return true;
   }
 
+  /// Moves [delta] — a share of the split's own extent — from child
+  /// `index + 1` to child [index] of workspace split [splitId].
+  void resizeWorkspace(String splitId, int index, double delta) {
+    final tree = _workspace;
+    if (tree == null) return;
+    final next = tree.resize(splitId, index, delta);
+    if (identical(next, tree)) return;
+    _workspace = next;
+    _publish();
+  }
+
   /// A tab left in the focused group once [closing] has gone.
   ///
   /// Closing a tab must not hand the keyboard to whichever group happens to

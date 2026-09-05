@@ -118,7 +118,8 @@ void main() {
     tester,
   ) async {
     // The route to a pane's verbs in an ordinary split: right-click the
-    // terminal. Copy, Paste, Find…, then the pane pair, then End session.
+    // terminal. Copy, Paste, Find…, the two pane splits, then the pane pair,
+    // then End session.
     await pump(tester);
     terminals().openInSlot(
       terminals().splitPane(SplitAxis.horizontal)!,
@@ -129,8 +130,8 @@ void main() {
     await tester.tapAt(const Offset(200, 400), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    expectHouseRows(tester, rows: 6);
-    expect(find.byType(DesktopMenuDivider), findsNWidgets(2));
+    expectHouseRows(tester, rows: 8);
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(3));
     expect(find.text('Move pane to a new tab'), findsOneWidget);
     expect(find.text('Close pane'), findsOneWidget);
   });
@@ -142,9 +143,9 @@ void main() {
     await tester.tapAt(const Offset(400, 400), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    // Copy, Paste, Find…, End session — the split-only pair is absent because
-    // there is no split to collapse.
-    expectHouseRows(tester, rows: 4);
+    // Copy, Paste, Find…, the two pane splits, End session — the split-only
+    // pair is absent because there is no split to collapse.
+    expectHouseRows(tester, rows: 6);
     expect(find.text('Ctrl+Shift+C'), findsOneWidget);
     expect(find.text('Ctrl+Shift+V'), findsOneWidget);
     expect(

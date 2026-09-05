@@ -28,7 +28,10 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/domain/pane_liveness.dart';
 import '../../features/terminal/domain/terminal_drag.dart';
+import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/presentation/close_tabs_dialog.dart';
+import '../../features/terminal/presentation/empty_pane_region.dart';
+import '../../features/terminal/presentation/pane_layout_view.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
@@ -108,41 +111,29 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// publish that changes nothing about *this* session costs one lookup.
   String? _shownPane;
 
-  /// The session whose **conversation** is mounted, or null when none is.
+  /// Whether the one automatic open has had its turn.
   ///
-  /// The conversation is built only once it has been asked for, and only for
-  /// the session it was asked for. An [IndexedStack] builds every child, so
-  /// putting the two surfaces in one meant that landing on a session's terminal
-  /// — which is what every tap does — also mounted its chat view, and
-  /// `sessionChatTranscriptProvider` answers a fresh subscription with a CLI
-  /// **store scan** followed by a read and JSON parse of that session's
-  /// **whole transcript file**. Two sessions switched back and forth paid that
-  /// on every switch, for a surface nobody was looking at: the lag the owner
-  /// reported. Measured in `session_switch_cost_test.dart`.
-  ///
-  /// What the stack was for survives: while the conversation *is* the surface
-  /// the user chose, both children stay built, so toggling to the terminal and
-  /// back keeps its scroll position. Only the never-asked-for case is dropped —
-  /// and a switch to another session is exactly that case, because a different
-  /// session's transcript has no scroll position to keep.
-  ///
-  /// **Mounted is not the same as working**, and the difference is the second
-  /// half of this design. A conversation kept alive behind the terminal went on
-  /// polling: `sessionChatTranscriptProvider` re-reads and JSON-decodes that
-  /// session's *whole* transcript every two seconds whenever the file has moved
-  /// — 43.8 MB over 11 637 lines on the owner's machine, 888 ms a tick, moving
-  /// constantly, because the agent writing it is the one being typed to. So
-  /// the poll is gated on which
-  /// surface is in front (`chatTranscriptPollingProvider`, keyed off
-  /// [terminalVisibleProvider]): the view keeps its scroll position and its
-  /// place in the tree, and stops doing megabytes of work on the UI isolate
-  /// under every keystroke. Measured in
-  /// `test/app/shell/keystroke_cost_test.dart`.
-  String? _conversationFor;
+  /// Owned here rather than by the pane stack: the stack is rebuilt whenever
+  /// the workspace gains or loses its last tab, so a flag that lived down there
+  /// would reset and reopen the terminal the user has just closed.
+  bool _autoOpenDone = false;
+
 
   @override
   void initState() {
     super.initState();
+    // There is always at least one terminal when the workbench opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final terminal = TerminalActions(ref);
+      if (ref.read(terminalSessionsControllerProvider).isEmpty) {
+        terminal.open(terminal.defaultProfile());
+      }
+      // Deliberately not conditional on having opened anything: what this
+      // records is that the automatic attempt is over, so a workspace that
+      // stays empty offers the user the button instead of a false promise.
+      setState(() => _autoOpenDone = true);
+    });
     // A session can already be selected when the workbench mounts — the shell
     // rebuilding around it, or a selection made by something that ran first.
     // The listener in `build` only fires on a *change*, so the mount has to
@@ -165,11 +156,6 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     });
   }
 
-  /// **The only write of `false` in the app.** Wired to the labelled Chat half
-  /// of the bar's toggle and to nothing else, which is what makes "a tap never
-  /// opens the conversation" a property rather than a race won.
-  void _showChat() => ref.read(terminalVisibleProvider.notifier).set(false);
-
   /// Reveals the pane [sessionId] is already running in. Starts and stops
   /// nothing: a detached pane comes back as a tab, one already in a tab is
   /// simply focused.
@@ -181,23 +167,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// Explorer cards that is five rebuilds and a handful of reads per row, for a
   /// session nothing happened to. Every caller knows whose pane this is, so it
   /// says so. Measured in `session_switch_cost_test.dart`.
-  void _showTerminalFor(String? paneId, String? sessionId) {
-    if (paneId != null) {
-      final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-      terminals
-        ..reattachSession(paneId)
-        ..focusPane(paneId);
-      // Which pane this session is showing in moved, and nothing about any
-      // other row. A pane with no session behind it — there is no such caller
-      // today — would still be the honest broadcast.
-      ref.publishSessionChange(
-        sessionId == null
-            ? const SessionChange(kinds: {SessionChangeKind.placement})
-            : SessionChange.moved(sessionId),
-      );
-    }
-    ref.read(terminalVisibleProvider.notifier).set(true);
-  }
+  void _showTerminalFor(String? paneId, String? sessionId) =>
+      showTerminalFor(ref, paneId, sessionId);
 
   /// Opens [sessionId] on the surface a session *is*: its terminal.
   ///
@@ -320,11 +291,144 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       next == null ? context.stopFollowing() : context.follow(next);
     });
 
+    final workspace = ref.watch(workspaceLayoutProvider);
+    // Before the first tab there is no tree at all, and one group stands in for
+    // it: an empty strip, a surface that says a terminal is on its way, and no
+    // session to put a bar under.
+    if (workspace == null) {
+      return _WorkspaceGroup(groupId: null, autoOpenDone: _autoOpenDone);
+    }
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    return PaneLayoutView(
+      layout: workspace,
+      onResize: sessions.resizeWorkspace,
+      regionBuilder: (group) => _WorkspaceGroup(
+        // Keyed by group, so a collapsing group does not hand its element —
+        // and the tabs mounted inside it — to whichever group takes its place.
+        key: ValueKey(group.id),
+        groupId: group.id,
+        autoOpenDone: _autoOpenDone,
+      ),
+    );
+  }
+}
+
+/// One **workspace group**: its own tab strip, its own surface, its own status
+/// bar. VS Code's editor group, with the whole middle of the window inside it
+/// instead of an editor.
+///
+/// The report: *"every split pane should have it's tabbar and its statusbar,
+/// and every split can have multiple tabs dragged to their tab header, like vs
+/// code. not like only split the terminal space. split the whole middle
+/// workspace."*
+///
+/// **Everything here reads its own group.** Not the focused one — that is the
+/// bug this shape exists to make impossible. A bar wired to "the session the
+/// window is about" looks perfect with one group and describes somebody else's
+/// session the instant there are two: three groups running Codex, Antigravity
+/// and Claude Code would show one model, one repository state and one usage
+/// figure between them, following whichever pane was clicked last. So the tab
+/// strip reads [workspaceGroupTabsProvider], the surface reads
+/// [workspaceGroupActiveTabProvider] and the bar reads
+/// [workspaceGroupSessionIdProvider] — all keyed by [groupId].
+///
+/// **We depart from the reference here, deliberately.** VS Code's status bar is
+/// one strip across the window, not one per editor group. Ours is per group
+/// because it carries *session* state — the model, the account's usage, the
+/// delivery stage of the work in that group — and a window-wide row could only
+/// ever speak for one of them. What is genuinely about the window stays where
+/// VS Code puts it: [ShellStatusBar], one row along the bottom.
+///
+/// The one thing that stays window-level is which of a session's two renderings
+/// is up ([terminalVisibleProvider]): every launcher, approval card and palette
+/// command in the app writes it, and at most one conversation is on screen at a
+/// time. So the toggle is drawn in every group's bar and answered by the
+/// focused one — pressing *Chat* focuses this group first, which is what makes
+/// that read as "the conversation opened here".
+class _WorkspaceGroup extends ConsumerStatefulWidget {
+  const _WorkspaceGroup({
+    required this.groupId,
+    required this.autoOpenDone,
+    super.key,
+  });
+
+  /// Null only before the window has a workspace — see [WorkbenchView.build].
+  final String? groupId;
+
+  final bool autoOpenDone;
+
+  @override
+  ConsumerState<_WorkspaceGroup> createState() => _WorkspaceGroupState();
+}
+
+class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
+  /// The session whose **conversation** is mounted, or null when none is.
+  ///
+  /// The conversation is built only once it has been asked for, and only for
+  /// the session it was asked for. An [IndexedStack] builds every child, so
+  /// putting the two surfaces in one meant that landing on a session's terminal
+  /// — which is what every tap does — also mounted its chat view, and
+  /// `sessionChatTranscriptProvider` answers a fresh subscription with a CLI
+  /// **store scan** followed by a read and JSON parse of that session's
+  /// **whole transcript file**. Two sessions switched back and forth paid that
+  /// on every switch, for a surface nobody was looking at: the lag the owner
+  /// reported. Measured in `session_switch_cost_test.dart`.
+  ///
+  /// What the stack was for survives: while the conversation *is* the surface
+  /// the user chose, both children stay built, so toggling to the terminal and
+  /// back keeps its scroll position. Only the never-asked-for case is dropped —
+  /// and a switch to another session is exactly that case, because a different
+  /// session's transcript has no scroll position to keep.
+  ///
+  /// **Mounted is not the same as working**, and the difference is the second
+  /// half of this design. A conversation kept alive behind the terminal went on
+  /// polling: `sessionChatTranscriptProvider` re-reads and JSON-decodes that
+  /// session's *whole* transcript every two seconds whenever the file has moved
+  /// — 43.8 MB over 11 637 lines on the owner's machine, 888 ms a tick, moving
+  /// constantly, because the agent writing it is the one being typed to. So
+  /// the poll is gated on which
+  /// surface is in front (`chatTranscriptPollingProvider`, keyed off
+  /// [terminalVisibleProvider]): the view keeps its scroll position and its
+  /// place in the tree, and stops doing megabytes of work on the UI isolate
+  /// under every keystroke. Measured in
+  /// `test/app/shell/keystroke_cost_test.dart`.
+  String? _conversationFor;
+  /// **The only write of `false` in the app.** Wired to the labelled Chat half
+  /// of the bar's toggle and to nothing else, which is what makes "a tap never
+  /// opens the conversation" a property rather than a race won.
+  void _showChat() {
+    _focusThisGroup();
+    ref.read(terminalVisibleProvider.notifier).set(false);
+  }
+
+  /// Hands this group the keyboard. Cheap to call on every pointer down:
+  /// `focusGroup` publishes nothing when the group is already the focused one,
+  /// the same guard `focusPane` keeps for a click inside the pane you are in.
+  void _focusThisGroup() {
+    final groupId = widget.groupId;
+    if (groupId == null) return;
+    ref.read(terminalSessionsControllerProvider.notifier).focusGroup(groupId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupId = widget.groupId;
+    final focused =
+        groupId == null || ref.watch(focusedWorkspaceGroupProvider) == groupId;
+    final activeTab = groupId == null
+        ? null
+        : ref.watch(workspaceGroupActiveTabProvider(groupId));
+    // No tab of its own is what an empty group *is* — the room a split cleared
+    // and nobody has filled yet.
+    final empty = groupId != null && activeTab == null;
+
     final scheme = Theme.of(context).colorScheme;
-    final session = _selectedSession();
-    // With nothing to read, the workbench is the terminal — an empty middle
-    // would be worse than the surface the app is primarily about.
-    final onTerminal = ref.watch(terminalVisibleProvider) || session == null;
+    final session = empty ? null : _groupSession(focused);
+    // With nothing to read, the group is its terminal — an empty middle would
+    // be worse than the surface the app is primarily about. And only the
+    // focused group ever shows a conversation, because there is one of those.
+    final onTerminal =
+        !focused || ref.watch(terminalVisibleProvider) || session == null;
     // Asked for, or let go of — see [_conversationFor]. Written here rather
     // than in a listener because both inputs are read here and nowhere else,
     // and neither is a provider this may write to.
@@ -335,75 +439,96 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     }
     final conversationMounted = session != null && _conversationFor != null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _TabStrip(),
-        const Divider(height: 1),
-        Expanded(
-          child: ColoredBox(
-            color: scheme.surfaceContainerLowest,
-            // With two surfaces up, an IndexedStack rather than a branch: the
-            // conversation keeps its scroll position while the terminal is up,
-            // and — the Loop 26 property — the hidden one paints nothing. With
-            // one surface there is nothing to keep alive, so it is not paid
-            // for — and until the conversation has been asked for there is no
-            // second surface at all ([_conversationFor]).
-            child: session == null
-                ? const _TerminalSurface()
-                : IndexedStack(
-                    key: kWorkbenchSurfaces,
-                    index: onTerminal ? 0 : 1,
-                    children: [
-                      _TerminalSurface(session: session),
-                      // [WorkbenchSessionView] renders whatever the Explorer
-                      // has selected, which is right until nothing is: a
-                      // session the workbench reached by following the pane
-                      // would find that view's "open a session" placeholder
-                      // behind the toggle. It is named outright in that case.
-                      // Only a native session is ever reached that way — an
-                      // imported one has no pane of ours to follow.
-                      if (conversationMounted)
-                        if (session.selected)
-                          const WorkbenchSessionView()
-                        else
-                          SessionTranscriptView(sessionId: session.id),
-                    ],
-                  ),
+    return Listener(
+      // A press anywhere in the group hands it the keyboard, the way clicking
+      // into an editor group does. Translucent, so the pane, the chips and the
+      // buttons all still get the pointer.
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _focusThisGroup(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TabStrip(groupId: groupId, groupFocused: focused),
+          const Divider(height: 1),
+          Expanded(
+            child: ColoredBox(
+              color: scheme.surfaceContainerLowest,
+              // With two surfaces up, an IndexedStack rather than a branch: the
+              // conversation keeps its scroll position while the terminal is up,
+              // and — the Loop 26 property — the hidden one paints nothing. With
+              // one surface there is nothing to keep alive, so it is not paid
+              // for — and until the conversation has been asked for there is no
+              // second surface at all ([_conversationFor]).
+              child: empty
+                  ? _EmptyGroup(groupId: groupId, focused: focused)
+                  : session == null
+                  ? _TerminalSurface(
+                      groupId: groupId,
+                      groupFocused: focused,
+                      autoOpenDone: widget.autoOpenDone,
+                    )
+                  : IndexedStack(
+                      key: kWorkbenchSurfaces,
+                      index: onTerminal ? 0 : 1,
+                      children: [
+                        _TerminalSurface(
+                          session: session,
+                          groupId: groupId,
+                          groupFocused: focused,
+                          autoOpenDone: widget.autoOpenDone,
+                        ),
+                        // [WorkbenchSessionView] renders whatever the Explorer
+                        // has selected, which is right until nothing is: a
+                        // session the workbench reached by following the pane
+                        // would find that view's "open a session" placeholder
+                        // behind the toggle. It is named outright in that case.
+                        // Only a native session is ever reached that way — an
+                        // imported one has no pane of ours to follow.
+                        if (conversationMounted)
+                          if (session.selected)
+                            const WorkbenchSessionView()
+                          else
+                            SessionTranscriptView(sessionId: session.id),
+                      ],
+                    ),
+            ),
           ),
-        ),
-        // Outside the stack, because the toggle is the way *back* from the
-        // conversation as well as the way to it: hosted on the terminal surface
-        // it would be built and unreachable for exactly the surface that has no
-        // other way home.
-        _SessionBar(
-          session: session,
-          onTerminal: onTerminal,
-          onChat: _showChat,
-          onTerminalView: () => _showTerminalFor(session?.paneId, session?.id),
-        ),
-      ],
+          // Outside the stack, because the toggle is the way *back* from the
+          // conversation as well as the way to it: hosted on the terminal
+          // surface it would be built and unreachable for exactly the surface
+          // that has no other way home.
+          _SessionBar(
+            groupId: groupId,
+            session: session,
+            onTerminal: onTerminal,
+            onChat: _showChat,
+            onTerminalView: () {
+              _focusThisGroup();
+              showTerminalFor(ref, session?.paneId, session?.id);
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  /// The session the workbench is about, if any, as it needs it: a title,
-  /// whether it has a pane of ours, and whether it is one of ours at all
-  /// (imported CLI sessions have no pane and no live status).
+  /// The session this group is about, as its chrome needs it: a title, whether
+  /// it has a pane of ours, and whether it is one of ours at all (imported CLI
+  /// sessions have no pane and no live status).
   ///
-  /// **The Explorer's selection, and failing that the pane on screen.** The
-  /// rest of the bar already follows the pane — the permission chip, the
-  /// delivery strip — so an agent reached by activating its
-  /// terminal tab had every session control except the one thing only this
-  /// answers: the toggle, and therefore the way to its transcript.
+  /// **This group's own active tab — and, for the focused group only, the
+  /// Explorer's selection.** Selecting a row is a request to see it *here*,
+  /// where the keyboard is; a group nobody is typing into keeps describing its
+  /// own tab, continuously, whatever is selected elsewhere.
   ///
   /// The fallback is deliberately a **read**, not a selection. Writing
   /// `selectedSessionIdProvider` to make the toggle appear would fire the
-  /// listener in [build] that opens the session's terminal, so the way to the
-  /// conversation would fight the surface the user is already on. Nothing here
-  /// writes anything.
-  _WorkbenchSession? _selectedSession() {
-    // The strip draws the selected session's name and offers the toggle its
-    // pane decides. Statuses and permission modes are drawn elsewhere.
+  /// listener in [WorkbenchView] that opens the session's terminal, so the way
+  /// to the conversation would fight the surface the user is already on.
+  /// Nothing here writes anything.
+  _WorkbenchSession? _groupSession(bool focused) {
+    // The strip draws the session's name and offers the toggle its pane
+    // decides. Statuses and permission modes are drawn elsewhere.
     ref.watchSessionKinds(const {
       SessionChangeKind.membership,
       SessionChangeKind.title,
@@ -416,18 +541,27 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // cannot change which panes exist, and at a hundred panes that was the
     // common case.
     ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs));
-    final importedId = ref.watch(selectedImportedSessionIdProvider);
-    if (importedId != null) {
-      final imported = ref.read(importedSessionDaoProvider).getById(importedId);
-      return _WorkbenchSession(
-        id: importedId,
-        title: imported?.displayTitle ?? 'Session',
-        paneId: null,
-        native: false,
-      );
+    if (focused) {
+      final importedId = ref.watch(selectedImportedSessionIdProvider);
+      if (importedId != null) {
+        final imported = ref
+            .read(importedSessionDaoProvider)
+            .getById(importedId);
+        return _WorkbenchSession(
+          id: importedId,
+          title: imported?.displayTitle ?? 'Session',
+          paneId: null,
+          native: false,
+        );
+      }
     }
-    final selected = ref.watch(selectedSessionIdProvider);
-    final sessionId = selected ?? ref.watch(activePaneSessionIdProvider);
+    final selected = focused ? ref.watch(selectedSessionIdProvider) : null;
+    final groupId = widget.groupId;
+    final sessionId =
+        selected ??
+        (groupId == null
+            ? null
+            : ref.watch(workspaceGroupSessionIdProvider(groupId)));
     if (sessionId == null) return null;
     final Session? record = ref.read(sessionDaoProvider).getById(sessionId);
     return _WorkbenchSession(
@@ -438,6 +572,90 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       selected: selected != null,
     );
   }
+}
+
+/// The room a workspace split cleared, before anything has been put in it.
+///
+/// The same face an empty *region* wears one level down, with the drop
+/// addressed to a group rather than to a pane — see [EmptyPaneRegion].
+class _EmptyGroup extends ConsumerWidget {
+  const _EmptyGroup({required this.groupId, required this.focused});
+
+  final String groupId;
+  final bool focused;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final slot = ref.watch(
+      terminalSessionsControllerProvider.select(
+        (s) => s.workspace?.groupById(groupId)?.activePaneId,
+      ),
+    );
+    final terminal = TerminalActions(ref);
+    return EmptyPaneRegion(
+      paneId: slot ?? groupId,
+      focused: focused,
+      title: 'Empty group',
+      closeLabel: 'Close group',
+      accepts: (TerminalDrag drag) => switch (drag) {
+        TabDrag(:final tabId) => sessions.canMoveTabToGroup(tabId, groupId),
+        // A pane leaves its split as a tab of its own, which then lands here.
+        PaneDrag(:final paneId) => sessions.isPaneInSplit(paneId),
+      },
+      onDrop: (TerminalDrag drag) {
+        switch (drag) {
+          case TabDrag(:final tabId):
+            sessions.moveTabToGroup(tabId, groupId);
+          case PaneDrag(:final paneId):
+            final tabId = sessions.movePaneToNewTab(paneId);
+            if (tabId != null) sessions.moveTabToGroup(tabId, groupId);
+        }
+      },
+      // Focused first, or the tab would open in whichever group had the
+      // keyboard rather than in the one the button is drawn in.
+      onNewTerminal: () {
+        sessions.focusGroup(groupId);
+        terminal.open(terminal.defaultProfile());
+      },
+      onNewSession: () {
+        sessions.focusGroup(groupId);
+        NewSessionDialog.show(context);
+      },
+      onClose: () => sessions.closeGroup(groupId),
+      onMoveTabHere: () =>
+          TabPicker.show(context, (ref) => tabsMovableToGroup(ref, groupId)),
+    );
+  }
+}
+
+/// Reveals the pane [sessionId] is already running in. Starts and stops
+/// nothing: a detached pane comes back as a tab, one already in a tab is
+/// simply focused.
+///
+/// [sessionId] is carried alongside the pane purely to **name the change**.
+/// This used to publish a placement change with no row on it, and a change
+/// that names no row is read — correctly — as being about every row, so one
+/// switch woke every per-session provider in the app: at a screenful of
+/// Explorer cards that is five rebuilds and a handful of reads per row, for a
+/// session nothing happened to. Every caller knows whose pane this is, so it
+/// says so. Measured in `session_switch_cost_test.dart`.
+void showTerminalFor(WidgetRef ref, String? paneId, String? sessionId) {
+  if (paneId != null) {
+    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+    terminals
+      ..reattachSession(paneId)
+      ..focusPane(paneId);
+    // Which pane this session is showing in moved, and nothing about any
+    // other row. A pane with no session behind it — there is no such caller
+    // today — would still be the honest broadcast.
+    ref.publishSessionChange(
+      sessionId == null
+          ? const SessionChange(kinds: {SessionChangeKind.placement})
+          : SessionChange.moved(sessionId),
+    );
+  }
+  ref.read(terminalVisibleProvider.notifier).set(true);
 }
 
 class _WorkbenchSession {
@@ -477,9 +695,19 @@ class _WorkbenchSession {
 /// this surface should show — the tab on screen would be some other session's.
 /// [_NoPaneForSession] takes their place and says so.
 class _TerminalSurface extends StatelessWidget {
-  const _TerminalSurface({this.session});
+  const _TerminalSurface({
+    this.session,
+    this.groupId,
+    this.groupFocused = true,
+    this.autoOpenDone = true,
+  });
 
   final _WorkbenchSession? session;
+
+  /// The group whose tabs these panes belong to — see [_WorkspaceGroup].
+  final String? groupId;
+  final bool groupFocused;
+  final bool autoOpenDone;
 
   @override
   Widget build(BuildContext context) {
@@ -487,7 +715,11 @@ class _TerminalSurface extends StatelessWidget {
     if (selected != null && selected.paneId == null) {
       return _NoPaneForSession(session: selected);
     }
-    return const TerminalPaneStack();
+    return TerminalPaneStack(
+      groupId: groupId,
+      groupFocused: groupFocused,
+      autoOpenDone: autoOpenDone,
+    );
   }
 }
 
@@ -693,11 +925,16 @@ class _NoPaneForSession extends ConsumerWidget {
 /// not taken here.
 class _SessionBar extends ConsumerWidget {
   const _SessionBar({
+    required this.groupId,
     required this.session,
     required this.onTerminal,
     required this.onChat,
     required this.onTerminalView,
   });
+
+  /// The group this bar belongs to. **Its** session is what it describes — see
+  /// [_WorkspaceGroup] for why that must not be the focused one.
+  final String? groupId;
 
   final _WorkbenchSession? session;
   final bool onTerminal;
@@ -707,11 +944,14 @@ class _SessionBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = session;
+    final group = groupId;
     final sessionId = !onTerminal
         ? null
         : selected != null && selected.paneId == null
         ? selected.id
-        : ref.watch(activePaneSessionIdProvider);
+        : group == null
+        ? null
+        : ref.watch(workspaceGroupSessionIdProvider(group));
     // A shell tab with nothing selected has neither a session to describe nor a
     // surface to switch to, and an empty bar would be 30 pixels of nothing.
     if (sessionId == null && selected == null) return const SizedBox.shrink();
@@ -979,13 +1219,22 @@ class _StripTab {
 /// it, focus mode — sits outside the scrolling region, so no number of tabs can
 /// push the way to make another one off the end of the strip.
 class _TabStrip extends ConsumerWidget {
-  const _TabStrip();
+  const _TabStrip({required this.groupId, required this.groupFocused});
+
+  /// The group whose tabs this strip shows. Null only before the window has a
+  /// workspace, when the strip is empty by definition.
+  final String? groupId;
+
+  /// Whether the keyboard is in this group. Only the focused group's active
+  /// chip draws as the one on screen.
+  final bool groupFocused;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final tabs = _tabs(ref);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final group = groupId;
 
     // The strip is where a pane goes to stop being in a split. Dragging a pane
     // by its grip and dropping it here is the same verb as the pane menu's
@@ -995,12 +1244,22 @@ class _TabStrip extends ConsumerWidget {
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) => switch (details.data) {
         PaneDrag(:final paneId) => sessions.isPaneInSplit(paneId),
-        // A tab is already a tab; there is nothing here for it to become.
-        TabDrag() => false,
+        // A tab is already a tab, so there is nothing here for it to *become* —
+        // but a tab from another group's strip lands in this one.
+        TabDrag(:final tabId) =>
+          group != null && sessions.canMoveTabToGroup(tabId, group),
       },
       onAcceptWithDetails: (details) {
-        if (details.data case PaneDrag(:final paneId)) {
-          sessions.movePaneToNewTab(paneId);
+        switch (details.data) {
+          case PaneDrag(:final paneId):
+            final tabId = sessions.movePaneToNewTab(paneId);
+            // It becomes a tab of the group it was dropped on, not of whichever
+            // group happened to have the keyboard.
+            if (tabId != null && group != null) {
+              sessions.moveTabToGroup(tabId, group);
+            }
+          case TabDrag(:final tabId):
+            if (group != null) sessions.moveTabToGroup(tabId, group);
         }
       },
       builder: (context, candidate, _) => Container(
@@ -1026,13 +1285,20 @@ class _TabStrip extends ConsumerWidget {
                   },
                   // The one place in the strip no chip can offer: the room
                   // after the last tab is how a tab is made last.
-                  onMoveTabToEnd: (tabId) =>
-                      sessions.reorderTab(tabId, tabs.length - 1),
+                  onMoveTabToEnd: (tabId) {
+                    // From another group it is a move; from this one it is an
+                    // order along the same strip.
+                    if (group != null &&
+                        sessions.canMoveTabToGroup(tabId, group)) {
+                      sessions.moveTabToGroup(tabId, group, index: tabs.length);
+                    } else {
+                      sessions.reorderTab(tabId, tabs.length - 1);
+                    }
+                  },
                 ),
               ),
             ),
             const TerminalToolbar(),
-            const _ZenButton(),
             const SizedBox(width: Insets.xs),
           ],
         ),
@@ -1049,15 +1315,21 @@ class _TabStrip extends ConsumerWidget {
   /// for a dot that moved in one of them. Liveness is subscribed to per tab, by
   /// [_TabChip].
   List<_StripTab> _tabs(WidgetRef ref) {
-    final tabs = ref.watch(terminalTabsProvider);
-    final active = ref.watch(terminalActiveTabIdProvider);
-    final onPanes = _showingPanes(ref);
+    final group = groupId;
+    final tabs = group == null
+        ? const <TerminalTab>[]
+        : ref.watch(workspaceGroupTabsProvider(group));
+    final active = group == null
+        ? null
+        : ref.watch(workspaceGroupActiveTabProvider(group));
+    final onPanes = _showingPanes(ref, focused: groupFocused);
     return [
       for (final (index, tab) in tabs.indexed)
         _StripTab(
           active: onPanes && tab.id == active,
           chip: () => _TabChip(
             tab: tab,
+            groupId: group,
             selected: onPanes && tab.id == active,
             index: index,
             tabCount: tabs.length,
@@ -1119,12 +1391,18 @@ Widget _markedForDrop(
 class _TabChip extends ConsumerWidget {
   const _TabChip({
     required this.tab,
+    required this.groupId,
     required this.selected,
     required this.index,
     required this.tabCount,
   });
 
   final TerminalTab tab;
+
+  /// The strip this chip hangs in. A bulk close is scoped to it: *close to the
+  /// right* means the right of **this** strip, not of the window.
+  final String? groupId;
+
   final bool selected;
 
   /// Where the strip laid this chip out, and how wide the row is. The chip
@@ -1168,6 +1446,7 @@ class _TabChip extends ConsumerWidget {
       child: _TabDropTarget(
         index: index,
         tab: tab,
+        groupId: groupId,
         chip: chip,
       ),
     );
@@ -1187,8 +1466,14 @@ class _TabChip extends ConsumerWidget {
     TabCloseScope scope,
   ) async {
     // Read now rather than trusting the index the chip was built with: a tab
-    // can have gone between the menu opening and a row being picked.
-    final tabs = ref.read(terminalTabsProvider);
+    // can have gone between the menu opening and a row being picked. This
+    // group's tabs, because this strip is the thing "to the right" is about.
+    final group = groupId;
+    final tabs = group == null
+        ? ref.read(terminalTabsProvider)
+        : ref.read(terminalSessionsControllerProvider.notifier).tabsInGroup(
+            group,
+          );
     final at = tabs.indexWhere((candidate) => candidate.id == tab.id);
     if (at < 0) return;
     final ids = scope.apply([for (final tab in tabs) tab.id], at);
@@ -1266,11 +1551,17 @@ class _TabDropTarget extends ConsumerStatefulWidget {
   const _TabDropTarget({
     required this.index,
     required this.tab,
+    required this.groupId,
     required this.chip,
   });
 
   final int index;
   final TerminalTab tab;
+
+  /// The strip this chip is in. A tab from **another** group lands here as a
+  /// move rather than a reorder — the drop that makes groups worth having.
+  final String? groupId;
+
   final Widget chip;
 
   @override
@@ -1306,9 +1597,18 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
   }
 
   bool _comesFromTheRight(TerminalDrag data) =>
-      data is TabDrag &&
-      ref.read(terminalTabsProvider).indexWhere((t) => t.id == data.tabId) >
-          widget.index;
+      data is TabDrag && _indexInStrip(data.tabId) > widget.index;
+
+  /// Where [tabId] sits in *this* strip, or -1 when it is in another group's.
+  int _indexInStrip(String tabId) {
+    final group = widget.groupId;
+    final tabs = group == null
+        ? ref.read(terminalTabsProvider)
+        : ref.read(terminalSessionsControllerProvider.notifier).tabsInGroup(
+            group,
+          );
+    return tabs.indexWhere((tab) => tab.id == tabId);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1341,14 +1641,20 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
               insertBefore: _dropLeading,
             );
           } else {
-            final from = ref
-                .read(terminalTabsProvider)
-                .indexWhere((candidate) => candidate.id == tabId);
+            final from = _indexInStrip(tabId);
             if (from >= 0) {
               final insertIndex = _dropLeading
                   ? (from < widget.index ? widget.index - 1 : widget.index)
                   : (from < widget.index ? widget.index : widget.index + 1);
               sessions.reorderTab(tabId, insertIndex);
+            } else if (widget.groupId case final group?) {
+              // From another group's strip: it moves here, at the edge of this
+              // chip the pointer is over.
+              sessions.moveTabToGroup(
+                tabId,
+                group,
+                index: _dropLeading ? widget.index : widget.index + 1,
+              );
             }
           }
         }
@@ -1456,7 +1762,11 @@ class _TabDragFeedback extends StatelessWidget {
 /// selected session with no pane of ours gets. While either is, no terminal tab
 /// is on screen at all — so none of them may draw as the active one, in the
 /// strip or in the picker.
-bool _showingPanes(WidgetRef ref) {
+bool _showingPanes(WidgetRef ref, {bool focused = true}) {
+  // Only the focused group can be showing anything but its panes: the
+  // conversation and the "no pane for this session" state both belong to the
+  // selection, and a selection is one thing in the window.
+  if (!focused) return true;
   // A pane appearing or ending changes the answer, and so does the launch that
   // rewrites `pane_id` on the row. Only the tab list, though: a *process* dying
   // cannot change which panes exist, and this is read from the tab strip on
@@ -1999,18 +2309,3 @@ class _ViewToggle extends StatelessWidget {
   }
 }
 
-/// Hides the Explorer and the side panel so the workbench has the window.
-class _ZenButton extends ConsumerWidget {
-  const _ZenButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final zen = ref.watch(terminalMaximizedProvider);
-    return IconButton(
-      tooltip: zen ? 'Show the panels (Ctrl+\\)' : 'Focus mode (Ctrl+\\)',
-      isSelected: zen,
-      icon: const Icon(AppIcons.arrowsOutSimple, size: Chrome.icon),
-      onPressed: () => ref.read(terminalMaximizedProvider.notifier).toggle(),
-    );
-  }
-}

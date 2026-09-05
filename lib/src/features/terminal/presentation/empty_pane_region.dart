@@ -23,6 +23,10 @@ class EmptyPaneRegion extends ConsumerWidget {
   const EmptyPaneRegion({
     required this.paneId,
     required this.focused,
+    this.title = 'Empty split',
+    this.closeLabel = 'Close split',
+    this.accepts,
+    this.onDrop,
     this.onNewTerminal,
     this.onNewSession,
     this.onClose,
@@ -31,7 +35,23 @@ class EmptyPaneRegion extends ConsumerWidget {
   });
 
   /// The empty region's own pane id, which is also the drop target's address.
+  ///
+  /// An empty **workspace group** uses the same face and passes its own slot
+  /// id here, with [accepts] and [onDrop] supplied: the room reads the same to
+  /// a user either way, and the only real difference is what the drop is
+  /// addressed to.
   final String paneId;
+
+  /// What the room is called, in its own words.
+  final String title;
+
+  /// What the way out is called.
+  final String closeLabel;
+
+  /// Whether [drag] can land here, and what happens when it does. Null keeps
+  /// the region rules — a group supplies its own.
+  final bool Function(TerminalDrag drag)? accepts;
+  final void Function(TerminalDrag drag)? onDrop;
 
   /// Whether this is the pane the active tab has focus in. Drives the focus
   /// ring, and hands the keyboard to the primary action so a split made from a
@@ -56,25 +76,32 @@ class EmptyPaneRegion extends ConsumerWidget {
       // A whole tab, or one pane out of a region's header. A tab cannot be
       // dropped into a region of itself: the tab would have to contain the very
       // region it is being put inside.
-      onWillAcceptWithDetails: (details) => switch (details.data) {
-        TabDrag(:final tabId) => sessions.canMoveTabIntoSlot(tabId, paneId),
-        PaneDrag(paneId: final moved) => sessions.canMovePaneIntoRegion(
-          moved,
-          paneId,
-        ),
-      },
-      onAcceptWithDetails: (details) => switch (details.data) {
-        TabDrag(:final tabId) => sessions.moveTabIntoSlot(tabId, paneId),
-        PaneDrag(paneId: final moved) => sessions.movePaneIntoRegion(
-          moved,
-          paneId,
-        ),
+      onWillAcceptWithDetails: (details) =>
+          accepts?.call(details.data) ??
+          switch (details.data) {
+            TabDrag(:final tabId) => sessions.canMoveTabIntoSlot(tabId, paneId),
+            PaneDrag(paneId: final moved) => sessions.canMovePaneIntoRegion(
+              moved,
+              paneId,
+            ),
+          },
+      onAcceptWithDetails: (details) {
+        if (onDrop case final drop?) {
+          drop(details.data);
+          return;
+        }
+        switch (details.data) {
+          case TabDrag(:final tabId):
+            sessions.moveTabIntoSlot(tabId, paneId);
+          case PaneDrag(paneId: final moved):
+            sessions.movePaneIntoRegion(moved, paneId);
+        }
       },
       builder: (context, candidate, _) {
         final hovering = candidate.isNotEmpty;
         return Semantics(
           container: true,
-          label: 'Empty split',
+          label: title,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: hovering
@@ -109,7 +136,7 @@ class EmptyPaneRegion extends ConsumerWidget {
                         ),
                         const SizedBox(height: Insets.sm),
                         Text(
-                          'Empty split',
+                          title,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: scheme.onSurface,
                           ),
@@ -163,7 +190,7 @@ class EmptyPaneRegion extends ConsumerWidget {
                             ),
                             TextButton(
                               onPressed: onClose,
-                              child: const Text('Close split'),
+                              child: Text(closeLabel),
                             ),
                           ],
                         ),
@@ -203,6 +230,28 @@ List<TabEntry> tabsMovableInto(WidgetRef ref, String slotPaneId) {
             subtitle: sessions.instanceFor(tab.focusedPaneId)?.workingDirectory,
             icon: AppIcons.terminal,
             onSelect: () => sessions.moveTabIntoSlot(tab.id, slotPaneId),
+          ),
+          active: false,
+        ),
+  ];
+}
+
+/// The tabs that can be moved into workspace group [groupId], as [TabPicker]
+/// lists them — [tabsMovableInto] one level up.
+List<TabEntry> tabsMovableToGroup(WidgetRef ref, String groupId) {
+  final terminals = ref.watch(terminalSessionsControllerProvider);
+  final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+  return [
+    for (final tab in terminals.tabs)
+      if (sessions.canMoveTabToGroup(tab.id, groupId))
+        TabEntry(
+          item: QuickOpenItem(
+            id: 'move-tab-to-group/${tab.id}',
+            group: QuickOpenGroup.tabs,
+            title: sessions.titleForTab(tab.id),
+            subtitle: sessions.instanceFor(tab.focusedPaneId)?.workingDirectory,
+            icon: AppIcons.terminal,
+            onSelect: () => sessions.moveTabToGroup(tab.id, groupId),
           ),
           active: false,
         ),

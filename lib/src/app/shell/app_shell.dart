@@ -28,6 +28,7 @@ import '../../features/system/system_integration_service.dart';
 import '../../features/sessions/application/session_liveness_reconciler.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
@@ -297,6 +298,16 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
                 child: QuickOpenButton(),
               ),
             ),
+            const _WindowSessionBadges(),
+            _ChromeToggle(
+              icon: AppIcons.arrowsOutSimple,
+              label: 'Focus mode',
+              chord: shellChordLabel<ToggleFocusModeIntent>(),
+              note: 'Hides the Explorer and the side panel',
+              selected: ref.watch(terminalMaximizedProvider),
+              onPressed: () =>
+                  ref.read(terminalMaximizedProvider.notifier).toggle(),
+            ),
             _ChromeToggle(
               icon: AppIcons.sidebarSimple,
               label: 'Show or hide the side panel',
@@ -312,6 +323,68 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// What is running that no group's strip can show: sessions a restart left
+/// dormant, and sessions kept alive with no tab.
+///
+/// Both are facts about the **window**, which is what brought them up here.
+/// They used to sit at the right end of the one tab strip there was; every
+/// workspace group has a strip of its own now, and a question about the app
+/// answered in three places at once is three answers.
+///
+/// Its own widget, so the counts it watches wake this row and nothing else.
+class _WindowSessionBadges extends ConsumerWidget {
+  const _WindowSessionBadges();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final actions = TerminalActions(ref);
+    final restored = ref.watch(
+      restoredAgentPanesProvider.select((panes) => panes.length),
+    );
+    final background = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.detached.length),
+    );
+    if (restored == 0 && background == 0) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (restored > 0)
+          IconButton(
+            tooltip:
+                '$restored restored session'
+                '${restored == 1 ? '' : 's'} — nothing running in '
+                '${restored == 1 ? 'it' : 'them'}',
+            icon: Badge.count(
+              count: restored,
+              backgroundColor: scheme.primary,
+              textColor: scheme.onPrimary,
+              // Not the history clock the Commands button uses: two identical
+              // icons in one row are one icon as far as the eye is concerned.
+              child: const Icon(AppIcons.playCircle, size: Chrome.icon),
+            ),
+            onPressed: () => actions.showRestoredSessions(context),
+          ),
+        if (background > 0)
+          IconButton(
+            tooltip:
+                '$background session'
+                '${background == 1 ? '' : 's'} running in the background',
+            // The accent, not Material's error red: a session running without a
+            // tab is the app working as designed, not a fault.
+            icon: Badge.count(
+              count: background,
+              backgroundColor: scheme.primary,
+              textColor: scheme.onPrimary,
+              child: const Icon(AppIcons.terminalWindow, size: Chrome.icon),
+            ),
+            onPressed: () => actions.showBackgroundSessions(context),
+          ),
+      ],
     );
   }
 }
