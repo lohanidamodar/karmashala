@@ -4,6 +4,8 @@ import 'package:karmashala/src/features/git/domain/diff_stat.dart';
 import 'package:karmashala/src/features/git/domain/file_change.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fixtures.dart';
+
 final _us = String.fromCharCode(0x1f);
 
 void main() {
@@ -132,30 +134,53 @@ void main() {
     });
   });
 
-  group('parseGitStatusBranch', () {
-    test('reads branch, upstream and divergence from the header', () {
-      final status = parseGitStatusBranch(
-        '## work...origin/work [ahead 2, behind 1]\n'
-        ' M lib/a.dart\n'
-        '?? new.txt\n',
+  /// **`--porcelain=v2 --branch`**, which is what `statusWithBranch` asks for.
+  ///
+  /// v2 for its header lines: the branch, its upstream and the distance between
+  /// them each get one, where v1 squeezed all three into `##
+  /// work...origin/work [ahead 2, behind 1]` and said nothing at all when the
+  /// branch was level. So the distance from the **upstream** comes free from a
+  /// call the app already makes — a different comparison from `rev-list
+  /// --count` against the base branch, which `parseAheadBehind` above owns and
+  /// which is unchanged.
+  ///
+  /// The two record types v1 has no equivalent of are the ones worth writing
+  /// tests for, because both are **silent** when missed: a rename puts two
+  /// paths on one line separated by a tab, and an unmerged path stops being a
+  /// `UU` entry and becomes its own `u` record.
+  group('parseGitStatusV2', () {
+    test('reads branch, upstream and divergence from the headers', () {
+      final status = parseGitStatusV2(
+        '# branch.oid 3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a\n'
+        '# branch.head work\n'
+        '# branch.upstream origin/work\n'
+        '# branch.ab +2 -1\n'
+        '1 .M N... 100644 100644 100644 $_sha $_sha lib/a.dart\n'
+        '? new.txt\n',
       );
       expect(status.branch, 'work');
       expect(status.upstream, 'origin/work');
       expect(status.aheadOfUpstream, 2);
       expect(status.behindUpstream, 1);
       expect(status.changes.length, 2);
+      expect(status.changes.first.path, 'lib/a.dart');
+      expect(status.changes.first.staged, isFalse);
+      expect(status.changes.first.unstaged, isTrue);
+      expect(status.changes.last.type, FileChangeType.untracked);
     });
 
-    test('the header is never read as a changed file', () {
-      final status = parseGitStatusBranch('## work...origin/work\n');
+    test('a header is never read as a changed file', () {
+      final status = parseGitStatusV2(porcelainV2(upstream: 'origin/main'));
       expect(status.changes, isEmpty);
-      // No bracket means level with the upstream, not "unknown".
+      // `+0 -0` is git saying "level", which is not the same as not knowing.
       expect(status.aheadOfUpstream, 0);
       expect(status.behindUpstream, 0);
     });
 
     test('a branch with no upstream reports no distance', () {
-      final status = parseGitStatusBranch('## work\n M a\n');
+      final status = parseGitStatusV2(
+        porcelainV2(branch: 'work', modified: ['a']),
+      );
       expect(status.branch, 'work');
       expect(status.upstream, isNull);
       expect(status.aheadOfUpstream, isNull);
@@ -163,19 +188,31 @@ void main() {
     });
 
     test('an upstream that is gone has no distance to report', () {
-      final status = parseGitStatusBranch('## work...origin/work [gone]\n');
+      // Git prints `branch.upstream` and then omits `branch.ab`, because
+      // `stat_tracking_info` cannot answer for a ref that is not there.
+      final status = parseGitStatusV2(
+        porcelainV2(
+          branch: 'work',
+          upstream: 'origin/work',
+          ahead: null,
+          behind: null,
+        ),
+      );
       expect(status.upstream, 'origin/work');
       expect(status.aheadOfUpstream, isNull);
       expect(status.behindUpstream, isNull);
     });
 
     test('a detached HEAD has no branch', () {
-      expect(parseGitStatusBranch('## HEAD (no branch)\n').branch, isNull);
+      expect(parseGitStatusV2(porcelainV2(branch: null)).branch, isNull);
     });
 
     test('a repository with no commits still names its branch', () {
-      final status = parseGitStatusBranch(
-        '## No commits yet on main\n?? README.md\n',
+      // v1 said `## No commits yet on main`, which had to be recognised by its
+      // English. v2 says `# branch.oid (initial)` and names the branch in the
+      // ordinary field.
+      final status = parseGitStatusV2(
+        porcelainV2(initial: true, untracked: ['README.md']),
       );
       expect(status.branch, 'main');
       expect(status.upstream, isNull);
@@ -184,15 +221,91 @@ void main() {
 
     test('ahead only', () {
       expect(
-        parseGitStatusBranch('## w...origin/w [ahead 3]\n').aheadOfUpstream,
+        parseGitStatusV2(
+          porcelainV2(branch: 'w', upstream: 'origin/w', ahead: 3),
+        ).aheadOfUpstream,
         3,
       );
     });
 
-    test('output with no header at all is still a file list', () {
-      final status = parseGitStatusBranch(' M a\n');
+    test('output with no headers at all is still a file list', () {
+      final status = parseGitStatusV2(
+        '1 .M N... 100644 100644 100644 $_sha $_sha a\n',
+      );
       expect(status.branch, isNull);
       expect(status.changes.single.path, 'a');
     });
+
+    test('a staged change is staged, and `.` is not a status', () {
+      // v2 writes `.` where v1 wrote a space, so a parse that kept looking for
+      // the space would call every file both staged and unstaged.
+      final status = parseGitStatusV2(porcelainV2(staged: ['lib/a.dart']));
+      expect(status.changes.single.staged, isTrue);
+      expect(status.changes.single.unstaged, isFalse);
+      expect(status.changes.single.type, FileChangeType.modified);
+    });
+
+    test('a rename keeps its two tab-separated paths apart', () {
+      // **The trap.** A `2` record ends `<path>\t<origPath>`, which v1 never
+      // writes. Splitting the line on whitespace folds them into one nonsense
+      // path and undercounts the dirty files by one per rename.
+      final status = parseGitStatusV2(
+        porcelainV2(renamed: {'lib/new.dart': 'lib/old.dart'}),
+      );
+      expect(status.changes.single.path, 'lib/new.dart');
+      expect(status.changes.single.originalPath, 'lib/old.dart');
+      expect(status.changes.single.type, FileChangeType.renamed);
+    });
+
+    test('an unmerged path is still a change, and still unrecognised', () {
+      // The second trap: v1 reported a conflict as an ordinary `UU` entry, so
+      // a parse that handles only `1`, `2` and `?` drops conflicted files out
+      // of the listing and a row mid-merge reports itself clean. The rendering
+      // is unchanged — `FileChangeType.unknown` is what the two callers that
+      // say "changed (unrecognised git status)" have always shown for `UU`.
+      final status = parseGitStatusV2(porcelainV2(unmerged: ['lib/a.dart']));
+      expect(status.changes.single.path, 'lib/a.dart');
+      expect(status.changes.single.type, FileChangeType.unknown);
+      expect(status.changes.single.staged, isTrue);
+      expect(status.changes.single.unstaged, isTrue);
+    });
+
+    test('a path with spaces in it survives every record type', () {
+      // The field counts are what make this work: the last field takes the
+      // whole remainder of the line, so a space in a name is not a separator.
+      final status = parseGitStatusV2(
+        porcelainV2(
+          modified: ['lib/two words.dart'],
+          untracked: ['a b c.txt'],
+          renamed: {'new name.dart': 'old name.dart'},
+        ),
+      );
+      expect(status.changes.map((c) => c.path), [
+        'lib/two words.dart',
+        'new name.dart',
+        'a b c.txt',
+      ]);
+      expect(status.changes[1].originalPath, 'old name.dart');
+    });
+
+    test('an ignored file is not a change', () {
+      // `!` records only appear under `--ignored`, which nothing asks for — but
+      // treating one as a change would make every build directory dirty.
+      final status = parseGitStatusV2(
+        '# branch.head main\n! build/app.exe\n? real.txt\n',
+      );
+      expect(status.changes.single.path, 'real.txt');
+    });
+
+    test('a truncated record is dropped, not guessed at', () {
+      final status = parseGitStatusV2(
+        '# branch.head main\n'
+        '1 .M N... 100644\n'
+        '? real.txt\n',
+      );
+      expect(status.changes.single.path, 'real.txt');
+    });
   });
 }
+
+const _sha = '0000000000000000000000000000000000000000';

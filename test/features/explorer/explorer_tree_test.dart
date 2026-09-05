@@ -619,14 +619,16 @@ CommandResult _defaultGit(CommandRequest request) {
   final args = request.arguments;
   final dir = args.length > 1 ? args[1] : '';
   if (args.contains('status')) {
-    // `--porcelain=v1 --branch` puts git's `## <branch>` header first, and
-    // since Loop 67 that header is where every row reads its branch from.
-    final header = args.contains('--branch')
-        ? '## ${dir.contains('wt-side') ? 'feature/side' : 'main'}\n'
-        : '';
+    // `--porcelain=v2 --branch` puts the branch in a `# branch.head` header,
+    // where v1 wrote `## <branch>`; every row still reads its branch from the
+    // same process that lists its files.
     return CommandResult(
       exitCode: 0,
-      stdout: '$header M lib/a.dart\n?? lib/b.dart\n M lib/c.dart\n',
+      stdout: porcelainV2(
+        branch: dir.contains('wt-side') ? 'feature/side' : 'main',
+        modified: const ['lib/a.dart', 'lib/c.dart'],
+        untracked: const ['lib/b.dart'],
+      ),
       stderr: '',
     );
   }

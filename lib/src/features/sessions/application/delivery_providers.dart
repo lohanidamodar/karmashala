@@ -149,7 +149,7 @@ final repositoryOriginProvider = FutureProvider.autoDispose
 /// describing *one* working tree, and keying by session would run git twenty
 /// times for one answer.
 ///
-/// Costs **one to three processes of its own**: one `git status --porcelain=v1
+/// Costs **one to three processes of its own**: one `git status --porcelain=v2
 /// --branch` (branch, upstream, divergence and the file list together) and —
 /// when the repository has a default branch to measure against — a `rev-list`
 /// and a `diff --numstat` against it. The other two, `remote get-url` and

@@ -1,7 +1,7 @@
 import 'file_change.dart';
 
-/// What one `git status --porcelain=v1 --branch` says: the branch, its upstream,
-/// how far they have diverged, and the changed files.
+/// What one `git status --porcelain=v2 --branch` says: the branch, its
+/// upstream, how far they have diverged, and the changed files.
 ///
 /// Collected into one type because git answers all of it in **one process**.
 /// Asking separately — `rev-parse` for the branch, `for-each-ref` for the
@@ -25,7 +25,10 @@ class WorkingTreeStatus {
   final String? upstream;
 
   /// Commits the branch has that its upstream does not. Null when there is no
-  /// upstream, or when it has gone from the remote.
+  /// upstream, or when it has gone from the remote — the two cases in which
+  /// git omits its `# branch.ab` line because it cannot compute the distance.
+  /// **Null is "could not tell" and never zero**; level with an upstream is
+  /// `+0 -0`, said out loud.
   final int? aheadOfUpstream;
 
   final int? behindUpstream;

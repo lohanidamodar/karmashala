@@ -224,77 +224,80 @@ AheadBehind? parseAheadBehind(String output) {
   return AheadBehind(ahead: ahead, behind: behind);
 }
 
-/// Parses `git status --porcelain=v1 --branch`.
+/// Parses `git status --porcelain=v2 --branch`.
 ///
-/// The first line is git's branch header and is **not** a file: reading it as
-/// one would add a change called `## work...origin/work` to every listing. The
-/// header carries the branch, its upstream and the divergence between them:
+/// **v2 rather than v1, for the three header lines v1 does not have.** v1
+/// squeezes the branch, its upstream and their divergence into one `## ` line
+/// and a bracket — `## work...origin/work [ahead 2, behind 1]` — which has to
+/// be taken apart by string surgery, and which says nothing at all when the
+/// branch is level. v2 states each fact on its own line:
 ///
 /// ```txt
-/// ## work...origin/work [ahead 2, behind 1]
-/// ## work                       (no upstream)
-/// ## HEAD (no branch)           (detached)
-/// ## No commits yet on main
-/// ## main...origin/main [gone]  (upstream deleted on the remote)
+/// # branch.oid 3f2a…            (or `(initial)` before the first commit)
+/// # branch.head work            (or `(detached)`)
+/// # branch.upstream origin/work (absent when the branch has no upstream)
+/// # branch.ab +2 -1             (absent when git cannot compute it)
 /// ```
-WorkingTreeStatus parseGitStatusBranch(String porcelain) {
-  final lines = porcelain.split(RegExp(r'[\r\n]'));
-  final header = lines.firstWhere(
-    (line) => line.startsWith('## '),
-    orElse: () => '',
-  );
-  final body = [
-    for (final line in lines)
-      if (!line.startsWith('## ')) line,
-  ].join('\n');
-
-  if (header.isEmpty) {
-    return WorkingTreeStatus(changes: parseGitStatus(body));
-  }
-
-  var rest = header.substring(3).trim();
+///
+/// So **how far the branch stands from its upstream comes free from a call the
+/// app already makes**. That is a different comparison from `rev-list --count`
+/// against the *base* branch, which is what `AheadBehind` measures and which
+/// stays exactly where it was.
+///
+/// `branch.ab` is absent, and the distance therefore **null rather than zero**,
+/// in the two cases where git does not know it: a branch with no upstream, and
+/// an upstream that has gone from the remote — v1's `[gone]`. Level with an
+/// upstream is `+0 -0`, stated, which is the case v1 expressed by saying
+/// nothing.
+///
+/// ## The two records v1 does not have, and both are silent when missed
+///
+/// * **`2` — a rename or a copy.** Its last field is `<path>\t<origPath>`, two
+///   paths on one line separated by a **tab**, which v1 never writes. Splitting
+///   the line on whitespace merges them into a single nonsense path and
+///   undercounts the dirty files by one per rename.
+/// * **`u` — an unmerged path.** v1 reported a conflict as an ordinary `UU`
+///   entry; v2 gives it its own record type. A parse that handles only `1`, `2`
+///   and `?` drops conflicted files out of the listing altogether — a row that
+///   is mid-merge would report itself clean.
+///
+/// The status letters themselves are v1's, with one substitution: v2 writes `.`
+/// where v1 wrote a space. So `1 .M` is modified-but-unstaged and `1 M.` is
+/// staged, and an unmerged `u UU` still reads as "staged and unstaged with an
+/// unrecognised code", exactly as `UU` did — which is what the two callers that
+/// render [FileChangeType.unknown] as *"changed (unrecognised git status)"*
+/// have always shown for a conflict.
+WorkingTreeStatus parseGitStatusV2(String porcelain) {
   String? branch;
   String? upstream;
   int? ahead;
   int? behind;
+  final changes = <FileChange>[];
 
-  final bracket = rest.indexOf(' [');
-  var divergence = '';
-  if (bracket >= 0 && rest.endsWith(']')) {
-    divergence = rest.substring(bracket + 2, rest.length - 1);
-    rest = rest.substring(0, bracket);
-  }
-
-  if (rest == 'HEAD (no branch)') {
-    branch = null;
-  } else if (rest.startsWith('No commits yet on ')) {
-    branch = rest.substring('No commits yet on '.length).trim();
-  } else {
-    final split = rest.indexOf('...');
-    if (split < 0) {
-      branch = rest.trim();
-    } else {
-      branch = rest.substring(0, split).trim();
-      upstream = rest.substring(split + 3).trim();
-      // An upstream that still exists is level unless git says otherwise; an
-      // upstream reported `gone` has no distance to report at all.
-      ahead = 0;
-      behind = 0;
+  for (final line in porcelain.split(RegExp(r'[\r\n]'))) {
+    if (line.isEmpty) continue;
+    if (line.startsWith('# ')) {
+      final header = line.substring(2);
+      if (header.startsWith(_branchHead)) {
+        final value = header.substring(_branchHead.length).trim();
+        // `(detached)` is git's word for "no branch", and the only other thing
+        // this field ever holds is a branch name.
+        branch = value == '(detached)' ? null : value;
+      } else if (header.startsWith(_branchUpstream)) {
+        upstream = header.substring(_branchUpstream.length).trim();
+      } else if (header.startsWith(_branchAb)) {
+        final counts = _abPattern.firstMatch(
+          header.substring(_branchAb.length).trim(),
+        );
+        if (counts != null) {
+          ahead = int.parse(counts.group(1)!);
+          behind = int.parse(counts.group(2)!);
+        }
+      }
+      continue;
     }
-  }
-
-  if (divergence == 'gone') {
-    ahead = null;
-    behind = null;
-  } else if (divergence.isNotEmpty) {
-    for (final part in divergence.split(',')) {
-      final words = part.trim().split(RegExp(r'\s+'));
-      if (words.length != 2) continue;
-      final count = int.tryParse(words[1]);
-      if (count == null) continue;
-      if (words[0] == 'ahead') ahead = count;
-      if (words[0] == 'behind') behind = count;
-    }
+    final change = _v2Record(line);
+    if (change != null) changes.add(change);
   }
 
   return WorkingTreeStatus(
@@ -302,6 +305,86 @@ WorkingTreeStatus parseGitStatusBranch(String porcelain) {
     upstream: (upstream?.isEmpty ?? true) ? null : upstream,
     aheadOfUpstream: ahead,
     behindUpstream: behind,
-    changes: parseGitStatus(body),
+    changes: changes,
+  );
+}
+
+const _branchHead = 'branch.head ';
+const _branchUpstream = 'branch.upstream ';
+const _branchAb = 'branch.ab ';
+final _abPattern = RegExp(r'^\+(\d+)\s+-(\d+)$');
+
+/// One entry line of `--porcelain=v2`, or null for a line that is not one.
+///
+/// The field counts are git's, and the **last** field is always the path, which
+/// is why they are counted rather than split: a path may contain spaces.
+FileChange? _v2Record(String line) {
+  switch (line[0]) {
+    // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+    case '1':
+      final fields = _v2Fields(line, 9);
+      return fields == null ? null : _v2Change(fields[1], fields[8]);
+    // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>\t<origPath>
+    case '2':
+      final fields = _v2Fields(line, 10);
+      if (fields == null) return null;
+      // **The tab**, which v1 never writes. Splitting the last field on
+      // whitespace would fold two paths into one and undercount the change.
+      final tab = fields[9].indexOf('\t');
+      return _v2Change(
+        fields[1],
+        tab < 0 ? fields[9] : fields[9].substring(0, tab),
+        originalPath: tab < 0 ? null : fields[9].substring(tab + 1),
+      );
+    // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+    case 'u':
+      final fields = _v2Fields(line, 11);
+      return fields == null ? null : _v2Change(fields[1], fields[10]);
+    // ? <path>
+    case '?':
+      if (line.length < 3) return null;
+      return FileChange(
+        path: line.substring(2),
+        type: FileChangeType.untracked,
+        staged: false,
+        unstaged: true,
+      );
+    // `! <path>` is an ignored file, listed only for `--ignored`, which nothing
+    // here asks for. Anything else is a line this parse does not know.
+    default:
+      return null;
+  }
+}
+
+/// [line] as exactly [count] fields, the last one taking the whole remainder,
+/// or null when there are not that many.
+List<String>? _v2Fields(String line, int count) {
+  final fields = <String>[];
+  var start = 0;
+  for (var i = 0; i < count - 1; i++) {
+    final space = line.indexOf(' ', start);
+    if (space < 0) return null;
+    fields.add(line.substring(start, space));
+    start = space + 1;
+  }
+  if (start >= line.length) return null;
+  fields.add(line.substring(start));
+  return fields;
+}
+
+/// A `<XY>` field and a path as a [FileChange].
+///
+/// `.` is v2's "unmodified", where v1 wrote a space; everything else is the
+/// same letter v1 used, so [_typeOf] is shared and a conflict still reads the
+/// way it always did.
+FileChange _v2Change(String xy, String path, {String? originalPath}) {
+  final x = xy.isNotEmpty ? xy[0] : '.';
+  final y = xy.length > 1 ? xy[1] : '.';
+  return FileChange(
+    path: path,
+    originalPath: originalPath,
+    type: _typeOf(x != '.' ? x : y),
+    staged: x != '.',
+    unstaged: y != '.',
   );
 }

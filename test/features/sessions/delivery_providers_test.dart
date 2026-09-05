@@ -40,7 +40,7 @@ void main() {
     path: r'C:\src\.karmashala-worktrees\app-s1',
   );
 
-  var statusOutput = '## work...origin/work [ahead 2]\n';
+  var statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0);
   var remoteUrl = 'git@github.com:popupbits/app.git\n';
   var originHead = 'origin/main\n';
   var revList = '0\t2\n';
@@ -53,7 +53,7 @@ void main() {
       '[{"isResolved":false},{"isResolved":true}]}}}}}';
 
   setUp(() {
-    statusOutput = '## work...origin/work [ahead 2]\n';
+    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0);
     remoteUrl = 'git@github.com:popupbits/app.git\n';
     originHead = 'origin/main\n';
     revList = '0\t2\n';
@@ -172,7 +172,7 @@ void main() {
     () async {
       addSession('s1', at: null);
       statusOutput =
-          '## work...origin/work [ahead 2]\n M lib/a.dart\n?? new.txt\n';
+          porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['lib/a.dart'], untracked: ['new.txt']);
 
       final delivery = await harness().read(
         sessionDeliveryProvider('s1').future,
@@ -197,19 +197,19 @@ void main() {
   test('the stage walks the line as git answers differently', () async {
     addSession('s1', at: null);
 
-    statusOutput = '## work...origin/work [ahead 2]\n M a\n';
+    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['a']);
     expect(
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.working,
     );
 
-    statusOutput = '## work...origin/work [ahead 2]\n';
+    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0);
     expect(
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.committed,
     );
 
-    statusOutput = '## work...origin/work\n';
+    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 0, behind: 0);
     expect(
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.pushed,
@@ -380,7 +380,7 @@ void main() {
       originHead = '';
       // The worktree is on `work`; the repository itself is on `main`.
       var asked = 0;
-      statusOutput = '## work\n';
+      statusOutput = porcelainV2(branch: 'work', ahead: 0, behind: 0);
       final container = ProviderContainer(
         overrides: [
           ...fakeTerminalOverrides(database: db),
@@ -394,7 +394,7 @@ void main() {
                     asked++;
                     return CommandResult(
                       exitCode: 0,
-                      stdout: asked == 1 ? '## work\n' : '## main\n',
+                      stdout: asked == 1 ? porcelainV2(branch: 'work', ahead: 0, behind: 0) : porcelainV2(branch: 'main', ahead: 0, behind: 0),
                       stderr: '',
                     );
                   }

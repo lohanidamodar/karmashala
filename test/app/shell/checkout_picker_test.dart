@@ -84,13 +84,17 @@ void main() {
         inboxPath => 'inbox-bounds',
         _ => 'main',
       };
-      // The `##` header only when asked for, or it reads as a changed file.
-      final header = verb.contains('--branch')
-          ? '## $branch...origin/$branch\n'
-          : '';
+      // Two formats for two calls: `statusWithBranch` asks for
+      // `--porcelain=v2 --branch`, and `status` for a bare v1 file list.
       return CommandResult(
         exitCode: 0,
-        stdout: '$header M lib/main.dart\n',
+        stdout: verb.contains('--branch')
+            ? porcelainV2(
+                branch: branch,
+                upstream: 'origin/$branch',
+                modified: const ['lib/main.dart'],
+              )
+            : ' M lib/main.dart\n',
         stderr: '',
       );
     }

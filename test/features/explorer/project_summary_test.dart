@@ -56,12 +56,16 @@ void main() {
       responder: (request) {
         final args = request.arguments;
         if (args.contains('status')) {
-          // The `## <branch>` header of `--porcelain=v1 --branch`: since Loop
-          // 67 a row's branch comes out of the same process as its file list.
-          return const CommandResult(
+          // `--porcelain=v2 --branch`: a row's branch comes out of the same
+          // process as its file list, now from the `# branch.head` header
+          // rather than v1's `##` line.
+          return CommandResult(
             exitCode: 0,
-            stdout:
-                '## feature/cards\n M lib/a.dart\n?? lib/b.dart\n M lib/c.dart\n',
+            stdout: porcelainV2(
+              branch: 'feature/cards',
+              modified: ['lib/a.dart', 'lib/c.dart'],
+              untracked: ['lib/b.dart'],
+            ),
             stderr: '',
           );
         }
@@ -199,9 +203,9 @@ void main() {
     git.responder = (request) {
       final args = request.arguments;
       if (args.contains('status')) {
-        return const CommandResult(
+        return CommandResult(
           exitCode: 0,
-          stdout: '## feature/cards\n M lib/a.dart\n',
+          stdout: porcelainV2(branch: 'feature/cards', ahead: 0, behind: 0, modified: ['lib/a.dart']),
           stderr: '',
         );
       }
@@ -244,9 +248,9 @@ void main() {
     // A checkout whose only change is an untracked file: `git diff --numstat`
     // sees nothing, and `+0 −0` would be a lie where "1 changed" is true.
     git.responder = (request) => request.arguments.contains('status')
-        ? const CommandResult(
+        ? CommandResult(
             exitCode: 0,
-            stdout: '## feature/cards\n?? new.dart\n',
+            stdout: porcelainV2(branch: 'feature/cards', ahead: 0, behind: 0, untracked: ['new.dart']),
             stderr: '',
           )
         : const CommandResult(exitCode: 0, stdout: '', stderr: '');
@@ -316,8 +320,15 @@ void main() {
         return CommandResult(
           exitCode: 0,
           stdout: inWorktree
-              ? '## feature/side\n M lib/a.dart\n'
-              : '## main\n M lib/a.dart\n?? b.dart\n',
+              ? porcelainV2(
+                  branch: 'feature/side',
+                  modified: ['lib/a.dart'],
+                )
+              : porcelainV2(
+                  branch: 'main',
+                  modified: ['lib/a.dart'],
+                  untracked: ['b.dart'],
+                ),
           stderr: '',
         );
       }

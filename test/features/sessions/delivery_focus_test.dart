@@ -116,9 +116,9 @@ void main() {
     gitCalls.add(request.arguments);
     final args = request.arguments;
     if (args.contains('status')) {
-      return const CommandResult(
+      return CommandResult(
         exitCode: 0,
-        stdout: '## work...origin/work [ahead 2]\n M lib/a.dart\n',
+        stdout: porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['lib/a.dart']),
         stderr: '',
       );
     }

@@ -120,7 +120,7 @@ branch refs/heads/$worktreeBranch
     worktreeBranch = 'feature/login';
     existingBranches = {'main', 'feature/login'};
     // Clean tree, on the worktree's branch, no upstream.
-    statusBody = '## feature/login';
+    statusBody = porcelainV2(branch: 'feature/login', ahead: 0, behind: 0);
     aheadBehind = '0\t0';
     remotesContaining = 'origin/main';
     worktreeWrite = const CommandResult(exitCode: 0, stdout: '', stderr: '');
@@ -395,7 +395,7 @@ branch refs/heads/$worktreeBranch
     });
 
     test('refuses uncommitted changes', () async {
-      statusBody = '## feature/login\n M lib/a.dart\n?? lib/b.dart';
+      statusBody = porcelainV2(branch: 'feature/login', ahead: 0, behind: 0, modified: ['lib/a.dart'], untracked: ['lib/b.dart']);
 
       final result = await callTool('worktree_remove', {'repositoryId': 'r2'});
 

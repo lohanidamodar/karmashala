@@ -849,9 +849,9 @@ CommandResult _git(CommandRequest request) {
     );
   }
   if (joined.startsWith('status')) {
-    return const CommandResult(
+    return CommandResult(
       exitCode: 0,
-      stdout: '## main...origin/main\n M lib/a.dart\n',
+      stdout: porcelainV2(branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, modified: ['lib/a.dart']),
       stderr: '',
     );
   }

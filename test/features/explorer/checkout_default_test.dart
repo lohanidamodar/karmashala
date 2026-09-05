@@ -65,12 +65,18 @@ void main() {
   CommandResult respond(CommandRequest request) {
     final verb = verbOf(request);
     if (verb.isNotEmpty && verb.first == 'status') {
-      // The `##` header only when asked for, or it reads as a changed file.
-      final header = verb.contains('--branch') ? '## main...origin/main\n' : '';
+      // Two formats for two calls: `statusWithBranch` asks for
+      // `--porcelain=v2 --branch`, and `status` for a bare v1 file list.
       final changed = dirty.contains(dirOf(request))
-          ? ' M lib/main.dart\n'
-          : '';
-      return CommandResult(exitCode: 0, stdout: '$header$changed', stderr: '');
+          ? const ['lib/main.dart']
+          : const <String>[];
+      return CommandResult(
+        exitCode: 0,
+        stdout: verb.contains('--branch')
+            ? porcelainV2(upstream: 'origin/main', modified: changed)
+            : changed.map((path) => ' M $path\n').join(),
+        stderr: '',
+      );
     }
     // No remote, so nothing measures against `origin/HEAD` and one `git status`
     // is the whole cost of a checkout's delivery state.

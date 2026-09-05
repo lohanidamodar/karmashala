@@ -69,7 +69,7 @@ void main() {
     return db;
   }
 
-  /// Git answering `status --porcelain=v1 --branch` with one branch name, and
+  /// Git answering `status --porcelain=v2 --branch` with one branch name, and
   /// nothing else.
   FakeCommandRunner gitOn(String branch) => FakeCommandRunner(
     responder: (request) {
@@ -77,7 +77,7 @@ void main() {
       if (verb.isNotEmpty && verb.first == 'status') {
         return CommandResult(
           exitCode: 0,
-          stdout: verb.contains('--branch') ? '## $branch\n' : '',
+          stdout: verb.contains('--branch') ? porcelainV2(branch: branch) : '',
           stderr: '',
         );
       }

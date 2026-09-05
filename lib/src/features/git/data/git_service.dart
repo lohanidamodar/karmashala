@@ -239,16 +239,27 @@ class GitService {
   }
 
   /// The branch, its upstream, their divergence and the changed files, from
-  /// **one** `git status --porcelain=v1 --branch`.
+  /// **one** `git status --porcelain=v2 --branch`.
   ///
   /// This is what a delivery row wants and it costs one process. [status] is
-  /// kept for callers that only need the files.
+  /// kept for callers that only need the files, and stays on v1 because the
+  /// files are all it reads.
+  ///
+  /// **v2 for its header lines.** `# branch.head`, `# branch.upstream` and
+  /// `# branch.ab +N -M` state on their own lines what v1 squeezed into one
+  /// `## work...origin/work [ahead 2, behind 1]` — so how far the branch stands
+  /// from its **upstream** comes free from a call already being made, stated
+  /// rather than inferred from the presence of a bracket. That is a different
+  /// comparison from [aheadBehind]'s `rev-list --count` against the **base**
+  /// branch, which measures against `origin/HEAD` and stays exactly where it
+  /// is. See `parseGitStatusV2` for the two record types v1 has no equivalent
+  /// of, both of which are silent when missed.
   Future<WorkingTreeStatus> statusWithBranch(EnvironmentPath repo) async {
-    final result = await _git(repo, ['status', '--porcelain=v1', '--branch']);
+    final result = await _git(repo, ['status', '--porcelain=v2', '--branch']);
     if (!result.ok) {
       throw GitException('git status failed: ${result.stderr.trim()}');
     }
-    return parseGitStatusBranch(result.stdout);
+    return parseGitStatusV2(result.stdout);
   }
 
   /// The remote's default branch as this clone recorded it (`origin/main`).
