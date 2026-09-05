@@ -7,6 +7,7 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/agent_pane_launch.dart';
 import '../domain/pane_layout.dart';
+import '../domain/workspace_layout.dart';
 
 /// One persisted terminal pane: how to relaunch it, and what was on its screen.
 class StoredTerminalPane {
@@ -110,6 +111,14 @@ const kTerminalLayoutBackupAtKey = 'terminal.workspace_backup_at';
 /// them how wide a pane is — so without a value carried over from the last run
 /// there is nothing for them to parse into. See `TerminalGridHint`.
 const kTerminalPaneGridKey = 'terminal.pane_grid';
+
+/// The `app_metadata` key holding the workspace split tree — see
+/// [WorkspaceLayout].
+///
+/// One row about all the tabs, rather than a column on each of them: the tree
+/// is a document, and half of one written across N rows is a tree that cannot
+/// be read back.
+const kTerminalWorkspaceKey = 'terminal.workspace_tree';
 
 /// Reads and writes the terminal layout (schema v7, backup tables v11) with
 /// hand-written SQL.
@@ -477,6 +486,27 @@ class TerminalLayoutDao {
 
   void savePaneGrid(({int columns, int rows}) grid) =>
       _db.writeMetadata(kTerminalPaneGridKey, '${grid.columns}x${grid.rows}');
+
+  /// How the middle workspace was divided when the app last saved, or null when
+  /// it has never recorded one.
+  ///
+  /// Forgiving in the same way [loadLayout] is: anything this cannot parse is
+  /// no tree, never an exception — the worst case is one group, which is what a
+  /// first run looks like anyway.
+  WorkspaceLayout? loadWorkspace() {
+    final raw = _db.readMetadata(kTerminalWorkspaceKey);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return PaneLayout.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void saveWorkspace(WorkspaceLayout? tree) => _db.writeMetadata(
+    kTerminalWorkspaceKey,
+    tree == null ? '' : jsonEncode(tree.toJson()),
+  );
 
   StoredTerminalLayout loadLayout() {
     final layout = _load('terminal_tabs', 'terminal_panes');

@@ -277,6 +277,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// into and has not filled yet.
   String? _focusedGroupId;
 
+  /// The tree the store already holds, so a save that changed no group writes
+  /// no row — the same record [_writtenGrid] keeps for the grid hint.
+  WorkspaceLayout? _writtenWorkspace;
+
   final Map<String, TerminalInstance> _instances = {};
 
   /// Sessions with a running process and no tab, oldest first.
@@ -1595,12 +1599,21 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _focusActivePane();
   }
 
-  /// Moves focus to the pane adjacent to the focused one in [direction].
+  /// Moves focus to the pane adjacent to the focused one in [direction], and
+  /// at the edge of the tab's own split to the **workspace group** next door.
+  ///
+  /// One chord, two levels, and no ambiguity about which: inside a split tab
+  /// the next thing left of this pane is the pane beside it; at the tab's edge
+  /// it is the group beside it. That is what the arrow means on screen either
+  /// way, so it is what the key does.
   void movePaneFocus(PaneDirection direction) {
     final tab = _activeTab;
-    if (tab == null) return;
-    final target = tab.layout.paneInDirection(tab.focusedPaneId, direction);
-    if (target != null) focusPane(target);
+    final target = tab?.layout.paneInDirection(tab.focusedPaneId, direction);
+    if (target != null) {
+      focusPane(target);
+      return;
+    }
+    moveGroupFocus(direction);
   }
 
   void nextTab() => _stepTab(1);
@@ -2073,6 +2086,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         activeTabId: _activeTabId,
         userClosed: _userClosedSinceRestore,
       );
+      // How those tabs were divided into groups. Written after them, and only
+      // when it moved: the tree is compared by identity, so a save that changed
+      // no group costs no row.
+      if (!identical(_workspace, _writtenWorkspace)) {
+        dao.saveWorkspace(_workspace);
+        _writtenWorkspace = _workspace;
+      }
       // A structural save that reused an encoding has left text unwritten that
       // this controller already knows about, so the autosave is asked for its
       // catch-up cadence rather than whatever idle tick happens to be armed.
@@ -2432,9 +2452,29 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       }
 
       _activeTabId ??= _tabs.isEmpty ? null : _tabs.last.id;
+      _restoreWorkspace(dao.loadWorkspace());
     } catch (error, stack) {
       _log.warning('Could not restore the terminal layout.', error, stack);
     }
+  }
+
+  /// Puts the tabs that came back into the groups they were in.
+  ///
+  /// Pruned against the tabs that actually rebuilt, the same way a tab's own
+  /// layout is: a group naming only tabs that could not be restored collapses,
+  /// and a tab the tree never heard of joins the focused group when
+  /// [_reconcileWorkspace] next runs. A tree that will not parse is no tree,
+  /// which costs one group — what a first run has.
+  void _restoreWorkspace(WorkspaceLayout? stored) {
+    if (stored == null) return;
+    final live = {for (final tab in _tabs) tab.id};
+    final keep = {
+      for (final id in stored.panes)
+        if (live.contains(id) || isEmptyGroupSlot(id)) id,
+    };
+    if (keep.isEmpty) return;
+    _workspace = stored.withoutMissing(keep);
+    _writtenWorkspace = _workspace;
   }
 
   /// Rebuilds [pane]: with a process when it earned one, and as a process-free

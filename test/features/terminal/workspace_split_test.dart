@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -279,6 +280,106 @@ void main() {
       controller.notifyTitleChanged();
 
       expect(identical(stateOf(container).workspace, before), isTrue);
+    });
+  });
+
+  group('a split survives a restart', () {
+    test('the groups come back holding the tabs they held', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      final first = ProviderContainer(
+        overrides: fakeTerminalOverrides(database: db),
+      );
+      final controller = first.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final left = controller.openTab(TerminalProfile.powerShell);
+      final right = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final moved = controller.openTab(TerminalProfile.commandPrompt);
+      expect(controller.tabsInGroup(right).map((tab) => tab.id), [moved]);
+      controller.persistLayout();
+      first.dispose();
+
+      final next = ProviderContainer(
+        overrides: fakeTerminalOverrides(database: db, restoreLivePanes: false),
+      );
+      addTearDown(next.dispose);
+      final restored = next.read(terminalSessionsControllerProvider);
+      final groups = restored.workspace!.groups;
+
+      expect(groups, hasLength(2), reason: 'the split itself came back');
+      expect(
+        groups.map((group) => group.panes),
+        [
+          [left],
+          [moved],
+        ],
+      );
+    });
+
+    test('a group whose tabs all went is not restored as empty room', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      final first = ProviderContainer(
+        overrides: fakeTerminalOverrides(database: db),
+      );
+      final controller = first.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final left = controller.openTab(TerminalProfile.powerShell);
+      final right = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final doomed = controller.openTab(TerminalProfile.commandPrompt);
+      controller.persistLayout();
+      // The tab is taken out from under the stored tree, the way a profile
+      // that no longer resolves takes one out at restore.
+      controller.closeGroup(right);
+      controller.persistLayout();
+      first.dispose();
+
+      final next = ProviderContainer(
+        overrides: fakeTerminalOverrides(database: db, restoreLivePanes: false),
+      );
+      addTearDown(next.dispose);
+      final restored = next.read(terminalSessionsControllerProvider);
+
+      expect(restored.workspace!.groups, hasLength(1));
+      expect(restored.workspace!.groups.single.panes, [left]);
+      expect(restored.tabs.map((tab) => tab.id), [left]);
+      expect(doomed, isNot(left));
+    });
+  });
+
+  group('one chord, two levels of focus', () {
+    test('at the edge of a tab the arrow steps to the group next door', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final left = controller.openTab(TerminalProfile.powerShell);
+      controller.splitWorkspace(SplitAxis.horizontal);
+      final right = controller.openTab(TerminalProfile.powerShell);
+
+      controller.movePaneFocus(PaneDirection.left);
+
+      expect(stateOf(container).activeTabId, left);
+
+      controller.movePaneFocus(PaneDirection.right);
+      expect(stateOf(container).activeTabId, right);
+    });
+
+    test('inside a split tab the arrow stays among its panes', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+      final slot = controller.splitPane(SplitAxis.horizontal)!;
+      controller.openInSlot(slot, TerminalProfile.commandPrompt);
+      final tabId = stateOf(container).activeTabId;
+
+      controller.movePaneFocus(PaneDirection.left);
+
+      // The same tab, its other pane — the group tree was never consulted.
+      expect(stateOf(container).activeTabId, tabId);
+      expect(stateOf(container).activeTab!.focusedPaneId, isNot(slot));
     });
   });
 }
