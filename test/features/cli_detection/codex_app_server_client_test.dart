@@ -87,6 +87,22 @@ void main() {
     });
   });
 
+  test('a thread/name/updated notification reaches the title listener', () async {
+    final updates = <CodexThreadNameUpdate>[];
+    final server = FakeCodexAppServer();
+    final client = CodexAppServerClient(
+      connect: () async => server,
+      onThreadNameUpdated: updates.add,
+    );
+    addTearDown(client.close);
+
+    await client.setThreadName('t1', ' renamed in Codex ');
+
+    expect(updates, hasLength(1));
+    expect(updates.single.threadId, 't1');
+    expect(updates.single.name, 'renamed in Codex');
+  });
+
   test('a name with non-ASCII characters crosses as escaped ASCII', () async {
     final server = FakeCodexAppServer();
     final client = _clientFor(server);

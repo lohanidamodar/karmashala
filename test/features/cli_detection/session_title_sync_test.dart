@@ -83,10 +83,12 @@ void main() {
   SessionTitleSyncService service(
     List<DetectedSession> Function() detected, {
     void Function(String, String)? onRenamed,
+    String? Function(Session)? agentIdFor,
   }) => SessionTitleSyncService(
     sessionDao: dao,
     agents: AgentRegistry.builtIn,
     scanStores: () async => detected(),
+    agentIdFor: agentIdFor,
     onRenamed: onRenamed,
   );
 
@@ -136,8 +138,8 @@ void main() {
   group('what it refuses to overwrite', () {
     test('a title the user typed in the app', () async {
       // `titleByUser` is what `SessionActions.renameNative` records, and it is
-      // the only thing that stops the sync. It is on the row rather than in
-      // memory precisely so it survives a restart — see the test below.
+      // what stops file-based CLI sync. It is on the row rather than in memory
+      // precisely so it survives a restart — see the test below.
       dao.insert(row(title: 'Ledger rewrite', titleByUser: true));
       final sync = service(() => [found(title: 'test me now')]);
 
@@ -147,6 +149,19 @@ void main() {
       // reason to read the disk at all.
       expect(sync.scans, 0);
       expect(sync.wantsStoreSweep, isFalse);
+    });
+
+    test('a later explicit Codex rename supersedes the app title', () async {
+      dao.insert(row(title: 'Old app title', titleByUser: true));
+      final sync = service(
+        () => [found(cli: AgentIds.codex, title: 'Renamed in Codex')],
+        agentIdFor: (_) => AgentIds.codex,
+      );
+
+      expect(await sync.sync(), 1);
+      final updated = dao.getById('s1')!;
+      expect(updated.title, 'Renamed in Codex');
+      expect(updated.titleByUser, isFalse);
     });
 
     test('a preview, which is a summary and not a name', () async {

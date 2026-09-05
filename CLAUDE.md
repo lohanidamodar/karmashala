@@ -354,7 +354,7 @@ Before considering a task complete, try to run:
 
 ```bash
 flutter analyze
-flutter test
+flutter test --exclude-tags=live-ssh,live-wsl
 ```
 
 For UI changes, also run the app where practical:
@@ -384,7 +384,7 @@ Common commands:
 flutter pub get
 flutter pub add <package>
 flutter analyze
-flutter test
+flutter test --exclude-tags=live-ssh,live-wsl
 flutter run -d chrome
 flutter devices
 flutter clean
@@ -544,8 +544,12 @@ breaking the toolchain for everyone else.
 The default gate excludes two tags:
 
 ```bash
-flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4
+flutter test --exclude-tags=live-ssh,live-wsl
 ```
+
+`dart_test.yaml` supplies the measured eight-worker default. Keep the command
+free of a `--concurrency` override so local runs and automation use the same
+setting.
 
 That exclusion is correct and must stay. The tests behind those tags bind real
 sockets, drive a real WSL distribution and dial a real SSH server; making the
