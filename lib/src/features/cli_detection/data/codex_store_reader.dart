@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
+import 'codex_app_server_launch.dart';
 import 'store_scan_slots.dart';
 import 'store_session_reader.dart';
 
@@ -31,13 +32,21 @@ class CodexRolloutCache {
 }
 
 class _CachedRollout {
-  const _CachedRollout({required this.meta, required this.size});
+  const _CachedRollout({
+    required this.meta,
+    required this.size,
+    required this.modified,
+  });
 
   final _CodexMeta meta;
 
   /// The size the file had when it was read. A file that has only *grown*
   /// still says the same thing — see [CodexStoreReader._readRollout].
   final int size;
+
+  /// When it was last written, which is the only thing that separates an
+  /// untouched rollout from one replaced by a file of the same length.
+  final DateTime modified;
 }
 
 class CodexStoreReader implements StoreSessionReader {
@@ -68,17 +77,19 @@ class CodexStoreReader implements StoreSessionReader {
   /// So a mtime-gated walk would silently drop every resumed session, which is
   /// worse than walking the whole tree.
   ///
-  /// The way out is not a cutoff but a better source: `codex app-server`
-  /// answers `thread/list` with `useStateDbOnly: true` — id, cwd, current name,
-  /// timestamps and the rollout path, from Codex's own index, measured at
-  /// 15-49 ms against a ~1.7 s one-off spawn. It is a [StoreSessionReader] like
-  /// this one, so it drops in beside it with this as the fallback.
+  /// The way out was not a cutoff but a better source, and `CodexAppServerReader`
+  /// is it: `thread/list` with `useStateDbOnly: true` answers id, cwd, current
+  /// name, timestamps and the rollout path out of Codex's own index. This walk
+  /// is what that reader falls back to when an install will not answer.
+  /// [appServer] is ignored here: this *is* the walk `CodexAppServerReader`
+  /// falls back to, and it reaches the same store without spawning anything.
   @override
   Future<List<DetectedSession>> read(
     String codexHome,
     String environmentId, {
     Set<String>? directories,
     StoreScanSlots? slots,
+    CodexAppServerLaunch? appServer,
   }) async {
     final sessionsDir = Directory(p.join(codexHome, 'sessions'));
     if (!await sessionsDir.exists()) return const [];
@@ -138,23 +149,30 @@ class CodexStoreReader implements StoreSessionReader {
 
   /// The `session_meta` a rollout opens with.
   ///
-  /// Cached on the file's size, because **every field here is first-wins from
-  /// the head of the file**: `cwd`, `id`, `startedAt` and the preview all come
-  /// from the opening lines and are never rewritten. A rollout that has grown
-  /// since the last scan therefore still says exactly what it said, and only
-  /// one that *shrank* — a file replaced under the same name — has to be read
-  /// again.
+  /// Cached on the file's size **and** its mtime, because every field here is
+  /// first-wins from the head of the file: `cwd`, `id`, `startedAt` and the
+  /// preview all come from the opening lines and are never rewritten. A rollout
+  /// that has only *grown* therefore still says exactly what it said and costs
+  /// a `stat`; one that shrank, or that was rewritten in place to the same
+  /// length, is read again.
   ///
-  /// That is a stronger rule than [ClaudeStoreReader]'s, which must still read
-  /// the tail for a title that gets re-stamped. Here there is nothing in the
-  /// tail worth having.
+  /// Weaker than [ClaudeStoreReader]'s rule, which re-reads on any change
+  /// because it must see a title re-stamped in the tail. Here there is nothing
+  /// in the tail worth having, so appending is free.
   ///
   /// Without this, a scan re-decoded up to 400 lines of every rollout every
   /// time it ran. On the owner's machine that was **39% of the app's entire
   /// idle CPU** — measured in a profile build with the window untouched.
   Future<_CodexMeta?> _readRollout(File file, FileStat stat) async {
     final cached = _cache._byPath[file.path];
-    if (cached != null && stat.size >= cached.size) {
+    // Grown means appended to, and every field here comes from the head. Same
+    // size *and* same mtime means untouched. Anything else — shrunk, or
+    // rewritten in place to the same length — has to be read again; without
+    // the mtime that last case was served stale for ever.
+    if (cached != null &&
+        (stat.size > cached.size ||
+            (stat.size == cached.size &&
+                stat.modified == cached.modified))) {
       return cached.meta;
     }
 
@@ -212,7 +230,11 @@ class CodexStoreReader implements StoreSessionReader {
     // Only a complete answer is cached. A rollout still being written may not
     // have its `session_meta` yet, and remembering the miss would keep it
     // missing.
-    _cache._byPath[file.path] = _CachedRollout(meta: meta, size: stat.size);
+    _cache._byPath[file.path] = _CachedRollout(
+      meta: meta,
+      size: stat.size,
+      modified: stat.modified,
+    );
     return meta;
   }
 

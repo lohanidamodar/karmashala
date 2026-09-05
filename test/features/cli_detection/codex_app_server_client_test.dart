@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/features/cli_detection/data/codex_app_server_client.dart';
+import 'package:karmashala/src/features/cli_detection/data/codex_thread.dart';
 
 import '../../support/fake_codex_app_server.dart';
 
@@ -367,7 +368,156 @@ void main() {
       expect((await client.setThreadName('t1', 'one')).ok, isTrue);
     });
   });
+
+  group('thread/list', () {
+    test('every source kind is asked for, on every page', () async {
+      final server = FakeCodexAppServer.withThreads(
+        [for (var i = 0; i < 5; i++) _row('t$i')],
+        pageSize: 2,
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final list = await client.listThreads(pageSize: 2);
+
+      expect(list.ok, isTrue);
+      expect(list.threads.length, 5);
+      // The trap this test exists for: omit `sourceKinds` and Codex applies an
+      // "interactive sources" default that answered 11 of 16 real threads.
+      for (final params in server.threadListParams) {
+        expect(
+          params['sourceKinds'],
+          codexThreadSourceKinds,
+          reason: 'a page that drops a kind drops the sessions of that kind',
+        );
+        expect(params['useStateDbOnly'], isTrue);
+      }
+      expect(codexThreadSourceKinds, hasLength(10));
+    });
+
+    test('paging follows nextCursor to exhaustion', () async {
+      final server = FakeCodexAppServer.withThreads(
+        [for (var i = 0; i < 7; i++) _row('t$i')],
+        pageSize: 3,
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final list = await client.listThreads(pageSize: 3);
+
+      expect(list.threads.map((t) => t.id), [
+        for (var i = 0; i < 7; i++) 't$i',
+      ]);
+      expect(client.threadsPaged, 3, reason: '3 + 3 + 1');
+      expect(server.threadListParams.first.containsKey('cursor'), isFalse);
+      expect(server.threadListParams[1]['cursor'], '3');
+      expect(server.threadListParams[2]['cursor'], '6');
+    });
+
+    test('a repeated cursor ends the loop instead of spinning', () async {
+      final server = FakeCodexAppServer(
+        reply: (server, id, method, params) => jsonEncode({
+          'id': id,
+          'result': {
+            'data': [_row('t1')],
+            'nextCursor': 'always-the-same',
+          },
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final list = await client.listThreads();
+
+      expect(list.threads, hasLength(2), reason: 'the page, then the repeat');
+      expect(client.threadsPaged, 2);
+    });
+
+    test('rows are parsed with epoch-second timestamps', () async {
+      final server = FakeCodexAppServer.withThreads([
+        {
+          'id': '01a06f57',
+          'name': 'social campaigns',
+          'preview': 'i want you to create a chatgpt site',
+          'cwd': '/mnt/c/users/me/projects',
+          'path': '/home/me/.codex/sessions/2026/09/05/rollout-x.jsonl',
+          'createdAt': 1788574375,
+          'updatedAt': 1788585458,
+        },
+      ]);
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final thread = (await client.listThreads()).threads.single;
+
+      expect(thread.id, '01a06f57');
+      expect(thread.name, 'social campaigns');
+      expect(thread.preview, 'i want you to create a chatgpt site');
+      expect(thread.cwd, '/mnt/c/users/me/projects');
+      expect(thread.path, '/home/me/.codex/sessions/2026/09/05/rollout-x.jsonl');
+      // Seconds, not milliseconds: reading them as milliseconds dates every
+      // session to 1970.
+      expect(
+        thread.createdAt,
+        DateTime.fromMillisecondsSinceEpoch(1788574375000, isUtc: true),
+      );
+      expect(
+        thread.updatedAt,
+        DateTime.fromMillisecondsSinceEpoch(1788585458000, isUtc: true),
+      );
+    });
+
+    test('a row with no id or no cwd is dropped, not guessed at', () async {
+      final server = FakeCodexAppServer.withThreads([
+        {'id': 'ok', 'cwd': '/w'},
+        {'cwd': '/w'},
+        {'id': 'no-cwd'},
+        {'id': 'blank-cwd', 'cwd': ''},
+      ]);
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      expect((await client.listThreads()).threads.map((t) => t.id), ['ok']);
+    });
+
+    test('an rpc error is the failure, not an empty store', () async {
+      final server = FakeCodexAppServer(
+        reply: (server, id, method, params) => jsonEncode({
+          'error': {'code': -32600, 'message': 'Invalid request'},
+          'id': id,
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final list = await client.listThreads();
+
+      expect(list.ok, isFalse);
+      expect(list.failure!.kind, CodexAppServerFailureKind.rpcError);
+      expect(
+        list.threads,
+        isEmpty,
+        reason: 'a caller must be able to tell "none" from "could not ask"',
+      );
+    });
+
+    test('a reply with no data array is malformed, not empty', () async {
+      final server = FakeCodexAppServer(
+        reply: (server, id, method, params) =>
+            jsonEncode({'id': id, 'result': <String, Object?>{}}),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final list = await client.listThreads();
+
+      expect(list.failure!.kind, CodexAppServerFailureKind.malformed);
+    });
+  });
 }
+
+/// A `thread/list` row with only the fields that must be present.
+Map<String, Object?> _row(String id) => {'id': id, 'cwd': '/w/$id'};
 
 CodexAppServerClient _clientFor(
   FakeCodexAppServer server, {

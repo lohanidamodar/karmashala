@@ -1,4 +1,5 @@
 import '../domain/detected_session.dart';
+import 'codex_app_server_launch.dart';
 import 'store_scan_slots.dart';
 
 /// One CLI's on-disk session store, read into the shape detection speaks.
@@ -18,10 +19,15 @@ abstract interface class StoreSessionReader {
   ///
   /// [slots] bounds how many reads this call may have in flight. Null means
   /// unbounded, which is what a test that wants to see the bound work asks for.
+  ///
+  /// [appServer] says how to reach a store's own server rather than its files —
+  /// a per-reader hint in the same spirit as [directories], and today Codex's
+  /// alone. A reader that has no server ignores it and walks the store.
   Future<List<DetectedSession>> read(
     String storeHome,
     String environmentId, {
     Set<String>? directories,
     StoreScanSlots? slots,
+    CodexAppServerLaunch? appServer,
   });
 }

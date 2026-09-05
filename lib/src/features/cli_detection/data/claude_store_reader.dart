@@ -7,6 +7,7 @@ import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
 import '../domain/session_stats.dart';
+import 'codex_app_server_launch.dart';
 import 'store_scan_slots.dart';
 import 'store_session_reader.dart';
 
@@ -69,12 +70,14 @@ class ClaudeStoreReader implements StoreSessionReader {
   /// [slots] bounds how many project directories are read at once. Null reads
   /// them all together, which is what the concurrency test asks for so the
   /// bound is about something.
+  /// [appServer] is ignored — Claude Code has no app-server to ask.
   @override
   Future<List<DetectedSession>> read(
     String claudeHome,
     String environmentId, {
     Set<String>? directories,
     StoreScanSlots? slots,
+    CodexAppServerLaunch? appServer,
   }) async {
     final projectsDir = Directory(p.join(claudeHome, 'projects'));
     if (!await projectsDir.exists()) return const [];

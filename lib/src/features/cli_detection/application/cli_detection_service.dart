@@ -5,13 +5,17 @@ import 'package:path/path.dart' as p;
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/path_translator.dart';
+import '../../agents/data/agent_installation_dao.dart';
 import '../../agents/domain/agent_descriptor.dart';
+import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../data/antigravity_store_sessions.dart';
 import '../data/claude_store_reader.dart';
+import '../data/codex_app_server_launch.dart';
+import '../data/codex_app_server_reader.dart';
 import '../data/codex_store_reader.dart';
 import '../data/store_scan_slots.dart';
 import '../data/store_session_reader.dart';
@@ -21,9 +25,18 @@ import 'detected_project_merger.dart';
 
 /// The CLI store homes to scan for one environment, keyed by agent registry id.
 class CliStore {
-  const CliStore({required this.environmentId, required this.homesByAgentId});
+  const CliStore({
+    required this.environmentId,
+    required this.homesByAgentId,
+    this.codexAppServer,
+  });
 
   final String environmentId;
+
+  /// How to reach this environment's `codex app-server`, when a Codex is
+  /// installed there. Plain data, because it crosses to the worker isolate
+  /// where the spawn has to happen — see [CodexAppServerLaunch].
+  final CodexAppServerLaunch? codexAppServer;
 
   /// `AgentDescriptor.id` → the agent's store home in this environment, in a
   /// form the app can read directly (Windows-native or a `\\wsl.localhost\…`
@@ -44,12 +57,18 @@ class CliStoreLocator {
     required this.runnerFactory,
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
+    this.installations,
     Map<String, String>? environment,
   }) : environment = environment ?? Platform.environment;
 
   final CommandRunnerFactory runnerFactory;
   final PathTranslator translator;
   final AgentRegistry registry;
+
+  /// Where each environment's Codex executable is, so a store can be read
+  /// through `thread/list` rather than by walking its rollouts. Omit it and
+  /// every Codex store is walked, which is what it did before.
+  final AgentInstallationDao? installations;
 
   /// The process environment the home directory is read from. Injected so the
   /// per-platform lookup is testable off the platform it describes.
@@ -81,6 +100,7 @@ class CliStoreLocator {
             home,
             usesWindowsPaths(local.kind) ? p.windows : p.posix,
           ),
+          codexAppServer: _codexAppServer(local),
         ),
       );
     }
@@ -103,6 +123,7 @@ class CliStoreLocator {
           CliStore(
             environmentId: env.id,
             homesByAgentId: _homesUnder(unc, p.windows),
+            codexAppServer: _codexAppServer(env),
           ),
         );
       }
@@ -124,6 +145,21 @@ class CliStoreLocator {
     final name = usesWindowsPaths(kind) ? 'USERPROFILE' : 'HOME';
     final value = environment[name]?.trim();
     return value == null || value.isEmpty ? null : value;
+  }
+
+  /// The Codex install in [environment], as something the worker can spawn.
+  CodexAppServerLaunch? _codexAppServer(ExecutionEnvironment environment) {
+    final dao = installations;
+    if (dao == null) return null;
+    for (final installation in dao.getByEnvironment(environment.id)) {
+      if (installation.agentId == AgentIds.codex) {
+        return CodexAppServerLaunch(
+          environment: environment,
+          executable: installation.executable.path,
+        );
+      }
+    }
+    return null;
   }
 
   /// One home per registry agent that declares a store, under [homeDirectory].
@@ -166,16 +202,28 @@ class CliDetectionService {
   CliDetectionService({
     ClaudeStoreReader? claudeReader,
     CodexStoreReader? codexReader,
+    CodexAppServerReader? codexAppServerReader,
     this.antigravityReader = const AntigravityStoreSessions(),
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
     // Not const any more: both store readers carry the cache that keeps a scan
     // proportional to what changed rather than to the whole store.
   }) : claudeReader = claudeReader ?? ClaudeStoreReader(),
-       codexReader = codexReader ?? CodexStoreReader();
+       codexReader = codexReader ?? CodexStoreReader() {
+    this.codexAppServerReader =
+        codexAppServerReader ?? CodexAppServerReader(fallback: this.codexReader);
+  }
 
   final ClaudeStoreReader claudeReader;
+
+  /// The rollout walk. Still reachable, and still the answer for a Codex whose
+  /// app-server cannot be spawned or will not answer.
   final CodexStoreReader codexReader;
+
+  /// What actually answers for `codexRollout`: `thread/list` when it can, the
+  /// walk above when it cannot.
+  late final CodexAppServerReader codexAppServerReader;
+
   final AntigravityStoreSessions antigravityReader;
   final PathTranslator translator;
   final AgentRegistry registry;
@@ -184,7 +232,7 @@ class CliDetectionService {
   /// new agent is a descriptor, and only a genuinely new layout is a reader.
   Map<AgentStoreFormat, StoreSessionReader> get _readersByFormat => {
     AgentStoreFormat.claudeJsonl: claudeReader,
-    AgentStoreFormat.codexRollout: codexReader,
+    AgentStoreFormat.codexRollout: codexAppServerReader,
     AgentStoreFormat.antigravityStore: antigravityReader,
   };
 
@@ -210,12 +258,13 @@ class CliDetectionService {
             ),
   ];
 
-  /// Runs one job. [directories] and [slots] are passed straight through — see
-  /// [StoreSessionReader.read].
+  /// Runs one job. [directories], [slots] and [appServer] are passed straight
+  /// through — see [StoreSessionReader.read].
   Future<List<DetectedSession>> runJob(
     StoreScanJob job, {
     Set<String>? directories,
     StoreScanSlots? slots,
+    CodexAppServerLaunch? appServer,
   }) async {
     final reader = _readersByFormat[job.format];
     if (reader == null) return const [];
@@ -224,14 +273,30 @@ class CliDetectionService {
       job.environmentId,
       directories: directories,
       slots: slots,
+      appServer: appServer,
     );
   }
+
+  /// The app-server launches in [stores], by environment id.
+  static Map<String, CodexAppServerLaunch> codexAppServersIn(
+    List<CliStore> stores,
+  ) => {
+    for (final store in stores)
+      store.environmentId: ?store.codexAppServer,
+  };
 
   /// Reads every store and returns the flat list of detected sessions.
   ///
   /// [onJob] sees each job's sessions as that job finishes, so Claude's are
   /// usable while Codex is still walking. Callers that only want the total can
   /// ignore it.
+  ///
+  /// **No app-server is asked here, on purpose.** This is the path the *main*
+  /// isolate takes — `detect()`, and the transcript index the status registry
+  /// runs on its slow slot — and starting `codex app-server` costs a ~1 s
+  /// `CreateProcessW` charged to the isolate that calls it. The protocol is
+  /// reached through `runStoreScanJobs`, which the store-scan worker runs; a
+  /// main-isolate read walks the files.
   Future<List<DetectedSession>> readStores(
     List<CliStore> stores, {
     Set<String>? claudeDirectories,

@@ -2,6 +2,7 @@ import '../../agents/data/antigravity_store_reader.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
+import 'codex_app_server_launch.dart';
 import 'store_scan_slots.dart';
 import 'store_session_reader.dart';
 
@@ -23,15 +24,16 @@ class AntigravityStoreSessions implements StoreSessionReader {
 
   final AntigravityStoreReader reader;
 
-  /// [directories] and [slots] are ignored: this store is one directory
-  /// listing plus two small files, so there is nothing to narrow and nothing
-  /// that fans out.
+  /// [directories], [slots] and [appServer] are ignored: this store is one
+  /// directory listing plus two small files, so there is nothing to narrow,
+  /// nothing that fans out, and no server to ask.
   @override
   Future<List<DetectedSession>> read(
     String storeHome,
     String environmentId, {
     Set<String>? directories,
     StoreScanSlots? slots,
+    CodexAppServerLaunch? appServer,
   }) async {
     final conversations = await reader.read(storeHome);
     return [
