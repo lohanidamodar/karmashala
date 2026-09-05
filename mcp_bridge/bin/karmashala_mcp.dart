@@ -254,9 +254,18 @@ class _BridgeConfig {
 /// Mirrors `path_provider`'s application-support directory per platform, and is
 /// overridable so a bridge can be pointed at a second install (or a test app)
 /// without guessing.
+///
+/// `KARMASHALA_DATA_DIR` is read for the same reason the app reads it: an
+/// instance started against a throwaway data directory publishes its handshake
+/// there, and a bridge computing `%APPDATA%` would look past it at the real
+/// install's file — connecting to the wrong app rather than failing.
 String _handshakePath() {
   final override = Platform.environment['KARMASHALA_BRIDGE_HANDSHAKE'];
   if (override != null && override.isNotEmpty) return override;
+  final dataDir = Platform.environment['KARMASHALA_DATA_DIR'];
+  if (dataDir != null && dataDir.trim().isNotEmpty) {
+    return '${dataDir.trim()}${Platform.pathSeparator}mcp_bridge.json';
+  }
   if (Platform.isWindows) {
     final appData = Platform.environment['APPDATA'];
     if (appData == null) {
