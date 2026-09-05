@@ -1305,9 +1305,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final visible =
         tab.layout.visiblePanes.where((p) => !_isEmptyRegion(p)).toList();
     if (visible.length > 1) {
-      return visible
-          .map((p) => _titles.putIfAbsent(p, () => _titleForPane(p)))
-          .join(' | ');
+      // Deduplicated: a split inherits the selected repository's directory, so
+      // both panes report the same label and the join printed it twice. Saying
+      // a thing once is the whole of what the header work was about.
+      final names = <String>[];
+      for (final pane in visible) {
+        final name = _titles.putIfAbsent(pane, () => _titleForPane(pane));
+        if (!names.contains(name)) names.add(name);
+      }
+      return names.join(' | ');
     }
     final named = _isEmptyRegion(tab.focusedPaneId)
         ? tab.layout.panes.firstWhere(

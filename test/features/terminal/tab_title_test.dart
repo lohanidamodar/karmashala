@@ -379,6 +379,29 @@ void main() {
       );
     });
 
+    test('and never the same name twice', () {
+      // What the app really does when the user splits: `openInSlot` is handed
+      // the selected repository's directory, the same one the first pane got,
+      // so both panes report the same label and the join printed it twice.
+      // Naming a thing twice is what the header work was about; a tab is no
+      // different.
+      final tabId = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\karmashala',
+      );
+      controller.splitPaneWith(
+        SplitAxis.horizontal,
+        TerminalProfile.commandPrompt,
+        workingDirectory: r'C:\src\karmashala',
+      );
+
+      expect(
+        controller.titleForTab(tabId),
+        'src/karmashala',
+        reason: 'two panes, one name between them',
+      );
+    });
+
     test('a stack in one region names the front pane too', () {
       final host = controller.openTab(
         TerminalProfile.powerShell,
