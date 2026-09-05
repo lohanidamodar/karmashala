@@ -35,6 +35,7 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/domain/detected_project.dart';
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 
+import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -150,6 +151,10 @@ void main() {
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),
+        // No store to walk. Without this the registry's store slot reads the
+        // machine's own `.claude`, so the test would be measuring the
+        // developer's home directory.
+        cliStoreLocatorProvider.overrideWithValue(FixedLocator(const [])),
         autoImportRunnerProvider.overrideWithValue(
           (_) async => const ImportSummary(),
         ),

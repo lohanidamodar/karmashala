@@ -9,6 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/desktop_dialog.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
@@ -25,6 +26,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../../repositories/domain/repository.dart';
@@ -172,6 +174,15 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     }
   }
 
+  /// " · checked 3m ago", or " · never checked" when nothing has read the
+  /// stores for this project yet.
+  String _checkedSuffix(String projectId) {
+    final at = ref.read(cliSessionsCheckedProvider).forProject(projectId);
+    if (at == null) return ' · never checked';
+    final now = ref.read(clockProvider).nowUtc();
+    return ' · checked ${describeAge(now.difference(at))}';
+  }
+
   void _openTerminal(Project project) {
     final envDao = ref.read(executionEnvironmentDaoProvider);
     final env = envDao.getById(project.environmentId);
@@ -238,11 +249,12 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (repos.length == 1) {
       ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
     }
-    // Refresh live CLI sessions on expand so the newest ones surface without a
-    // manual import. Quiet (no snackbar); the list updates via sessionsRevision.
-    if (expanding) {
-      ref.read(projectsControllerProvider.notifier).syncSessions(project.id);
-    }
+    // **Nothing is scanned here.** Expanding used to start a full walk of every
+    // CLI store — and `select` above started a second — so the spinner was up
+    // and the frame pipeline starved for as long as it took, every single time.
+    // The import runs once after the first frame and on demand from this row's
+    // "Refresh CLI sessions"; `explorer_expand_scan_cost_test.dart` pins the
+    // zero.
   }
 
   /// Starts a session in one click. [installation] is the "…with" choice; left
@@ -690,7 +702,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ),
           DesktopMenuItem(
             value: 'refresh',
-            label: 'Refresh CLI sessions',
+            // The reading's age, beside the control that re-takes it — §19.
+            // Built when the menu opens (`RowMenuItemBuilder`), so it is the
+            // age now and not the age when the row was drawn.
+            label: 'Refresh CLI sessions${_checkedSuffix(project.id)}',
             icon: AppIcons.arrowsClockwise,
           ),
           DesktopMenuItem(
@@ -773,7 +788,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           // away: that sentence invites them to start work they already have.
           // A project emptied by the filter says so, and says how much.
           message: visible.hidden == 0
-              ? 'No sessions yet — start one with the + on this project.'
+              // "No sessions yet" is a claim about the CLI stores, and before
+              // the first-frame import lands nobody has read them. §19: say
+              // what was observed, never more.
+              ? ref.watch(cliSessionsCheckedProvider).forProject(project.id) ==
+                        null
+                    ? 'No sessions yet — the CLI stores have not been checked.'
+                    : 'No sessions yet — start one with the + on this project.'
               : '${_sessionCount(visible.hidden)} hidden by the agent filter.',
         ),
       );

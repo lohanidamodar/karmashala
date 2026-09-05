@@ -7,6 +7,26 @@ import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
 import '../domain/session_stats.dart';
+import 'store_scan_slots.dart';
+import 'store_session_reader.dart';
+
+/// The `projects/` subdirectory Claude Code writes a session in when its
+/// working directory is [cwd] — every character that is not a letter or a digit
+/// replaced by `-`.
+///
+/// **Encode only.** The decode direction is ambiguous and this file's own
+/// header, and `ConversationStoreIndex`, both refuse it: `/a/b-c` and `/a/b/c`
+/// encode the same. Encoding is a function and has one answer, which is what
+/// makes the store *addressable* from a repository path — see
+/// [ClaudeStoreReader.read]'s `directories`.
+///
+/// Verified against the owner's two stores on 2026-09-05: `C:\` → `C--`,
+/// `/tmp/claude-1000/-mnt-c-…` → `-tmp-claude-1000--mnt-c-…`. Case is
+/// **preserved** by Claude and both `G--dev-…` and `g--dev-…` exist there, so
+/// callers must compare case-insensitively; [read] lowercases what it is given
+/// and what it lists.
+String claudeStoreDirectoryName(String cwd) =>
+    cwd.replaceAll(RegExp('[^A-Za-z0-9]'), '-');
 
 /// Reads Claude Code sessions from a `.claude` store directory.
 ///
@@ -16,7 +36,7 @@ import '../domain/session_stats.dart';
 /// lossy dash-encoding). Title precedence: `custom-title` > `ai-title` > first
 /// user message preview. The `entrypoint` field distinguishes SDK-spawned
 /// subagents.
-class ClaudeStoreReader {
+class ClaudeStoreReader implements StoreSessionReader {
   ClaudeStoreReader({ClaudeStoreCache? cache})
     : _cache = cache ?? ClaudeStoreCache.shared;
 
@@ -34,36 +54,73 @@ class ClaudeStoreReader {
 
   /// Reads all sessions under [claudeHome] (a `.claude` directory), tagging them
   /// with [environmentId]. Returns an empty list if the store is absent.
+  ///
+  /// [directories] narrows the read to the `projects/` subdirectories with
+  /// those lowercased names — [claudeStoreDirectoryName] of each working
+  /// directory the caller cares about. The top-level listing still happens, so
+  /// nothing is guessed: the names that came back are matched against the set.
+  /// On the owner's WSL store that is 12 listings and the ~5 that are his
+  /// repositories, instead of 12 listings and 663 files.
+  ///
+  /// **Only a caller that knows every path it wants may pass it.** Auto-import
+  /// does — it is handed the repositories. "Detect CLI sessions" must not: its
+  /// whole job is to find projects the workspace has never heard of.
+  ///
+  /// [slots] bounds how many project directories are read at once. Null reads
+  /// them all together, which is what the concurrency test asks for so the
+  /// bound is about something.
+  @override
   Future<List<DetectedSession>> read(
     String claudeHome,
-    String environmentId,
-  ) async {
+    String environmentId, {
+    Set<String>? directories,
+    StoreScanSlots? slots,
+  }) async {
     final projectsDir = Directory(p.join(claudeHome, 'projects'));
     if (!await projectsDir.exists()) return const [];
 
-    final sessions = <DetectedSession>[];
+    final buckets = <List<DetectedSession>>[];
+    final reads = <Future<void>>[];
     await for (final projectEntity in projectsDir.list()) {
       if (projectEntity is! Directory) continue;
-      await for (final fileEntity in projectEntity.list()) {
-        if (fileEntity is! File || !fileEntity.path.endsWith('.jsonl')) {
-          continue;
-        }
-        final FileStat stat;
-        try {
-          stat = await fileEntity.stat();
-        } on Object {
-          continue;
-        }
-        final entry = await _readEntry(fileEntity, stat);
-        final session = entry.toSession(
-          fileEntity.path,
-          claudeHome,
-          environmentId,
-        );
-        if (session != null) sessions.add(session);
+      if (directories != null &&
+          !directories.contains(p.basename(projectEntity.path).toLowerCase())) {
+        continue;
       }
+      // Indexed rather than appended, so bounded concurrency does not reorder
+      // what a sequential read returned.
+      final bucket = <DetectedSession>[];
+      buckets.add(bucket);
+      Future<void> readDir() =>
+          _readDirectory(projectEntity, claudeHome, environmentId, bucket);
+      reads.add(slots == null ? readDir() : slots.run(readDir));
     }
-    return sessions;
+    await Future.wait(reads);
+    return [for (final bucket in buckets) ...bucket];
+  }
+
+  Future<void> _readDirectory(
+    Directory directory,
+    String claudeHome,
+    String environmentId,
+    List<DetectedSession> into,
+  ) async {
+    await for (final fileEntity in directory.list()) {
+      if (fileEntity is! File || !fileEntity.path.endsWith('.jsonl')) continue;
+      final FileStat stat;
+      try {
+        stat = await fileEntity.stat();
+      } on Object {
+        continue;
+      }
+      final entry = await _readEntry(fileEntity, stat);
+      final session = entry.toSession(
+        fileEntity.path,
+        claudeHome,
+        environmentId,
+      );
+      if (session != null) into.add(session);
+    }
   }
 
   /// What one session's own file adds up to, resumed from wherever the last
