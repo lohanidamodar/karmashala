@@ -18,12 +18,14 @@ import '../../terminal/data/terminal_grid_text.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../data/cli_session_mutator.dart';
 import '../data/conversation_store_index.dart';
+import '../data/store_scan_worker.dart';
 import '../data/imported_session_dao.dart';
 import '../domain/conversation_presence.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'antigravity_attribution_service.dart';
 import 'cli_detection_service.dart';
+import 'detected_project_merger.dart';
 import 'launched_session_attribution_service.dart';
 import 'project_import_service.dart';
 import 'session_adoption_service.dart';
@@ -48,10 +50,20 @@ final projectImportServiceProvider = Provider<ProjectImportService>(
   ),
 );
 
+/// Where every CLI-store walk in the app happens.
+///
+/// One long-lived worker isolate, shared by auto-import, "Detect CLI sessions"
+/// and the status registry's store slot, so no two of them can be walking the
+/// same 9p share on the isolate that draws. A test overrides this with an
+/// inline runner (or a canned one) and never spawns anything.
+final storeScanRunnerProvider = Provider<StoreScanRunner>(
+  (ref) => sharedStoreScanRunner,
+);
+
 final sessionAutoImportServiceProvider = Provider<SessionAutoImportService>(
   (ref) => SessionAutoImportService(
     locator: ref.watch(cliStoreLocatorProvider),
-    detectionService: ref.watch(cliDetectionServiceProvider),
+    scan: ref.watch(storeScanRunnerProvider).scan,
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
     importedSessionDao: ref.watch(importedSessionDaoProvider),
     sessionDao: ref.watch(sessionDaoProvider),
@@ -304,20 +316,21 @@ List<AdoptablePane> adoptablePanes(Ref ref) {
 }
 
 /// One pass over every CLI store, flattened to the sessions it found.
+///
+/// Reads through [storeScanRunnerProvider], so the status registry's slow slot
+/// walks the stores on the worker isolate like everything else. Unnarrowed:
+/// attribution and the title sync are looking for rows they have no path for.
 Future<List<DetectedSession>> scanCliStores(Ref ref) async {
   final environments = ref.read(executionEnvironmentDaoProvider).getAll();
   final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
-  final byId = {for (final e in environments) e.id: e};
-  final projects = await ref.read(cliDetectionServiceProvider).detect(
-    stores,
-    byId,
-  );
-  return [
-    for (final project in projects) ...[
-      ...project.sessions,
-      ...project.subagentSessions,
-    ],
-  ];
+  final sessions = <DetectedSession>[];
+  await for (final chunk
+      in ref.read(storeScanRunnerProvider).scan(
+        StoreScanRequest(stores: stores),
+      )) {
+    sessions.addAll(chunk.sessions);
+  }
+  return sessions;
 }
 
 final cliStoreLocatorProvider = Provider<CliStoreLocator>(
@@ -404,11 +417,16 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
     state = await AsyncValue.guard(_load);
   }
 
+  /// Reads every store, unnarrowed and on the worker isolate: this door's whole
+  /// job is to find projects the workspace has never heard of, so it is the one
+  /// caller that must not narrow to the repositories it already has.
   Future<List<DetectedProject>> _load() async {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
-    final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
-    final byId = {for (final e in environments) e.id: e};
-    return ref.read(cliDetectionServiceProvider).detect(stores, byId);
+    final sessions = await scanCliStores(ref);
+    ref.read(cliSessionsCheckedProvider.notifier).stampAll();
+    return mergeDetectedProjects(sessions, {
+      for (final e in environments) e.id: e,
+    });
   }
 
   /// Imports every detected project/session into the workspace, ignoring

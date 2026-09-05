@@ -8,6 +8,7 @@ import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/domain/agent_hook_endpoint.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
+import '../../features/projects/application/projects_controller.dart';
 import '../../features/remote/application/remote_access_controller.dart';
 import '../../features/remote/relay_local/local_relay_providers.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
@@ -236,6 +237,47 @@ class AppLifecycle {
       _installAgentHooksNow(server);
     };
     _installAgentHooksNow(server, gate: afterFirstFrame);
+  }
+
+  /// The one CLI-session import of this run, behind [afterFirstFrame].
+  ///
+  /// Same gate and same reasoning as [installAgentHooks]: the walk is over
+  /// stores that live inside WSL, so every entry is a `\\wsl.localhost` round
+  /// trip, and start-up is already under scrutiny. Nothing waits on it — the
+  /// tree fills in when it lands, and until then the Explorer says the stores
+  /// have not been checked rather than implying they have.
+  ///
+  /// A gate that throws must not cost the user their sessions, so it is caught
+  /// and the import runs anyway; a launch straight to the tray may never paint
+  /// a frame, which is what the caller's timeout is for.
+  Future<void> importCliSessions({Future<void> Function()? afterFirstFrame}) =>
+      _cliSessionImport ??= _importCliSessions(afterFirstFrame);
+
+  Future<void>? _cliSessionImport;
+
+  Future<void> _importCliSessions(Future<void> Function()? gate) async {
+    if (gate != null) {
+      try {
+        await gate();
+      } on Object catch (error, stack) {
+        _logger.warning(
+          'Waiting for the first frame before importing CLI sessions failed; '
+          'importing now.',
+          error,
+          stack,
+        );
+      }
+    }
+    try {
+      final summary = await _container
+          .read(projectsControllerProvider.notifier)
+          .importCliSessionsOnce();
+      _logger.info('CLI session import: ${summary.sessions} imported.');
+    } on Object catch (error, stack) {
+      // The stores are somebody else's files and may be absent, locked or on an
+      // unreachable share. The workspace is still usable without them.
+      _logger.warning('Could not import CLI sessions.', error, stack);
+    }
   }
 
   void _installAgentHooksNow(

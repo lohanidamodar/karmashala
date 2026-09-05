@@ -234,15 +234,25 @@ Future<void> main() async {
   // session loses only the events inside the gap rather than its whole
   // lifetime. Until the sweep reports, Settings says the callbacks are not in
   // place yet rather than saying nothing.
+  Future<void> afterFirstFrame() => WidgetsBinding.instance.endOfFrame.timeout(
+    const Duration(seconds: 2),
+    onTimeout: () {},
+  );
+
   if (controlServer != null) {
-    lifecycle.installAgentHooks(
-      controlServer,
-      afterFirstFrame: () => WidgetsBinding.instance.endOfFrame.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      ),
-    );
+    lifecycle.installAgentHooks(controlServer, afterFirstFrame: afterFirstFrame);
   }
+
+  // The CLI stores, **once**, behind the same gate and for the same reason.
+  //
+  // This import used to run on every project expand and every project
+  // selection — a full walk of every store each time, on the isolate that
+  // draws, with the Explorer's spinner up throughout. It runs here instead, and
+  // the project row's "Refresh CLI sessions" is what re-runs it.
+  //
+  // Not gated on `controlServer`, unlike the hooks: finding conversations an
+  // agent already wrote needs nothing bound.
+  unawaited(lifecycle.importCliSessions(afterFirstFrame: afterFirstFrame));
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps
