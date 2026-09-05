@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
+import 'codex_app_server_launch.dart';
 import 'store_scan_slots.dart';
 import 'store_session_reader.dart';
 
@@ -68,17 +69,19 @@ class CodexStoreReader implements StoreSessionReader {
   /// So a mtime-gated walk would silently drop every resumed session, which is
   /// worse than walking the whole tree.
   ///
-  /// The way out is not a cutoff but a better source: `codex app-server`
-  /// answers `thread/list` with `useStateDbOnly: true` — id, cwd, current name,
-  /// timestamps and the rollout path, from Codex's own index, measured at
-  /// 15-49 ms against a ~1.7 s one-off spawn. It is a [StoreSessionReader] like
-  /// this one, so it drops in beside it with this as the fallback.
+  /// The way out was not a cutoff but a better source, and `CodexAppServerReader`
+  /// is it: `thread/list` with `useStateDbOnly: true` answers id, cwd, current
+  /// name, timestamps and the rollout path out of Codex's own index. This walk
+  /// is what that reader falls back to when an install will not answer.
+  /// [appServer] is ignored here: this *is* the walk `CodexAppServerReader`
+  /// falls back to, and it reaches the same store without spawning anything.
   @override
   Future<List<DetectedSession>> read(
     String codexHome,
     String environmentId, {
     Set<String>? directories,
     StoreScanSlots? slots,
+    CodexAppServerLaunch? appServer,
   }) async {
     final sessionsDir = Directory(p.join(codexHome, 'sessions'));
     if (!await sessionsDir.exists()) return const [];

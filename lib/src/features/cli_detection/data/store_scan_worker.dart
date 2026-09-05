@@ -242,6 +242,11 @@ Stream<StoreScanChunk> runStoreScanJobs(
   StoreScanRequest request,
   CliDetectionService detection,
 ) async* {
+  // Resolved on the main isolate and carried in `CliStore`: the worker builds
+  // the runner and spawns Codex itself, because a live `Process` cannot cross
+  // an isolate boundary and a ~1 s `CreateProcessW` must not be on the isolate
+  // that draws.
+  final appServers = CliDetectionService.codexAppServersIn(request.stores);
   for (final job in detection.jobsFor(request.stores)) {
     final sessions = await detection.runJob(
       job,
@@ -249,6 +254,7 @@ Stream<StoreScanChunk> runStoreScanJobs(
           ? request.claudeDirectories
           : null,
       slots: StoreScanSlots(concurrency: request.concurrency),
+      appServer: appServers[job.environmentId],
     );
     yield StoreScanChunk(
       agentId: job.agentId,

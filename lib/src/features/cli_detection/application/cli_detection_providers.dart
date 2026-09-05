@@ -338,6 +338,10 @@ final cliStoreLocatorProvider = Provider<CliStoreLocator>(
   (ref) => CliStoreLocator(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     registry: ref.watch(agentRegistryProvider),
+    // So a located Codex store carries how to reach its app-server: the two
+    // DAO reads happen here, on the isolate that has a database, and cross to
+    // the scan worker as plain data.
+    installations: ref.watch(agentInstallationDaoProvider),
   ),
 );
 

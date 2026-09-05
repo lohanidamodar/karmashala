@@ -9,15 +9,7 @@ import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import 'codex_app_server_client.dart';
-
-/// The app-server arguments. `--listen stdio://` is the default on both Codex
-/// 0.145.0 and 0.153.4, and naming it keeps a future default change from
-/// quietly moving this connection onto a socket.
-const List<String> codexAppServerArguments = [
-  'app-server',
-  '--listen',
-  'stdio://',
-];
+import 'codex_app_server_launch.dart';
 
 /// One live `codex app-server` per execution environment, opened on demand.
 ///

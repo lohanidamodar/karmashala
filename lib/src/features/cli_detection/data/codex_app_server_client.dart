@@ -241,7 +241,7 @@ class CodexAppServerClient {
         'limit': pageSize,
         'useStateDbOnly': true,
         'sourceKinds': codexThreadSourceKinds,
-        if (cursor != null) 'cursor': cursor,
+        'cursor': ?cursor,
       });
       final failure = result.failure;
       if (failure != null) return CodexThreadList.failed(failure);
