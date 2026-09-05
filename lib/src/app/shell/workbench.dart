@@ -1158,6 +1158,11 @@ class _TabChip extends ConsumerWidget {
     // palette, because a drag alone is not an affordance everybody has.
     return Draggable<TerminalDrag>(
       data: TabDrag(tab.id),
+      // The pointer, not the grab point: a drop target reads `details.offset`
+      // to decide which half of itself the drag is over, and that offset is
+      // the feedback's corner. Anchored to the child it was half a chip out,
+      // which put every drop in the leading half whatever the pointer did.
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _TabDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
       child: _TabDropTarget(
@@ -1273,14 +1278,22 @@ class _TabDropTarget extends ConsumerStatefulWidget {
 }
 
 class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
+  /// How near the middle of a chip counts as *on* it, in logical pixels.
+  static const _centreSlack = 1.0;
+
   bool _dropLeading = true;
   bool _ctrlPressed = false;
 
-  void _updatePosition(Offset globalPos) {
+  void _updatePosition(TerminalDrag data, Offset globalPos) {
     final box = context.findRenderObject() as RenderBox?;
     if (box != null && box.hasSize && box.size.width > 0) {
-      final local = box.globalToLocal(globalPos);
-      final leading = local.dx < box.size.width / 2;
+      final offMiddle = box.globalToLocal(globalPos).dx - box.size.width / 2;
+      // Which half the pointer is over says where the tab lands. Dead centre
+      // is not a coin flip: it goes the way the drag came from, which is the
+      // whole rule the strip had before it had halves.
+      final leading = offMiddle.abs() <= _centreSlack
+          ? _comesFromTheRight(data)
+          : offMiddle < 0;
       final ctrl = HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
       if (leading != _dropLeading || ctrl != _ctrlPressed) {
@@ -1292,6 +1305,11 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
     }
   }
 
+  bool _comesFromTheRight(TerminalDrag data) =>
+      data is TabDrag &&
+      ref.read(terminalTabsProvider).indexWhere((t) => t.id == data.tabId) >
+          widget.index;
+
   @override
   Widget build(BuildContext context) {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
@@ -1299,10 +1317,10 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
       onWillAcceptWithDetails: (details) {
         if (details.data is! TabDrag) return false;
         final tabId = (details.data as TabDrag).tabId;
-        _updatePosition(details.offset);
+        _updatePosition(details.data, details.offset);
         return tabId != widget.tab.id;
       },
-      onMove: (details) => _updatePosition(details.offset),
+      onMove: (details) => _updatePosition(details.data, details.offset),
       onLeave: (_) {
         if (mounted) {
           setState(() {

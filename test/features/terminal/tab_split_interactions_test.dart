@@ -256,5 +256,39 @@ void main() {
       // tab2 should now be at the front: [tab2, tab0, tab1].
       expect(controller.state.tabs.map((t) => t.id).toList(), [tab2, tab0, tab1]);
     });
+
+    testWidgets('and the right half of a tab puts it after that tab', (
+      tester,
+    ) async {
+      // The other half of the same rule, and the half nothing drove: the drop
+      // side has to come from where the *pointer* is, not from where the drag
+      // feedback's corner happens to be.
+      final container = workbenchContainer();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+
+      final tab0 = controller.openTab(TerminalProfile.powerShell);
+      final tab1 = controller.openTab(TerminalProfile.commandPrompt);
+      final tab2 = controller.openTab(TerminalProfile.posix('/bin/bash'));
+
+      await pumpWorkbench(tester, container);
+
+      final tabChips = find.byType(TerminalTabChip);
+      final tab2Rect = tester.getRect(tabChips.at(2));
+      final rightHalfTarget = Offset(
+        tab2Rect.left + tab2Rect.width * 0.9,
+        tab2Rect.center.dy,
+      );
+
+      final gesture = await tester.startGesture(tester.getCenter(tabChips.at(0)));
+      await tester.pump();
+      await gesture.moveTo(rightHalfTarget);
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(controller.state.tabs.map((t) => t.id).toList(), [tab1, tab2, tab0]);
+    });
   });
 }

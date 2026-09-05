@@ -1431,6 +1431,7 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
                 Draggable<TerminalDrag>(
                   key: paneDragHandleKey(widget.paneId),
                   data: PaneDrag(widget.paneId),
+                  dragAnchorStrategy: pointerDragAnchorStrategy,
                   feedback: PaneDragFeedback(title: title),
                   child: MouseRegion(
                     cursor: SystemMouseCursors.grab,

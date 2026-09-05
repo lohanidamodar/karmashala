@@ -232,6 +232,9 @@ class PaneTabChip extends ConsumerWidget {
 
     return Draggable<TerminalDrag>(
       data: PaneDrag(paneId),
+      // See the tab chip: the split zone a pane lands in is read off this
+      // offset, so it has to be the pointer.
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: PaneDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
       child: chip,
