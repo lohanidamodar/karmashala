@@ -156,7 +156,7 @@ class PaneLayout {
   PaneGroup? groupOf(String paneId) => _groupByPane[paneId];
 
   /// Divides the region holding [paneId] along [axis], putting a new region
-  /// holding [newPaneId] after it.
+  /// holding [newPaneId] after (or before if [insertBefore] is true) it.
   ///
   /// The new split is always created nested; normalization then flattens it into
   /// the parent when the axes match, which is what turns a second "split right"
@@ -165,10 +165,34 @@ class PaneLayout {
     String paneId,
     SplitAxis axis,
     String newPaneId,
-    String splitId,
-  ) {
+    String splitId, {
+    bool insertBefore = false,
+  }) => splitWithNode(
+    paneId,
+    axis,
+    PaneGroup.of(newPaneId),
+    splitId,
+    insertBefore: insertBefore,
+  );
+
+  /// Divides the region holding [paneId] along [axis], putting [newNode]
+  /// after (or before if [insertBefore] is true) it.
+  PaneLayout splitWithNode(
+    String paneId,
+    SplitAxis axis,
+    PaneNode newNode,
+    String splitId, {
+    bool insertBefore = false,
+  }) {
     if (!contains(paneId)) return this;
-    final replaced = _splitIn(root, paneId, axis, newPaneId, splitId);
+    final replaced = _splitIn(
+      root,
+      paneId,
+      axis,
+      newNode,
+      splitId,
+      insertBefore: insertBefore,
+    );
     final normalized = _normalize(replaced);
     return normalized == null ? this : PaneLayout(normalized);
   }
@@ -371,16 +395,17 @@ PaneNode _splitIn(
   PaneNode node,
   String paneId,
   SplitAxis axis,
-  String newPaneId,
-  String splitId,
-) {
+  PaneNode newNode,
+  String splitId, {
+  bool insertBefore = false,
+}) {
   switch (node) {
     case PaneGroup():
       if (!node.panes.contains(paneId)) return node;
       return PaneSplit(
         splitId,
         axis: axis,
-        children: [node, PaneGroup.of(newPaneId)],
+        children: insertBefore ? [newNode, node] : [node, newNode],
         weights: const [0.5, 0.5],
       );
     case PaneSplit():
@@ -389,7 +414,14 @@ PaneNode _splitIn(
         axis: node.axis,
         children: [
           for (final child in node.children)
-            _splitIn(child, paneId, axis, newPaneId, splitId),
+            _splitIn(
+              child,
+              paneId,
+              axis,
+              newNode,
+              splitId,
+              insertBefore: insertBefore,
+            ),
         ],
         weights: List.of(node.weights),
       );

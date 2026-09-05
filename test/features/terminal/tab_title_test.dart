@@ -329,35 +329,26 @@ void main() {
       expect(controller.titleForTab(opened.tabId), 'Work');
     });
 
-    test('a split tab names its directory, not a region and not a count', () {
-      // It used to end with " (2)". Once every region grew a header of its own
-      // that became two problems at once: the tab repeated a name the region
-      // below it already showed, and counted panes that were both on screen.
-      // The owner read the result as "an extra tab at the top... it doesn't do
-      // anything it's just there".
+    test('a split tab names the visible panes, not a project directory', () {
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\karmashala',
       );
-      controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
+      controller.splitPaneWith(
+        SplitAxis.horizontal,
+        TerminalProfile.commandPrompt,
+      );
 
       final title = controller.titleForTab(tabId);
       expect(title, isNot(contains('(')));
       expect(
         title,
-        'src/karmashala',
-        reason: 'the directory is what the tab is about, and unlike a borrowed '
-            'session name it does not move as focus moves between regions',
+        'src/karmashala | Command Prompt',
+        reason: 'the tab names both visible panes like VS Code, not the project directory',
       );
     });
 
-    test('the rename happens at the split, not when the split is filled', () {
-      // The second report, with a screenshot: `New session` on the tab strip
-      // and `New session` again in the region header directly beneath it, on a
-      // ~2000px window. Splitting starts nothing, so the second region is
-      // *empty* — and the rule used to be gated on how many regions were
-      // occupied, which is one until the user fills it. That is the whole of
-      // the state they are looking at when they split.
+    test('a split tab keeps the focused pane title when split', () {
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\karmashala',
@@ -379,22 +370,39 @@ void main() {
 
       expect(
         controller.titleForTab(tabId),
-        'src/karmashala',
-        reason: 'the tab names itself as soon as a region header exists to '
-            'name the pane, which is the moment of the split',
+        'New session',
+        reason: 'the tab still names the active pane, not the directory',
       );
       expect(
         controller.titleForPane(pane),
         'New session',
-        reason: 'the region header still names the pane — the two rows now '
-            'say different things, which is the point',
       );
     });
 
-    test('a stack in one region renames its tab too', () {
-      // Not only splits: a region holding two panes draws a header as well, so
-      // the tab would echo whichever of them was in front. The gate is "this
-      // tab is more than one pane", which covers both shapes.
+    test('and never the same name twice', () {
+      // What the app really does when the user splits: `openInSlot` is handed
+      // the selected repository's directory, the same one the first pane got,
+      // so both panes report the same label and the join printed it twice.
+      // Naming a thing twice is what the header work was about; a tab is no
+      // different.
+      final tabId = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\karmashala',
+      );
+      controller.splitPaneWith(
+        SplitAxis.horizontal,
+        TerminalProfile.commandPrompt,
+        workingDirectory: r'C:\src\karmashala',
+      );
+
+      expect(
+        controller.titleForTab(tabId),
+        'src/karmashala',
+        reason: 'two panes, one name between them',
+      );
+    });
+
+    test('a stack in one region names the front pane too', () {
       final host = controller.openTab(
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\karmashala',
@@ -415,7 +423,7 @@ void main() {
         hasLength(1),
         reason: 'one region, two panes stacked in it',
       );
-      expect(controller.titleForTab(host), 'src/karmashala');
+      expect(controller.titleForTab(host), 'Command Prompt');
     });
   });
 }

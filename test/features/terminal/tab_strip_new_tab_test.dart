@@ -4,7 +4,6 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -143,7 +142,7 @@ void main() {
     expect(tabCount(container), 1);
 
     final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(PaneTabChip.keyFor(second))),
+      tester.getCenter(find.byKey(paneDragHandleKey(second))),
     );
     await tester.pump();
     await gesture.moveTo(tester.getCenter(find.byKey(kTabStripEmptySpace)));

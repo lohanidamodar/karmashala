@@ -175,6 +175,12 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData dotsSixVertical = IconData(
+    0xeae2,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData dotsThreeVertical = IconData(
     0xe208,
     fontFamily: 'PhosphorRegular',

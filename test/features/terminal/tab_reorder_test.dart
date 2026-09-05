@@ -4,7 +4,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.dart';
+import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -231,6 +231,12 @@ void main() {
     // The verb that already existed, driven the way a mouse drives it rather
     // than with one synthetic jump — reordering must not have taken the drop
     // that moves a tab into a split away from it.
+    //
+    // Where it lands changed with the redesign: the target is the pane itself,
+    // not a header the region no longer draws, and the tab arrives as a region
+    // *beside* the one it was dropped on rather than stacked behind it. What
+    // has not changed is the point of the gesture — the tab leaves the strip
+    // and the session it carried keeps running, mid-command and all.
     final container = harness();
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
@@ -247,6 +253,7 @@ void main() {
         .layout
         .panes
         .single;
+    final guestInstance = controller.instanceFor(guestPane);
     controller.activateTab(host);
 
     await pumpWorkbench(tester, container);
@@ -256,21 +263,39 @@ void main() {
     );
     await tester.pump();
 
+    final leftPane = find.byWidgetPredicate(
+      (widget) => widget is TerminalPaneView && widget.instance.id == left,
+    );
+    final target = tester.getRect(leftPane);
     final gesture = await dragFrom(
       tester,
       tester.getCenter(find.byType(TerminalTabChip).at(1)),
-      tester.getCenter(find.byType(PaneGroupStrip).first),
+      Offset(target.left + target.width * 0.9, target.center.dy),
     );
     await drop(tester, gesture);
 
     final state = container.read(terminalSessionsControllerProvider);
     expect(state.tabs, hasLength(1), reason: 'it left the strip');
-    expect(state.activeTab!.layout.groupOf(left)!.panes, [left, guestPane]);
+    final layout = state.activeTab!.layout;
+    expect(layout.panes, contains(guestPane), reason: 'and joined the split');
+    expect(
+      layout.groupOf(guestPane)!.panes,
+      [guestPane],
+      reason: 'as a region of its own — dropping on a pane splits it',
+    );
+    expect(layout.groupOf(left)!.panes, [left]);
+    expect(
+      controller.instanceFor(guestPane),
+      same(guestInstance),
+      reason: 'the session moved rather than being closed and relaunched',
+    );
   });
 
   testWidgets('a pane still drags out of a region onto the strip', (
     tester,
   ) async {
+    // The grip moved — a region of a split draws no header now, so the handle
+    // is the one floating on the pane — and the gesture did not.
     final container = harness();
     final controller = controllerOf(container);
     controller.openTab(TerminalProfile.powerShell);
@@ -283,7 +308,7 @@ void main() {
 
     final gesture = await dragFrom(
       tester,
-      tester.getCenter(find.byKey(PaneTabChip.keyFor(right))),
+      tester.getCenter(find.byKey(paneDragHandleKey(right))),
       tester.getCenter(find.byKey(kTabStripEmptySpace)),
     );
     await drop(tester, gesture);

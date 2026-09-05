@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
@@ -24,6 +25,7 @@ import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/domain/pane_liveness.dart';
 import '../../features/terminal/domain/terminal_drag.dart';
 import '../../features/terminal/presentation/close_tabs_dialog.dart';
@@ -985,11 +987,11 @@ class _TabStrip extends ConsumerWidget {
     final tabs = _tabs(ref);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
 
-    // The strip is where a pane goes to stop being in a split. Dragging a chip
-    // out of a region's header and dropping it here is the same verb as the
-    // region menu's "Move to a new tab" and the palette's — the gesture the
-    // whole redesign turns on, because a drag that only goes one way leaves
-    // whatever it moved stranded.
+    // The strip is where a pane goes to stop being in a split. Dragging a pane
+    // by its grip and dropping it here is the same verb as the pane menu's
+    // "Move pane to a new tab" and the palette's — the gesture the whole
+    // redesign turns on, because a drag that only goes one way leaves whatever
+    // it moved stranded.
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) => switch (details.data) {
         PaneDrag(:final paneId) => sessions.isPaneInSplit(paneId),
@@ -1156,49 +1158,20 @@ class _TabChip extends ConsumerWidget {
     // palette, because a drag alone is not an affordance everybody has.
     return Draggable<TerminalDrag>(
       data: TabDrag(tab.id),
+      // The pointer, not the grab point: a drop target reads `details.offset`
+      // to decide which half of itself the drag is over, and that offset is
+      // the feedback's corner. Anchored to the child it was half a chip out,
+      // which put every drop in the leading half whatever the pointer did.
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _TabDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
-      child: _dropSlot(ref, chip),
+      child: _TabDropTarget(
+        index: index,
+        tab: tab,
+        chip: chip,
+      ),
     );
   }
-
-  /// [chip], as the place another tab can be dropped into.
-  ///
-  /// The strip could not be rearranged at all until this, because a dragged tab
-  /// had nothing to land *on*: the only target over the strip is the one around
-  /// the whole of it, and that one refuses a tab by design — a tab is already a
-  /// tab. So the chip is both ends of the gesture, a `Draggable` for the tab it
-  /// carries and a `DragTarget` for the place it occupies.
-  ///
-  /// A *pane* is refused here rather than handled. A target that says no is
-  /// skipped and the drop walks up to the strip's own, which is what turns a
-  /// pane dragged out of a region header into a tab — so the two-way street
-  /// stays exactly as wide as it was.
-  ///
-  /// The chip being dragged shows `childWhenDragging` in place of this, so a
-  /// tab can never be dropped on itself and every drop that gets here moves
-  /// something.
-  Widget _dropSlot(WidgetRef ref, Widget chip) => DragTarget<TerminalDrag>(
-    onWillAcceptWithDetails: (details) => details.data is TabDrag,
-    onAcceptWithDetails: (details) {
-      if (details.data case TabDrag(:final tabId)) {
-        ref
-            .read(terminalSessionsControllerProvider.notifier)
-            .reorderTab(tabId, index);
-      }
-    },
-    builder: (context, candidate, _) {
-      final incoming = candidate.isEmpty ? null : candidate.first;
-      if (incoming is! TabDrag) return chip;
-      // Which edge the mark goes on is the direction of travel. A drop takes
-      // this chip's index, so a tab arriving from the right lands *before*
-      // this one and pushes it along; one from the left ends up after it.
-      final from = ref
-          .read(terminalTabsProvider)
-          .indexWhere((candidate) => candidate.id == incoming.tabId);
-      return _markedForDrop(context, chip, leading: from > index);
-    },
-  );
 
   /// Runs [scope], asking first when it would take a running session with it.
   ///
@@ -1285,6 +1258,146 @@ class _TabChip extends ConsumerWidget {
     for (final paneId in tab.layout.panes)
       ref.watch(paneAgentActivityProvider(paneId)),
   ]);
+}
+
+/// The drop target on a tab chip: reorders tabs when dragged over, and splits
+/// the tab when dropped with Ctrl held.
+class _TabDropTarget extends ConsumerStatefulWidget {
+  const _TabDropTarget({
+    required this.index,
+    required this.tab,
+    required this.chip,
+  });
+
+  final int index;
+  final TerminalTab tab;
+  final Widget chip;
+
+  @override
+  ConsumerState<_TabDropTarget> createState() => _TabDropTargetState();
+}
+
+class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
+  /// How near the middle of a chip counts as *on* it, in logical pixels.
+  static const _centreSlack = 1.0;
+
+  bool _dropLeading = true;
+  bool _ctrlPressed = false;
+
+  void _updatePosition(TerminalDrag data, Offset globalPos) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0) {
+      final offMiddle = box.globalToLocal(globalPos).dx - box.size.width / 2;
+      // Which half the pointer is over says where the tab lands. Dead centre
+      // is not a coin flip: it goes the way the drag came from, which is the
+      // whole rule the strip had before it had halves.
+      final leading = offMiddle.abs() <= _centreSlack
+          ? _comesFromTheRight(data)
+          : offMiddle < 0;
+      final ctrl = HardwareKeyboard.instance.isControlPressed ||
+          HardwareKeyboard.instance.isMetaPressed;
+      if (leading != _dropLeading || ctrl != _ctrlPressed) {
+        setState(() {
+          _dropLeading = leading;
+          _ctrlPressed = ctrl;
+        });
+      }
+    }
+  }
+
+  bool _comesFromTheRight(TerminalDrag data) =>
+      data is TabDrag &&
+      ref.read(terminalTabsProvider).indexWhere((t) => t.id == data.tabId) >
+          widget.index;
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    return DragTarget<TerminalDrag>(
+      onWillAcceptWithDetails: (details) {
+        if (details.data is! TabDrag) return false;
+        final tabId = (details.data as TabDrag).tabId;
+        _updatePosition(details.data, details.offset);
+        return tabId != widget.tab.id;
+      },
+      onMove: (details) => _updatePosition(details.data, details.offset),
+      onLeave: (_) {
+        if (mounted) {
+          setState(() {
+            _ctrlPressed = false;
+          });
+        }
+      },
+      onAcceptWithDetails: (details) {
+        if (details.data case TabDrag(:final tabId)) {
+          final ctrl = HardwareKeyboard.instance.isControlPressed ||
+              HardwareKeyboard.instance.isMetaPressed ||
+              _ctrlPressed;
+          if (ctrl && tabId != widget.tab.id) {
+            sessions.splitPaneWithTab(
+              widget.tab.focusedPaneId,
+              tabId,
+              SplitAxis.horizontal,
+              insertBefore: _dropLeading,
+            );
+          } else {
+            final from = ref
+                .read(terminalTabsProvider)
+                .indexWhere((candidate) => candidate.id == tabId);
+            if (from >= 0) {
+              final insertIndex = _dropLeading
+                  ? (from < widget.index ? widget.index - 1 : widget.index)
+                  : (from < widget.index ? widget.index : widget.index + 1);
+              sessions.reorderTab(tabId, insertIndex);
+            }
+          }
+        }
+      },
+      builder: (context, candidate, _) {
+        final incoming = candidate.isEmpty ? null : candidate.first;
+        if (incoming is! TabDrag) return widget.chip;
+
+        if (_ctrlPressed) {
+          return Stack(
+            fit: StackFit.passthrough,
+            children: [
+              widget.chip,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.15),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(Radii.sm),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        AppIcons.squareSplitHorizontal,
+                        size: Chrome.iconSmall,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return _markedForDrop(
+          context,
+          widget.chip,
+          leading: _dropLeading,
+        );
+      },
+    );
+  }
 }
 
 /// What a dragged tab looks like under the pointer.

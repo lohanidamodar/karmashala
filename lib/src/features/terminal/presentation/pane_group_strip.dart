@@ -232,7 +232,10 @@ class PaneTabChip extends ConsumerWidget {
 
     return Draggable<TerminalDrag>(
       data: PaneDrag(paneId),
-      feedback: _PaneDragFeedback(title: title),
+      // See the tab chip: the split zone a pane lands in is read off this
+      // offset, so it has to be the pointer.
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: PaneDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
       child: chip,
     );
@@ -289,8 +292,11 @@ class PaneTabChip extends ConsumerWidget {
 /// What a dragged pane looks like under the pointer — the same label-only
 /// treatment a dragged tab gets, and for the same reason: dragging a
 /// control that can still be clicked reads as a bug.
-class _PaneDragFeedback extends StatelessWidget {
-  const _PaneDragFeedback({required this.title});
+///
+/// Shared with the grip a split pane is dragged out by, so a pane looks the
+/// same in flight whichever handle started it.
+class PaneDragFeedback extends StatelessWidget {
+  const PaneDragFeedback({required this.title, super.key});
 
   final String title;
 

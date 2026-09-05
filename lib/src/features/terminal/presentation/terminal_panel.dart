@@ -23,6 +23,7 @@ import '../data/terminal_instance.dart';
 import '../data/theme_discovery.dart';
 import '../domain/command_blocks.dart';
 import '../domain/mounted_tabs.dart';
+import '../domain/terminal_drag.dart';
 import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
@@ -521,7 +522,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       focused: tabActive && group.activePaneId == tab.focusedPaneId,
       showFocusRing: split,
     );
-    if (empty || (!split && group.panes.length < 2)) return pane;
+    if (empty || group.panes.length < 2) return pane;
     return Column(
       children: [
         PaneGroupStrip(
@@ -568,7 +569,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       settingsControllerProvider.select((s) => s.terminalChordOverrides),
     );
 
-    return GestureDetector(
+    final paneWidget = GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTapDown: (_) => _sessions.focusPane(paneId),
       child: DecoratedBox(
@@ -652,6 +653,28 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           ],
         ),
       ),
+    );
+
+    final paneWithActions = Stack(
+      children: [
+        Positioned.fill(child: paneWidget),
+        if (showFocusRing)
+          Positioned(
+            top: Insets.xs,
+            right: Insets.xs,
+            child: _PaneFloatingActions(
+              paneId: paneId,
+              focused: focused,
+              onMoveToNewTab: () => _sessions.movePaneToNewTab(paneId),
+              onClose: () => _sessions.closePane(paneId),
+            ),
+          ),
+      ],
+    );
+
+    return _PaneDropTarget(
+      paneId: paneId,
+      child: paneWithActions,
     );
   }
 
@@ -1178,3 +1201,287 @@ extension on TerminalTheme {
     );
   }
 }
+
+enum _SplitDropZone { left, right, top, bottom }
+
+/// A drop target over an active terminal pane that allows splitting the pane
+/// horizontally or vertically by dragging another tab or pane over it.
+class _PaneDropTarget extends ConsumerStatefulWidget {
+  const _PaneDropTarget({
+    required this.paneId,
+    required this.child,
+  });
+
+  final String paneId;
+  final Widget child;
+
+  @override
+  ConsumerState<_PaneDropTarget> createState() => _PaneDropTargetState();
+}
+
+class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
+  _SplitDropZone? _activeZone;
+
+  void _updateZone(Offset globalPos) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      final local = box.globalToLocal(globalPos);
+      final dx = (local.dx / box.size.width).clamp(0.0, 1.0);
+      final dy = (local.dy / box.size.height).clamp(0.0, 1.0);
+      final distH = (dx - 0.5).abs();
+      final distV = (dy - 0.5).abs();
+      final zone = distH >= distV
+          ? (dx < 0.5 ? _SplitDropZone.left : _SplitDropZone.right)
+          : (dy < 0.5 ? _SplitDropZone.top : _SplitDropZone.bottom);
+      if (zone != _activeZone) {
+        setState(() => _activeZone = zone);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    return DragTarget<TerminalDrag>(
+      onWillAcceptWithDetails: (details) {
+        final data = details.data;
+        final accepts = switch (data) {
+          TabDrag(:final tabId) =>
+            sessions.canSplitPaneWithTab(widget.paneId, tabId),
+          PaneDrag(:final paneId) =>
+            sessions.canSplitPaneWithPane(widget.paneId, paneId),
+        };
+        if (accepts) {
+          _updateZone(details.offset);
+        }
+        return accepts;
+      },
+      onMove: (details) => _updateZone(details.offset),
+      onLeave: (_) {
+        if (mounted && _activeZone != null) {
+          setState(() => _activeZone = null);
+        }
+      },
+      onAcceptWithDetails: (details) {
+        final zone = _activeZone ?? _SplitDropZone.right;
+        final axis = (zone == _SplitDropZone.left || zone == _SplitDropZone.right)
+            ? SplitAxis.horizontal
+            : SplitAxis.vertical;
+        final insertBefore =
+            (zone == _SplitDropZone.left || zone == _SplitDropZone.top);
+
+        switch (details.data) {
+          case TabDrag(:final tabId):
+            sessions.splitPaneWithTab(
+              widget.paneId,
+              tabId,
+              axis,
+              insertBefore: insertBefore,
+            );
+          case PaneDrag(:final paneId):
+            sessions.splitPaneWithPane(
+              widget.paneId,
+              paneId,
+              axis,
+              insertBefore: insertBefore,
+            );
+        }
+        if (mounted) setState(() => _activeZone = null);
+      },
+      builder: (context, candidate, _) {
+        if (candidate.isEmpty || _activeZone == null) {
+          return widget.child;
+        }
+
+        final theme = Theme.of(context);
+        final isHorizontal =
+            _activeZone == _SplitDropZone.left || _activeZone == _SplitDropZone.right;
+
+        return Stack(
+          children: [
+            widget.child,
+            Positioned.fill(
+              child: Align(
+                alignment: switch (_activeZone!) {
+                  _SplitDropZone.left => Alignment.centerLeft,
+                  _SplitDropZone.right => Alignment.centerRight,
+                  _SplitDropZone.top => Alignment.topCenter,
+                  _SplitDropZone.bottom => Alignment.bottomCenter,
+                },
+                child: FractionallySizedBox(
+                  widthFactor: isHorizontal ? 0.5 : 1.0,
+                  heightFactor: isHorizontal ? 1.0 : 0.5,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                        border: Border.all(
+                          color: theme.colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Insets.sm,
+                            vertical: Insets.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(Radii.sm),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isHorizontal
+                                    ? AppIcons.squareSplitHorizontal
+                                    : AppIcons.squareSplitVertical,
+                                size: Chrome.iconSmall,
+                                color: theme.colorScheme.onPrimary,
+                              ),
+                              const SizedBox(width: Insets.xs),
+                              Text(
+                                'Drop to split',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The grip a split pane is dragged out by, so a test can aim at it.
+///
+/// Named rather than found by geometry for the reason [kTabStripEmptySpace] is:
+/// the handle *is* the subject of the gesture.
+Key paneDragHandleKey(String paneId) => ValueKey('pane-handle/$paneId');
+
+/// The floating handle in the top-right corner of a split pane: a grip to drag
+/// the pane by, and the two verbs that used to live in a per-region header.
+///
+/// A region of a split no longer draws a header (see [_buildRegion]), so this
+/// is the pane's only handle — including the grip that starts a [PaneDrag],
+/// which is what still lets a pane be dropped on the tab strip to become a tab,
+/// on another region's header to join it, or on another pane to re-split.
+class _PaneFloatingActions extends ConsumerStatefulWidget {
+  const _PaneFloatingActions({
+    required this.paneId,
+    required this.focused,
+    required this.onMoveToNewTab,
+    required this.onClose,
+  });
+
+  final String paneId;
+  final bool focused;
+  final VoidCallback onMoveToNewTab;
+  final VoidCallback onClose;
+
+  @override
+  ConsumerState<_PaneFloatingActions> createState() =>
+      _PaneFloatingActionsState();
+}
+
+class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final opacity = _hovered ? 1.0 : (widget.focused ? 0.35 : 0.0);
+    final title = ref.watch(terminalPaneTitleProvider(widget.paneId));
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedOpacity(
+        opacity: opacity,
+        duration: const Duration(milliseconds: 150),
+        // Invisible is also unclickable: the box stays to keep the hover
+        // target and the geometry the same in every state.
+        child: IgnorePointer(
+          ignoring: opacity == 0.0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(Radii.sm),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.5),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Draggable<TerminalDrag>(
+                  key: paneDragHandleKey(widget.paneId),
+                  data: PaneDrag(widget.paneId),
+                  dragAnchorStrategy: pointerDragAnchorStrategy,
+                  feedback: PaneDragFeedback(title: title),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: Tooltip(
+                      message: 'Drag the pane elsewhere',
+                      child: SizedBox(
+                        width: 16,
+                        height: 22,
+                        child: Icon(
+                          AppIcons.dotsSixVertical,
+                          size: 14,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Move pane to a new tab',
+                  iconSize: Chrome.iconSmall,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                  padding: EdgeInsets.zero,
+                  icon: Icon(
+                    AppIcons.terminalWindow,
+                    size: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onPressed: widget.onMoveToNewTab,
+                ),
+                const SizedBox(width: 2),
+                IconButton(
+                  tooltip: 'Close pane',
+                  iconSize: Chrome.iconSmall,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                  padding: EdgeInsets.zero,
+                  icon: Icon(
+                    AppIcons.x,
+                    size: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onPressed: widget.onClose,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

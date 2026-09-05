@@ -92,6 +92,26 @@ void main() {
     expect(get$().activeTabId, first);
   });
 
+  test('focusing the pane already focused tells the topology nothing', () {
+    // A pane calls `focusPane` on every pointer down, so a click while
+    // selecting text used to republish the layout and rebuild the tab strip.
+    controller.openTab(TerminalProfile.powerShell);
+    final split = controller.splitPaneWith(
+      SplitAxis.horizontal,
+      TerminalProfile.powerShell,
+    )!;
+    final before = get$().tabs;
+
+    controller.focusPane(split);
+
+    expect(get$().activeTab!.focusedPaneId, split);
+    expect(
+      identical(get$().tabs, before),
+      isTrue,
+      reason: 'nothing changed, so nothing was published',
+    );
+  });
+
   test('the pane index survives splitting and closing', () {
     final tab = controller.openTab(TerminalProfile.powerShell);
     final split = controller.splitPaneWith(

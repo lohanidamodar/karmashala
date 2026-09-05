@@ -942,6 +942,124 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return true;
   }
 
+  /// Whether [sourceTabId] can be dropped onto [targetPaneId] to split it.
+  bool canSplitPaneWithTab(String targetPaneId, String sourceTabId) {
+    final target = _tabContaining(targetPaneId);
+    final source = _tabById(sourceTabId);
+    return target != null && source != null && target.id != sourceTabId;
+  }
+
+  /// Splits the region holding [targetPaneId] with the entire layout of [sourceTabId].
+  ///
+  /// Removes [sourceTabId] from the tab strip and inserts its layout next to [targetPaneId]
+  /// along [axis] (before if [insertBefore] is true, else after).
+  bool splitPaneWithTab(
+    String targetPaneId,
+    String sourceTabId,
+    SplitAxis axis, {
+    bool insertBefore = false,
+  }) {
+    if (!canSplitPaneWithTab(targetPaneId, sourceTabId)) return false;
+    final target = _tabContaining(targetPaneId)!;
+    final source = _tabById(sourceTabId)!;
+
+    _tabs.removeWhere((t) => t.id == source.id);
+    _tabsMutated();
+
+    final targetIndex = _tabIndex[target.id];
+    if (targetIndex == null) return false;
+
+    final updatedLayout = target.layout.splitWithNode(
+      targetPaneId,
+      axis,
+      source.layout.root,
+      _newId(),
+      insertBefore: insertBefore,
+    );
+
+    final focused = source.focusedPaneId;
+    _tabs[targetIndex] = target.copyWith(
+      layout: updatedLayout.activate(focused),
+      focusedPaneId: focused,
+    );
+    _tabsMutated();
+    _activeTabId = target.id;
+    _publish();
+    persistStructure();
+    _focusActivePane();
+    return true;
+  }
+
+  /// Whether [sourcePaneId] can be dropped onto [targetPaneId] to split it.
+  bool canSplitPaneWithPane(String targetPaneId, String sourcePaneId) {
+    if (targetPaneId == sourcePaneId || _isEmptyRegion(sourcePaneId)) return false;
+    final target = _tabContaining(targetPaneId);
+    final source = _tabContaining(sourcePaneId);
+    return target != null && source != null;
+  }
+
+  /// Splits the region holding [targetPaneId] with [sourcePaneId] along [axis].
+  bool splitPaneWithPane(
+    String targetPaneId,
+    String sourcePaneId,
+    SplitAxis axis, {
+    bool insertBefore = false,
+  }) {
+    if (!canSplitPaneWithPane(targetPaneId, sourcePaneId)) return false;
+    final target = _tabContaining(targetPaneId)!;
+    final sourceTab = _tabContaining(sourcePaneId)!;
+
+    if (sourceTab.id == target.id) {
+      final closedLayout = target.layout.close(sourcePaneId);
+      if (closedLayout == null) return false;
+      final targetIndex = _tabIndex[target.id]!;
+      final updatedLayout = closedLayout.splitWithNode(
+        targetPaneId,
+        axis,
+        PaneGroup.of(sourcePaneId),
+        _newId(),
+        insertBefore: insertBefore,
+      );
+      _tabs[targetIndex] = target.copyWith(
+        layout: updatedLayout.activate(sourcePaneId),
+        focusedPaneId: sourcePaneId,
+      );
+    } else {
+      final closedSource = sourceTab.layout.close(sourcePaneId);
+      if (closedSource == null) {
+        _tabs.removeWhere((t) => t.id == sourceTab.id);
+      } else {
+        final sourceIndex = _tabIndex[sourceTab.id]!;
+        final newFocused = closedSource.visiblePanes.contains(sourceTab.focusedPaneId)
+            ? sourceTab.focusedPaneId
+            : closedSource.visiblePanes.first;
+        _tabs[sourceIndex] = sourceTab.copyWith(
+          layout: closedSource,
+          focusedPaneId: newFocused,
+        );
+      }
+      _tabsMutated();
+      final targetIndex = _tabIndex[target.id]!;
+      final updatedLayout = target.layout.splitWithNode(
+        targetPaneId,
+        axis,
+        PaneGroup.of(sourcePaneId),
+        _newId(),
+        insertBefore: insertBefore,
+      );
+      _tabs[targetIndex] = target.copyWith(
+        layout: updatedLayout.activate(sourcePaneId),
+        focusedPaneId: sourcePaneId,
+      );
+    }
+    _tabsMutated();
+    _activeTabId = target.id;
+    _publish();
+    persistStructure();
+    _focusActivePane();
+    return true;
+  }
+
   /// Whether [paneId] could be moved into the region holding [targetPaneId].
   ///
   /// The pane-sized counterpart of [canMoveTabIntoSlot], asked by a region
@@ -1157,6 +1275,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void focusPane(String paneId) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
+    // Already here: a press inside the pane you are already typing in must not
+    // republish the layout. A pane calls this on *every* pointer down, so
+    // without this a click while selecting text rebuilt the whole tab strip.
+    if (_activeTabId == tab.id &&
+        tab.focusedPaneId == paneId &&
+        tab.layout.groupOf(paneId)?.activePaneId == paneId) {
+      _focusActivePane();
+      return;
+    }
     _activeTabId = tab.id;
     _replaceTab(
       tab.copyWith(layout: tab.layout.activate(paneId), focusedPaneId: paneId),
@@ -1184,47 +1311,25 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   String titleForTab(String tabId) {
     final tab = _tabById(tabId);
     if (tab == null) return 'Terminal';
-    // An empty region has no name of its own, so a tab whose focus is sitting
-    // in one keeps the name of whatever is actually running in it rather than
-    // renaming itself "Terminal" the moment the user splits.
+    final visible =
+        tab.layout.visiblePanes.where((p) => !_isEmptyRegion(p)).toList();
+    if (visible.length > 1) {
+      // Deduplicated: a split inherits the selected repository's directory, so
+      // both panes report the same label and the join printed it twice. Saying
+      // a thing once is the whole of what the header work was about.
+      final names = <String>[];
+      for (final pane in visible) {
+        final name = _titles.putIfAbsent(pane, () => _titleForPane(pane));
+        if (!names.contains(name)) names.add(name);
+      }
+      return names.join(' | ');
+    }
     final named = _isEmptyRegion(tab.focusedPaneId)
         ? tab.layout.panes.firstWhere(
             (paneId) => !_isEmptyRegion(paneId),
             orElse: () => tab.focusedPaneId,
           )
         : tab.focusedPaneId;
-    // A tab that is more than one pane names *itself*, not one of its panes.
-    //
-    // **The gate is the one the header is drawn on, and nothing else.** A pane
-    // header appears exactly when `tab.layout.panes.length > 1` — either the
-    // tab is split, or one region has a stack in it — so this is the condition
-    // under which borrowing a pane's name prints the same word twice, once on
-    // the tab and once in the row directly beneath it. It used to read
-    // `occupied.length > 1`, which asks something else: whether two regions
-    // are *filled*. That is false for the whole of the state right after every
-    // split, when one region holds the pane and the other is still the empty
-    // invitation — which is precisely the moment the user is looking, and the
-    // moment the owner screenshotted with `New session` printed twice, one row
-    // under the other, on a 2000px window.
-    //
-    // The directory is what a terminal tab is *about*, and unlike a borrowed
-    // session name it does not change as focus moves between regions. Taken
-    // from the first occupied region rather than the focused one for exactly
-    // that reason. The `(2)` that used to follow is gone for the same reason
-    // the borrowing is: the regions it counted are all on screen already.
-    if (tab.layout.panes.length > 1) {
-      final occupied = tab.layout.panes.where((id) => !_isEmptyRegion(id));
-      final first = occupied.isEmpty ? null : occupied.first;
-      final directory = first == null
-          ? null
-          : _instances[first]?.workingDirectory;
-      if (directory != null && directory.isNotEmpty) {
-        return directoryLabel(directory, home: _homeDirectory);
-      }
-      // No directory to name it by — a stub pane, or a shell that has not
-      // reported one. Fall back to the borrowed name, but still without the
-      // count.
-    }
     return _titles.putIfAbsent(named, () => _titleForPane(named));
   }
 
