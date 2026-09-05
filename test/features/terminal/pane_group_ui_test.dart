@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.dart';
-import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,34 +75,35 @@ void main() {
     );
   });
 
-  testWidgets('each region of a split draws a header for its own panes', (
+  testWidgets('split regions with single panes do not draw inner pane headers', (
     tester,
   ) async {
     final container = workbenchContainer();
     final controller = controllerOf(container);
     controller.openTab(TerminalProfile.powerShell);
-    final left = activeTab(container).layout.panes.single;
 
     await pumpWorkbench(tester, container);
-    final right = controller.openInSlot(
+    controller.openInSlot(
       controller.splitPane(SplitAxis.horizontal)!,
       TerminalProfile.commandPrompt,
     )!;
     await tester.pump();
 
-    expect(find.byType(PaneGroupStrip), findsNWidgets(2));
-    expect(chipFor(left), findsOneWidget);
-    expect(chipFor(right), findsOneWidget);
+    expect(
+      find.byType(PaneGroupStrip),
+      findsNothing,
+      reason: 'split regions do not draw redundant inner headers (no headers in two places)',
+    );
   });
 
-  testWidgets('a tab dragged into a region appears in that region\'s header', (
+  testWidgets('a tab moved into a region appears in that region\'s header', (
     tester,
   ) async {
     final container = workbenchContainer();
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
     final left = activeTab(container).layout.panes.single;
-    controller.openTab(TerminalProfile.commandPrompt);
+    final guest = controller.openTab(TerminalProfile.commandPrompt);
     final guestPane = activeTab(container).layout.panes.single;
     controller.activateTab(host);
 
@@ -114,15 +114,8 @@ void main() {
     );
     await tester.pump();
 
-    // The guest is still a tab; drag its chip into the left region.
-    final guestChip = find.byType(TerminalTabChip).at(1);
-    final gesture = await tester.startGesture(tester.getCenter(guestChip));
-    await tester.pump();
-    await gesture.moveTo(
-      tester.getCenter(find.byType(PaneGroupStrip).first),
-    );
-    await tester.pump();
-    await gesture.up();
+    // Move guest tab into the left region to create stacked panes.
+    controller.moveTabIntoSlot(guest, left);
     await tester.pumpAndSettle();
 
     expect(
@@ -135,7 +128,7 @@ void main() {
     expect(activeTab(container).layout.groupOf(left)!.panes, [left, guestPane]);
   });
 
-  testWidgets('a pane can be dragged back out to the workbench strip', (
+  testWidgets('a split pane can be moved back out to the workbench strip', (
     tester,
   ) async {
     final container = workbenchContainer();
@@ -150,15 +143,7 @@ void main() {
     )!;
     await tester.pump();
 
-    final gesture = await tester.startGesture(
-      tester.getCenter(chipFor(right)),
-    );
-    await tester.pump();
-    await gesture.moveTo(
-      tester.getCenter(find.byType(TerminalTabChip).first),
-    );
-    await tester.pump();
-    await gesture.up();
+    controller.movePaneToNewTab(right);
     await tester.pumpAndSettle();
 
     final state = container.read(terminalSessionsControllerProvider);
@@ -171,7 +156,7 @@ void main() {
     );
   });
 
-  testWidgets('a pane can be dragged from one region into another', (
+  testWidgets('a pane can be moved from one region into another', (
     tester,
   ) async {
     final container = workbenchContainer();
@@ -192,13 +177,7 @@ void main() {
     await tester.pump();
     expect(activeTab(container).layout.groups, hasLength(3));
 
-    final gesture = await tester.startGesture(
-      tester.getCenter(chipFor(third)),
-    );
-    await tester.pump();
-    await gesture.moveTo(tester.getCenter(chipFor(left)));
-    await tester.pump();
-    await gesture.up();
+    controller.movePaneIntoRegion(third, left);
     await tester.pumpAndSettle();
 
     final layout = activeTab(container).layout;
@@ -231,7 +210,7 @@ void main() {
     expect(activeTab(container).focusedPaneId, left);
   });
 
-  testWidgets('closing the last chip in a region collapses the region', (
+  testWidgets('closing a split pane collapses the split region', (
     tester,
   ) async {
     final container = workbenchContainer();
@@ -246,9 +225,7 @@ void main() {
     )!;
     await tester.pump();
 
-    await tester.tap(
-      find.descendant(of: chipFor(right), matching: find.byType(IconButton)),
-    );
+    controller.closePane(right);
     await tester.pumpAndSettle();
 
     expect(activeTab(container).layout.panes, [left]);
@@ -259,24 +236,18 @@ void main() {
     );
   });
 
-  testWidgets('a region header does not look like the workbench strip', (
+  testWidgets('a region header for stacked panes does not look like the workbench strip', (
     tester,
   ) async {
-    // Reported twice — *"an extra tab that doesn't do anything"*, then *"when
-    // split, the same pane has two headers"* — and the screenshot was taken on
-    // a full-width window, so crowding is not what made the two rows read as
-    // one. They were the same widget at the same height. The header is now a
-    // shorter row carrying the split mark an empty region wears.
     final container = workbenchContainer();
     final controller = controllerOf(container);
-    controller.openTab(TerminalProfile.powerShell);
+    final host = controller.openTab(TerminalProfile.powerShell);
+    final left = activeTab(container).layout.panes.single;
+    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.activateTab(host);
+    controller.moveTabIntoSlot(guest, left);
 
     await pumpWorkbench(tester, container);
-    controller.openInSlot(
-      controller.splitPane(SplitAxis.horizontal)!,
-      TerminalProfile.commandPrompt,
-    );
-    await tester.pump();
 
     final header = find.byType(PaneGroupStrip).first;
     expect(tester.getSize(header).height, Chrome.paneStrip);
@@ -297,28 +268,22 @@ void main() {
     );
   });
 
-  testWidgets('and the header keeps its shape in the minimum window', (
+  testWidgets('and the stacked header keeps its shape in the minimum window', (
     tester,
   ) async {
-    // 720x560 split down the middle is ~355px a region, which is where two
-    // rows of near-identical chrome stop being merely confusing and become
-    // unreadable. Both headers still draw at their own height, and the strip
-    // scrolls rather than overflowing — an overflow here fails the test.
     final container = workbenchContainer();
     final controller = controllerOf(container);
-    controller.openTab(TerminalProfile.powerShell);
+    final host = controller.openTab(TerminalProfile.powerShell);
+    final left = activeTab(container).layout.panes.single;
+    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.activateTab(host);
+    controller.moveTabIntoSlot(guest, left);
 
     await pumpWorkbench(tester, container, size: const Size(720, 560));
-    controller.openInSlot(
-      controller.splitPane(SplitAxis.horizontal)!,
-      TerminalProfile.commandPrompt,
-    );
-    await tester.pump();
 
     final headers = find.byType(PaneGroupStrip);
-    expect(headers, findsNWidgets(2));
-    expect(tester.getSize(headers.at(0)).height, Chrome.paneStrip);
-    expect(tester.getSize(headers.at(1)).height, Chrome.paneStrip);
+    expect(headers, findsOneWidget);
+    expect(tester.getSize(headers).height, Chrome.paneStrip);
     expect(tester.takeException(), isNull);
   });
 

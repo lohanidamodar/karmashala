@@ -1302,24 +1302,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   String titleForTab(String tabId) {
     final tab = _tabById(tabId);
     if (tab == null) return 'Terminal';
-    // An empty region has no name of its own, so a tab whose focus is sitting
-    // in one keeps the name of whatever is actually running in it rather than
-    // renaming itself "Terminal" the moment the user splits.
+    final visible =
+        tab.layout.visiblePanes.where((p) => !_isEmptyRegion(p)).toList();
+    if (visible.length > 1) {
+      return visible
+          .map((p) => _titles.putIfAbsent(p, () => _titleForPane(p)))
+          .join(' | ');
+    }
     final named = _isEmptyRegion(tab.focusedPaneId)
         ? tab.layout.panes.firstWhere(
             (paneId) => !_isEmptyRegion(paneId),
             orElse: () => tab.focusedPaneId,
           )
         : tab.focusedPaneId;
-    // A tab that is more than one pane names *itself*, not one of its panes.
-    //
-    // **The gate is the one the header is drawn on, and nothing else.** A pane
-    // header appears exactly when `tab.layout.panes.length > 1` — either the
-    // tab is split, or one region has a stack in it — so this is the condition
-    // under which borrowing a pane's name prints the same word twice, once on
-    // the tab and once in the row directly beneath it. It used to read
-    // `occupied.length > 1`, which asks something else: whether two regions
-    // are *filled*. That is false for the whole of the state right after every
     return _titles.putIfAbsent(named, () => _titleForPane(named));
   }
 

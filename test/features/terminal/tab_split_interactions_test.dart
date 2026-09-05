@@ -68,7 +68,7 @@ void main() {
       final mergedTab = tabs.single;
       expect(mergedTab.layout.panes, containsAll([pane1, pane2]));
       expect(mergedTab.focusedPaneId, pane2);
-      expect(controller.titleForTab(mergedTab.id), 'Command Prompt');
+      expect(controller.titleForTab(mergedTab.id), 'PowerShell | Command Prompt');
     });
 
     test('splitPaneWithPane splits panes within same tab', () {
@@ -122,7 +122,7 @@ void main() {
 
       // Initially pane2 was opened and focused.
       expect(controller.state.activeTab!.focusedPaneId, pane2);
-      expect(controller.titleForTab(tabId), 'Command Prompt');
+      expect(controller.titleForTab(tabId), 'PowerShell | Command Prompt');
 
       // Tap on pane 1.
       final pane1Finder = find.byWidgetPredicate(
@@ -132,9 +132,9 @@ void main() {
       await tester.tap(pane1Finder);
       await tester.pump();
 
-      // Focusing pane1 should update tab's focusedPaneId and the tab title.
+      // Focusing pane1 should update tab's focusedPaneId.
       expect(controller.state.activeTab!.focusedPaneId, pane1);
-      expect(controller.titleForTab(tabId), 'PowerShell');
+      expect(controller.titleForTab(tabId), 'PowerShell | Command Prompt');
     });
 
     testWidgets('dragging tab over terminal pane shows split overlay and splits', (

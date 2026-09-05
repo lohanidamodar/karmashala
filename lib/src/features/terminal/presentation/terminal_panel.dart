@@ -522,7 +522,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       focused: tabActive && group.activePaneId == tab.focusedPaneId,
       showFocusRing: split,
     );
-    if (empty || (!split && group.panes.length < 2)) return pane;
+    if (empty || group.panes.length < 2) return pane;
     return Column(
       children: [
         PaneGroupStrip(
@@ -655,9 +655,25 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       ),
     );
 
+    final paneWithActions = Stack(
+      children: [
+        Positioned.fill(child: paneWidget),
+        if (showFocusRing)
+          Positioned(
+            top: Insets.xs,
+            right: Insets.xs,
+            child: _PaneFloatingActions(
+              focused: focused,
+              onMoveToNewTab: () => _sessions.movePaneToNewTab(paneId),
+              onClose: () => _sessions.closePane(paneId),
+            ),
+          ),
+      ],
+    );
+
     return _PaneDropTarget(
       paneId: paneId,
-      child: paneWidget,
+      child: paneWithActions,
     );
   }
 
@@ -1346,3 +1362,89 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
     );
   }
 }
+
+/// Floating action buttons in the top-right corner of a split pane, giving the
+/// user an immediate handle to move the pane to a new tab or close it without
+/// drawing a permanent sub-header row.
+class _PaneFloatingActions extends StatefulWidget {
+  const _PaneFloatingActions({
+    required this.focused,
+    required this.onMoveToNewTab,
+    required this.onClose,
+  });
+
+  final bool focused;
+  final VoidCallback onMoveToNewTab;
+  final VoidCallback onClose;
+
+  @override
+  State<_PaneFloatingActions> createState() => _PaneFloatingActionsState();
+}
+
+class _PaneFloatingActionsState extends State<_PaneFloatingActions> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final opacity = _hovered ? 1.0 : (widget.focused ? 0.35 : 0.0);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: opacity == 0.0
+          ? const SizedBox(width: 52, height: 26)
+          : AnimatedOpacity(
+              opacity: opacity,
+              duration: const Duration(milliseconds: 150),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Move pane to a new tab',
+                      iconSize: Chrome.iconSmall,
+                      visualDensity: VisualDensity.compact,
+                      constraints:
+                          const BoxConstraints(minWidth: 22, minHeight: 22),
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        AppIcons.terminalWindow,
+                        size: 14,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      onPressed: widget.onMoveToNewTab,
+                    ),
+                    const SizedBox(width: 2),
+                    IconButton(
+                      tooltip: 'Close pane',
+                      iconSize: Chrome.iconSmall,
+                      visualDensity: VisualDensity.compact,
+                      constraints:
+                          const BoxConstraints(minWidth: 22, minHeight: 22),
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        AppIcons.x,
+                        size: 14,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      onPressed: widget.onClose,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+

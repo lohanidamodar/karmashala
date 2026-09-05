@@ -329,7 +329,7 @@ void main() {
       expect(controller.titleForTab(opened.tabId), 'Work');
     });
 
-    test('a split tab names the focused pane, not a project directory', () {
+    test('a split tab names the visible panes, not a project directory', () {
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\karmashala',
@@ -343,8 +343,8 @@ void main() {
       expect(title, isNot(contains('(')));
       expect(
         title,
-        'Command Prompt',
-        reason: 'the tab names the active focused pane like VS Code, not the project directory',
+        'src/karmashala | Command Prompt',
+        reason: 'the tab names both visible panes like VS Code, not the project directory',
       );
     });
 
