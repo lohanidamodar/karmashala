@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner_providers.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
 import '../../cli_detection/domain/imported_session.dart';
@@ -31,6 +32,10 @@ import 'project_service_provider.dart';
 /// refreshed explicitly after mutations.
 class ProjectsController extends Notifier<List<Project>> {
   final Map<String, Future<ImportSummary>> _syncs = {};
+
+  /// The once-per-lifecycle import, held so a second caller joins it rather
+  /// than starting a second walk of every store.
+  Future<ImportSummary>? _lifecycleImport;
 
   @override
   List<Project> build() => ref.watch(projectDaoProvider).getAll();
@@ -67,23 +72,61 @@ class ProjectsController extends Notifier<List<Project>> {
     }
   }
 
+  /// The **one** CLI-store import of this app's life, run after the first
+  /// frame (`AppLifecycle.importCliSessions`).
+  ///
+  /// It used to run on every project expand *and* every project selection, and
+  /// each run was a full walk of every store — so a workspace of five projects
+  /// paid five concurrent walks of the owner's 663-file Claude store across
+  /// `\\wsl.localhost`, with the Explorer's spinner up for all of it. That is
+  /// the "what is it loading on every expand?" the owner profiled.
+  ///
+  /// Every repository in the workspace, in one pass, because the walk is per
+  /// *store* and not per project: doing it project by project would read the
+  /// same store once per project. What is left for the user is the per-project
+  /// **Refresh CLI sessions**, which is the same import narrowed to one
+  /// project's repositories.
+  Future<ImportSummary> importCliSessionsOnce() {
+    return _lifecycleImport ??= _import(
+      () => ref.read(repositoryDaoProvider).getAll(),
+      onDone: () => ref.read(cliSessionsCheckedProvider.notifier).stampAll(),
+    );
+  }
+
   /// Discovers CLI sessions created outside the app for an existing project.
   /// Concurrent requests for the same project share one filesystem scan.
   Future<ImportSummary> syncSessions(String projectId) {
     return _syncs.putIfAbsent(projectId, () async {
-      ref.read(sessionSyncingProvider.notifier).start();
       try {
-        final repos = ref.read(repositoryDaoProvider).getByProject(projectId);
-        final summary = await ref.read(autoImportRunnerProvider)(repos);
-        if (summary.sessions > 0) {
-          ref.read(sessionsRevisionProvider.notifier).bump();
-        }
-        return summary;
+        return await _import(
+          () => ref.read(repositoryDaoProvider).getByProject(projectId),
+          onDone: () => ref
+              .read(cliSessionsCheckedProvider.notifier)
+              .stampProject(projectId),
+        );
       } finally {
         _syncs.remove(projectId);
-        ref.read(sessionSyncingProvider.notifier).finish();
       }
     });
+  }
+
+  /// One import, with the spinner held for exactly its duration and the
+  /// freshness stamped only once it really finished.
+  Future<ImportSummary> _import(
+    List<Repository> Function() repositories, {
+    required void Function() onDone,
+  }) async {
+    ref.read(sessionSyncingProvider.notifier).start();
+    try {
+      final summary = await ref.read(autoImportRunnerProvider)(repositories());
+      if (summary.sessions > 0) {
+        ref.read(sessionsRevisionProvider.notifier).bump();
+      }
+      onDone();
+      return summary;
+    } finally {
+      ref.read(sessionSyncingProvider.notifier).finish();
+    }
   }
 
   /// Rebuilds the workspace project list entirely from Claude/Codex stores.
@@ -109,6 +152,9 @@ class ProjectsController extends Notifier<List<Project>> {
     ref.read(selectedImportedSessionIdProvider.notifier).select(null);
 
     final summary = ref.read(projectImportServiceProvider).importAll(detected);
+    // Every store was read and everything in them imported, so this reading
+    // does speak for the whole workspace.
+    ref.read(cliSessionsCheckedProvider.notifier).stampAll();
     ref.read(sessionsRevisionProvider.notifier).bump();
     _refresh();
     return summary;
@@ -405,20 +451,63 @@ class SelectedProjectController extends Notifier<String?> {
   @override
   String? build() => null;
 
-  void select(String? id) {
-    state = id;
-    if (id != null) {
-      // Selection should remain immediate; discovery completes in the
-      // background and bumps the session list when new CLI sessions are found.
-      unawaited(
-        ref
-            .read(projectsControllerProvider.notifier)
-            .syncSessions(id)
-            .catchError((_) => const ImportSummary()),
-      );
-    }
+  /// Selecting a project scans nothing.
+  ///
+  /// It used to start a full CLI-store import — so every click in the Explorer,
+  /// and every expand (which selects too), walked every store again. The import
+  /// runs once after the first frame now, and on demand from the project row's
+  /// **Refresh CLI sessions**.
+  void select(String? id) => state = id;
+}
+
+/// When the CLI stores were last read, and for which project.
+///
+/// §19's rule, applied to a list that can now be out of date: a reading is
+/// shown with its age, and *no* reading says so rather than saying nothing.
+/// Before the first-frame import lands, [all] is null and the Explorer says the
+/// stores have not been checked instead of implying the tree is current.
+class CliSessionsChecked {
+  const CliSessionsChecked({this.all, this.byProject = const {}});
+
+  /// When every store was last read for every repository in the workspace.
+  final DateTime? all;
+
+  /// When one project was last refreshed on its own. A per-project refresh
+  /// reads the stores but only imports for that project, so it may not speak
+  /// for any other.
+  final Map<String, DateTime> byProject;
+
+  /// The freshest reading that covers [projectId], or null for none.
+  DateTime? forProject(String projectId) {
+    final mine = byProject[projectId];
+    final everything = all;
+    if (mine == null) return everything;
+    if (everything == null) return mine;
+    return mine.isAfter(everything) ? mine : everything;
   }
 }
+
+class CliSessionsCheckedController extends Notifier<CliSessionsChecked> {
+  @override
+  CliSessionsChecked build() => const CliSessionsChecked();
+
+  void stampAll() => state = CliSessionsChecked(
+    all: ref.read(clockProvider).nowUtc(),
+    byProject: state.byProject,
+  );
+
+  void stampProject(String projectId) => state = CliSessionsChecked(
+    all: state.all,
+    byProject: {...state.byProject, projectId: ref.read(clockProvider).nowUtc()},
+  );
+}
+
+/// When the CLI stores were last read. Watched by the Explorer so the tree
+/// never implies a freshness nobody measured.
+final cliSessionsCheckedProvider =
+    NotifierProvider<CliSessionsCheckedController, CliSessionsChecked>(
+      CliSessionsCheckedController.new,
+    );
 
 class SessionSyncingController extends Notifier<int> {
   @override
