@@ -70,3 +70,4 @@ packages/local_ipc/pubspec.lock
 # ignoring `macos/Vendor/` wholesale made every fresh clone fail the macOS
 # build with `No such file or directory`.
 macos/Vendor/wda/
+.claude/worktrees/
