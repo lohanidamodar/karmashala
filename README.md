@@ -84,8 +84,9 @@ comments explain *why* a line is the way it is at the line itself. What is left:
 
 ## Requirements
 
-- **Flutter** stable with the desktop toolchain. `pubspec.yaml` requires Dart
-  `^3.12.2`; 1.16.0 was built on Flutter 3.47.2 / Dart 3.13.2.
+- **Flutter**, stable channel, with the desktop toolchain. `pubspec.yaml`
+  requires Dart `^3.12.2` and CI pins nothing tighter than `stable`, so no
+  exact version is recorded here to go stale.
 - **Windows 10/11** — Visual Studio with "Desktop development with C++".
 - **Linux** — `clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
   libsqlite3-dev libayatana-appindicator3-dev libkeybinder-3.0-dev
@@ -130,8 +131,8 @@ flutter test --exclude-tags=live-ssh,live-wsl
 the reason no command in this repository passes `--concurrency`. Leave it off so
 a local run and automation cannot drift apart.
 
-**Do not run `dart format .`.** Under the current SDK it rewrites 144 of 669
-files; a repo-wide reformat here is a change, not a tidy-up.
+**Do not run `dart format .`.** Measured under the current SDK it rewrites 144
+of 669 files — a repo-wide reformat here is a change, not a tidy-up.
 
 The two live tags are excluded because they drive a real WSL distribution and
 dial a real SSH server. They are meant to be run deliberately:
