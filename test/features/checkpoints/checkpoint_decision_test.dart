@@ -34,6 +34,10 @@ class _MemoryGitFiles implements GitFiles {
   Future<bool> exists(String path) async => written.containsKey(path);
 
   @override
+  Future<PathEntry> typeOf(String path) async =>
+      throw UnimplementedError('the checkpoint path never stats');
+
+  @override
   Future<void> writeString(String path, String contents) async =>
       written[path] = contents;
 
