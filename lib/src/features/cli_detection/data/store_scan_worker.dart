@@ -30,11 +30,17 @@ class StoreScanChunk {
     required this.agentId,
     required this.environmentId,
     required this.sessions,
+    required this.isolate,
   });
 
   final String agentId;
   final String environmentId;
   final List<DetectedSession> sessions;
+
+  /// Which isolate walked the store — [kStoreScanIsolateName] when the worker
+  /// did. Reported rather than assumed: "off the UI isolate" is the whole claim
+  /// and a claim nobody can read is one nobody can check.
+  final String isolate;
 }
 
 /// Reads CLI stores somewhere other than the isolate that draws.
@@ -110,6 +116,13 @@ class IsolateStoreScanRunner implements StoreScanRunner {
     StoreScanRequest request,
     StreamController<StoreScanChunk> out,
   ) async {
+    // No stores, no isolate. A host with no CLI installed never creates the
+    // worker at all, the way `IsolateProcessSpawner` never creates its own on a
+    // launch that runs no command.
+    if (request.stores.isEmpty) {
+      await out.close();
+      return;
+    }
     if (_isolatesUnavailable) {
       await out.addStream(InlineStoreScanRunner().scan(request));
       await out.close();
@@ -241,6 +254,7 @@ Stream<StoreScanChunk> runStoreScanJobs(
       agentId: job.agentId,
       environmentId: job.environmentId,
       sessions: sessions,
+      isolate: Isolate.current.debugName ?? 'main',
     );
   }
 }

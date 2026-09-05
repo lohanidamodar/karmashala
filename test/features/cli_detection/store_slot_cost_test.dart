@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/domain/detected_project.dart';
+import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
@@ -110,6 +110,11 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         cliDetectionServiceProvider.overrideWithValue(detection),
+        // The stores are read through the scan runner now; inline here, so the
+        // pass is counted on this isolate rather than on a worker.
+        storeScanRunnerProvider.overrideWithValue(
+          InlineStoreScanRunner(detection: detection),
+        ),
         cliStoreLocatorProvider.overrideWithValue(
           FixedLocator([
             CliStore(
@@ -293,16 +298,16 @@ class _SlotCost {
 }
 
 /// The production detection service, counting the passes made over it.
+///
+/// One pass is one call to [jobsFor]: the scan queue asks for the job list
+/// once, then runs the jobs it was given.
 class _CountingDetection extends CliDetectionService {
   int scans = 0;
 
   @override
-  Future<List<DetectedProject>> detect(
-    List<CliStore> stores,
-    Map<String, ExecutionEnvironment> environmentsById,
-  ) {
+  List<StoreScanJob> jobsFor(List<CliStore> stores) {
     scans++;
-    return super.detect(stores, environmentsById);
+    return super.jobsFor(stores);
   }
 }
 
