@@ -104,6 +104,27 @@ void main() {
     expect(sessions.single.cwd.path, '/after');
   });
 
+  test('a rollout rewritten in place to the same length is read again', () async {
+    // The hole a size-only cache left open. `/before` and `/aftera` are the
+    // same number of bytes, so nothing but the mtime says the file moved — and
+    // a rollout served from a stale cache is served stale for ever.
+    write('s1', cwd: '/before');
+    final reader = CodexStoreReader(cache: CodexRolloutCache());
+    await reader.read(home, 'windows');
+    final afterFirst = reader.bytesRead;
+    final was = rollout('s1').lengthSync();
+
+    write('s1', cwd: '/aftera');
+    // Stamped rather than raced: two writes inside one clock tick would leave
+    // the mtime unchanged and the case would prove nothing.
+    rollout('s1').setLastModifiedSync(DateTime.now().add(const Duration(minutes: 1)));
+    final sessions = await reader.read(home, 'windows');
+
+    expect(rollout('s1').lengthSync(), was, reason: 'the same size, exactly');
+    expect(reader.bytesRead, greaterThan(afterFirst), reason: 'it re-read');
+    expect(sessions.single.cwd.path, '/aftera');
+  });
+
   test('the cost of a scan follows what changed, not the store size', () async {
     for (var i = 0; i < 20; i++) {
       write('s$i');
