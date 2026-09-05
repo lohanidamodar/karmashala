@@ -322,13 +322,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a fresh split does not print the same name on two rows', (
+  testWidgets('a fresh split does not print the project header on the tab', (
     tester,
   ) async {
-    // The screenshot: `New session` on the tab strip, `New session` again in
-    // the region header directly under it. Splitting starts nothing, so the
-    // right-hand region is the empty invitation and the tab has to rename
-    // itself at the split rather than once the split is filled.
     final container = workbenchContainer();
     final controller = controllerOf(container);
     controller.openTab(
@@ -343,14 +339,14 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('New session'),
-      findsOneWidget,
-      reason: 'the region header names the pane, and only it does',
+      find.text('src/karmashala'),
+      findsNothing,
+      reason: 'the tab does not show a project header on split',
     );
     expect(
-      find.text('src/karmashala'),
-      findsOneWidget,
-      reason: 'the tab names what it is about — its directory',
+      find.text('New session'),
+      findsWidgets,
+      reason: 'the active focused pane title is shown',
     );
   });
 

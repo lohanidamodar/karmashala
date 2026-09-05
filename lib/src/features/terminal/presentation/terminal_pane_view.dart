@@ -13,6 +13,7 @@ import '../../media/domain/session_image_reference.dart';
 import '../../media/presentation/session_image_dialog.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
+import '../application/terminal_sessions_controller.dart';
 import '../data/terminal_instance.dart';
 import '../domain/terminal_link_resolution.dart';
 import '../domain/terminal_links.dart';
@@ -601,6 +602,9 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
 
   void _onPointerDown(PointerDownEvent event) {
     _pressedAt = event.buttons == kPrimaryButton ? event.position : null;
+    ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .focusPane(widget.instance.id);
   }
 
   void _onPointerUp(PointerUpEvent event) {
