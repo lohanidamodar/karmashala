@@ -34,30 +34,26 @@ import 'store_session_reader.dart';
 class CodexAppServerReader implements StoreSessionReader {
   CodexAppServerReader({
     StoreSessionReader? fallback,
-    CodexAppServerClient Function(
-      CodexAppServerLaunch launch,
-      String? expectedCodexHome,
-    )?
-    openClient,
+    this.openClient,
     this.runnerFactory = const CommandRunnerFactory(),
     this.translator = const PathTranslator(),
     this.clientVersion = '0.0.0',
-  }) : fallback = fallback ?? CodexStoreReader(),
-       // ignore: prefer_initializing_formals
-       _openClient = openClient;
+  }) : fallback = fallback ?? CodexStoreReader();
 
   /// The file walk, used whenever the protocol cannot answer.
   final StoreSessionReader fallback;
 
-  final CommandRunnerFactory runnerFactory;
-  final PathTranslator translator;
-  final String clientVersion;
-
+  /// Builds the client for one launch. Null means [_open], which is the real
+  /// thing; a test hands back a client wired to a scripted server instead.
   final CodexAppServerClient Function(
     CodexAppServerLaunch launch,
     String? expectedCodexHome,
   )?
-  _openClient;
+  openClient;
+
+  final CommandRunnerFactory runnerFactory;
+  final PathTranslator translator;
+  final String clientVersion;
 
   final Map<String, _CodexConnection> _byEnvironment = {};
 
@@ -162,7 +158,7 @@ class CodexAppServerReader implements StoreSessionReader {
     final expectedHome = _expectedHomeIn(launch.environment, storeHome);
     final CodexAppServerClient client;
     try {
-      client = (_openClient ?? _open)(launch, expectedHome);
+      client = (openClient ?? _open)(launch, expectedHome);
     } on Object {
       // An SSH environment with no connection pool composed, most likely. The
       // walk is the whole answer for a store we cannot reach a runner for.
