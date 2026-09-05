@@ -9,6 +9,7 @@ import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
@@ -96,16 +97,42 @@ void main() {
     );
   });
 
-  testWidgets('the pane menu draws house rows', (tester) async {
+  testWidgets('the pane chip menu draws house rows', (tester) async {
     await pump(tester);
-    terminals().splitPane(SplitAxis.horizontal);
+    // The chip only exists where a region stacks panes now — a split whose
+    // regions hold one pane each draws no header at all.
+    final host = terminals().state.activeTab!;
+    final guest = terminals().openTab(TerminalProfile.commandPrompt);
+    terminals().moveTabIntoSlot(guest, host.layout.panes.single);
     await tester.pumpAndSettle();
+    expect(find.byType(PaneTabChip), findsNWidgets(2));
 
-    await tester.tap(find.byType(PaneTabChip), buttons: kSecondaryButton);
+    await tester.tap(find.byType(PaneTabChip).first, buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
     expectHouseRows(tester, rows: 3);
     expect(find.byType(DesktopMenuDivider), findsOneWidget);
+  });
+
+  testWidgets('and a split pane reaches the same verbs from its own body', (
+    tester,
+  ) async {
+    // The route to a pane's verbs in an ordinary split: right-click the
+    // terminal. Copy, Paste, Find…, then the pane pair, then End session.
+    await pump(tester);
+    terminals().openInSlot(
+      terminals().splitPane(SplitAxis.horizontal)!,
+      TerminalProfile.commandPrompt,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tapAt(const Offset(200, 400), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expectHouseRows(tester, rows: 6);
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(2));
+    expect(find.text('Move pane to a new tab'), findsOneWidget);
+    expect(find.text('Close pane'), findsOneWidget);
   });
 
   testWidgets('the terminal body menu draws house rows, with the chords it '
