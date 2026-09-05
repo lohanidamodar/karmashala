@@ -24,6 +24,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../agents/domain/agent_permission_support.dart';
 import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
@@ -63,14 +64,16 @@ class SessionActions {
   /// launched *by* Karmashala and renamed *in* Karmashala reached no store at
   /// all.
   Future<void> renameNative(String id, String title) async {
-    // `byUser`: this is the one event that makes a title the user's, and
-    // recording it is what stops the CLI rename sync taking it back — for the
-    // life of the row, not just this run of the app.
+    // `byUser`: this is the one event that makes a title the user's. File-based
+    // CLI sync preserves it; Codex may report a newer authoritative rename.
     _ref.read(sessionDaoProvider).updateTitle(id, title, byUser: true);
     // The narrowest fact the app publishes, and the most frequent: nothing but
     // this row's name moved. See `session_signal_cost_test.dart` for what the
     // coarse word used to cost — 108 session reads at a hundred sessions.
     _publish(SessionChange.renamed(id));
+    _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .notifyTitleChanged();
     await _propagateNativeRename(id, title);
   }
 

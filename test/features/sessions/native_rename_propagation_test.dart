@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/cli_detection/application/codex_app_server_providers.dart';
@@ -10,7 +11,9 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
+import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fake_codex_app_server.dart';
@@ -108,5 +111,36 @@ void main() {
     await container.read(sessionActionsProvider).renameNative('s1', 'Renamed');
 
     expect(SessionDao(db).getById('s1')!.title, 'Renamed');
+  });
+
+  test('a Codex-side name notification updates the row and both title surfaces', () async {
+    seedSession();
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: runner),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final beforeSessions = container.read(sessionsRevisionProvider);
+    final beforeTerminals = container
+        .read(terminalSessionsControllerProvider)
+        .titleRevision;
+    final client = container
+        .read(codexAppServersProvider)
+        .forEnvironment('windows')!;
+
+    await client.setThreadName('u1', 'Renamed in Codex');
+
+    final row = SessionDao(db).getById('s1')!;
+    expect(row.title, 'Renamed in Codex');
+    expect(row.titleByUser, isFalse);
+    expect(container.read(sessionsRevisionProvider), beforeSessions + 1);
+    expect(
+      container.read(terminalSessionsControllerProvider).titleRevision,
+      greaterThan(beforeTerminals),
+    );
   });
 }

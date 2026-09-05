@@ -183,6 +183,10 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
     sessionDao: ref.watch(sessionDaoProvider),
     agents: ref.watch(agentRegistryProvider),
     scanStores: () => ref.read(cliStoreScanPassProvider).read(),
+    agentIdFor: (session) => ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId,
     // **The bump that fires on a timer.** The store sweep runs whether or not
     // the user is doing anything, so this one narrow fact used to wake all
     // twenty-eight watchers of the revision counter — several of them with a

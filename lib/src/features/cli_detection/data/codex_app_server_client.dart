@@ -106,6 +106,14 @@ class CodexAppServerResult {
   bool get ok => failure == null;
 }
 
+/// A thread title Codex changed on this app-server connection.
+class CodexThreadNameUpdate {
+  const CodexThreadNameUpdate({required this.threadId, required this.name});
+
+  final String threadId;
+  final String name;
+}
+
 /// Opens the transport for one app-server connection.
 ///
 /// A `Future<ProcessHandle>` rather than a process, so the client never touches
@@ -161,6 +169,7 @@ class CodexAppServerClient {
     this.clientVersion = '0.0.0',
     this.timeout = const Duration(seconds: 30),
     this.expectedCodexHome,
+    this.onThreadNameUpdated,
   });
 
   /// Opens the one connection this client uses. See [CodexAppServerConnect].
@@ -181,6 +190,9 @@ class CodexAppServerClient {
   /// right one — and a false rejection here would block a rename that was going
   /// to work.
   final String? expectedCodexHome;
+
+  /// Called for `thread/name/updated` notifications emitted by Codex.
+  final void Function(CodexThreadNameUpdate update)? onThreadNameUpdated;
 
   /// Connections opened, and requests written. **Counts, never durations** —
   /// milliseconds on a shared machine are noise, and "did it hand-shake twice?"
@@ -495,10 +507,13 @@ class CodexAppServerClient {
 
     final id = decoded['id'];
     final error = decoded['error'];
-    // A notification, or anything else this client did not ask for. Codex
-    // attributes every reply it sends, so a line with no id answers nobody and
-    // guessing an owner for it could only fail the wrong call.
-    if (id is! int) return;
+    // Notifications have no id. Most are unrelated to this small client, but a
+    // thread rename is application state rather than call bookkeeping and must
+    // reach the session row that owns the thread.
+    if (id is! int) {
+      _onNotification(decoded);
+      return;
+    }
     final completer = _pending.remove(id);
     if (completer == null || completer.isCompleted) return;
     if (error != null) {
@@ -516,6 +531,24 @@ class CodexAppServerClient {
               ),
             ),
     );
+  }
+
+  void _onNotification(Map<String, Object?> message) {
+    if (message['method'] != 'thread/name/updated') return;
+    final params = message['params'];
+    if (params is! Map) return;
+    final threadId = params['threadId'];
+    final name = params['threadName'];
+    if (threadId is! String || threadId.isEmpty || name is! String) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      onThreadNameUpdated?.call(
+        CodexThreadNameUpdate(threadId: threadId, name: trimmed),
+      );
+    } on Object {
+      // A UI listener must not break JSON-RPC reply delivery on this pipe.
+    }
   }
 
   CodexAppServerFailure _rpcFailure(Object? error) {

@@ -32,6 +32,7 @@ class CodexAppServers {
     this.translator = const PathTranslator(),
     this.clientVersion = '0.0.0',
     AppLogger? logger,
+    this.onThreadNameUpdated,
   }) : _log = logger ?? AppLogger.named('codex.appServer');
 
   final CommandRunnerFactory runnerFactory;
@@ -39,6 +40,7 @@ class CodexAppServers {
   final AgentInstallationDao installations;
   final PathTranslator translator;
   final String clientVersion;
+  final void Function(CodexThreadNameUpdate update)? onThreadNameUpdated;
 
   final AppLogger _log;
 
@@ -82,6 +84,7 @@ class CodexAppServers {
       ),
       clientVersion: clientVersion,
       expectedCodexHome: _expectedHomeIn(environment, storeHome),
+      onThreadNameUpdated: onThreadNameUpdated,
     );
     _byEnvironment[environmentId] = client;
     return client;

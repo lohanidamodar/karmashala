@@ -108,6 +108,18 @@ class FakeCodexAppServer extends FakeProcessHandle {
     }
     final scripted = reply;
     if (scripted == null) {
+      if (method == 'thread/name/set') {
+        final params = (request['params'] as Map?) ?? const {};
+        emitStdout(
+          jsonEncode({
+            'method': 'thread/name/updated',
+            'params': {
+              'threadId': params['threadId'],
+              'threadName': params['name'],
+            },
+          }),
+        );
+      }
       emitStdout(jsonEncode({'id': id, 'result': <String, Object?>{}}));
       return;
     }
