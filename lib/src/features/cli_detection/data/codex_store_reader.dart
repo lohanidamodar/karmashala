@@ -77,12 +77,13 @@ class CodexStoreReader implements StoreSessionReader {
   /// So a mtime-gated walk would silently drop every resumed session, which is
   /// worse than walking the whole tree.
   ///
-  /// The way out was not a cutoff but a better source, and `CodexAppServerReader`
-  /// is it: `thread/list` with `useStateDbOnly: true` answers id, cwd, current
-  /// name, timestamps and the rollout path out of Codex's own index. This walk
-  /// is what that reader falls back to when an install will not answer.
-  /// [appServer] is ignored here: this *is* the walk `CodexAppServerReader`
-  /// falls back to, and it reaches the same store without spawning anything.
+  /// The way out was not a cutoff but a better source, and
+  /// `CodexAppServerReader` is it: `thread/list` with `useStateDbOnly: true`
+  /// answers id, cwd, current name, timestamps and the rollout path out of
+  /// Codex's own index.
+  ///
+  /// [appServer] is ignored here, because this *is* the walk that reader falls
+  /// back to — it reaches the same store without spawning anything.
   @override
   Future<List<DetectedSession>> read(
     String codexHome,
