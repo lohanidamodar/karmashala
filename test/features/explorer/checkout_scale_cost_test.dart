@@ -823,6 +823,18 @@ class _ProbeFiles implements GitFiles {
   Future<bool> exists(String path) async =>
       throw UnimplementedError('nothing on this path stats');
 
+  /// By shape, like [readString], and **not recorded**: this is the presence
+  /// probe's question and the counts below are the delivery reading's.
+  @override
+  Future<PathEntry> typeOf(String path) async {
+    if (path.endsWith(r'\.git')) {
+      return path.contains(r'\.karmashala-worktrees\')
+          ? PathEntry.file
+          : PathEntry.directory;
+    }
+    return PathEntry.directory;
+  }
+
   @override
   Future<void> createDirectory(String path) async =>
       throw UnimplementedError('nothing on this path writes');

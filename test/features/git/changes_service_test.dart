@@ -263,6 +263,10 @@ class _FakeFiles implements GitFiles {
   Future<bool> exists(String path) async => contents.containsKey(path);
 
   @override
+  Future<PathEntry> typeOf(String path) async =>
+      contents.containsKey(path) ? PathEntry.file : PathEntry.none;
+
+  @override
   Future<void> createDirectory(String path) async {}
 
   @override

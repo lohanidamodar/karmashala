@@ -117,6 +117,12 @@ class NoGitFiles implements GitFiles {
   @override
   Future<bool> exists(String path) async => false;
 
+  /// Nothing is there — **not even the checkout folder**, so `GitPresenceReader`
+  /// answers `unknown` and every provider gating on it still asks git. Tests
+  /// that are *about* the probe hand over their own [GitFiles].
+  @override
+  Future<PathEntry> typeOf(String path) async => PathEntry.none;
+
   @override
   Future<void> createDirectory(String path) async {}
 

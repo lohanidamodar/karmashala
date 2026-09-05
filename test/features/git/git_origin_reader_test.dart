@@ -376,6 +376,10 @@ class _MapFiles implements GitFiles {
       throw UnimplementedError('this reader never stats');
 
   @override
+  Future<PathEntry> typeOf(String path) async =>
+      throw UnimplementedError('this reader never stats');
+
+  @override
   Future<void> createDirectory(String path) async =>
       throw UnimplementedError('this reader never writes');
 

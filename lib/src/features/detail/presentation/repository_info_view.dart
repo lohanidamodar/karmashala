@@ -13,7 +13,9 @@ import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/data/git_presence_reader.dart';
 import '../../git/domain/git_commit.dart';
+import '../../git/domain/git_presence.dart';
 import '../../git/domain/git_worktree.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -199,23 +201,84 @@ class _RevealButton extends ConsumerWidget {
 ///
 /// Three sections, three widgets. One build used to watch all four providers,
 /// so a `git worktree list` landing repainted the commit log beside it.
-class _GitDetails extends StatelessWidget {
+///
+/// **Unless there is no git to detail**, and then the whole section is one
+/// sentence read from [selectedCheckoutGitTroubleProvider]: four rows each
+/// saying "not a git repository" in a 240px panel is one fact spelled four
+/// times.
+///
+/// The one watch back in this build does not undo the split above: the three
+/// children are `const`, so an identical instance rebuilds none of them.
+class _GitDetails extends ConsumerWidget {
   const _GitDetails();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final trouble = ref.watch(selectedCheckoutGitTroubleProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _label(theme, 'GIT'),
-        const _BranchAndRemote(),
-        const SizedBox(height: Insets.md),
-        const _Worktrees(),
-        const SizedBox(height: Insets.md),
-        _label(theme, 'RECENT COMMITS'),
-        const _RecentCommits(),
+        if (trouble != null)
+          _GitTroubleNote(report: trouble)
+        else ...[
+          const _BranchAndRemote(),
+          const SizedBox(height: Insets.md),
+          const _Worktrees(),
+          const SizedBox(height: Insets.md),
+          _label(theme, 'RECENT COMMITS'),
+          const _RecentCommits(),
+        ],
       ],
+    );
+  }
+}
+
+/// The GIT section when git has nothing to say — a plain paragraph on the muted
+/// ramp, with no error colour and no exception name.
+///
+/// A wrapping paragraph rather than a [_kv] row: this pane drags down to 240px,
+/// where that row's label column would leave a sentence about 170px.
+class _GitTroubleNote extends StatelessWidget {
+  const _GitTroubleNote({required this.report});
+
+  final GitTroubleReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // The muted ramp for all three, the failure included: the red box lives in
+    // the Changes pane, where a failure is the whole content of the surface.
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            // Nudged onto the first line's text rather than its box.
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              // Glyph and sentence, never colour alone (§5).
+              switch (report.trouble) {
+                GitTrouble.notARepository => AppIcons.folder,
+                GitTrouble.unreachable => AppIcons.linkBreak,
+                GitTrouble.failed => AppIcons.warningCircle,
+              },
+              size: Chrome.iconSmall,
+              color: muted,
+            ),
+          ),
+          const SizedBox(width: Insets.xs),
+          Expanded(
+            child: SelectableText(
+              report.message,
+              style: theme.textTheme.bodySmall?.copyWith(color: muted),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -234,9 +297,13 @@ class _BranchAndRemote extends ConsumerWidget {
     final branch = ref.watch(currentBranchProvider);
     final remote = ref.watch(repoRemoteUrlProvider);
 
+    // A row that failed on its own, the remote while the branch answered say.
+    // Named rather than a flat `unavailable`, which covered all three states
+    // with one word. `.error` before the loading case: see
+    // `selectedCheckoutGitTroubleProvider`.
     String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
       AsyncData(:final value) => value ?? fallback,
-      AsyncError() => 'unavailable',
+      AsyncValue(:final error?) => gitTroubleLabel(gitTroubleOf(error)),
       _ => '…',
     };
 
@@ -339,7 +406,12 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
           itemBuilder: (context, index) => row(value[index]),
         ),
       ),
-      AsyncError() => _dim(theme, 'unavailable'),
+      // `.error` before the bare loading: a failure being retried is an
+      // `AsyncLoading` carrying its error.
+      AsyncValue(:final error?) => _dim(
+        theme,
+        gitTroubleLabel(gitTroubleOf(error)),
+      ),
       _ => _dim(theme, '…'),
     };
 
@@ -569,7 +641,7 @@ class _RecentCommits extends ConsumerWidget {
 
     return commits.when(
       loading: () => _dim(theme, '…'),
-      error: (_, _) => _dim(theme, 'unavailable'),
+      error: (e, _) => _dim(theme, gitTroubleLabel(gitTroubleOf(e))),
       data: (list) => list.isEmpty
           ? _dim(theme, 'none')
           : Column(

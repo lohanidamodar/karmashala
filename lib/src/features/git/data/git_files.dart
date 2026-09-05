@@ -5,6 +5,14 @@ import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 
+/// What is at a path, as far as this process can see.
+///
+/// [none] is *nothing is there* **and** *the lookup failed*, for the reason
+/// [GitFiles.readString] answers one null for three failures — a dead
+/// `\\wsl.localhost` share reports the same nothing an empty folder does. So a
+/// [none] is never on its own an absence; see `GitPresenceReader`.
+enum PathEntry { none, file, directory }
+
 /// The few filesystem operations this feature needs, behind an interface so a
 /// test can watch them without a disk.
 ///
@@ -32,6 +40,13 @@ abstract interface class GitFiles {
   /// that opens `<checkout>/.git` and gets null has learned the useful thing:
   /// it is not a worktree pointer file.
   Future<String?> readString(String path);
+
+  /// What is at [path] — see [PathEntry].
+  ///
+  /// The one `stat` this feature spends, because proving an absence is the one
+  /// question a read cannot answer: a null from `<dir>/.git/config` cannot tell
+  /// "there is no `.git`" from "`.git` is a directory I could not open".
+  Future<PathEntry> typeOf(String path);
 }
 
 /// [GitFiles] against the real filesystem, as this process sees it.
@@ -61,6 +76,22 @@ class HostGitFiles implements GitFiles {
       // Not UTF-8. `.git/config` and a ref file are ASCII in practice; a file
       // that is not is not one this reader can speak for.
       return null;
+    }
+  }
+
+  @override
+  Future<PathEntry> typeOf(String path) async {
+    try {
+      // Links are followed, so a `.git` symlinked to a real git directory reads
+      // as a directory — which is what git makes of it too.
+      return switch (await FileSystemEntity.type(path)) {
+        FileSystemEntityType.file => PathEntry.file,
+        FileSystemEntityType.directory => PathEntry.directory,
+        _ => PathEntry.none,
+      };
+    } on FileSystemException {
+      // A dead share, or a path this OS will not parse. See [PathEntry].
+      return PathEntry.none;
     }
   }
 }
