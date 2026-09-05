@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../../../core/process/command_runner.dart';
+import '../../../core/process/process_spawner.dart';
 import '../../../core/process/wsl_distributions.dart';
 import '../data/agent_hook_spool.dart';
 
@@ -29,11 +31,23 @@ class AgentHookSpoolSource {
 /// `wsl.exe -l --running -q` is answered by the service on the Windows side,
 /// so it cannot wake a distribution — which is the entire reason it is here.
 /// Measured at 188 ms on the owner's machine.
+///
+/// **All 188 ms of it used to be the UI isolate's**, every [runningRefresh],
+/// for as long as a WSL store was being polled: creating a process is
+/// synchronous work charged to the isolate that asks (see
+/// `core/process/process_spawn.dart`), and this is a `wsl.exe`, the dearest
+/// kind. It goes through [sharedProcessSpawner] for the same reason the command
+/// runners do, and by the same route — the app-wide worker isolate.
 Future<Set<String>> wslRunningDistributions() async {
   try {
-    final result = await Process.run('wsl.exe', ['-l', '--running', '-q']);
+    final result = await sharedProcessSpawner.run(
+      const CommandRequest(
+        executable: 'wsl.exe',
+        arguments: ['-l', '--running', '-q'],
+      ),
+    );
     if (result.exitCode != 0) return const {};
-    return parseWslDistributions('${result.stdout}').toSet();
+    return parseWslDistributions(result.stdout).toSet();
   } on Object {
     return const {};
   }
