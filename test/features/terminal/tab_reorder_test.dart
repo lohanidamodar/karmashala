@@ -271,6 +271,8 @@ void main() {
   testWidgets('a pane still drags out of a region onto the strip', (
     tester,
   ) async {
+    // The grip moved — a region of a split draws no header now, so the handle
+    // is the one floating on the pane — and the gesture did not.
     final container = harness();
     final controller = controllerOf(container);
     controller.openTab(TerminalProfile.powerShell);
@@ -283,7 +285,7 @@ void main() {
 
     final gesture = await dragFrom(
       tester,
-      tester.getCenter(find.byKey(PaneTabChip.keyFor(right))),
+      tester.getCenter(find.byKey(paneDragHandleKey(right))),
       tester.getCenter(find.byKey(kTabStripEmptySpace)),
     );
     await drop(tester, gesture);

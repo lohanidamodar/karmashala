@@ -987,11 +987,11 @@ class _TabStrip extends ConsumerWidget {
     final tabs = _tabs(ref);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
 
-    // The strip is where a pane goes to stop being in a split. Dragging a chip
-    // out of a region's header and dropping it here is the same verb as the
-    // region menu's "Move to a new tab" and the palette's — the gesture the
-    // whole redesign turns on, because a drag that only goes one way leaves
-    // whatever it moved stranded.
+    // The strip is where a pane goes to stop being in a split. Dragging a pane
+    // by its grip and dropping it here is the same verb as the pane menu's
+    // "Move pane to a new tab" and the palette's — the gesture the whole
+    // redesign turns on, because a drag that only goes one way leaves whatever
+    // it moved stranded.
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) => switch (details.data) {
         PaneDrag(:final paneId) => sessions.isPaneInSplit(paneId),
