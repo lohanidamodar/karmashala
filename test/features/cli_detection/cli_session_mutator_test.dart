@@ -39,7 +39,10 @@ void main() {
     expect(decoded['sessionId'], 'abc');
   });
 
-  test('Codex rename rewrites thread_name in the index', () async {
+  // The mirror is only the fallback now — `codex_rename_test.dart` covers the
+  // `thread/name/set` call that replaced it, and what happens when Codex
+  // answers and when it cannot be reached.
+  test('Codex rename with no way to reach Codex still updates the mirror', () async {
     final index = File(p.join(tmp.path, '.codex/session_index.jsonl'))
       ..createSync(recursive: true)
       ..writeAsStringSync('{"id":"u1","thread_name":"old"}\n');

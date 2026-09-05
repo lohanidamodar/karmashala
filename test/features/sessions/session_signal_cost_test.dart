@@ -160,6 +160,13 @@ void main() {
   });
 
   group('what a rename does not wake', () {
+    /// The one session row a rename reads **itself**: `renameNative` asks which
+    /// CLI conversation the row is backed by before telling that CLI the new
+    /// name. An indexed by-id read, made once, by the action — these cases are
+    /// about *listeners*, so they are counted against it rather than zero, and
+    /// a listener that woke would still push the number past it.
+    const renamedRowLookup = 1;
+
     late _CountingDatabase db;
     late ProviderContainer container;
 
@@ -188,7 +195,7 @@ void main() {
       await renameAfter(
         () => container.listen(sessionProjectIdsProvider, (_, _) {}),
       );
-      expect(db.sessionReads, 0, reason: '${db.reads}');
+      expect(db.sessionReads, renamedRowLookup, reason: '${db.reads}');
     });
 
     test('the project summary — it counts rows, it does not name them', () async {
@@ -207,7 +214,7 @@ void main() {
       await renameAfter(
         () => container.listen(sessionWhereaboutsProvider('s5'), (_, _) {}),
       );
-      expect(db.sessionReads, 0, reason: '${db.reads}');
+      expect(db.sessionReads, renamedRowLookup, reason: '${db.reads}');
     });
   });
 

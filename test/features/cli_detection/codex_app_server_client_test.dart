@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,11 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/features/cli_detection/data/codex_app_server_client.dart';
 
+import '../../support/fake_codex_app_server.dart';
+
 /// **The client that finally reaches Codex**, driven by scripted JSON rather
 /// than by a real `codex`.
 ///
 /// Nothing here spawns a process, reads `~/.codex` or opens a socket: the
-/// transport is a [CodexAppServerConnect] handing back a [_ScriptedCodex], so
+/// transport is a [CodexAppServerConnect] handing back a [FakeCodexAppServer], so
 /// the suite runs identically on a machine with no Codex installed.
 ///
 /// Every reply below is the shape the real thing was measured to send — no
@@ -20,7 +21,7 @@ import 'package:karmashala/src/features/cli_detection/data/codex_app_server_clie
 /// each of them would have hung or dropped a real call.
 void main() {
   test('the handshake happens once, in order, however many calls follow', () async {
-    final server = _ScriptedCodex();
+    final server = FakeCodexAppServer();
     final client = _clientFor(server);
     addTearDown(client.close);
 
@@ -47,7 +48,7 @@ void main() {
   });
 
   test('nothing is started until the first call', () async {
-    final server = _ScriptedCodex();
+    final server = FakeCodexAppServer();
     final client = _clientFor(server);
     addTearDown(client.close);
 
@@ -61,7 +62,7 @@ void main() {
   });
 
   test('a rename issues thread/name/set with the thread id and the name', () async {
-    final server = _ScriptedCodex();
+    final server = FakeCodexAppServer();
     final client = _clientFor(server);
     addTearDown(client.close);
 
@@ -82,7 +83,7 @@ void main() {
     // valid methods arrives with **no id**, because the request never parsed
     // far enough to have one. Charged to the oldest waiter, or the call waits
     // out its whole budget for an answer that already came.
-    final server = _ScriptedCodex(
+    final server = FakeCodexAppServer(
       reply: (server, id, method, params) => jsonEncode({
         'error': {
           'code': -32600,
@@ -103,7 +104,7 @@ void main() {
   });
 
   test('an error that does carry its id fails only that call', () async {
-    final server = _ScriptedCodex(
+    final server = FakeCodexAppServer(
       reply: (server, id, method, params) => jsonEncode({
         'id': id,
         'error': {'code': -32600, 'message': 'no rollout found for thread id x'},
@@ -136,7 +137,7 @@ void main() {
 
   test('a failed connection is not cached — the next call tries again', () async {
     var attempts = 0;
-    final server = _ScriptedCodex();
+    final server = FakeCodexAppServer();
     final client = CodexAppServerClient(
       connect: () {
         attempts++;
@@ -155,7 +156,7 @@ void main() {
   });
 
   test('an app-server that exits mid-call fails the call rather than hanging', () async {
-    final server = _ScriptedCodex(reply: (server, id, method, params) => null);
+    final server = FakeCodexAppServer(reply: (server, id, method, params) => null);
     final client = _clientFor(server);
     addTearDown(client.close);
 
@@ -180,7 +181,7 @@ void main() {
   });
 
   test('a call that is never answered fails as a timeout', () async {
-    final server = _ScriptedCodex(reply: (server, id, method, params) => null);
+    final server = FakeCodexAppServer(reply: (server, id, method, params) => null);
     // A budget, not a measurement: the assertion is *which failure*, never how
     // long anything took.
     final client = _clientFor(server, timeout: const Duration(milliseconds: 50));
@@ -192,7 +193,7 @@ void main() {
   });
 
   test('a reply that is not an object is malformed, not a crash', () async {
-    final server = _ScriptedCodex(
+    final server = FakeCodexAppServer(
       reply: (server, id, method, params) =>
           jsonEncode({'id': id, 'result': 'yes'}),
     );
@@ -206,7 +207,7 @@ void main() {
   });
 
   test('a non-JSON line on stdout is ignored, not charged to a call', () async {
-    final server = _ScriptedCodex(
+    final server = FakeCodexAppServer(
       reply: (server, id, method, params) {
         server.emitStdout('WARNING: proceeding, even though …');
         return jsonEncode({'id': id, 'result': <String, Object?>{}});
@@ -219,7 +220,7 @@ void main() {
   });
 
   test('close kills the app-server and leaves nothing running', () async {
-    final server = _ScriptedCodex();
+    final server = FakeCodexAppServer();
     final client = _clientFor(server);
 
     await client.setThreadName('t1', 'one');
@@ -234,7 +235,7 @@ void main() {
   });
 
   test('close fails a call that was still waiting', () async {
-    final server = _ScriptedCodex(reply: (server, id, method, params) => null);
+    final server = FakeCodexAppServer(reply: (server, id, method, params) => null);
     final client = _clientFor(server);
 
     final pending = client.setThreadName('t1', 'one');
@@ -248,7 +249,7 @@ void main() {
 
   group('the store the server actually serves', () {
     test('a different codexHome is refused before any call is made', () async {
-      final server = _ScriptedCodex(codexHome: '/home/someone-else/.codex');
+      final server = FakeCodexAppServer(codexHome: '/home/someone-else/.codex');
       final client = _clientFor(server, expectedCodexHome: '/home/me/.codex');
       addTearDown(client.close);
 
@@ -264,7 +265,7 @@ void main() {
     });
 
     test('the same home spelled differently is still the same store', () async {
-      final server = _ScriptedCodex(codexHome: r'C:\Users\Me\.codex');
+      final server = FakeCodexAppServer(codexHome: r'C:\Users\Me\.codex');
       final client = _clientFor(server, expectedCodexHome: r'c:\users\me\.codex\');
       addTearDown(client.close);
 
@@ -274,7 +275,7 @@ void main() {
 }
 
 CodexAppServerClient _clientFor(
-  _ScriptedCodex server, {
+  FakeCodexAppServer server, {
   Duration timeout = const Duration(seconds: 5),
   String? expectedCodexHome,
 }) => CodexAppServerClient(
@@ -282,108 +283,3 @@ CodexAppServerClient _clientFor(
   timeout: timeout,
   expectedCodexHome: expectedCodexHome,
 );
-
-/// A `codex app-server` that exists only as JSON.
-///
-/// It answers on the shape the real one was measured to use: replies with no
-/// `jsonrpc` field, and an unsolicited `remoteControl/status/changed` right
-/// after `initialize`, which is exactly what a live Codex sends and what a
-/// client must not mistake for an answer.
-class _ScriptedCodex implements ProcessHandle {
-  _ScriptedCodex({this.codexHome = '/home/me/.codex', this.reply});
-
-  final String codexHome;
-
-  /// Answers one non-handshake request, or `null` to answer nothing at all.
-  final String? Function(
-    _ScriptedCodex server,
-    int id,
-    String method,
-    Map<String, Object?> params,
-  )?
-  reply;
-
-  final List<Map<String, Object?>> requests = [];
-  List<String> get methods => [
-    for (final request in requests) request['method']! as String,
-  ];
-
-  bool killed = false;
-
-  final StreamController<String> _stdout = StreamController<String>();
-  final StreamController<String> _stderr = StreamController<String>();
-  final Completer<int> _exit = Completer<int>();
-
-  void emitStdout(String line) {
-    if (!_stdout.isClosed) _stdout.add(line);
-  }
-
-  void emitStderr(String line) {
-    if (!_stderr.isClosed) _stderr.add(line);
-  }
-
-  void complete([int code = 0]) {
-    if (!_exit.isCompleted) _exit.complete(code);
-    if (!_stdout.isClosed) _stdout.close();
-    if (!_stderr.isClosed) _stderr.close();
-  }
-
-  @override
-  void writeLine(String line) {
-    final request = jsonDecode(line) as Map<String, Object?>;
-    requests.add(request);
-    final id = request['id'];
-    if (id is! int) return;
-    final method = request['method']! as String;
-    if (method == 'initialize') {
-      emitStdout(
-        jsonEncode({
-          'id': id,
-          'result': {
-            'userAgent': 'karmashala/0.0.0',
-            'codexHome': codexHome,
-            'platformFamily': 'unix',
-            'platformOs': 'linux',
-          },
-        }),
-      );
-      emitStdout(
-        jsonEncode({
-          'method': 'remoteControl/status/changed',
-          'params': {'status': 'disabled'},
-        }),
-      );
-      return;
-    }
-    final scripted = reply;
-    if (scripted == null) {
-      emitStdout(jsonEncode({'id': id, 'result': <String, Object?>{}}));
-      return;
-    }
-    final answer = scripted(
-      this,
-      id,
-      method,
-      (request['params'] as Map?)?.cast<String, Object?>() ?? const {},
-    );
-    if (answer != null) emitStdout(answer);
-  }
-
-  @override
-  Stream<String> get stdoutLines => _stdout.stream;
-
-  @override
-  Stream<List<int>> get stdoutBytes => const Stream<List<int>>.empty();
-
-  @override
-  Stream<String> get stderrLines => _stderr.stream;
-
-  @override
-  Future<int> get exitCode => _exit.future;
-
-  @override
-  Future<void> kill() async {
-    killed = true;
-    complete(137);
-  }
-}
