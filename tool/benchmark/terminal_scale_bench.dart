@@ -21,8 +21,8 @@ import '../../test/terminal/perf/corpora.dart';
 ///
 ///   flutter test tool/benchmark/terminal_scale_bench.dart
 ///
-/// The evidence for the scale target in `docs/ARCHITECTURE.md`: **100 sessions
-/// with a terminal each, responsive while the user types in one of them.**
+/// The evidence for the scale target: **100 sessions with a terminal each,
+/// responsive while the user types in one of them.**
 ///
 /// Opens N process-free panes through the real `TerminalSessionsController`,
 /// fills every one of them with output, then measures the three things that
