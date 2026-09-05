@@ -6,7 +6,6 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/logging/app_logger.dart';
 import '../../core/process/command_runner_providers.dart';
@@ -69,6 +68,7 @@ import 'todo_tools.dart';
 import 'workspace_tools.dart';
 import 'worktree_tools.dart';
 import 'wsl_host_address.dart';
+import '../../core/paths/app_support_directory.dart';
 
 /// The port the control server asks for before falling back to an ephemeral one.
 ///
@@ -415,7 +415,7 @@ class LauncherControlServer implements SessionMcp {
 
   /// Where the bridge reads the port + token from.
   static Future<String> bridgeFilePath() async {
-    final dir = await getApplicationSupportDirectory();
+    final dir = await appSupportDirectory();
     return p.join(dir.path, 'mcp_bridge.json');
   }
 
@@ -565,7 +565,7 @@ class LauncherControlServer implements SessionMcp {
     }
     // Beside the handshake file rather than resolved separately: they belong in
     // the same application-support directory, and a second
-    // `getApplicationSupportDirectory()` would be a platform-channel call on a
+    // `appSupportDirectory()` would be a platform-channel call on a
     // path every caller has already told us about.
     await _prepareSessionConfigs(
       sessionConfigDirectory ?? p.join(p.dirname(file.path), 'mcp'),
@@ -794,7 +794,7 @@ class LauncherControlServer implements SessionMcp {
   Future<LocalRpcServer> _bindLocalSocket(String? overrideDirectory) async {
     final dirPath =
         overrideDirectory ??
-        p.join((await getApplicationSupportDirectory()).path, 'ipc');
+        p.join((await appSupportDirectory()).path, 'ipc');
     final dir = Directory(dirPath);
     await dir.create(recursive: true);
     if (!await _permissions.restrictDirectory(dir, logger: _logger)) {
