@@ -265,6 +265,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
     final explorerVisible = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
+    final width = ShellWidth.of(MediaQuery.sizeOf(context).width);
     // No app icon or name: the OS title bar already carries those.
     return Material(
       color: scheme.surfaceContainerLow,
@@ -292,12 +293,32 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
             // Expanded, not Flexible-then-Spacer: the field takes its own
             // width and the rest of the row is empty space the toggles are
             // pushed to the far edge by.
-            const Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: QuickOpenButton(),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => constraints.maxWidth < 64
+                    // Below its own leading glyph there is nothing to draw but
+                    // an overflow. The field is a convenience — `Ctrl+K` and
+                    // Workspace > Go to… are the same command — so it is the
+                    // last thing in this row to take space and the first to
+                    // give it all back.
+                    ? const SizedBox.shrink()
+                    : const Align(
+                        alignment: Alignment.centerLeft,
+                        child: QuickOpenButton(),
+                      ),
               ),
             ),
+            // The terminal's own verbs, acting on the pane the keyboard is in.
+            // Not per group: none of them needs to know *which* group, and
+            // seven of them repeated in every strip is what made a split group
+            // narrower than its own status bar.
+            //
+            // Down to the `+` alone at compact widths, where the menus and
+            // the command field need the row more than six glyphs do. Every one
+            // of the rest is a chord and a palette command, and the two splits
+            // are on the pane's own menu too — but the way to make a terminal
+            // stays visible at every width.
+            TerminalToolbar(compact: width.isCompact),
             const _WindowSessionBadges(),
             _ChromeToggle(
               icon: AppIcons.arrowsOutSimple,

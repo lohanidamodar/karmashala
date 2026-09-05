@@ -994,7 +994,27 @@ class _SessionBar extends ConsumerWidget {
                 if (sessionId != null) ...[
                   Row(
                     children: [
-                      Expanded(child: DeliveryStateLine(sessionId: sessionId)),
+                      Expanded(
+                        // Scrolled rather than squeezed, for the reason the
+                        // action row below gives: a group narrow enough that
+                        // the branch name and the counts will not fit is one
+                        // where sharing the pixels out leaves none of them
+                        // legible. Its own `LayoutBuilder` because this line
+                        // sits above the row that has the width class.
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final line = DeliveryStateLine(
+                              sessionId: sessionId,
+                            );
+                            return constraints.maxWidth < 240
+                                ? SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: line,
+                                  )
+                                : line;
+                          },
+                        ),
+                      ),
                       // **What this session's account has left, at the end of
                       // the line of facts** — because that is what it is. It
                       // came from the window's status bar, where one figure
@@ -1017,7 +1037,10 @@ class _SessionBar extends ConsumerWidget {
                       // moving — the most frequent change in this bar —
                       // repaints the chip and neither the facts beside it nor
                       // the actions under it.
-                      UsageChip(sessionId: sessionId),
+                      // Flexible for the same reason the line beside it is:
+                      // this row is as wide as a group, not as wide as the
+                      // window, and neither half of it may push the other out.
+                      Flexible(child: UsageChip(sessionId: sessionId)),
                     ],
                   ),
                   // Whatever this session has just been told, in this session's
@@ -1036,6 +1059,81 @@ class _SessionBar extends ConsumerWidget {
                     // with it and the room does not.
                     final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
                     final roomForModel = constraints.maxWidth > 820 * scale;
+                    // **A group is a fraction of the window, and this bar was
+                    // designed when it was the window.** At the 363px a two-way
+                    // split leaves it ran 50px over; at the 143px a split beside
+                    // a wide Explorer leaves, nothing that keeps its natural
+                    // width can fit at all.
+                    //
+                    // What a narrow group gives up, in order:
+                    //
+                    // 1. **The model chip**, above — a fact the chat surface
+                    //    repeats in full, so a narrow bar loses a shortcut
+                    //    rather than a control.
+                    // 2. **Words.** Every pill drops to its glyph and keeps its
+                    //    tooltip and its semantics label, so a pointer and a
+                    //    screen reader still get the verb.
+                    // 3. **Nothing else.** The actions do not go into an
+                    //    overflow menu: `Commit` is what most visits to this bar
+                    //    are for, and two clicks away is worse than small.
+                    //
+                    // Below that the row **scrolls** rather than squeezing.
+                    // Sharing out a box narrower than the controls gives every
+                    // one of them a few pixels and makes all of them unusable;
+                    // scrolling keeps each at the size it needs and every one
+                    // reachable. It is also the answer this app already gives
+                    // one level down — `PaneGroupStrip` scrolls its chips when a
+                    // region is dragged below their width.
+                    //
+                    // The toggle stays **outside** the scroll: it is the only
+                    // way back from the conversation, and a way home you have to
+                    // find by scrolling is not one.
+                    final narrow = constraints.maxWidth < 560 * scale;
+                    final toggle = selected == null
+                        ? null
+                        : _ViewToggle(
+                            onTerminal: onTerminal,
+                            onChat: onChat,
+                            onTerminalView: onTerminalView,
+                            compact: narrow,
+                          );
+                    if (narrow) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: sessionId == null
+                                ? const SizedBox.shrink()
+                                : SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        PermissionModeChip(
+                                          sessionId: sessionId,
+                                        ),
+                                        const SizedBox(width: Insets.xs),
+                                        // Unbounded, so the strip's `Wrap` lays
+                                        // out in one run and the bar keeps one
+                                        // height whatever it holds.
+                                        DeliveryStrip(
+                                          sessionId: sessionId,
+                                          hostedOnTerminal: true,
+                                          compact: true,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                          if (toggle != null) ...[
+                            const SizedBox(width: Insets.sm),
+                            toggle,
+                          ],
+                        ],
+                      );
+                    }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1085,13 +1183,9 @@ class _SessionBar extends ConsumerWidget {
                             ),
                           ),
                         ],
-                        if (selected != null) ...[
+                        if (toggle != null) ...[
                           const SizedBox(width: Insets.sm),
-                          _ViewToggle(
-                            onTerminal: onTerminal,
-                            onChat: onChat,
-                            onTerminalView: onTerminalView,
-                          ),
+                          toggle,
                         ],
                       ],
                     );
@@ -1298,7 +1392,11 @@ class _TabStrip extends ConsumerWidget {
                 ),
               ),
             ),
-            const TerminalToolbar(),
+            // Nothing else. Every verb that used to sit here — find, snippets,
+            // the two splits, the new-terminal pair — asked no question a group
+            // could answer that "the focused one" could not, and seven controls
+            // repeated in a 286px group were the whole of why the bar below
+            // overflowed. They are in the title bar now. See [ShellTitleBar].
             const SizedBox(width: Insets.xs),
           ],
         ),
@@ -2223,11 +2321,20 @@ class _ViewToggle extends StatelessWidget {
     required this.onTerminal,
     required this.onChat,
     required this.onTerminalView,
+    this.compact = false,
   });
 
   final bool onTerminal;
   final VoidCallback onChat;
   final VoidCallback onTerminalView;
+
+  /// Glyphs only, for a group too narrow to spell the two words.
+  ///
+  /// The labels are the first thing this control gives up and the icons are the
+  /// last: a two-state switch between a terminal and a conversation is legible
+  /// from its marks, the tooltip still says the words, and the semantics label
+  /// is unchanged — so nothing is lost to a screen reader or to the keyboard.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2265,11 +2372,15 @@ class _ViewToggle extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(icon, size: Chrome.iconSmall, color: colour),
-                  const SizedBox(width: Insets.xs),
-                  Text(
-                    label,
-                    style: theme.textTheme.labelSmall?.copyWith(color: colour),
-                  ),
+                  if (!compact) ...[
+                    const SizedBox(width: Insets.xs),
+                    Text(
+                      label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colour,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

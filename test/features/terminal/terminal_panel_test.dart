@@ -205,7 +205,8 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
 
-    await pumpPanel(tester, container);
+    // The window chrome, because that is where the two split buttons are now.
+    await pumpWindowChrome(tester, container);
     await tester.tap(
       find.byTooltip('Split the workspace right (Ctrl+Shift+D)'),
     );
@@ -226,7 +227,7 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
 
-    await pumpPanel(tester, container);
+    await pumpWindowChrome(tester, container);
     expect(find.byType(TerminalSearchBar), findsNothing);
 
     await tester.tap(find.byTooltip('Find in scrollback (Ctrl+Shift+F)'));

@@ -816,7 +816,17 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
 /// background-session badges are questions about the window, and they have
 /// gone up to the title bar with focus mode. See [ShellTitleBar].
 class TerminalToolbar extends ConsumerWidget {
-  const TerminalToolbar({super.key});
+  const TerminalToolbar({this.compact = false, super.key});
+
+  /// Only the way to make another terminal, for a window too narrow to hold the
+  /// rest of the row.
+  ///
+  /// The other five are a chord and a palette command each, and the two splits
+  /// are on the pane's own menu as well — but **the `+` must never be off
+  /// screen**. That was true when this row lived in the tab strip ("no number
+  /// of tabs can push the way to make another one off the end") and moving the
+  /// row up did not stop it being true.
+  final bool compact;
 
   /// Builds of this widget, for `snippet_button_cost_test.dart`.
   ///
@@ -839,7 +849,7 @@ class TerminalToolbar extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (hasCommands)
+        if (!compact && hasCommands)
           IconButton(
             tooltip: 'Commands',
             icon: const Icon(AppIcons.clockCounterClockwise, size: Chrome.icon),
@@ -851,7 +861,7 @@ class TerminalToolbar extends ConsumerWidget {
         // anything else happening while somebody types — could wake. The empty
         // case is answered inside the picker, which always offers "New command
         // snippet…". See `snippet_button_cost_test.dart`.
-        IconButton(
+        if (!compact) IconButton(
           tooltip:
               'Command snippets'
               '${_chord(_snippetChord())}',
@@ -860,14 +870,14 @@ class TerminalToolbar extends ConsumerWidget {
               ? () => QuickOpen.show(context, initialQuery: r'$')
               : null,
         ),
-        IconButton(
+        if (!compact) IconButton(
           tooltip:
               'Find in scrollback'
               '${_chord(shellChordLabel<FindInScrollbackIntent>())}',
           icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
-        IconButton(
+        if (!compact) IconButton(
           tooltip:
               'Split the workspace right'
               '${_chord(_splitChord(SplitAxis.horizontal))}',
@@ -877,7 +887,7 @@ class TerminalToolbar extends ConsumerWidget {
           icon: const Icon(AppIcons.squareSplitHorizontal, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
         ),
-        IconButton(
+        if (!compact) IconButton(
           tooltip:
               'Split the workspace down'
               '${_chord(_splitChord(SplitAxis.vertical))}',
