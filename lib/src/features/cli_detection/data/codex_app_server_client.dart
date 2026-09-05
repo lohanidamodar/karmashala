@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../../../core/process/process_handle.dart';
+import 'codex_thread.dart';
 
 /// Why a Codex app-server call produced no result.
 enum CodexAppServerFailureKind {
@@ -78,6 +79,18 @@ class CodexAppServerInfo {
 
   @override
   String toString() => 'CodexAppServerInfo($codexHome, $platformOs)';
+}
+
+/// Every thread `thread/list` returned, or the reason there are none.
+class CodexThreadList {
+  const CodexThreadList.ok(this.threads) : failure = null;
+  const CodexThreadList.failed(CodexAppServerFailure this.failure)
+    : threads = const [];
+
+  final List<CodexThread> threads;
+  final CodexAppServerFailure? failure;
+
+  bool get ok => failure == null;
 }
 
 /// The answer to one call: a result object, or the reason there is none.
@@ -175,6 +188,9 @@ class CodexAppServerClient {
   int connectionsOpened = 0;
   int requestsSent = 0;
 
+  /// `thread/list` pages actually read, over this client's life.
+  int threadsPaged = 0;
+
   /// What `initialize` answered, once there has been a handshake.
   CodexAppServerInfo? get info => _info;
   CodexAppServerInfo? _info;
@@ -202,6 +218,53 @@ class CodexAppServerClient {
   /// (`thread/setName` does not exist — it answers `-32600`.)
   Future<CodexAppServerResult> setThreadName(String threadId, String name) =>
       call('thread/name/set', {'threadId': threadId, 'name': name});
+
+  /// Every thread in this store, paging `thread/list` until it is exhausted.
+  ///
+  /// `useStateDbOnly: true` answers out of `state_5.sqlite` alone — 15-49 ms
+  /// against the owner's 16 threads, versus a walk that has to open every
+  /// rollout. [codexThreadSourceKinds] is always sent, because the default
+  /// silently drops rows; see that list.
+  ///
+  /// A page ends when `nextCursor` is null. [maxPages] is a stop for a server
+  /// that never says so — a cursor that repeats or a page count that runs away
+  /// ends the loop with what has been read rather than spinning.
+  Future<CodexThreadList> listThreads({
+    int pageSize = 200,
+    int maxPages = 200,
+  }) async {
+    final threads = <CodexThread>[];
+    final seenCursors = <String>{};
+    String? cursor;
+    for (var page = 0; page < maxPages; page++) {
+      final result = await call('thread/list', {
+        'limit': pageSize,
+        'useStateDbOnly': true,
+        'sourceKinds': codexThreadSourceKinds,
+        if (cursor != null) 'cursor': cursor,
+      });
+      final failure = result.failure;
+      if (failure != null) return CodexThreadList.failed(failure);
+      final data = result.value!['data'];
+      if (data is! List) {
+        return const CodexThreadList.failed(
+          CodexAppServerFailure(
+            CodexAppServerFailureKind.malformed,
+            'thread/list answered without a data array',
+          ),
+        );
+      }
+      threadsPaged++;
+      for (final row in data) {
+        if (CodexThread.fromJson(row) case final thread?) threads.add(thread);
+      }
+      final next = result.value!['nextCursor'];
+      if (next is! String || next.isEmpty) break;
+      if (!seenCursors.add(next)) break;
+      cursor = next;
+    }
+    return CodexThreadList.ok(threads);
+  }
 
   /// Sends one JSON-RPC request, connecting and handshaking first if needed.
   ///
