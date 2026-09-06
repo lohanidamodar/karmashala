@@ -750,7 +750,8 @@ class SessionLauncher {
     _ref.read(terminalSessionsControllerProvider.notifier)
       ..reattachSession(paneId)
       ..focusPane(paneId);
-    _ref.read(terminalVisibleProvider.notifier).set(true);
+    // The group that pane is in, not the focused one.
+    _ref.read(terminalSessionsControllerProvider.notifier).showTerminalForPane(paneId);
     _ref.read(selectedSessionIdProvider.notifier).select(sessionId);
     // Where this session is on screen moved; nothing was created or renamed.
     _publish(SessionChange.moved(sessionId));
@@ -1466,7 +1467,7 @@ class SessionLauncher {
         ? (tabId: resumedTab, paneId: dormant!)
         : slotted ?? terminals.openAgentTab(launch);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
-    _ref.read(terminalVisibleProvider.notifier).set(true);
+    _ref.read(terminalSessionsControllerProvider.notifier).showTerminalForPane(opened.paneId);
     // Deliberately after the pane is claimed, so it reports what happened
     // rather than what was intended. `resumed` is the dormant-pane reuse: when
     // it is false for a session that has a restored pane, the user is about to

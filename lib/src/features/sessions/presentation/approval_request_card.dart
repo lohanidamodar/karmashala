@@ -363,5 +363,10 @@ void _openTerminal(WidgetRef ref, String sessionId) {
       ..reattachSession(paneId)
       ..focusPane(paneId);
   }
-  ref.read(terminalVisibleProvider.notifier).set(true);
+  // The group holding that session's pane. An approval is about one
+  // session, so "go to the terminal" means the one running it.
+  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+  paneId == null
+      ? terminals.showTerminalHere()
+      : terminals.showTerminalForPane(paneId);
 }

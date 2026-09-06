@@ -319,6 +319,17 @@ void main() {
         // The three the owner's screenshot shows have to be reachable, not
         // merely laid out: `hitTestWarningShouldBeFatal` is on inside the
         // matrix, so a button pushed off the window fails here.
+        // The bar is on screen at every size in the matrix, and the matrix's
+        // own rules — no overflow, nothing hit-tested off the window — are what
+        // say its controls are reachable there.
+        expect(find.byType(DeliveryStrip), findsOneWidget);
+        // The **words** are only owed where there is room for them: a workspace
+        // group narrower than 560px keeps every pill and drops its letters, so
+        // asking for the text at 720px would now be asking the bar not to be
+        // responsive. Above that the labels are still the assertion they were.
+        final logical =
+            tester.view.physicalSize.width / tester.view.devicePixelRatio;
+        if (logical < 900) return;
         for (final label in ['Run tests', 'Continue with…']) {
           expect(
             find.descendant(

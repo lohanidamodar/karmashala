@@ -413,9 +413,15 @@ void main() {
           .layout
           .panes
           .single;
-      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      controller.openTab(TerminalProfile.commandPrompt);
+      final guestPane = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
       controller.activateTab(host);
-      controller.moveTabIntoSlot(guest, first);
+      controller.movePaneIntoRegion(guestPane, first);
 
       expect(
         container.read(terminalSessionsControllerProvider).tabs.single.layout

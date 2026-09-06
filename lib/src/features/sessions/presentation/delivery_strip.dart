@@ -50,10 +50,22 @@ class DeliveryStrip extends ConsumerStatefulWidget {
   const DeliveryStrip({
     required this.sessionId,
     this.hostedOnTerminal = false,
+    this.compact = false,
     super.key,
   });
 
   final String sessionId;
+
+  /// Icon-only pills, for a workspace group too narrow to spell the verbs.
+  ///
+  /// The labels are what a narrow bar gives up, and the buttons are what it
+  /// keeps: `deliveryActionsFor` over-offers on purpose, so five labelled pills
+  /// are ~440px and five glyphs are ~150. The tooltip and the semantics label
+  /// are unchanged, so a pointer and a screen reader both still get the word —
+  /// only the letters go. Hiding an action behind an overflow menu instead
+  /// would put `Commit`, the one thing most visits to this bar are for, two
+  /// clicks away.
+  final bool compact;
 
   /// Whether the strip is drawn in the session bar under the terminal rather
   /// than above the conversation's composer. One parameter, not a second
@@ -328,6 +340,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
               label: offered.action.label,
               tooltip: _actionTooltip(offered),
               primary: offered.isPrimary,
+              compact: widget.compact,
               onPressed: _busy || !offered.isEnabled
                   ? null
                   : () => _press(offered, delivery),
@@ -689,6 +702,7 @@ class _BarAction extends StatelessWidget {
     required this.tooltip,
     required this.onPressed,
     this.primary = false,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -696,6 +710,9 @@ class _BarAction extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onPressed;
   final bool primary;
+
+  /// Glyph only — see [DeliveryStrip.compact].
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -737,24 +754,27 @@ class _BarAction extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, size: Chrome.iconSmall, color: foreground),
-                const SizedBox(width: Insets.xs),
-                // Flexible so a pill wider than the room left for it ellipsises
-                // instead of overflowing: at 200% text "Archive worktree" is
-                // wider than the gap between the permission control and the
-                // toggle. The glyph, the tooltip and the semantics label all
-                // survive the trim, so nothing is lost but letters.
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                      fontWeight: primary ? FontWeight.w600 : null,
+                if (!compact) ...[
+                  const SizedBox(width: Insets.xs),
+                  // Flexible so a pill wider than the room left for it
+                  // ellipsises instead of overflowing: at 200% text "Archive
+                  // worktree" is wider than the gap between the permission
+                  // control and the toggle. The glyph, the tooltip and the
+                  // semantics label all survive the trim, so nothing is lost
+                  // but letters.
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontWeight: primary ? FontWeight.w600 : null,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

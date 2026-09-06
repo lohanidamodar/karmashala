@@ -1071,7 +1071,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           ),
           ToggleTerminalIntent: CallbackAction<ToggleTerminalIntent>(
             onInvoke: (intent) {
-              ref.read(terminalVisibleProvider.notifier).toggle();
+              ref.read(terminalSessionsControllerProvider.notifier).toggleFaceHere();
               return null;
             },
           ),

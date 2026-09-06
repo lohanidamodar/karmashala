@@ -10,7 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
-import 'terminal_panel_test.dart' show panelContainer, pumpPanel;
+import 'terminal_panel_test.dart'
+    show panelContainer, pumpPanel, pumpWindowChrome;
 
 /// The one pane of [tabId].
 String paneOf(ProviderContainer container, String tabId) => container
@@ -207,7 +208,7 @@ void main() {
 
     /// The bulk control, and the two things it must not be: always there, or a
     /// button that starts four agents without saying which four.
-    testWidgets('the toolbar offers a resume only once a restart has left '
+    testWidgets('the title bar offers a resume only once a restart has left '
         'something dormant', (tester) async {
       final container = panelContainer();
       final controller = container.read(
@@ -215,7 +216,7 @@ void main() {
       );
       controller.openTab(TerminalProfile.powerShell);
 
-      await pumpPanel(tester, container);
+      await pumpWindowChrome(tester, container);
       expect(find.byTooltip(_restoredTooltip(1)), findsNothing);
       expect(find.byTooltip(_restoredTooltip(2)), findsNothing);
 
@@ -274,7 +275,7 @@ void main() {
       expect(inDialog(find.text('Resume')), findsNWidgets(2));
     });
 
-    testWidgets('the tab bar shows nothing until a session is detached', (
+    testWidgets('the title bar shows nothing until a session is detached', (
       tester,
     ) async {
       final container = panelContainer();
@@ -285,7 +286,7 @@ void main() {
       giveShellHistory(controller.instanceFor(paneOf(container, tabId))!);
       controller.openTab(TerminalProfile.commandPrompt);
 
-      await pumpPanel(tester, container);
+      await pumpWindowChrome(tester, container);
       expect(find.byType(Badge), findsNothing);
 
       controller.closeTab(tabId);
@@ -340,7 +341,7 @@ void main() {
       giveShellHistory(controller.instanceFor(pane)!);
       controller.closeTab(first);
 
-      await pumpPanel(tester, container);
+      await pumpWindowChrome(tester, container);
       await tester.tap(find.byType(Badge));
       await tester.pumpAndSettle();
 
@@ -368,7 +369,7 @@ void main() {
       controller.openTab(TerminalProfile.commandPrompt);
       controller.closeTab(first);
 
-      await pumpPanel(tester, container);
+      await pumpWindowChrome(tester, container);
       await tester.tap(find.byType(Badge));
       await tester.pumpAndSettle();
       await tester.tap(find.text('End all'));

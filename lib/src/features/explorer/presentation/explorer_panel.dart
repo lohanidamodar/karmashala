@@ -212,7 +212,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             workingDirectory: project.root.path,
           );
     }
-    ref.read(terminalVisibleProvider.notifier).set(true);
+    ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere();
   }
 
   /// Opens [path] in the host's file manager and says why when it cannot.

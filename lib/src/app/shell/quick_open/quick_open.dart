@@ -430,13 +430,24 @@ class QuickOpenButton extends StatelessWidget {
                       style: theme.textTheme.labelSmall?.copyWith(color: muted),
                     ),
                   ),
-                  const SizedBox(width: Insets.md),
-                  Text(
-                    'Ctrl+K',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: muted,
-                      fontFamily: kMonoFamily,
-                      letterSpacing: 0,
+                  // The chord is decoration — the tooltip says it too — so it
+                  // is what the field gives up first. Flexible rather than
+                  // dropped outright so it shortens before it goes, and so the
+                  // row can never overflow whatever the chrome beside it takes.
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: Insets.md),
+                      child: Text(
+                        'Ctrl+K',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: muted,
+                          fontFamily: kMonoFamily,
+                          letterSpacing: 0,
+                        ),
+                      ),
                     ),
                   ),
                 ],

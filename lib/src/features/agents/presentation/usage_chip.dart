@@ -328,11 +328,17 @@ class _UsageChipState extends ConsumerState<UsageChip> {
                 color: colour,
               ),
               const SizedBox(width: _glyphGap),
-              Text(
-                view.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: colour),
+              // Flexible, so the chip can be given a bounded box and give up
+              // its tail rather than overflow: a workspace group's bar is a
+              // fraction of the window, and `51% · 28m` is wider than some of
+              // them. The glyph and the tooltip survive the trim.
+              Flexible(
+                child: Text(
+                  view.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: colour),
+                ),
               ),
             ],
           ),

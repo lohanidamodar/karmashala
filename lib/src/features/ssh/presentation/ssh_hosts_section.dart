@@ -75,7 +75,8 @@ class _HostCard extends ConsumerWidget {
         TerminalProfile.ssh(host.id, hostName: host.name),
         workingDirectory: host.defaultDirectory?.path,
       );
-      ref.read(terminalVisibleProvider.notifier).set(true);
+      // A new shell opens in the group the keyboard is in.
+      ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere();
     }
 
     return RowContextMenu(

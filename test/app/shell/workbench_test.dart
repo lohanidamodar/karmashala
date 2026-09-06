@@ -1456,9 +1456,12 @@ void main() {
         reason: 'with nothing selected the workbench is the terminal',
       );
       expect(container.read(selectedSessionIdProvider), isNull);
-      // The panes' own standing rule, not this one: there is always at least
-      // one terminal once they are what the workbench is showing.
-      expect(find.byType(TerminalTabChip), findsOneWidget);
+      // Empty, and left that way. The one automatic open belongs to opening the
+      // app: a workbench that reopened a shell every time the last tab closed
+      // would be one the user could never put down. The panes offer the button
+      // instead — see `_NoTerminalOpen`.
+      expect(find.byType(TerminalTabChip), findsNothing);
+      expect(find.text('No terminal open'), findsOneWidget);
     });
 
     testWidgets('ending a session in another tab moves nothing', (

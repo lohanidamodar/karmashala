@@ -91,9 +91,16 @@ class TerminalActions {
     _sessions.openTab(profile, workingDirectory: workingDirFor(profile));
   }
 
-  /// Divides the focused pane, leaving the new region empty for the user to
-  /// fill — see [TerminalSessionsController.splitPane].
-  void split(SplitAxis axis) => _sessions.splitPane(axis);
+  /// Divides the focused **workspace group**, leaving the new one empty for the
+  /// user to fill — see [TerminalSessionsController.splitWorkspace].
+  ///
+  /// The buttons and the chords split the workspace; splitting a *pane* inside
+  /// one tab is the pane's own verb, on its own menu.
+  void split(SplitAxis axis) => _sessions.splitWorkspace(axis);
+
+  /// Divides the focused pane inside its tab — see
+  /// [TerminalSessionsController.splitPane].
+  void splitPane(SplitAxis axis) => _sessions.splitPane(axis);
 
   /// Starts a terminal in the empty region [slotPaneId].
   void openInSlot(String slotPaneId, [TerminalProfile? profile]) {
@@ -385,7 +392,26 @@ class TerminalActions {
 /// live `TerminalInstance`, so an unmounted tab keeps its process, its buffer
 /// and its scrollback and comes back unchanged. See [MountedTabs].
 class TerminalPaneStack extends ConsumerStatefulWidget {
-  const TerminalPaneStack({super.key});
+  const TerminalPaneStack({
+    this.groupId,
+    this.groupFocused = true,
+    this.autoOpenDone = true,
+    super.key,
+  });
+
+  /// The workspace group whose tabs these are, or null before the window has
+  /// a workspace at all — the one frame between launching and the first tab.
+  final String? groupId;
+
+  /// Whether the keyboard is in this group. Only the focused group draws a
+  /// pane as focused; every group still draws its own tab.
+  final bool groupFocused;
+
+  /// Whether the workbench's one automatic open has had its turn. Owned up
+  /// there rather than here: this widget is rebuilt whenever the workspace
+  /// gains or loses its last tab, and a flag that resets with it would reopen
+  /// the terminal the user has just closed.
+  final bool autoOpenDone;
 
   @override
   ConsumerState<TerminalPaneStack> createState() => _TerminalPaneStackState();
@@ -398,31 +424,6 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   /// which tabs happen to be built is nobody else's business, and publishing it
   /// would put a rebuild of every consumer behind every tab switch.
   final MountedTabs _mounted = MountedTabs();
-
-  /// Whether the one automatic open below has had its turn.
-  ///
-  /// It runs once, when the panel mounts. Before it, "no tabs" really does mean
-  /// a terminal is on its way and saying so is honest; after it, "no tabs" can
-  /// only be the user having closed the last one, and the same words became a
-  /// message that never changed — the panel sat on "Opening terminal…" with
-  /// nothing opening.
-  bool _autoOpenDone = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Ensure there is always at least one terminal when the panes are shown.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (ref.read(terminalSessionsControllerProvider).isEmpty) {
-        _actions.open(_actions.defaultProfile());
-      }
-      // Deliberately not conditional on having opened anything: what this
-      // records is that the automatic attempt is over, so a layout that
-      // stays empty offers the user the button instead of a false promise.
-      setState(() => _autoOpenDone = true);
-    });
-  }
 
   TerminalSessionsController get _sessions =>
       ref.read(terminalSessionsControllerProvider.notifier);
@@ -440,8 +441,15 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     // Deliberately narrow: the topology and which tab is in front, not the
     // whole layout. A process exiting changes neither, so it no longer
     // rebuilds the stack — the pane's own status bar watches its liveness.
-    final openTabs = ref.watch(terminalTabsProvider);
-    final activeTabId = ref.watch(terminalActiveTabIdProvider);
+    final groupId = widget.groupId;
+    final openTabs = groupId == null
+        ? ref.watch(terminalTabsProvider)
+        : ref.watch(workspaceGroupTabsProvider(groupId));
+    final activeTabId = groupId == null
+        ? ref.watch(terminalActiveTabIdProvider)
+        : ref.watch(workspaceGroupActiveTabProvider(groupId));
+    // One search bar, over the group the keyboard is in: the bar is bound to a
+    // pane, and a pane in a group nobody is typing into has nothing to find.
     final search = ref.watch(terminalSearchControllerProvider);
     _mounted.sync(
       openTabIds: [for (final tab in openTabs) tab.id],
@@ -457,10 +465,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       color: theme.colorScheme.surfaceContainerLowest,
       child: Column(
         children: [
-          if (search.visible) const TerminalSearchBar(),
+          if (search.visible && widget.groupFocused) const TerminalSearchBar(),
           Expanded(
             child: openTabs.isEmpty
-                ? _autoOpenDone
+                ? widget.autoOpenDone
                       ? _NoTerminalOpen(
                           onNewTerminal: () =>
                               _actions.open(_actions.defaultProfile()),
@@ -488,8 +496,11 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                           // 100 the pointer did.
                           onResize: (splitId, index, share) =>
                               _sessions.resizePane(tab.id, splitId, index, share),
-                          regionBuilder: (group) =>
-                              _buildRegion(group, tab, tab.id == activeTabId),
+                          regionBuilder: (group) => _buildRegion(
+                            group,
+                            tab,
+                            widget.groupFocused && tab.id == activeTabId,
+                          ),
                         ),
                     ],
                   ),
@@ -554,10 +565,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           targetPaneId: paneId,
         ),
         onClose: () => _sessions.closePane(paneId),
-        onMoveTabHere: _canMoveATabHere(paneId)
+        onMoveTabHere: _canMoveAPaneHere(paneId)
             ? () => TabPicker.show(
                 context,
-                (ref) => tabsMovableInto(ref, paneId),
+                (ref) => panesMovableInto(ref, paneId),
               )
             : null,
       );
@@ -674,15 +685,20 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
 
     return _PaneDropTarget(
       paneId: paneId,
+      groupId: widget.groupId,
       child: paneWithActions,
     );
   }
 
-  /// Whether any tab could be moved into the empty region [paneId] — false
-  /// while it is the only tab there is, when the offer would lead nowhere.
-  bool _canMoveATabHere(String paneId) {
+  /// Whether any pane could be moved into the empty region [paneId] — false
+  /// while there is none to move, when the offer would lead nowhere.
+  bool _canMoveAPaneHere(String paneId) {
     final tabs = ref.read(terminalSessionsControllerProvider).tabs;
-    return tabs.any((tab) => _sessions.canMoveTabIntoSlot(tab.id, paneId));
+    return tabs.any(
+      (tab) => tab.layout.panes.any(
+        (candidate) => _sessions.canMovePaneIntoRegion(candidate, paneId),
+      ),
+    );
   }
 
 
@@ -726,6 +742,21 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           shortcut: shellChordLabel<FindInScrollbackIntent>(),
         ),
         const DesktopMenuDivider(),
+        // The *pane* split, and the only place it is offered. The toolbar's two
+        // split buttons divide the whole workspace group now — a strip, a
+        // surface and a status bar of its own — which is a different act, and
+        // one row of chrome cannot honestly stand for both.
+        DesktopMenuItem(
+          value: 'split-pane-right',
+          label: 'Split pane right',
+          icon: AppIcons.squareSplitHorizontal,
+        ),
+        DesktopMenuItem(
+          value: 'split-pane-down',
+          label: 'Split pane down',
+          icon: AppIcons.squareSplitVertical,
+        ),
+        const DesktopMenuDivider(),
         // Only while there is a split to collapse, and only then: with one
         // pane the tab strip's own close button is the way, and two words for
         // one act in two places is how a menu stops being read.
@@ -767,6 +798,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         await pasteIntoTerminal(session.terminal, controller: session.controller);
       case 'find':
         _actions.openSearch();
+      case 'split-pane-right':
+        _actions.splitPane(SplitAxis.horizontal);
+      case 'split-pane-down':
+        _actions.splitPane(SplitAxis.vertical);
       case 'untangle':
         _sessions.movePaneToNewTab(paneId);
       case 'close':
@@ -777,14 +812,26 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   }
 }
 
-/// The terminal's own toolbar buttons — find, split, new tab and the two
-/// buttons that only appear when they have something to say (background
-/// sessions, recorded commands).
+/// One workspace group's own toolbar — find, split, new tab, and the recorded
+/// commands button that only appears when it has something to say.
 ///
-/// Sits at the right of the workbench's tab strip, so terminal verbs stay
-/// beside terminal tabs.
+/// Sits at the right of that group's tab strip, so a verb that acts on *this*
+/// group's focused pane is beside that group's tabs. What is **not** here any
+/// more is what was never about one group: the restored-session and
+/// background-session badges are questions about the window, and they have
+/// gone up to the title bar with focus mode. See [ShellTitleBar].
 class TerminalToolbar extends ConsumerWidget {
-  const TerminalToolbar({super.key});
+  const TerminalToolbar({this.compact = false, super.key});
+
+  /// Only the way to make another terminal, for a window too narrow to hold the
+  /// rest of the row.
+  ///
+  /// The other five are a chord and a palette command each, and the two splits
+  /// are on the pane's own menu as well — but **the `+` must never be off
+  /// screen**. That was true when this row lived in the tab strip ("no number
+  /// of tabs can push the way to make another one off the end") and moving the
+  /// row up did not stop it being true.
+  final bool compact;
 
   /// Builds of this widget, for `snippet_button_cost_test.dart`.
   ///
@@ -799,62 +846,15 @@ class TerminalToolbar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     debugBuildCount++;
     final actions = TerminalActions(ref);
-    final backgroundCount = ref.watch(
-      terminalSessionsControllerProvider.select((s) => s.detached.length),
-    );
     final hasTabs = ref.watch(
       terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
-    );
-    // Only the number, through a `select`, for the reason the background count
-    // is read the same way: this row sits above a terminal somebody types into
-    // all day and must not wake for anything smaller than a change it draws.
-    final restoredCount = ref.watch(
-      restoredAgentPanesProvider.select((panes) => panes.length),
     );
     final hasCommands = actions.focusedBlocks().isNotEmpty;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Conditional, like the background badge beside it and unlike the
-        // snippets button — a control that is always here is one the tab strip
-        // has to find room for at every window width, and `workbench.dart`
-        // records what adding an unconditional one to this end cost: 8.8px of
-        // overflow at 640 wide. There is also nothing to say when a restart
-        // left nothing dormant, which is nearly always.
-        if (restoredCount > 0)
-          IconButton(
-            tooltip:
-                '$restoredCount restored session'
-                '${restoredCount == 1 ? '' : 's'} — nothing running in '
-                '${restoredCount == 1 ? 'it' : 'them'}',
-            icon: Badge.count(
-              count: restoredCount,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              textColor: Theme.of(context).colorScheme.onPrimary,
-              // Not the history clock the Commands button beside it uses: two
-              // identical icons in one row are one icon as far as the eye is
-              // concerned. This one is about starting them again.
-              child: const Icon(AppIcons.playCircle, size: Chrome.icon),
-            ),
-            onPressed: () => actions.showRestoredSessions(context),
-          ),
-        if (backgroundCount > 0)
-          IconButton(
-            tooltip:
-                '$backgroundCount session'
-                '${backgroundCount == 1 ? '' : 's'} running in the background',
-            // The accent, not Material's default error red: a session running
-            // without a tab is the app working as designed, not a fault.
-            icon: Badge.count(
-              count: backgroundCount,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              textColor: Theme.of(context).colorScheme.onPrimary,
-              child: const Icon(AppIcons.terminalWindow, size: Chrome.icon),
-            ),
-            onPressed: () => actions.showBackgroundSessions(context),
-          ),
-        if (hasCommands)
+        if (!compact && hasCommands)
           IconButton(
             tooltip: 'Commands',
             icon: const Icon(AppIcons.clockCounterClockwise, size: Chrome.icon),
@@ -866,7 +866,7 @@ class TerminalToolbar extends ConsumerWidget {
         // anything else happening while somebody types — could wake. The empty
         // case is answered inside the picker, which always offers "New command
         // snippet…". See `snippet_button_cost_test.dart`.
-        IconButton(
+        if (!compact) IconButton(
           tooltip:
               'Command snippets'
               '${_chord(_snippetChord())}',
@@ -875,23 +875,27 @@ class TerminalToolbar extends ConsumerWidget {
               ? () => QuickOpen.show(context, initialQuery: r'$')
               : null,
         ),
-        IconButton(
+        if (!compact) IconButton(
           tooltip:
               'Find in scrollback'
               '${_chord(shellChordLabel<FindInScrollbackIntent>())}',
           icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
-        IconButton(
-          tooltip: 'Split right${_chord(_splitChord(SplitAxis.horizontal))}',
+        if (!compact) IconButton(
+          tooltip:
+              'Split the workspace right'
+              '${_chord(_splitChord(SplitAxis.horizontal))}',
           // `sidebarSimple` means the side panel everywhere else in the
           // chrome; a split is its own shape, and the vertical one no longer
           // needs a RotatedBox to be drawn.
           icon: const Icon(AppIcons.squareSplitHorizontal, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
         ),
-        IconButton(
-          tooltip: 'Split down${_chord(_splitChord(SplitAxis.vertical))}',
+        if (!compact) IconButton(
+          tooltip:
+              'Split the workspace down'
+              '${_chord(_splitChord(SplitAxis.vertical))}',
           icon: const Icon(AppIcons.squareSplitVertical, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
         ),
@@ -1034,6 +1038,7 @@ class TerminalTabChip extends StatelessWidget {
     required this.onEnd,
     required this.onBulkClose,
     this.agentStatus,
+    this.accented = true,
     super.key,
   });
 
@@ -1053,6 +1058,11 @@ class TerminalTabChip extends StatelessWidget {
   final AgentActivityStatus? agentStatus;
 
   final bool selected;
+
+  /// Whether this is also the tab the keyboard is in — see
+  /// [WorkbenchTabChip.accented] for the three states. Every workspace group
+  /// shows which tab it holds; only one of them shows where typing goes.
+  final bool accented;
 
   /// Where this tab sits in the strip, and how many there are.
   ///
@@ -1083,6 +1093,7 @@ class TerminalTabChip extends StatelessWidget {
     final status = agentStatus;
     return WorkbenchTabChip(
       selected: selected,
+      accented: accented,
       onTap: onTap,
       onSecondaryTapDown: (details) => _menu(context, details.globalPosition),
       // One slot, never two glyphs: a tab running an agent says what the agent
@@ -1209,10 +1220,18 @@ enum _SplitDropZone { left, right, top, bottom }
 class _PaneDropTarget extends ConsumerStatefulWidget {
   const _PaneDropTarget({
     required this.paneId,
+    required this.groupId,
     required this.child,
   });
 
   final String paneId;
+
+  /// The workspace group this pane is in. A **tab** dropped on an edge divides
+  /// that group and lands in the new one; a **pane** divides the tab, which is
+  /// what a region is for. See
+  /// [TerminalSessionsController.moveTabBesideGroup].
+  final String? groupId;
+
   final Widget child;
 
   @override
@@ -1245,9 +1264,10 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) {
         final data = details.data;
+        final group = widget.groupId;
         final accepts = switch (data) {
           TabDrag(:final tabId) =>
-            sessions.canSplitPaneWithTab(widget.paneId, tabId),
+            group != null && sessions.canMoveTabBesideGroup(tabId, group),
           PaneDrag(:final paneId) =>
             sessions.canSplitPaneWithPane(widget.paneId, paneId),
         };
@@ -1272,12 +1292,14 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
 
         switch (details.data) {
           case TabDrag(:final tabId):
-            sessions.splitPaneWithTab(
-              widget.paneId,
-              tabId,
-              axis,
-              insertBefore: insertBefore,
-            );
+            if (widget.groupId case final group?) {
+              sessions.moveTabBesideGroup(
+                tabId,
+                group,
+                axis,
+                insertBefore: insertBefore,
+              );
+            }
           case PaneDrag(:final paneId):
             sessions.splitPaneWithPane(
               widget.paneId,

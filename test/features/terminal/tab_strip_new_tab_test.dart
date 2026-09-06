@@ -73,18 +73,15 @@ void main() {
     expect(tabCount(container), 1);
 
     // Where the target is, before what it does. It starts where the last chip
-    // ends and stops where the rail does — the toolbar and the focus-mode
-    // button are siblings of the rail rather than children of it, so nothing
-    // here can reach them.
+    // ends and runs to the end of the rail, which is now the end of the strip:
+    // the toolbar that used to sit beside it moved to the title bar when every
+    // workspace group got a strip of its own.
     final empty = tester.getRect(find.byKey(kTabStripEmptySpace));
     expect(
       empty.left,
       greaterThanOrEqualTo(tester.getRect(find.byType(TerminalTabChip)).right),
     );
-    expect(
-      empty.right,
-      lessThanOrEqualTo(tester.getRect(find.byType(TerminalToolbar)).left),
-    );
+    expect(find.byType(TerminalToolbar), findsNothing);
 
     await doubleTap(tester, find.byKey(kTabStripEmptySpace));
 

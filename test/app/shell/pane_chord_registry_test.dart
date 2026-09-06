@@ -300,29 +300,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('Ctrl+Shift+D splits the focused pane right', (tester) async {
+    testWidgets('Ctrl+Shift+D splits the workspace right', (tester) async {
       final (container, toShell) = await pumpFocusedTerminal(tester);
 
       await chord(tester, LogicalKeyboardKey.keyD);
 
-      final layout = container
-          .read(terminalSessionsControllerProvider)
-          .activeTab!
-          .layout;
-      expect(layout.groups, hasLength(2));
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(state.workspace!.groups, hasLength(2));
+      // The new group is the empty room a split clears, so there is nothing to
+      // be typing into until something lands in it.
+      expect(state.activeTabId, isNull);
       expect(toShell, isEmpty);
     });
 
-    testWidgets('Ctrl+Shift+E splits the focused pane down', (tester) async {
+    testWidgets('Ctrl+Shift+E splits the workspace down', (tester) async {
       final (container, toShell) = await pumpFocusedTerminal(tester);
 
       await chord(tester, LogicalKeyboardKey.keyE);
 
-      final layout = container
-          .read(terminalSessionsControllerProvider)
-          .activeTab!
-          .layout;
-      expect(layout.groups, hasLength(2));
+      expect(
+        container.read(terminalSessionsControllerProvider).workspace!.groups,
+        hasLength(2),
+      );
       expect(toShell, isEmpty);
     });
 

@@ -103,7 +103,7 @@ void main() {
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
     final left = activeTab(container).layout.panes.single;
-    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.openTab(TerminalProfile.commandPrompt);
     final guestPane = activeTab(container).layout.panes.single;
     controller.activateTab(host);
 
@@ -114,8 +114,8 @@ void main() {
     );
     await tester.pump();
 
-    // Move guest tab into the left region to create stacked panes.
-    controller.moveTabIntoSlot(guest, left);
+    // Stack the guest's pane into the left region — a region takes panes.
+    controller.movePaneIntoRegion(guestPane, left);
     await tester.pumpAndSettle();
 
     expect(
@@ -191,14 +191,14 @@ void main() {
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
     final left = activeTab(container).layout.panes.single;
-    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.openTab(TerminalProfile.commandPrompt);
     final guestPane = activeTab(container).layout.panes.single;
     controller.activateTab(host);
     controller.openInSlot(
       controller.splitPane(SplitAxis.horizontal)!,
       TerminalProfile.powerShell,
     );
-    controller.moveTabIntoSlot(guest, left);
+    controller.movePaneIntoRegion(guestPane, left);
 
     await pumpWorkbench(tester, container);
     expect(activeTab(container).layout.groupOf(left)!.activePaneId, guestPane);
@@ -243,9 +243,10 @@ void main() {
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
     final left = activeTab(container).layout.panes.single;
-    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.openTab(TerminalProfile.commandPrompt);
+    final guestPane = activeTab(container).layout.panes.single;
     controller.activateTab(host);
-    controller.moveTabIntoSlot(guest, left);
+    controller.movePaneIntoRegion(guestPane, left);
 
     await pumpWorkbench(tester, container);
 
@@ -275,9 +276,10 @@ void main() {
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
     final left = activeTab(container).layout.panes.single;
-    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.openTab(TerminalProfile.commandPrompt);
+    final guestPane = activeTab(container).layout.panes.single;
     controller.activateTab(host);
-    controller.moveTabIntoSlot(guest, left);
+    controller.movePaneIntoRegion(guestPane, left);
 
     await pumpWorkbench(tester, container, size: const Size(720, 560));
 
@@ -325,10 +327,10 @@ void main() {
     final controller = controllerOf(container);
     final host = controller.openTab(TerminalProfile.powerShell);
     final first = activeTab(container).layout.panes.single;
-    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    controller.openTab(TerminalProfile.commandPrompt);
     final guestPane = activeTab(container).layout.panes.single;
     controller.activateTab(host);
-    controller.moveTabIntoSlot(guest, first);
+    controller.movePaneIntoRegion(guestPane, first);
 
     await pumpWorkbench(tester, container);
     controller.instanceFor(guestPane)!.focusNode.requestFocus();

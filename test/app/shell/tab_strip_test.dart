@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
@@ -196,9 +197,13 @@ void main() {
       return ids;
     }
 
+    /// [chrome] adds the window's title bar over the workbench, for the cases
+    /// about controls that live there — the new-terminal pair moved up when
+    /// every workspace group got a strip of its own.
     Future<void> pump(
       WidgetTester tester, {
       Size size = const Size(1200, 800),
+      bool chrome = false,
     }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
@@ -209,7 +214,10 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: AppTheme.light(),
-            home: const Scaffold(body: WorkbenchView()),
+            home: Scaffold(
+              appBar: chrome ? const ShellTitleBar() : null,
+              body: const WorkbenchView(),
+            ),
           ),
         ),
       );
@@ -240,7 +248,7 @@ void main() {
       // terminal, there should be another button to open different terminal
       // like vs code provides". The + used to only ever open a menu.
       openTabs(1);
-      await pump(tester);
+      await pump(tester, chrome: true);
 
       await tester.tap(find.byTooltip(RegExp(r'^New terminal \(')));
       await tester.pumpAndSettle();
@@ -464,7 +472,7 @@ void main() {
       // open another tab may not be pushed off the end, and the picker has to
       // be there — a hundred tabs is the case it exists for.
       openTabs(100);
-      await pump(tester, size: const Size(720, 560));
+      await pump(tester, size: const Size(720, 560), chrome: true);
 
       expect(overflowButton(100), findsOneWidget);
       expect(find.byTooltip(RegExp(r'^New terminal \(')), findsOneWidget);

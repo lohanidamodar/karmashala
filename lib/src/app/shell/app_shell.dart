@@ -28,6 +28,7 @@ import '../../features/system/system_integration_service.dart';
 import '../../features/sessions/application/session_liveness_reconciler.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
@@ -264,6 +265,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
     final explorerVisible = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
+    final width = ShellWidth.of(MediaQuery.sizeOf(context).width);
     // No app icon or name: the OS title bar already carries those.
     return Material(
       color: scheme.surfaceContainerLow,
@@ -291,11 +293,41 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
             // Expanded, not Flexible-then-Spacer: the field takes its own
             // width and the rest of the row is empty space the toggles are
             // pushed to the far edge by.
-            const Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: QuickOpenButton(),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => constraints.maxWidth < 64
+                    // Below its own leading glyph there is nothing to draw but
+                    // an overflow. The field is a convenience — `Ctrl+K` and
+                    // Workspace > Go to… are the same command — so it is the
+                    // last thing in this row to take space and the first to
+                    // give it all back.
+                    ? const SizedBox.shrink()
+                    : const Align(
+                        alignment: Alignment.centerLeft,
+                        child: QuickOpenButton(),
+                      ),
               ),
+            ),
+            // The terminal's own verbs, acting on the pane the keyboard is in.
+            // Not per group: none of them needs to know *which* group, and
+            // seven of them repeated in every strip is what made a split group
+            // narrower than its own status bar.
+            //
+            // Down to the `+` alone at compact widths, where the menus and
+            // the command field need the row more than six glyphs do. Every one
+            // of the rest is a chord and a palette command, and the two splits
+            // are on the pane's own menu too — but the way to make a terminal
+            // stays visible at every width.
+            TerminalToolbar(compact: width.isCompact),
+            const _WindowSessionBadges(),
+            _ChromeToggle(
+              icon: AppIcons.arrowsOutSimple,
+              label: 'Focus mode',
+              chord: shellChordLabel<ToggleFocusModeIntent>(),
+              note: 'Hides the Explorer and the side panel',
+              selected: ref.watch(terminalMaximizedProvider),
+              onPressed: () =>
+                  ref.read(terminalMaximizedProvider.notifier).toggle(),
             ),
             _ChromeToggle(
               icon: AppIcons.sidebarSimple,
@@ -312,6 +344,68 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// What is running that no group's strip can show: sessions a restart left
+/// dormant, and sessions kept alive with no tab.
+///
+/// Both are facts about the **window**, which is what brought them up here.
+/// They used to sit at the right end of the one tab strip there was; every
+/// workspace group has a strip of its own now, and a question about the app
+/// answered in three places at once is three answers.
+///
+/// Its own widget, so the counts it watches wake this row and nothing else.
+class _WindowSessionBadges extends ConsumerWidget {
+  const _WindowSessionBadges();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final actions = TerminalActions(ref);
+    final restored = ref.watch(
+      restoredAgentPanesProvider.select((panes) => panes.length),
+    );
+    final background = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.detached.length),
+    );
+    if (restored == 0 && background == 0) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (restored > 0)
+          IconButton(
+            tooltip:
+                '$restored restored session'
+                '${restored == 1 ? '' : 's'} — nothing running in '
+                '${restored == 1 ? 'it' : 'them'}',
+            icon: Badge.count(
+              count: restored,
+              backgroundColor: scheme.primary,
+              textColor: scheme.onPrimary,
+              // Not the history clock the Commands button uses: two identical
+              // icons in one row are one icon as far as the eye is concerned.
+              child: const Icon(AppIcons.playCircle, size: Chrome.icon),
+            ),
+            onPressed: () => actions.showRestoredSessions(context),
+          ),
+        if (background > 0)
+          IconButton(
+            tooltip:
+                '$background session'
+                '${background == 1 ? '' : 's'} running in the background',
+            // The accent, not Material's error red: a session running without a
+            // tab is the app working as designed, not a fault.
+            icon: Badge.count(
+              count: background,
+              backgroundColor: scheme.primary,
+              textColor: scheme.onPrimary,
+              child: const Icon(AppIcons.terminalWindow, size: Chrome.icon),
+            ),
+            onPressed: () => actions.showBackgroundSessions(context),
+          ),
+      ],
     );
   }
 }

@@ -170,7 +170,7 @@ void main() {
     );
   });
 
-  testWidgets('a tab chip dragged onto the region moves that tab in', (
+  testWidgets('a tab chip dragged onto the region is refused', (
     tester,
   ) async {
     final container = workbenchContainer();
@@ -207,14 +207,20 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
+    // A region holds panes. A tab carries a session, a view and a status strip
+    // together and only a workspace group can host that, so a tab dropped in a
+    // region would land in a room with neither. It stays where it was.
     final state = container.read(terminalSessionsControllerProvider);
-    expect(state.tabs, hasLength(1), reason: 'the tab left the strip');
+    expect(state.tabs, hasLength(2), reason: 'the tab is still a tab');
     expect(state.activeTab!.id, host);
-    expect(state.activeTab!.layout.panes, [kept, movedPane]);
-    expect(find.byType(EmptyPaneRegion), findsNothing);
+    expect(state.tabs.firstWhere((t) => t.id == moved).layout.panes, [
+      movedPane,
+    ]);
+    expect(state.activeTab!.layout.panes, contains(kept));
+    expect(find.byType(EmptyPaneRegion), findsOneWidget);
   });
 
-  testWidgets('"Move a tab here" is offered only when a tab could land', (
+  testWidgets('"Move a pane here" is offered only when a pane could land', (
     tester,
   ) async {
     final container = workbenchContainer();
@@ -224,28 +230,23 @@ void main() {
     controller.openTab(TerminalProfile.powerShell);
 
     await pumpWorkbench(tester, container);
-    controller.splitPane(SplitAxis.horizontal);
+    final slot = controller.splitPane(SplitAxis.horizontal)!;
     await tester.pump();
 
     TextButton moveButton() => tester.widget<TextButton>(
       find.ancestor(
-        of: find.text('Move a tab here…'),
+        of: find.text('Move a pane here…'),
         matching: find.byType(TextButton),
       ),
     );
-    expect(
-      moveButton().onPressed,
-      isNull,
-      reason: 'there is no other tab to move',
-    );
-
-    controller.openTab(TerminalProfile.commandPrompt);
-    controller.activateTab(
-      container.read(terminalSessionsControllerProvider).tabs.first.id,
-    );
-    await tester.pump();
-
+    // The tab's other pane is the only candidate, and it is already the one
+    // this empty region was split from — so there is something to move.
     expect(moveButton().onPressed, isNotNull);
+
+    // Fill it, and the region stops being empty rather than stops offering.
+    controller.openInSlot(slot, TerminalProfile.commandPrompt);
+    await tester.pump();
+    expect(find.byType(EmptyPaneRegion), findsNothing);
   });
 }
 

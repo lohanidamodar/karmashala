@@ -30,6 +30,7 @@ import '../../../features/snippets/application/snippet_providers.dart';
 import '../../../features/snippets/domain/command_snippet.dart';
 import '../../../features/snippets/presentation/snippet_dialogs.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../../features/terminal/domain/pane_layout.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../../features/terminal/presentation/pane_group_strip.dart';
 import '../../../features/terminal/presentation/terminal_panel.dart';
@@ -217,7 +218,10 @@ class QuickOpenSources {
         subtitle: 'Show the terminal in the workbench',
         icon: AppIcons.terminal,
         shortcut: 'Ctrl+`',
-        onSelect: () => ref.read(terminalVisibleProvider.notifier).set(true),
+        // The focused group: a command that names no tab means the group the
+        // keyboard is in.
+        onSelect: () =>
+            ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere(),
       ),
       // The tabs listed below are only the ones that are *nothing but* tabs
       // (see [_openTabs]), and finding one that way means knowing its name.
@@ -338,47 +342,94 @@ class QuickOpenSources {
     ];
   }
 
-  /// The keyboard's way to do everything a region header can be dragged to do.
+  /// The keyboard's way to do everything the chrome can be dragged or clicked
+  /// to do about layout.
   ///
-  /// Every drop target has an entry here, because a feature reachable only by
-  /// dragging is one some people cannot reach at all: a tab into a region
-  /// (empty or not), a pane into another region, and a pane back out to a tab
-  /// of its own.
+  /// Every drop target and every split button has an entry, because a feature
+  /// reachable only by dragging is one some people cannot reach at all — and
+  /// since the split buttons moved to the title bar, where a compact window
+  /// keeps only the `+`, this is the route that is always there.
+  ///
+  /// **Two structures, two vocabularies, and every title says which.** A
+  /// *group* is a division of the whole middle workspace: its own tab strip,
+  /// its own content and its own status bar, holding **tabs**. A *region* is a
+  /// division inside one tab, holding **panes**. `WorkspaceLayout` states the
+  /// pair once; these titles use the same two words and nothing else, because
+  /// "move a tab into this split" named neither.
   List<QuickOpenItem> _splitCommands() {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final emptyGroup = sessions.emptyWorkspaceGroup();
     final slot = sessions.emptySlotInActiveTab();
-    // An empty region first: it is the one somebody has just cleared, and the
-    // one that looks wrong until something is in it.
-    final target = slot ?? sessions.regionForIncomingTab();
     final pane = sessions.paneMovableToNewTab();
+    final canSplitWorkspace = sessions.canSplitWorkspace();
+    final canSplitPane = sessions.focusedPaneIsSplittable();
     return [
-      if (target != null)
+      if (canSplitWorkspace) ...[
         _command(
-          slot != null
-              ? 'Move a tab into the empty split…'
-              : 'Move a tab into this split…',
-          subtitle: slot != null
-              ? 'Fill the empty region of the split you are in'
-              : 'Add a tab to the region you are in',
+          'Split the workspace right',
+          subtitle: 'A new group beside this one, with a strip and a bar',
           icon: AppIcons.squareSplitHorizontal,
-          keywords: const ['split', 'move', 'tab', 'pane', 'drag'],
+          keywords: const ['split', 'group', 'workspace', 'right', 'column'],
+          onSelect: () => sessions.splitWorkspace(SplitAxis.horizontal),
+        ),
+        _command(
+          'Split the workspace down',
+          subtitle: 'A new group under this one, with a strip and a bar',
+          icon: AppIcons.squareSplitVertical,
+          keywords: const ['split', 'group', 'workspace', 'down', 'row'],
+          onSelect: () => sessions.splitWorkspace(SplitAxis.vertical),
+        ),
+      ],
+      if (canSplitPane) ...[
+        _command(
+          'Split this pane right',
+          subtitle: 'A second terminal inside this tab',
+          icon: AppIcons.squareSplitHorizontal,
+          keywords: const ['split', 'pane', 'region', 'terminal', 'right'],
+          onSelect: () => sessions.splitPane(SplitAxis.horizontal),
+        ),
+        _command(
+          'Split this pane down',
+          subtitle: 'A second terminal inside this tab',
+          icon: AppIcons.squareSplitVertical,
+          keywords: const ['split', 'pane', 'region', 'terminal', 'down'],
+          onSelect: () => sessions.splitPane(SplitAxis.vertical),
+        ),
+      ],
+      if (emptyGroup != null)
+        _command(
+          'Move a tab into the empty group…',
+          subtitle: 'Fill the group you cleared',
+          icon: AppIcons.squareSplitHorizontal,
+          keywords: const ['group', 'move', 'tab', 'split', 'drag'],
+          onSelect: () => TabPicker.show(
+            context,
+            (ref) => tabsMovableToGroup(ref, emptyGroup),
+          ),
+        ),
+      if (slot != null)
+        _command(
+          'Move a pane into the empty region…',
+          subtitle: 'Fill the empty half of the tab you are in',
+          icon: AppIcons.squareSplitVertical,
+          keywords: const ['region', 'move', 'pane', 'split', 'drag'],
           onSelect: () =>
-              TabPicker.show(context, (ref) => tabsMovableInto(ref, target)),
+              TabPicker.show(context, (ref) => panesMovableInto(ref, slot)),
         ),
       if (pane != null) ...[
         _command(
           'Move this pane to a new tab',
-          subtitle: 'Take the focused pane out of its split',
+          subtitle: 'Take the focused pane out of its region',
           icon: AppIcons.terminalWindow,
-          keywords: const ['split', 'unsplit', 'pane', 'tab', 'move'],
+          keywords: const ['region', 'unsplit', 'pane', 'tab', 'move'],
           onSelect: () => sessions.movePaneToNewTab(pane),
         ),
         if (sessions.regionAnchorsBesides(pane).isNotEmpty)
           _command(
-            'Move this pane into another split…',
-            subtitle: 'Send the focused pane to another region',
+            'Move this pane into another region…',
+            subtitle: 'Send the focused pane elsewhere in this tab',
             icon: AppIcons.squareSplitVertical,
-            keywords: const ['split', 'region', 'pane', 'move', 'drag'],
+            keywords: const ['region', 'pane', 'move', 'drag', 'split'],
             onSelect: () =>
                 TabPicker.show(context, (ref) => regionsMovableTo(ref, pane)),
           ),
@@ -680,7 +731,9 @@ class QuickOpenSources {
             weight: _tabWeight,
             onSelect: () => dismiss(() {
               sessions.activateTab(tab.id);
-              ref.read(terminalVisibleProvider.notifier).set(true);
+              // The group that holds the tab, which activating it has just
+              // focused — not whichever group was in front before.
+              sessions.showTerminalForTab(tab.id);
               shell.focusPane(ShellPane.detail);
             }),
           ),

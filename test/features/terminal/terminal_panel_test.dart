@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_search_controller.dart';
@@ -32,6 +33,25 @@ Future<void> pumpPanel(WidgetTester tester, ProviderContainer container) async {
     UncontrolledProviderScope(
       container: container,
       child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+    ),
+  );
+  await tester.pump();
+}
+
+/// The workbench **with the window chrome over it**, for the controls that
+/// belong to the window rather than to a workspace group: the restored-session
+/// and background-session badges, and focus mode. They used to sit at the right
+/// end of the one tab strip; every group has a strip of its own now.
+Future<void> pumpWindowChrome(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        home: Scaffold(appBar: ShellTitleBar(), body: WorkbenchView()),
+      ),
     ),
   );
   await tester.pump();
@@ -177,25 +197,26 @@ void main() {
     );
   });
 
-  testWidgets('the split button splits the focused pane', (tester) async {
+  testWidgets('the split button divides the workspace, not the pane', (
+    tester,
+  ) async {
     final container = panelContainer();
     container
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
 
-    await pumpPanel(tester, container);
-    await tester.tap(find.byTooltip('Split right (Ctrl+Shift+D)'));
+    // The window chrome, because that is where the two split buttons are now.
+    await pumpWindowChrome(tester, container);
+    await tester.tap(
+      find.byTooltip('Split the workspace right (Ctrl+Shift+D)'),
+    );
     await tester.pump();
 
-    expect(
-      container
-          .read(terminalSessionsControllerProvider)
-          .activeTab!
-          .layout
-          .panes
-          .length,
-      2,
-    );
+    final state = container.read(terminalSessionsControllerProvider);
+    expect(state.workspace!.groups, hasLength(2));
+    // The tab that was split is untouched: it is the *workspace* that divided,
+    // and the new group is empty room.
+    expect(state.tabs.single.layout.panes, hasLength(1));
   });
 
   testWidgets('the find button opens the search bar for the focused pane', (
@@ -206,7 +227,7 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
 
-    await pumpPanel(tester, container);
+    await pumpWindowChrome(tester, container);
     expect(find.byType(TerminalSearchBar), findsNothing);
 
     await tester.tap(find.byTooltip('Find in scrollback (Ctrl+Shift+F)'));
