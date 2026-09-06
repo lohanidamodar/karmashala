@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.16.0 (2026-09-05)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.17.0 (2026-09-06)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,80 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.17.0 — 2026-09-06 (build 30)
+
+**The middle workspace splits like VS Code's editor groups.** Until now a split
+divided only the terminal area, under one tab strip and one status bar. The unit
+is a whole group now — its own tab strip, its own content, its own status bar —
+and the splitter divides those. Tabs drag between groups and carry everything
+with them, because a tab *owns* {session, terminal, chat, status} rather than
+pointing at one.
+
+Three agents side by side each keep their own tabs, their own repository and git
+state, their own model, and their own usage budget counting down separately.
+
+### Two words, and only two
+
+A **group** divides the workspace and holds tabs. A **region** divides one tab
+and holds panes. Those are now the only two words used for it in the palette,
+the menus, the tooltips and the domain doc — "move a tab into this split…" named
+neither and is gone. The palette gained split commands in both directions for
+both acts; it had none at all before.
+
+A tab dropped on a division makes a **group**, never a bare region. The Ctrl-drop,
+the region header, the empty region and its picker, and the palette all refused
+to be the exception, and the five methods that allowed it were deleted rather
+than left unreachable — which retires by deletion a latent bug where
+`splitPaneWithTab` removed the source tab *before* an early `return false`.
+
+### The chrome went up, because a group is narrow
+
+The seven-button cluster — find, snippets, commands, `+`, the profile chevron
+and the two splits — moved to the title bar. Applying one test to each, *does it
+need to know which group?*, none of them did. A group is left with just its tab
+strip, which is the reference exactly. Compact widths keep `+` and its chevron,
+because dropping the row wholesale would leave no visible way to make a terminal.
+
+The status bar then still did not fit: **413px of content in 363px**, and 286px
+is a group's ordinary width once the workspace is split a few ways. Below 820 it
+drops the model chip, below 560 the words but never the glyphs, tooltips or
+semantics labels, and below that it scrolls rather than squeezing. Deliberately
+no overflow menu — `Commit` is what most visits to that bar are for, and two
+clicks away is worse than small.
+
+### Focus is visible
+
+A tab chip has three states, not two: not showing, showing, and showing-and-
+focused. Exactly one strip in the window draws the third. Unfocused groups keep
+their selection, because deselecting them would make their terminal and status
+bar appear to belong to nothing.
+
+### Fixed
+
+- **The attention inbox could badge a session you were looking at.**
+  `foregroundTerminalPaneIdsProvider` decides that a visible pane raises no
+  notification, and it read the *focused* group's tab — so with a split
+  workspace it would have badged sessions plainly on screen in another group.
+  Found while making chat per-group, not by looking for it.
+- **A write reachable from a read path.** The group tree was reconciled inside
+  `_snapshot`, which `build()` calls. It reconciles on publish now, and a
+  debug-only diagnostic reports which write landed inside a build — Riverpod's
+  own message names no location, which is why that error has to be hunted
+  rather than read.
+- Chat is part of the group, so three agents can show three transcripts at once.
+  The transcript poll gate asks whether *any* group is showing chat, so nothing
+  polls while every group is on its terminal.
+
+### Known, not fixed
+
+A group has no minimum width. `kMinPaneWeight` is 5%, so a group can be dragged
+to about 70px; the status bar survives that by scrolling, but a terminal there is
+roughly ten columns. The repository selection is still workspace-wide rather than
+per group, and a divider drag is not persisted until the next structural save —
+which the in-tab divider already did.
 
 ---
 
