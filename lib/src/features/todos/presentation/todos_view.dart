@@ -6,7 +6,11 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/row_menu.dart';
+import '../../explorer/application/session_context.dart';
+import '../../notes/application/composer_draft.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
 import '../domain/todo.dart';
@@ -345,29 +349,75 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     ref.read(todosProvider.notifier).edit(widget.todo.id, text);
   }
 
+  /// The session this row would send to, captured when the menu was built.
+  ///
+  /// Captured rather than re-read on activation, for the reason
+  /// `resolveSnippetTarget` gives: the answer the row was *labelled* with is
+  /// the one the user chose, and a fresh read could send the line to a session
+  /// that came to the front while the menu was open.
+  ({String id, String title})? _sendTo;
+
+  /// Where "send this to the session" goes.
+  ///
+  /// [focusedSessionIdProvider] and nothing else — the Explorer's selection,
+  /// and failing that the session running in the focused group's active tab.
+  /// That is already the app's one answer to "which session is this window
+  /// about", and a side panel that invented a second would describe a
+  /// different session from the status bar two inches away.
+  ///
+  /// **Read, never watched.** A menu is built as it opens, so reading here
+  /// costs one lookup per menu; watching would put every row of the list on
+  /// the focused-session signal and repaint the panel on every tab click.
+  ({String id, String title})? _resolveTarget() {
+    final id = ref.read(focusedSessionIdProvider);
+    if (id == null) return null;
+    return (
+      id: id,
+      title: ref.read(sessionDaoProvider).getById(id)?.title ?? 'the session',
+    );
+  }
+
   /// The row's actions, in the one vocabulary every path to them shares.
   ///
   /// Built fresh per call: the same entries cannot be mounted by the `⋮` and
   /// by a right-click at once, and a menu is only ever built as it opens.
-  List<PopupMenuEntry<String>> _menuItems() => [
-    if (!widget.todo.isDone) ...[
-      DesktopMenuItem(value: 'up', label: 'Move up', icon: AppIcons.arrowUp),
+  List<PopupMenuEntry<String>> _menuItems() {
+    final target = _sendTo = _resolveTarget();
+    return [
+      if (!widget.todo.isDone) ...[
+        DesktopMenuItem(value: 'up', label: 'Move up', icon: AppIcons.arrowUp),
+        DesktopMenuItem(
+          value: 'down',
+          label: 'Move down',
+          icon: AppIcons.arrowDown,
+        ),
+        const DesktopMenuDivider(),
+      ],
+      // Behind the menu rather than drawn on the row, unlike the Notes card's
+      // Send. A note exists to be handed back to an agent; a todo exists to be
+      // ticked off, and the verb it is *for* is already the checkbox.
       DesktopMenuItem(
-        value: 'down',
-        label: 'Move down',
-        icon: AppIcons.arrowDown,
+        value: 'send',
+        label: target == null
+            ? 'Send to a session — open one first'
+            : 'Send to ${target.title}’s message box',
+        icon: AppIcons.paperPlaneRight,
+        enabled: target != null,
+      ),
+      DesktopMenuItem(
+        value: 'file',
+        label: 'File under…',
+        icon: AppIcons.folder,
       ),
       const DesktopMenuDivider(),
-    ],
-    DesktopMenuItem(value: 'file', label: 'File under…', icon: AppIcons.folder),
-    const DesktopMenuDivider(),
-    DesktopMenuItem(
-      value: 'delete',
-      label: 'Delete',
-      icon: AppIcons.trash,
-      destructive: true,
-    ),
-  ];
+      DesktopMenuItem(
+        value: 'delete',
+        label: 'Delete',
+        icon: AppIcons.trash,
+        destructive: true,
+      ),
+    ];
+  }
 
   Future<void> _act(String value) async {
     final todos = ref.read(todosProvider.notifier);
@@ -378,9 +428,30 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
         todos.move(widget.todo.id, up: false);
       case 'delete':
         todos.delete(widget.todo.id);
+      case 'send':
+        _send();
       case 'file':
         await _file();
     }
+  }
+
+  /// Puts the line in the session's message box.
+  ///
+  /// **Offered, not sent** — the contract [ComposerDrafts] already gives a
+  /// note, and the reason is the same one twice over: a todo is a deferred
+  /// instruction the user wrote for themselves, and dispatching one would be
+  /// Karmashala deciding it was still worded right. Nothing here ticks it off
+  /// either; a line handed to an agent is not a line that is done.
+  void _send() {
+    final target = _sendTo;
+    if (target == null) return;
+    ref.read(composerDraftProvider.notifier).queue(target.id, widget.todo.body);
+    // Bring that session up, so the box the text just landed in is the one on
+    // screen. Selecting is all this does.
+    ref.read(selectedSessionIdProvider.notifier).select(target.id);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text('Sent to ${target.title}’s message box.')),
+    );
   }
 
   /// The "file under…" picker, opened where the row is rather than as a

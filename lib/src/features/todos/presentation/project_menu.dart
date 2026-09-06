@@ -152,3 +152,59 @@ List<PopupMenuEntry<ProjectScope>> projectPickerMenuItems(
       selected: selected == project.id,
     ),
 ];
+
+/// The `Project · <name> ⌄` line a composer dialog carries.
+///
+/// One widget for the two dialogs that write the user's own text — a note and
+/// a todo — for [projectPickerMenuItems]'s reason: they ask the same question
+/// of two tables, and a second control invented per feature is the drift the
+/// design system was consolidated to stop.
+class ProjectField extends ConsumerWidget {
+  const ProjectField({
+    required this.projectId,
+    required this.onChanged,
+    required this.tooltip,
+    super.key,
+  });
+
+  final String? projectId;
+  final ValueChanged<String?> onChanged;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final name = projectId == null ? null : projectNameById(ref, projectId!);
+    return Row(
+      children: [
+        Text('Project', style: theme.textTheme.bodySmall),
+        const SizedBox(width: Insets.md),
+        PopupMenuButton<ProjectScope>(
+          tooltip: tooltip,
+          position: PopupMenuPosition.under,
+          onSelected: (scope) => onChanged(scope.projectId),
+          itemBuilder: (context) =>
+              projectPickerMenuItems(ref, selected: projectId),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name ?? 'No project',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: name == null
+                      ? theme.colorScheme.onSurfaceVariant
+                      : theme.colorScheme.primary,
+                ),
+              ),
+              Icon(
+                AppIcons.caretDown,
+                size: Chrome.iconAction,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

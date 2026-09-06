@@ -10,9 +10,13 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../git/application/changes_providers.dart';
+import '../../notes/application/notes_providers.dart';
+import '../../notes/presentation/note_edit_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
+import '../../todos/presentation/todo_edit_dialog.dart';
+import '../application/terminal_capture.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
 import '../application/terminal_scroll.dart';
@@ -713,6 +717,15 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     if (overlay == null) return;
     final selection = session.controller.selection;
     final hasSelection = selection != null;
+    // Read once, as the menu is built, and used by every row that wants it.
+    // The two capture rows are only offered for a selection that caught
+    // something: a drag over blank cells is not a todo, and a row that opens
+    // an empty composer is a row that wasted the click.
+    final selected = selection == null
+        ? null
+        : session.terminal.buffer.getText(selection);
+    final capturable = selected != null && selected.trim().isNotEmpty;
+    final notesEnabled = ref.read(notesEnabledProvider);
     final choice = await showMenu<String>(
       context: context,
       // The same one-pixel anchor `ContextMenuRegion._show` uses, so a menu
@@ -741,6 +754,28 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           icon: AppIcons.magnifyingGlass,
           shortcut: shellChordLabel<FindInScrollbackIntent>(),
         ),
+        // Keeping what is on screen, in the two places the app already keeps
+        // the user's own writing — and the two an agent already reaches through
+        // `todo_add` and `note_add`. Offered only with a selection, because
+        // unlike Copy there is no disabled version of this that says anything:
+        // "create a todo from nothing" is not a lesser act, it is not an act.
+        if (capturable) ...[
+          const DesktopMenuDivider(),
+          DesktopMenuItem(
+            value: 'todo',
+            label: 'Create todo from selection',
+            icon: AppIcons.listChecks,
+          ),
+          // Absent, not disabled, when Notes is switched off — the one reading
+          // `notesEnabledProvider` exists for, so the capture affordance and
+          // the surface cannot disagree about whether the user asked for this.
+          if (notesEnabled)
+            DesktopMenuItem(
+              value: 'note',
+              label: 'Create note from selection',
+              icon: AppIcons.notePencil,
+            ),
+        ],
         const DesktopMenuDivider(),
         // The *pane* split, and the only place it is offered. The toolbar's two
         // split buttons divide the whole workspace group now — a strip, a
@@ -787,10 +822,13 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     );
     switch (choice) {
       case 'copy':
-        if (selection != null) {
-          final text = session.terminal.buffer.getText(selection);
-          await Clipboard.setData(ClipboardData(text: text));
+        if (selected != null) {
+          await Clipboard.setData(ClipboardData(text: selected));
         }
+      case 'todo':
+        if (selected != null) await _captureTodo(paneId, selected);
+      case 'note':
+        if (selected != null) await _captureNote(paneId, selected);
       case 'paste':
         // The same rule as the chord, from the same place: a menu item called
         // Paste that silently does nothing with a screenshot on the clipboard
@@ -810,6 +848,45 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         _sessions.endSession(paneId);
     }
   }
+
+  /// Keeps [selected] as a todo, filed under the pane's project.
+  ///
+  /// Collapsed to one line **and shown collapsed**, because that is what a
+  /// todo is and a terminal selection usually is not — see [todoLineFrom].
+  Future<void> _captureTodo(String paneId, String selected) async {
+    final source = ref.read(terminalSelectionSourceProvider(paneId));
+    final todo = await showNewTodoDialog(
+      context,
+      ref,
+      body: todoLineFrom(selected),
+      projectId: source.projectId,
+      joinedLines: selectionLineCount(selected),
+    );
+    if (todo == null || !mounted) return;
+    _say('Added to Todos.');
+  }
+
+  /// Keeps [selected] as a note, word for word, remembering the session and
+  /// repository it was taken from. Nothing is filled in for a plain shell.
+  Future<void> _captureNote(String paneId, String selected) async {
+    final source = ref.read(terminalSelectionSourceProvider(paneId));
+    final note = await showCapturedNoteDialog(
+      context,
+      ref,
+      body: selected,
+      projectId: source.projectId,
+      sourceSessionId: source.sessionId,
+      sourceRepositoryId: source.repositoryId,
+    );
+    if (note == null || !mounted) return;
+    _say('Saved to Notes.');
+  }
+
+  /// Confirmation, not navigation: the side panel stays where the user left
+  /// it. A right-click in a terminal is not a request to rearrange the window.
+  void _say(String message) => ScaffoldMessenger.maybeOf(
+    context,
+  )?.showSnackBar(SnackBar(content: Text(message)));
 }
 
 /// One workspace group's own toolbar — find, split, new tab, and the recorded
