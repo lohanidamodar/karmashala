@@ -78,6 +78,28 @@ class SelectedDeviceSerial extends Notifier<String?> {
   void select(String? serial) => state = serial;
 }
 
+/// Serial of the device the Android live view is **on**, or `null` when it is
+/// off. Next to the selection on purpose: two answers to "which device is this
+/// pane about" is a fault this feature has already had once.
+///
+/// It is a provider and not a field on the pane because the side panel
+/// unmounts the pane every time it switches surface, and this flag has to
+/// outlive that — same reason the simulator keeps its live view in
+/// `simulatorLiveViewProvider`, and deliberately the same shape. Only the
+/// *intent* is here, though: the session itself is torn down on unmount and
+/// started again on remount, because a scrcpy server on the phone, two sockets
+/// and a decoding player are not worth running for a pane nobody is looking at.
+final androidLiveViewProvider = NotifierProvider<AndroidLiveView, String?>(
+  AndroidLiveView.new,
+);
+
+class AndroidLiveView extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void select(String? serial) => state = serial;
+}
+
 /// The selected device, defaulting to the only ready one when there is exactly
 /// one — which is the common case and saves a click.
 final selectedDeviceProvider = Provider<AndroidDevice?>((ref) {
