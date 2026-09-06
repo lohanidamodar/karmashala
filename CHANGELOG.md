@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.17.0 (2026-09-06)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.17.1 (2026-09-06)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,60 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.17.1 — 2026-09-06 (build 31)
+
+A fix-only release for three things found by using 1.17.0, two of which are
+older than it.
+
+### Copying from a terminal ate the spaces
+
+Pasting agent output gave back `Crashandanalyticsvendors.` — every gap deleted —
+while the next line came through intact. `BufferLine.getText` skipped any cell
+whose code point was 0 and emitted nothing at all for it. An untouched cell
+holds 0, and so does a cell a CLI stepped over with a cursor move instead of
+writing spaces, which is why the same paste was half right.
+
+Blanks now accumulate and flush as spaces only when a glyph follows, so a
+200-column line of `hi` still copies as `hi`, and a wrapped line's blank tail is
+dropped before the continuation joins rather than injected into the middle of a
+word. Two cases are deliberately not spaces: a wide glyph's spacer, which has
+code point 0 *and* width 0 exactly like an untouched cell, and a run directly
+after a real `HT` — spelling that one out would paste a tab plus seven spaces
+and land the text at column 15 where it was drawn at 8.
+
+Fixed in the `xterm2` fork (`5ea40a7`).
+
+### A group's chat showed the window's selection
+
+Introduced in 1.17.0. A group drew its own tab's panes on the terminal side and
+the Explorer's selection on the chat side, so picking `s1`, clicking that
+group's `s3` tab and pressing Chat read `s1`. With two groups it was worse: a
+selection with no pane was drawn by whichever group held the keyboard, and
+moving focus dragged it across — moving the keyboard is not a request to see
+something.
+
+A selection that has a pane already resolves itself, because opening it focuses
+the group holding that tab. One with no pane has no tab to become, so the group
+it was opened into is recorded and only that group draws it.
+
+### A conversation could stream another session's events
+
+Older than the split, and unrelated to it. `sessionTranscriptProvider` and
+`selectedSessionRepositoriesProvider` were keyed on the Explorer's selection
+from inside a view that has always taken its session as an argument — so a
+conversation titled `s3` streamed `s1`'s events and listed `s1`'s repositories.
+Both are families keyed by session now, so the compiler stops the next one.
+
+### Also
+
+A still Android phone froze its own live view. media_kit's `network-timeout` is
+finite at 5 s and a static screen sends no frames, so libmpv decided the stream
+had ended and paused; the app then re-attached the player, saw the same, and
+looped. The session already knows whether scrcpy is running, so it owns liveness
+and the timeout is off.
 
 ---
 
