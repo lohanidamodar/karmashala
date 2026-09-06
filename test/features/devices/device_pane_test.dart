@@ -130,6 +130,22 @@ IosSimulator _bootedSimulator(String udid, String name) => IosSimulator(
 );
 
 void main() {
+  test('live player overrides the finite network timeout once at setup', () async {
+    final writes = <(String, String)>[];
+    await configureDeviceLivePlayer((name, value) async {
+      writes.add((name, value));
+    });
+
+    // A physical-phone idle/resume probe reached EOF with media_kit's 5s
+    // timeout. This must be applied on every player, including reattachments.
+    expect(
+      writes.where((entry) => entry.$1 == 'network-timeout'),
+      [('network-timeout', '0')],
+    );
+    expect(writes, hasLength(10));
+    expect(writes.map((entry) => entry.$1).toSet(), hasLength(10));
+  });
+
   group('while it is still finding out', () {
     testWidgets('says it is looking, rather than inviting a pick', (
       tester,

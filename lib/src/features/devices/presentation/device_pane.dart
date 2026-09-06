@@ -29,6 +29,32 @@ import 'simulator_live_pane.dart';
 import 'simulator_list.dart';
 import 'device_touch_surface.dart';
 
+/// Shared by the pane and the native-player verification probe.
+Future<void> configureDeviceLivePlayer(
+  Future<void> Function(String, String) setProperty,
+) async {
+  for (final entry in const {
+    'profile': 'low-latency',
+    // A static screen sends nothing. media_kit's 5s timeout makes libmpv
+    // mark this live stream EOF and pause. The session owns liveness instead.
+    'network-timeout': '0',
+    'cache': 'no',
+    'demuxer-readahead-secs': '0',
+    'demuxer-lavf-analyzeduration': '0',
+    // Replacing this list must preserve media_kit's protocol whitelist.
+    'demuxer-lavf-o':
+        'fflags=+nobuffer,seg_max_retry=5,strict=experimental,'
+        'allowed_extensions=ALL,protocol_whitelist=[file,tcp,http]',
+    // Preserve the last picture while a replacement player is opening.
+    'keep-open': 'yes',
+    'untimed': 'yes',
+    'vd-lavc-threads': '1',
+    'audio': 'no',
+  }.entries) {
+    await setProperty(entry.key, entry.value);
+  }
+}
+
 /// What the live view must do when the user's chosen device changes.
 enum LiveViewSelectionAction {
   /// Nothing: the live view is off, or it is already on the chosen device.
@@ -421,28 +447,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     // were verified by reading them back: `profile=low-latency` really is
     // applied (`cache-pause=no`, `video-latency-hacks=yes` and
     // `stream-buffer-size=4096` are the profile's values, not the defaults).
-    for (final entry in const {
-      'profile': 'low-latency',
-      'cache': 'no',
-      'demuxer-readahead-secs': '0',
-      'demuxer-lavf-analyzeduration': '0',
-      // Setting this replaces the whole list, and media_kit's protocol
-      // whitelist lives in it — so its entries are repeated here.
-      // `flush_packets` was dropped: it is a muxer flag and did nothing.
-      'demuxer-lavf-o':
-          'fflags=+nobuffer,seg_max_retry=5,strict=experimental,'
-          'allowed_extensions=ALL,protocol_whitelist=[file,tcp,http]',
-      // The stream ends the moment the session it is reading from stops, and
-      // without this mpv clears the video output there — which would make the
-      // held frame a black rectangle. Paused on the last frame is the whole
-      // point of holding it.
-      'keep-open': 'yes',
-      'untimed': 'yes',
-      'vd-lavc-threads': '1',
-      'audio': 'no',
-    }.entries) {
-      await native.setProperty(entry.key, entry.value);
-    }
+    await configureDeviceLivePlayer(native.setProperty);
     final controller = VideoController(player);
     await player.open(Media(url.toString()));
     return (player: player, controller: controller);
