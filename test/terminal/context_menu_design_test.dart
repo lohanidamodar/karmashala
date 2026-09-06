@@ -137,6 +137,29 @@ void main() {
     expect(find.text('Close pane'), findsOneWidget);
   });
 
+  testWidgets('and the two rows a selection adds are house rows as well', (
+    tester,
+  ) async {
+    await pump(tester);
+    final paneId = terminals().state.activeTab!.focusedPaneId;
+    final instance = terminals().instanceFor(paneId)!;
+    instance.terminal.write('hello world');
+    await tester.pumpAndSettle();
+    final buffer = instance.terminal.buffer;
+    instance.controller.setSelection(
+      buffer.createAnchor(0, 0),
+      buffer.createAnchor(11, 0),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tapAt(const Offset(400, 400), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    // The six of the no-selection menu, plus Create todo and Create note.
+    expectHouseRows(tester, rows: 8);
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(3));
+  });
+
   testWidgets('the terminal body menu draws house rows, with the chords it '
       'really binds', (tester) async {
     await pump(tester);
