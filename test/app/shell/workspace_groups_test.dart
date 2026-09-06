@@ -16,6 +16,7 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -336,5 +337,126 @@ void main() {
     );
     expect(find.byType(TerminalTabChip), findsOneWidget);
     expect(find.text('branch-s1'), findsOneWidget);
+  });
+
+  group('the Explorer opens a session into one group, and only that one', () {
+    /// The tombstone a group draws for a session nothing of ours is running.
+    final tombstone = find.textContaining(
+      'No terminal of ours is running this session',
+    );
+
+    testWidgets('a paneless selection stays in the group it was opened into', (
+      tester,
+    ) async {
+      // The whole of the report, in the form only two groups can show it: a
+      // selection with no pane of ours was drawn by whichever group happened
+      // to have the keyboard, so it moved from group to group as the user
+      // clicked around — and the group it landed on lost its own tab to it.
+      final a = openSessionTab('s1');
+      final b = openSessionTab('s2');
+      final groups = splitAndMove(b);
+      terminals().activateTab(a);
+      await pump(tester);
+      SessionDao(db).insert(session(id: 's3', title: 'Read the report'));
+
+      container.read(selectedSessionIdProvider.notifier).select('s3');
+      await tester.pumpAndSettle();
+
+      expect(tombstone, findsOneWidget);
+      expect(
+        find.text('branch-s3'),
+        findsOneWidget,
+        reason: 'it opened into the group with the keyboard',
+      );
+      expect(
+        find.text('branch-s2'),
+        findsOneWidget,
+        reason: 'the group nobody asked about is untouched',
+      );
+      expect(find.text('branch-s1'), findsNothing);
+
+      terminals().focusGroup(groups.right);
+      await tester.pumpAndSettle();
+
+      // **The assertion that carries the weight.** Moving the keyboard is not
+      // a request to see anything, so nothing on screen may move with it.
+      expect(
+        find.text('branch-s2'),
+        findsOneWidget,
+        reason: 'the other group still reads its own tab',
+      );
+      expect(
+        find.text('branch-s3'),
+        findsOneWidget,
+        reason: 'the selection stayed in the group it was opened into',
+      );
+      expect(find.text('branch-s1'), findsNothing);
+      expect(tombstone, findsOneWidget);
+    });
+
+    testWidgets('a group\'s conversation is its own tab\'s session', (
+      tester,
+    ) async {
+      // The owner's words: *"the chat view is embeded with terminal but i
+      // think it's still responding globally not to the session it's embeded
+      // into"*. The chat half of a group read the window-wide selection, so a
+      // group showing one tab could be reading another tab's transcript.
+      final a = openSessionTab('s1');
+      final b = openSessionTab('s2');
+      final c = openSessionTab('s3');
+      final groups = splitAndMove(b);
+      terminals().activateTab(a);
+      await pump(tester);
+
+      // The Explorer picks the tab the group is already showing…
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await tester.pumpAndSettle();
+      // …and then the user moves that group to its other tab.
+      terminals().activateTab(c);
+      await tester.pumpAndSettle();
+      terminals().showFaceIn(groups.left, terminal: false);
+      await tester.pumpAndSettle();
+
+      final chats = tester
+          .widgetList<SessionTranscriptView>(find.byType(SessionTranscriptView))
+          .toList();
+      expect(chats, hasLength(1));
+      expect(
+        chats.single.sessionId,
+        's3',
+        reason: 'the group is showing s3, so its chat is s3',
+      );
+      expect(
+        find.text('branch-s2'),
+        findsOneWidget,
+        reason: 'and the other group is still its own',
+      );
+    });
+
+    testWidgets('a selection with a pane never shadows another group', (
+      tester,
+    ) async {
+      final a = openSessionTab('s1');
+      final b = openSessionTab('s2');
+      final c = openSessionTab('s3');
+      splitAndMove(b);
+      terminals().activateTab(a);
+      await pump(tester);
+      terminals().activateTab(c);
+      await tester.pumpAndSettle();
+
+      // Selecting a session that lives in the other group opens it *there* —
+      // that group's own tab is the one thing that may change.
+      container.read(selectedSessionIdProvider.notifier).select('s2');
+      await tester.pumpAndSettle();
+
+      expect(find.text('branch-s2'), findsOneWidget);
+      expect(
+        find.text('branch-s3'),
+        findsOneWidget,
+        reason: 'the group that was not asked about kept its tab',
+      );
+      expect(find.text('branch-s1'), findsNothing);
+    });
   });
 }

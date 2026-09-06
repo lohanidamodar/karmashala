@@ -11,7 +11,7 @@ import '../theme/design_tokens.dart';
 import '../../features/agents/domain/agent_status.dart';
 import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
-import '../../features/detail/presentation/workbench_session_view.dart';
+import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/delivery_providers.dart';
@@ -153,7 +153,23 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // Explorer happens to highlight first.
       if (active != null) ref.read(sessionContextProvider).follow(active);
       if (selected != null) _showSurfaceFor(_shownPane, selected);
+      _hostSelection();
     });
+  }
+
+  /// Records the group the Explorer's selection has been opened into — the one
+  /// with the keyboard, because that is what a tap in the tree means.
+  ///
+  /// Only ever *recorded*. Which group draws the selection is then a fact about
+  /// that group, so moving the keyboard afterwards moves nothing on screen —
+  /// see [selectionHostGroupProvider].
+  void _hostSelection() {
+    final selected =
+        ref.read(selectedSessionIdProvider) ??
+        ref.read(selectedImportedSessionIdProvider);
+    ref
+        .read(selectionHostGroupProvider.notifier)
+        .host(selected == null ? null : ref.read(focusedWorkspaceGroupProvider));
   }
 
   /// Reveals the pane [sessionId] is already running in. Starts and stops
@@ -253,6 +269,9 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // branch so the user can switch to the conversation and stay there.
     ref.listen(selectedSessionIdProvider, (_, next) {
       if (next != null) _openSession(next);
+      // After the open, so the group recorded is the one the session landed
+      // in rather than the one the keyboard was in a moment earlier.
+      _hostSelection();
     });
     ref.listen(selectedImportedSessionIdProvider, (_, next) {
       // An imported CLI session has no pane of ours *yet* — the tap that
@@ -260,6 +279,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // to switch straight to the transcript, which is how the one path the
       // user could not miss opened the chat interface every single time.
       if (next != null) _showSurfaceFor(null, null);
+      _hostSelection();
     });
     // ...and the pane the selected session has can arrive after the tap that
     // selected it, or go away under it. Both of these move it: the terminal's
@@ -331,6 +351,14 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 /// strip reads [workspaceGroupTabsProvider], the surface reads
 /// [workspaceGroupActiveTabProvider] and the bar reads
 /// [workspaceGroupSessionIdProvider] — all keyed by [groupId].
+///
+/// **The conversation included**, which it was not at first: it was a view that
+/// rendered whatever the Explorer had selected, so a group showing one tab
+/// could be reading another tab's transcript — *"the chat view is embeded with
+/// terminal but i think it's still responding globally"*. It is named off this
+/// group's session now, like everything else here. A selection with no tab to
+/// live in is opened **into** one group and stays there
+/// ([selectionHostGroupProvider]).
 ///
 /// **We depart from the reference here, deliberately.** VS Code's status bar is
 /// one strip across the window, not one per editor group. Ours is per group
@@ -422,12 +450,15 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     final activeTab = groupId == null
         ? null
         : ref.watch(workspaceGroupActiveTabProvider(groupId));
+
     // No tab of its own is what an empty group *is* — the room a split cleared
-    // and nobody has filled yet.
+    // and nobody has filled yet. It keeps that face even while it holds the
+    // keyboard: [_EmptyGroup] is the only way to close a group, and a session
+    // drawn over it would take that away with no other way back.
     final empty = groupId != null && activeTab == null;
 
     final scheme = Theme.of(context).colorScheme;
-    final session = empty ? null : _groupSession(focused);
+    final session = empty ? null : _groupSession();
     // With nothing to read, the group is its terminal — an empty middle would
     // be worse than the surface the app is primarily about. Otherwise it is
     // **this group's own face**: a tab owns a session, a terminal view, a chat
@@ -486,18 +517,16 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
                           groupFocused: focused,
                           autoOpenDone: widget.autoOpenDone,
                         ),
-                        // [WorkbenchSessionView] renders whatever the Explorer
-                        // has selected, which is right until nothing is: a
-                        // session the workbench reached by following the pane
-                        // would find that view's "open a session" placeholder
-                        // behind the toggle. It is named outright in that case.
-                        // Only a native session is ever reached that way — an
-                        // imported one has no pane of ours to follow.
+                        // **Named, never read off a window-wide provider.**
+                        // This used to be a view that rendered whatever the
+                        // Explorer had selected, so a group showing one tab
+                        // could be reading another tab's transcript — the
+                        // report this group's shape exists to make impossible.
                         if (conversationMounted)
-                          if (session.selected)
-                            const WorkbenchSessionView()
+                          if (session.native)
+                            SessionTranscriptView(sessionId: session.id)
                           else
-                            SessionTranscriptView(sessionId: session.id),
+                            ImportedSessionView(sessionId: session.id),
                       ],
                     ),
             ),
@@ -525,17 +554,22 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
   /// it has a pane of ours, and whether it is one of ours at all (imported CLI
   /// sessions have no pane and no live status).
   ///
-  /// **This group's own active tab — and, for the focused group only, the
-  /// Explorer's selection.** Selecting a row is a request to see it *here*,
-  /// where the keyboard is; a group nobody is typing into keeps describing its
-  /// own tab, continuously, whatever is selected elsewhere.
+  /// **This group's own active tab**, and nothing outside the group. A group
+  /// nobody is typing into keeps describing its own tab, continuously,
+  /// whatever is selected elsewhere — and so does the one that is.
+  ///
+  /// The Explorer's selection is not an exception to that. One that has a pane
+  /// of ours *is* a tab, and opening it is [showTerminalFor] activating that
+  /// tab in the group that holds it; one that has no pane has no tab anywhere,
+  /// so it is opened **into** a group and only that group draws it — see
+  /// [selectionHostGroupProvider] and [_hostedSelection].
   ///
   /// The fallback is deliberately a **read**, not a selection. Writing
   /// `selectedSessionIdProvider` to make the toggle appear would fire the
   /// listener in [WorkbenchView] that opens the session's terminal, so the way
   /// to the conversation would fight the surface the user is already on.
   /// Nothing here writes anything.
-  _WorkbenchSession? _groupSession(bool focused) {
+  _WorkbenchSession? _groupSession() {
     // The strip draws the session's name and offers the toggle its pane
     // decides. Statuses and permission modes are drawn elsewhere.
     ref.watchSessionKinds(const {
@@ -550,27 +584,29 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     // cannot change which panes exist, and at a hundred panes that was the
     // common case.
     ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs));
-    if (focused) {
-      final importedId = ref.watch(selectedImportedSessionIdProvider);
-      if (importedId != null) {
-        final imported = ref
-            .read(importedSessionDaoProvider)
-            .getById(importedId);
+    final groupId = widget.groupId;
+    final hosted = _hostedSelection(ref, groupId);
+    if (hosted != null) {
+      if (!hosted.native) {
+        final imported = ref.read(importedSessionDaoProvider).getById(hosted.id);
         return _WorkbenchSession(
-          id: importedId,
+          id: hosted.id,
           title: imported?.displayTitle ?? 'Session',
           paneId: null,
           native: false,
         );
       }
+      final Session? row = ref.read(sessionDaoProvider).getById(hosted.id);
+      return _WorkbenchSession(
+        id: hosted.id,
+        title: row?.title ?? 'Session',
+        paneId: null,
+        native: true,
+      );
     }
-    final selected = focused ? ref.watch(selectedSessionIdProvider) : null;
-    final groupId = widget.groupId;
-    final sessionId =
-        selected ??
-        (groupId == null
-            ? null
-            : ref.watch(workspaceGroupSessionIdProvider(groupId)));
+    final sessionId = groupId == null
+        ? null
+        : ref.watch(workspaceGroupSessionIdProvider(groupId));
     if (sessionId == null) return null;
     final Session? record = ref.read(sessionDaoProvider).getById(sessionId);
     return _WorkbenchSession(
@@ -578,9 +614,35 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
       title: record?.title ?? 'Session',
       paneId: sessionTerminalPane(ref, sessionId),
       native: true,
-      selected: selected != null,
     );
   }
+}
+
+/// The session group [groupId] was asked to show that has no tab to show it in.
+///
+/// Null for every group but the one the Explorer's selection was opened into
+/// ([selectionHostGroupProvider]) — and null there too as soon as that
+/// selection has a pane of ours, because a session with a pane *is* a tab and
+/// the group holding that tab already draws it. Before the window has a
+/// workspace one group stands in for it, so it hosts.
+({String id, bool native})? _hostedSelection(WidgetRef ref, String? groupId) {
+  final host =
+      ref.watch(selectionHostGroupProvider) ??
+      ref.watch(focusedWorkspaceGroupProvider);
+  if (groupId != null && host != groupId) return null;
+  final imported = ref.watch(selectedImportedSessionIdProvider);
+  if (imported != null) return (id: imported, native: false);
+  final selected = ref.watch(selectedSessionIdProvider);
+  if (selected == null) return null;
+  // A pane arriving under the selection, or going away, changes the answer.
+  ref.watch(terminalTabsProvider);
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.placement,
+  });
+  return sessionTerminalPane(ref, selected) == null
+      ? (id: selected, native: true)
+      : null;
 }
 
 /// The room a workspace split cleared, before anything has been put in it.
@@ -682,16 +744,10 @@ class _WorkbenchSession {
     required this.title,
     required this.paneId,
     required this.native,
-    this.selected = true,
   });
 
   final String id;
   final String title;
-
-  /// Whether the Explorer picked this session, rather than the workbench
-  /// having followed the pane on screen to it. What decides which widget draws
-  /// the conversation — see the [IndexedStack] in `build`.
-  final bool selected;
 
   /// The pane this session can be *shown* in — it runs in one of ours and that
   /// pane is still there. Null for an imported CLI session, one opened in an
@@ -1449,7 +1505,7 @@ class _TabStrip extends ConsumerWidget {
     final active = group == null
         ? null
         : ref.watch(workspaceGroupActiveTabProvider(group));
-    final onPanes = _showingPanes(ref, groupId: group, focused: groupFocused);
+    final onPanes = _showingPanes(ref, groupId: group);
     return [
       for (final (index, tab) in tabs.indexed)
         _StripTab(
@@ -1896,45 +1952,21 @@ class _TabDragFeedback extends StatelessWidget {
   }
 }
 
-/// Whether the workbench is showing terminal **panes** right now.
+/// Whether group [groupId] is showing terminal **panes** right now.
 ///
 /// Two surfaces can be up instead: the conversation, and the empty state a
-/// selected session with no pane of ours gets. While either is, no terminal tab
-/// is on screen at all — so none of them may draw as the active one, in the
-/// strip or in the picker.
-bool _showingPanes(WidgetRef ref, {String? groupId, bool focused = true}) {
-  // The "no pane for this session" state belongs to the selection, and a
-  // selection is one thing in the window — so an unfocused group can only be
-  // showing its panes or its own conversation.
-  if (!focused) {
-    return groupId == null ||
-        ref.watch(terminalVisibleInGroupProvider(groupId));
-  }
-  // A pane appearing or ending changes the answer, and so does the launch that
-  // rewrites `pane_id` on the row. Only the tab list, though: a *process* dying
-  // cannot change which panes exist, and this is read from the tab strip on
-  // every build.
-  ref.watch(terminalTabsProvider);
-  ref.watchSessionKinds(const {
-    SessionChangeKind.membership,
-    SessionChangeKind.placement,
-  });
-  final imported = ref.watch(selectedImportedSessionIdProvider);
-  // The same fallback the workbench itself makes: with nothing selected it
-  // still follows the pane on screen to its session, and that session has a
-  // conversation the strip has to account for. See [_selectedSession].
-  final selected =
-      ref.watch(selectedSessionIdProvider) ??
-      ref.watch(activePaneSessionIdProvider);
-  // With no session at all the workbench is the terminal, whatever the flag
-  // says — there is no second surface to be on.
-  if (imported == null && selected == null) return true;
-  final showsTerminal = groupId == null
-      ? ref.watch(terminalVisibleProvider)
-      : ref.watch(terminalVisibleInGroupProvider(groupId));
-  if (!showsTerminal) return false;
-  // An imported CLI session has no pane of ours by definition.
-  return imported == null && sessionTerminalPane(ref, selected!) != null;
+/// session with no pane of ours gets ([_hostedSelection]). While either is, no
+/// terminal tab is on screen in that group — so none of its tabs may draw as
+/// the active one, in the strip or in the picker.
+///
+/// A null [groupId] means the focused group, for the picker, which lists the
+/// window's tabs and marks the one the keyboard is in.
+bool _showingPanes(WidgetRef ref, {String? groupId}) {
+  final group = groupId ?? ref.watch(focusedWorkspaceGroupProvider);
+  // Before the window has a workspace there is nothing but the terminal.
+  if (group == null) return true;
+  if (!ref.watch(terminalVisibleInGroupProvider(group))) return false;
+  return _hostedSelection(ref, group) == null;
 }
 
 /// Brings [tabId] to the front and makes sure the terminal is what the
@@ -1947,7 +1979,7 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
   terminals.activateTab(tabId);
   // The group that holds it, which activating the tab has just focused.
   terminals.showTerminalForTab(tabId);
-  _releaseHijackedSelection(ref);
+  _releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
 }
 
 /// Lets go of a selection that has no pane of ours, because the user has just
@@ -1972,7 +2004,14 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
 /// **Only the selection that is in the way.** One that has a pane is the
 /// session the user is looking at, and the toggle to its conversation is
 /// offered off the back of it; activating a tab must not quietly drop it.
-void _releaseHijackedSelection(WidgetRef ref) {
+///
+/// **And only in the way of the group it was opened into.** A tab activated in
+/// another group is not a statement about this one, and clearing the selection
+/// then would empty a group nobody had asked about — the very thing
+/// [selectionHostGroupProvider] exists to stop.
+void _releaseHijackedSelection(WidgetRef ref, {String? inGroup}) {
+  final host = ref.read(selectionHostGroupProvider);
+  if (inGroup != null && host != null && host != inGroup) return;
   // An imported CLI session has no pane of ours by definition, so it is always
   // the paneless kind.
   if (ref.read(selectedImportedSessionIdProvider) != null) {

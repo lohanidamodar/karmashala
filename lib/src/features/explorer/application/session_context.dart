@@ -71,6 +71,30 @@ final workspaceGroupSessionIdProvider = Provider.autoDispose
       return null;
     });
 
+/// The workspace group the Explorer's selection was opened into.
+///
+/// A selection that has a pane of ours *is* a tab, and the tab machinery
+/// already puts it in a group. This is for the ones that are not — an imported
+/// conversation, a session whose pane has ended — which have no tab anywhere
+/// and were drawn by whichever group happened to hold the keyboard, so they
+/// followed the focus around the window and took over each group they landed
+/// on. A tap in the tree means "show me this **here**", and here is one group.
+///
+/// Null until something has been opened, and null again once the selection is
+/// let go of; [WorkbenchView] is the only writer. A group that has since
+/// collapsed leaves a stale id behind, which matches no group and so draws
+/// nothing — nothing to prune.
+class SelectionHostGroupController extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void host(String? groupId) => state = groupId;
+}
+
+final selectionHostGroupProvider =
+    NotifierProvider<SelectionHostGroupController, String?>(
+      SelectionHostGroupController.new,
+    );
+
 /// The session [tab] is running: the focused pane's, and failing that the
 /// oldest pane in the tab that has one.
 ///
