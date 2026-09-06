@@ -79,7 +79,7 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         // Everything that would otherwise reach the host or poll a file: a
         // spinner that never stops is a `pumpAndSettle` that never returns.
-        sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),

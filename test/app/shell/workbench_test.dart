@@ -131,7 +131,7 @@ void main() {
         // Both of these poll on a real timer, which would outlive the widget
         // tree and trip flutter_test's pending-timer check. The workbench does
         // not care what they say — only that a session has two renderings.
-        sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
         // The transcript header offers "open in a system terminal", which
         // *detects* terminals by running real host commands. A unit test must
         // never reach the host for that.

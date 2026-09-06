@@ -18,7 +18,7 @@ class SessionRepositoriesBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repos = ref.watch(selectedSessionRepositoriesProvider);
+    final repos = ref.watch(sessionRepositoriesProvider(sessionId));
     if (repos.isEmpty) return const SizedBox.shrink();
 
     final primary = repos.first;

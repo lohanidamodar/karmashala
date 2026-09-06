@@ -98,7 +98,7 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           sessionTranscriptProvider.overrideWith(
-            (ref) => Stream.value([
+            (ref, id) => Stream.value([
               SessionEvent(
                 id: 1,
                 sessionId: 's1',

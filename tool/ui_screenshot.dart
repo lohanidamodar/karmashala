@@ -168,7 +168,9 @@ void main() {
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),
-        sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value(const []),
+        ),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => Stream.value(
             AgentStatusReport(

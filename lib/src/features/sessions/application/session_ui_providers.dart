@@ -115,26 +115,26 @@ final selectedImportedSessionIdProvider =
       SelectedImportedSessionController.new,
     );
 
-/// Repositories the selected session spans (primary first). Refreshes when
-/// *that* session's checkouts are attached or detached — not when any other
-/// session moves.
-final selectedSessionRepositoriesProvider =
-    Provider.autoDispose<List<Repository>>((ref) {
-      final id = ref.watch(selectedSessionIdProvider);
-      if (id == null) return const [];
-      ref.watchSession(id);
-      return ref.read(sessionRepositoriesServiceProvider).forSession(id);
+/// Repositories [sessionId] spans (primary first). Refreshes when *that*
+/// session's checkouts are attached or detached — not when any other session
+/// moves.
+///
+/// Keyed by session rather than by the Explorer's selection: it draws a row
+/// inside one group's conversation, and with two groups up "the selected one"
+/// is a different session from the one that conversation is about.
+final sessionRepositoriesProvider = Provider.autoDispose
+    .family<List<Repository>, String>((ref, sessionId) {
+      ref.watchSession(sessionId);
+      return ref.read(sessionRepositoriesServiceProvider).forSession(sessionId);
     });
 
-/// Live transcript for the selected session: the persisted event history,
-/// refreshed whenever the engine appends a new event to an active session.
-final sessionTranscriptProvider =
-    StreamProvider.autoDispose<List<SessionEvent>>((ref) async* {
-      final id = ref.watch(selectedSessionIdProvider);
-      if (id == null) {
-        yield const [];
-        return;
-      }
+/// Live transcript for [id]: the persisted event history, refreshed whenever
+/// the engine appends a new event to an active session.
+///
+/// Keyed by session for the reason [sessionRepositoriesProvider] gives — the
+/// view that reads it is one group's conversation, and it is named.
+final sessionTranscriptProvider = StreamProvider.autoDispose
+    .family<List<SessionEvent>, String>((ref, id) async* {
       // Re-subscribe when *this* session is (re)started, so a freshly
       // relaunched agent's live stream is picked up. Another session starting
       // used to tear this stream down and rebuild it from the event log.
