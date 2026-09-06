@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.17.1 (2026-09-06)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.17.2 (2026-09-06)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,68 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.17.2 — 2026-09-06 (build 32)
+
+### A terminal selection can become a todo or a note
+
+Right-click a selection and keep it. Both open a pre-filled composer rather than
+saving on the spot — the app's two existing patterns disagreed, and the
+discriminator is whether the captured thing is a unit somebody wrote. A
+transcript message is; a rectangle of characters dragged over a terminal is not.
+
+Provenance comes from the pane's own session and nowhere else: not a sibling
+pane in the same tab, not the Explorer's selection, not the panel's filter. A
+pane with no session tags nothing and says "No project" — `Todo` already held
+that null is a first-class answer, not a hole to fill with a guess. A selection
+is not a message, so the message ordinal and role stay null.
+
+A multi-line selection collapses for a todo and the composer says so — "N lines
+were joined into one" — because a selection carries each row's padding out to
+the right edge, and joining alone is not enough. A note keeps it byte for byte.
+
+### Sending a note or a todo to the session you are working in
+
+Both offer their text to a session's message box through the existing composer
+queue, which offers rather than taking the person's turn.
+
+The Notes card used to subscribe to a session just to name and disable its Send
+button, which put every source-less card on a signal that changes whenever the
+active session does. It resolves on the click now. A note that came from a
+session still names its target — that is on its own row, and free. A source-less
+one says "the active session" and answers an empty click with a message rather
+than sitting greyed out; a card that refuses to watch the state cannot gate on
+it either.
+
+The cost test that guards this panel got stronger: changing session went from
+repainting one card to repainting none, and because zero rebuilds could be
+bought by a card that simply stopped working, it now also asserts that tapping
+afterwards still reaches the new session.
+
+### Fixed: the Android live view did not come back
+
+Switching the side panel to another surface unmounted the device pane, and
+`_liveSerial` — the flag meaning "the live view is on, for this device" — was a
+widget `State` field that died with it. Collapsing the panel and zen mode did
+the same. It was never the workspace groups; the side panel is a sibling of the
+workbench.
+
+The intent now lives beside the other "which device" answer and survives the
+unmount. The **session** deliberately does not: an invisible pane is worth no
+handset battery and no host decode, so unmount still stops scrcpy and coming
+back starts it again. A remount shows the spinner rather than a stale frame,
+because holding the frame would mean holding the stream.
+
+Found alongside it: the "stop streaming a device that went away" check read a
+still-*loading* device list as an *empty* one, so a mid-refresh remount would
+have destroyed the intent before the resume could use it.
+
+The iOS Simulator path never had this bug — its state was always in a provider —
+but it is the mirror image: nothing tells it nobody is watching, so its video
+feed runs for a hidden pane. Left alone, because it is macOS-only and nothing
+here can prove a change to it.
 
 ---
 
