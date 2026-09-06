@@ -23,11 +23,20 @@ class WorkbenchTabChip extends StatelessWidget {
   /// Whether this chip carries the accent rule, when that is a different
   /// question from being selected.
   ///
-  /// A window has one workbench strip, so there "the selected tab" and "the tab
-  /// you are working in" are the same tab and this stays null. A split has a
-  /// header per region and each one has a selected tab, but only one of them
-  /// holds the keyboard — so the ground says *this region is showing this
-  /// pane* and the accent says *and this is where typing goes*.
+  /// **Three states, not two.** Once the window holds several strips — a
+  /// workspace group has one, and a region of a split tab has one — "the tab
+  /// this strip is showing" and "the tab your keystrokes reach" stop being the
+  /// same question. Four groups each drawing a fully selected tab say nothing
+  /// about where you are typing. So:
+  ///
+  /// | selected | accented | reads as |
+  /// | --- | --- | --- |
+  /// | false | — | not the tab this strip is showing |
+  /// | true | false | the tab this strip is showing |
+  /// | true | true | …and this is where typing goes |
+  ///
+  /// Null means the two are the same question and selection carries the accent
+  /// — which is what a strip that is always focused wants.
   final bool? accented;
 
   /// Whether this chip belongs to a **pane** header rather than the window's
@@ -58,9 +67,17 @@ class WorkbenchTabChip extends StatelessWidget {
     // in the accent, because an outline alone is invisible against a neutral
     // ramp at this size. The rule sits on the edge the chip belongs to: a tab
     // points up at the window it names, a pane header points down at the pane.
+    // The middle state is a rule too, in the neutral ink rather than the
+    // accent: dropping it entirely would leave an unfocused group's chosen tab
+    // looking like any other tab in its strip, and a group must always show
+    // which tab its terminal and its status bar belong to.
     final rule = BorderSide(
       width: 2,
-      color: (accented ?? selected) ? scheme.primary : Colors.transparent,
+      color: switch ((selected, accented)) {
+        (false, _) => Colors.transparent,
+        (true, false) => scheme.outlineVariant,
+        _ => scheme.primary,
+      },
     );
     final chip = Material(
       color: selected ? scheme.surfaceContainerLowest : Colors.transparent,
@@ -95,7 +112,10 @@ class WorkbenchTabChip extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
                       .copyWith(
-                        color: selected
+                        // Full ink only where the keyboard is. A strip nobody
+                        // is typing in keeps its tab legible and stops it
+                        // competing with the one that is.
+                        color: selected && (accented ?? true)
                             ? scheme.onSurface
                             : scheme.onSurfaceVariant,
                       ),

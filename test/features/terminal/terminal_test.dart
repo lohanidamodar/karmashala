@@ -279,17 +279,49 @@ void main() {
     });
   });
 
-  group('terminalVisibleProvider', () {
+  group('a group\'s face', () {
     test('rests on the terminal, and toggles off it', () {
       // The app is terminal-primary, so the terminal is the resting state
       // rather than something every path has to switch to.
       final container = ProviderContainer();
       addTearDown(container.dispose);
-      expect(container.read(terminalVisibleProvider), isTrue);
-      container.read(terminalVisibleProvider.notifier).toggle();
-      expect(container.read(terminalVisibleProvider), isFalse);
-      container.read(terminalVisibleProvider.notifier).toggle();
-      expect(container.read(terminalVisibleProvider), isTrue);
+      final faces = container.read(terminalFacesProvider.notifier);
+      expect(container.read(terminalVisibleInGroupProvider('g1')), isTrue);
+      faces.toggle('g1');
+      expect(container.read(terminalVisibleInGroupProvider('g1')), isFalse);
+      faces.toggle('g1');
+      expect(container.read(terminalVisibleInGroupProvider('g1')), isTrue);
+    });
+
+    test('is one group\'s business and not its neighbour\'s', () {
+      // The assertion that carries the weight: a face wired to the window
+      // would move both, and would look right with one group.
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final faces = container.read(terminalFacesProvider.notifier);
+
+      faces.show('a', terminal: false);
+
+      expect(container.read(terminalVisibleInGroupProvider('a')), isFalse);
+      expect(
+        container.read(terminalVisibleInGroupProvider('b')),
+        isTrue,
+        reason: 'the neighbour is still on its terminal',
+      );
+      expect(container.read(anyChatVisibleProvider), isTrue);
+    });
+
+    test('a group that collapses takes its face with it', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final faces = container.read(terminalFacesProvider.notifier);
+      faces
+        ..show('a', terminal: false)
+        ..show('b', terminal: false);
+
+      faces.forget({'a'});
+
+      expect(container.read(terminalFacesProvider).keys, ['a']);
     });
   });
 }

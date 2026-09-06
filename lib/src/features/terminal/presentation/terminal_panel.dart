@@ -1038,6 +1038,7 @@ class TerminalTabChip extends StatelessWidget {
     required this.onEnd,
     required this.onBulkClose,
     this.agentStatus,
+    this.accented = true,
     super.key,
   });
 
@@ -1057,6 +1058,11 @@ class TerminalTabChip extends StatelessWidget {
   final AgentActivityStatus? agentStatus;
 
   final bool selected;
+
+  /// Whether this is also the tab the keyboard is in — see
+  /// [WorkbenchTabChip.accented] for the three states. Every workspace group
+  /// shows which tab it holds; only one of them shows where typing goes.
+  final bool accented;
 
   /// Where this tab sits in the strip, and how many there are.
   ///
@@ -1087,6 +1093,7 @@ class TerminalTabChip extends StatelessWidget {
     final status = agentStatus;
     return WorkbenchTabChip(
       selected: selected,
+      accented: accented,
       onTap: onTap,
       onSecondaryTapDown: (details) => _menu(context, details.globalPosition),
       // One slot, never two glyphs: a tab running an agent says what the agent

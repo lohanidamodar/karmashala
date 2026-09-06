@@ -123,11 +123,22 @@ final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
   // autosave timer, which is why every container that merely reads the inbox
   // would otherwise inherit a pending timer.
   if (!ref.exists(terminalSessionsControllerProvider)) return const [];
-  if (!ref.watch(terminalVisibleProvider)) return const [];
+  // **Every group showing its terminal**, not just the focused one: each group
+  // has an active tab on screen, and a pane the user can see is a pane the
+  // inbox must not badge — whichever group it happens to be in.
+  final faces = ref.watch(terminalFacesProvider);
   final joined = ref.watch(
-    terminalSessionsControllerProvider.select(
-      (state) => state.activeTab?.layout.visiblePanes.join('\u0000') ?? '',
-    ),
+    terminalSessionsControllerProvider.select((state) {
+      final tree = state.workspace;
+      if (tree == null) return '';
+      final byTab = {for (final tab in state.tabs) tab.id: tab};
+      return [
+        for (final group in tree.groups)
+          if (faces[group.id] ?? true)
+            if (byTab[group.activePaneId] case final tab?)
+              ...tab.layout.visiblePanes,
+      ].join('\u0000');
+    }),
   );
   return joined.isEmpty ? const [] : joined.split('\u0000');
 });

@@ -218,7 +218,10 @@ class QuickOpenSources {
         subtitle: 'Show the terminal in the workbench',
         icon: AppIcons.terminal,
         shortcut: 'Ctrl+`',
-        onSelect: () => ref.read(terminalVisibleProvider.notifier).set(true),
+        // The focused group: a command that names no tab means the group the
+        // keyboard is in.
+        onSelect: () =>
+            ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere(),
       ),
       // The tabs listed below are only the ones that are *nothing but* tabs
       // (see [_openTabs]), and finding one that way means knowing its name.
@@ -728,7 +731,9 @@ class QuickOpenSources {
             weight: _tabWeight,
             onSelect: () => dismiss(() {
               sessions.activateTab(tab.id);
-              ref.read(terminalVisibleProvider.notifier).set(true);
+              // The group that holds the tab, which activating it has just
+              // focused — not whichever group was in front before.
+              sessions.showTerminalForTab(tab.id);
               shell.focusPane(ShellPane.detail);
             }),
           ),

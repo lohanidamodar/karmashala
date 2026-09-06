@@ -42,13 +42,18 @@ final chatTranscriptPollIntervalProvider = Provider<Duration>(
 /// measures the terminal and the conversation *together*, which is the case
 /// each feature's own cost test could not see.
 ///
-/// One global bool rather than one per session, because the workbench shows one
-/// surface at a time: `onTerminal` is `terminalVisibleProvider`, and while the
-/// terminal is in front no session's conversation is on screen. The only
-/// watchers of the transcript are that conversation and the activity strip
-/// inside it, so there is nobody else this can starve.
+/// One bool for the window rather than one per session, because the question
+/// is only ever "is *any* conversation on screen" — the only watchers of a
+/// transcript are that conversation and the activity strip inside it, so there
+/// is nobody else this can starve.
+///
+/// It used to read the one global "the terminal is up" flag, which was right
+/// while the workbench showed one surface at a time. A workspace group now owns
+/// its own face, so several conversations can be up at once and the honest
+/// question is [anyChatVisibleProvider]: nothing polls while every group is
+/// showing its terminal, which is the property this exists for.
 final chatTranscriptPollingProvider = Provider<bool>(
-  (ref) => !ref.watch(terminalVisibleProvider),
+  (ref) => ref.watch(anyChatVisibleProvider),
 );
 
 /// How long to keep looking for a transcript the agent has not written yet.

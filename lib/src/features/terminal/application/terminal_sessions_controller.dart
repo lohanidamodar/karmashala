@@ -1102,6 +1102,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (!identical(tree, _workspace)) _workspace = tree;
     _repairFocusedGroup();
     _syncTabOrder();
+    // A collapsed group takes its face with it, or the map would grow by one
+    // entry per split for the life of the app.
+    ref
+        .read(terminalFacesProvider.notifier)
+        .forget({for (final group in _workspace?.groups ?? const []) group.id});
   }
 
   /// [tree] with [tabId] in the focused group — filling it when it was the
@@ -1220,6 +1225,51 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       if (_isEmptyRegion(paneId)) return paneId;
     }
     return null;
+  }
+
+  /// The workspace group whose strip holds the tab [paneId] is in.
+  String? groupOfPane(String paneId) {
+    final tab = _tabContaining(paneId);
+    if (tab == null) return null;
+    return _workspace?.groupOf(tab.id)?.id;
+  }
+
+  /// The workspace group whose strip holds [tabId].
+  String? groupOfTab(String tabId) => _workspace?.groupOf(tabId)?.id;
+
+  /// Shows the terminal face of the group holding [paneId] — **that** group,
+  /// not whichever one has focus.
+  ///
+  /// Every caller that has a pane in hand should come through here: "show the
+  /// terminal" from a launch, a reveal or an approval means the group the pane
+  /// landed in, and pointing it at the focused group would look correct with
+  /// one group and move the wrong one with two. A pane in no group falls back
+  /// to the focused one, which is the only honest answer left.
+  void showTerminalForPane(String paneId) =>
+      _showFace(groupOfPane(paneId) ?? _focusedGroupId, terminal: true);
+
+  /// Shows the terminal face of the group whose strip holds [tabId].
+  void showTerminalForTab(String tabId) =>
+      _showFace(groupOfTab(tabId) ?? _focusedGroupId, terminal: true);
+
+  /// Shows the terminal face of the focused group — for a command that names
+  /// no pane, such as opening a shell or the palette's *Terminal view*.
+  void showTerminalHere() => _showFace(_focusedGroupId, terminal: true);
+
+  /// Shows group [groupId]'s terminal or its conversation.
+  void showFaceIn(String groupId, {required bool terminal}) =>
+      _showFace(groupId, terminal: terminal);
+
+  /// Swaps the focused group's face — what `` Ctrl+` `` does.
+  void toggleFaceHere() {
+    final group = _focusedGroupId;
+    if (group == null) return;
+    ref.read(terminalFacesProvider.notifier).toggle(group);
+  }
+
+  void _showFace(String? groupId, {required bool terminal}) {
+    if (groupId == null) return;
+    ref.read(terminalFacesProvider.notifier).show(groupId, terminal: terminal);
   }
 
   /// The empty **workspace group**, if the user has cleared one — what the
@@ -3172,24 +3222,79 @@ final terminalPaneTitleProvider = Provider.autoDispose
           .titleForPane(paneId);
     });
 
-/// Whether the terminal is the surface the workbench is showing.
+/// Which face each workspace group's active tab is showing: `true` for its
+/// terminal, `false` for its conversation. A group with no entry shows its
+/// terminal.
 ///
-/// Defaults to **true**: the app is terminal-primary, so the terminal is what
-/// it rests on and the conversation is what you switch to. It was `false`,
-/// which made chat the resting state and left every path that wanted the
-/// terminal — the workbench on mount, a launch, a reveal — writing `true` to
-/// correct it, each one a chance to correct it a frame too late.
-class TerminalVisibleController extends Notifier<bool> {
+/// **Per group, because a tab owns both faces.** A tab carries a session, a
+/// terminal view, a chat view and a status strip as one thing, so which face is
+/// up is a property of the group showing that tab — not of the window. Three
+/// agents side by side must be able to show three transcripts at once, which is
+/// the whole point of the layout.
+///
+/// One notifier holding a map rather than a family, so a group that collapses
+/// leaves nothing behind: [forget] prunes it. Consumers read one group's entry
+/// through [terminalVisibleInGroupProvider], which `select`s it, so switching
+/// one group's face wakes that group and nobody else.
+///
+/// Defaults to the **terminal**: the app is terminal-primary, so the terminal
+/// is what it rests on and the conversation is what you switch to. It was the
+/// other way once, which left every path that wanted the terminal writing
+/// `true` to correct it, each one a chance to correct it a frame too late.
+class TerminalFacesController extends Notifier<Map<String, bool>> {
   @override
-  bool build() => true;
-  void toggle() => state = !state;
-  void set(bool value) => state = value;
+  Map<String, bool> build() => const {};
+
+  void show(String groupId, {required bool terminal}) {
+    if ((state[groupId] ?? true) == terminal) return;
+    state = {...state, groupId: terminal};
+  }
+
+  void toggle(String groupId) =>
+      show(groupId, terminal: !(state[groupId] ?? true));
+
+  /// Drops the entries of groups that no longer exist.
+  void forget(Set<String> live) {
+    if (state.keys.every(live.contains)) return;
+    state = {
+      for (final entry in state.entries)
+        if (live.contains(entry.key)) entry.key: entry.value,
+    };
+  }
 }
 
-final terminalVisibleProvider =
-    NotifierProvider<TerminalVisibleController, bool>(
-      TerminalVisibleController.new,
+final terminalFacesProvider =
+    NotifierProvider<TerminalFacesController, Map<String, bool>>(
+      TerminalFacesController.new,
     );
+
+/// Whether group [groupId] is showing its terminal rather than its chat.
+final terminalVisibleInGroupProvider = Provider.family<bool, String>(
+  (ref, groupId) =>
+      ref.watch(terminalFacesProvider.select((f) => f[groupId] ?? true)),
+);
+
+/// The **focused** group's face — what a command with no group in hand means.
+///
+/// Read-only on purpose. Every writer has to say which group it is changing,
+/// and the compiler is what makes them: pointing them all at the focused group
+/// looks correct with one group and is wrong the moment there are two.
+final terminalVisibleProvider = Provider<bool>((ref) {
+  final group = ref.watch(focusedWorkspaceGroupProvider);
+  return group == null || ref.watch(terminalVisibleInGroupProvider(group));
+});
+
+/// Whether **any** group is showing a conversation.
+///
+/// What a cost gate on transcript work asks now that more than one can be up at
+/// once — see `chatTranscriptPollingProvider`.
+final anyChatVisibleProvider = Provider<bool>(
+  (ref) => ref.watch(
+    terminalFacesProvider.select(
+      (faces) => faces.values.any((terminal) => !terminal),
+    ),
+  ),
+);
 
 /// Whether the terminal fills the whole window rather than sitting in its dock.
 class TerminalMaximizedController extends Notifier<bool> {

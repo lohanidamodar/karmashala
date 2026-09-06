@@ -397,8 +397,12 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
   /// of the bar's toggle and to nothing else, which is what makes "a tap never
   /// opens the conversation" a property rather than a race won.
   void _showChat() {
+    final groupId = widget.groupId;
+    if (groupId == null) return;
     _focusThisGroup();
-    ref.read(terminalVisibleProvider.notifier).set(false);
+    ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .showFaceIn(groupId, terminal: false);
   }
 
   /// Hands this group the keyboard. Cheap to call on every pointer down:
@@ -425,10 +429,15 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     final scheme = Theme.of(context).colorScheme;
     final session = empty ? null : _groupSession(focused);
     // With nothing to read, the group is its terminal — an empty middle would
-    // be worse than the surface the app is primarily about. And only the
-    // focused group ever shows a conversation, because there is one of those.
+    // be worse than the surface the app is primarily about. Otherwise it is
+    // **this group's own face**: a tab owns a session, a terminal view, a chat
+    // view and a status strip together, so which of the two faces is up is a
+    // property of the group showing that tab. Three agents side by side can
+    // show three transcripts at once, which is the point of the layout.
     final onTerminal =
-        !focused || ref.watch(terminalVisibleProvider) || session == null;
+        groupId == null ||
+        session == null ||
+        ref.watch(terminalVisibleInGroupProvider(groupId));
     // Asked for, or let go of — see [_conversationFor]. Written here rather
     // than in a listener because both inputs are read here and nowhere else,
     // and neither is a provider this may write to.
@@ -658,7 +667,13 @@ void showTerminalFor(WidgetRef ref, String? paneId, String? sessionId) {
           : SessionChange.moved(sessionId),
     );
   }
-  ref.read(terminalVisibleProvider.notifier).set(true);
+  // The group that pane is in — not the focused one. A launch, a reveal or an
+  // approval means "show me it *there*", and with two groups those are
+  // different answers.
+  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+  paneId == null
+      ? terminals.showTerminalHere()
+      : terminals.showTerminalForPane(paneId);
 }
 
 class _WorkbenchSession {
@@ -716,7 +731,7 @@ class _TerminalSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = session;
     if (selected != null && selected.paneId == null) {
-      return _NoPaneForSession(session: selected);
+      return _NoPaneForSession(session: selected, groupId: groupId);
     }
     return TerminalPaneStack(
       groupId: groupId,
@@ -739,9 +754,13 @@ class _TerminalSurface extends StatelessWidget {
 /// is ever reached ([_releaseEndedPane]), because explaining the corpse of the
 /// thing someone just finished with is not an answer to anything.
 class _NoPaneForSession extends ConsumerWidget {
-  const _NoPaneForSession({required this.session});
+  const _NoPaneForSession({required this.session, required this.groupId});
 
   final _WorkbenchSession session;
+
+  /// The group this empty state is drawn in — so "read the conversation" opens
+  /// it *here* rather than in whichever group has the keyboard.
+  final String? groupId;
 
   /// Whether resuming is something we could actually do. A native row needs the
   /// CLI's own id — without it a "resume" would start a *new* conversation
@@ -828,8 +847,15 @@ class _NoPaneForSession extends ConsumerWidget {
                       label: const Text('Resume in a terminal'),
                     ),
                   TextButton(
-                    onPressed: () =>
-                        ref.read(terminalVisibleProvider.notifier).set(false),
+                    // This card is drawn inside one group, so the conversation
+                    // opens in that group.
+                    onPressed: () {
+                      if (groupId case final group?) {
+                        ref
+                            .read(terminalSessionsControllerProvider.notifier)
+                            .showFaceIn(group, terminal: false);
+                      }
+                    },
                     child: const Text('Read the conversation'),
                   ),
                 ],
@@ -1423,7 +1449,7 @@ class _TabStrip extends ConsumerWidget {
     final active = group == null
         ? null
         : ref.watch(workspaceGroupActiveTabProvider(group));
-    final onPanes = _showingPanes(ref, focused: groupFocused);
+    final onPanes = _showingPanes(ref, groupId: group, focused: groupFocused);
     return [
       for (final (index, tab) in tabs.indexed)
         _StripTab(
@@ -1432,6 +1458,11 @@ class _TabStrip extends ConsumerWidget {
             tab: tab,
             groupId: group,
             selected: onPanes && tab.id == active,
+            // Selected says *this group is showing this tab*; accented says
+            // *and this is where typing goes*. Without the second, four groups
+            // draw four fully selected tabs and nothing on screen says which
+            // one your keystrokes reach.
+            accented: groupFocused,
             index: index,
             tabCount: tabs.length,
           ),
@@ -1494,6 +1525,7 @@ class _TabChip extends ConsumerWidget {
     required this.tab,
     required this.groupId,
     required this.selected,
+    required this.accented,
     required this.index,
     required this.tabCount,
   });
@@ -1505,6 +1537,9 @@ class _TabChip extends ConsumerWidget {
   final String? groupId;
 
   final bool selected;
+
+  /// Whether this strip's group has the keyboard.
+  final bool accented;
 
   /// Where the strip laid this chip out, and how wide the row is. The chip
   /// itself reads no provider, so this is how it learns whether "close to the
@@ -1521,6 +1556,7 @@ class _TabChip extends ConsumerWidget {
       liveness: _liveness(ref),
       agentStatus: _agentActivity(ref),
       selected: selected,
+      accented: accented,
       index: index,
       tabCount: tabCount,
       onTap: () => activateTerminalTab(ref, tab.id),
@@ -1866,11 +1902,14 @@ class _TabDragFeedback extends StatelessWidget {
 /// selected session with no pane of ours gets. While either is, no terminal tab
 /// is on screen at all — so none of them may draw as the active one, in the
 /// strip or in the picker.
-bool _showingPanes(WidgetRef ref, {bool focused = true}) {
-  // Only the focused group can be showing anything but its panes: the
-  // conversation and the "no pane for this session" state both belong to the
-  // selection, and a selection is one thing in the window.
-  if (!focused) return true;
+bool _showingPanes(WidgetRef ref, {String? groupId, bool focused = true}) {
+  // The "no pane for this session" state belongs to the selection, and a
+  // selection is one thing in the window — so an unfocused group can only be
+  // showing its panes or its own conversation.
+  if (!focused) {
+    return groupId == null ||
+        ref.watch(terminalVisibleInGroupProvider(groupId));
+  }
   // A pane appearing or ending changes the answer, and so does the launch that
   // rewrites `pane_id` on the row. Only the tab list, though: a *process* dying
   // cannot change which panes exist, and this is read from the tab strip on
@@ -1890,7 +1929,10 @@ bool _showingPanes(WidgetRef ref, {bool focused = true}) {
   // With no session at all the workbench is the terminal, whatever the flag
   // says — there is no second surface to be on.
   if (imported == null && selected == null) return true;
-  if (!ref.watch(terminalVisibleProvider)) return false;
+  final showsTerminal = groupId == null
+      ? ref.watch(terminalVisibleProvider)
+      : ref.watch(terminalVisibleInGroupProvider(groupId));
+  if (!showsTerminal) return false;
   // An imported CLI session has no pane of ours by definition.
   return imported == null && sessionTerminalPane(ref, selected!) != null;
 }
@@ -1901,8 +1943,10 @@ bool _showingPanes(WidgetRef ref, {bool focused = true}) {
 /// the empty state of a session that is not in any tab at all
 /// ([_releaseHijackedSelection]).
 void activateTerminalTab(WidgetRef ref, String tabId) {
-  ref.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
-  ref.read(terminalVisibleProvider.notifier).set(true);
+  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+  terminals.activateTab(tabId);
+  // The group that holds it, which activating the tab has just focused.
+  terminals.showTerminalForTab(tabId);
   _releaseHijackedSelection(ref);
 }
 

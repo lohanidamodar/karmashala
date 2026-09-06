@@ -721,7 +721,12 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(terminalVisibleProvider.notifier).set(terminalVisible);
+      // A face belongs to a workspace group now, and this container has no
+      // widget tree — so it names one and the poll gate reads "any group on
+      // chat", which is the same question with one group.
+      container
+          .read(terminalFacesProvider.notifier)
+          .show('g', terminal: terminalVisible);
       return container;
     }
 
@@ -787,7 +792,9 @@ void main() {
 
       // ...and it is a pause, not a stop: looking at the conversation brings it
       // back on the next tick.
-      container.read(terminalVisibleProvider.notifier).set(false);
+      container
+          .read(terminalFacesProvider.notifier)
+          .show('g', terminal: false);
       expect(
         await waitFor(() => seen.isNotEmpty),
         isTrue,

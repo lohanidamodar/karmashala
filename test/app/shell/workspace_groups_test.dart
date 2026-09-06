@@ -21,6 +21,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import '../../features/terminal/fake_instance.dart';
@@ -83,8 +84,8 @@ void main() {
       container.read(terminalSessionsControllerProvider.notifier);
 
   /// A tab of its own running session [id].
-  String openSessionTab(String id) {
-    final tabId = terminals().openTab(TerminalProfile.powerShell);
+  String openSessionTab(String id, [TerminalProfile? profile]) {
+    final tabId = terminals().openTab(profile ?? TerminalProfile.powerShell);
     final paneId = container
         .read(terminalSessionsControllerProvider)
         .tabs
@@ -183,6 +184,124 @@ void main() {
     // Two chips in the left strip and one in the right. A strip reading the
     // window's whole tab list would draw three in each, for six.
     expect(find.byType(TerminalTabChip), findsNWidgets(3));
+  });
+
+  testWidgets('only the focused group\'s tab says where typing goes', (
+    tester,
+  ) async {
+    // Two shells, so the two chips are told apart by name rather than by the
+    // order the tree happens to build them in.
+    final a = openSessionTab('s1');
+    final b = openSessionTab('s2', TerminalProfile.commandPrompt);
+    final groups = splitAndMove(b);
+    terminals().activateTab(a);
+
+    await pump(tester);
+
+    // `toList`, because `widgetList` is lazy: read again after the focus moves
+    // it would describe the tree as it is *then*, and the comparison would be
+    // a list against itself.
+    List<TerminalTabChip> strips() => tester
+        .widgetList<TerminalTabChip>(find.byType(TerminalTabChip))
+        .toList();
+
+    final before = strips();
+    expect(before, hasLength(2));
+    // Both groups show which tab they hold — a group whose tab looked
+    // unselected would have a terminal and a status bar belonging to nothing.
+    expect(before.every((chip) => chip.selected), isTrue);
+    // Exactly one says where the keyboard is, and it is the focused group's.
+    expect(before.where((chip) => chip.accented), hasLength(1));
+    expect(
+      before.firstWhere((chip) => chip.accented).title,
+      terminals().titleForTab(a),
+    );
+
+    terminals().focusGroup(groups.right);
+    await tester.pumpAndSettle();
+
+    final after = strips();
+    expect(after.every((chip) => chip.selected), isTrue);
+    expect(after.where((chip) => chip.accented), hasLength(1));
+    expect(
+      after.firstWhere((chip) => chip.accented).title,
+      terminals().titleForTab(b),
+      reason: 'the accent followed the focus to the other group',
+    );
+  });
+
+  testWidgets('each group shows its own face, and the neighbour keeps its', (
+    tester,
+  ) async {
+    // A tab owns a session, a terminal view, a chat view and a status strip
+    // together, so which face is up belongs to the group showing that tab.
+    // Three agents side by side must be able to show three transcripts.
+    final a = openSessionTab('s1');
+    final b = openSessionTab('s2', TerminalProfile.commandPrompt);
+    final groups = splitAndMove(b);
+    terminals().activateTab(a);
+
+    await pump(tester);
+    expect(container.read(terminalVisibleInGroupProvider(groups.left)), isTrue);
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.right)),
+      isTrue,
+    );
+
+    // The left group turns to its conversation.
+    terminals().showFaceIn(groups.left, terminal: false);
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.left)),
+      isFalse,
+    );
+    // **The assertion that carries the weight.** "The left group changed" would
+    // pass against one window-wide flag too; only a per-group face leaves the
+    // neighbour where it was.
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.right)),
+      isTrue,
+      reason: 'the other group is still showing its terminal',
+    );
+    // And the right group is still drawing a terminal, not a transcript.
+    expect(find.byType(TerminalPaneView), findsWidgets);
+
+    // Turning the right one too leaves both on chat rather than swapping them.
+    terminals().showFaceIn(groups.right, terminal: false);
+    await tester.pumpAndSettle();
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.left)),
+      isFalse,
+    );
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.right)),
+      isFalse,
+    );
+  });
+
+  testWidgets('the focused group is what a face command with no tab means', (
+    tester,
+  ) async {
+    final a = openSessionTab('s1');
+    final b = openSessionTab('s2', TerminalProfile.commandPrompt);
+    final groups = splitAndMove(b);
+    terminals().activateTab(a);
+    await pump(tester);
+
+    // `` Ctrl+` `` and the palette's Terminal view both come through here.
+    terminals().toggleFaceHere();
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.left)),
+      isFalse,
+      reason: 'the focused group turned',
+    );
+    expect(
+      container.read(terminalVisibleInGroupProvider(groups.right)),
+      isTrue,
+    );
   });
 
   testWidgets('the room a split clears offers the ways to fill it', (
