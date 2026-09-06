@@ -120,7 +120,21 @@ class _DevicePaneState extends ConsumerState<DevicePane>
   /// through the new one's resolution. The provider is now the source of truth
   /// and this is only ever a *reflection* of it, maintained in exactly one
   /// place: [_onSelectionChanged].
-  String? _liveSerial;
+  ///
+  /// It is stored in [androidLiveViewProvider] rather than in this `State`,
+  /// because the side panel unmounts the pane whenever it switches surface and
+  /// the flag has to survive that. Every write below is inside — or
+  /// immediately followed by — a `setState`, which is why reading it does not
+  /// need to watch.
+  String? get _liveSerial => ref.read(androidLiveViewProvider);
+  set _liveSerial(String? serial) =>
+      ref.read(androidLiveViewProvider.notifier).select(serial);
+
+  /// A live view being brought back after a remount, before the device list has
+  /// answered. Kept apart from [_starting], whose job is to refuse a second
+  /// `_startStream` for the device already starting — a resume has to be let
+  /// through it.
+  bool _resuming = false;
 
   /// Distinguishes an in-flight start from a newer one that has overtaken it.
   ///
@@ -179,6 +193,43 @@ class _DevicePaneState extends ConsumerState<DevicePane>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // The side panel unmounts this pane every time it switches surface, and
+    // [dispose] takes the session down with it. What survived is the intent;
+    // this is what acts on it.
+    final serial = ref.read(androidLiveViewProvider);
+    if (serial != null) {
+      // From the first frame, so the pane does not flash "pick a device" on
+      // its way back to a live view it is about to have.
+      _resuming = true;
+      unawaited(_resumeLiveView(serial));
+    }
+  }
+
+  /// Puts the live view back on the device it was on before the unmount.
+  ///
+  /// The device list is awaited rather than read: it outlives the pane, but a
+  /// refresh may be in flight, and a list still loading reads as the same empty
+  /// list as a phone that has been unplugged.
+  Future<void> _resumeLiveView(String serial) async {
+    List<AndroidDevice> devices;
+    try {
+      devices = await ref.read(devicesProvider.future);
+    } on Object {
+      devices = const [];
+    }
+    if (!mounted) return;
+    setState(() => _resuming = false);
+    if (_liveSerial != serial) return;
+    final device = devices
+        .where((candidate) => candidate.serial == serial && candidate.isReady)
+        .firstOrNull;
+    // Unplugged while the pane was away. The ordinary "pick a device" state —
+    // not an error, and not a spinner with nothing behind it.
+    if (device == null) {
+      await _stopAndRebuild();
+      return;
+    }
+    await _startStream(device);
   }
 
   /// A minimised window is not a stalled player.
@@ -192,6 +243,12 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     );
   }
 
+  /// A real teardown, not [DeviceStreamSession.setWatched] on a retained
+  /// session. `setWatched` only stops the watchdog reading silence as a stall;
+  /// it does not stop one frame being encoded on the phone, pushed over the
+  /// socket and decoded by libmpv. A pane the user switched away from is worth
+  /// no battery on their handset and no decode on the host — so the session
+  /// goes, and [androidLiveViewProvider] remembers that it should come back.
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -715,7 +772,8 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       (_, serial) => _onSelectionChanged(serial),
     );
     final sdk = ref.watch(androidSdkProvider);
-    final devices = ref.watch(devicesProvider).asData?.value ?? const [];
+    final deviceList = ref.watch(devicesProvider);
+    final devices = deviceList.asData?.value ?? const <AndroidDevice>[];
     final selected = ref.watch(selectedDeviceProvider);
     final reason = deviceUnavailableReason(
       sdk: sdk.asData?.value,
@@ -724,8 +782,12 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       kind: ref.watch(deviceEnvironmentProvider).kind,
     );
 
-    // Stop streaming a device that went away.
+    // Stop streaming a device that went away — once the list has actually
+    // said so. A refresh in flight reads as the same empty list as a machine
+    // with nothing plugged in, and tearing the live view down for one is what
+    // a resume would run into first.
     if (_liveSerial != null &&
+        deviceList.hasValue &&
         !devices.any((d) => d.serial == _liveSerial && d.isReady)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_stopAndRebuild());
@@ -784,7 +846,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
           devices: devices,
           selected: selected,
           streaming: _liveSerial != null,
-          starting: _starting,
+          starting: _starting || _resuming,
           stoppingEmulator:
               selected != null && _stopping.contains(selected.serial),
           onStart: selected == null ? null : () => _startStream(selected),
@@ -830,7 +892,10 @@ class _DevicePaneState extends ConsumerState<DevicePane>
                   // labelled — see [_LiveView.reconnecting].
                   video: _video ?? _heldVideo,
                   device: live,
-                  starting: _starting,
+                  // A remount shows the spinner, never the last frame: the
+                  // held picture is a `Player` that went with the old element,
+                  // and there is nothing to hold it in between.
+                  starting: _starting || _resuming,
                   reconnecting: _holdingPicture,
                   sink: _sink,
                   keyboard: _keyboardSink,
@@ -844,7 +909,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
                   // not information.
                   probing:
                       !(sdk.asData != null || sdk.hasError) ||
-                      !ref.watch(devicesProvider).hasValue,
+                      !deviceList.hasValue,
                   onRestart: _restartStream,
                   stopping: _stopping,
                   booting: _booting,
