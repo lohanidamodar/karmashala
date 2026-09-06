@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala/src/features/todos/domain/project_scope.dart';
 import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 
+import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
@@ -42,8 +43,13 @@ void main() {
       ..insert(project())
       ..insert(project(id: 'p2', name: 'Karmashala', path: r'C:\src\k'));
 
+    // The row menu names the session it would send to, so building one
+    // resolves `focusedSessionIdProvider` and with it the terminal
+    // controller — whose autosave timer would outlive a widget test. The
+    // faked terminal is the sanctioned way to hold that still; nothing here
+    // is about the terminal.
     final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: fakeTerminalOverrides(database: db),
     );
     addTearDown(container.dispose);
 
