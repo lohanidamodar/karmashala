@@ -1,5 +1,4 @@
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
@@ -18,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 
+import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 
 void main() {
@@ -39,8 +39,12 @@ void main() {
       RepositoryDao(db).insert(repository());
       AgentInstallationDao(db).insert(agentInstallation());
     }
+    // Faked terminals, because a Send with nothing selected resolves through
+    // `focusedSessionIdProvider` and so reaches the real controller — whose
+    // autosave timer would outlive the tree. Same overrides the Todos row's
+    // send test takes, for the same reason.
     final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: fakeTerminalOverrides(database: db),
     );
     addTearDown(container.dispose);
     if (withSession) {
@@ -217,7 +221,10 @@ void main() {
     expect(container.read(selectedSessionIdProvider), 's1');
   });
 
-  testWidgets('a note with no session of its own goes to the open one', (
+  /// A note written in the panel does not name a target and does not watch one
+  /// — the button is offered, and the click resolves it. See
+  /// `notes_view_cost_test.dart` for what that buys the panel.
+  testWidgets('a note with no session of its own goes to the active one', (
     tester,
   ) async {
     final container = await pump(tester);
@@ -226,33 +233,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Written here'), findsOneWidget);
-    await tester.tap(find.byTooltip('Send to Toolbar rework’s message box'));
+    // Generic on purpose: the card cannot name a session it never read.
+    await tester.tap(
+      find.byTooltip('Send to the active session’s message box'),
+    );
     await tester.pumpAndSettle();
 
     expect(
       container.read(composerDraftProvider),
       containsPair('s1', 'written here'),
     );
+    // And the snackbar names where it actually landed, which is the one place
+    // that can.
+    expect(find.text('Sent to Toolbar rework’s message box.'), findsOneWidget);
   });
 
-  testWidgets('with nothing open, sending back is offered but disabled', (
+  testWidgets('with nothing open, the click says so rather than the button', (
     tester,
   ) async {
     final container = await pump(tester, withSession: false);
     container.read(notesProvider.notifier).capture(body: 'someday');
     await tester.pumpAndSettle();
 
-    final send = find.byTooltip(
-      'No session to send this to — open one first',
-    );
+    final send = find.byTooltip('Send to the active session’s message box');
     expect(send, findsOneWidget);
+    // Enabled: disabling on state the card refuses to watch is not possible,
+    // and "just give the option" is the ask anyway.
     expect(
       tester
           .widget<IconButton>(
             find.ancestor(of: send, matching: find.byType(IconButton)).first,
           )
           .onPressed,
-      isNull,
+      isNotNull,
+    );
+
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('No session to send this to — open one first.'),
+      findsOneWidget,
     );
     expect(container.read(composerDraftProvider), isEmpty);
   });
@@ -340,10 +361,8 @@ void main() {
     testWidgets(
       'and a note with nowhere to send still has a keyboard path to its menu',
       (tester) async {
-        // The case the card body's tap target exists for. With no session
-        // open the Send button is disabled, and a disabled button is not a
-        // focus stop — so without the body this card would have no way at all
-        // to reach its own delete without a mouse.
+        // The card body's tap target is the card's focus stop, and the only
+        // way `Shift+F10` reaches the actions behind the `⋮` without a mouse.
         final container = await pump(tester, withSession: false);
         container.read(notesProvider.notifier).capture(body: 'someday');
         await tester.pumpAndSettle();
@@ -357,9 +376,10 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Delete note'), findsOneWidget);
-        // And the send row says so rather than pretending it would work.
+        // The menu is worded exactly as the button beside it — one verb, one
+        // reading, whichever of the four ways in the user took.
         expect(
-          find.text('Send back — open a session first'),
+          find.text('Send to the active session’s message box'),
           findsOneWidget,
         );
 

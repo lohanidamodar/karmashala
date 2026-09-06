@@ -6,6 +6,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/row_menu.dart';
+import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../todos/presentation/project_menu.dart';
@@ -24,19 +25,18 @@ class NotesView extends ConsumerWidget {
   const NotesView({super.key});
 
   /// Builds of the note cards, counted so a cost test can prove that changing
-  /// session repaints only the cards whose send button names it.
+  /// session repaints none of them.
   @visibleForTesting
   static int debugCardBuildCount = 0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The notes and nothing else. The selected session used to be watched here
-    // and handed to every card, so switching session repainted the whole list
-    // — including every note that was captured from a session of its own and
-    // never looks at the selection at all.
+    // The notes and nothing else. No card here reads a session provider — a
+    // Send resolves its target on the click — so nothing in this panel sits on
+    // the terminal's active-tab signal.
     //
-    // The scope is watched **here and not in a card**, for the same reason: it
-    // decides which cards exist, not what any card says.
+    // The scope is watched **here and not in a card**: it decides which cards
+    // exist, not what any card says.
     final scope = ref.watch(noteScopeProvider);
     final notes = [
       for (final note in ref.watch(notesProvider))
@@ -174,9 +174,8 @@ class _EmptyNotes extends ConsumerWidget {
 /// and hands to `Shift+F10` and to a screen reader.
 ///
 /// The card body is a tap target because of that menu, not only for
-/// convenience: it is the card's focus stop, and without one a note with no
-/// session to send to — whose Send button is disabled, and therefore not
-/// focusable — would have no keyboard path to its own actions at all.
+/// convenience: it is the card's focus stop, and the way the keyboard reaches
+/// actions that live behind `⋮`.
 class _NoteCard extends ConsumerWidget {
   const _NoteCard({required this.note});
 
@@ -187,23 +186,18 @@ class _NoteCard extends ConsumerWidget {
     NotesView.debugCardBuildCount++;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final sessions = ref.read(sessionDaoProvider);
+    // A note that kept its own session can name it for free, off its own row.
+    // A note written here cannot, and does not subscribe to anything to find
+    // out: [_sendBack] resolves the target on the click. See [_sendLabel].
     final source = note.sourceSessionId == null
         ? null
-        : sessions.getById(note.sourceSessionId!);
-    // The selection is only the *fallback* target — a note that still has its
-    // own session ignores it. Subscribed here, and only on the branch that
-    // reads it, so changing session costs the cards that name it and no others.
-    final targetId = source?.id ?? ref.watch(selectedSessionIdProvider);
-    final targetTitle = targetId == null
-        ? null
-        : (source?.title ?? sessions.getById(targetId)?.title ?? 'the session');
+        : ref.read(sessionDaoProvider).getById(note.sourceSessionId!);
     final menuLabel = 'Actions for “${note.displayTitle}”';
-    void act(String value) => _act(context, ref, value, targetId, targetTitle);
+    void act(String value) => _act(context, ref, value);
 
     return RowContextMenu(
       menuLabel: menuLabel,
-      itemBuilder: () => _menuItems(targetTitle),
+      itemBuilder: () => _menuItems(source?.title),
       onSelected: act,
       builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.sm, 2),
@@ -261,16 +255,12 @@ class _NoteCard extends ConsumerWidget {
                       ),
                       _CardAction(
                         icon: AppIcons.paperPlaneRight,
-                        tooltip: targetId == null
-                            ? 'No session to send this to — open one first'
-                            : 'Send to $targetTitle’s message box',
-                        onPressed: targetId == null
-                            ? null
-                            : () => _sendBack(context, ref, targetId, targetTitle!),
+                        tooltip: _sendLabel(source?.title),
+                        onPressed: () => _sendBack(context, ref),
                       ),
                       RowMenuButton(
                         tooltip: menuLabel,
-                        itemBuilder: () => _menuItems(targetTitle),
+                        itemBuilder: () => _menuItems(source?.title),
                         onSelected: act,
                       ),
                     ],
@@ -284,18 +274,31 @@ class _NoteCard extends ConsumerWidget {
     );
   }
 
+  /// What Send offers, in the only terms the card can honestly use.
+  ///
+  /// A note captured from a session names it. A note written here says *the
+  /// active session* rather than naming one: it is not subscribed to the
+  /// selection, so at build time it does not know — and it is never disabled,
+  /// because refusing to watch the state is also refusing to gate on it. The
+  /// click resolves, and says where it went.
+  String _sendLabel(String? sourceTitle) => sourceTitle == null
+      ? 'Send to the active session’s message box'
+      : 'Send to $sourceTitle’s message box';
+
   /// The card's actions, in the one vocabulary every path to them shares.
   ///
   /// Built fresh per call: the same entries cannot be mounted by the `⋮` and by
   /// a right-click at once, and a menu is only ever built as it opens.
-  List<PopupMenuEntry<String>> _menuItems(String? targetTitle) => [
+  ///
+  /// Send is worded exactly as the always-drawn button beside it, rather than
+  /// resolving on open the way the Todos row does: the menu pops next to that
+  /// button, and one verb on one card reading two different ways is worse than
+  /// the naming the menu could have afforded.
+  List<PopupMenuEntry<String>> _menuItems(String? sourceTitle) => [
     DesktopMenuItem(
       value: 'send',
-      label: targetTitle == null
-          ? 'Send back — open a session first'
-          : 'Send to $targetTitle’s message box',
+      label: _sendLabel(sourceTitle),
       icon: AppIcons.paperPlaneRight,
-      enabled: targetTitle != null,
     ),
     DesktopMenuItem(
       value: 'edit',
@@ -311,18 +314,10 @@ class _NoteCard extends ConsumerWidget {
     ),
   ];
 
-  Future<void> _act(
-    BuildContext context,
-    WidgetRef ref,
-    String value,
-    String? targetId,
-    String? targetTitle,
-  ) async {
+  Future<void> _act(BuildContext context, WidgetRef ref, String value) async {
     switch (value) {
       case 'send':
-        if (targetId != null) {
-          _sendBack(context, ref, targetId, targetTitle!);
-        }
+        _sendBack(context, ref);
       case 'edit':
         await _edit(context, ref);
       case 'delete':
@@ -354,12 +349,32 @@ class _NoteCard extends ConsumerWidget {
     return 'From $sessionTitle  ·  $role';
   }
 
-  void _sendBack(
-    BuildContext context,
-    WidgetRef ref,
-    String sessionId,
-    String title,
-  ) {
+  /// Puts the note in a message box, deciding *which* only now.
+  ///
+  /// A note goes back to the session it came from. One written here goes to
+  /// [focusedSessionIdProvider] — the Explorer's selection, else the focused
+  /// group's active tab — the same single answer the Todos row sends to.
+  ///
+  /// **Read, never watched.** Send is drawn on every card always, so watching
+  /// would put the whole panel on the active-tab signal; reading costs one
+  /// lookup per click. The price is that a card cannot gate itself on a target
+  /// it refuses to observe, so the empty case is answered here instead.
+  void _sendBack(BuildContext context, WidgetRef ref) {
+    final sessions = ref.read(sessionDaoProvider);
+    final source = note.sourceSessionId == null
+        ? null
+        : sessions.getById(note.sourceSessionId!);
+    final sessionId = source?.id ?? ref.read(focusedSessionIdProvider);
+    if (sessionId == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('No session to send this to — open one first.'),
+        ),
+      );
+      return;
+    }
+    final title =
+        source?.title ?? sessions.getById(sessionId)?.title ?? 'the session';
     ref.read(composerDraftProvider.notifier).queue(sessionId, note.body);
     // Bring that session up, so the box the text just landed in is the one on
     // screen. Selecting is all this does: the note is not sent.

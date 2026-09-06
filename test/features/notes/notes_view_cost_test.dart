@@ -2,6 +2,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -14,29 +15,34 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 
-/// **What changing session costs the notes list.**
+/// **What changing session costs the notes list: nothing.**
 ///
-/// `NotesView.build` watched the selected session and handed it to every card,
-/// so switching session repainted all of them — including every note captured
-/// from a session of its own, which never reads the selection at all. The
-/// selection is only the *fallback* target for a note that has no session, so
-/// only those cards subscribe to it now.
+/// `NotesView.build` used to watch the selected session and hand it to every
+/// card, so switching session repainted all of them. Narrowing that to the
+/// cards with no session of their own left exactly one subscriber — the card
+/// whose always-drawn Send button had to *name* the fallback it would use.
+///
+/// It no longer names it. The button resolves its target when it is clicked,
+/// so **no card in this panel subscribes to a session provider at all** and a
+/// tab click cannot reach the list. That is what these tests pin.
 ///
 /// Counted, never timed: the suite runs at `--concurrency=4`, so a wall-clock
 /// assertion over a few milliseconds is a coin toss, while widget builds are
 /// countable exactly.
 ///
-/// What it measures (2026-09-03), over five notes of which one was written in
+/// What it measures (2026-09-06), over five notes of which one was written in
 /// the panel rather than captured from a session:
 ///
-/// | change                     | card builds before | after |
-/// | -------------------------- | -----------------: | ----: |
-/// | selecting another session  |                  5 |     1 |
-/// | re-selecting the same one  |                  0 |     0 |
-/// | capturing a note           |                  6 |     6 |
+/// | change                     | watch the fallback | resolve on click |
+/// | -------------------------- | -----------------: | ---------------: |
+/// | selecting another session  |                  1 |                0 |
+/// | re-selecting the same one  |                  0 |                0 |
+/// | capturing a note           |                  6 |                6 |
 ///
 /// The last row is the control: six notes, six cards, unchanged by this work.
-/// Without it the 1 above could be bought by a list that stopped listening.
+/// Without it the 0 above could be bought by a list that stopped listening —
+/// and the send in the first test is the other half of the same guard, because
+/// a card that never repaints is worth nothing if it also sends nowhere.
 void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final db = AppDatabase.memory();
@@ -65,11 +71,11 @@ void main() {
         sourceMessageRole: 'agent',
       );
     }
-    // The one note with no session of its own. Its send button names whichever
-    // session is on screen, so it is the only card the selection can change.
+    // The one note with no session of its own — the last card that had any
+    // reason to read the selection.
     notes.capture(body: 'written here');
 
-    // Tall enough that all five cards are built, so "1 build" below is a claim
+    // Tall enough that all five cards are built, so "0 builds" below is a claim
     // about cards that exist rather than cards the list never reached.
     tester.view.physicalSize = const Size(1440, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -98,9 +104,7 @@ void main() {
     return container;
   }
 
-  testWidgets('changing session repaints only the card that names it', (
-    tester,
-  ) async {
+  testWidgets('changing session repaints no card at all', (tester) async {
     final container = await pump(tester);
 
     container.read(selectedSessionIdProvider.notifier).select('s2');
@@ -108,16 +112,20 @@ void main() {
 
     expect(
       NotesView.debugCardBuildCount,
-      1,
+      0,
       reason:
-          'four notes carry their own session and cannot be affected by the '
-          'selection; the fifth is the fallback and has to be redrawn',
+          'four notes carry their own session, and the fifth resolves its '
+          'target when it is clicked — no card reads a session to draw itself',
     );
-    // And it really did change: the fallback card now offers the new session.
-    expect(
-      find.byTooltip('Send to Diff panel’s message box'),
-      findsOneWidget,
-    );
+    // The source-less card says the same thing before and after, because what
+    // it says no longer depends on which session is up.
+    final send = find.byTooltip('Send to the active session’s message box');
+    expect(send, findsOneWidget);
+
+    // And it followed the switch anyway: resolved on the click, not watched.
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(container.read(composerDraftProvider)['s2'], 'written here');
   });
 
   testWidgets('selecting the same session again costs nothing at all', (
