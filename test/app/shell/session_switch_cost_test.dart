@@ -177,7 +177,7 @@ void main() {
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
-        sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
         importedTranscriptProvider.overrideWith(
           (ref, _) => Stream.value(const []),
         ),

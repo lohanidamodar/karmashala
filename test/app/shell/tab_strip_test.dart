@@ -138,7 +138,7 @@ void main() {
           // strip does not care what they say — only that a session has two
           // renderings and therefore a tab of its own.
           sessionTranscriptProvider.overrideWith(
-            (ref) => Stream.value(const []),
+            (ref, id) => Stream.value(const []),
           ),
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => const <SystemTerminal>[],

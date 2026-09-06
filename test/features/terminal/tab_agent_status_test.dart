@@ -85,7 +85,7 @@ ProviderContainer harness(AppDatabase db) {
       // pieces poll the host on a real timer. Answered here for
       // `workbench_test.dart`'s reasons rather than reached for: a timer left
       // pending outlives the tree, and a unit test must never run `git`.
-      sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+      sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
       sessionDeliveryProvider.overrideWith(
         (ref, _) async => SessionDelivery.unknown,
       ),

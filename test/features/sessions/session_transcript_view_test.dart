@@ -63,7 +63,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
-          sessionTranscriptProvider.overrideWith((ref) => Stream.value(events)),
+          sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(events)),
         ],
         child: const MaterialApp(
           home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
@@ -106,7 +106,7 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
-          sessionTranscriptProvider.overrideWith((ref) => Stream.value(events)),
+          sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(events)),
         ],
         child: const MaterialApp(
           home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
@@ -274,7 +274,7 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           sessionTranscriptProvider.overrideWith(
-            (ref) => Stream.value(events),
+            (ref, id) => Stream.value(events),
           ),
         ],
         child: const MaterialApp(

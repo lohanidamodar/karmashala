@@ -288,7 +288,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         ? ref
               .watch(sessionChatTranscriptProvider(widget.sessionId))
               .whenData(_fromTranscript)
-        : ref.watch(sessionTranscriptProvider).whenData(_toMessages);
+        : ref
+              .watch(sessionTranscriptProvider(widget.sessionId))
+              .whenData(_toMessages);
     final resolveHostPath = _hostPathResolver();
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);

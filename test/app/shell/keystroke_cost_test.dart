@@ -218,7 +218,7 @@ void main() {
           });
           return reports.stream;
         }),
-        sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
         importedTranscriptProvider.overrideWith(
           (ref, _) => Stream.value(const []),
         ),
