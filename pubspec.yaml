@@ -73,7 +73,7 @@ dependencies:
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git
-      ref: e350dd91f22a25cad85fd0436b8716fe06c40be7
+      ref: 5ea40a7849cab079168bcce7695348b6237f95f1
   yaml: ^3.1.4
 
 # Dart-only stand-ins for the two Windows plugin implementations, whose C++
