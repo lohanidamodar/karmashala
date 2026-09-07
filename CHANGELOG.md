@@ -85,6 +85,94 @@ The per-environment scan had the same blind spot and is fixed with the same
 probe, so a host that reaches an agent through a junction is no longer reported
 as not having it.
 
+### Pair a phone over Wi-Fi, both ways Android offers
+
+**Wireless debugging, from the device pane's toolbar.** A QR code the phone's
+*Pair device with QR code* screen scans, and the six-digit code its *Pair device
+with pairing code* screen shows — both, because Android offers both and each
+fails in situations the other survives.
+
+It went in the toolbar rather than the section header because
+`DeviceSectionHeader.action` is unreachable exactly when it is needed: the list
+collapses to nothing when there are no devices, no AVDs and no simulators, which
+is the state of a machine with no cable. Settings is wrong in kind — pairing is
+an act, not a preference, and Settings → Tools is a read-only health surface
+(§19). The button appears only where adb does, and the pane's empty-state
+sentence now names pairing as one of its ways out.
+
+**What was read out of adb rather than guessed.** Every string the parsers match
+was lifted from the shipped `platform-tools 37.0.0` binary — `Successfully
+paired to … [guid=`, `Failed: Wrong password or connection was dropped.`,
+`Failed: Unable to start pairing client.`, `ERROR: mdns discovery disabled`, and
+both spellings of the daemon banner (`adb discovery` and `Openscreen
+discovery`). `already connected to` counts as success rather than a lost race,
+because `ADB_MDNS_AUTO_CONNECT` means adb may well have connected first.
+
+Two things are reasoned rather than observed, and are marked as such: the
+`WIFI:T:ADB;S:…;P:…;;` payload, which adb never parses because the phone's
+Settings app does, and the tab-separated shape of an `mdns services` row, which
+needed a phone advertising to see. The row parser is built for that uncertainty
+— tabs with a whitespace fallback, a trailing `.` stripped from the service
+type, the port split at the **last** colon so an IPv6 host keeps its own, and
+any row that is not three fields with a valid address dropped rather than
+half-read.
+
+**Failure states say which failure it was.** mDNS switched off in adb and mDNS
+that could not be checked are different sentences — §19's rule, applied to a
+new probe. A pairing port that does not answer names both of its causes, since
+adb cannot tell them apart: the phone's dialog has closed, or the two are not
+on the same network. Pairing that succeeds without a connect port advertised is
+its own state rather than a failure, and it says where to read the port off the
+phone — a different port from the one in the pairing dialog, which is the
+mistake this flow exists to prevent.
+
+**What it costs, counted at the `CommandRunner` seam.** A QR pairing that works
+spends five adb spawns, a typed one three, mDNS switched off one, and a
+malformed address or a short code none — refused before a process exists. A
+pairing nobody answers stops at 61: `kMdnsPollBudget` of 60 at two seconds,
+which is longer than anyone holds a phone up. The interval is a cancellable
+`Timer` rather than a bare `Future.delayed`, because the widget tests caught the
+naked version as a pending timer after teardown — a wake-up for a closed
+dialog. The provider is `autoDispose` and the dialog holds its only listener, so
+closing it ends the watch, and a test asserts the spawn count stops rather than
+timing anything.
+
+**The invite is a secret, and the redactor could not see it.** A QR payload
+delimits its password with `;` rather than assigning it to a keyword, so the
+catch-all rule missed it; `pairing code` written with a space — how a human and
+adb's own prompt write it — missed too. Both closed, with the service name left
+intact, because that is how one attempt is followed through a log. One residue
+is unavoidable and worth stating: `adb pair host:port <code>` puts the code in a
+process command line, visible in the host's process list. That is adb's CLI,
+and Android Studio does the same.
+
+`qr_painter.dart` moved to `core/widgets/`, since the remote-access pairing
+dialog and this one now draw with the same painter.
+
+### Fixed: a device id is not always serial-shaped
+
+A wireless device identifies itself as `192.168.1.24:37129`, not as a hardware
+serial, and three host filenames were built straight from that id. On Windows
+the colon does not fail — it opens an **alternate data stream**, so `adb pull`
+writes to a stream hanging off a truncated name and the read-back finds nothing:
+an empty screenshot with every step reporting success. `fileSafeDeviceId` maps
+anything outside `[A-Za-z0-9._-]` to `-`, leaving hardware serials and
+`emulator-<port>` byte-identical.
+
+Audited and found already safe: `parseAdbDevices` splits on whitespace and keeps
+the colon, `isEmulator` tests a prefix so a wireless phone gets the hardware
+encoder like any handset, scrcpy names its jar and socket from a random `scid`,
+and the device picker reads its ids back by length rather than by splitting on a
+colon.
+
+Two things are deliberately unchanged. There is no `adb disconnect` — a wireless
+device can still only be dropped from outside the app, which is the obvious next
+row action. And with two ready devices and no explicit choice,
+`selectedDeviceProvider` picks nothing: pre-existing, identical for a second USB
+phone, and now pinned by a test rather than left to be discovered. A cabled
+phone showing by default will stop being the pane's device when a second one
+connects, until the picker is used.
+
 ### Not fixed here
 
 An endpoint antimalware product quarantined this app's whole installation on
