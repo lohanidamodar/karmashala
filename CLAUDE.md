@@ -847,3 +847,141 @@ The inbox is per-session by construction as well — `PendingNotification` and
 `InboxItem` both require a `WatchedSession` — so a machine fault has no session
 to file under. Revisit only with something the app *observes* while doing real
 work, never with a poll.
+
+---
+
+## 20. A stored path is state; whether it resolves is a measurement
+
+**Settings → Agents → Executables**, and a check on every launch.
+
+`agent_installations.executable_path` was written once by the workspace's
+first scan and spawned forever after. On 2026-09-07 Codex self-updated to
+0.153.4, moved to a versioned standalone layout, and turned the stable path
+its own installer advertises into a chain of junctions:
+
+```txt
+…\OpenAI\Codex\bin  ->  …\.codex\packages\standalone\current\bin
+                    ->  …\releases\0.153.4-x86_64-pc-windows-msvc\bin
+```
+
+Windows refuses to traverse it — *"the path cannot be traversed because it
+contains an untrusted mount point"*, errno 448 — so Codex could not be
+started or resumed on Windows at all, launch after launch, while Settings
+showed a healthy-looking Codex row. WSL and SSH were unaffected: DrvFs
+resolves junctions itself.
+
+### What the fix is, and which half is the durable one
+
+| Piece | Where |
+| --- | --- |
+| The check, every launch, behind the first frame | `AppLifecycle.repairAgentPaths` |
+| The reading — usable / missing / unreachable / unchecked | `core/paths/path_probe.dart` |
+| The repair, as the *same* sweep Settings runs | `AgentInstallationsController.repairBrokenPaths` |
+| The manual lever and the honest report | `settings/presentation/agent_path_section.dart` |
+
+**The check is the durable half; the resolution is not.** What the resolver
+finds is `releases\<version>\…`, which the next Codex update moves. Nothing
+stored can be permanent here, so the answer is not a cleverer path — it is
+looking again, every time, cheaply enough that it can afford to.
+
+Cheap is the load-bearing word: a workspace with nothing wrong costs one
+`existsSync` per **local** installation and spawns no process at all. Only the
+rows that actually failed are re-probed, and only in their own environment.
+
+### Measured 2026-09-07, and it corrected the diagnosis
+
+`File.existsSync` on a path behind an untrusted mount point answers a flat
+**`false`**. It does not throw — `Directory.existsSync` and `Link.existsSync`
+raise errno 448, and `lengthSync` names the reason. So **an exception cannot
+tell an unreachable file from an absent one**, and any check built on catching
+one silently reports a working CLI as uninstalled.
+
+What does work, from plain Dart, with no PowerShell and no subprocess:
+
+```txt
+Link(r'…\OpenAI\Codex\bin').targetSync()      -> …\standalone\current\bin
+FileSystemEntity.typeSync(p, followLinks: false) -> link
+```
+
+Both are about the junction *itself* rather than anything behind it, so the
+traversal the OS refuses never happens. `resolveReparsePoints` walks a path
+**one component at a time** on that basis and resolved the real chain in two
+hops; the result runs (`codex-cli 0.153.4`). `resolveSymbolicLinksSync`
+throws and is no use.
+
+So the **reparse walk is the discriminator**, not an errno:
+
+* a route that completes and finds nothing → `missing`;
+* a route that cannot be completed → `unreachable`.
+
+That is §19's rule applied to the filesystem, and it is chosen over
+candidate-path globbing (`~/.codex/packages/standalone/releases/*/bin`)
+deliberately: nothing in `path_probe.dart` knows the word "codex", so the next
+tool to install itself behind a versioned junction is already covered, and no
+vendor's directory layout is baked into discovery.
+
+### Three rules the reconciler now follows
+
+1. **An unreachable row is never deleted.** A junction chain answers `where`,
+   `existsSync` and `Process.run` exactly like an uninstalled CLI, so deleting
+   on that evidence turns *"installed somewhere I cannot reach"* into *"not
+   installed"* — the worse of the two, because it takes the agent out of
+   Settings and leaves nothing to correct. It is reported on its own line and
+   counted among neither `found` nor `missing`.
+2. **A move keeps the row and its id.** `AgentInstallationDao.updatePath`,
+   not delete-and-insert. The id is what settings pin as the default agent and
+   what every session references; the old path repointed the sessions and
+   silently unpicked the default.
+3. **A working hand-set path is never overruled by a sweep.** Recorded in v39
+   as `executable_by_user`, the way `sessions.title_by_user` is — *never*
+   inferred from "the path differs from what discovery would find", which
+   cannot be recovered after a restart. A hand-set path that stops working is
+   still repaired, and reverts to detected, because a stale path helps nobody
+   whoever set it.
+
+### What it deliberately does not do
+
+- **Judge a WSL or SSH path.** Those are spelled for *their* disk, so a stat
+  of ours is not evidence either way; they read as `unchecked` and are never
+  repaired from here. This is why the failure was Windows-only in the first
+  place.
+- **Re-resolve a healthy path.** Trading a stable spelling for whatever it
+  points at today rots on the next update for no benefit.
+- **Cover anything but agent executables.** Deliberately scoped, and the audit
+  behind that decision is below rather than lost.
+
+### What else can rot, audited 2026-09-07
+
+**Only a *persisted* location can go stale unobserved**, so that is the line.
+Most of this app is on the safe side of it by construction: toolchain lookups
+(`git`, `gh`, `adb`, Chrome, editors, terminals) are resolved by bare name on
+every spawn; `karmashala_mcp` and WebDriverAgent are found relative to
+`Platform.resolvedExecutable` per call; `scrcpy-server` is a bundle asset
+staged into `systemTemp` under a per-start name; `CliStoreLocator` rebuilds
+every store home from `$HOME` each time; `execution_environments
+.wsl_distribution` is re-discovered and upserted every launch; and
+`paired_devices.relay_url` stores the *sentinel* `'local'`, resolved at serve
+time — which is the pattern the rest of these should copy.
+
+Persisted and never re-validated, in rough order of how much it matters:
+
+| Location | Where | Why it is not covered here |
+| --- | --- | --- |
+| `customTerminalPath`, `customEditorPath` | `settings/domain/settings.dart` | Persisted **and spawned**, with no `exists` check at save or at use. The closest analogue to the agent case. Left alone because each already sits beside a browse-or-paste field the user owns, so the failure is one step from its own fix — but a check would belong here. |
+| `ssh_hosts.private_key_path` | `ssh/data/ssh_connection.dart` | Probed only at connect, with a bare `File.exists()` — so a key that is present but unreachable is reported *"Private key not found"*, which is the wrong reason. The same two-value collapse this section exists to correct. |
+| `imported_sessions.file_path`, `store_home` | `cli_detection/data/imported_session_dao.dart` | Written under `ON CONFLICT DO NOTHING` and never refreshed. The presence machinery beside it re-locates the *store* and validates a conversation id, never this path. |
+| `terminal_panes.working_directory`, `launch_command` | `terminal/application/terminal_sessions_controller.dart` | Restored verbatim; a bad one fails at the ConPTY spawn. |
+| `session_checkpoints.repository_path`, `verification_runs.artifact_directory`, `fanout_candidates.worktree_path` | various | Historical records of where work happened. Repairing them would rewrite history rather than fix anything. |
+
+**One known-shape gap, recorded rather than fixed.**
+`sessionDirectoryPresentProvider` (`sessions/application/session_working_directory.dart`)
+ends `on Object { return true; }`, and its docstring says so on purpose: a path
+it merely *failed* to check must not be declared missing, because that would
+break every SSH session to close a smaller hole. That reasoning is sound for
+the case it was written for — an environment with no translation to a
+Windows-reachable form. It does **not** cover a junction chain, where
+`existsSync` raises and the answer becomes "present" for a directory the OS
+will refuse, so the session spawns into it anyway. `readExecutable`'s
+three-way reachability is the shape that closes it; doing so is a change to
+session launch rather than to agent discovery, which is why it is written down
+here instead of folded into this change.

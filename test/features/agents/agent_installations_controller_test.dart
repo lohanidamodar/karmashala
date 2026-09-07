@@ -187,7 +187,7 @@ void main() {
     );
 
     test(
-      'follows its agent to a new path, taking its sessions along',
+      'follows its agent to a new path, keeping its id and its sessions',
       () async {
         container = containerFinding(const {
           'claude': 'C:\\new\\claude.exe\r\n',
@@ -203,10 +203,17 @@ void main() {
           agentInstallationsControllerProvider,
         );
         expect(installations.single.executable.path, r'C:\new\claude.exe');
-        expect(report.removedCount, 1);
+        // **Moved, not replaced.** This used to delete the row and insert a
+        // new one, repointing the sessions behind it — which kept them
+        // resumable and silently unpicked the default-agent choice, because
+        // settings pin an *installation id*. `updatePath` keeps the id, so the
+        // move costs nothing that was pinned to it.
+        expect(installations.single.id, 'old');
+        expect(report.movedCount, 1);
+        expect(report.removedCount, 0);
         expect(report.retainedCount, 0);
-        // And the session moved with it, so it is still resumable.
-        expect(installationOfTheSession(), installations.single.id);
+        // And the session still names it, because it is the same installation.
+        expect(installationOfTheSession(), 'old');
       },
     );
   });

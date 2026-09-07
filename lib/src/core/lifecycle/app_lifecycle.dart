@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
+import '../../features/agents/application/agent_path_repair_providers.dart';
 import '../../features/agents/domain/agent_hook_endpoint.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
@@ -377,6 +378,70 @@ class AppLifecycle {
             ),
           ),
     );
+  }
+
+  /// Verifies the stored agent executables and repairs the rows whose path has
+  /// rotted, behind [afterFirstFrame].
+  ///
+  /// **The owner's ask, and the durable half of the fix.** Codex's self-update
+  /// turned the stable path the app had stored into a junction chain Windows
+  /// refuses to traverse, and nothing ever looked again — the app kept trying
+  /// to spawn a path that could not be spawned, launch after launch. The path
+  /// is durable *state*; whether it still resolves is a *measurement*, and one
+  /// taken at first run expires. So it is taken again on every launch.
+  ///
+  /// A repair also has to keep happening because its own answer is perishable:
+  /// what the resolver finds is `releases\<version>\…`, which the next Codex
+  /// update moves. The check is the part that lasts; the resolution is only
+  /// what makes each round of it succeed.
+  ///
+  /// Same gate and same reasoning as [importCliSessions] — a stat is cheap but
+  /// the sweep behind a failure is not, and the window must not wait on it. A
+  /// gate that throws still gets the check run, because the gate is about
+  /// *when*.
+  ///
+  /// Skipped on a workspace that has never discovered anything, exactly as
+  /// [startAgentDiscovery] is: that launch's own first-run scan is writing the
+  /// rows this would be checking, and racing it would probe everything twice.
+  Future<void> repairAgentPaths({Future<void> Function()? afterFirstFrame}) =>
+      _pathRepair ??= _repairAgentPaths(afterFirstFrame);
+
+  Future<void>? _pathRepair;
+
+  Future<void> _repairAgentPaths(Future<void> Function()? gate) async {
+    if (_container
+            .read(databaseProvider)
+            .readMetadata(MetadataKeys.agentsDiscoveredAt) ==
+        null) {
+      return;
+    }
+    if (gate != null) {
+      try {
+        await gate();
+      } on Object catch (error, stack) {
+        _logger.warning(
+          'Waiting for the first frame before checking the agent paths '
+          'failed; checking now.',
+          error,
+          stack,
+        );
+      }
+    }
+    try {
+      final report = await _container
+          .read(agentInstallationsControllerProvider.notifier)
+          .repairBrokenPaths();
+      // Published, not just logged: an unrepaired row is something only the
+      // user can fix, and Settings is where they can be told which of "not
+      // installed" and "cannot be reached" it actually is.
+      _container.read(agentPathRepairProvider.notifier).set(report);
+      if (report.isClean) return;
+      _logger.info('Agent paths: ${report.summary}');
+    } on Object catch (error, stack) {
+      // A check that could not run leaves the rows exactly as they were, which
+      // is the same state the app was in before this existed.
+      _logger.warning('Checking the stored agent paths failed.', error, stack);
+    }
   }
 
   /// Takes ownership of components built elsewhere.

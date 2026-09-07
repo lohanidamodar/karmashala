@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_providers.dart';
+import '../../../core/paths/path_probe.dart';
+import '../../../core/paths/path_probe_provider.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -14,6 +17,7 @@ import '../data/agent_installation_dao.dart';
 import '../data/agent_probe_log.dart';
 import '../domain/agent_discovery_report.dart';
 import '../domain/agent_installation.dart';
+import '../domain/agent_path_repair.dart';
 import '../domain/agent_registry.dart';
 import 'agent_providers.dart';
 
@@ -48,7 +52,21 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// A stopped WSL distribution answers `command -v` exactly like a running one
   /// with no agents installed, so deleting on that evidence would throw away a
   /// working machine's agents because it happened to be shut down.
-  Future<AgentDiscoveryReport> discoverAll() async {
+  Future<AgentDiscoveryReport> discoverAll() => _sweep();
+
+  /// One reconciling sweep. [only] narrows it to specific agents per
+  /// environment — `environmentId -> agentIds` — and null means every agent in
+  /// every environment.
+  ///
+  /// The narrowing is what makes the startup repair affordable: a launch with
+  /// one rotted row probes that one agent in that one environment rather than
+  /// re-running the whole detection. Everything else about the run is
+  /// identical, which is the point — the repair and Settings' "Detect agents"
+  /// are the same code with a different scope, not two implementations that
+  /// can drift.
+  Future<AgentDiscoveryReport> _sweep({
+    Map<String, Set<String>>? only,
+  }) async {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
     final factory = ref.read(commandRunnerFactoryProvider);
     final dao = ref.read(agentInstallationDaoProvider);
@@ -57,9 +75,13 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final registry = ref.read(agentRegistryProvider);
     final log = AgentProbeLog(ref.read(databaseProvider));
     final hostEnvironment = ref.read(hostEnvironmentProvider);
+    final pathProbe = ref.read(pathProbeProvider);
 
     final reports = <EnvironmentScanReport>[];
     for (final environment in environments) {
+      final wanted = only?[environment.id];
+      if (only != null && (wanted == null || wanted.isEmpty)) continue;
+
       final EnvironmentProbe probe;
       try {
         probe = await AgentDiscoveryService(
@@ -68,8 +90,9 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           ids: ids,
           clock: clock,
           registry: registry,
+          pathProbe: pathProbe,
           hostEnvironment: hostEnvironment,
-        ).probeEnvironment();
+        ).probeEnvironment(agentIds: wanted);
       } on Object catch (e) {
         // A runner that could not even be built — an SSH environment with no
         // configured connection, say. Reported, never silently skipped.
@@ -102,15 +125,20 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           ids: ids,
           clock: clock,
           registry: registry,
+          readings: _readingsFor(environment, dao, pathProbe),
+          probedIds: wanted,
         ),
       );
 
-      // This walk asked about every agent, so [discoverUnprobed] need not ask
-      // again. Only for an environment that answered: recording a probe we
-      // could not perform is what turns one bad moment into a permanent state.
+      // This walk asked about these agents, so [discoverUnprobed] need not ask
+      // again. Only for an environment that answered, and only the agents that
+      // were actually asked about: recording a probe we could not perform — or
+      // did not perform, in a narrowed sweep — is what turns one bad moment
+      // into a permanent state.
       if (environment.kind != EnvironmentKind.ssh) {
-        for (final descriptor in registry.descriptors) {
-          log.record(descriptor.id, environment.id, clock.nowUtc());
+        for (final id
+            in wanted ?? {for (final d in registry.descriptors) d.id}) {
+          log.record(id, environment.id, clock.nowUtc());
         }
       }
     }
@@ -121,6 +149,21 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
 
   /// Brings the stored installations for one environment into line with what
   /// [probe] just found there.
+  ///
+  /// [readings] is what the local filesystem said about each stored row's
+  /// executable, keyed by installation id, and it decides two things this used
+  /// to get wrong:
+  ///
+  /// * a row whose executable is **unreachable** is never deleted. A junction
+  ///   chain the OS will not traverse answers every probe exactly like an
+  ///   uninstalled CLI, so deleting on that evidence turns "installed somewhere
+  ///   I cannot reach" into "not installed" — the worse of the two, because it
+  ///   takes the agent out of Settings and leaves nothing to correct;
+  /// * a row whose path a **human set** and which still works is left exactly
+  ///   as it is, even when the sweep found the agent somewhere else.
+  ///
+  /// [probedIds] narrows which stored rows this sweep is evidence about; null
+  /// means the whole registry.
   EnvironmentScanReport _reconcile({
     required ExecutionEnvironment environment,
     required EnvironmentProbe probe,
@@ -128,71 +171,142 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     required IdGenerator ids,
     required Clock clock,
     required AgentRegistry registry,
+    required Map<String, ExecutableReading> readings,
+    Set<String>? probedIds,
   }) {
+    final stored = dao.getByEnvironment(environment.id);
     final added = <AgentInstallation>[];
     final updated = <AgentVersionChange>[];
+    final movedPaths = <AgentPathChange>[];
+    final pinnedPaths = <AgentInstallation>[];
+    final unreachablePaths = <AgentInstallation>[];
     final present = <AgentInstallation>[];
-    final seen = <String>{};
+    // Stored rows this sweep has already accounted for, so the leftover pass
+    // below does not judge a row that was just moved or deliberately kept.
+    final consumed = <String>{};
+
+    // A hand-set path that was not *observed* broken is the user's answer to
+    // "where is it", and a sweep does not overrule it. Unchecked counts as
+    // working on purpose: a WSL or SSH path cannot be stat-ed from here, and
+    // overwriting an explicit human choice on evidence we do not have is the
+    // mistake, not keeping it.
+    bool isPinned(AgentInstallation row) =>
+        row.executableByUser && (readings[row.id]?.isUsable ?? true);
 
     for (final agent in probe.found) {
+      final agentId = agent.descriptor.id;
+      final path = agent.executable.path;
+
+      final atThisPath = dao.getByIdentity(agentId, environment.id, path);
+      if (atThisPath != null) {
+        consumed.add(atThisPath.id);
+        if (atThisPath.version != agent.version) {
+          dao.updateVersion(atThisPath.id, agent.version);
+          updated.add(
+            AgentVersionChange(
+              displayName: agent.descriptor.displayName,
+              from: atThisPath.version,
+              to: agent.version,
+            ),
+          );
+        }
+        present.add(atThisPath.copyWith(version: agent.version));
+        continue;
+      }
+
+      // The same agent in the same environment at a different path. Either the
+      // user pinned it there, or it moved and this row follows it.
+      final elsewhere = [
+        for (final row in stored)
+          if (row.agentId == agentId &&
+              !consumed.contains(row.id) &&
+              row.executable.path != path)
+            row,
+      ];
+      final pinned = elsewhere.where(isPinned).toList();
+      if (pinned.isNotEmpty) {
+        // Not a second row for the same agent in the same environment: the
+        // user already answered this question, and offering the choice again
+        // is how an explicit decision gets quietly undone.
+        consumed.add(pinned.first.id);
+        pinnedPaths.add(pinned.first);
+        present.add(pinned.first);
+        continue;
+      }
+
+      final moved = elsewhere.isEmpty ? null : elsewhere.first;
+      if (moved != null && dao.updatePath(moved.id, path, byUser: false)) {
+        // **In place, keeping the id.** The id is what settings pin as the
+        // default agent and what every session row references, so a CLI that
+        // moved must stay the same installation. This used to delete the row
+        // and insert a new one, repointing the sessions behind it — which
+        // worked for the sessions and silently unpicked the default.
+        consumed.add(moved.id);
+        movedPaths.add(
+          AgentPathChange(
+            displayName: agent.descriptor.displayName,
+            from: moved.executable.path,
+            to: path,
+          ),
+        );
+        if (moved.version != agent.version) {
+          dao.updateVersion(moved.id, agent.version);
+          updated.add(
+            AgentVersionChange(
+              displayName: agent.descriptor.displayName,
+              from: moved.version,
+              to: agent.version,
+            ),
+          );
+        }
+        present.add(
+          moved.copyWith(
+            executable: agent.executable,
+            version: agent.version,
+            executableByUser: false,
+          ),
+        );
+        continue;
+      }
+
       final installation = AgentInstallation(
         id: ids.newId(),
-        agentId: agent.descriptor.id,
+        agentId: agentId,
         executable: agent.executable,
         version: agent.version,
         createdAt: clock.nowUtc(),
       );
-      seen.add('${installation.agentId}\u0000${installation.executable.path}');
-
-      final existing = dao.getByIdentity(
-        installation.agentId,
-        installation.environmentId,
-        installation.executable.path,
-      );
-      if (existing == null) {
-        dao.insert(installation);
-        added.add(installation);
-        present.add(installation);
-        continue;
-      }
-      if (existing.version != installation.version) {
-        dao.updateVersion(existing.id, installation.version);
-        updated.add(
-          AgentVersionChange(
-            displayName: agent.descriptor.displayName,
-            from: existing.version,
-            to: installation.version,
-          ),
-        );
-      }
-      present.add(existing.copyWith(version: installation.version));
+      dao.insert(installation);
+      added.add(installation);
+      present.add(installation);
     }
 
     // Only rows for agents this sweep actually asked about. A stored row for a
-    // descriptor the registry no longer carries was never probed, so nothing
-    // here is evidence about it — it is left alone rather than tidied away.
-    final probedIds = {
-      for (final descriptor in registry.descriptors) descriptor.id,
-    };
+    // descriptor the registry no longer carries — or one a narrowed sweep did
+    // not probe — was not searched for, so nothing here is evidence about it:
+    // it is left alone rather than tidied away.
+    final probed =
+        probedIds ??
+        {for (final descriptor in registry.descriptors) descriptor.id};
     final removed = <AgentInstallation>[];
     final retained = <AgentInstallation>[];
-    for (final stored in dao.getByEnvironment(environment.id)) {
-      if (!probedIds.contains(stored.agentId)) {
-        present.add(stored);
+    for (final row in stored) {
+      if (consumed.contains(row.id)) continue;
+      if (!probed.contains(row.agentId)) {
+        present.add(row);
         continue;
       }
-      if (seen.contains('${stored.agentId}\u0000${stored.executable.path}')) {
+      if (isPinned(row)) {
+        pinnedPaths.add(row);
+        present.add(row);
         continue;
       }
-      // The same agent, in the same environment, at a different path: it moved
-      // rather than left. Its sessions move with it — a session's installation
-      // records which *agent* ran it, and stranding those rows on one that is
-      // about to go makes every one of them unresumable.
-      final replacement = _replacementFor(stored, present);
-      if (replacement != null) {
-        dao.repointSessions(from: stored.id, to: replacement.id);
-        dao.delete(stored.id);
-        removed.add(stored);
+      if (readings[row.id]?.reachability ==
+          ExecutableReachability.unreachable) {
+        // Not evidence of absence — see the doc above. Reported on its own and
+        // counted among neither `found` nor `missing`, because the honest
+        // answer is that the file is somewhere this machine will not go.
+        unreachablePaths.add(row);
         continue;
       }
 
@@ -201,47 +315,181 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       // and that raise — thrown from the middle of this loop — used to abort
       // the entire sweep, so one uninstalled CLI left the app reporting no
       // agents in any environment at all.
-      if (dao.deleteIfUnreferenced(stored.id)) {
-        removed.add(stored);
+      if (dao.deleteIfUnreferenced(row.id)) {
+        removed.add(row);
       } else {
-        retained.add(stored);
+        retained.add(row);
       }
     }
 
+    // An agent with an unreachable row is not "not installed": the sweep could
+    // not complete the observation, so it does not get to state the outcome.
+    final unreachableAgentIds = {
+      for (final row in unreachablePaths) row.agentId,
+    };
     return EnvironmentScanReport(
       environmentId: environment.id,
       environmentName: environment.name,
       reachable: true,
       found: present,
       missing: [
-        for (final id in probe.missingAgentIds) registry.displayNameFor(id),
+        for (final id in probe.missingAgentIds)
+          if (!unreachableAgentIds.contains(id)) registry.displayNameFor(id),
       ],
       added: added,
       removed: removed,
       retained: retained,
       updated: updated,
+      movedPaths: movedPaths,
+      unreachablePaths: unreachablePaths,
+      pinnedPaths: pinnedPaths,
     );
   }
 
-  /// The installation that [stored] became, if this sweep found the same agent
-  /// somewhere else in the same environment.
+  /// What the local filesystem says about each stored installation in
+  /// [environment], keyed by installation id.
   ///
-  /// Same agent, same environment, different path is a **move**, and there is
-  /// nothing else it can be: the table's `UNIQUE (agent_kind, environment_id,
-  /// executable_path)` means two rows differing only in path are the same CLI
-  /// seen twice. What produces one in practice is a wrapper — a `cmux` shim in
-  /// `$TMPDIR`, a version-manager shim — being first on `PATH` when the app
-  /// last looked and gone when it looks again.
-  AgentInstallation? _replacementFor(
-    AgentInstallation stored,
-    List<AgentInstallation> present,
+  /// Empty for an environment that is not this machine. A WSL or SSH path is
+  /// spelled for *its* disk, so a stat of ours is not evidence about it either
+  /// way — and a repair driven by a reading we could not take is the §19
+  /// mistake with worse consequences, because it writes to the database.
+  Map<String, ExecutableReading> _readingsFor(
+    ExecutionEnvironment environment,
+    AgentInstallationDao dao,
+    PathProbe probe,
   ) {
-    for (final candidate in present) {
-      if (candidate.id != stored.id && candidate.agentId == stored.agentId) {
-        return candidate;
-      }
+    if (!isLocalHost(environment.kind)) return const {};
+    final context = usesWindowsPaths(environment.kind) ? p.windows : p.posix;
+    return {
+      for (final row in dao.getByEnvironment(environment.id))
+        row.id: readExecutable(row.executable.path, probe, context: context),
+    };
+  }
+
+  /// Reads every stored installation's executable, newest reading wins.
+  ///
+  /// One stat per local row and nothing else — no subprocess, no `where`, no
+  /// version probe. That is what makes it affordable on every launch, and it is
+  /// the whole of the check when nothing is wrong.
+  List<AgentPathReading> readStoredPaths() {
+    final dao = ref.read(agentInstallationDaoProvider);
+    final registry = ref.read(agentRegistryProvider);
+    final probe = ref.read(pathProbeProvider);
+    final byId = <String, ExecutableReading>{};
+    for (final environment in ref
+        .read(executionEnvironmentDaoProvider)
+        .getAll()) {
+      byId.addAll(_readingsFor(environment, dao, probe));
     }
-    return null;
+    return [
+      for (final row in dao.getAll())
+        AgentPathReading(
+          installation: row,
+          displayName: registry.displayNameFor(row.agentId),
+          reading:
+              byId[row.id] ??
+              ExecutableReading.unchecked(row.executable.path),
+        ),
+    ];
+  }
+
+  /// Checks every stored installation's executable and repairs the rows whose
+  /// path no longer opens.
+  ///
+  /// **This is what the app was missing.** A stored path can rot without
+  /// anything noticing: Codex self-updated to a versioned standalone layout and
+  /// turned the stable path its own installer advertises into a chain of
+  /// junctions Windows refuses to traverse, so every launch and every resume
+  /// failed with a `ProcessException` and nothing in the app ever revisited the
+  /// row. The path is durable *state*; whether it still resolves is a
+  /// *measurement*, and a measurement taken once at first run is a measurement
+  /// that expires.
+  ///
+  /// Cheap enough for every launch, and self-extinguishing: a workspace with
+  /// nothing broken pays one `existsSync` per local installation — three, on the
+  /// owner's machine — and spawns no processes at all. Only the rows that
+  /// actually failed are re-probed, and only in their own environment.
+  ///
+  /// Repair is [_sweep] narrowed, so it is the same reconciliation Settings'
+  /// "Detect agents" runs: the reparse-point resolver finds the executable
+  /// behind the junction, the row follows it *keeping its id*, and the version
+  /// is re-read from the binary that actually ran.
+  ///
+  /// **A repair that finds nothing changes nothing.** The row is kept — see
+  /// [AgentPathRepairReport.unresolved] — because a row at a wrong path can be
+  /// seen and corrected by hand, and no row at all cannot.
+  ///
+  /// [full] re-probes every agent in every environment instead of only the
+  /// rows that failed. That is what Settings' "Detect agents" runs, and it is
+  /// this same method rather than a second one on purpose: the button and the
+  /// startup check must not be able to disagree about what a repair does.
+  Future<AgentPathRepairReport> repairBrokenPaths({bool full = false}) async {
+    final clock = ref.read(clockProvider);
+    final broken = [
+      for (final reading in readStoredPaths())
+        if (reading.isBroken) reading,
+    ];
+    if (broken.isEmpty && !full) {
+      return AgentPathRepairReport(checkedAt: clock.nowUtc());
+    }
+
+    final scope = <String, Set<String>>{};
+    for (final reading in broken) {
+      scope
+          .putIfAbsent(reading.installation.environmentId, () => <String>{})
+          .add(reading.installation.agentId);
+    }
+    final scan = await _sweep(only: full ? null : scope);
+
+    // Re-read rather than infer: the sweep may have moved a row, replaced it,
+    // or found nothing, and the filesystem is the only thing that can say which
+    // of those actually left a usable executable behind.
+    //
+    // Keyed by **installation id**, which a repair now preserves — `updatePath`
+    // moves the row rather than replacing it. Keying by `(agent, environment)`
+    // would collapse two installations of the same agent in one environment
+    // into a single row of the report.
+    final after = {
+      for (final reading in readStoredPaths())
+        reading.installation.id: reading,
+    };
+    final repaired = <AgentPathReading>[];
+    final unresolved = <AgentPathReading>[];
+    for (final was in broken) {
+      final now = after[was.installation.id];
+      if (now == null) {
+        // The row is gone: the sweep established the agent is not installed
+        // here, which is a removal rather than an unrepaired path.
+        continue;
+      }
+      (now.isUsable ? repaired : unresolved).add(now);
+    }
+
+    return AgentPathRepairReport(
+      checkedAt: clock.nowUtc(),
+      broken: broken,
+      repaired: repaired,
+      unresolved: unresolved,
+      scan: scan,
+    );
+  }
+
+  /// Points one installation at [path], recording that a human chose it.
+  ///
+  /// The escape hatch for everything detection cannot see, and the reason it
+  /// records *who* chose: a later sweep must not quietly move a path the user
+  /// set deliberately. It still repairs it if it stops working — see
+  /// [AgentInstallation.executableByUser].
+  ///
+  /// Returns false when another installation of the same agent in the same
+  /// environment already holds [path], which the table forbids.
+  bool setExecutablePath(String installationId, String path) {
+    final dao = ref.read(agentInstallationDaoProvider);
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return false;
+    final ok = dao.updatePath(installationId, trimmed, byUser: true);
+    if (ok) state = dao.getAll();
+    return ok;
   }
 
   /// Probes only the `(agent, environment)` pairs nobody has ever searched for,
@@ -299,6 +547,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         ids: ids,
         clock: clock,
         registry: registry,
+        pathProbe: ref.read(pathProbeProvider),
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover(agentIds: missing);
 

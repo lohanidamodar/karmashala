@@ -6,6 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_redetect_controller.dart';
 import '../../agents/domain/agent_discovery_report.dart';
+import 'agent_label.dart';
 import 'settings_section.dart';
 
 /// Settings → Agents: run agent detection again, and say what it did.
@@ -79,7 +80,7 @@ class AgentDetectionSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final environment in report.environments)
+          for (final environment in report.environments) ...[
             Padding(
               padding: const EdgeInsets.only(bottom: Insets.xs),
               child: Text(
@@ -93,6 +94,36 @@ class AgentDetectionSection extends ConsumerWidget {
                 ),
               ),
             ),
+            // Its own line, in the error colour, because it is the one outcome
+            // a re-detect cannot fix by itself. Listing these among the found
+            // agents would claim they are usable; listing them among the
+            // missing would claim they are gone. Neither was established — the
+            // route to the file could not be completed (§19), and the remedy
+            // is the path field below rather than reinstalling anything.
+            for (final install in environment.unreachablePaths)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Insets.xs),
+                child: Text(
+                  '${environment.environmentName}: '
+                  '${agentLabel(install.agentId)} is installed at '
+                  '${install.executable.path} but cannot be reached',
+                  style: MonoStyles.small.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            for (final change in environment.movedPaths)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Insets.xs),
+                child: Text(
+                  '${environment.environmentName}: '
+                  '${change.displayName} moved to ${change.to}',
+                  style: MonoStyles.small.copyWith(
+                    color: theme.textTheme.bodySmall?.color,
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );

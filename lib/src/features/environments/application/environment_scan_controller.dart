@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/paths/path_probe_provider.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -62,6 +63,11 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
         ids: ref.read(idGeneratorProvider),
         clock: ref.read(clockProvider),
         registry: ref.read(agentRegistryProvider),
+        // The third and last caller of discovery, so a per-environment scan
+        // sees through a Windows junction chain exactly as the other two do.
+        // Without this, the one control a user reaches for after "my agent is
+        // not showing up" is the one that still cannot find it.
+        pathProbe: ref.read(pathProbeProvider),
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover();
 
