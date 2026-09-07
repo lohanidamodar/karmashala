@@ -20,6 +20,59 @@ void main() {
   UrlTarget url(TerminalLink link) => link.target as UrlTarget;
   PathTarget path(TerminalLink link) => link.target as PathTarget;
 
+  /// **A `file://` URL is a path, and must never become a [UrlTarget].**
+  ///
+  /// It used to fall between the two scans: the path scan skips anything with
+  /// a scheme in it, and the URL scan rejects any scheme but http(s) — for the
+  /// documented reason that terminal output is untrusted and an agent must not
+  /// be able to reach a scheme handler. So `file:///…` was recognised by
+  /// neither, which is what "these links are not clickable in terminal" was
+  /// about for the report `/insights` prints.
+  ///
+  /// The fix keeps that rule exactly: it is resolved as a **path**, so it goes
+  /// through `hostPathForTerminalTarget` — which already translates a WSL
+  /// `/home/…` to `\\wsl.localhost\<distro>\home\…` — and then through
+  /// reveal. No new scheme ever reaches the OS.
+  group('file URLs are paths', () {
+    test('a posix file URL becomes a path target', () {
+      final links = linksIn(
+        line('report at file:///home/me/.claude/usage-data/report.html'),
+      );
+
+      expect(links, hasLength(1));
+      expect(
+        links.single.target,
+        isA<PathTarget>(),
+        reason: 'a UrlTarget here would reach openInBrowser',
+      );
+      expect(path(links.single).path, '/home/me/.claude/usage-data/report.html');
+    });
+
+    test('percent escapes are decoded, because a path is not a URL', () {
+      final links = linksIn(line('file:///home/me/My%20Report.html'));
+
+      expect(path(links.single).path, '/home/me/My Report.html');
+    });
+
+    test('the Windows form keeps its drive letter', () {
+      final links = linksIn(line('file:///C:/Users/me/report.html'));
+
+      expect(path(links.single).path, r'C:/Users/me/report.html');
+    });
+
+    test('a file URL with a host is refused — that is a UNC share, and '
+        'terminal output does not get to point at one', () {
+      final links = linksIn(line('file://attacker.example/share/x'));
+
+      expect(
+        links,
+        isEmpty,
+        reason: 'revealing a remote share from untrusted output leaks '
+            'credentials to whoever printed it',
+      );
+    });
+  });
+
   group('urls', () {
     test('an http URL among prose', () {
       final links = linksIn(line('see https://example.com/a for more'));
@@ -54,11 +107,25 @@ void main() {
       expect(url(links.single).url, 'http://localhost:3000');
     });
 
-    test('no scheme but http(s) is ever offered', () {
+    test('no scheme but http(s) is ever offered as a URL', () {
       // Terminal output is untrusted; a click must not reach a scheme handler.
-      expect(linksIn(line('file:///etc/passwd')), isEmpty);
       expect(linksIn(line('mailto:me@example.com')), isEmpty);
       expect(linksIn(line('vscode://open?x=1')), isEmpty);
+    });
+
+    test('a file URL is offered, but only ever as a path', () {
+      // This listed `file:///etc/passwd` among the schemes that yield nothing,
+      // and that was over-broad rather than protective: the identical path
+      // *without* the prefix has always been a clickable PathTarget, so the
+      // two spellings of one path disagreed for no benefit. What the rule
+      // above protects is untouched — a file URL never becomes a UrlTarget and
+      // so never reaches a scheme handler; it is resolved as a path, revealed
+      // in the file manager, and translated for its environment on the way.
+      expect(path(linksIn(line('/etc/passwd')).single).path, '/etc/passwd');
+      expect(
+        path(linksIn(line('file:///etc/passwd')).single).path,
+        '/etc/passwd',
+      );
     });
 
     test('not a scheme with no host behind it', () {

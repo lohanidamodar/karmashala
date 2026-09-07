@@ -333,7 +333,7 @@ TerminalLink? osc8LinkAt(
 /// path separator rather than a URL one, and the C0/C1 controls are what an
 /// unparsed escape sequence would leave behind.
 final RegExp _urlPattern = RegExp(
-  r'(?:https?://|www\.)[^\s<>"' "'" r'`\\]+',
+  r'(?:https?://|file://|www\.)[^\s<>"' "'" r'`\\]+',
   caseSensitive: false,
 );
 
@@ -379,10 +379,19 @@ List<TerminalLink> linksIn(TerminalLinkLine line) {
     urlSpans.add((match.start, match.end));
     final trimmed = _trimTrailing(match[0]!);
     if (trimmed.isEmpty) continue;
-    final url = _resolveUrl(trimmed);
-    if (url == null) continue;
+    // A `file://` URL is a *path*, and is resolved as one — see
+    // [_fileUrlPath]. The span is still claimed either way, so the path scan
+    // below cannot carve a second link out of the middle of it.
+    final filePath = _fileUrlPath(trimmed);
+    final target = filePath != null
+        ? PathTarget(filePath)
+        : switch (_resolveUrl(trimmed)) {
+            final url? => UrlTarget(url),
+            null => null,
+          };
+    if (target == null) continue;
     found.add(
-      _linkOf(line, UrlTarget(url), match.start, match.start + trimmed.length),
+      _linkOf(line, target, match.start, match.start + trimmed.length),
     );
   }
 
@@ -507,6 +516,46 @@ int _countOf(String text, String char, int end) {
 String? _resolveUrl(String text) => _httpUrl(
   text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
 );
+
+/// The path a `file://` URL names, or null when [text] is not one this may
+/// follow.
+///
+/// **A file URL is a path, never a [UrlTarget].** The rule at the top of this
+/// file — terminal output is untrusted, so it must not reach a scheme handler —
+/// applies to `file:` more than to most schemes, not less. Resolving it as a
+/// path means it goes through `hostPathForTerminalTarget`, which already
+/// translates a WSL `/home/…` into the `\\wsl.localhost\<distro>\home\…`
+/// form this host can read, and then through reveal. Nothing new is handed to
+/// the OS.
+///
+/// **A host is refused.** `file://server/share/x` is a UNC path, and revealing
+/// one makes Windows authenticate to a share whose address came from whatever
+/// printed the line — an NTLM leak to an attacker's host, from output an agent
+/// controls. Only the empty-host form (`file:///…`) is followed.
+///
+/// Percent escapes are decoded, because the result is a path and `%20` is not
+/// a character in a filename. `file:///C:/…` keeps its drive letter: the
+/// leading slash of the URL path is dropped when what follows looks like one,
+/// which is the shape Windows programs print.
+String? _fileUrlPath(String text) {
+  if (!text.toLowerCase().startsWith('file://')) return null;
+  final uri = Uri.tryParse(text);
+  if (uri == null || uri.scheme != 'file') return null;
+  if (uri.host.isNotEmpty) return null;
+  final String decoded;
+  try {
+    decoded = Uri.decodeComponent(uri.path);
+  } on ArgumentError {
+    return null; // a truncated escape at the end of a wrapped line
+  }
+  if (decoded.isEmpty || decoded == '/') return null;
+  // `/C:/Users/…` -> `C:/Users/…`; a posix path keeps its root.
+  return _driveRooted.hasMatch(decoded) ? decoded.substring(1) : decoded;
+}
+
+/// `/C:/…` — a Windows path as a URL spells it, with the URL's own root slash
+/// still on the front.
+final RegExp _driveRooted = RegExp(r'^/[A-Za-z]:');
 
 /// [text] if it is an absolute http(s) URL, and null otherwise.
 ///
