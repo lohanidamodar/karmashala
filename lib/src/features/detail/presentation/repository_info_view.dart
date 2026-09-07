@@ -850,10 +850,9 @@ class _CopyButton extends StatelessWidget {
 }
 
 /// The repository whose name the Changes view should title itself with.
-Repository? selectedRepository(WidgetRef ref) {
-  final repoId = ref.watch(selectedRepositoryIdProvider);
-  return ref
-      .watch(selectedProjectRepositoriesProvider)
-      .where((r) => r.id == repoId)
-      .firstOrNull;
-}
+///
+/// Watches the row rather than the list: this and `ShellStatusBar` are siblings
+/// and a list announcement reaches both whether or not the repository moved.
+/// See `selectedRepositoryProvider`.
+Repository? selectedRepository(WidgetRef ref) =>
+    ref.watch(selectedRepositoryProvider);

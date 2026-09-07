@@ -6,7 +6,9 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
+import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../repositories/domain/repository.dart';
 import '../data/git_files.dart';
 import '../data/git_presence_reader.dart';
 import '../domain/file_change.dart';
@@ -51,6 +53,32 @@ final selectedRepositoryIdProvider =
     NotifierProvider<SelectedRepositoryController, String?>(
       SelectedRepositoryController.new,
     );
+
+/// The selected repository itself, for the widgets that want the row rather
+/// than the list it came out of.
+///
+/// Watch this, not `selectedProjectRepositoriesProvider`, unless you genuinely
+/// need every repository. `Repository` has value equality and a `List` does
+/// not, so a rebuilt list is never `==` to the last one and Riverpod's dedupe
+/// cannot fire — every announcement reaches every watcher whether or not
+/// anything moved. The list has to announce that freely, because the
+/// repositories table has no notifier of its own and it stands in as the
+/// change signal (see `selectedProjectRepositoriesProvider`); this derivation
+/// is where that noise is absorbed.
+///
+/// It is not a micro-optimisation. `ShellStatusBar` and the side panel's
+/// `_ChangesSurface` are siblings, and Flutter allows only a *descendant* of
+/// the widget being built to be marked dirty — so one redundant announcement
+/// arriving during the build phase threw `markNeedsBuild() called during
+/// build`, taking the frame's layout with it.
+final selectedRepositoryProvider = Provider<Repository?>((ref) {
+  final id = ref.watch(selectedRepositoryIdProvider);
+  if (id == null) return null;
+  return ref
+      .watch(selectedProjectRepositoriesProvider)
+      .where((r) => r.id == id)
+      .firstOrNull;
+});
 
 /// The file within the selected repository whose diff is shown, or `null`.
 class SelectedChangeFileController extends Notifier<String?> {

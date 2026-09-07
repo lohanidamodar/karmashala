@@ -7,7 +7,6 @@ import 'side_panel_state.dart';
 
 import '../../features/git/application/changes_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
-import '../../features/projects/application/projects_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 
 /// The window's bottom rule: where you are, and what is still running.
@@ -32,11 +31,10 @@ class ShellStatusBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final repoId = ref.watch(selectedRepositoryIdProvider);
-    final repo = ref
-        .watch(selectedProjectRepositoriesProvider)
-        .where((r) => r.id == repoId)
-        .firstOrNull;
+    // The row, not the list it came out of: watching the list put this widget
+    // and its sibling `_ChangesSurface` on an announcement that fires whether
+    // or not the repository moved. See `selectedRepositoryProvider`.
+    final repo = ref.watch(selectedRepositoryProvider);
     final branch = ref.watch(currentBranchProvider);
     // Two counts, not the state: the status bar has no other interest in the
     // terminal, and a process exiting anywhere used to repaint this whole row.
