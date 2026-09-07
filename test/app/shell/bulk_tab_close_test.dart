@@ -371,4 +371,44 @@ void main() {
       because: 'the tab menu and the question it asks are reached at every size',
     );
   });
+
+  /// **Middle click is the reversible close, deliberately.**
+  ///
+  /// It is a wheel press — mushy on most mice and easy to fire while
+  /// scrolling — so it gets the action whose cost can be undone, not
+  /// `closeTab(detach: false)`. This file's own opening line is the rule:
+  /// a single close is a *view* action, the tab goes and the session keeps
+  /// running. Ending one stays behind a menu item with a word on it.
+  ///
+  /// It lives on [WorkbenchTabChip], which both strips share, so a window
+  /// split into groups behaves the same in every one of them — a gesture that
+  /// worked in one strip and not its neighbour would be worse than none.
+  testWidgets('a middle click closes the tab and parks its session', (
+    tester,
+  ) async {
+    await pump(tester);
+    openTabs(2);
+    giveEveryPaneHistory();
+    await tester.pumpAndSettle();
+    // Relative to what is open, because `pump` opens a tab of its own.
+    final before = openTabIds();
+    expect(before, hasLength(3));
+
+    await tester.tap(
+      find.byType(WorkbenchTabChip).first,
+      buttons: kTertiaryButton,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      openTabIds(),
+      before.sublist(1),
+      reason: 'the tab the click landed on is gone, and only that one',
+    );
+    expect(
+      container.read(terminalSessionsControllerProvider).detached,
+      hasLength(1),
+      reason: 'parked, not killed — it comes back through the status bar count',
+    );
+  });
 }

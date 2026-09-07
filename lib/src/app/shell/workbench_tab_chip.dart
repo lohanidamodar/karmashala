@@ -12,6 +12,7 @@ class WorkbenchTabChip extends StatelessWidget {
     this.leading,
     this.trailing,
     this.onSecondaryTapDown,
+    this.onClose,
     this.tooltip,
     this.accented,
     this.dense = false,
@@ -57,6 +58,22 @@ class WorkbenchTabChip extends StatelessWidget {
   final Widget? leading;
   final Widget? trailing;
   final GestureTapDownCallback? onSecondaryTapDown;
+
+  /// What a **middle click** on the chip does — the reversible close, never
+  /// ending the session.
+  ///
+  /// A wheel press is mushy on most mice and easy to fire while scrolling, so
+  /// it gets the action whose cost can be undone: the tab or pane goes and the
+  /// session is parked, which is exactly what this chip's own X button does
+  /// and what its tooltip already promises. Ending one stays behind a menu
+  /// item with a word on it.
+  ///
+  /// It lives here rather than at the call sites because both strips share this
+  /// chip, and a gesture that worked in the workbench strip but not in a
+  /// group's would be worse than not having it. `InkWell` has no tertiary
+  /// callback, hence the wrapper; it fires on *up*, so sliding off the chip
+  /// still cancels.
+  final VoidCallback? onClose;
   final String? tooltip;
 
   @override
@@ -81,48 +98,51 @@ class WorkbenchTabChip extends StatelessWidget {
     );
     final chip = Material(
       color: selected ? scheme.surfaceContainerLowest : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        onSecondaryTapDown: onSecondaryTapDown,
-        child: Container(
-          height: dense ? Chrome.paneStrip : Chrome.tabStrip,
-          constraints: const BoxConstraints(maxWidth: 220),
-          padding: EdgeInsets.only(
-            left: dense ? Insets.xs : Insets.sm,
-            right: trailing == null ? Insets.sm : 2,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              top: dense ? BorderSide.none : rule,
-              bottom: dense ? rule : BorderSide.none,
-              right: BorderSide(color: scheme.outlineVariant),
+      child: GestureDetector(
+        onTertiaryTapUp: onClose == null ? null : (_) => onClose!(),
+        child: InkWell(
+          onTap: onTap,
+          onSecondaryTapDown: onSecondaryTapDown,
+          child: Container(
+            height: dense ? Chrome.paneStrip : Chrome.tabStrip,
+            constraints: const BoxConstraints(maxWidth: 220),
+            padding: EdgeInsets.only(
+              left: dense ? Insets.xs : Insets.sm,
+              right: trailing == null ? Insets.sm : 2,
             ),
-          ),
-          // Fills the slot the strip gave it rather than hugging its title:
-          // tabs are laid out at a uniform extent, so a short name left the X
-          // floating in the middle of the tab with empty space after it — "the
-          // tabs close button is aligned to text not to the tab pad itself".
-          child: Row(
-            children: [
-              ?leading,
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
-                      .copyWith(
-                        // Full ink only where the keyboard is. A strip nobody
-                        // is typing in keeps its tab legible and stops it
-                        // competing with the one that is.
-                        color: selected && (accented ?? true)
-                            ? scheme.onSurface
-                            : scheme.onSurfaceVariant,
-                      ),
-                ),
+            decoration: BoxDecoration(
+              border: Border(
+                top: dense ? BorderSide.none : rule,
+                bottom: dense ? rule : BorderSide.none,
+                right: BorderSide(color: scheme.outlineVariant),
               ),
-              if (trailing != null) ...[const SizedBox(width: 2), trailing!],
-            ],
+            ),
+            // Fills the slot the strip gave it rather than hugging its title:
+            // tabs are laid out at a uniform extent, so a short name left the X
+            // floating in the middle of the tab with empty space after it — "the
+            // tabs close button is aligned to text not to the tab pad itself".
+            child: Row(
+              children: [
+                ?leading,
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
+                        .copyWith(
+                          // Full ink only where the keyboard is. A strip nobody
+                          // is typing in keeps its tab legible and stops it
+                          // competing with the one that is.
+                          color: selected && (accented ?? true)
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+                if (trailing != null) ...[const SizedBox(width: 2), trailing!],
+              ],
+            ),
           ),
         ),
       ),

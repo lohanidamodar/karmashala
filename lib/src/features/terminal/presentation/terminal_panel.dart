@@ -1173,6 +1173,9 @@ class TerminalTabChip extends StatelessWidget {
       accented: accented,
       onTap: onTap,
       onSecondaryTapDown: (details) => _menu(context, details.globalPosition),
+      // Middle click, the same close this tab's X performs — the session keeps
+      // running, exactly as that button's tooltip promises.
+      onClose: onClose,
       // One slot, never two glyphs: a tab running an agent says what the agent
       // is doing, and one that is not says whether anything is running at all.
       leading: status == null

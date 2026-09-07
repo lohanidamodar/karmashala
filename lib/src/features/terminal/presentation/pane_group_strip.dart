@@ -213,6 +213,10 @@ class PaneTabChip extends ConsumerWidget {
       onTap: () => sessions.focusPane(paneId),
       onSecondaryTapDown: (details) =>
           _menu(context, sessions, details.globalPosition),
+      // Middle click, the same close this pane's X performs. Wired here too
+      // because a gesture that worked in the workbench strip and not in a
+      // group's would be worse than not having it at all.
+      onClose: () => sessions.closePane(paneId),
       leading: activity == null
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: activity),
