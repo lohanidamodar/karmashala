@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.17.2 (2026-09-06)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.18.0 (2026-09-07)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,35 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.18.0 — 2026-09-07 (build 33)
+
+**The phone can manage projects and resume sessions, not just watch them.** Add
+an existing desktop folder as a project from the companion, list the projects it
+can see, and resume a session rather than only starting a new one.
+
+### The capability split is the interesting part
+
+Adding a project is genuinely new power — it takes a folder on the desktop and
+makes it a project — so it gets its own bit, `addProject`. A phone paired before
+this build holds a bitset without that bit and is refused, in words, for ever.
+That is the rule the protocol already stated for `startSession`: nothing already
+granted quietly grows into permission to do more.
+
+`session.resume` reuses `startSession`, because resuming runs a process, and a
+phone that may not start one may not resume one either.
+
+`projects.list` reuses `viewSessions`, which **does** widen an existing grant: a
+phone paired earlier can list projects without being asked again. It learns no
+name it could not already read — it already sees those sessions grouped by
+project — so this is deliberate rather than an oversight, but it is a widening
+and worth knowing.
+
+`project.add` refuses unsafe paths without writing anything. That is the defence
+that matters once a remote device can name a folder on this machine, and it is
+tested as a refusal rather than assumed.
 
 ---
 
