@@ -14,6 +14,7 @@ class AgentInstallation {
     required this.executable,
     required this.createdAt,
     this.version,
+    this.executableByUser = false,
   });
 
   final String id;
@@ -27,6 +28,19 @@ class AgentInstallation {
   /// Detected version string, if known.
   final String? version;
 
+  /// Whether a human chose [executable], rather than discovery finding it.
+  ///
+  /// Recorded rather than inferred, the way `Session.titleByUser` is: a sweep
+  /// must not overwrite an explicit choice, and comparing the stored path
+  /// against what discovery would find today is not a test that survives a
+  /// restart.
+  ///
+  /// It does **not** protect a path that no longer works. A stale path helps
+  /// nobody whoever set it, so the startup check repairs a broken hand-set path
+  /// exactly as it repairs a broken detected one — and marks the result as
+  /// detected, because at that point discovery is what chose it.
+  final bool executableByUser;
+
   final DateTime createdAt;
 
   /// The environment this installation lives in (derived from [executable]).
@@ -38,12 +52,14 @@ class AgentInstallation {
     EnvironmentPath? executable,
     String? version,
     DateTime? createdAt,
+    bool? executableByUser,
   }) => AgentInstallation(
     id: id ?? this.id,
     agentId: agentId ?? this.agentId,
     executable: executable ?? this.executable,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
+    executableByUser: executableByUser ?? this.executableByUser,
   );
 
   @override
@@ -53,10 +69,12 @@ class AgentInstallation {
       other.agentId == agentId &&
       other.executable == executable &&
       other.version == version &&
-      other.createdAt == createdAt;
+      other.createdAt == createdAt &&
+      other.executableByUser == executableByUser;
 
   @override
-  int get hashCode => Object.hash(id, agentId, executable, version, createdAt);
+  int get hashCode =>
+      Object.hash(id, agentId, executable, version, createdAt, executableByUser);
 
   @override
   String toString() => 'AgentInstallation($id, $agentId, $executable)';

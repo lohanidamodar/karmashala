@@ -126,4 +126,63 @@ void main() {
     // And with nothing pointing at it any more, the old row can now go.
     expect(dao.deleteIfUnreferenced('shim'), isTrue);
   });
+
+  group('moving an installation to a new path', () {
+    test('keeps the row and its id, so nothing pinned to it is unpicked', () {
+      dao.insert(agentInstallation(path: r'C:\stale\codex.exe'));
+      giveItASession();
+
+      expect(
+        dao.updatePath('a1', r'C:\real\codex.exe', byUser: false),
+        isTrue,
+      );
+
+      final moved = dao.getById('a1')!;
+      expect(moved.executable.path, r'C:\real\codex.exe');
+      expect(moved.id, 'a1');
+      // The session still names the same installation, because it is the same
+      // installation. A delete-and-reinsert would have stranded it.
+      expect(
+        db.query('SELECT agent_installation_id FROM sessions;').single.values,
+        ['a1'],
+      );
+    });
+
+    test('records who chose the path', () {
+      dao.insert(agentInstallation());
+      expect(dao.getById('a1')!.executableByUser, isFalse);
+
+      dao.updatePath('a1', r'C:\chosen\codex.exe', byUser: true);
+      expect(dao.getById('a1')!.executableByUser, isTrue);
+
+      // And a later repair that moves it takes ownership back: at that point
+      // discovery is what chose the path, so a sweep may move it again.
+      dao.updatePath('a1', r'C:\found\codex.exe', byUser: false);
+      expect(dao.getById('a1')!.executableByUser, isFalse);
+    });
+
+    test('refuses a path another row for the same agent already holds', () {
+      // UNIQUE (agent_kind, environment_id, executable_path). Merging two rows
+      // is the caller's decision, not a setter's, so this reports rather than
+      // raising out of the middle of a sweep.
+      dao.insert(agentInstallation(id: 'a1', path: r'C:\one\codex.exe'));
+      dao.insert(agentInstallation(id: 'a2', path: r'C:\two\codex.exe'));
+
+      expect(dao.updatePath('a2', r'C:\one\codex.exe', byUser: true), isFalse);
+      expect(dao.getById('a2')!.executable.path, r'C:\two\codex.exe');
+    });
+
+    test('a row written before v39 reads as detected, not hand-set', () {
+      // The column arrived with a DEFAULT 0, and every row that predates it is
+      // in fact what that says: found by discovery, and free to be moved by it.
+      db.execute(
+        'INSERT INTO agent_installations '
+        '(id, agent_kind, environment_id, executable_path, version, created_at) '
+        'VALUES (?, ?, ?, ?, ?, ?);',
+        ['legacy', AgentIds.codex, 'windows', r'C:\old\codex.exe', '1.0.0',
+         isoFromDate(testTime)],
+      );
+      expect(dao.getById('legacy')!.executableByUser, isFalse);
+    });
+  });
 }

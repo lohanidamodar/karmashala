@@ -1,5 +1,8 @@
 import 'dart:io' show Platform;
 
+import 'package:path/path.dart' as p;
+
+import '../../../core/paths/path_probe.dart';
 import '../../../core/process/command_runner.dart';
 import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
@@ -220,6 +223,7 @@ class AgentDiscoveryService {
     required this.ids,
     required this.clock,
     this.registry = AgentRegistry.builtIn,
+    this.pathProbe,
     Map<String, String>? hostEnvironment,
   }) : hostEnvironment = hostEnvironment ?? Platform.environment;
 
@@ -228,6 +232,20 @@ class AgentDiscoveryService {
   final IdGenerator ids;
   final Clock clock;
   final AgentRegistry registry;
+
+  /// The local filesystem, for seeing through Windows reparse points.
+  ///
+  /// **The one thing here that is not a subprocess**, and only on
+  /// [EnvironmentKind.windowsNative] — which is this machine's own disk by
+  /// definition, so there is no other filesystem it could be asking about. It
+  /// exists because `where` and `Process.run` are both blind to the failure it
+  /// answers: a junction chain the OS will not traverse makes an installed CLI
+  /// report itself absent through every route discovery had. See
+  /// [resolveReparsePoints].
+  ///
+  /// Null leaves discovery exactly as it was — a caller with no filesystem to
+  /// offer loses nothing but the repair.
+  final PathProbe? pathProbe;
 
   /// The host process's variables, used only to expand the descriptors'
   /// declared Windows install paths. Injected so tests never depend on the
@@ -278,6 +296,8 @@ class AgentDiscoveryService {
       // version we already have; asking again would be a second process for an
       // answer in hand.
       version = hit.version;
+    } else {
+      path = _traversable(path);
     }
 
     if (version == null && descriptor.discovery.probeVersion) {
@@ -348,8 +368,12 @@ class AgentDiscoveryService {
   /// `--version` arguments a PATH hit gets: `dart:io` raises for an executable
   /// that is not there, which [CommandRunner] surfaces as [CommandException],
   /// so one process answers "is it installed" and "which version" together.
-  /// Doing it this way also keeps discovery inside the [CommandRunner]
-  /// abstraction — nothing here touches the filesystem.
+  ///
+  /// [pathProbe], when supplied, decides *which* path is run — see
+  /// [_declaredCandidates]. That is the one filesystem read in this class, and
+  /// without it a declared location behind a junction chain cannot be found by
+  /// any means available here: the OS refuses to spawn through it, so
+  /// `Process.run` reports the same [CommandException] an empty directory does.
   ///
   /// A descriptor with `probeVersion: false` declares that running its binary
   /// to interrogate it is not safe, so it gets no fallback: we have no other
@@ -361,25 +385,69 @@ class AgentDiscoveryService {
     if (!descriptor.discovery.probeVersion) return null;
 
     for (final template in descriptor.binaries.windowsInstallPaths) {
-      final path = expandWindowsPath(template, hostEnvironment);
-      if (path == null) continue; // An unset variable is not a path.
-      try {
-        final result = await runner.run(
-          CommandRequest(
-            executable: path,
-            arguments: descriptor.discovery.versionArguments,
-          ),
-        );
-        // It started, so the file is there — even if it exited non-zero.
-        return (
-          path: path,
-          version: result.ok ? parseAgentVersion(result.stdout) : null,
-        );
-      } on CommandException {
-        continue; // Nothing at this location.
+      final declared = expandWindowsPath(template, hostEnvironment);
+      if (declared == null) continue; // An unset variable is not a path.
+      for (final path in _declaredCandidates(declared)) {
+        try {
+          final result = await runner.run(
+            CommandRequest(
+              executable: path,
+              arguments: descriptor.discovery.versionArguments,
+            ),
+          );
+          // It started, so the file is there — even if it exited non-zero.
+          return (
+            path: path,
+            version: result.ok ? parseAgentVersion(result.stdout) : null,
+          );
+        } on CommandException {
+          continue; // Nothing at this location.
+        }
       }
     }
     return null;
+  }
+
+  /// The paths worth spawning for a declared Windows install location.
+  ///
+  /// With no [pathProbe] this is the declared path and nothing else, which is
+  /// what this method did before it existed. With one, the filesystem is asked
+  /// first and the answer decides:
+  ///
+  /// * **usable** — spawn the declared path, as before;
+  /// * **unreachable, with somewhere to go** — spawn where the reparse points
+  ///   actually lead. This is the Codex case: the declared path is the stable
+  ///   one its installer advertises and the OS will not spawn through it;
+  /// * **unreachable, with nowhere to go** — spawn the declared path anyway.
+  ///   Nothing was established, so the process is the better witness;
+  /// * **missing** — spawn nothing. The route completed and there is no file at
+  ///   the end of it, so a process could only confirm it at the cost of a spawn
+  ///   on every launch for every agent that is not installed.
+  List<String> _declaredCandidates(String declared) {
+    final probe = pathProbe;
+    if (probe == null) return [declared];
+    final reading = readExecutable(declared, probe, context: p.windows);
+    return switch (reading.reachability) {
+      ExecutableReachability.usable => [declared],
+      ExecutableReachability.unreachable => [reading.resolved ?? declared],
+      ExecutableReachability.missing ||
+      ExecutableReachability.unchecked => const [],
+    };
+  }
+
+  /// The path to record for an executable located on the Windows PATH.
+  ///
+  /// Almost always the path as located — a working install keeps the spelling
+  /// its own installer chose. Only when that spelling cannot be reached is it
+  /// traded for the reparse-resolved one, and only when *that* is usable;
+  /// otherwise the located path stands and the version probe below is left to
+  /// be the judge.
+  String _traversable(String located) {
+    final probe = pathProbe;
+    if (probe == null || environment.kind != EnvironmentKind.windowsNative) {
+      return located;
+    }
+    return traversablePath(located, probe, context: p.windows) ?? located;
   }
 
   /// Probes this environment and reports what it established, including the

@@ -1,5 +1,24 @@
 import 'agent_installation.dart';
 
+/// One installation whose executable turned out to be somewhere else.
+///
+/// A move keeps the row and its id — see `AgentInstallationDao.updatePath` —
+/// so this is a *change* to report, not an add and a remove.
+class AgentPathChange {
+  const AgentPathChange({
+    required this.displayName,
+    required this.from,
+    required this.to,
+  });
+
+  final String displayName;
+  final String from;
+  final String to;
+
+  @override
+  String toString() => '$displayName: $from → $to';
+}
+
 /// One installation whose recorded version no longer matches what the CLI says.
 class AgentVersionChange {
   const AgentVersionChange({
@@ -29,6 +48,9 @@ class EnvironmentScanReport {
     this.removed = const [],
     this.retained = const [],
     this.updated = const [],
+    this.movedPaths = const [],
+    this.unreachablePaths = const [],
+    this.pinnedPaths = const [],
   });
 
   /// The environment could not be asked. Nothing below is a claim about what
@@ -43,7 +65,10 @@ class EnvironmentScanReport {
        added = const [],
        removed = const [],
        retained = const [],
-       updated = const [];
+       updated = const [],
+       movedPaths = const [],
+       unreachablePaths = const [],
+       pinnedPaths = const [];
 
   final String environmentId;
   final String environmentName;
@@ -68,6 +93,25 @@ class EnvironmentScanReport {
   final List<AgentInstallation> retained;
 
   final List<AgentVersionChange> updated;
+
+  /// Installations that were found at a new path and followed to it.
+  final List<AgentPathChange> movedPaths;
+
+  /// Installations kept because the route to their executable could not be
+  /// established — not because it was proved gone.
+  ///
+  /// Its own list, and deliberately counted among neither [found] nor
+  /// [missing]. A junction chain Windows will not traverse answers `where` and
+  /// `existsSync` exactly like an uninstalled CLI, so calling this "not
+  /// installed" would be the §19 lie — and calling it "installed" would be the
+  /// same lie facing the other way. What the user needs is that the file is
+  /// somewhere we cannot reach, because "install it" and "fix the route" are
+  /// opposite instructions.
+  final List<AgentInstallation> unreachablePaths;
+
+  /// Installations the sweep left alone because a human chose their path and it
+  /// still works.
+  final List<AgentInstallation> pinnedPaths;
 }
 
 /// The truthful account of a whole re-detection run.
@@ -93,6 +137,9 @@ class AgentDiscoveryReport {
   int get removedCount => _sum((e) => e.removed.length);
   int get retainedCount => _sum((e) => e.retained.length);
   int get updatedCount => _sum((e) => e.updated.length);
+  int get movedCount => _sum((e) => e.movedPaths.length);
+  int get unreachableCount => _sum((e) => e.unreachablePaths.length);
+  int get pinnedCount => _sum((e) => e.pinnedPaths.length);
 
   List<EnvironmentScanReport> get unreachable => [
     for (final environment in environments)
@@ -118,10 +165,14 @@ class AgentDiscoveryReport {
           : 'Found ${_count(foundCount, 'agent')} in '
                 '${_count(scanned.length, 'environment')}.',
       if (addedCount > 0) '$addedCount new.',
+      if (movedCount > 0) '${_count(movedCount, 'path')} repaired.',
       if (updatedCount > 0) '${_count(updatedCount, 'version')} changed.',
       if (removedCount > 0) '$removedCount no longer installed.',
       if (retainedCount > 0)
         '$retainedCount gone but kept for sessions that used it.',
+      if (pinnedCount > 0) '$pinnedCount left at the path you set.',
+      if (unreachableCount > 0)
+        '$unreachableCount installed somewhere that cannot be reached.',
     ];
 
     final missing = <String>[

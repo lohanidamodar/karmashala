@@ -71,6 +71,9 @@ typedef MigrationStep = void Function(Database db);
 ///   agent's declared axes, because a shared three-value enum cannot say that
 ///   Claude Code has six modes or that Codex's sandbox and approval policy are
 ///   two separate dimensions.
+/// * **v39** — whether a human chose an installation's executable path, so the
+///   startup path repair can fix a broken one whoever set it and still never
+///   overwrite a working hand-set one.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -110,6 +113,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   36: _migrateToV36,
   37: _migrateToV37,
   38: _migrateToV38,
+  39: _migrateToV39,
 };
 
 /// Was this pane running when its row was written?
@@ -1608,4 +1612,31 @@ void _migrateToV38(Database db) {
       captured_at TEXT NOT NULL
     );
   ''');
+}
+
+/// Whether a human chose an installation's executable path.
+///
+/// The same distinction `sessions.title_by_user` draws, for the same reason: a
+/// sweep must not overwrite an explicit choice, and *"the path differs from
+/// what discovery would find"* is not a usable test for one — it cannot be
+/// recovered after a restart, and inferring it that way was a real bug when the
+/// title sync tried it. So it is recorded.
+///
+/// The rule it enables, in two halves:
+///
+/// * a **broken** path is repaired whoever set it — a stale path helps nobody;
+/// * a **working** hand-set path is never replaced by a sweep, even when
+///   discovery would now pick a different one.
+///
+/// Defaults to 0, so every row that already exists is what it in fact is:
+/// found by discovery, and free to be moved by it.
+void _migrateToV39(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(agent_installations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('executable_by_user')) return;
+  db.execute(
+    'ALTER TABLE agent_installations '
+    'ADD COLUMN executable_by_user INTEGER NOT NULL DEFAULT 0;',
+  );
 }

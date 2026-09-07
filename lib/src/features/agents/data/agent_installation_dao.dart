@@ -21,8 +21,9 @@ class AgentInstallationDao {
   void insert(AgentInstallation installation) {
     _db.execute(
       'INSERT INTO agent_installations '
-      '(id, agent_kind, environment_id, executable_path, version, created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?);',
+      '(id, agent_kind, environment_id, executable_path, version, created_at, '
+      'executable_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?);',
       [
         installation.id,
         installation.agentId,
@@ -30,6 +31,7 @@ class AgentInstallationDao {
         installation.executable.path,
         installation.version,
         isoFromDate(installation.createdAt),
+        intFromBool(installation.executableByUser),
       ],
     );
   }
@@ -86,6 +88,32 @@ class AgentInstallationDao {
     ]);
   }
 
+  /// Moves an installation to [path], keeping its row and its id.
+  ///
+  /// The same reasoning as [updateVersion], for the same reason: the id is what
+  /// settings pin as the default agent and what every session row references,
+  /// so an executable that moved must not become a new installation. That is
+  /// what made the junction failure worse than it had to be — the repair had no
+  /// way to say "the same Codex, at a different path".
+  ///
+  /// [byUser] records who chose it, so a later sweep knows whether it may pick
+  /// a different path. Returns `false` when [path] is already taken in this
+  /// environment by another row for the same agent — the table's
+  /// `UNIQUE (agent_kind, environment_id, executable_path)` — because merging
+  /// two rows is a decision for the caller that can see both, not for a setter.
+  bool updatePath(String id, String path, {required bool byUser}) {
+    try {
+      _db.execute(
+        'UPDATE agent_installations SET executable_path = ?, '
+        'executable_by_user = ? WHERE id = ?;',
+        [path, intFromBool(byUser), id],
+      );
+      return true;
+    } on SqliteException {
+      return false;
+    }
+  }
+
   void delete(String id) {
     _db.execute('DELETE FROM agent_installations WHERE id = ?;', [id]);
   }
@@ -140,5 +168,6 @@ class AgentInstallationDao {
     ),
     version: row['version'] as String?,
     createdAt: dateFromIso(row['created_at']),
+    executableByUser: boolFromInt(row['executable_by_user'] ?? 0),
   );
 }

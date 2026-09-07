@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fake_path_probe.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -180,6 +181,160 @@ void main() {
       ).discover();
 
       expect(runner.requests.map((r) => r.executable), everyElement('bash'));
+    });
+  });
+
+  group('Windows discovery — a declared location behind a junction', () {
+    // Measured on the owner's machine 2026-09-07: Codex self-updated to a
+    // versioned standalone layout and turned the stable path its own installer
+    // advertises into a chain of junctions Windows refuses to traverse. `where
+    // codex` answers "Could not find files", `File.existsSync` on the leaf
+    // answers a flat false, and `Process.run` raises — so before the resolver
+    // there was no route by which discovery could see a working CLI at all.
+    const declared = r'C:\Users\d\.local\bin\claude.exe';
+    const declaredDir = r'C:\Users\d\.local\bin';
+    const release = r'C:\Users\d\.store\releases\2.1.252';
+    const real = r'C:\Users\d\.store\releases\2.1.252\claude.exe';
+
+    FakePathProbe behindAJunction() => FakePathProbe(
+      files: const {real},
+      links: const {declaredDir: release},
+    );
+
+    test('is found at the path the junction actually leads to', () async {
+      final runner = FakeCommandRunner(
+        responder: (req) =>
+            req.executable == 'where' ? _notOnPath : _ok('2.1.252'),
+      );
+
+      final found = await AgentDiscoveryService(
+        runner: runner,
+        environment: windowsEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        registry: _declaring,
+        pathProbe: behindAJunction(),
+        hostEnvironment: const {'USERPROFILE': r'C:\Users\d'},
+      ).discover();
+
+      // The resolved path is what gets stored, because it is the only one that
+      // can be spawned — and the only one that was spawned.
+      expect(found.single.executable.path, real);
+      expect(found.single.version, '2.1.252');
+      expect(
+        runner.requests
+            .where((r) => r.executable != 'where')
+            .map((r) => r.executable),
+        [real],
+      );
+    });
+
+    test('a declared location the walk proves empty is not spawned', () async {
+      // The route completed and there is nothing at the end of it. Spawning to
+      // confirm would cost a process per launch per uninstalled agent.
+      final runner = FakeCommandRunner(
+        responder: (req) => req.executable == 'where' ? _notOnPath : _ok('x'),
+      );
+
+      final found = await AgentDiscoveryService(
+        runner: runner,
+        environment: windowsEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        registry: _declaring,
+        pathProbe: FakePathProbe(),
+        hostEnvironment: const {'USERPROFILE': r'C:\Users\d'},
+      ).discover();
+
+      expect(found, isEmpty);
+      expect(runner.requests.map((r) => r.executable), everyElement('where'));
+    });
+
+    test('a PATH hit that cannot be traversed is stored resolved', () async {
+      final runner = FakeCommandRunner(
+        responder: (req) =>
+            req.executable == 'where' ? _ok('$declared\r\n') : _ok('2.1.252'),
+      );
+
+      final found = await AgentDiscoveryService(
+        runner: runner,
+        environment: windowsEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        registry: _declaring,
+        pathProbe: behindAJunction(),
+        hostEnvironment: const {},
+      ).discover();
+
+      expect(found.single.executable.path, real);
+    });
+
+    test('a working PATH hit keeps the spelling its installer chose', () async {
+      // Resolving a healthy install would trade a stable path for whatever it
+      // points at today, which rots on the next update for no benefit.
+      final runner = FakeCommandRunner(
+        responder: (req) => req.executable == 'where'
+            ? _ok(r'C:\tools\claude.exe')
+            : _ok('2.1.252'),
+      );
+
+      final found = await AgentDiscoveryService(
+        runner: runner,
+        environment: windowsEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        registry: _declaring,
+        pathProbe: FakePathProbe(
+          files: const {r'C:\tools\claude.exe'},
+          links: const {r'C:\tools': r'C:\elsewhere'},
+        ),
+        hostEnvironment: const {},
+      ).discover();
+
+      expect(found.single.executable.path, r'C:\tools\claude.exe');
+    });
+
+    test('no probe at all leaves discovery exactly as it was', () async {
+      // The filesystem read is additive: a caller with none to offer loses the
+      // repair and nothing else.
+      final runner = FakeCommandRunner(
+        responder: (req) =>
+            req.executable == 'where' ? _notOnPath : _ok('2.1.252'),
+      );
+
+      final found = await AgentDiscoveryService(
+        runner: runner,
+        environment: windowsEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        registry: _declaring,
+        hostEnvironment: const {'USERPROFILE': r'C:\Users\d'},
+      ).discover();
+
+      expect(found.single.executable.path, declared);
+    });
+
+    test('a POSIX environment reads no filesystem even with a probe', () async {
+      // The resolver is a Windows-native concern: a WSL or SSH path belongs to
+      // a disk this process cannot stat, and reading ours would be evidence
+      // about the wrong machine.
+      final probe = FakePathProbe();
+      final runner = FakeCommandRunner(
+        responder: (req) =>
+            const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+      );
+
+      await AgentDiscoveryService(
+        runner: runner,
+        environment: wslEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        registry: _declaring,
+        pathProbe: probe,
+        hostEnvironment: const {'USERPROFILE': r'C:\Users\d'},
+      ).discover();
+
+      expect(probe.queries, isEmpty);
     });
   });
 
