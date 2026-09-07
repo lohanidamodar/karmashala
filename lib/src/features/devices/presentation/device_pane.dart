@@ -28,6 +28,7 @@ import '../application/simulator_live_view.dart';
 import 'simulator_live_pane.dart';
 import 'simulator_list.dart';
 import 'device_touch_surface.dart';
+import 'wireless_pairing_dialog.dart';
 
 /// Shared by the pane and the native-player verification probe.
 Future<void> configureDeviceLivePlayer(
@@ -1135,6 +1136,16 @@ class _DeviceToolbar extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
+          // Beside Refresh because both are about the *list* rather than about
+          // one device, and only shown when there is an adb to pair with —
+          // a button that could not work is worse than no button.
+          if (ref.watch(adbServiceProvider) != null)
+            IconButton(
+              key: const Key('wireless-pairing-open'),
+              tooltip: 'Pair a device over Wi-Fi',
+              icon: const Icon(AppIcons.wifiHigh),
+              onPressed: () => WirelessPairingDialog.show(context),
+            ),
           IconButton(
             // Named for what it does. It used to say "Refresh devices", which
             // is what people pressed when the picture froze — and it refreshed

@@ -332,7 +332,8 @@ String? deviceUnavailableReason({
   }
   if (devices.isEmpty) {
     return 'No devices connected. Plug in a device with USB debugging '
-        'enabled, or start an emulator below.';
+        'enabled, pair one over Wi-Fi from the toolbar above, or start an '
+        'emulator below.';
   }
   if (devices.every((d) => !d.isReady)) {
     final unauthorized = devices.any(

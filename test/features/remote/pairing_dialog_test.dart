@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/remote/pairing/pairing_code.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_payload.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
-import 'package:karmashala/src/features/remote/presentation/qr_painter.dart';
+import 'package:karmashala/src/core/widgets/qr_painter.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
