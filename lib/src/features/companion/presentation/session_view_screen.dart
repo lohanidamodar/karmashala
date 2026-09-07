@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/id_generator_provider.dart';
 import '../../remote/protocol.dart';
 import '../../sessions/domain/delivery_stage.dart';
 import '../application/companion_providers.dart';
@@ -10,6 +11,7 @@ import '../client/companion_gateway.dart';
 import 'companion_approval_card.dart';
 import 'companion_chrome.dart';
 import 'companion_composer.dart';
+import 'companion_route.dart';
 import 'companion_states.dart';
 import 'companion_status_badge.dart';
 import 'companion_transcript_view.dart';
@@ -35,6 +37,17 @@ class SessionViewScreen extends ConsumerStatefulWidget {
 
 class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
   final _composer = TextEditingController();
+  bool _resuming = false;
+  String? _resumeFailure;
+  late final String _resumeKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _resumeKey = _newRequestId();
+  }
+
+  String _newRequestId() => ref.read(idGeneratorProvider).newId();
 
   @override
   void dispose() {
@@ -48,6 +61,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final gateway = ref.read(companionGatewayProvider);
+    final sessions = ref.watch(companionSessionsProvider);
     final session = ref.watch(companionSessionProvider(sessionId));
     final transcript = ref.watch(companionTranscriptProvider(sessionId));
     final approval = ref
@@ -67,10 +81,30 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     });
     final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
     final canApprove = gateway.capabilities.has(Capability.approve);
+    // A null summary is normal for the first frame while sessions.list is
+    // arriving. Once the list has a value, it is authoritative: this session
+    // was removed and must not keep exposing send/approve controls.
+    final sessionGone = sessions.hasValue && session == null;
+    final imported = session?.imported ?? false;
+    final resumeOffer = !sessionGone &&
+        session != null &&
+        (imported ||
+            session.status == CompanionSessionStatus.idle ||
+            session.status == CompanionSessionStatus.failed ||
+            session.status == CompanionSessionStatus.unknown);
 
     // Hoisted out of the tree so the readable-width wrapper below reads as
     // one line rather than another level of nesting.
-    final pane = companionAsync(
+    final pane = sessionGone
+        ? CompanionNotice(
+            icon: AppIcons.folder,
+            title: 'Session no longer available',
+            body: _resumeFailure ??
+                'The desktop no longer lists this session. Go back and '
+                    'choose another session.',
+            tone: NoticeTone.attention,
+          )
+        : companionAsync(
       transcript,
       loading: () => link == CompanionLinkState.connected
           ? const Center(child: CircularProgressIndicator())
@@ -126,21 +160,33 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
           children: [
             // Above the composer, because it blocks the session: nothing
             // typed is read until the prompt is answered.
-            if (approval != null)
+            if (!sessionGone && approval != null && !imported)
               CompanionApprovalCard(
                 approval: approval,
                 canAnswer: canApprove,
                 onAnswer: (decision) =>
                     gateway.answerApproval(sessionId, approval.id, decision),
               ),
-            CompanionComposer(
-              controller: _composer,
-              enabled: canPrompt,
-              hintText: canPrompt
-                  ? 'Send a message…'
-                  : 'This phone was not granted prompt rights.',
-              onSend: (text) => gateway.sendPrompt(sessionId, text),
-            ),
+            if (resumeOffer)
+              _ResumePanel(
+                busy: _resuming,
+                failure: _resumeFailure,
+                enabled: gateway.capabilities.has(Capability.startSession) &&
+                    link == CompanionLinkState.connected,
+                disabledLabel: !gateway.capabilities.has(Capability.startSession)
+                    ? 'Resume permission not granted'
+                    : 'Connect to resume',
+                onResume: () => _resume(sessionId),
+              ),
+            if (!sessionGone && !imported)
+              CompanionComposer(
+                controller: _composer,
+                enabled: canPrompt && !imported,
+                hintText: canPrompt
+                    ? 'Send a message…'
+                    : 'This phone was not granted prompt rights.',
+                onSend: (text) => gateway.sendPrompt(sessionId, text),
+              ),
           ],
         ),
       ),
@@ -218,4 +264,84 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
       ),
     );
   }
+
+  Future<void> _resume(String sessionId) async {
+    if (_resuming) return;
+    final gateway = ref.read(companionGatewayProvider);
+    final hostBefore = gateway.pairing?.hostId;
+    setState(() {
+      _resuming = true;
+      _resumeFailure = null;
+    });
+    try {
+      final started = await gateway.resumeSession(
+        requestId: _resumeKey,
+        sessionId: sessionId,
+      );
+      if (!mounted) return;
+      final hostAfter = gateway.pairing?.hostId;
+      if (hostBefore != hostAfter) {
+        setState(() => _resumeFailure = 'The active desktop changed while '
+            'this session was being resumed. Try again.');
+        return;
+      }
+      Navigator.of(context).pushReplacement(
+        companionRoute<void>(
+          context,
+          (_) => SessionViewScreen(sessionId: started.sessionId),
+        ),
+      );
+    } on Object catch (error) {
+      if (mounted) setState(() => _resumeFailure = companionErrorText(error));
+    } finally {
+      if (mounted) setState(() => _resuming = false);
+    }
+  }
+}
+
+class _ResumePanel extends StatelessWidget {
+  const _ResumePanel({
+    required this.busy,
+    required this.onResume,
+    required this.enabled,
+    required this.disabledLabel,
+    this.failure,
+  });
+
+  final bool busy;
+  final bool enabled;
+  final String disabledLabel;
+  final String? failure;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(Insets.md),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (failure != null)
+          Text(
+            failure!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        FilledButton.icon(
+          onPressed: !enabled || busy ? null : onResume,
+          icon: busy
+              ? const SizedBox.square(
+                  dimension: Touch.iconSmall,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(AppIcons.play),
+          label: Text(
+            !enabled
+                ? disabledLabel
+                : busy
+                ? 'Resuming…'
+                : 'Resume session',
+          ),
+        ),
+      ],
+    ),
+  );
 }

@@ -612,6 +612,30 @@ void main() {
     );
   });
 
+  test('project add and session resume round-trip over the relay', () async {
+    fake.addWorkspace();
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final before = await gateway.listProjects();
+    expect(before.single.projectId, 'p1');
+    final added = await gateway.addProject(
+      requestId: 'project-1',
+      name: 'New project',
+      path: r'C:\work\new-project',
+    );
+    expect(added.name, 'New project');
+    expect(fake.addProjectCalls, 1);
+
+    final resumed = await gateway.resumeSession(
+      requestId: 'resume-1',
+      sessionId: 's1',
+    );
+    expect(resumed.sessionId, 's1');
+    expect(fake.resumeCalls, 1);
+  });
+
   test('a start resent after a re-dial costs one session, not two', () async {
     fake.addWorkspace();
     await startService();

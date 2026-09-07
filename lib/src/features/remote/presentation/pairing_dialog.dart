@@ -135,6 +135,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     Capability.approve => 'Answer approvals',
     Capability.receiveNotifications => 'Notifications',
     Capability.startSession => 'Start new sessions',
+    Capability.addProject => 'Add projects',
   };
 
   /// The local-vs-internet relay tabs. With one endpoint there is nothing to

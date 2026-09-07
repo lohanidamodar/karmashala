@@ -37,7 +37,10 @@ class RemoteHostBindings {
     required this.approvalEvidenceFor,
     required this.registerPush,
     required this.listWorkspace,
+    required this.listProjects,
     required this.startSession,
+    required this.addProject,
+    required this.resumeSession,
   });
 
   /// What `host.status` calls this desktop.
@@ -86,6 +89,7 @@ class RemoteHostBindings {
   /// mentions it. Synchronous, like [listSessions], and for the same reason:
   /// it must not start a process per repository.
   final List<RemoteWorkspaceProject> Function() listWorkspace;
+  final List<RemoteWorkspaceProject> Function() listProjects;
 
   /// Starts a new session, through the one write path the desktop's own New
   /// session dialog uses.
@@ -100,4 +104,9 @@ class RemoteHostBindings {
     RemoteSessionStartRequest request,
   )
   startSession;
+
+  final Future<RemoteWorkspaceProject> Function(String name, String path)
+  addProject;
+
+  final Future<RemoteSessionStarted> Function(String sessionId) resumeSession;
 }

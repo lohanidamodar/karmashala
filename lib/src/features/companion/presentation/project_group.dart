@@ -8,27 +8,36 @@
 library;
 
 import '../../explorer/application/session_diff_stat.dart';
+import '../../remote/domain/remote_payloads.dart';
 import '../client/companion_gateway.dart';
 
 /// One project, with the host's rows for it in the host's own order.
 class CompanionProjectGroup {
-  const CompanionProjectGroup({required this.key, required this.sessions});
+  const CompanionProjectGroup({
+    required this.key,
+    required this.sessions,
+    this.project,
+  });
 
   /// [CompanionSessionSummary.projectKey] — the repository's real identity
   /// when the host sent one, its display name otherwise.
   final String key;
 
-  /// Never empty, and never re-ordered.
+  /// Host sessions in host order; metadata-only projects may be empty.
   final List<CompanionSessionSummary> sessions;
 
-  String get name => sessions.first.projectName;
+  /// Metadata from the desktop project index. It is present even when this
+  /// project has no sessions yet.
+  final RemoteWorkspaceProject? project;
+
+  String get name => project?.name ?? sessions.firstOrNull?.projectName ?? 'Project';
 
   /// The host's own id for this project, when it sent one — what a start
   /// screen opened from here preselects.
-  String? get projectId => sessions.first.projectId;
+  String? get projectId => project?.projectId ?? sessions.firstOrNull?.projectId;
 
   /// The folder on the host, or '' when the host is too old to send one.
-  String get path => sessions.first.projectPath ?? '';
+  String get path => project?.path ?? sessions.firstOrNull?.projectPath ?? '';
 
   /// Sessions the host says are waiting on the user.
   int get attentionCount => sessions.where((s) => s.attention != null).length;
@@ -75,4 +84,33 @@ List<CompanionProjectGroup> groupByProject(
         sessions: List.unmodifiable(entry.value),
       ),
   ];
+}
+
+/// Joins the host's project metadata with the live session rows. The metadata
+/// order is authoritative; session-only rows remain visible for older hosts
+/// that cannot answer the project request.
+List<CompanionProjectGroup> mergeProjectsAndSessions(
+  List<RemoteWorkspaceProject> projects,
+  List<CompanionSessionSummary> sessions,
+) {
+  final byKey = <String, List<CompanionSessionSummary>>{};
+  for (final session in sessions) {
+    (byKey[session.projectKey] ??= <CompanionSessionSummary>[]).add(session);
+  }
+  final seen = <String>{};
+  final groups = <CompanionProjectGroup>[];
+  for (final project in projects) {
+    seen.add(project.projectId);
+    groups.add(
+      CompanionProjectGroup(
+        key: project.projectId,
+        project: project,
+        sessions: List.unmodifiable(byKey[project.projectId] ?? const []),
+      ),
+    );
+  }
+  for (final group in groupByProject(sessions)) {
+    if (!seen.contains(group.key)) groups.add(group);
+  }
+  return groups;
 }

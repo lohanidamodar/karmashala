@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../explorer/presentation/project_card.dart';
+import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
@@ -10,6 +11,7 @@ import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
+import 'add_project_screen.dart';
 import 'project_group.dart';
 import 'project_sessions_screen.dart';
 import 'start_session_screen.dart';
@@ -42,27 +44,22 @@ class SessionListScreen extends ConsumerWidget {
     final hostName =
         ref.watch(companionPairingProvider).asData?.value?.hostName ??
         'your desktop';
+    final projects = ref.watch(companionProjectsProvider);
+    final canAdd = ref.watch(companionGatewayProvider).capabilities.has(Capability.addProject);
+    final canStart = ref.watch(companionGatewayProvider).capabilities.has(Capability.startSession);
 
     // A Scaffold of its own so the tab can carry a floating action: the shell
     // owns the app bar and the navigation, and this adds neither.
     return Scaffold(
-      floatingActionButton:
-          ref
-              .watch(companionGatewayProvider)
-              .capabilities
-              .has(Capability.startSession)
+      floatingActionButton: canAdd || canStart
           ? FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(
-                companionRoute<void>(
-                  context,
-                  (_) => const StartSessionScreen(),
-                ),
-              ),
+              heroTag: 'companion-actions',
+              onPressed: () => _showActions(context, canAdd, canStart),
               icon: const Icon(AppIcons.plus),
-              label: const Text('New session'),
+              label: const Text('Actions'),
             )
           : null,
-      body: _body(context, ref, sessions, link, hostName),
+      body: _body(context, ref, sessions, projects, link, hostName),
     );
   }
 
@@ -70,6 +67,7 @@ class SessionListScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     AsyncValue<List<CompanionSessionSummary>> sessions,
+    AsyncValue<List<RemoteWorkspaceProject>> projects,
     CompanionLinkState? link,
     String hostName,
   ) {
@@ -79,9 +77,26 @@ class SessionListScreen extends ConsumerWidget {
       error: (error) =>
           CompanionNotice.failure(error: error, onRetry: () => _retry(ref)),
       data: (list) {
-        if (list.isEmpty) return _empty(context, ref, link, hostName);
-        final groups = groupByProject(list);
-        if (groups.length == 1) {
+        if (list.isEmpty) {
+          // The session stream can arrive before the project snapshot. Do not
+          // turn that intermediate state into a confident "No projects yet".
+          if (projects.isLoading) {
+            return const CompanionSkeletonList(lines: 2);
+          }
+          if (projects.hasError) {
+            return CompanionNotice.failure(
+              error: projects.error!,
+              onRetry: () => _retryProjects(ref),
+            );
+          }
+          final metadata = projects.asData?.value ?? const [];
+          if (metadata.isNotEmpty) return _projectIndex(context, metadata, const []);
+          return _empty(context, ref, link, hostName);
+        }
+        final groups = projects.asData?.value == null
+            ? groupByProject(list)
+            : mergeProjectsAndSessions(projects.asData!.value, list);
+        if (groups.length == 1 && groups.single.sessions.isNotEmpty) {
           final only = groups.single;
           return CompanionSessionList(
             sessions: only.sessions,
@@ -89,32 +104,43 @@ class SessionListScreen extends ConsumerWidget {
             bottomInset: companionFabGutter,
           );
         }
-        return ListView.separated(
-          // Clear of the floating action button, which hovers over this list
-          // and covered the last project's row at Insets.xl; and no wider
-          // than a phone, whatever the tablet under it is doing.
-          padding: companionListInsets(
-            context,
-            const EdgeInsets.only(bottom: companionFabGutter),
+        return _projectIndex(context, projects.asData?.value ?? const [], list);
+      },
+    );
+  }
+
+  Widget _projectIndex(
+    BuildContext context,
+    List<RemoteWorkspaceProject> metadata,
+    List<CompanionSessionSummary> sessions,
+  ) {
+    final groups = metadata.isEmpty
+        ? groupByProject(sessions)
+        : mergeProjectsAndSessions(metadata, sessions);
+    return ListView.separated(
+      // Clear of the floating action button, which hovers over this list
+      // and covered the last project's row at Insets.xl; and no wider
+      // than a phone, whatever the tablet under it is doing.
+      padding: companionListInsets(
+        context,
+        const EdgeInsets.only(bottom: companionFabGutter),
+      ),
+      itemCount: groups.length,
+      separatorBuilder: (context, index) => Divider(
+        height: 1,
+        thickness: 1,
+        color: Theme.of(context).colorScheme.outlineVariant,
+      ),
+      itemBuilder: (context, index) {
+        final group = groups[index];
+        return ProjectHeaderCard(
+          group: group,
+          onTap: () => Navigator.of(context).push(
+            companionRoute<void>(
+              context,
+              (_) => ProjectSessionsScreen(projectKey: group.key),
+            ),
           ),
-          itemCount: groups.length,
-          separatorBuilder: (context, index) => Divider(
-            height: 1,
-            thickness: 1,
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-          itemBuilder: (context, index) {
-            final group = groups[index];
-            return ProjectHeaderCard(
-              group: group,
-              onTap: () => Navigator.of(context).push(
-                companionRoute<void>(
-                  context,
-                  (_) => ProjectSessionsScreen(projectKey: group.key),
-                ),
-              ),
-            );
-          },
         );
       },
     );
@@ -126,6 +152,46 @@ class SessionListScreen extends ConsumerWidget {
   static void _retry(WidgetRef ref) {
     ref.read(companionGatewayProvider).reconnect();
     ref.invalidate(companionSessionsProvider);
+  }
+
+  static void _retryProjects(WidgetRef ref) {
+    ref.invalidate(companionProjectsProvider);
+    ref.invalidate(companionWorkspaceProvider);
+  }
+
+  static Future<void> _showActions(
+    BuildContext context,
+    bool canAdd,
+    bool canStart,
+  ) async {
+    final action = await companionSheet<String>(
+      context,
+      title: 'Project actions',
+      children: [
+        if (canAdd)
+          ListTile(
+            leading: const Icon(AppIcons.folderPlus),
+            title: const Text('Add project'),
+            onTap: () => Navigator.of(context).pop('add'),
+          ),
+        if (canStart)
+          ListTile(
+            leading: const Icon(AppIcons.plus),
+            title: const Text('New session'),
+            onTap: () => Navigator.of(context).pop('session'),
+          ),
+      ],
+    );
+    if (!context.mounted) return;
+    if (action == 'add') {
+      await Navigator.of(context).push(
+        companionRoute<void>(context, (_) => const AddProjectScreen()),
+      );
+    } else if (action == 'session') {
+      await Navigator.of(context).push(
+        companionRoute<void>(context, (_) => const StartSessionScreen()),
+      );
+    }
   }
 
   /// Nothing to list — and *why* there is nothing is the difference between
@@ -154,8 +220,16 @@ class SessionListScreen extends ConsumerWidget {
       icon: AppIcons.folderPlus,
       title: 'No projects yet',
       body:
-          'Open a project on $hostName and start a session there — it shows '
-          'up here as soon as it exists.',
+          'Add a project from its desktop path, or start a session there — '
+          'it shows up here as soon as it exists.',
+      actionLabel: ref.read(companionGatewayProvider).capabilities.has(Capability.addProject)
+          ? 'Add project'
+          : null,
+      onAction: ref.read(companionGatewayProvider).capabilities.has(Capability.addProject)
+          ? () => Navigator.of(context).push(
+              companionRoute<void>(context, (_) => const AddProjectScreen()),
+            )
+          : null,
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../remote/protocol.dart';
+import '../../remote/domain/remote_payloads.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
 import 'companion_chrome.dart';
@@ -77,12 +78,19 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   @override
   Widget build(BuildContext context) {
     final sessions = ref.watch(companionSessionsProvider);
+    final projects = ref.watch(companionProjectsProvider);
     final groups = groupByProject(
       sessions.asData?.value ?? const <CompanionSessionSummary>[],
     );
-    final group = groups.where((g) => g.key == _key).firstOrNull;
+    final merged = projects.asData?.value == null
+        ? groups
+        : mergeProjectsAndSessions(
+            projects.asData!.value,
+            sessions.asData?.value ?? const <CompanionSessionSummary>[],
+          );
+    final group = merged.where((g) => g.key == _key).firstOrNull;
     final scheme = Theme.of(context).colorScheme;
-    final canSwitch = groups.length > 1;
+    final canSwitch = merged.length > 1;
 
     return Scaffold(
       appBar: companionAppBar(
@@ -90,7 +98,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
         title: _Title(
           name: group?.name ?? 'Project',
           canSwitch: canSwitch,
-          onTap: canSwitch ? () => _switchProject(groups) : null,
+          onTap: canSwitch ? () => _switchProject(merged) : null,
         ),
         actions: [
           // Only when the desktop granted it: an action that can only ever be
@@ -118,7 +126,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const LinkBanner(),
-            Expanded(child: _body(context, sessions, group, scheme)),
+            Expanded(child: _body(context, sessions, projects, group, scheme)),
           ],
         ),
       ),
@@ -131,6 +139,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   Widget _body(
     BuildContext context,
     AsyncValue<List<CompanionSessionSummary>> sessions,
+    AsyncValue<List<RemoteWorkspaceProject>> projects,
     CompanionProjectGroup? group,
     ColorScheme scheme,
   ) {
@@ -149,8 +158,40 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
               ],
             ),
           ),
-          Expanded(child: CompanionSessionList(sessions: group.sessions)),
+          Expanded(
+            child: group.sessions.isEmpty
+                ? CompanionNotice(
+                    icon: AppIcons.chat,
+                    title: 'No sessions yet',
+                    body: 'Start a session in ${group.name} from this desktop.',
+                    actionLabel: ref
+                        .read(companionGatewayProvider)
+                        .capabilities
+                        .has(Capability.startSession)
+                        ? 'Start a session'
+                        : null,
+                    onAction: () => Navigator.of(context).push(
+                      companionRoute<void>(
+                        context,
+                        (_) => StartSessionScreen(projectId: group.projectId),
+                      ),
+                    ),
+                  )
+                : CompanionSessionList(sessions: group.sessions),
+          ),
         ],
+      );
+    }
+    if (projects.isLoading || projects.isRefreshing) {
+      return const CompanionSkeletonList();
+    }
+    if (projects.hasError) {
+      return CompanionNotice.failure(
+        error: projects.error!,
+        onRetry: () {
+          ref.invalidate(companionProjectsProvider);
+          ref.invalidate(companionWorkspaceProvider);
+        },
       );
     }
     if (sessions.hasValue) {

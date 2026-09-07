@@ -30,6 +30,7 @@ import '../pairing/host_pairing.dart';
 import '../pairing/pairing_payload.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
+import '../domain/remote_payloads.dart';
 import '../push/push_fanout.dart';
 import '../push/relay_push_client.dart';
 import '../transport/key_schedule.dart';
@@ -581,7 +582,9 @@ class _DeviceRuntime {
   /// What this phone's `session.start` frames have already produced. Held here
   /// rather than on the api because the retry it exists for arrives on a fresh
   /// generation, and every generation gets a new api.
-  final SessionStartLedger _starts = SessionStartLedger();
+  final SessionStartLedger<RemoteSessionStarted> _starts = SessionStartLedger<RemoteSessionStarted>();
+  final SessionStartLedger<RemoteSessionStarted> _resumes = SessionStartLedger<RemoteSessionStarted>();
+  final SessionStartLedger<RemoteWorkspaceProject> _projects = SessionStartLedger<RemoteWorkspaceProject>();
 
   /// True while a transcript sweep is running for this device.
   bool _sweeping = false;
@@ -889,6 +892,8 @@ class _DeviceRuntime {
         bindings: service.bindings,
         onLog: service.onLog,
         startLedger: _starts,
+        resumeLedger: _resumes,
+        projectLedger: _projects,
         // Read at announcement time, never captured: a relay toggled while
         // this link is up must be in the very next `host.status`.
         relays: () => service.announcedRelaysFor(device),

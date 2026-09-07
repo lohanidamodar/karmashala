@@ -13,6 +13,7 @@ import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
+import 'add_project_screen.dart';
 import 'session_view_screen.dart';
 
 /// Starting a session on the desktop, from the phone.
@@ -73,16 +74,28 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
 
   RemoteWorkspaceProject? _project(List<RemoteWorkspaceProject> projects) {
     if (projects.isEmpty) return null;
-    for (final project in projects) {
-      if (project.projectId == (_projectId ?? widget.projectId)) return project;
+    final requested = _projectId ?? widget.projectId;
+    // A project supplied by the caller is an answer the user has already
+    // given. Never silently replace it with the first project if the host's
+    // workspace changed while this screen was open.
+    if (requested != null) {
+      for (final project in projects) {
+        if (project.projectId == requested) return project;
+      }
+      return null;
     }
     return projects.first;
   }
 
   RemoteCheckoutOption? _checkout(RemoteWorkspaceProject project) {
     if (project.checkouts.isEmpty) return null;
-    for (final checkout in project.checkouts) {
-      if (checkout.repositoryId == _repositoryId) return checkout;
+    if (_repositoryId != null) {
+      for (final checkout in project.checkouts) {
+        if (checkout.repositoryId == _repositoryId) return checkout;
+      }
+      // Do not start in another checkout after a workspace refresh removed
+      // the selected one.
+      return null;
     }
     return project.checkouts.first;
   }
@@ -245,6 +258,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     RemoteAgentOption agent,
     RemotePermissionOption mode,
   ) async {
+    if (_starting) return;
+    final hostBefore = ref.read(companionGatewayProvider).pairing?.hostId;
     setState(() {
       _starting = true;
       _failure = null;
@@ -261,6 +276,13 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
             message: _message.text.trim().isEmpty ? null : _message.text.trim(),
           );
       if (!mounted) return;
+      final hostAfter = ref.read(companionGatewayProvider).pairing?.hostId;
+      if (hostBefore != hostAfter) {
+        setState(() => _failure =
+            'The active desktop changed while this session was starting. '
+            'Try again.');
+        return;
+      }
       // Replace rather than push: coming back to a filled-in form for a
       // session that now exists would invite starting it twice.
       Navigator.of(context).pushReplacement(
@@ -331,22 +353,50 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   Widget _form(List<RemoteWorkspaceProject> projects) {
     final project = _project(projects);
     if (project == null) {
-      return const CompanionNotice(
+      final staleSelection = _projectId != null || widget.projectId != null;
+      return CompanionNotice(
         icon: AppIcons.folderPlus,
-        title: 'Nothing to start in',
-        body:
-            'Your desktop lists no project with a checkout in it. Add one '
-            'there and it shows up here.',
+        title: staleSelection ? 'Project no longer available' : 'Nothing to start in',
+        body: staleSelection
+            ? 'The project selected for this session is no longer in the '
+                'desktop workspace. Go back and choose another project.'
+            : 'Your desktop lists no project with a checkout in it. Add one '
+                'here and it will show up on the next refresh.',
+        actionLabel: !staleSelection &&
+                ref
+                    .read(companionGatewayProvider)
+                    .capabilities
+                    .has(Capability.addProject)
+            ? 'Add project'
+            : null,
+        onAction: !staleSelection &&
+                ref
+                    .read(companionGatewayProvider)
+                    .capabilities
+                    .has(Capability.addProject)
+            ? () async {
+                await Navigator.of(context).push(
+                  companionRoute<void>(
+                    context,
+                    (_) => const AddProjectScreen(),
+                  ),
+                );
+                if (mounted) ref.invalidate(companionWorkspaceProvider);
+              }
+            : null,
       );
     }
     final checkout = _checkout(project);
     if (checkout == null) {
       return CompanionNotice(
         icon: AppIcons.folder,
-        title: 'No checkout here',
+        title: _repositoryId == null ? 'No checkout here' : 'Checkout changed',
         body:
-            '${project.name} has no repository your desktop can start a '
-            'session in.',
+            _repositoryId == null
+                ? '${project.name} has no repository your desktop can start '
+                    'a session in.'
+                : 'That checkout is no longer available on the desktop. '
+                    'Go back and choose another checkout.',
       );
     }
     final agent = _agent(checkout);

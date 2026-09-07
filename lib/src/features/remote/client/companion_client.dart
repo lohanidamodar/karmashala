@@ -443,6 +443,30 @@ class CompanionClient {
     ];
   }
 
+  Future<List<RemoteWorkspaceProject>> listProjects() async {
+    final payload = await _request(FrameType.projectsList, const {});
+    final projects = payload['projects'];
+    return [
+      if (projects is List)
+        for (final entry in projects)
+          if (entry is Map<String, Object?>)
+            RemoteWorkspaceProject.fromJson(entry),
+    ];
+  }
+
+  Future<RemoteWorkspaceProject> addProject({
+    required String requestId,
+    required String name,
+    required String path,
+  }) async {
+    final payload = await _request(FrameType.projectAdd, {
+      'requestId': requestId,
+      'name': name,
+      'path': path,
+    });
+    return RemoteWorkspaceProject.fromJson(payload);
+  }
+
   /// `session.start`.
   ///
   /// [requestId] is the idempotency key. The SAME value must be resent for a
@@ -464,6 +488,17 @@ class CompanionClient {
       'permissionMode': permissionMode,
       'title': ?title,
       'message': ?message,
+    });
+    return RemoteSessionStarted.fromJson(payload);
+  }
+
+  Future<RemoteSessionStarted> resumeSession({
+    required String requestId,
+    required String sessionId,
+  }) async {
+    final payload = await _request(FrameType.sessionResume, {
+      'requestId': requestId,
+      'sessionId': sessionId,
     });
     return RemoteSessionStarted.fromJson(payload);
   }

@@ -67,6 +67,8 @@ class FakeRemoteBindings {
   /// Every start the host actually carried out, in order. A retry that the
   /// ledger absorbs must not add a row here.
   final List<RemoteSessionStartRequest> starts = [];
+  int addProjectCalls = 0;
+  int resumeCalls = 0;
 
   /// When set, the next start throws it and is then cleared, so a test can
   /// fail one attempt and let the retry through.
@@ -121,6 +123,18 @@ class FakeRemoteBindings {
       pushes.add((deviceId: deviceId, token: token, platform: platform));
     },
     listWorkspace: () => List.of(workspace),
+    listProjects: () => List.of(workspace),
+    addProject: (name, path) async {
+      addProjectCalls++;
+      return RemoteWorkspaceProject(projectId: path, name: name, path: path);
+    },
+    resumeSession: (sessionId) async {
+      resumeCalls++;
+      return RemoteSessionStarted(
+        sessionId: sessionId,
+        title: sessions[sessionId]?.title ?? 'Resumed',
+      );
+    },
     startSession: (request) async {
       final gate = startGate;
       if (gate != null) await gate.future;

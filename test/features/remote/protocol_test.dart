@@ -180,7 +180,10 @@ void main() {
         'approval.answer',
         'notifications.register',
         'workspace.list',
+        'projects.list',
+        'project.add',
         'session.start',
+        'session.resume',
         'session.changed',
         'transcript.appended',
         'approval.requested',
@@ -203,7 +206,10 @@ void main() {
         Capability.receiveNotifications,
       );
       expect(FrameType.workspaceList.capability, Capability.startSession);
+      expect(FrameType.projectsList.capability, Capability.viewSessions);
+      expect(FrameType.projectAdd.capability, Capability.addProject);
       expect(FrameType.sessionStart.capability, Capability.startSession);
+      expect(FrameType.sessionResume.capability, Capability.startSession);
     });
 
     test('host events need no capability and are host-sent', () {

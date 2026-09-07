@@ -16,7 +16,6 @@ library;
 
 import 'dart:async';
 
-import '../domain/remote_payloads.dart';
 
 /// How many answers one device's ledger keeps. A start is a deliberate act, so
 /// this is generous for the retries it exists to absorb; the cap is only there
@@ -28,7 +27,7 @@ const int kSessionStartLedgerCapacity = 64;
 /// memory a frame at a time.
 const int kMaxSessionStartKeyLength = 128;
 
-class SessionStartLedger {
+class SessionStartLedger<T> {
   SessionStartLedger({this.capacity = kSessionStartLedgerCapacity});
 
   final int capacity;
@@ -36,16 +35,16 @@ class SessionStartLedger {
   /// Insertion-ordered, which is what makes eviction "the oldest answer".
   /// Holds the *future* rather than the result so two frames racing on one key
   /// join the same launch instead of both starting one.
-  final Map<String, Future<RemoteSessionStarted>> _answers = {};
+  final Map<String, Future<T>> _answers = {};
 
   /// Whether [key] already has an answer — asked before [once] so the reply
   /// can say the desktop started nothing this time.
   bool holds(String key) => _answers.containsKey(key);
 
   /// The answer for [key], starting one with [start] only if there is none.
-  Future<RemoteSessionStarted> once(
+  Future<T> once(
     String key,
-    Future<RemoteSessionStarted> Function() start,
+    Future<T> Function() start,
   ) {
     final remembered = _answers[key];
     if (remembered != null) return remembered;

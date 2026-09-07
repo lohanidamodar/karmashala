@@ -4,8 +4,11 @@
 /// it just started.
 library;
 
+import 'dart:async';
+
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/application/companion_providers.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
@@ -13,9 +16,46 @@ import 'package:karmashala/src/features/companion/presentation/start_session_scr
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
+
+class _PendingStartGateway extends FakeCompanionGateway {
+  _PendingStartGateway({super.connections = const []})
+      : super(
+          pairing: CompanionPairing(
+            capabilities: CapabilitySet.all,
+            hostName: 'Desktop',
+            hostId: DeviceId.parse(
+              connections.isEmpty ? fakeHostId(0) : connections.first.hostId,
+            ),
+          ),
+          link: CompanionLinkState.connected,
+        ) {
+    workspace = [workspaceProject()];
+  }
+
+  final completer = Completer<RemoteSessionStarted>();
+  var calls = 0;
+
+  @override
+  Future<List<RemoteWorkspaceProject>> listWorkspace() async =>
+      [workspaceProject()];
+
+  @override
+  Future<RemoteSessionStarted> startSession({
+    required String requestId,
+    required String repositoryId,
+    required String installationId,
+    required String permissionMode,
+    String? title,
+    String? message,
+  }) {
+    calls++;
+    return completer.future;
+  }
+}
 
 const _ask = RemotePermissionOption(
   mode: 'ask',
@@ -226,6 +266,97 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing to start in'), findsOneWidget);
+    });
+
+    testWidgets('an explicit missing project is never replaced by another', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: paired(workspace: [workspaceProject(projectId: 'other')]),
+        home: const StartSessionScreen(projectId: 'missing'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Project no longer available'), findsOneWidget);
+      expect(find.text('Start session'), findsNothing);
+    });
+
+    testWidgets('a removed selected checkout is not replaced silently', (
+      tester,
+    ) async {
+      final gateway = paired(workspace: [checkedOutTwice()]);
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Checkout'));
+      await tester.pumpAndSettle();
+      final sheet = find.byType(BottomSheet);
+      await tester.tap(
+        find.descendant(of: sheet, matching: find.text('WSL · Ubuntu')),
+      );
+      await tester.pumpAndSettle();
+
+      gateway.workspace = [workspaceProject()];
+      ProviderScope.containerOf(
+        tester.element(find.byType(StartSessionScreen)),
+      ).invalidate(companionWorkspaceProvider);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Checkout changed'), findsOneWidget);
+      expect(find.text('Start session'), findsNothing);
+      expect(gateway.startedSessions, isEmpty);
+    });
+
+    testWidgets('a pending start ignores duplicate taps', (tester) async {
+      final gateway = _PendingStartGateway();
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Start session'),
+      );
+      button.onPressed!();
+      button.onPressed!();
+      await tester.pump();
+      expect(gateway.calls, 1);
+      gateway.completer.complete(
+        const RemoteSessionStarted(sessionId: 'started', title: 'Started'),
+      );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a pending start does not navigate after host switch', (
+      tester,
+    ) async {
+      final gateway = _PendingStartGateway(
+        connections: [
+          CompanionConnection(hostId: fakeHostId(0), name: 'A', active: true),
+          CompanionConnection(hostId: fakeHostId(1), name: 'B', active: false),
+        ],
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start session'));
+      await tester.pump();
+      await gateway.switchTo(fakeHostId(1));
+      gateway.completer.complete(
+        const RemoteSessionStarted(sessionId: 'old-host', title: 'Old host'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(StartSessionScreen), findsOneWidget);
+      expect(find.textContaining('active desktop changed'), findsOneWidget);
     });
 
     testWidgets('a phone without the grant is told, not left guessing', (
@@ -570,8 +701,13 @@ void main() {
         home: const SessionListScreen(),
       );
       await tester.pumpAndSettle();
+      await tester.pump();
 
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
       expect(find.text('New session'), findsOneWidget);
+      Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+      await tester.pumpAndSettle();
 
       await pumpPhone(
         tester,

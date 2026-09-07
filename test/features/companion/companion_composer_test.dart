@@ -153,6 +153,26 @@ void main() {
 
       expect(fake.sentPrompts, isEmpty);
     });
+
+    testWidgets('a dropped link keeps the draft for retry', (tester) async {
+      final fake = gateway();
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+
+      await tester.enterText(find.byType(TextField), 'send when back online');
+      fake.setLink(CompanionLinkState.disconnected);
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+
+      expect(fake.sentPrompts, isEmpty);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'send when back online',
+      );
+    });
   });
 
   // --- The box a thumb writes in --------------------------------------------

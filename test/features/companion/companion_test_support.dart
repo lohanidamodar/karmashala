@@ -94,6 +94,7 @@ CompanionSessionSummary summary(
   DateTime? lastActivityAt,
   bool archived = false,
   bool folderMissing = false,
+  bool imported = false,
 }) => CompanionSessionSummary(
   id: id,
   title: title ?? 'Session $id',
@@ -110,4 +111,5 @@ CompanionSessionSummary summary(
   lastActivityAt: lastActivityAt,
   archived: archived,
   folderMissing: folderMissing,
+  imported: imported,
 );

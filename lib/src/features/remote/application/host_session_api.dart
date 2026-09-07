@@ -39,10 +39,14 @@ class HostSessionApi {
     this.onLog,
     this.relays,
     this.lanHint,
-    SessionStartLedger? startLedger,
+    SessionStartLedger<RemoteSessionStarted>? startLedger,
+    SessionStartLedger<RemoteSessionStarted>? resumeLedger,
+    SessionStartLedger<RemoteWorkspaceProject>? projectLedger,
     // ignore: prefer_initializing_formals — named `send` for callers.
   }) : _send = send,
-       _starts = startLedger ?? SessionStartLedger();
+       _starts = startLedger ?? SessionStartLedger<RemoteSessionStarted>(),
+       _resumes = resumeLedger ?? SessionStartLedger<RemoteSessionStarted>(),
+       _projects = projectLedger ?? SessionStartLedger<RemoteWorkspaceProject>();
 
   final PairedDevice device;
   final RemoteHostBindings bindings;
@@ -50,7 +54,9 @@ class HostSessionApi {
 
   /// What this device's `session.start` frames have already produced. Supplied
   /// by the caller so it can outlive one connection — see [SessionStartLedger].
-  final SessionStartLedger _starts;
+  final SessionStartLedger<RemoteSessionStarted> _starts;
+  final SessionStartLedger<RemoteSessionStarted> _resumes;
+  final SessionStartLedger<RemoteWorkspaceProject> _projects;
 
   /// Where this host can be met right now, read fresh at every announcement so
   /// a relay switched on mid-session is told to the phone at once. Null (and
@@ -274,6 +280,31 @@ class HostSessionApi {
               for (final project in bindings.listWorkspace()) project.toJson(),
             ],
           });
+        case FrameType.projectsList:
+          await _result(envelope.id, {
+            'projects': [
+              for (final project in bindings.listProjects())
+                {
+                  ...RemoteWorkspaceProject(
+                    projectId: project.projectId,
+                    name: project.name,
+                    path: project.path,
+                    environmentName: project.environmentName,
+                  ).toJson()
+                    ..remove('checkouts'),
+                },
+            ],
+          });
+        case FrameType.projectAdd:
+          final key = _requireString(envelope, 'requestId');
+          if (key.length > kMaxSessionStartKeyLength) {
+            throw const RemoteApiRefusal(ErrorCode.badRequest, 'requestId is too long');
+          }
+          final name = _requireString(envelope, 'name');
+          final path = _requireString(envelope, 'path');
+          final replayed = _projects.holds(key);
+          final project = await _projects.once(key, () => bindings.addProject(name, path));
+          await _result(envelope.id, {...project.toJson(), if (replayed) 'replayed': true});
         case FrameType.sessionStart:
           // The idempotency key, first: a start that cannot be recognised on a
           // second delivery is the one request this api must never take on
@@ -302,6 +333,15 @@ class HostSessionApi {
             ...started.toJson(),
             if (replayed) 'replayed': true,
           });
+        case FrameType.sessionResume:
+          final key = _requireString(envelope, 'requestId');
+          if (key.length > kMaxSessionStartKeyLength) {
+            throw const RemoteApiRefusal(ErrorCode.badRequest, 'requestId is too long');
+          }
+          final sessionId = _requireString(envelope, 'sessionId');
+          final replayed = _resumes.holds(key);
+          final resumed = await _resumes.once(key, () => bindings.resumeSession(sessionId));
+          await _result(envelope.id, {...resumed.toJson(), if (replayed) 'replayed': true});
         // Host-only types cannot reach here: sentBy refused them above.
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:
