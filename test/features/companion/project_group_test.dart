@@ -7,6 +7,7 @@ library;
 
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/project_group.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
@@ -90,5 +91,23 @@ void main() {
       isNull,
       reason: 'the phone has no git, and must not claim it does',
     );
+  });
+
+  test('projects with no sessions remain visible in host order', () {
+    final groups = mergeProjectsAndSessions(
+      const [
+        RemoteWorkspaceProject(
+          projectId: 'empty', name: 'Empty project', path: r'C:\work\empty',
+        ),
+        RemoteWorkspaceProject(
+          projectId: 'active', name: 'Active project', path: r'C:\work\active',
+        ),
+      ],
+      [summary('s1', project: 'Active project', projectId: 'active')],
+    );
+    expect([for (final group in groups) group.key], ['empty', 'active']);
+    expect(groups.first.sessions, isEmpty);
+    expect(groups.first.summary.sessions, 0);
+    expect(groups.last.sessions, hasLength(1));
   });
 }

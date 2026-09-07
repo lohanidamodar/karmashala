@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
@@ -7,6 +9,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
+
+class _PendingResumeGateway extends FakeCompanionGateway {
+  _PendingResumeGateway({super.connections = const []})
+      : super(
+          pairing: CompanionPairing(
+            capabilities: CapabilitySet.all,
+            hostName: 'Desktop',
+            hostId: DeviceId.parse(
+              connections.isEmpty ? fakeHostId(0) : connections.first.hostId,
+            ),
+          ),
+          link: CompanionLinkState.connected,
+          sessions: [
+            summary('s1', imported: true, status: CompanionSessionStatus.idle),
+          ],
+          transcripts: const {'s1': []},
+        );
+
+  final completer = Completer<RemoteSessionStarted>();
+  var calls = 0;
+
+  @override
+  Future<RemoteSessionStarted> resumeSession({
+    required String requestId,
+    required String sessionId,
+  }) {
+    calls++;
+    return completer.future;
+  }
+}
 
 /// The session view on the phone: the desktop transcript, a composer reduced
 /// to sending a prompt, and the approval card with its verbatim evidence.
@@ -356,5 +388,167 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     });
+  });
+
+  testWidgets('an imported session stays read-only until explicit resume', (
+    tester,
+  ) async {
+    final gateway = FakeCompanionGateway.paired(
+      sessions: [summary('s1', imported: true)],
+      transcripts: const {'s1': []},
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+
+    expect(find.text('Resume session'), findsOneWidget);
+    expect(find.byTooltip('Send'), findsNothing);
+    await tester.tap(find.text('Resume session'));
+    await tester.pumpAndSettle();
+
+    expect(gateway.resumedSessions, hasLength(1));
+    expect(find.byType(SessionViewScreen), findsOneWidget);
+  });
+
+  testWidgets('resume refusal can be retried with the same request id', (
+    tester,
+  ) async {
+    final gateway = FakeCompanionGateway.paired(
+      sessions: [summary('s1', imported: true)],
+      transcripts: const {'s1': []},
+    )..resumeFailure = const GatewayException('The desktop refused resume.');
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+
+    await tester.tap(find.text('Resume session'));
+    await tester.pumpAndSettle();
+    expect(find.text('The desktop refused resume.'), findsOneWidget);
+    gateway.resumeFailure = null;
+    await tester.tap(find.text('Resume session'));
+    await tester.pumpAndSettle();
+
+    expect(gateway.resumedSessions, hasLength(2));
+    expect(
+      gateway.resumedSessions[0].requestId,
+      gateway.resumedSessions[1].requestId,
+    );
+  });
+
+  testWidgets('a stopped native session offers explicit resume', (tester) async {
+    final gateway = FakeCompanionGateway.paired(
+      sessions: [summary('s1', status: CompanionSessionStatus.idle)],
+      transcripts: const {'s1': []},
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    expect(find.text('Resume session'), findsOneWidget);
+  });
+
+  testWidgets('an authorized offline session asks to reconnect before resume', (
+    tester,
+  ) async {
+    final gateway = FakeCompanionGateway.paired(
+      link: CompanionLinkState.disconnected,
+      sessions: [summary('s1', status: CompanionSessionStatus.idle)],
+      transcripts: const {'s1': []},
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+
+    expect(find.text('Connect to resume'), findsOneWidget);
+    expect(find.text('Resume session'), findsNothing);
+    expect(gateway.resumedSessions, isEmpty);
+  });
+
+  testWidgets('a pending resume ignores duplicate taps', (tester) async {
+    final gateway = _PendingResumeGateway();
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Resume session'),
+    );
+    button.onPressed!();
+    button.onPressed!();
+    await tester.pump();
+    expect(gateway.calls, 1);
+    gateway.completer.complete(
+      const RemoteSessionStarted(sessionId: 'native-s1', title: 'Resumed'),
+    );
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('resume does not navigate after the host switches', (tester) async {
+    final gateway = _PendingResumeGateway(
+      connections: [
+        CompanionConnection(hostId: fakeHostId(0), name: 'A', active: true),
+        CompanionConnection(hostId: fakeHostId(1), name: 'B', active: false),
+      ],
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    await tester.tap(find.text('Resume session'));
+    await tester.pump();
+    await gateway.switchTo(fakeHostId(1));
+    gateway.completer.complete(
+      const RemoteSessionStarted(sessionId: 'old-host', title: 'Old host'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SessionViewScreen), findsOneWidget);
+    expect(find.textContaining('active desktop changed'), findsOneWidget);
+  });
+
+  for (final (label, size) in [
+    ('phone', kPhoneSize),
+    ('tablet', kTabletSize),
+  ]) {
+    testWidgets('$label: resume panel lays out without overflow', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        sessions: [summary('s1', imported: true)],
+        transcripts: const {'s1': []},
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const SessionViewScreen(sessionId: 's1'),
+        size: size,
+      );
+      expect(find.text('Resume session'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('a removed session disables its actions', (tester) async {
+    final gateway = FakeCompanionGateway.paired(
+      sessions: [summary('s1')],
+      transcripts: const {'s1': []},
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    gateway.setSessions(const []);
+    await tester.pump();
+
+    expect(find.text('Session no longer available'), findsOneWidget);
+    expect(find.byTooltip('Send'), findsNothing);
   });
 }

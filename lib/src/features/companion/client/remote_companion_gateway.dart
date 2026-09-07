@@ -948,7 +948,34 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {
     await _ready;
     final client = _requireClient();
-    return _mapRefusals(client.listWorkspace);
+    final result = await _mapRefusals(client.listWorkspace);
+    _ensureCurrentClient(client);
+    return result;
+  }
+
+  @override
+  Future<List<RemoteWorkspaceProject>> listProjects() async {
+    await _ready;
+    final client = _requireClient();
+    final result = await _mapRefusals(client.listProjects);
+    _ensureCurrentClient(client);
+    return result;
+  }
+
+  @override
+  Future<RemoteWorkspaceProject> addProject({
+    required String requestId,
+    required String name,
+    required String path,
+  }) async {
+    await _ready;
+    final client = _requireClient();
+    final project = await _mapRefusals(
+      () => client.addProject(requestId: requestId, name: name, path: path),
+    );
+    _ensureCurrentClient(client);
+    await _refreshSessionsNow();
+    return project;
   }
 
   @override
@@ -972,11 +999,34 @@ class RemoteCompanionGateway implements CompanionGateway {
         message: message,
       ),
     );
+    _ensureCurrentClient(client);
     // Relist before answering, so the screen the caller pushes next finds the
     // new session's row and its transcript subscription already there rather
     // than waiting out a poll on an empty view.
     await _refreshSessionsNow();
     return started;
+  }
+
+  @override
+  Future<RemoteSessionStarted> resumeSession({
+    required String requestId,
+    required String sessionId,
+  }) async {
+    await _ready;
+    final client = _requireClient();
+    final resumed = await _mapRefusals(
+      () => client.resumeSession(requestId: requestId, sessionId: sessionId),
+    );
+    _ensureCurrentClient(client);
+    await _refreshSessionsNow();
+    return resumed;
+  }
+
+  void _ensureCurrentClient(CompanionClient client) {
+    if (identical(_client, client)) return;
+    throw const GatewayException(
+      'The desktop changed while this request was in flight. Nothing was applied to the new desktop.',
+    );
   }
 
   @override

@@ -4,23 +4,31 @@
 library;
 
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
+import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
 import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
 import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
@@ -29,6 +37,8 @@ import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/domain/repository.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
@@ -41,17 +51,32 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
+import '../../support/fakes.dart';
 
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
+  late FakeRepositoryDiscoveryService discovery;
   final now = DateTime.utc(2026, 8, 31, 10);
 
   setUp(() {
     db = AppDatabase.memory();
+    ExecutionEnvironmentDao(db).upsert(
+      ExecutionEnvironment(
+        id: localHostEnvironmentId,
+        kind: EnvironmentKind.windowsNative,
+        name: 'Windows',
+        createdAt: now,
+      ),
+    );
+    discovery = FakeRepositoryDiscoveryService();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+        autoImportRunnerProvider.overrideWithValue(
+          (_) async => const ImportSummary(),
+        ),
         // The two lookups whose production path is a probe (git/gh, the
         // status sources). Everything else is the real wiring.
         remoteDeliveryStageProvider.overrideWithValue(
@@ -106,6 +131,142 @@ void main() {
       ),
     );
   }
+
+  Future<Directory> tempFolder() async {
+    final folder = await Directory.systemTemp.createTemp('karmashala-remote-');
+    addTearDown(() => folder.delete(recursive: true));
+    return folder;
+  }
+
+  test('project add rejects unsafe paths without writing a project', () async {
+    final bindings = container.read(remoteHostBindingsProvider);
+    for (final path in [
+      'relative-folder',
+      '${Directory.systemTemp.path}\\does-not-exist-karmashala',
+      '${Directory.systemTemp.path}\\bad\nname',
+      r'\\server\share\project',
+    ]) {
+      await expectLater(
+        bindings.addProject('Project', path),
+        throwsA(isA<RemoteApiRefusal>()),
+      );
+    }
+    expect(ProjectDao(db).getAll(), isEmpty);
+  });
+
+  test('project add uses a real folder and refreshes controller', () async {
+    final folder = await tempFolder();
+    final bindings = container.read(remoteHostBindingsProvider);
+    final first = await bindings.addProject('Workspace', folder.path);
+    expect(first.path, folder.resolveSymbolicLinksSync());
+    expect(container.read(projectsControllerProvider), hasLength(1));
+    final second = await bindings.addProject('Renamed', folder.path);
+    expect(second.projectId, first.projectId);
+    expect(ProjectDao(db).getAll(), hasLength(1));
+  });
+
+  test('same in-flight path dedupes and a failed path can be retried', () async {
+    final folder = await tempFolder();
+    final gate = Completer<void>();
+    final gatedImport = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+        autoImportRunnerProvider.overrideWithValue(
+          (_) => gate.future.then((_) => const ImportSummary()),
+        ),
+      ],
+    );
+    addTearDown(gatedImport.dispose);
+    final bindings = gatedImport.read(remoteHostBindingsProvider);
+    final a = bindings.addProject('A', folder.path);
+    await Future<void>.delayed(Duration.zero);
+    final b = bindings.addProject('B', folder.path);
+    await Future<void>.delayed(Duration.zero);
+    gate.complete();
+    final results = await Future.wait([a, b]);
+    expect(results[0].projectId, results[1].projectId);
+    expect(ProjectDao(db).getAll(), hasLength(1));
+
+    final missing = Directory(
+      '${Directory.systemTemp.path}\\remote-retry-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    await expectLater(
+      bindings.addProject('Retry', missing.path),
+      throwsA(isA<RemoteApiRefusal>()),
+    );
+    await missing.create(recursive: true);
+    addTearDown(() => missing.delete(recursive: true));
+    expect((await bindings.addProject('Retry', missing.path)).name, 'Retry');
+  });
+
+  test(
+    'native resume launches a stopped row with its original conversation and directory',
+    () async {
+    seedWorkspace();
+    final bindings = container.read(remoteHostBindingsProvider);
+    await expectLater(
+      bindings.resumeSession('s1'),
+      throwsA(isA<RemoteApiRefusal>()),
+    );
+    final launcher = container.read(sessionLauncherProvider);
+    final workFolder = await tempFolder();
+    final workDir = EnvironmentPath(
+      environmentId: 'windows',
+      path: workFolder.path,
+    );
+    final resumableInstallation = AgentInstallation(
+      id: 'i2',
+      agentId: 'codex',
+      executable: path(r'C:\bin\codex.exe'),
+      createdAt: now,
+    );
+    AgentInstallationDao(db).insert(resumableInstallation);
+    final result = await launcher.launch(
+      SessionLaunchRequest(
+        repository: RepositoryDao(db).getById('r1')!,
+        installation: resumableInstallation,
+        title: 'Active',
+        purpose: SessionPurpose.newSession,
+        workingDirectory: workDir,
+        permissionOverride: PermissionSelection.parse(
+          'approval=on-request;sandbox=bypass-all',
+        ),
+      ),
+    );
+    final original = result.session.id;
+    SessionDao(db).updateExternalSessionId(original, 'external-1');
+    final paneId = SessionDao(db).getById(original)!.paneId!;
+    container.read(terminalSessionsControllerProvider.notifier).endSession(paneId);
+    final resumed = await bindings.resumeSession(original);
+    expect(resumed.sessionId, result.session.id);
+    expect(SessionDao(db).getAll(), hasLength(1));
+    final resumedRow = SessionDao(db).getById(original)!;
+    expect(resumedRow.externalSessionId, 'external-1');
+    expect(resumedRow.permissionMode, 'approval=on-request;sandbox=bypass-all');
+    expect(resumedRow.workingDirectory, workDir);
+    final resumedPane = resumedRow.paneId!;
+    final instance = container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(resumedPane)!;
+    expect(instance.agentLaunch?.arguments, contains('external-1'));
+    expect(
+      instance.agentLaunch?.arguments,
+      contains('--dangerously-bypass-approvals-and-sandbox'),
+    );
+    expect(instance.agentLaunch?.workingDirectory, workDir.path);
+    final again = await bindings.resumeSession(original);
+    expect(again.sessionId, original);
+    expect(SessionDao(db).getAll(), hasLength(1));
+    expect(SessionDao(db).getById(original)!.paneId, resumedPane);
+    expect(
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumedPane),
+      same(instance),
+    );
+    },
+  );
 
   void seedSession(
     String id, {

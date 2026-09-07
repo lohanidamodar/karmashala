@@ -10,11 +10,29 @@ import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
+
+class _MetadataGateway extends FakeCompanionGateway {
+  _MetadataGateway(this.projects)
+    : super(
+        pairing: CompanionPairing(
+          capabilities: CapabilitySet.all,
+          hostName: 'Desktop',
+        ),
+        link: CompanionLinkState.connected,
+      );
+
+  final List<RemoteWorkspaceProject> projects;
+
+  @override
+  Future<List<RemoteWorkspaceProject>> listProjects() async => projects;
+}
 
 void main() {
   testWidgets('names the project in the app bar and lists only its sessions', (
@@ -115,6 +133,40 @@ void main() {
     await tester.tap(find.text('alpha'), warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(find.text('Projects on this desktop'), findsNothing);
+  });
+
+  testWidgets('metadata-only projects can switch between empty projects', (
+    tester,
+  ) async {
+    final gateway = _MetadataGateway(const [
+      RemoteWorkspaceProject(
+        projectId: 'p1',
+        name: 'Empty alpha',
+        path: r'C:\alpha',
+      ),
+      RemoteWorkspaceProject(
+        projectId: 'p2',
+        name: 'Empty beta',
+        path: r'C:\beta',
+      ),
+    ]);
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const ProjectSessionsScreen(projectKey: 'p1'),
+    );
+
+    await tester.tap(find.text('Empty alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Empty beta'), findsOneWidget);
+
+    await tester.tap(find.text('Empty beta').last);
+    await tester.pumpAndSettle();
+    expect(find.text('No sessions yet'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Empty beta')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a project the host stops listing says so, with a way out', (

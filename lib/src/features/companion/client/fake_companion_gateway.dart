@@ -526,6 +526,16 @@ class FakeCompanionGateway implements CompanionGateway {
   }
 
   @override
+  Future<List<RemoteWorkspaceProject>> listProjects() async => const [];
+
+  @override
+  Future<RemoteWorkspaceProject> addProject({
+    required String requestId,
+    required String name,
+    required String path,
+  }) async => RemoteWorkspaceProject(projectId: requestId, name: name, path: path);
+
+  @override
   Future<RemoteSessionStarted> startSession({
     required String requestId,
     required String repositoryId,
@@ -572,6 +582,25 @@ class FakeCompanionGateway implements CompanionGateway {
     ]);
     return started;
   }
+
+  @override
+  Future<RemoteSessionStarted> resumeSession({
+    required String requestId,
+    required String sessionId,
+  }) async {
+    _requireLink();
+    resumedSessions.add((requestId: requestId, sessionId: sessionId));
+    final failure = resumeFailure;
+    if (failure != null) throw failure;
+    return _resumesByKey.putIfAbsent(
+      requestId,
+      () => RemoteSessionStarted(sessionId: 'resumed-$sessionId', title: 'Resumed'),
+    );
+  }
+
+  final resumedSessions = <({String requestId, String sessionId})>[];
+  GatewayException? resumeFailure;
+  final _resumesByKey = <String, RemoteSessionStarted>{};
 
   @override
   Future<void> sendPrompt(String sessionId, String text) async {

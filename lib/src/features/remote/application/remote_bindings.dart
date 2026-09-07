@@ -6,11 +6,13 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../../agents/domain/agent_permission_options.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_status.dart';
@@ -21,6 +23,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_label.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/local_environment.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/project_tree.dart';
@@ -155,6 +158,7 @@ final remoteCheckoutBranchProvider =
     });
 
 final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
+  final projectAdds = <String, Future<RemoteWorkspaceProject>>{};
   /// The project a repository belongs to, for the rows the ordered walk did
   /// not already know it for (`sessionById`, orphan fallbacks).
   Project? projectOfRepository(String? repositoryId) {
@@ -543,9 +547,188 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       ref.read(pairedDevicesRevisionProvider.notifier).bump();
     },
     listWorkspace: listWorkspace,
+    listProjects: () => [
+      for (final project in ref.read(projectDaoProvider).getAll())
+        RemoteWorkspaceProject(
+          projectId: project.id,
+          name: project.name,
+          path: project.root.path,
+          environmentName: null,
+        ),
+    ],
     startSession: (request) => _startSession(ref, request),
+    addProject: (name, path) async {
+      final trimmedName = name.trim();
+      if (trimmedName.isEmpty ||
+          trimmedName.contains(RegExp(r'[\x00-\x1f\x7f]'))) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'name and an existing absolute local desktop path are required',
+        );
+      }
+      // Resolve before joining the in-flight map. This both avoids duplicate
+      // filesystem work and makes aliases (including case variants on
+      // Windows) share one operation.
+      final canonical = await _canonicalProjectPath(path);
+      final key = canonicalPathKey(canonical);
+      final future = projectAdds.putIfAbsent(
+        key,
+        () => _addProject(ref, trimmedName, canonical),
+      );
+      try {
+        return await future;
+      } finally {
+        if (identical(projectAdds[key], future)) {
+          projectAdds.remove(key);
+        }
+      }
+    },
+    resumeSession: (sessionId) => _resumeSession(ref, sessionId),
   );
 });
+
+Future<RemoteWorkspaceProject> _addProject(
+  Ref ref,
+  String name,
+  String path,
+) async {
+  final trimmedName = name.trim();
+  final trimmedPath = path.trim();
+  if (trimmedName.isEmpty || trimmedPath.isEmpty ||
+      trimmedPath.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
+      !p.isAbsolute(trimmedPath)) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'name and an existing absolute local desktop path are required',
+    );
+  }
+  if (trimmedPath.startsWith(r'\\') || trimmedPath.startsWith('//')) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'the path must be on the desktop, not a network or WSL path',
+    );
+  }
+  final canonical = canonicalPathKey(trimmedPath);
+  for (final project in ref.read(projectDaoProvider).getAll()) {
+    if (project.root.environmentId == localHostEnvironmentId &&
+        canonicalPathKey(project.root.path) == canonical) {
+      return RemoteWorkspaceProject(
+        projectId: project.id,
+        name: project.name,
+        path: project.root.path,
+      );
+    }
+  }
+  final result = await ref.read(projectsControllerProvider.notifier).createByDiscovery(
+    name: trimmedName,
+    path: trimmedPath,
+  );
+  return RemoteWorkspaceProject(
+    projectId: result.project.id,
+    name: result.project.name,
+    path: result.project.root.path,
+    checkouts: [
+      for (final repository in result.repositories)
+        RemoteCheckoutOption(
+          repositoryId: repository.id,
+          name: repository.name,
+          path: repository.path.path,
+        ),
+    ],
+  );
+}
+
+Future<String> _canonicalProjectPath(String path) async {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty ||
+      trimmed.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
+      !p.isAbsolute(trimmed)) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'name and an existing absolute local desktop path are required',
+    );
+  }
+  if (trimmed.startsWith(r'\\') || trimmed.startsWith('//')) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'the path must be on the desktop, not a network or WSL path',
+    );
+  }
+  final directory = Directory(trimmed);
+  if (!await directory.exists()) {
+    throw const RemoteApiRefusal(ErrorCode.notFound, 'that desktop folder does not exist');
+  }
+  final canonical = (await directory.resolveSymbolicLinks()).trim();
+  // A local-looking junction can resolve onto a UNC/network target. Refuse
+  // after resolution as well as before it, so the service never imports a
+  // path outside the desktop's local filesystem contract.
+  if (canonical.startsWith(r'\\') || canonical.startsWith('//')) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'the path must be on the desktop, not a network or WSL path',
+    );
+  }
+  return canonical;
+}
+
+Future<RemoteSessionStarted> _resumeSession(Ref ref, String sessionId) async {
+  final native = ref.read(sessionDaoProvider).getById(sessionId);
+  if (native != null) {
+    final launcher = ref.read(sessionLauncherProvider);
+    if (launcher.reveal(native.id)) {
+      return RemoteSessionStarted(
+        sessionId: native.id,
+        title: native.title,
+        permissionMode: native.permissionMode,
+      );
+    }
+    final external = native.externalSessionId;
+    if (external == null || external.trim().isEmpty) {
+      throw const RemoteApiRefusal(ErrorCode.badRequest, 'this session has no conversation to resume');
+    }
+    final repository = ref.read(repositoryDaoProvider).getById(native.repositoryId);
+    final installation = ref.read(agentInstallationDaoProvider).getById(native.agentInstallationId);
+    if (repository == null || installation == null) {
+      throw const RemoteApiRefusal(ErrorCode.notFound, 'the session workspace is no longer available');
+    }
+    try {
+      final launched = await ref.read(sessionLauncherProvider).launch(
+        SessionLaunchRequest(
+          repository: repository,
+          installation: installation,
+          title: native.title,
+          purpose: SessionPurpose.existingSession,
+          resumeExternalSessionId: external,
+          existingWorktree: native.worktree,
+          workingDirectory: native.workingDirectory,
+          permissionOverride: PermissionSelection.parse(native.permissionMode),
+        ),
+      );
+      return RemoteSessionStarted(
+        sessionId: launched.session.id,
+        title: launched.session.title,
+        permissionMode: launched.session.permissionMode,
+      );
+    } catch (error) {
+      throw RemoteApiRefusal(ErrorCode.badRequest, _sayLaunchFailure(error));
+    }
+  }
+  final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+  if (imported == null) {
+    throw const RemoteApiRefusal(ErrorCode.notFound, 'this session no longer exists');
+  }
+  try {
+    final id = await ref.read(sessionActionsProvider).resumeImported(imported);
+    final resumed = ref.read(sessionDaoProvider).getById(id);
+    return RemoteSessionStarted(
+      sessionId: id,
+      title: resumed?.title ?? imported.title ?? 'Resumed session',
+      permissionMode: resumed?.permissionMode,
+    );
+  } catch (error) {
+    throw RemoteApiRefusal(ErrorCode.badRequest, _sayLaunchFailure(error));
+  }
+}
 
 String? _attentionFor(Ref ref, String sessionId, {bool imported = false}) {
   for (final attention in ref.read(sessionAttentionProvider)) {

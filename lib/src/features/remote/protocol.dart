@@ -103,7 +103,9 @@ enum Capability {
   /// meaning for [sendPrompt]: a phone paired before this existed holds a
   /// bitset without it and is refused, in words, for ever — nothing already
   /// granted quietly grows into permission to start processes.
-  startSession('start_session', 1 << 5);
+  startSession('start_session', 1 << 5),
+  /// Add an existing local desktop folder as a project.
+  addProject('add_project', 1 << 6);
 
   const Capability(this.wire, this.bit);
 
@@ -226,8 +228,23 @@ enum FrameType {
     origin: FrameOrigin.companion,
     capability: Capability.startSession,
   ),
+  projectsList(
+    'projects.list',
+    origin: FrameOrigin.companion,
+    capability: Capability.viewSessions,
+  ),
+  projectAdd(
+    'project.add',
+    origin: FrameOrigin.companion,
+    capability: Capability.addProject,
+  ),
   sessionStart(
     'session.start',
+    origin: FrameOrigin.companion,
+    capability: Capability.startSession,
+  ),
+  sessionResume(
+    'session.resume',
     origin: FrameOrigin.companion,
     capability: Capability.startSession,
   ),

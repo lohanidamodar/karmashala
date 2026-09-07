@@ -553,6 +553,14 @@ abstract interface class CompanionGateway {
   /// does to a given agent.
   Future<List<RemoteWorkspaceProject>> listWorkspace();
 
+  Future<List<RemoteWorkspaceProject>> listProjects();
+
+  Future<RemoteWorkspaceProject> addProject({
+    required String requestId,
+    required String name,
+    required String path,
+  });
+
   /// `session.start` — starts a new session and answers with it.
   ///
   /// [requestId] is the phone's idempotency key: resend the SAME value to
@@ -566,6 +574,11 @@ abstract interface class CompanionGateway {
     required String permissionMode,
     String? title,
     String? message,
+  });
+
+  Future<RemoteSessionStarted> resumeSession({
+    required String requestId,
+    required String sessionId,
   });
 
   /// `prompt.send`.

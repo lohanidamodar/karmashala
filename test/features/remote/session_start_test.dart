@@ -29,7 +29,7 @@ class StartHarness {
   late final FakeRemoteBindings fake;
   late HostSessionApi api;
   final List<Frame> sent = [];
-  final SessionStartLedger ledger = SessionStartLedger();
+  final SessionStartLedger<RemoteSessionStarted> ledger = SessionStartLedger<RemoteSessionStarted>();
   int _seq = 0;
 
   HostSessionApi _newApi() => HostSessionApi(

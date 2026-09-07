@@ -143,6 +143,38 @@ final companionSessionProvider = Provider.autoDispose
 /// A pull, not a subscription — projects and installations change when the
 /// user changes them on the desktop, not while a phone watches — so the start
 /// screen reads it once and `ref.invalidate` is the retry.
+final companionActiveHostKeyProvider = Provider<String?>((ref) {
+  // Watch both streams so link/host changes invalidate the pull, while using
+  // the gateway's current values makes the first read deterministic too.
+  ref.watch(companionLinkProvider);
+  ref.watch(companionPairingProvider);
+  final gateway = ref.watch(companionGatewayProvider);
+  final pairing = gateway.pairing;
+  if (gateway.link != CompanionLinkState.connected || pairing == null) {
+    return null;
+  }
+  return pairing.hostId?.value ?? pairing.hostName;
+});
+
 final companionWorkspaceProvider = FutureProvider.autoDispose<
   List<RemoteWorkspaceProject>
->((ref) => ref.watch(companionGatewayProvider).listWorkspace());
+>((ref) {
+  if (ref.watch(companionActiveHostKeyProvider) == null) {
+    return const <RemoteWorkspaceProject>[];
+  }
+  return ref.watch(companionGatewayProvider).listWorkspace();
+});
+
+/// Projects on the active desktop, including projects with no sessions.
+/// This is deliberately a pull separate from the live session stream: a new
+/// transcript/status event must not trigger another project scan. Link changes
+/// invalidate the host snapshot; callers can invalidate it for an explicit
+/// refresh after a mutation.
+final companionProjectsProvider = FutureProvider.autoDispose<
+  List<RemoteWorkspaceProject>
+>((ref) {
+  if (ref.watch(companionActiveHostKeyProvider) == null) {
+    return const <RemoteWorkspaceProject>[];
+  }
+  return ref.watch(companionGatewayProvider).listProjects();
+});
