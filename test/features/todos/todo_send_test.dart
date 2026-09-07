@@ -97,6 +97,60 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// **The regression this file did not catch.**
+  ///
+  /// Every assertion below checks that the draft was *queued*, which is why
+  /// they all stayed green from 2026-09-02 while the feature did nothing a
+  /// user could see. `bb4283f0` — "a switch no longer reads a whole transcript
+  /// nobody asked for" — stopped `WorkbenchView` mounting a session's
+  /// conversation until it had been asked for, and the composer the draft
+  /// lands in *is* that conversation. Before it, the `IndexedStack` built both
+  /// children, so a box existed for every session whether or not anybody had
+  /// opened chat, and Send worked for free.
+  ///
+  /// So queueing is not the observable behaviour; **revealing the box is**. The
+  /// perf change is right and stays — an ordinary tap still reads no
+  /// transcript — and sending becomes an explicit asker, which is what it
+  /// always was implicitly.
+  testWidgets('sending reveals the conversation, because that is where the '
+      'box is', (tester) async {
+    await pump(tester);
+    runSessionInATab('s1', title: 'Resize');
+    await tester.pumpAndSettle();
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .focusedPaneId;
+    final groupId = terminals.groupOfPane(paneId);
+    expect(groupId, isNotNull, reason: 'the tab landed in a group');
+    expect(
+      container.read(terminalVisibleInGroupProvider(groupId!)),
+      isTrue,
+      reason: 'a tab opens on its terminal, which is the broken case',
+    );
+
+    container.read(todosProvider.notifier).add(body: 'Fix the resize');
+    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Fix the resize');
+    await tester.tap(find.textContaining('message box'));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(composerDraftProvider)['s1'],
+      'Fix the resize',
+      reason: 'still queued for that session',
+    );
+    expect(
+      container.read(terminalVisibleInGroupProvider(groupId)),
+      isFalse,
+      reason: 'the group now shows the conversation, so the queued line has a '
+          'composer to land in — a draft with no box is a draft nobody sees',
+    );
+  });
+
   testWidgets('the row sends its line to the terminal tab on screen', (
     tester,
   ) async {

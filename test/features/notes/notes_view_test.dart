@@ -16,6 +16,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
@@ -243,8 +245,64 @@ void main() {
       container.read(composerDraftProvider),
       containsPair('s1', 'written here'),
     );
-    // And the snackbar names where it actually landed, which is the one place
-    // that can.
+    // And the snackbar names where it actually landed — which here is
+    // *nowhere yet*. This asserted "Sent to Toolbar rework’s message box."
+    // until 2026-09-07, and that sentence was false for this exact setup:
+    // s1 runs in no pane, so the workbench has mounted no conversation for it
+    // and there is no composer for the note to appear in. The draft does wait
+    // (`ComposerDrafts` is built for that) and lands when the session comes
+    // up, so the honest report is that it is waiting, not that it arrived.
+    // The case where it really does arrive is the next test.
+    expect(
+      find.text('Waiting for Toolbar rework — no terminal is running it.'),
+      findsOneWidget,
+    );
+  });
+
+  /// **The regression `bb4283f0` left behind, from the other surface.**
+  ///
+  /// The perf change stopped the workbench mounting a session's conversation
+  /// until it had been asked for, and the composer a note lands in *is* that
+  /// conversation — so from 2026-09-02 a note sent to a session showing its
+  /// terminal went into a draft with no box. Sending now asks, which is what
+  /// it always did implicitly.
+  testWidgets('a note sent to a session in a pane reveals its conversation', (
+    tester,
+  ) async {
+    final container = await pump(tester);
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    terminals.openTab(TerminalProfile.powerShell);
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .focusedPaneId;
+    container.read(sessionDaoProvider).updatePaneId('s1', paneId);
+    final groupId = terminals.groupOfPane(paneId);
+    expect(groupId, isNotNull);
+    expect(
+      container.read(terminalVisibleInGroupProvider(groupId!)),
+      isTrue,
+      reason: 'a tab opens on its terminal — the broken case',
+    );
+
+    container.read(notesProvider.notifier).capture(body: 'written here');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byTooltip('Send to the active session’s message box'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(composerDraftProvider),
+      containsPair('s1', 'written here'),
+    );
+    expect(
+      container.read(terminalVisibleInGroupProvider(groupId)),
+      isFalse,
+      reason: 'the group shows the conversation, so the note has a box',
+    );
     expect(find.text('Sent to Toolbar rework’s message box.'), findsOneWidget);
   });
 

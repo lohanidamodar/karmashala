@@ -15,6 +15,7 @@ import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
 import '../domain/todo.dart';
 import 'project_menu.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 
 /// The resting height of either text field, in lines. Both start at one, which
 /// is how the panel has always looked when there is nothing in it.
@@ -449,8 +450,26 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     // Bring that session up, so the box the text just landed in is the one on
     // screen. Selecting is all this does.
     ref.read(selectedSessionIdProvider.notifier).select(target.id);
+    // And reveal its conversation, because the composer *is* the conversation:
+    // a group showing its terminal has no box for this line to land in, and a
+    // draft nobody can see is not a line that was sent.
+    final paneId = ref.read(sessionDaoProvider).getById(target.id)?.paneId;
+    if (paneId != null) {
+      ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .revealConversationForPane(paneId);
+    }
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text('Sent to ${target.title}’s message box.')),
+      SnackBar(
+        content: Text(
+          paneId == null
+              // It really is waiting rather than lost, and it lands when the
+              // session comes back up — but saying "sent" for text nobody can
+              // see is the lie this whole change exists to remove.
+              ? 'Waiting for ${target.title} — no terminal is running it.'
+              : 'Sent to ${target.title}’s message box.',
+        ),
+      ),
     );
   }
 
