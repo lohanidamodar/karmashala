@@ -423,7 +423,8 @@ class DeviceControlTools {
       devicePath: devicePath,
       hostPath: p.join(
         directory,
-        'karmashala_${driver.target.id}_${p.posix.basename(devicePath)}',
+        'karmashala_${driver.target.fileSafeId}_'
+        '${p.posix.basename(devicePath)}',
       ),
     );
     return {
@@ -493,7 +494,7 @@ class DeviceControlTools {
     final file = File(
       p.join(
         Directory.systemTemp.path,
-        'karmashala_${driver.target.id}_'
+        'karmashala_${driver.target.fileSafeId}_'
         '${DateTime.now().millisecondsSinceEpoch}.png',
       ),
     );
