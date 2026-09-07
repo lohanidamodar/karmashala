@@ -7,6 +7,7 @@ import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
 import 'agent_detection_section.dart';
 import 'agent_label.dart';
+import 'agent_path_section.dart';
 import 'agent_usage_section.dart';
 import 'claude_accounts_section.dart';
 import 'codex_accounts_section.dart';
@@ -73,6 +74,7 @@ class AgentsPage extends ConsumerWidget {
         ),
         const DefaultModelSection(),
         const AgentDetectionSection(),
+        const AgentPathSection(),
         ClaudeAccountsSection(
           installations: installations
               .where((i) => i.agentId == AgentIds.claudeCode)

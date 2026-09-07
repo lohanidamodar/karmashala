@@ -418,14 +418,18 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// **A repair that finds nothing changes nothing.** The row is kept — see
   /// [AgentPathRepairReport.unresolved] — because a row at a wrong path can be
   /// seen and corrected by hand, and no row at all cannot.
-  Future<AgentPathRepairReport> repairBrokenPaths() async {
+  ///
+  /// [full] re-probes every agent in every environment instead of only the
+  /// rows that failed. That is what Settings' "Detect agents" runs, and it is
+  /// this same method rather than a second one on purpose: the button and the
+  /// startup check must not be able to disagree about what a repair does.
+  Future<AgentPathRepairReport> repairBrokenPaths({bool full = false}) async {
     final clock = ref.read(clockProvider);
-    final before = readStoredPaths();
     final broken = [
-      for (final reading in before)
+      for (final reading in readStoredPaths())
         if (reading.isBroken) reading,
     ];
-    if (broken.isEmpty) {
+    if (broken.isEmpty && !full) {
       return AgentPathRepairReport(checkedAt: clock.nowUtc());
     }
 
@@ -435,7 +439,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           .putIfAbsent(reading.installation.environmentId, () => <String>{})
           .add(reading.installation.agentId);
     }
-    final scan = await _sweep(only: scope);
+    final scan = await _sweep(only: full ? null : scope);
 
     // Re-read rather than infer: the sweep may have moved a row, replaced it,
     // or found nothing, and the filesystem is the only thing that can say which

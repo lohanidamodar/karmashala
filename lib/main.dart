@@ -253,6 +253,17 @@ Future<void> main() async {
   // Not gated on `controlServer`, unlike the hooks: finding conversations an
   // agent already wrote needs nothing bound.
   unawaited(lifecycle.importCliSessions(afterFirstFrame: afterFirstFrame));
+
+  // The stored agent executables, **behind the same gate and on every launch**.
+  //
+  // A path is durable state; whether it still resolves is a measurement, and
+  // the app used to take that measurement once — at the workspace's first scan
+  // — and then trust it forever. Codex's self-update turned the path this app
+  // had stored into a junction chain Windows refuses to traverse, and every
+  // launch afterwards tried to spawn it again. A workspace with nothing wrong
+  // pays one `existsSync` per local installation and spawns no processes at
+  // all, which is why this can afford to run every time.
+  unawaited(lifecycle.repairAgentPaths(afterFirstFrame: afterFirstFrame));
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps
