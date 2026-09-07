@@ -339,6 +339,33 @@ abstract interface class DeviceDriver {
     bool overwrite,
   });
 
+  /// Copies or moves a path **within** the device, with no host round trip.
+  ///
+  /// One method with a [move] flag rather than two, because everything except
+  /// the verb is the same question — the destination check, the overwrite
+  /// refusal, the directory rule — and two methods would be two places to
+  /// forget one of them.
+  ///
+  /// [to] is the destination *file* path, or an existing directory to put it
+  /// in; when it is a directory the returned [DeviceFileTransfer.note] says so,
+  /// exactly as [pushFile] does, rather than leaving the caller to guess where
+  /// it went. [DeviceFileTransfer.hostPath] is empty for both: nothing touched
+  /// this computer, and inventing a host path would misreport what happened.
+  ///
+  /// **[overwrite] defaults to false, as with [pushFile] and for the same
+  /// reason**: nothing on the far side of the wire can undo it.
+  ///
+  /// A [move] onto its own path is refused rather than run: `mv a a` is an
+  /// error on some shells and a silent no-op on others, and neither is an
+  /// answer a file browser should show. So is moving a directory into itself,
+  /// which the shell will happily start and not finish.
+  Future<DeviceFileTransfer> copyWithinDevice({
+    required String from,
+    required String to,
+    bool move,
+    bool overwrite,
+  });
+
   /// Removes a file or directory. Not undoable, anywhere, ever.
   ///
   /// [recursive] is required for a non-empty directory and is refused rather

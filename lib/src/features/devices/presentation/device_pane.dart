@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/app_logger.dart';
+import '../application/device_clipboard_bridge.dart';
 import '../application/device_providers.dart';
 import '../application/stream_restart_policy.dart';
 import '../data/device_gesture_sink.dart';
@@ -19,6 +20,7 @@ import '../domain/android_device.dart';
 import '../domain/ios_simulator.dart';
 import '../domain/device_input.dart';
 import 'android_slimming_dialog.dart';
+import 'device_clipboard_controls.dart';
 import 'device_files_dialog.dart';
 import 'device_section_header.dart';
 import 'device_controls.dart';
@@ -158,6 +160,16 @@ class _DevicePaneState extends ConsumerState<DevicePane>
   /// question about focus, and focus lives down there.
   DeviceKeyboardSink? _keyboardSink;
 
+  /// The device's clipboard, over the same control socket the sinks use.
+  ///
+  /// `null` when there is no control socket, and there is deliberately **no adb
+  /// fallback** — unlike input, where `adb shell input` is a worse but real
+  /// second transport. adb has no clipboard verb at all (see
+  /// `DeviceClipboardBridge`'s measurements), so with no socket the honest
+  /// answer is that the clipboard cannot be reached, and the control says so
+  /// rather than offering a button that does nothing.
+  DeviceClipboardBridge? _clipboard;
+
   /// The previous session's player, kept alive across a restart so the last
   /// frame it decoded stays on screen instead of the picture going blank.
   ///
@@ -273,14 +285,17 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     final player = _player;
     final video = _video;
     final health = _healthSubscription;
+    final clipboard = _clipboard;
     _healthSubscription = null;
     _session = null;
     _player = null;
     _video = null;
     _sink = null;
     _keyboardSink = null;
+    _clipboard = null;
     _health = null;
     await health?.cancel();
+    await clipboard?.dispose();
     await session?.stop();
     if (retainPicture && player != null) {
       await _releaseHeldPicture();
@@ -449,6 +464,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       }
       _healthSubscription = session.health.listen(_onHealth);
       final sink = _controlSink(session);
+      final control = session.control;
       setState(() {
         _session = session;
         _player = player;
@@ -457,6 +473,13 @@ class _DevicePaneState extends ConsumerState<DevicePane>
         _holdingPicture = false;
         _health = null;
         _sink = sink;
+        // Built here rather than lazily so the device's pushed clipboard is
+        // being listened for from the moment the stream is up: it arrives as
+        // an event, and a listener attached only when the user first presses
+        // the button would have missed everything before that.
+        _clipboard = control == null
+            ? null
+            : DeviceClipboardBridge(channel: control);
         // The keyboard needs no screen size, so it is available immediately in
         // either transport — a gesture has to wait for `wm size`, a keystroke
         // does not.
@@ -648,6 +671,14 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     final session = _session;
     if (!mounted || serial == null || session == null) return;
     final adb = ref.read(adbServiceProvider);
+    // The clipboard has no second transport, so it goes rather than degrading.
+    // Kept as a fact the controls can read: the button then explains that the
+    // socket has closed instead of failing on every press.
+    final clipboard = _clipboard;
+    if (clipboard != null && !clipboard.isOpen) {
+      _clipboard = null;
+      unawaited(clipboard.dispose());
+    }
     // Keyed on the transport rather than the class: every sink is wrapped for
     // input observation now, so `is AdbKeyboardSink` would never be true again
     // and the fallback would reinstall itself on every dropped event.
@@ -931,7 +962,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
           // happened to be selected — the user believed they had disconnected
           // and had not. The row stays on screen, disabled, because a control
           // that vanishes reads as a fault while an inert one says why.
-          _AndroidControls(device: live),
+          _AndroidControls(device: live, clipboard: _clipboard),
         ],
       ],
     );
@@ -1471,9 +1502,15 @@ class _LiveView extends ConsumerWidget {
 /// refactor away from being effective again, and "silently drives a device the
 /// user thinks is disconnected" is the failure this widget must not have.
 class _AndroidControls extends ConsumerStatefulWidget {
-  const _AndroidControls({required this.device});
+  const _AndroidControls({required this.device, this.clipboard});
 
   final AndroidDevice? device;
+
+  /// The live view's clipboard bridge, or `null` when there is no control
+  /// socket to carry one. Not a capability flag: `null` is the only honest
+  /// value when the transport is absent, because adb has no clipboard verb to
+  /// fall back to.
+  final DeviceClipboardBridge? clipboard;
 
   @override
   ConsumerState<_AndroidControls> createState() => _AndroidControlsState();
@@ -1596,8 +1633,19 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
           onPressed: canReach ? _openUrl : null,
           buttonKey: const Key('android-open-url'),
         ),
+        // The clipboard is gated on the *control socket*, not on adb, which is
+        // why these two do not use [canReach]: adb can drive every other
+        // button on this row and cannot touch a clipboard at all.
+        ...deviceClipboardControls(bridge: widget.clipboard, say: _say),
       ],
     );
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

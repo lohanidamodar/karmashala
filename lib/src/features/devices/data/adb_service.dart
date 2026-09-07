@@ -1221,6 +1221,9 @@ class AdbService {
   /// `rm` without `-f`, so a path that is not there is an error rather than a
   /// silent success: a delete that reports "done" for a path it never found
   /// tells the user their file is gone when it is somewhere else.
+  ///
+  /// See [copyPath] and [movePath] below for the same output-not-exit-code
+  /// rule, which they share for the same reason.
   Future<void> removePath(
     String serial,
     String path, {
@@ -1256,6 +1259,97 @@ class AdbService {
         verb: 'deletePath',
         serial: serial,
         summary: 'Deleted $path on $serial',
+      ),
+    );
+  }
+
+  /// Copies a path **within** the device — nothing crosses the wire.
+  ///
+  /// That is the point: pulling a 2 GB video to this computer and pushing it
+  /// back into the next folder is two transfers to achieve a `cp` the device
+  /// can do in place. Both paths go through [shellQuote] because both reach the
+  /// device's own shell.
+  ///
+  /// `cp -p` preserves the timestamp and mode. Without it every copy is dated
+  /// now, which quietly destroys the one piece of metadata a file browser is
+  /// normally sorted by. `-r` is the caller's decision; the driver refuses a
+  /// directory without it rather than assuming.
+  Future<void> copyPath(
+    String serial,
+    String from,
+    String to, {
+    bool recursive = false,
+  }) => _moveOrCopy(
+    serial,
+    from,
+    to,
+    argv: 'cp -p${recursive ? ' -r' : ''}',
+    verb: 'copyPath',
+    what: 'Copy',
+    past: 'Copied',
+  );
+
+  /// Moves a path within the device.
+  ///
+  /// `mv` rather than copy-then-delete, and it matters beyond speed: within one
+  /// filesystem `mv` is a rename, so it cannot half-finish. A cut that copied
+  /// and then failed to delete would leave two files and report success.
+  /// Across filesystems — `/sdcard` to `/data/local/tmp` — the device's own
+  /// `mv` falls back to copy-and-unlink, which is its business and not ours to
+  /// reimplement.
+  ///
+  /// No `-r`: `mv` needs none, for a directory or anything else.
+  Future<void> movePath(String serial, String from, String to) => _moveOrCopy(
+    serial,
+    from,
+    to,
+    argv: 'mv',
+    verb: 'movePath',
+    what: 'Move',
+    past: 'Moved',
+  );
+
+  /// The shared half of [copyPath] and [movePath].
+  ///
+  /// Neither `cp` nor `mv` says anything when it works, so — exactly as
+  /// [removePath] documents — **any output at all is the failure**. Which is
+  /// just as well: a device from before Android 7 does not forward a remote
+  /// exit code through `adb shell`, so the exit status alone cannot be trusted.
+  Future<void> _moveOrCopy(
+    String serial,
+    String from,
+    String to, {
+    required String argv,
+    required String verb,
+    required String what,
+    required String past,
+  }) async {
+    final result = await runner.run(
+      _forDevice(serial, [
+        'shell',
+        '$argv ${shellQuote(from)} ${shellQuote(to)}',
+      ]),
+    );
+    final combined = '${result.stdout}\n${result.stderr}'.trim();
+    if (!result.ok || combined.isNotEmpty) {
+      final error = DeviceRefusal(
+        'Could not ${what.toLowerCase()} $from to $to on $serial: '
+        '${combined.isEmpty ? 'it exited ${result.exitCode}.' : cleanAdbError(combined)}',
+      );
+      _report(
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: '$what $from to $to',
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(
+      DeviceAction(
+        verb: verb,
+        serial: serial,
+        summary: '$past $from to $to on $serial',
       ),
     );
   }

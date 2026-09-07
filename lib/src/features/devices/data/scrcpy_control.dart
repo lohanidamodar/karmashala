@@ -32,6 +32,18 @@ abstract final class ScrcpyControlType {
   static const int injectScrollEvent = 3;
   static const int backOrScreenOn = 4;
 
+  /// Ask the device for its clipboard. The reply is a `TYPE_CLIPBOARD` device
+  /// message on the same socket — see `scrcpy_device_message.dart`.
+  ///
+  /// **8, read out of the jar this app deploys**, like every other id here:
+  /// `ControlMessage.TYPE_GET_CLIPBOARD` is 8 and `TYPE_SET_CLIPBOARD` is 9 in
+  /// `assets/scrcpy/scrcpy-server`'s `classes.dex`.
+  static const int getClipboard = 8;
+
+  /// Put text on the device's clipboard. Acknowledged by a `TYPE_ACK_CLIPBOARD`
+  /// device message carrying the sequence that was sent.
+  static const int setClipboard = 9;
+
   /// Restart video capture: a fresh codec config and a fresh keyframe, with
   /// nothing torn down.
   ///
@@ -279,13 +291,31 @@ List<String> splitForInjectText(String text) {
   return chunks;
 }
 
+/// The two-way half of scrcpy's control protocol, without the socket.
+///
+/// A seam rather than an abstraction for its own sake: [ScrcpyControlConnection]
+/// wraps a real `Socket`, which a unit test cannot build, while everything
+/// above it — the clipboard bridge's sequence matching and its timeout policy —
+/// is exactly the part worth testing and the part least in need of a network.
+/// No test may touch a real phone.
+abstract interface class ScrcpyControlChannel {
+  /// Writes one control message. False when the socket is gone.
+  bool send(Uint8List message);
+
+  /// Messages the device sent back. Broadcast, so with nobody listening the
+  /// bytes are dropped — which still drains the socket.
+  Stream<Uint8List> get replies;
+
+  bool get isOpen;
+}
+
 /// The scrcpy control socket, opened alongside the video socket on the same
 /// adb tunnel.
 ///
 /// The server also *writes* on this socket (clipboard replies, UHID output), so
 /// the incoming side is drained and discarded rather than ignored — an unread
 /// socket eventually blocks the server's writer thread.
-class ScrcpyControlConnection {
+class ScrcpyControlConnection implements ScrcpyControlChannel {
   ScrcpyControlConnection(this._socket, {AppLogger? logger})
     : _logger = logger ?? AppLogger.named('scrcpy-control') {
     _socket.setOption(SocketOption.tcpNoDelay, true);
@@ -313,9 +343,11 @@ class ScrcpyControlConnection {
   /// Device messages coming back the other way (clipboard replies, UHID
   /// output). Broadcast, so with nobody listening the bytes are simply dropped
   /// — which is the normal case, and still drains the socket.
+  @override
   Stream<Uint8List> get replies => _replies.stream;
 
   /// False once the socket has closed, from either end.
+  @override
   bool get isOpen => _open;
 
   /// Completes when the socket closes. Useful as a liveness signal.
@@ -329,6 +361,7 @@ class ScrcpyControlConnection {
 
   /// Writes one control message. Returns false if the socket is gone, which is
   /// the caller's cue to fall back to `adb shell input`.
+  @override
   bool send(Uint8List message) {
     if (!_open) return false;
     try {
@@ -346,5 +379,105 @@ class ScrcpyControlConnection {
     await _incoming.cancel();
     await _replies.close();
     _socket.destroy();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Clipboard
+//
+// The device→host half is the interesting one, and the reason it works at all
+// is a *permission*, not a protocol: scrcpy-server runs as the shell uid and
+// identifies itself to the framework as `com.android.shell`
+// (`FakeContext.PACKAGE_NAME` in the deployed jar), and
+// `com.android.shell` holds `android.permission.READ_CLIPBOARD_IN_BACKGROUND`.
+// Measured 2026-09-07 on the cabled OnePlus CPH1989, Android 11 / API 30:
+//
+//     $ adb shell dumpsys package com.android.shell | grep -i clip
+//       android.permission.READ_CLIPBOARD_IN_BACKGROUND: granted=true
+//
+// That is what exempts it from the Android 10+ rule confining clipboard reads
+// to the foreground app or the active IME, and it is why there is a device→host
+// direction here at all. It is a fact about *the device*, so this build reports
+// what the device answered rather than assuming — see `DeviceClipboardRead`.
+// ---------------------------------------------------------------------------
+
+/// What the server should do to the device's selection before reading it.
+///
+/// `ControlMessage.COPY_KEY_*` in the deployed jar. [none] just reads what is
+/// already on the clipboard, which is the only one this app sends: [copy] and
+/// [cut] inject a Ctrl+C / Ctrl+X first, and pressing keys in the foreground app
+/// to answer "what is on the clipboard" would change the user's document.
+abstract final class ScrcpyCopyKey {
+  static const int none = 0;
+  static const int copy = 1;
+  static const int cut = 2;
+}
+
+/// The whole `GET_CLIPBOARD` message: the type byte and a copy-key byte.
+///
+/// `ControlMessageReader.parseGetClipboard` reads exactly one
+/// `readUnsignedByte` after the type, so this is two bytes and no more —
+/// the same trap [encodeResetVideo] documents: a spare byte is read as the
+/// *next* message's type and the socket never recovers.
+Uint8List encodeGetClipboard({int copyKey = ScrcpyCopyKey.none}) =>
+    Uint8List.fromList([ScrcpyControlType.getClipboard, copyKey]);
+
+/// The most UTF-8 bytes one `SET_CLIPBOARD` may carry.
+///
+/// `ControlMessageReader.CLIPBOARD_TEXT_MAX_LENGTH`, read out of the deployed
+/// jar. The reader allocates the declared length and `readFully`s it, so an
+/// over-long message is refused and then desynchronises the socket — which is
+/// why [ScrcpySetClipboardMessage.encode] throws rather than truncating.
+const int kScrcpyClipboardTextMaxBytes = 262130;
+
+/// One `SET_CLIPBOARD` message: text for the device's clipboard.
+///
+/// ```
+/// u8  type = 9        i64 sequence        u8  paste
+/// u32 utf8 length     u8[length] utf-8
+/// ```
+///
+/// Field order and widths from `ControlMessageReader.parseSetClipboard`:
+/// `readLong`, `readByte` (non-zero is true), then `parseString()` — which is
+/// `parseString(4)`, a **four**-byte length.
+class ScrcpySetClipboardMessage {
+  const ScrcpySetClipboardMessage({
+    required this.sequence,
+    required this.text,
+    this.paste = false,
+  });
+
+  /// Echoed back verbatim in an `ACK_CLIPBOARD`, and the only way to tell
+  /// *this* write's acknowledgement from one for a write that has already
+  /// timed out. `ControlMessage.SEQUENCE_INVALID` is 0, which the server reads
+  /// as "do not acknowledge" — so a sequence of zero is a write whose outcome
+  /// can never be known, and [DeviceClipboardBridge] never sends one.
+  final int sequence;
+
+  final String text;
+
+  /// Whether the server should inject a paste into the foreground app after
+  /// setting the clipboard. False here: putting text on a phone's clipboard is
+  /// not permission to type it into whatever happens to be open.
+  final bool paste;
+
+  Uint8List encode() {
+    final utf8Bytes = utf8.encode(text);
+    if (utf8Bytes.length > kScrcpyClipboardTextMaxBytes) {
+      throw ArgumentError.value(
+        utf8Bytes.length,
+        'text',
+        'longer than $kScrcpyClipboardTextMaxBytes UTF-8 bytes; the server '
+            'refuses the message and the control socket then desynchronises',
+      );
+    }
+    final bytes = Uint8List(14 + utf8Bytes.length);
+    final view = ByteData.sublistView(bytes);
+    view.setUint8(0, ScrcpyControlType.setClipboard);
+    view.setInt64(1, sequence);
+    view.setUint8(9, paste ? 1 : 0);
+    view.setUint32(10, utf8Bytes.length);
+    bytes.setRange(14, bytes.length, utf8Bytes);
+    return bytes;
   }
 }
