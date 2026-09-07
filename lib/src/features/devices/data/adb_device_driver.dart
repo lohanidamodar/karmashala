@@ -328,6 +328,71 @@ class AdbDeviceDriver implements DeviceDriver {
   }
 
   @override
+  Future<DeviceFileTransfer> copyWithinDevice({
+    required String from,
+    required String to,
+    bool move = false,
+    bool overwrite = false,
+  }) async {
+    final source = await adb.statPath(_serial, from);
+    if (source == null) {
+      throw DeviceRefusal('There is nothing at $from on $_serial.');
+    }
+    final target = await adb.statPath(_serial, to);
+    var destination = to;
+    String? note;
+    if (target != null && target.isDirectory) {
+      destination = devicePathJoin(to, devicePathBasename(from));
+      note =
+          '$to is a directory, so it went in as '
+          '${devicePathBasename(destination)}.';
+      final inside = await adb.statPath(_serial, destination);
+      if (inside != null && !overwrite) {
+        throw DeviceRefusal(_overwriteRefusal(destination, inside));
+      }
+    } else if (target != null && !overwrite) {
+      throw DeviceRefusal(_overwriteRefusal(destination, target));
+    }
+    if (destination == from) {
+      throw DeviceRefusal(
+        '$from is already where you are asking to put it. Nothing was '
+        '${move ? 'moved' : 'copied'}.',
+      );
+    }
+    // A directory into its own subtree: the shell starts it and does not
+    // finish, leaving a half-copied tree behind an error nobody can read.
+    // Checked on the *string* deliberately — `ls` cannot answer "is this
+    // inside that", and a round trip per path segment would not either.
+    if (source.isDirectory &&
+        destination.startsWith(_withTrailingSlash(from))) {
+      throw DeviceRefusal(
+        '$destination is inside $from. ${move ? 'Moving' : 'Copying'} a '
+        'directory into itself does not terminate, so nothing was done.',
+      );
+    }
+    if (move) {
+      await adb.movePath(_serial, from, destination);
+    } else {
+      await adb.copyPath(
+        _serial,
+        from,
+        destination,
+        recursive: source.isDirectory,
+      );
+    }
+    return DeviceFileTransfer(
+      devicePath: destination,
+      // Nothing touched this computer, and an invented host path here would be
+      // a report of a transfer that did not happen.
+      hostPath: '',
+      note: note,
+    );
+  }
+
+  static String _withTrailingSlash(String path) =>
+      path.endsWith('/') ? path : '$path/';
+
+  @override
   Future<void> deletePath(String path, {bool recursive = false}) async {
     final entry = await adb.statPath(_serial, path);
     if (entry == null) {

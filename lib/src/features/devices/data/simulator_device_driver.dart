@@ -435,6 +435,14 @@ class SimulatorDeviceDriver implements DeviceDriver {
   }) async => _noFiles();
 
   @override
+  Future<DeviceFileTransfer> copyWithinDevice({
+    required String from,
+    required String to,
+    bool move = false,
+    bool overwrite = false,
+  }) async => _noFiles();
+
+  @override
   Future<void> deletePath(String path, {bool recursive = false}) async =>
       _noFiles();
 }
