@@ -302,7 +302,7 @@ void main() {
       expect(report.deviceChanged, isFalse);
     });
 
-    test('an existing file is refused, and the refusal is the push\'s own', () async {
+    test('an existing file is refused and the refusal is the push\'s own', () async {
       final host = FakeHostClipboard(files: [r'C:\Users\x\Desktop\a.txt']);
       final report = await pasteFromHostClipboard(
         driver: _driver(
@@ -320,6 +320,79 @@ void main() {
       expect(report.message, contains('already exists'));
       expect(report.message, contains('no undo'));
       expect(report.deviceChanged, isFalse);
+    });
+  });
+
+  group('what each operation costs', () {
+    // Counted, never timed. Every one of these is a process, so the number is
+    // the thing worth pinning — and the number changing is how a check gets
+    // added or lost without anybody noticing.
+    test('a device-side paste is three adb calls and no transfer', () async {
+      final runner = _runner({
+        '/sdcard/a.txt': _fileRow('a.txt'),
+        '/sdcard/Download': _dirRow('Download'),
+      });
+      await pasteOnDevice(
+        driver: _driver(AdbService(runner: runner, sdk: _sdk())),
+        clip: DeviceFileClipboard(
+          serial: _serial,
+          entries: [_file('/sdcard/a.txt')],
+          mode: DeviceFileClipboardMode.copy,
+        ),
+        directory: '/sdcard/Download',
+      );
+      // stat the source, stat the destination *file*, then one `cp`. Paste
+      // names the destination file rather than the folder, so the
+      // "it is a directory, put it inside" branch — and its extra stat — is
+      // never taken from here.
+      expect(runner.requests, hasLength(3));
+      expect(
+        runner.requests.where(
+          (request) =>
+              request.arguments.contains('pull') ||
+              request.arguments.contains('push'),
+        ),
+        isEmpty,
+        reason: 'nothing crosses the wire; that is the whole point',
+      );
+      // And nothing was started with `start`, so nothing is left running.
+      expect(runner.startRequests, isEmpty);
+    });
+
+    test('copying one file to this computer is two adb calls', () async {
+      final runner = _runner({'/sdcard/a.txt': _fileRow('a.txt')});
+      await copyToHostClipboard(
+        driver: _driver(AdbService(runner: runner, sdk: _sdk())),
+        host: FakeHostClipboard(),
+        temporaryDirectory: _temp,
+        entries: [_file('/sdcard/a.txt')],
+        makeDirectory: (_) async {},
+      );
+      // stat, then pull.
+      expect(runner.requests, hasLength(2));
+      expect(runner.requests.last.arguments, contains('pull'));
+    });
+
+    test('pasting one file from this computer is three adb calls', () async {
+      final runner = _runner({'/sdcard/Download': _dirRow('Download')});
+      await pasteFromHostClipboard(
+        driver: _driver(AdbService(runner: runner, sdk: _sdk())),
+        host: FakeHostClipboard(files: [r'C:\Users\x\a.txt']),
+        directory: '/sdcard/Download',
+      );
+      // stat the destination, stat the name inside it, then one `push`.
+      expect(runner.requests, hasLength(3));
+      expect(runner.requests.last.arguments, contains('push'));
+    });
+
+    test('an empty host clipboard costs no adb call at all', () async {
+      final runner = _runner(const {});
+      await pasteFromHostClipboard(
+        driver: _driver(AdbService(runner: runner, sdk: _sdk())),
+        host: FakeHostClipboard(),
+        directory: '/sdcard/Download',
+      );
+      expect(runner.requests, isEmpty);
     });
   });
 }
