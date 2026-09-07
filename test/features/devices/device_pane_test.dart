@@ -508,6 +508,34 @@ void main() {
       expect(find.byTooltip('Refresh devices'), findsNothing);
     });
 
+    testWidgets('offers wireless pairing beside the refresh, with an SDK', (
+      tester,
+    ) async {
+      // On the toolbar rather than in a section header: the toolbar is on
+      // screen whatever the pane is showing, so it is reachable from the empty
+      // state a user with no cable actually sees.
+      await _pump(tester, sdk: _sdk(), devices: [_device()]);
+      expect(
+        find.byKey(const Key('wireless-pairing-open')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Pair a device over Wi-Fi'), findsOneWidget);
+    });
+
+    testWidgets('and does not offer it when there is no adb to pair with', (
+      tester,
+    ) async {
+      await _pump(tester, sdk: null, devices: const []);
+      expect(find.byKey(const Key('wireless-pairing-open')), findsNothing);
+    });
+
+    testWidgets('the empty state points at wireless pairing too', (
+      tester,
+    ) async {
+      await _pump(tester, sdk: _sdk(), devices: const []);
+      expect(find.textContaining('pair one over Wi-Fi'), findsOneWidget);
+    });
+
     testWidgets('offers to stop a selected emulator', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
       // The tooltip names the device now, because the button used to be able

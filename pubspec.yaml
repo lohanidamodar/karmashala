@@ -57,7 +57,8 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.6
   picons: ^3.0.1
-  # Pure-Dart QR encoder for the remote-access pairing dialog.
+  # Pure-Dart QR encoder, behind core/widgets/qr_painter.dart — the
+  # remote-access pairing dialog and the wireless-adb one both draw with it.
   qr: ^4.0.0
   sqlite3: ^3.3.3
   sqlite3_flutter_libs: ^0.6.0+eol

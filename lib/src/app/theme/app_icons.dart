@@ -572,4 +572,20 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// Pairing a device over Wi-Fi rather than a cable.
+  static const IconData wifiHigh = IconData(
+    0xe4ea,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// The scannable half of a pairing dialog.
+  static const IconData qrCode = IconData(
+    0xe3e6,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }

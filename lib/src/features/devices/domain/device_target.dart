@@ -17,6 +17,17 @@ enum DevicePlatform {
   final String label;
 }
 
+/// [id] made safe as one component of a **host** filename.
+///
+/// A device attached over Wi-Fi identifies itself as `HOST:PORT` rather than by
+/// hardware serial, and on Windows a colon in a filename does not fail — it
+/// opens an *alternate data stream*, so `adb pull` writes somewhere nothing
+/// reads back and the failure looks like an empty screenshot. Everything
+/// outside `[A-Za-z0-9._-]` becomes `-`, which leaves a hardware serial and an
+/// `emulator-<port>` untouched.
+String fileSafeDeviceId(String id) =>
+    id.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
+
 /// One device this app knows about: an attached Android device, an Android
 /// emulator, or an iOS Simulator.
 ///
@@ -55,6 +66,9 @@ sealed class DeviceTarget {
 
   /// One line for an error listing: enough to choose from, and no more.
   String get summary => '$id ($label, ${platform.label})';
+
+  /// [id], safe to put in a host filename — see [fileSafeDeviceId].
+  String get fileSafeId => fileSafeDeviceId(id);
 }
 
 final class AndroidTarget extends DeviceTarget {

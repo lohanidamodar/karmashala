@@ -10,11 +10,14 @@ import '../domain/device_action.dart';
 import '../domain/device_driver.dart';
 import '../domain/device_files.dart';
 import '../domain/device_input.dart';
+import '../domain/device_target.dart';
 import '../domain/logcat_entry.dart';
 import '../domain/ui_node.dart';
 import '../domain/ui_summary.dart';
+import '../domain/wireless_pairing.dart';
 import 'adb_file_parsing.dart';
 import 'adb_output_parsing.dart';
+import 'adb_wireless_parsing.dart';
 import 'uiautomator_parsing.dart';
 
 /// Reads a file from the host that adb runs on. Injectable so tests never touch
@@ -99,6 +102,69 @@ class AdbService {
     final result = await runner.run(_adb(['devices', '-l']));
     if (!result.ok) return const [];
     return parseAdbDevices(result.stdout, environmentId: sdk.environmentId);
+  }
+
+  /// Whether this adb server can discover services over mDNS.
+  ///
+  /// Three answers, not two: an adb that could not be run has *not* told us
+  /// discovery is off, and reporting it as off would send the user looking for
+  /// a setting that is already correct (§19).
+  Future<MdnsAvailability> mdnsAvailability() async {
+    try {
+      return parseMdnsCheck(await runner.run(_adb(const ['mdns', 'check'])));
+    } on CommandException {
+      return MdnsAvailability.unknown;
+    }
+  }
+
+  /// One reading of what is advertising itself on the local network.
+  ///
+  /// Run to completion, deliberately: the wireless-pairing flow polls this
+  /// while a QR is on screen, and `run` creates its process on the spawner's
+  /// worker isolate while `start` would charge it to the caller.
+  Future<MdnsScan> mdnsServices() async {
+    try {
+      return parseMdnsServices(
+        await runner.run(_adb(const ['mdns', 'services'])),
+      );
+    } on CommandException {
+      return const MdnsScan.unknown();
+    }
+  }
+
+  /// Completes the wireless-debugging pairing handshake with [address].
+  ///
+  /// [code] is passed as an argument rather than typed into a prompt — adb
+  /// accepts it either way, and there is no prompt to drive from here.
+  ///
+  /// Neither the code nor anything derived from it is logged; only the
+  /// [AdbPairResult] leaves this method.
+  Future<AdbPairResult> pair(
+    PairingAddress address, {
+    required String code,
+  }) async {
+    try {
+      return parsePairResult(
+        await runner.run(_adb(['pair', address.argument, code])),
+      );
+    } on CommandException catch (error) {
+      return AdbPairRefused(
+        cause: AdbPairFailure.unknown,
+        message: 'adb could not be run: ${error.message}',
+      );
+    }
+  }
+
+  /// Attaches a paired device at [address] — its **connect** port, which is not
+  /// the port it was paired on.
+  Future<AdbConnectOutcome> connect(PairingAddress address) async {
+    try {
+      return parseConnectResult(
+        await runner.run(_adb(['connect', address.argument])),
+      );
+    } on CommandException {
+      return AdbConnectOutcome.refused;
+    }
   }
 
   /// Lists AVDs, marking any that are currently running.
@@ -302,7 +368,7 @@ class AdbService {
     final destination =
         hostPath ??
         '${Directory.systemTemp.path}${Platform.pathSeparator}'
-            'karmashala_screen_$serial.png';
+            'karmashala_screen_${fileSafeDeviceId(serial)}.png';
     final pull = await runner.run(
       _forDevice(serial, ['pull', devicePath, destination]),
     );

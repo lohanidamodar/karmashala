@@ -140,6 +140,15 @@ class LogRedactor {
       pattern: RegExp(r'\b([Bb]earer|[Bb]asic)\s+[A-Za-z0-9._~+/=-]{8,}'),
       replacement: r'$1 [redacted:token]',
     ),
+    // The wireless-debugging QR payload. Its password is delimited by `;`
+    // rather than assigned to a keyword, so the catch-all below cannot see it;
+    // the service name is kept because that is how one pairing attempt is
+    // followed through a log.
+    RedactionRule(
+      name: 'adb pairing invite',
+      pattern: RegExp(r'(WIFI:T:ADB;S:[^;]*;P:)[^;]+', caseSensitive: false),
+      replacement: r'$1[redacted]',
+    ),
     // The catch-all: anything spelled like a secret being assigned. Deliberately
     // a short keyword list — a bare `auth:` would eat ordinary message text.
     RedactionRule(
@@ -148,7 +157,9 @@ class LogRedactor {
         r'\b(access[_-]?token|refresh[_-]?token|id[_-]?token|token'
         r'|secret|password|passphrase|api[_-]?key|apikey'
         r'|access[_-]?key|session[_-]?key|private[_-]?key'
-        r'|pairing[_-]?code|device[_-]?key|client[_-]?secret)'
+        // A space between the two words as well: "pairing code: 123456" is
+        // how a human writes it, and adb's own prompt spells it that way.
+        r'|pairing[_\s-]?code|device[_-]?key|client[_-]?secret)'
         r'(\s*[=:]\s*)'
         r'''("?)([^\s"',;}]{6,})\3''',
         caseSensitive: false,
