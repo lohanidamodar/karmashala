@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.18.1 (2026-09-07)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.18.2 (2026-09-07)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,142 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.18.2 — 2026-09-07 (build 34)
+
+**Everything found by using 1.18.1 for an afternoon.** The build number is
+deliberately unchanged: 1.18.1+34 and 1.18.2+34 are different binaries, and on
+Windows the installer filename is what tells them apart. An Android companion
+at the same `versionCode` reinstalls over itself locally but cannot be
+distinguished from its predecessor, and Play would refuse it.
+
+### Fixed: the shell threw on its own status bar
+
+Two exceptions and two ~98,000px `RenderFlex` overflows, on an ordinary session
+launch:
+
+```txt
+setState() or markNeedsBuild() called during build.
+  This _ChangesSurface widget cannot be marked as needing to build…
+  The widget which was currently being built was: ShellStatusBar
+Bad state: Tried to rebuild Provider<List<Repository>>#83d42
+  multiple times in the same frame
+```
+
+`ShellStatusBar` and the side panel's `_ChangesSurface` both wanted the name of
+the selected repository, and both got it by watching a
+`Provider<List<Repository>>` and picking one element out. A `List` has no value
+equality, so a rebuilt one is never `==` to the last and Riverpod's dedupe can
+never fire: every announcement reached both widgets whether or not the
+repository had changed. They are siblings, and Flutter allows only a
+*descendant* of the widget being built to be marked dirty — so one redundant
+announcement during the build phase threw, and took the frame's layout with it.
+That is where the absurd overflow numbers came from; a layout pass that throws
+part-way leaves the tree measured against unbounded constraints.
+
+**The obvious fix was the wrong one, and there is now a test saying so.**
+Guarding `ProjectsController._refresh` with `listEquals` silences the redundant
+announcement — and also the only signal a new repository has, because
+`ProjectService.rediscover` adds repositories to an *existing* project without
+touching one project row and the repositories table has no notifier of its own.
+That would have traded an exception for a stale panel. So the list keeps
+announcing freely and `selectedRepositoryProvider` absorbs it: `Repository?`
+has value equality, so a re-read that found the same row reaches nobody and
+neither sibling rebuilds at all.
+
+### Fixed: sending a note or a todo to a session did nothing visible
+
+Broken since 2026-09-02, by a change that was right on its own terms.
+`bb4283f0` stopped the workbench mounting a session's conversation until it had
+been asked for — it was a whole-transcript read on every tab switch — and the
+composer a note lands in *is* that conversation. Send was an unnamed asker, so
+text offered to a session showing its terminal queued a draft into a box that
+did not exist, under a snackbar claiming it had arrived.
+
+The perf change stays: an ordinary tap still reads no transcript. Sending is now
+an explicit asker, through the mirror of the reveal that already existed for the
+other face — `revealConversationForPane`, which inherits the rule that matters
+once the workspace is split: *that* group, not whichever one has focus.
+
+A pane is required, and that is not a detail: falling back to the focused group
+would open whichever *other* session it holds, so a note offered to A would flip
+a group showing B into B's chat. Without a pane the draft waits, which is what
+`ComposerDrafts` is for, and the report says so instead of claiming delivery.
+
+Why five days of green gates missed it: every assertion checked that the draft
+was *queued*, never that it reached anything.
+
+### Middle click closes a tab
+
+The gesture every browser and editor binds, and it gets the **reversible**
+close. A wheel press is mushy and easy to fire while scrolling, so it must not
+be the action that kills an agent mid-turn: it runs the same
+`shouldDetachOnClose` policy the tab's own X does, which parks a pane holding
+real work and releases an idle shell — one gesture behaving correctly for both
+without a second one to tell them apart. Ending a session stays behind a menu
+item with a word on it.
+
+It lives on the chip both strips share, so a window split into groups behaves
+the same in every one of them.
+
+### A `file://` URL in the terminal is a link, and it is a path
+
+`/insights` prints `file:///home/<user>/.claude/usage-data/…html` and there was
+nothing to click. It fell between the two scans: the path scan skips anything
+with a scheme in it, and the URL scan rejects any scheme but http(s).
+
+That rejection is deliberate — terminal output is untrusted and must not reach
+a scheme handler — and it applies to `file:` more than to most schemes. So the
+allowed schemes are unchanged. A file URL resolves to a **path**, which means
+it goes through the translation that already existed:
+
+```txt
+WSL non-/mnt path /home/x  ->  Windows UNC \\wsl.localhost\<distro>\home\x
+```
+
+and then through reveal. A host is refused: `file://server/share/x` is a UNC
+path, and revealing one makes Windows authenticate to a share whose address came
+from whatever printed the line.
+
+### The phone's clipboard, and a real file manager
+
+Copy on Windows and paste on the phone, and the reverse. There is **no adb
+route** — `cmd clipboard` answers *"No shell command implementation"*,
+`dumpsys clipboard` prints nothing, and `service call` structurally cannot
+carry a `ClipData`, which is a parcelable and not among the argument types that
+binary can marshal. What works is scrcpy's control socket, which this app
+already opens for touch and keyboard, and the reason it can read a clipboard adb
+cannot is a permission: scrcpy-server runs as the shell uid and presents as
+`com.android.shell`, which holds `READ_CLIPBOARD_IN_BACKGROUND` and is therefore
+exempt from the Android 10+ foreground-or-IME rule. No companion app, no new
+dependency, and every wire constant read out of the bundled jar rather than
+guessed.
+
+Two costs stated rather than hidden. It needs the live view running, because
+without a stream there is no control socket — both buttons disable with that
+reason, deliberately not the generic adb one. And **no clipboard has yet
+crossed to a real phone**: proving it needs pushing a jar and starting a
+process. Whether Android 16 still grants that permission is recorded as
+unknown, not assumed, so the code reports what the device answered rather than
+what it expects.
+
+Device→host costs zero processes: the server pushes on change, so nothing polls.
+
+The device file browser gained copy, cut and paste performed **by the device** —
+one `cp -p` or `mv`, so a 2 GB move costs nothing on the wire — drag onto a
+folder, and host↔device transfer through the Windows file clipboard. Dragging to
+and from Explorer still needs a native drop target and is not here.
+
+### Fixed: a device id is not always serial-shaped
+
+A wireless device identifies itself as `192.168.1.24:37129`, or as
+`adb-<serial>-<random>._adb-tls-connect._tcp` — both shapes occur for one phone
+depending on how adb reached it. Three host filenames were built straight from
+that id, and on Windows a colon does not fail: it opens an **alternate data
+stream**, so `adb pull` wrote to a stream hanging off a truncated name and the
+read-back found nothing — an empty file with every step reporting success.
 
 ---
 
