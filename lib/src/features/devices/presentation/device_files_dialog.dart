@@ -1,13 +1,19 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/clipboard/host_clipboard.dart';
 import '../../../core/util/file_picking.dart';
+import '../application/device_file_actions.dart';
 import '../application/device_fleet.dart';
 import '../domain/android_device.dart';
 import '../domain/device_driver.dart';
+import '../domain/device_file_clipboard.dart';
 import '../domain/device_files.dart';
 import '../domain/device_target.dart';
 
@@ -28,10 +34,62 @@ import '../domain/device_target.dart';
 /// Every call is a subprocess, so every call is awaited and the dialog draws a
 /// progress state rather than freezing. Nothing here runs on the platform
 /// thread.
+///
+/// ## Two clipboards, kept apart on purpose
+///
+/// **The app's own**, holding device paths — what Copy and Cut fill and what
+/// Paste empties. Those paths are moved by the *device*, with no host round
+/// trip, so pasting a 2 GB video into the next folder costs one `cp` rather
+/// than two transfers. It is deliberately not the system clipboard:
+/// `/sdcard/DCIM/a.jpg` means nothing to any other program on this computer,
+/// and putting it there as text would silently replace whatever the user had
+/// copied with a string nothing can open.
+///
+/// **This computer's**, holding real files — which is how a file crosses
+/// between here and the phone in either direction: *Copy for this computer*
+/// stages a file under the system temp directory and puts its path on the
+/// system file clipboard, so it pastes into Explorer; *Paste from this
+/// computer* reads that clipboard and pushes what is on it. See
+/// `application/device_file_actions.dart`.
+///
+/// **Dragging a row onto a folder** is the same device-side move, as a gesture.
+/// `pointerDragAnchorStrategy` is not optional there: without it
+/// `DragTargetDetails.offset` is the *feedback widget's* top-left rather than
+/// the pointer, so a drop lands on whichever row happens to be under the
+/// corner of the label.
+///
+/// **What this cannot do: drag a file to or from Explorer.** A drop from
+/// outside needs a native `IDropTarget` and a drag out needs a native drag
+/// source; neither is in this app's dependencies, and adding a C++ plugin is
+/// exactly what `pubspec.yaml` already has two stubs for after the VS 2026
+/// toolchain dropped ATL. The clipboard route above is the same operation
+/// without a plugin.
 class DeviceFilesDialog extends ConsumerStatefulWidget {
-  const DeviceFilesDialog({required this.device, super.key});
+  const DeviceFilesDialog({
+    required this.device,
+    this.host = const PlatformHostClipboard(),
+    this.temporaryDirectory,
+    this.makeDirectory = makeHostDirectory,
+    super.key,
+  });
 
   final AndroidDevice device;
+
+  /// This computer's clipboard, behind its seam so a test never reaches the
+  /// platform channel.
+  final HostClipboard host;
+
+  /// Where a file copied off the device is staged. Defaults to the system temp
+  /// directory, read lazily so nothing touches the filesystem at construction.
+  final String? temporaryDirectory;
+
+  /// Creates the staging directory.
+  ///
+  /// A seam for the same reason [host] is one, and a sharper one than it looks:
+  /// a widget test body runs inside `FakeAsync`, so a real `Directory.create`
+  /// never completes there and the symptom is `pumpAndSettle timed out` rather
+  /// than anything about the filesystem.
+  final HostDirectoryMaker makeDirectory;
 
   static Future<void> show(BuildContext context, AndroidDevice device) =>
       showDialog<void>(
@@ -54,6 +112,12 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
   /// refusal is not an empty directory and must never be drawn as one.
   String? _refusal;
   String? _busy;
+
+  /// Device paths held by Copy or Cut, or null when nothing is held.
+  DeviceFileClipboard? _clip;
+
+  String get _temporaryDirectory =>
+      widget.temporaryDirectory ?? Directory.systemTemp.path;
 
   @override
   void initState() {
@@ -165,6 +229,112 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     }
   }
 
+  /// Holds [entry] on the app's own clipboard, to be pasted somewhere on the
+  /// same device.
+  void _hold(DeviceFileEntry entry, DeviceFileClipboardMode mode) {
+    setState(() {
+      _clip = DeviceFileClipboard(
+        serial: widget.device.serial,
+        entries: [entry],
+        mode: mode,
+      );
+    });
+    _say('${mode.label} ${entry.name}. Open a folder and press Paste.');
+  }
+
+  /// Pastes what the app is holding into [directory], on the device.
+  Future<void> _paste(String directory) async {
+    final driver = _driver;
+    final clip = _clip;
+    if (driver == null || clip == null) return;
+    setState(() => _busy = '${clip.summary} into $directory…');
+    final report = await pasteOnDevice(
+      driver: driver,
+      clip: clip,
+      directory: directory,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = null;
+      // A cut is consumed by its paste; a copy survives so it can go into
+      // several folders. `afterPaste` owns that rule.
+      if (report.deviceChanged) _clip = clip.afterPaste();
+    });
+    _say(report.message);
+    if (report.deviceChanged) await _refresh();
+  }
+
+  /// Copies [entry] off the device and onto **this computer's** clipboard, so
+  /// it can be pasted into Explorer or Finder.
+  Future<void> _copyForHost(DeviceFileEntry entry) async {
+    final driver = _driver;
+    if (driver == null) return;
+    setState(() => _busy = 'Copying ${entry.name} to this computer…');
+    final report = await copyToHostClipboard(
+      driver: driver,
+      host: widget.host,
+      temporaryDirectory: _temporaryDirectory,
+      entries: [entry],
+      makeDirectory: widget.makeDirectory,
+    );
+    if (!mounted) return;
+    setState(() => _busy = null);
+    _say(report.message);
+  }
+
+  /// Pushes whatever files are on **this computer's** clipboard into the open
+  /// directory: the other half of [_copyForHost].
+  Future<void> _pasteFromHost() async {
+    final driver = _driver;
+    final path = _path;
+    if (driver == null || path == null) return;
+    setState(() => _busy = 'Copying this computer\'s clipboard to the device…');
+    final report = await pasteFromHostClipboard(
+      driver: driver,
+      host: widget.host,
+      directory: path,
+    );
+    if (!mounted) return;
+    setState(() => _busy = null);
+    _say(report.message);
+    if (report.deviceChanged) await _refresh();
+  }
+
+  /// Drops [entry] into [directory] — the drag gesture for a device-side move.
+  ///
+  /// A move rather than a copy, which is what dragging within one filesystem
+  /// means everywhere else. The app's own clipboard is left alone: a drag is
+  /// not a cut, and clobbering a held Copy because somebody dragged something
+  /// would lose work they had queued.
+  Future<void> _dropInto(DeviceFileEntry entry, String directory) async {
+    final driver = _driver;
+    if (driver == null) return;
+    final clip = DeviceFileClipboard(
+      serial: widget.device.serial,
+      entries: [entry],
+      mode: DeviceFileClipboardMode.cut,
+    );
+    setState(() => _busy = 'Moving ${entry.name} into $directory…');
+    final report = await pasteOnDevice(
+      driver: driver,
+      clip: clip,
+      directory: directory,
+    );
+    if (!mounted) return;
+    setState(() => _busy = null);
+    _say(report.message);
+    if (report.deviceChanged) await _refresh();
+  }
+
+  /// Re-reads the open directory. Its own method because five actions end with
+  /// it and each was re-deriving the root.
+  Future<void> _refresh() async {
+    final root = _root;
+    final path = _path;
+    if (root == null || path == null) return;
+    await _go(root, path);
+  }
+
   /// Deleting, which nothing on the far side can undo.
   Future<void> _delete(DeviceFileEntry entry) async {
     final driver = _driver;
@@ -260,7 +430,14 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         ),
       ),
       actions: [
-        if (_root?.writable == true && _path != null)
+        if (_writable && _path != null)
+          TextButton.icon(
+            key: const Key('device-files-paste-from-host'),
+            onPressed: _busy == null ? _pasteFromHost : null,
+            icon: const Icon(AppIcons.clipboardText, size: Chrome.iconAction),
+            label: const Text('Paste from this computer'),
+          ),
+        if (_writable && _path != null)
           TextButton.icon(
             onPressed: _busy == null ? _push : null,
             icon: const Icon(AppIcons.plus, size: Chrome.iconAction),
@@ -301,12 +478,21 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     padding: const EdgeInsets.fromLTRB(Insets.sm, 0, Insets.md, Insets.sm),
     child: Row(
       children: [
-        IconButton(
-          tooltip: 'Up one level',
-          icon: const Icon(AppIcons.arrowUp, size: Chrome.iconAction),
-          onPressed: _atRoot || _busy != null
-              ? null
-              : () => _go(_root!, p.posix.dirname(_path!)),
+        // Also a drop target, so dragging a row here moves it up a level —
+        // the only way out of a folder with a drag.
+        _dropTarget(
+          onto: _atRoot ? null : p.posix.dirname(_path ?? ''),
+          builder: (hovering) => IconButton(
+            key: const Key('device-files-up'),
+            tooltip: _atRoot
+                ? 'Up one level'
+                : 'Up one level — or drop a file here to move it up',
+            isSelected: hovering,
+            icon: const Icon(AppIcons.arrowUp, size: Chrome.iconAction),
+            onPressed: _atRoot || _busy != null
+                ? null
+                : () => _go(_root!, p.posix.dirname(_path!)),
+          ),
         ),
         Expanded(
           child: Text(
@@ -318,8 +504,52 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
             ),
           ),
         ),
+        if (_clip case final clip?)
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.sm),
+            child: TextButton.icon(
+              key: const Key('device-files-paste'),
+              onPressed: _busy != null || _path == null || !_writable
+                  ? null
+                  : () => _paste(_path!),
+              icon: const Icon(
+                AppIcons.clipboardText,
+                size: Chrome.iconAction,
+              ),
+              // The button says what it holds, so a Paste pressed ten minutes
+              // later is not a guess about which file is on its way.
+              label: Text('Paste — ${clip.summary}'),
+            ),
+          ),
       ],
     ),
+  );
+
+  bool get _writable => _root?.writable == true;
+
+  /// Wraps [builder] in a `DragTarget` that moves a dropped entry into [onto].
+  ///
+  /// **`pointerDragAnchorStrategy` is on the `Draggable` side and is not
+  /// optional** — see [_row]. It is named here too because this is the half
+  /// that reads `DragTargetDetails`, and the two only agree about where the
+  /// drop happened if the anchor is the pointer.
+  ///
+  /// A null [onto] accepts nothing, which is how the Up button behaves at a
+  /// root: a target that accepted and then did nothing would look like a
+  /// failed move.
+  Widget _dropTarget({
+    required String? onto,
+    required Widget Function(bool hovering) builder,
+  }) => DragTarget<DeviceFileEntry>(
+    onWillAcceptWithDetails: (details) =>
+        onto != null &&
+        _busy == null &&
+        _writable &&
+        // Dropping something onto its own parent is a no-op the device would
+        // answer with an error, so the target simply does not light up.
+        p.posix.dirname(details.data.path) != onto,
+    onAcceptWithDetails: (details) => _dropInto(details.data, onto!),
+    builder: (context, candidate, rejected) => builder(candidate.isNotEmpty),
   );
 
   Widget _body(ThemeData theme, ColorScheme scheme) {
@@ -362,12 +592,82 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     );
   }
 
+  /// One entry: a drag source, and a drop target when it is a directory.
+  ///
+  /// **`pointerDragAnchorStrategy` is load-bearing.** Flutter's default anchor
+  /// makes `DragTargetDetails.offset` the *feedback widget's* top-left rather
+  /// than the pointer, so with a wide row as feedback a drop lands on whatever
+  /// is under the corner of the label — several rows above where the user is
+  /// pointing. This cost real debugging time in the workspace splits and the
+  /// same trap is here.
   Widget _row(ThemeData theme, ColorScheme scheme, DeviceFileEntry entry) {
+    // The hover highlight goes on the `ListTile` itself rather than on a
+    // coloured box around it: Flutter asserts on the latter, because a tile
+    // paints its background and its ink on the nearest Material and anything
+    // coloured in between hides both.
+    Widget wrap({required bool hovering}) {
+      final tile = _tile(theme, scheme, entry, hovering: hovering);
+      // Only a writable root can be dragged out of: a move needs a delete at
+      // the source, and a drag that always fails is worse than none.
+      if (!_writable || !entry.readable || _busy != null) return tile;
+      return Draggable<DeviceFileEntry>(
+        data: entry,
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _dragFeedback(theme, scheme, entry),
+        childWhenDragging: Opacity(opacity: 0.4, child: tile),
+        child: tile,
+      );
+    }
+
+    if (!entry.isDirectory || !entry.readable) return wrap(hovering: false);
+    return _dropTarget(
+      onto: entry.path,
+      builder: (hovering) => wrap(hovering: hovering),
+    );
+  }
+
+  /// What follows the pointer during a drag. Deliberately small: the anchor is
+  /// the pointer, and a full-width row under the cursor hides the target.
+  Widget _dragFeedback(
+    ThemeData theme,
+    ColorScheme scheme,
+    DeviceFileEntry entry,
+  ) => Material(
+    elevation: 4,
+    color: scheme.surfaceContainerHighest,
+    borderRadius: BorderRadius.circular(Radii.sm),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.xs,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            entry.isDirectory ? AppIcons.folder : AppIcons.note,
+            size: Chrome.iconAction,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.xs),
+          Text(entry.name, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    ),
+  );
+
+  Widget _tile(
+    ThemeData theme,
+    ColorScheme scheme,
+    DeviceFileEntry entry, {
+    required bool hovering,
+  }) {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
     return ListTile(
       dense: true,
+      tileColor: hovering ? scheme.primaryContainer : null,
       leading: Icon(
         entry.isDirectory ? AppIcons.folder : AppIcons.note,
         size: Chrome.iconAction,
@@ -392,7 +692,41 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
               ),
               onPressed: _busy == null ? () => _pull(entry) : null,
             ),
-          if (_root?.writable == true)
+          if (entry.readable)
+            PopupMenuButton<_RowAction>(
+              key: Key('device-file-menu-${entry.name}'),
+              tooltip: 'More for ${entry.name}',
+              icon: const Icon(
+                AppIcons.dotsThreeVertical,
+                size: Chrome.iconAction,
+              ),
+              enabled: _busy == null,
+              onSelected: (action) => switch (action) {
+                _RowAction.copy => _hold(entry, DeviceFileClipboardMode.copy),
+                _RowAction.cut => _hold(entry, DeviceFileClipboardMode.cut),
+                _RowAction.copyForHost => unawaited(_copyForHost(entry)),
+              },
+              itemBuilder: (context) => [
+                // Copy and Cut hold a *device path* and are pasted by the
+                // device — no host round trip, which is the point.
+                if (_writable)
+                  const PopupMenuItem(
+                    value: _RowAction.copy,
+                    child: Text('Copy on the device'),
+                  ),
+                if (_writable)
+                  const PopupMenuItem(
+                    value: _RowAction.cut,
+                    child: Text('Cut on the device'),
+                  ),
+                if (!entry.isDirectory)
+                  const PopupMenuItem(
+                    value: _RowAction.copyForHost,
+                    child: Text('Copy for this computer'),
+                  ),
+              ],
+            ),
+          if (_writable)
             IconButton(
               tooltip: 'Delete on the device',
               icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
@@ -470,3 +804,9 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     ),
   );
 }
+
+/// The row menu's items. An enum so the switch is exhaustive: an action added
+/// without a handler is a compile error rather than a menu entry that does
+/// nothing.
+enum _RowAction { copy, cut, copyForHost }
+
