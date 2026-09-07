@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.18.0 (2026-09-07)**. Anything
+This file records **1.1.0 (2026-08-31) through 1.18.1 (2026-09-07)**. Anything
 before 1.1.0 is not recorded — no release notes were written for those versions
 and this file does not invent them.
 
@@ -13,6 +13,91 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.18.1 — 2026-09-07 (build 34)
+
+**Codex could not be started or resumed on Windows at all.** It self-updated to
+0.153.4, moved to a versioned standalone layout, and turned the stable path its
+own installer advertises into a chain of junctions:
+
+```txt
+…\OpenAI\Codex\bin  ->  …\.codex\packages\standalone\current\bin
+                    ->  …\releases\0.153.4-x86_64-pc-windows-msvc\bin
+```
+
+Windows refuses to traverse that — *"the path cannot be traversed because it
+contains an untrusted mount point"*, errno 448 — while Settings went on showing
+a healthy-looking Codex row, because the row was reading a value written once by
+the workspace's first scan. WSL and SSH sessions were unaffected: DrvFs resolves
+junctions itself.
+
+### A stored path is state; whether it resolves is a measurement
+
+The check runs on every launch, behind the first frame, and it is the durable
+half of this. What the resolver *finds* is `releases\<version>\…`, which the
+next Codex update will move again — so the answer is not a cleverer path, it is
+looking again, cheaply enough that it can afford to. A workspace with nothing
+wrong costs one `existsSync` per local installation and spawns no process at
+all; only rows that actually failed are re-probed.
+
+`File.existsSync` on a path behind an untrusted mount point answers a flat
+**`false`** rather than throwing, so an exception cannot tell an unreachable
+file from an absent one — any check built on catching one reports a working CLI
+as uninstalled. What does work from plain Dart is asking about the junction
+*itself*: `Link.targetSync()` and `typeSync(followLinks: false)`. The resolver
+walks a path one component at a time on that basis, so the traversal the OS
+refuses never happens, and the reparse walk — not an errno — is the
+discriminator: a route that completes and finds nothing is `missing`, a route
+that cannot be completed is `unreachable`.
+
+Nothing in `path_probe.dart` knows the word "codex", so the next tool to install
+itself behind a versioned junction is already covered.
+
+### Three rules the reconciler follows
+
+**An unreachable row is never deleted.** A junction chain answers `where`,
+`existsSync` and `Process.run` exactly like an uninstalled CLI, and deleting on
+that evidence turns *"installed somewhere I cannot reach"* into *"not
+installed"* — the worse of the two, because it takes the agent out of Settings
+and leaves nothing to correct. It gets its own line and is counted among neither
+found nor missing.
+
+**A move keeps the row and its id.** The id is what settings pin as the default
+agent and what every session references; the earlier delete-and-reinsert
+repointed the sessions and silently unpicked the default.
+
+**A working hand-set path is never overruled by a sweep.** Recorded in schema
+v39 as `executable_by_user`, the way `sessions.title_by_user` already is — and
+never inferred from "the path differs from what discovery would find", which
+cannot be recovered after a restart. A hand-set path that stops working is still
+repaired, and reverts to detected, because a stale path helps nobody whoever set
+it.
+
+### Executables are editable, and per-environment scans see the junction too
+
+Settings → Agents → Executables lists what is stored, what each path currently
+measures as, and when that was measured. A path can be typed or browsed to, and
+the same sweep the launch runs is available as a button.
+
+The per-environment scan had the same blind spot and is fixed with the same
+probe, so a host that reaches an agent through a junction is no longer reported
+as not having it.
+
+### Not fixed here
+
+An endpoint antimalware product quarantined this app's whole installation on
+this machine twice on 2026-09-07 — every plugin DLL, the uninstaller, the Start
+Menu shortcuts and the app's own MCP session files. Nothing in this release
+addresses that: an unsigned executable that spawns processes and binds a local
+socket is what tripped it, and the answers are a policy exclusion or a signing
+certificate, neither of which is code.
+
+`sessionDirectoryPresentProvider` still ends `on Object { return true; }`, so a
+session can still be spawned into a directory the OS will refuse. That is a
+change to session launch rather than to agent discovery, and it is written down
+in `CLAUDE.md` §20 rather than folded in here.
 
 ---
 
