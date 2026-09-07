@@ -444,18 +444,19 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     // Re-read rather than infer: the sweep may have moved a row, replaced it,
     // or found nothing, and the filesystem is the only thing that can say which
     // of those actually left a usable executable behind.
+    //
+    // Keyed by **installation id**, which a repair now preserves — `updatePath`
+    // moves the row rather than replacing it. Keying by `(agent, environment)`
+    // would collapse two installations of the same agent in one environment
+    // into a single row of the report.
     final after = {
       for (final reading in readStoredPaths())
-        '${reading.installation.agentId} '
-            '${reading.installation.environmentId}': reading,
+        reading.installation.id: reading,
     };
     final repaired = <AgentPathReading>[];
     final unresolved = <AgentPathReading>[];
     for (final was in broken) {
-      final key =
-          '${was.installation.agentId} '
-          '${was.installation.environmentId}';
-      final now = after[key];
+      final now = after[was.installation.id];
       if (now == null) {
         // The row is gone: the sweep established the agent is not installed
         // here, which is a removal rather than an unrepaired path.

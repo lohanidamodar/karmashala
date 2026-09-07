@@ -254,6 +254,38 @@ void main() {
       expect(report.scan!.removedCount, 1);
     });
 
+    test('two installs of one agent are reported as two rows', () async {
+      // The report is keyed by installation id, which a repair preserves.
+      // Keying by (agent, environment) collapsed these into one row and lost
+      // the fact that only one of them was put right.
+      AgentInstallationDao(db)
+        ..insert(
+          agentInstallation(
+            id: 'shim',
+            agentId: AgentIds.codex,
+            path: r'C:\shim\codex.exe',
+          ),
+        )
+        ..insert(
+          agentInstallation(
+            id: 'stale',
+            agentId: AgentIds.codex,
+            path: r'C:\stale\codex.exe',
+          ),
+        );
+      container = workspaceWith(
+        probe: FakePathProbe(files: const {r'C:\shim\codex.exe'}),
+        responder: (req) => req.executable == 'where'
+            ? _notOnPath
+            : throw CommandException('nothing there'),
+      );
+
+      final report = await controllerOf(container).repairBrokenPaths();
+
+      // Only the stale one was broken, and it is the only one reported.
+      expect(report.broken.map((r) => r.installation.id), ['stale']);
+    });
+
     test('a WSL path is never judged by this host\'s filesystem', () async {
       // A WSL path is spelled for *its* disk. Stat-ing it here would report
       // every WSL agent missing and repair them all into nothing.
