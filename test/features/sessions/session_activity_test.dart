@@ -330,6 +330,137 @@ void main() {
     expect(activity, SessionActivity.none);
   });
 
+  /// The `Agent` row of a subagent Claude Code is running in the background.
+  ///
+  /// Answered — `pendingToolUseId` is null, because the CLI replied to the
+  /// parent's call within 0.2 minutes — and still running, which is the whole
+  /// gap. The reader puts the CLI's own agent id on the row; see
+  /// [TranscriptMessage.pendingBackgroundAgentId].
+  TranscriptMessage backgroundSubagent({
+    String agentId = 'a809fe33a06af42de',
+    String subject = 'review the diff',
+    DateTime? at,
+  }) => TranscriptMessage(
+    role: 'tool',
+    text: '$kSubagentToolName($subject)',
+    tool: ToolActivity(
+      name: kSubagentToolName,
+      subject: subject,
+      output: 'Async agent launched successfully.',
+    ),
+    at: at ?? issued,
+    pendingBackgroundAgentId: agentId,
+  );
+
+  group('a background subagent is running though its call was answered', () {
+    test('it reaches the strip at all', () async {
+      final activity = await activityFor(messages: [backgroundSubagent()]);
+
+      expect(activity.calls.single.summary, 'Agent(review the diff)');
+      expect(activity.calls.single.isSubagent, isTrue);
+      expect(activity.blindSpot, isNull);
+    });
+
+    // **The real case, not a hypothetical.** Two subagents launched from this
+    // repo on 2026-09-07 ran 4,549,121 ms and 4,798,063 ms. Neither was ever an
+    // outstanding call for more than a moment, so before this the strip said
+    // nothing for 76 and 80 minutes while the badge said Working.
+    for (final (name, elapsed) in [
+      ('a 76-minute background subagent', Duration(milliseconds: 4549121)),
+      ('an 80-minute background subagent', Duration(milliseconds: 4798063)),
+    ]) {
+      test(name, () async {
+        final activity = await activityFor(messages: [backgroundSubagent()]);
+
+        expect(activity.calls, hasLength(1));
+        expect(activity.calls.single.ageAt(issued.add(elapsed)), elapsed);
+      });
+    }
+
+    test('the age is the transcript\'s, never a first sighting', () async {
+      final launched = issued.subtract(const Duration(minutes: 76));
+      final activity = await activityFor(
+        messages: [backgroundSubagent(at: launched)],
+      );
+
+      expect(activity.calls.single.startedAt, launched);
+    });
+
+    test('it is not counted twice against its own answered call', () async {
+      // The reader clears `pendingToolUseId` in the same step that records the
+      // launch, so the two can never both be set — asserted here because a
+      // double count is what would turn one subagent into "2 subagents
+      // running".
+      final activity = await activityFor(messages: [backgroundSubagent()]);
+
+      expect(activity.calls, hasLength(1));
+    });
+
+    test('it joins foreground calls in transcript order', () async {
+      final activity = await activityFor(
+        messages: [
+          backgroundSubagent(subject: 'audit the diff'),
+          call(id: 't1', subject: 'flutter test', at: issued.add(const Duration(minutes: 1))),
+        ],
+      );
+
+      expect(activity.calls.map((c) => c.summary), [
+        'Agent(audit the diff)',
+        'Bash(flutter test)',
+      ]);
+      expect(activity.calls.map((c) => c.isSubagent), [true, false]);
+    });
+
+    test('a session that has stopped working claims none of them', () async {
+      // The one backstop, and it is the same one the outstanding rule uses. A
+      // ledger entry means "launched and unreported", which a session whose
+      // CLI went away also produces — so nothing is drawn for a session the
+      // app cannot see working.
+      for (final status in [
+        AgentActivityStatus.idle,
+        AgentActivityStatus.unknown,
+        AgentActivityStatus.awaitingApproval,
+      ]) {
+        final activity = await activityFor(
+          messages: [backgroundSubagent()],
+          status: status,
+        );
+
+        expect(activity, SessionActivity.none, reason: status.name);
+      }
+    });
+
+    test('a finished row claims none of them', () async {
+      final activity = await activityFor(
+        messages: [backgroundSubagent()],
+        rowStatus: SessionStatus.cancelled,
+      );
+
+      expect(activity, SessionActivity.none);
+    });
+
+    test('a background subagent with no timestamp is not shown', () async {
+      // Same discipline as a foreground call: no instant, no age, and an age we
+      // invented would be a claim we were inventing.
+      final activity = await activityFor(
+        messages: [
+          TranscriptMessage(
+            role: 'tool',
+            text: 'Agent(review the diff)',
+            tool: const ToolActivity(
+              name: kSubagentToolName,
+              subject: 'review the diff',
+            ),
+            pendingBackgroundAgentId: 'a1',
+          ),
+        ],
+      );
+
+      expect(activity.calls, isEmpty);
+      expect(activity.blindSpot, isNull);
+    });
+  });
+
   // The strip is repainted on a one-second tick; a poll that changed nothing
   // must hand it a value it recognises rather than a new list of the same calls.
   test('two identical derivations compare equal', () {
