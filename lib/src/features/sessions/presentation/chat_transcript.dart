@@ -10,6 +10,14 @@ import '../domain/tool_activity.dart';
 import 'markdown_message.dart';
 import 'tool_activity_row.dart';
 
+/// The one row the transcript view writes itself: the line that says a
+/// compaction happened here and how much of the conversation is behind it.
+///
+/// A role of its own rather than `agent`, because nobody said it. The rest of
+/// the file treats an unknown role as the agent's, which would have put the
+/// app's own words in the model's mouth.
+const String kCompactionNoticeRole = 'compaction';
+
 /// A normalized chat message for the transcript view, independent of whether it
 /// came from a native session's event log or an imported CLI transcript.
 class ChatMessage {
@@ -508,6 +516,7 @@ class _ChatMessageTile extends StatelessWidget {
       'user' => 'You',
       'tool' => 'Tool',
       'error' => 'Error',
+      kCompactionNoticeRole => 'Compacted',
       _ => 'Agent',
     };
 

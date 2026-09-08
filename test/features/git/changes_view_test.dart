@@ -75,6 +75,52 @@ void main() {
     expect(find.text('-old line'), findsOneWidget);
   });
 
+  testWidgets('the list opens on what a reviewer reads first, and hides none', (
+    tester,
+  ) async {
+    // git lists these alphabetically, which puts the lockfile at the top of
+    // every review. Tiered, never filtered — see `review_order.dart`.
+    await pump(
+      tester,
+      files: const [
+        FileChange(
+          path: 'build/app/outputs/log.txt',
+          type: FileChangeType.modified,
+          staged: false,
+          unstaged: true,
+        ),
+        FileChange(
+          path: 'lib/models/user.g.dart',
+          type: FileChangeType.modified,
+          staged: false,
+          unstaged: true,
+        ),
+        FileChange(
+          path: 'pubspec.lock',
+          type: FileChangeType.modified,
+          staged: false,
+          unstaged: true,
+        ),
+        FileChange(
+          path: 'lib/main.dart',
+          type: FileChangeType.modified,
+          staged: false,
+          unstaged: true,
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    double top(String path) => tester.getTopLeft(find.text(path)).dy;
+
+    expect(top('lib/main.dart'), lessThan(top('lib/models/user.g.dart')));
+    expect(top('lib/models/user.g.dart'), lessThan(top('pubspec.lock')));
+    expect(top('pubspec.lock'), lessThan(top('build/app/outputs/log.txt')));
+    // Every one of them is still on screen.
+    expect(find.byType(ListTile), findsNothing);
+    expect(find.text('build/app/outputs/log.txt'), findsOneWidget);
+  });
+
   testWidgets('shows an empty state when there are no changes', (tester) async {
     await pump(tester, files: const []);
     await tester.pumpAndSettle();

@@ -467,21 +467,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// which has no place for a widget's state.
   List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) {
     _subagents.clear();
-    final out = <ChatMessage>[];
-    for (final message in messages) {
-      final reference = message.subagent;
-      if (reference != null) _subagents[out.length] = reference;
-      out.add(
-        ChatMessage(
-          role: message.role,
-          text: message.text,
-          tool: message.tool,
-          thinking: message.thinking,
-          at: message.at,
-        ),
-      );
-    }
-    return out;
+    return chatMessagesFromTranscript(messages, subagents: _subagents);
   }
 
   /// Maps the persisted event log to displayable chat messages, dropping
@@ -617,6 +603,80 @@ String? sessionTerminalPane(WidgetRef ref, String sessionId) {
   if (paneId == null) return null;
   final terminals = ref.read(terminalSessionsControllerProvider.notifier);
   return terminals.instanceFor(paneId) == null ? null : paneId;
+}
+
+/// A CLI transcript as chat messages, with a compacted session's history
+/// shown **once**.
+///
+/// Everything before the last compaction boundary is history the CLI dropped
+/// from its own context and then restated as the summary that follows it, so
+/// drawing both is the same conversation twice. Measured on a real compacted
+/// transcript on this machine: `readCliTranscript` returns 2,793 rows, of which
+/// row 1,287 is a 17,795-character row summarising the 1,287 above it — and
+/// drawn, because the CLI writes it as a `user` message, as something the user
+/// typed. Row 2,556 does it again for everything up to there.
+///
+/// Claude Code's own `--resume` shows the summary and the continuation, and so
+/// does this, with one line saying how many messages are behind it so that
+/// nothing is dropped silently.
+///
+/// **The cut is here and not in `readCliTranscript`.** That list keeps every
+/// row, its order and its roles, so the conversation index and search still
+/// hold the whole pre-compaction history; only the reading of it stops
+/// repeating itself. [subagents], when given, is filled with the delegates to
+/// hang on the rows they were spawned from, keyed by position in the result.
+@visibleForTesting
+List<ChatMessage> chatMessagesFromTranscript(
+  List<TranscriptMessage> messages, {
+  Map<int, SubagentRef>? subagents,
+}) {
+  // The **last** boundary: a session compacted twice has restated its history
+  // twice, and only the newest summary covers all of it.
+  var from = 0;
+  CompactionBoundary? boundary;
+  for (var i = messages.length - 1; i > 0; i--) {
+    final compaction = messages[i].compaction;
+    if (compaction != null) {
+      from = i;
+      boundary = compaction;
+      break;
+    }
+  }
+
+  final out = <ChatMessage>[];
+  if (boundary != null) {
+    final trigger = boundary.trigger;
+    out.add(
+      ChatMessage(
+        role: kCompactionNoticeRole,
+        // The count, because a reader must be able to tell how much is behind
+        // the line. The trigger only when the record carried one.
+        text:
+            '$from earlier ${from == 1 ? 'message' : 'messages'} were '
+            'compacted away by the agent'
+            '${trigger == null ? '' : ' ($trigger)'}. What it kept is the '
+            'summary below; the transcript file still holds them, and so does '
+            'search.',
+        at: messages[from].at,
+      ),
+    );
+  }
+
+  for (var i = from; i < messages.length; i++) {
+    final message = messages[i];
+    final reference = message.subagent;
+    if (reference != null) subagents?[out.length] = reference;
+    out.add(
+      ChatMessage(
+        role: message.role,
+        text: message.text,
+        tool: message.tool,
+        thinking: message.thinking,
+        at: message.at,
+      ),
+    );
+  }
+  return out;
 }
 
 /// Whether a chat view can be built for the agent behind [sessionId].
