@@ -436,12 +436,22 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 
       await lifecycle.shutdown();
 
-      // A literal, and a tight one: the hook step's own 150 ms cap is the whole
-      // cost here. Bounding this by `kShutdownBudget` instead meant a step that
-      // helped itself to the shared budget still passed.
+      // **Counted, not timed.** This used to be `lastShutdownDuration <
+      // 800 ms`, and under six concurrent suites it read 902 ms — which said
+      // nothing about the budget and everything about the machine. Worse, it
+      // was weak in the direction that matters: a 700 ms shutdown that skipped
+      // the control server step entirely would have passed it. The property is
+      // that *this* step was cut off at its own cap and nothing after it was
+      // starved, and that is two lists.
       expect(
-        lifecycle.lastShutdownDuration,
-        lessThan(const Duration(milliseconds: 800)),
+        lifecycle.abandonedSteps,
+        ['agent hook installation'],
+        reason: 'only the step that hangs may be cut off',
+      );
+      expect(
+        lifecycle.skippedSteps,
+        isEmpty,
+        reason: 'a hanging step helped itself to the shared budget',
       );
       expect(File(bridge).existsSync(), isFalse, reason: 'handshake removed');
       expect(natives.tray.destroyed, isTrue);

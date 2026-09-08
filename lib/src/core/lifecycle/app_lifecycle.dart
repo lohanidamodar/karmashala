@@ -134,6 +134,23 @@ class AppLifecycle {
   Future<void>? _hookInstallation;
   Future<void>? _shutdown;
 
+  /// The steps the last [shutdown] cut off at their own cap, in order.
+  ///
+  /// Recorded rather than only logged, because *which* step was abandoned is
+  /// the property worth holding and wall-clock milliseconds are not: on a
+  /// loaded machine the elapsed time is the machine, while a 700 ms shutdown
+  /// that skipped the step which deletes the handshake would pass any duration
+  /// bound you could pick.
+  final List<String> abandonedSteps = <String>[];
+
+  /// The steps that never ran at all because the overall budget was already
+  /// spent when their turn came.
+  ///
+  /// **This is the failure the per-step slices exist to prevent** — one hang
+  /// eating the sequence — so it is a list to assert on rather than a warning
+  /// in a file nobody opens.
+  final List<String> skippedSteps = <String>[];
+
   /// How long the last completed [shutdown] took. Measured rather than
   /// asserted: the budget above is only meaningful if someone reads this.
   Duration? lastShutdownDuration;
@@ -769,6 +786,7 @@ class AppLifecycle {
     final left = _shutdownBudget - watch.elapsed;
     var remaining = cap < left ? cap : left;
     if (remaining <= Duration.zero) {
+      skippedSteps.add(name);
       _logger.warning(
         'lifecycle: skipped $name — the shutdown budget is spent',
       );
@@ -777,6 +795,7 @@ class AppLifecycle {
     try {
       await action().timeout(remaining);
     } on TimeoutException {
+      abandonedSteps.add(name);
       _logger.warning(
         'lifecycle: $name did not finish within '
         '${remaining.inMilliseconds} ms; closing anyway',
