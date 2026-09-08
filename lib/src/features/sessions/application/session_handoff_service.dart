@@ -213,12 +213,12 @@ class SessionHandoffService {
     // it must be the quoted tail: a dropped turn is still in the transcript
     // the new agent can read, while a dropped decision is the thing nobody
     // wrote down twice.
-    final decisions = _decisionsFor(sessionId, decisionBudget);
+    final recorded = _decisionsFor(sessionId, decisionBudget);
     final recap = await _recapFor(
       session,
       agentId,
       sourceName,
-      budget.reducedBy(decisions.cost),
+      budget.reducedBy(recorded.cost),
     );
     final changes = directory == null ? null : await _changesIn(directory);
     final delivery = directory == null
@@ -238,8 +238,9 @@ class SessionHandoffService {
       changes: changes,
       recap: recap.turns,
       omittedTurns: recap.omitted,
-      decisions: decisions.decisions,
-      omittedDecisions: decisions.omitted,
+      decisions: recorded.decisions,
+      omittedDecisions: recorded.omitted,
+      deadEnds: recorded.deadEnds,
       unresolvedTasks: [
         for (final task in unresolvedTasks)
           if (task.trim().isNotEmpty) task.trim(),
@@ -260,7 +261,13 @@ class SessionHandoffService {
   /// record, which means nobody wrote anything down — and the packet says so
   /// in different words, because an agent taking over a long session must not
   /// read either as "nothing was decided".
-  ({List<HandoffDecision>? decisions, int omitted, int cost}) _decisionsFor(
+  ({
+    List<HandoffDecision>? decisions,
+    List<HandoffClaim>? deadEnds,
+    int omitted,
+    int cost,
+  })
+  _decisionsFor(
     String sessionId,
     HandoffDecisionBudget budget,
   ) {
@@ -278,14 +285,46 @@ class SessionHandoffService {
             recordedAt: row.recordedAt,
           ),
       ], budget);
+      // Partitioned *after* the trim, so the budget is charged once over the
+      // whole record and the split cannot change what survives it. A rejected
+      // approach is not a second copy of a decision — it moves, because the
+      // reader needs it before they start work rather than among the rest.
+      const ruledOut = 'Approach rejected';
       return (
-        decisions: trimmed.decisions,
+        decisions: [
+          for (final decision in trimmed.decisions)
+            if (decision.kind != ruledOut) decision,
+        ],
+        deadEnds: [
+          for (final decision in trimmed.decisions)
+            if (decision.kind == ruledOut) _deadEnd(decision),
+        ],
         omitted: trimmed.omitted,
         cost: trimmed.cost,
       );
     } catch (_) {
-      return (decisions: null, omitted: 0, cost: 0);
+      return (decisions: null, deadEnds: null, omitted: 0, cost: 0);
     }
+  }
+
+  /// A rejected approach as the claim it is: what was ruled out, who said so,
+  /// and what backs it — or **"not checked yet"**, which the claim itself
+  /// renders rather than leaving the qualifier off.
+  static HandoffClaim _deadEnd(HandoffDecision decision) {
+    final detail = decision.detail?.trim();
+    final origin = decision.origin;
+    final backing = <String>[
+      if (detail != null && detail.isNotEmpty) detail,
+      if (origin != null)
+        decision.originId == null
+            ? 'recorded from $origin'
+            : 'recorded from $origin `${decision.originId}`',
+    ];
+    return HandoffClaim(
+      statement: decision.summary,
+      evidence: backing.isEmpty ? null : backing.join(' — '),
+      attributedTo: decision.decidedBy,
+    );
   }
 
   /// The tail of the conversation, read from the **agent's own transcript** —

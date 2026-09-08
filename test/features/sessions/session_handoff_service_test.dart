@@ -523,8 +523,21 @@ void main() {
           );
       final text = packet.render();
 
-      expect(packet.decisions, hasLength(2));
-      expect(text, contains('> The isolate pool deadlocked on Windows.'));
+      // A rejected approach is not filed with the rest: it moves to
+      // `## Don't do`, which is the section a reader needs *before* they start
+      // work rather than among everything else that was settled.
+      expect(packet.decisions, hasLength(1));
+      expect(packet.deadEnds, hasLength(1));
+      expect(
+        text,
+        contains('- **The isolate pool deadlocked on Windows.**'),
+      );
+      expect(text, contains('said by: Forker CLI'));
+      // Its evidence is the act that recorded it — never an omitted qualifier.
+      expect(
+        text,
+        contains('evidence: recorded from a `decision_record` call'),
+      );
       expect(text, contains('> Pass — the header parses.'));
       expect(text, contains('from verification run `v-1`'));
       expect(text, contains('decided by Forker CLI'));
@@ -581,8 +594,12 @@ void main() {
         instruction: 'Finish it.',
       );
 
-      // Every decision survives...
-      expect(after.decisions, hasLength(15));
+      // Every decision survives — counted across both sections it can land
+      // in, because the budget is charged once over the whole record.
+      expect(
+        after.decisions!.length + after.deadEnds!.length,
+        15,
+      );
       expect(after.omittedDecisions, 0);
       for (var i = 0; i < 15; i++) {
         expect(after.render(), contains('Decision $i'));

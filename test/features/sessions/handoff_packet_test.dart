@@ -6,6 +6,7 @@ HandoffPacket _packet({
   int omittedTurns = 0,
   List<HandoffChange>? changes = const [],
   List<String> unresolvedTasks = const [],
+  List<HandoffClaim>? deadEnds = const [],
   List<HandoffDecision>? decisions = const [],
   int omittedDecisions = 0,
   String? branch = 'feature/x',
@@ -29,6 +30,7 @@ HandoffPacket _packet({
   decisions: decisions,
   omittedDecisions: omittedDecisions,
   unresolvedTasks: unresolvedTasks,
+  deadEnds: deadEnds,
   isFork: isFork,
 );
 
@@ -436,4 +438,109 @@ void main() {
       expect(result.omitted, 0);
     });
   });
+
+  group('the two rules — ownership and evidence', () {
+    test('states the evidence rule, and that a packet is not evidence', () {
+      final text = _packet().render();
+      expect(text, contains('a command and what it printed'));
+      expect(text, contains('"not checked yet"'));
+      // The clause the rule exists for: a prior packet is a claim.
+      expect(
+        text,
+        contains('A previous packet is a claim, not evidence'),
+      );
+      expect(text, contains('the files win'));
+      // And the mismatch is reported rather than quietly corrected.
+      expect(text, contains('worth reporting rather than quietly correcting'));
+    });
+
+    test('gives every section an owner, and says who may edit it', () {
+      final text = _packet(
+        decisions: [_decision()],
+        recap: const [HandoffTurn(speaker: 'The user', text: 'Go.')],
+        unresolvedTasks: const ['the parser'],
+      ).render();
+
+      // The quoted recap has no editors at all — an edited quotation is not
+      // evidence any more.
+      expect(
+        text,
+        contains(
+          '_Owner: Claude Code and the user. No editors — if you disagree '
+          'with something here, say so; do not rewrite it._',
+        ),
+      );
+      // The decision record does: the receiving agent adds to it.
+      expect(
+        text,
+        contains('_Owner: Claude Code and the user. May edit: Codex CLI'),
+      );
+      expect(text, contains('_Owner: the user.'));
+      expect(text, contains('_Owner: Karmashala, read from git.'));
+    });
+
+    test('the ownership rule is stated once, above the sections', () {
+      final text = _packet().render();
+      expect(text, contains('Each section names its owner and who may edit'));
+      expect(
+        text.indexOf('Each section names its owner'),
+        lessThan(text.indexOf('## Where this came from')),
+      );
+    });
+  });
+
+  group('the dead ends already ruled out', () {
+    test('are their own section, above the rest of the record', () {
+      final text = _packet(
+        deadEnds: const [
+          HandoffClaim(
+            statement: 'An isolate pool for the parser.',
+            evidence: 'lib/src/parser.dart:88 — deadlocks on Windows',
+            attributedTo: 'Claude Code',
+          ),
+        ],
+        decisions: [_decision()],
+      ).render();
+
+      expect(text, contains("## Don't do"));
+      expect(text, contains('- **An isolate pool for the parser.**'));
+      expect(text, contains('said by: Claude Code'));
+      expect(
+        text,
+        contains('evidence: lib/src/parser.dart:88 — deadlocks on Windows'),
+      );
+      expect(
+        text.indexOf("## Don't do"),
+        lessThan(text.indexOf('## Decisions on record')),
+      );
+      // It is the receiving agent's to add to — that is the whole use of it.
+      expect(text, contains('_Owner: Claude Code. May edit: Codex CLI'));
+    });
+
+    test('a claim with no evidence says "not checked yet"', () {
+      final text = _packet(
+        deadEnds: const [HandoffClaim(statement: 'Threads.')],
+      ).render();
+      expect(text, contains('evidence: not checked yet'));
+      // And the attribution is never simply dropped.
+      expect(text, contains('said by: not recorded'));
+    });
+
+    test('an empty list is not "nothing was ruled out"', () {
+      final text = _packet(deadEnds: const []).render();
+      expect(text, contains('Nothing was recorded as ruled out'));
+      expect(
+        text,
+        contains('That is not the same as "nothing was ruled out"'),
+      );
+      expect(text, isNot(contains('None.')));
+    });
+
+    test('a record that could not be read says so, not "none"', () {
+      final text = _packet(deadEnds: null).render();
+      expect(text, contains('Could not be read'));
+      expect(text, contains('before spending a turn re-deriving it'));
+    });
+  });
+
 }
