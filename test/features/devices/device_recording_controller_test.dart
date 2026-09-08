@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/media/video_writer.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/process_spawn.dart';
 import 'package:karmashala/src/core/util/clock.dart';
@@ -71,6 +72,36 @@ class _ListSink implements RecordingSink {
   }
 }
 
+/// Stands in for the operating system's MP4 muxer.
+class _FakeRemuxer implements VideoRemuxer {
+  _FakeRemuxer({
+    required this.path,
+    required this.width,
+    required this.height,
+    required this.sequenceHeader,
+  });
+
+  final String path;
+  final int width;
+  final int height;
+  final Uint8List sequenceHeader;
+  final frames = <EncodedVideoFrame>[];
+  bool finished = false;
+  bool aborted = false;
+
+  @override
+  void add(EncodedVideoFrame frame) => frames.add(frame);
+
+  @override
+  int finish() {
+    finished = true;
+    return frames.isEmpty ? 0 : 20480;
+  }
+
+  @override
+  void abort() => aborted = true;
+}
+
 AndroidTarget _android([String serial = 'emulator-5554']) => AndroidTarget(
   AndroidDevice(
     serial: serial,
@@ -116,8 +147,26 @@ class _FakeLiveView {
   LiveViewRecordingSource get source => LiveViewRecordingSource(
     target: target,
     openTransportStream: _open,
+    openAccessUnits: _openUnits,
     geometryChanges: _sizes.stream,
   );
+
+  /// The same frames unmuxed — `DeviceStreamSession.openAccessUnits`' shape.
+  Stream<DeviceAccessUnit> _openUnits() async* {
+    consumers += 1;
+    var first = true;
+    await for (final unit in _frames.stream) {
+      yield DeviceAccessUnit(
+        bytes: unit,
+        ptsUs: _pts,
+        keyframe: first,
+        width: 1080,
+        height: 2400,
+        sequenceHeader: _unit(20, 0x67),
+      );
+      first = false;
+    }
+  }
 
   Stream<List<int>> _open() async* {
     consumers += 1;
@@ -197,6 +246,7 @@ void main() {
   ProviderContainer container({
     RecordingSinkOpener? opener,
     SimctlService? simctl,
+    Mp4WriterOpener? mp4,
   }) {
     final made = ProviderContainer(
       overrides: [
@@ -205,11 +255,40 @@ void main() {
           () async => directory.path,
         ),
         if (opener != null) recordingSinkOpenerProvider.overrideWithValue(opener),
+        if (mp4 != null) mp4WriterOpenerProvider.overrideWithValue(mp4),
         simctlServiceProvider.overrideWithValue(simctl),
       ],
     );
     addTearDown(made.dispose);
     return made;
+  }
+
+  /// An MP4 writer with the operating system's muxer faked out.
+  ({Mp4WriterOpener opener, List<_FakeRemuxer> made}) fakeMp4() {
+    final made = <_FakeRemuxer>[];
+    return (
+      opener: (String path) => Mp4RecordingWriter.open(
+        path,
+        openRemuxer:
+            ({
+              required String path,
+              required int width,
+              required int height,
+              required int frameRate,
+              required Uint8List sequenceHeader,
+            }) {
+              final remuxer = _FakeRemuxer(
+                path: path,
+                width: width,
+                height: height,
+                sequenceHeader: sequenceHeader,
+              );
+              made.add(remuxer);
+              return remuxer;
+            },
+      ),
+      made: made,
+    );
   }
 
   group('recording an Android live view', () {
@@ -364,6 +443,92 @@ void main() {
       expect(outcome.message, contains('not enough space'));
       expect(outcome.message, contains('was saved before it'));
       expect(sink.closed, isTrue);
+    });
+  });
+
+  group('recording an Android live view into an MP4', () {
+    test('names the file .mp4 and opens no container before a frame', () async {
+      final fake = fakeMp4();
+      final ref = container(mp4: fake.opener);
+      final live = _FakeLiveView(_android());
+      final recorder = ref.read(deviceRecordingProvider.notifier);
+
+      recorder.offerLiveView(live.source);
+      await recorder.startLiveViewRecording(
+        container: DeviceRecordingContainer.mp4,
+      );
+
+      final active = ref.read(deviceRecordingProvider) as DeviceRecordingActive;
+      expect(p.basename(active.path), 'emulator-5554-20260908-140307.mp4');
+      // Nothing is muxed until a frame says how big the picture is.
+      expect(fake.made, isEmpty);
+    });
+
+    test('muxes the handset frames with no re-encode', () async {
+      final fake = fakeMp4();
+      final ref = container(mp4: fake.opener);
+      final live = _FakeLiveView(_android());
+      final recorder = ref.read(deviceRecordingProvider.notifier);
+
+      recorder.offerLiveView(live.source);
+      await recorder.startLiveViewRecording(
+        container: DeviceRecordingContainer.mp4,
+      );
+      await live.sendFrame(700);
+      await live.sendFrame(500);
+      await recorder.stop();
+
+      final remuxer = fake.made.single;
+      expect(remuxer.width, 1080);
+      expect(remuxer.height, 2400);
+      expect(remuxer.sequenceHeader, isNotEmpty);
+      // The bytes go through untouched — a container change, not an encode.
+      expect(remuxer.frames.map((frame) => frame.bytes.length), [700, 500]);
+      expect(remuxer.frames.first.keyframe, isTrue);
+      expect(remuxer.finished, isTrue);
+
+      final outcome = await settled(ref);
+      expect(outcome.result, DeviceRecordingResult.saved);
+      expect(outcome.path, endsWith('.mp4'));
+    });
+
+    test('a rotation says the picture after it is stretched', () async {
+      final fake = fakeMp4();
+      final ref = container(mp4: fake.opener);
+      final live = _FakeLiveView(_android());
+      final recorder = ref.read(deviceRecordingProvider.notifier);
+
+      recorder.offerLiveView(live.source);
+      await recorder.startLiveViewRecording(
+        container: DeviceRecordingContainer.mp4,
+      );
+      await live.sendFrame();
+      await live.rotate();
+      await recorder.stop();
+
+      final outcome = await settled(ref);
+      // MP4 fixed the size in its sample entry, so this is what the file now
+      // is — not a footnote about the device.
+      expect(outcome.message, contains('keeps the size it started with'));
+      expect(outcome.message, contains('record to MPEG-TS'));
+    });
+
+    test('no frame at all is nothing recorded, and no file', () async {
+      final fake = fakeMp4();
+      final ref = container(mp4: fake.opener);
+      final live = _FakeLiveView(_android());
+      final recorder = ref.read(deviceRecordingProvider.notifier);
+
+      recorder.offerLiveView(live.source);
+      await recorder.startLiveViewRecording(
+        container: DeviceRecordingContainer.mp4,
+      );
+      await recorder.stop();
+
+      final outcome = await settled(ref);
+      expect(outcome.result, DeviceRecordingResult.empty);
+      expect(outcome.path, isNull);
+      expect(fake.made, isEmpty);
     });
   });
 

@@ -137,6 +137,7 @@ class IsolateFrameSink implements FrameSink {
   SendPort? _commands;
   final _ready = Completer<void>();
   final _done = Completer<FrameSinkResult>();
+  final _aborted = Completer<void>();
   int _frames = 0;
   bool _closed = false;
 
@@ -162,12 +163,19 @@ class IsolateFrameSink implements FrameSink {
         case FrameSinkResult():
           if (!_done.isCompleted) _done.complete(message);
           receive.close();
+        case _EncodeAborted():
+          if (!_aborted.isCompleted) _aborted.complete();
+          receive.close();
         case _EncodeFailure():
           final error = StateError(message.message);
           if (!_ready.isCompleted) _ready.completeError(error);
           if (!_done.isCompleted) _done.completeError(error);
+          // A worker that failed will never acknowledge an abort.
+          if (!_aborted.isCompleted) _aborted.complete();
           receive.close();
       }
+    }, onDone: () {
+      if (!_aborted.isCompleted) _aborted.complete();
     });
     return _ready.future;
   }
@@ -200,21 +208,29 @@ class IsolateFrameSink implements FrameSink {
     return _done.future;
   }
 
+  /// Asks the worker to give up, and waits for it to say it has.
+  ///
+  /// **Asked, not killed.** The worker holds the container and its file handle,
+  /// so it is the only one that can close and remove a half-written MP4 — a
+  /// killed isolate leaves the handle open on Windows, the delete fails, and
+  /// what is left on disk is a file that looks like a recording and opens in
+  /// nothing. Waiting costs one frame's encode.
   @override
   Future<void> abort() async {
+    if (_closed) return;
     _closed = true;
-    _worker?.kill(priority: Isolate.immediate);
+    final worker = _worker;
     _worker = null;
-    // A killed worker cannot close its container, so a half-written MP4 is on
-    // disk and no player will open it. Remove it rather than leave it looking
-    // like a recording.
-    if (format == RecordingFormat.mp4) {
+    if (worker != null) {
       try {
-        final file = File(outputPath);
-        if (file.existsSync()) file.deleteSync();
+        await _ready.future;
+        _commands?.send(const _EncodeAbort());
+        await _aborted.future;
       } on Object {
-        // Still held open by the encoder we just killed; nothing to do.
+        // The worker never got as far as answering; there is nothing it can
+        // have left behind either.
       }
+      worker.kill(priority: Isolate.beforeNextEvent);
     }
     if (!_done.isCompleted) {
       _done.completeError(StateError('encode aborted'));
@@ -271,6 +287,14 @@ class _EncodeFinish {
   const _EncodeFinish();
 }
 
+class _EncodeAbort {
+  const _EncodeAbort();
+}
+
+class _EncodeAborted {
+  const _EncodeAborted();
+}
+
 class _EncodeFailure {
   const _EncodeFailure(this.message);
 
@@ -300,6 +324,10 @@ Future<void> _encodeWorker(_EncodeRequest request) async {
           );
         case _EncodeFinish():
           request.reply.send(await encoder.finish());
+          commands.close();
+        case _EncodeAbort():
+          encoder.abort();
+          request.reply.send(const _EncodeAborted());
           commands.close();
       }
     } catch (error) {
@@ -391,6 +419,12 @@ class FrameEncoder {
         ).writeAsBytesSync(img.encodePng(image));
     }
     _frames++;
+  }
+
+  /// Closes the encoder and removes anything half-written.
+  void abort() {
+    _video?.abort();
+    _video = null;
   }
 
   Future<FrameSinkResult> finish() async {

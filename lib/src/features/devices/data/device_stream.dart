@@ -11,6 +11,7 @@ import 'adb_output_parsing.dart';
 import 'adb_service.dart';
 import 'scrcpy_control.dart';
 import 'scrcpy_protocol.dart';
+import 'recording_sink.dart';
 import 'loopback_media_server.dart';
 import 'ts_muxer.dart';
 
@@ -371,6 +372,7 @@ class DeviceStreamSession {
     required this.mark,
     required this.control,
     required this.videoSize,
+    required this.openAccessUnits,
   });
 
   final String serial;
@@ -390,6 +392,13 @@ class DeviceStreamSession {
   /// access unit, keyframes carrying their SPS/PPS. A consumer that stops
   /// reading stops the fan-out to itself and nothing else.
   final MediaStreamFactory openTransportStream;
+
+  /// Opens the same frames as [openTransportStream], unmuxed.
+  ///
+  /// For a recording that wants a container of its own — an MP4 sink takes the
+  /// access units and muxes them itself, so wrapping them in MPEG-TS first
+  /// only to unwrap them would be work for nothing.
+  final AccessUnitStreamFactory openAccessUnits;
 
   /// Newest frame seen and the timestamps needed to measure lag against it.
   final LiveFrameMark mark;
@@ -1065,6 +1074,36 @@ class DeviceStreamService {
       }
     }
 
+    DeviceAccessUnit unitFor(ScrcpyFrame frame) {
+      final size = videoSize;
+      return DeviceAccessUnit(
+        bytes: accessUnitFor(frame, codecConfig),
+        ptsUs: frame.ptsUs,
+        keyframe: frame.isKeyFrame,
+        width: size?.width ?? 0,
+        height: size?.height ?? 0,
+        // Annex-B SPS/PPS, which is what an MP4 sample entry is built from.
+        sequenceHeader: codecConfig ?? Uint8List(0),
+      );
+    }
+
+    Stream<DeviceAccessUnit> accessUnitsForOneConsumer() async* {
+      var started = false;
+      final cached = lastKeyFrame;
+      if (cached != null) {
+        yield unitFor(cached);
+        started = true;
+      }
+      await for (final frame in frames.stream) {
+        // A decoder handed a mid-GOP frame first has nothing to predict from.
+        if (!started) {
+          if (!frame.isKeyFrame) continue;
+          started = true;
+        }
+        yield unitFor(frame);
+      }
+    }
+
     final http = await LoopbackMediaServer.serve(
       openStream: muxedForOneViewer,
       onChunkWritten: () =>
@@ -1096,6 +1135,7 @@ class DeviceStreamService {
       url: http.url,
       onStop: stop,
       openTransportStream: muxedForOneViewer,
+      openAccessUnits: accessUnitsForOneConsumer,
       videoSizeChanges: sizes.stream,
       health: healthController.stream,
       mark: mark,

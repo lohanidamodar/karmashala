@@ -29,6 +29,13 @@ const String kDeviceRecordingsFolder = 'recordings';
 /// `DeviceRecordingController.startLiveViewRecording`.
 const String kTransportStreamExtension = 'ts';
 
+/// Opens an MP4 destination. Injected so a test needs no OS muxer.
+typedef Mp4WriterOpener = Mp4RecordingWriter Function(String path);
+
+final mp4WriterOpenerProvider = Provider<Mp4WriterOpener>(
+  (ref) => Mp4RecordingWriter.open,
+);
+
 /// What `simctl io … recordVideo` writes: a QuickTime movie.
 const String kQuickTimeExtension = 'mov';
 
@@ -60,6 +67,7 @@ class LiveViewRecordingSource {
   const LiveViewRecordingSource({
     required this.target,
     required this.openTransportStream,
+    required this.openAccessUnits,
     required this.geometryChanges,
   });
 
@@ -67,6 +75,9 @@ class LiveViewRecordingSource {
 
   /// See `DeviceStreamSession.openTransportStream`.
   final MediaStreamFactory openTransportStream;
+
+  /// The same frames unmuxed, for the MP4 container to mux itself.
+  final AccessUnitStreamFactory openAccessUnits;
 
   /// The session's rotations and resizes, counted so the file can say it
   /// changes size partway through.
@@ -98,7 +109,9 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
   LiveViewRecordingSource? _source;
 
   RecordingSink? _sink;
-  StreamSubscription<List<int>>? _video;
+  Mp4RecordingWriter? _mp4;
+  DeviceRecordingContainer _container = DeviceRecordingContainer.transportStream;
+  StreamSubscription<void>? _video;
   StreamSubscription<DeviceScreenSize>? _sizes;
   ProcessHandle? _process;
 
@@ -175,24 +188,45 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
   ///
   /// MPEG-TS also happens to be the container that survives what this stream
   /// does. A rotation re-sends SPS/PPS mid-stream and changes the picture's
-  /// size; MP4 fixes both in the sample entry it writes at the end, and a
-  /// rotation would need a second track.
-  Future<void> startLiveViewRecording() async {
+  /// size; MP4 fixes both in one sample entry, and a rotation would need a
+  /// second track.
+  ///
+  /// ## And why there is an MP4 now anyway
+  ///
+  /// [DeviceRecordingContainer.mp4] muxes the *same* frames through the
+  /// operating system's MP4 sink — still no re-encode, measured byte-identical
+  /// — so the file every player double-clicks costs nothing but the container.
+  /// The rotation limit above is real and is what the outcome says when one
+  /// happens; MPEG-TS stays on offer for exactly that.
+  ///
+  /// [container] defaults to MPEG-TS so it is never chosen by omission. The
+  /// surfaces name what they want.
+  Future<void> startLiveViewRecording({
+    DeviceRecordingContainer container =
+        DeviceRecordingContainer.transportStream,
+  }) async {
     if (_current is DeviceRecordingActive) return;
     final source = _source;
     if (source == null) return;
 
     final startedAt = ref.read(clockProvider).nowUtc();
     final String path;
-    RecordingSink sink;
+    RecordingSink? sink;
+    Mp4RecordingWriter? mp4;
     try {
       path = deviceRecordingPath(
         target: source.target,
         directory: await ref.read(deviceRecordingDirectoryProvider)(),
         startedAt: startedAt,
-        extension: kTransportStreamExtension,
+        extension: container.extension,
       );
-      sink = await ref.read(recordingSinkOpenerProvider)(path);
+      if (container == DeviceRecordingContainer.mp4) {
+        // The container itself opens on the first frame, when the picture size
+        // is known; nothing touches the disk before then.
+        mp4 = ref.read(mp4WriterOpenerProvider)(path);
+      } else {
+        sink = await ref.read(recordingSinkOpenerProvider)(path);
+      }
     } on Object catch (error, stack) {
       _log.warning('A recording of ${source.target.id} would not open', error, stack);
       _set(
@@ -207,12 +241,14 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     }
 
     _sink = sink;
+    _mp4 = mp4;
+    _container = container;
     _chunks = 0;
     _gaps = 0;
     _geometryChanges = 0;
     _finishing = false;
     _accepting = true;
-    _watchForWriteFailure(sink);
+    _watchForWriteFailure(sink?.done ?? mp4!.done);
     _set(
       DeviceRecordingActive(
         target: source.target,
@@ -295,17 +331,31 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
 
   void _attach(LiveViewRecordingSource source) {
     final sink = _sink;
-    if (sink == null) return;
-    _video = source.openTransportStream().listen(
-      (chunk) {
-        if (!_accepting) return;
-        _chunks += 1;
-        sink.add(chunk);
-      },
-      onDone: _sourceEnded,
-      onError: (Object _) => _sourceEnded(),
-      cancelOnError: true,
-    );
+    final mp4 = _mp4;
+    if (sink == null && mp4 == null) return;
+    // Two shapes, because the containers take different things: MPEG-TS is
+    // already muxed upstream, MP4 muxes the access units here.
+    _video = mp4 != null
+        ? source.openAccessUnits().listen(
+            (unit) {
+              if (!_accepting) return;
+              _chunks += 1;
+              mp4.add(unit);
+            },
+            onDone: _sourceEnded,
+            onError: (Object _) => _sourceEnded(),
+            cancelOnError: true,
+          )
+        : source.openTransportStream().listen(
+            (chunk) {
+              if (!_accepting) return;
+              _chunks += 1;
+              sink!.add(chunk);
+            },
+            onDone: _sourceEnded,
+            onError: (Object _) => _sourceEnded(),
+            cancelOnError: true,
+          );
     _sizes = source.geometryChanges.listen((_) {
       _geometryChanges += 1;
       final active = _current;
@@ -338,9 +388,9 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
 
   /// Out of disk, and everything else the filesystem only discovers on the
   /// write itself. It arrives as an event rather than being polled for.
-  void _watchForWriteFailure(RecordingSink sink) {
+  void _watchForWriteFailure(Future<void> done) {
     unawaited(
-      sink.done.then(
+      done.then(
         (_) {},
         onError: (Object error) => unawaited(_finish(writeFailure: error)),
       ),
@@ -356,10 +406,12 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     final video = _video;
     final sizes = _sizes;
     final sink = _sink;
+    final mp4 = _mp4;
     final process = _process;
     _video = null;
     _sizes = null;
     _sink = null;
+    _mp4 = null;
     _process = null;
     // **Dropped, not awaited.** The transport stream is an `async*` generator
     // suspended on the session's frame controller, and cancelling one of those
@@ -382,12 +434,24 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
         closeError ??= error;
       }
     }
+    if (mp4 != null) {
+      try {
+        bytes = await mp4.close();
+      } on Object catch (error) {
+        closeError ??= error;
+        mp4.abort();
+      }
+    }
     if (bytes == 0) bytes = await _sizeOf(active.path);
 
     final length = ref.read(clockProvider).nowUtc().difference(active.startedAt);
     // A transport stream whose only event was the container tables holds no
-    // picture, however many bytes that is.
-    final noPicture = bytes == 0 || (sink != null && _chunks <= 1);
+    // picture, however many bytes that is. An MP4 counts access units, so one
+    // of those is already a picture.
+    final noPicture =
+        bytes == 0 ||
+        (sink != null && _chunks <= 1) ||
+        (mp4 != null && _chunks == 0);
 
     if (closeError != null && bytes > 0) {
       _set(
@@ -437,6 +501,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
                 length: length,
                 gaps: active.gaps,
                 geometryChanges: active.geometryChanges,
+                container: _container,
               )
             : DeviceRecordingOutcome.endedEarly(
                 target: active.target,
@@ -456,10 +521,12 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     final video = _video;
     final sizes = _sizes;
     final sink = _sink;
+    final mp4 = _mp4;
     final process = _process;
     _video = null;
     _sizes = null;
     _sink = null;
+    _mp4 = null;
     _process = null;
     _finishing = true;
     _accepting = false;
@@ -468,6 +535,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     await process?.interrupt();
     try {
       await sink?.close();
+      await mp4?.close();
     } on Object {
       // Nothing left to tell.
     }
