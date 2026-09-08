@@ -127,23 +127,55 @@ class SessionActivity {
       : 'SessionActivity(blind: ${blindSpot!.name})';
 }
 
-/// The `tool_use` blocks in [messages] that no `tool_result` has answered.
+/// **The calls in [messages] that are still running**, of both kinds.
 ///
 /// One walk of a list the parse already produced — no second read, no second
-/// poll, and nothing here opens a file. Outstanding-ness is read off
-/// [TranscriptMessage.pendingToolUseId], which the reader clears when the
-/// result lands; `tool.output == null` would have been wrong, because a call
-/// that answered with nothing at all looks identical to one still in flight.
+/// poll, and nothing here opens a file. A call whose line carried no timestamp
+/// is skipped either way: without one there is no age to show beside it.
 ///
-/// A call whose line carried no timestamp is skipped: without one there is no
-/// age to show beside it.
+/// ### Two kinds, because the CLI runs them two ways
+///
+/// **A foreground call** is outstanding: a `tool_use` no `tool_result` has
+/// answered, read off [TranscriptMessage.pendingToolUseId]. (`tool.output ==
+/// null` would have been wrong — a call that answered with nothing at all
+/// looks identical to one still in flight.)
+///
+/// **A background subagent** is never outstanding for more than a moment:
+/// Claude Code answers the parent's `Agent` call at once with
+/// `async_launched` and reports the outcome much later. The two runs on
+/// 2026-09-07 took 76 and 80 minutes, so no rule about a call's age could have
+/// found either. [TranscriptMessage.pendingBackgroundAgentId] is what sees
+/// them.
+///
+/// **Neither is marked as which**, here or in the strip. Whether the CLI held
+/// the parent's tool call open or answered it with a stub is a fact about the
+/// CLI — that detail already changed once, when `Task` became `Agent` — and
+/// not about the user's work. The distinction a reader needs is subagent
+/// versus tool, which [OutstandingCall.isSubagent] carries.
+///
+/// Oldest first, and by one walk: a background launch is recorded on the row
+/// of the call that started it, so the two kinds interleave in transcript
+/// order rather than concatenating.
+///
+/// **This session's own calls, at depth 1.** A delegate that spawns a delegate
+/// records that launch in *its* transcript, not the parent's — the owner's
+/// largest session has 109 such refs on disk, at depths 2 and 3, and none of
+/// their launches appears here. Reading them would mean opening the 519 MiB of
+/// delegate transcripts this whole design refuses to open on a poll, so a
+/// nested agent is left unclaimed rather than counted or denied.
 List<OutstandingCall> outstandingCallsIn(List<TranscriptMessage> messages) {
   final out = <OutstandingCall>[];
   for (final message in messages) {
     final tool = message.tool;
     final startedAt = message.at;
     if (tool == null || startedAt == null) continue;
-    if (message.pendingToolUseId == null) continue;
+    // Mutually exclusive by construction: the reader clears
+    // `pendingToolUseId` in the same step that records the async launch, so a
+    // background subagent can never be counted twice.
+    if (message.pendingToolUseId == null &&
+        message.pendingBackgroundAgentId == null) {
+      continue;
+    }
     out.add(
       OutstandingCall(
         summary: tool.summary,
@@ -184,6 +216,31 @@ List<OutstandingCall> outstandingCallsIn(List<TranscriptMessage> messages) {
 /// their own constants rather than by a guess here. Nothing in this file needs
 /// a clock, and §19's "one reading, not two" is why it must not take a second
 /// opinion on a question the status pipeline has already answered.
+///
+/// ### What retires a *background* subagent
+///
+/// The same answer, and no clock here either. A launch the CLI never reported
+/// on means "running" or "it died with the session" — the ambiguity above —
+/// but it needs one thing the outstanding rule did not: the CLI's own
+/// reconciliation. 95 of the 311 background subagents in the owner's largest
+/// session never got a notification at all, so "launched and unreported" alone
+/// would have drawn 95 running agents on a session that had four. What prunes
+/// them is in [TranscriptMessage.pendingBackgroundAgentId].
+///
+/// It leaves the ledger honest but not clairvoyant, and the split is the
+/// designed one. Run over all 72 transcripts in the owner's store on
+/// 2026-09-08: 64 hold nothing, the one live session holds exactly the agents
+/// that were really running, and 7 dead sessions hold 1 to 3 entries each — an
+/// agent that died with its CLI and got no notification and no boundary after
+/// it. Every one of those 7 is silenced here, by gate 2, because a dead
+/// session is not working. That is the same division of labour the outstanding
+/// rule already relies on, and it is why neither needs a clock.
+///
+/// **The phone learns about it for free.** `session.activity` already carries a
+/// call as summary, tool name, `subagent` and `startedAt` against the host's
+/// own `observedAt`, and the host builds that list from [SessionActivity.calls]
+/// — so a background subagent rides the frame `Capability.viewActivity`
+/// already gates, with no new bit and no new field.
 ///
 /// ### The gates, in order
 ///

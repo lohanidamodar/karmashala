@@ -305,6 +305,84 @@ void main() {
     expect(tester.getSize(find.byType(ActivityStrip)), Size.zero);
   });
 
+  /// The `Agent` row of a subagent running in the background: answered, and
+  /// running. See [TranscriptMessage.pendingBackgroundAgentId].
+  TranscriptMessage backgroundSubagent({
+    String subject = 'review the diff',
+    DateTime? at,
+  }) => TranscriptMessage(
+    role: 'tool',
+    text: '$kSubagentToolName($subject)',
+    tool: ToolActivity(
+      name: kSubagentToolName,
+      subject: subject,
+      output: 'Async agent launched successfully.',
+    ),
+    at: at ?? issued,
+    pendingBackgroundAgentId: 'a809fe33a06af42de',
+  );
+
+  // **The strip drawing the thing the owner asked for.** Claude Code answers
+  // the parent's `Agent` call in about 0.2 minutes and reports the outcome much
+  // later, so a subagent that ran 76 minutes — two did on 2026-09-07 — was
+  // never an outstanding call and this row was blank the whole time.
+  testWidgets('a background subagent is named while it runs', (tester) async {
+    await pumpStrip(
+      tester,
+      clock: FixedClock(issued.add(const Duration(milliseconds: 4549121))),
+      messages: [backgroundSubagent()],
+    );
+
+    expect(find.text('$kSubagentToolName(review the diff)'), findsOneWidget);
+    expect(find.text('1h 15m'), findsOneWidget);
+    expect(find.byIcon(AppIcons.robot), findsOneWidget);
+    final semantics = tester.getSemantics(find.byType(ActivityStrip));
+    expect(semantics.label, contains('Subagent running'));
+  });
+
+  testWidgets('it collapses beside foreground calls with no second vocabulary',
+      (tester) async {
+    // One label, and no "background" in it. Whether the CLI held the parent's
+    // tool call open or answered it with a stub is a fact about the CLI, not
+    // about the user's work — and that detail already changed once, when the
+    // tool was renamed from `Task` to `Agent`. The distinction a reader has to
+    // see is subagent versus tool, which the count and the glyph already draw.
+    await pumpStrip(
+      tester,
+      clock: FixedClock(issued.add(const Duration(minutes: 1, seconds: 20))),
+      messages: [
+        call(id: 't1', subject: 'flutter test'),
+        call(
+          id: 't2',
+          subject: 'git log',
+          at: issued.add(const Duration(seconds: 30)),
+        ),
+        backgroundSubagent(at: issued.add(const Duration(seconds: 40))),
+      ],
+    );
+
+    expect(find.text('2 tools and 1 subagent running'), findsOneWidget);
+    expect(find.text('oldest 1m 20s'), findsOneWidget);
+    expect(find.byIcon(AppIcons.robot), findsOneWidget);
+  });
+
+  testWidgets('several background subagents at once say so', (tester) async {
+    // Four ran in parallel on the owner's session on 2026-09-08, which is what
+    // this row could not show.
+    await pumpStrip(
+      tester,
+      messages: [
+        for (var i = 0; i < 4; i++)
+          backgroundSubagent(
+            subject: 'job $i',
+            at: issued.add(Duration(seconds: i)),
+          ),
+      ],
+    );
+
+    expect(find.text('4 subagents running'), findsOneWidget);
+  });
+
   testWidgets('the elapsed time advances on its own', (tester) async {
     final clock = _MovingClock(issued.add(const Duration(seconds: 4)));
     await pumpStrip(tester, messages: [call(id: 't1')], clock: clock);

@@ -18,6 +18,7 @@ class TranscriptMessage {
     this.subagent,
     this.at,
     this.pendingToolUseId,
+    this.pendingBackgroundAgentId,
     this.thinking,
   });
 
@@ -53,6 +54,29 @@ class TranscriptMessage {
   /// answered with nothing at all lands as a null [ToolActivity.output] too, and
   /// reading that as in-flight would leave it on screen forever.
   final String? pendingToolUseId;
+
+  /// **The CLI's own id for a subagent it is running in the background**, set
+  /// only while nothing in this record has reported it finished.
+  ///
+  /// [pendingToolUseId] cannot answer this: Claude Code answers the parent's
+  /// `Agent` call at once with `{"isAsync":true,"status":"async_launched"}` —
+  /// 0.2 minutes typically, longest 1.5 across the owner's 518 calls — and
+  /// delivers the outcome much later in a `<task-notification>`. A subagent
+  /// that ran 76 minutes was therefore never an outstanding call, at any age.
+  ///
+  /// Three records retire it, each written by the CLI for its own reasons and
+  /// each able only to *remove*:
+  ///
+  /// * a `<task-notification>` naming it as `<task-id>`;
+  /// * a `system/compact_boundary`, after which the CLI re-enumerates what is
+  ///   still live as `attachment/task_status` rows. **The load-bearing one**:
+  ///   95 of 311 background subagents in the owner's largest session never
+  ///   reported back at all, and without it all 95 would read as running;
+  /// * a `system/agents_killed` — the kill-all gesture.
+  ///
+  /// Null on every other row, and on a launch with no `agentId`: a launch we
+  /// cannot name is one we could never retire.
+  final String? pendingBackgroundAgentId;
 }
 
 /// Reads a CLI session's full transcript (Claude Code / Codex JSONL) into a flat
@@ -96,6 +120,12 @@ Future<List<TranscriptMessage>> readCliTranscript(
   // pays nothing at all — not even the `stat` on a directory that is not
   // there.
   final tasks = <String, int>{};
+  // The background-subagent ledger: agent id → the row of the `Agent` call
+  // that launched it. Two maps because a boundary holds every entry aside and
+  // takes back only the ones the CLI names again — see
+  // [TranscriptMessage.pendingBackgroundAgentId].
+  final background = <String, int>{};
+  final acrossBoundary = <String, int>{};
   try {
     await for (final line
         in file
@@ -118,14 +148,49 @@ Future<List<TranscriptMessage>> readCliTranscript(
       if (cli == AgentIds.codex) {
         _parseCodexLine(decoded, messages, pending, at);
       } else {
-        _parseClaudeLine(decoded, messages, pending, tasks, at);
+        _parseClaudeLine(
+          decoded,
+          messages,
+          pending,
+          tasks,
+          background,
+          acrossBoundary,
+          at,
+        );
       }
     }
   } catch (_) {
     // Truncated/locked file — return whatever parsed.
   }
   await _attachSubagents(messages, tasks, filePath, subagentsDirectory);
+  // After the join, because that one rebuilds the very rows this stamps.
+  _stampBackgroundAgents(messages, background);
   return messages;
+}
+
+/// Marks the calls whose background subagents nothing has reported finished.
+///
+/// Once at the end rather than as the ledger moves: a boundary can retire an
+/// entry recorded thousands of lines earlier. Only the survivors are rewritten
+/// — 4 rows on the owner's live session, not the 30,000 the file holds.
+void _stampBackgroundAgents(
+  List<TranscriptMessage> messages,
+  Map<String, int> background,
+) {
+  background.forEach((agentId, index) {
+    if (index >= messages.length) return;
+    final row = messages[index];
+    messages[index] = TranscriptMessage(
+      role: row.role,
+      text: row.text,
+      tool: row.tool,
+      subagent: row.subagent,
+      at: row.at,
+      pendingToolUseId: row.pendingToolUseId,
+      pendingBackgroundAgentId: agentId,
+      thinking: row.thinking,
+    );
+  });
 }
 
 /// Hangs each located subagent on the `Task` row that spawned it.
@@ -185,14 +250,48 @@ void _parseClaudeLine(
   List<TranscriptMessage> out,
   Map<String, int> pending,
   Map<String, int> tasks,
+  Map<String, int> background,
+  Map<String, int> acrossBoundary,
   DateTime? at,
 ) {
   final type = json['type'];
+  // Session-level records: not turns, so they render nothing, but they are the
+  // only thing that can retire a subagent nobody ever reported.
+  if (type == 'system') {
+    switch (json['subtype']) {
+      // The `task_status` rows that follow re-state what is still live.
+      case 'compact_boundary':
+        acrossBoundary.addAll(background);
+        background.clear();
+      // The kill-all gesture: nothing survives it, named or not.
+      case 'agents_killed':
+        background.clear();
+        acrossBoundary.clear();
+    }
+    return;
+  }
+  if (type == 'attachment') {
+    final attachment = json['attachment'];
+    if (attachment is! Map) return;
+    if (attachment['type'] != 'task_status') return;
+    if (attachment['status'] != 'running') return;
+    final id = attachment['taskId'];
+    // Only an agent we watched launch: a re-statement with no launch record
+    // behind it carries no instant to count an age from.
+    if (id is String) {
+      final row = acrossBoundary.remove(id);
+      if (row != null) background[id] = row;
+    }
+    return;
+  }
   if (type != 'user' && type != 'assistant') return;
   final message = json['message'];
   if (message is! Map) return;
   final content = message['content'];
   final role = type == 'user' ? 'user' : 'agent';
+  if (role == 'user' && (background.isNotEmpty || acrossBoundary.isNotEmpty)) {
+    _retireReportedAgents(content, background, acrossBoundary);
+  }
 
   if (content is String) {
     _add(out, role, content, at);
@@ -226,17 +325,71 @@ void _parseClaudeLine(
             );
           }
         case 'tool_result':
+          // Read before `_attachResult` takes the id out of `pending`: the
+          // launch and the row it belongs to are known only here.
+          final id = part['tool_use_id'];
+          final row = id is String ? pending[id] : null;
           _attachResult(
             out,
             pending,
-            id: part['tool_use_id'],
+            id: id,
             output: _claudeResultText(part['content']),
             isError: part['is_error'] == true,
           );
+          final launched = _asyncAgentId(json['toolUseResult']);
+          if (launched != null && row != null) background[launched] = row;
       }
     }
   }
 }
+
+/// The agent id a `toolUseResult` says went to the background, or null.
+///
+/// `isAsync` rather than the `status` word: `async_launched` is the only value
+/// the owner's 311 launches carry, and gating on a string the CLI could extend
+/// would silently stop seeing a subagent the day it did.
+String? _asyncAgentId(Object? toolUseResult) {
+  if (toolUseResult is! Map) return null;
+  if (toolUseResult['isAsync'] != true) return null;
+  final id = toolUseResult['agentId'];
+  return id is String && id.isNotEmpty ? id : null;
+}
+
+/// Drops from the ledger every background agent [content] reports back on.
+///
+/// Joined on `<task-id>`, not the `<tool-use-id>` beside it: the ledger is
+/// keyed by agent id, and 151 of 908 envelopes in the owner's store carry no
+/// tool-use-id at all. The `<status>` word is not read — completed, failed,
+/// killed and stopped are four things to say and one thing to know.
+void _retireReportedAgents(
+  Object? content,
+  Map<String, int> background,
+  Map<String, int> acrossBoundary,
+) {
+  // Per block, so an ordinary turn costs one `contains` and no allocation.
+  for (final block in content is List ? content : [content]) {
+    final String text;
+    if (block is String) {
+      text = block;
+    } else if (block is Map && block['text'] is String) {
+      text = block['text'] as String;
+    } else {
+      continue;
+    }
+    if (!text.contains(_taskNotificationMarker)) continue;
+    for (final match in _taskIdPattern.allMatches(text)) {
+      final id = match.group(1);
+      background.remove(id);
+      acrossBoundary.remove(id);
+    }
+  }
+}
+
+/// The wrapper a background task's outcome arrives in, as the parent's own turn.
+const String _taskNotificationMarker = '<task-notification>';
+
+/// Compiled once for the process: this runs on every user turn of every parse.
+final RegExp _taskIdPattern = RegExp(r'<task-id>([^<]*)</task-id>');
 
 /// The text of a Claude `tool_result`'s content.
 ///
