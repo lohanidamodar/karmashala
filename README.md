@@ -68,9 +68,14 @@ comments explain *why* a line is the way it is at the line itself. What is left:
   Windows-toolchain rule (§17), the opt-in live tests (§18) and system health
   (§19).
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — the only planning document: what is
-  wanted, what is deliberately refused, and what was measured. It also carries
-  the reconciled findings from every competitor survey; the comparison documents
-  below are the evidence behind them, not a second plan.
+  wanted and what is deliberately refused, open items only, with a ranked index
+  at the top. It also carries the reconciled findings from every competitor
+  survey; the comparison documents below are the evidence behind them, not a
+  second plan.
+- [`docs/SETTLED.md`](docs/SETTLED.md) — the closed half: diagnoses worth
+  keeping, what shipped and why it is shaped that way, the two cost
+  measurements, and the limits that are deliberate. Nothing here is wanted; it
+  exists so an answered question is not asked twice.
 - Design notes: [agent status](docs/agent-status-integration.md),
   [inter-agent communication](docs/inter-agent-communication.md),
   [spawn approval](docs/spawn-approval.md),
