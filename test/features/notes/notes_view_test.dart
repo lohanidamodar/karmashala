@@ -259,16 +259,22 @@ void main() {
     );
   });
 
-  /// **The regression `bb4283f0` left behind, from the other surface.**
+  /// **Follow the face that is already showing.**
   ///
-  /// The perf change stopped the workbench mounting a session's conversation
-  /// until it had been asked for, and the composer a note lands in *is* that
-  /// conversation — so from 2026-09-02 a note sent to a session showing its
-  /// terminal went into a draft with no box. Sending now asks, which is what
-  /// it always did implicitly.
-  testWidgets('a note sent to a session in a pane reveals its conversation', (
-    tester,
-  ) async {
+  /// `e7adebe6` made Send reveal the conversation, which fixed the text
+  /// vanishing (`bb4283f0` had stopped the workbench mounting a composer
+  /// nobody had asked for) by forcing the chat face open — whether or not that
+  /// was where the user was working. The owner's rule is the narrower one:
+  /// terminal showing, the text goes to the terminal; chat showing, it goes to
+  /// the composer. So this file's reveal assertions are inverted here and in
+  /// the test below: the group's face is now what Send *reads*, never what it
+  /// writes.
+  ///
+  /// Typed and left there, the way a snippet is — [insertSnippet] is the path,
+  /// and it never presses Enter in a pane, because a carriage return there
+  /// takes a turn as if the user had.
+  testWidgets('a note offered to a session showing its terminal is typed into '
+      'the terminal', (tester) async {
     final container = await pump(tester);
     final terminals = container.read(
       terminalSessionsControllerProvider.notifier,
@@ -281,11 +287,53 @@ void main() {
     container.read(sessionDaoProvider).updatePaneId('s1', paneId);
     final groupId = terminals.groupOfPane(paneId);
     expect(groupId, isNotNull);
+    final written = <String>[];
+    terminals.instanceFor(paneId)!.terminal.onOutput = written.add;
+
+    container.read(notesProvider.notifier).capture(body: 'written here');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byTooltip('Send to the active session’s message box'),
+    );
+    await tester.pumpAndSettle();
+
+    // The bytes the pane would have handed its process: the note, and no
+    // carriage return after it.
+    expect(written, ['written here']);
+    expect(
+      container.read(composerDraftProvider).containsKey('s1'),
+      isFalse,
+      reason: 'a draft as well would deliver the same note twice',
+    );
     expect(
       container.read(terminalVisibleInGroupProvider(groupId!)),
       isTrue,
-      reason: 'a tab opens on its terminal — the broken case',
+      reason: 'the face the user was working in is the one that stays up',
     );
+    expect(
+      find.text('Typed into Toolbar rework’s terminal, unsent.'),
+      findsOneWidget,
+    );
+  });
+
+  /// The other half of the same rule — and the case `bb4283f0` broke, which is
+  /// now answered by *reading* the face instead of forcing it.
+  testWidgets('a note offered to a session showing its chat is queued for the '
+      'composer', (tester) async {
+    final container = await pump(tester);
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    terminals.openTab(TerminalProfile.powerShell);
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .focusedPaneId;
+    container.read(sessionDaoProvider).updatePaneId('s1', paneId);
+    final groupId = terminals.groupOfPane(paneId)!;
+    terminals.showFaceIn(groupId, terminal: false);
+    final written = <String>[];
+    terminals.instanceFor(paneId)!.terminal.onOutput = written.add;
 
     container.read(notesProvider.notifier).capture(body: 'written here');
     await tester.pumpAndSettle();
@@ -298,10 +346,11 @@ void main() {
       container.read(composerDraftProvider),
       containsPair('s1', 'written here'),
     );
+    expect(written, isEmpty, reason: 'nothing was typed at the prompt');
     expect(
       container.read(terminalVisibleInGroupProvider(groupId)),
       isFalse,
-      reason: 'the group shows the conversation, so the note has a box',
+      reason: 'still the chat, because that is where the user already was',
     );
     expect(find.text('Sent to Toolbar rework’s message box.'), findsOneWidget);
   });

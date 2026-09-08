@@ -97,23 +97,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// **The regression this file did not catch.**
+  /// **Follow the face that is already showing.**
   ///
-  /// Every assertion below checks that the draft was *queued*, which is why
-  /// they all stayed green from 2026-09-02 while the feature did nothing a
-  /// user could see. `bb4283f0` — "a switch no longer reads a whole transcript
-  /// nobody asked for" — stopped `WorkbenchView` mounting a session's
-  /// conversation until it had been asked for, and the composer the draft
-  /// lands in *is* that conversation. Before it, the `IndexedStack` built both
-  /// children, so a box existed for every session whether or not anybody had
-  /// opened chat, and Send worked for free.
+  /// Every assertion in this file used to check only that the draft was
+  /// *queued*, which is why they stayed green from 2026-09-02 while
+  /// `bb4283f0` left the text in a composer that was never mounted. `e7adebe6`
+  /// answered that by making Send reveal the conversation, and asserted the
+  /// reveal here — going one step too far: it forced the chat face open over
+  /// whatever the user was working in. The owner's rule is narrower, and it is
+  /// what these two tests pin: the face is what Send **reads**.
   ///
-  /// So queueing is not the observable behaviour; **revealing the box is**. The
-  /// perf change is right and stays — an ordinary tap still reads no
-  /// transcript — and sending becomes an explicit asker, which is what it
-  /// always was implicitly.
-  testWidgets('sending reveals the conversation, because that is where the '
-      'box is', (tester) async {
+  /// Terminal showing, so the line is typed at the prompt and left there —
+  /// [insertSnippet]'s contract, which never presses Enter in a pane.
+  testWidgets('a todo offered to a session showing its terminal is typed into '
+      'the terminal', (tester) async {
     await pump(tester);
     runSessionInATab('s1', title: 'Resize');
     await tester.pumpAndSettle();
@@ -126,11 +123,8 @@ void main() {
         .focusedPaneId;
     final groupId = terminals.groupOfPane(paneId);
     expect(groupId, isNotNull, reason: 'the tab landed in a group');
-    expect(
-      container.read(terminalVisibleInGroupProvider(groupId!)),
-      isTrue,
-      reason: 'a tab opens on its terminal, which is the broken case',
-    );
+    final written = <String>[];
+    terminals.instanceFor(paneId)!.terminal.onOutput = written.add;
 
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
     await tester.pumpAndSettle();
@@ -138,22 +132,53 @@ void main() {
     await tester.tap(find.textContaining('message box'));
     await tester.pumpAndSettle();
 
+    expect(written, ['Fix the resize']);
     expect(
-      container.read(composerDraftProvider)['s1'],
-      'Fix the resize',
-      reason: 'still queued for that session',
-    );
-    expect(
-      container.read(terminalVisibleInGroupProvider(groupId)),
+      container.read(composerDraftProvider).containsKey('s1'),
       isFalse,
-      reason: 'the group now shows the conversation, so the queued line has a '
-          'composer to land in — a draft with no box is a draft nobody sees',
+      reason: 'the line went to the terminal; a draft too would send it twice',
     );
+    expect(
+      container.read(terminalVisibleInGroupProvider(groupId!)),
+      isTrue,
+      reason: 'the face the user was working in stays up',
+    );
+    expect(find.text('Typed into Resize’s terminal, unsent.'), findsOneWidget);
   });
 
-  testWidgets('the row sends its line to the terminal tab on screen', (
-    tester,
-  ) async {
+  /// The other half: chat showing, so the line goes to the composer — and the
+  /// face is still not written to.
+  testWidgets('a todo offered to a session showing its chat is queued for the '
+      'composer', (tester) async {
+    await pump(tester);
+    runSessionInATab('s1', title: 'Resize');
+    await tester.pumpAndSettle();
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .focusedPaneId;
+    final groupId = terminals.groupOfPane(paneId)!;
+    terminals.showFaceIn(groupId, terminal: false);
+    final written = <String>[];
+    terminals.instanceFor(paneId)!.terminal.onOutput = written.add;
+
+    container.read(todosProvider.notifier).add(body: 'Fix the resize');
+    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Fix the resize');
+    await tester.tap(find.textContaining('message box'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(composerDraftProvider)['s1'], 'Fix the resize');
+    expect(written, isEmpty);
+    expect(container.read(terminalVisibleInGroupProvider(groupId)), isFalse);
+    expect(find.text('Sent to Resize’s message box.'), findsOneWidget);
+  });
+
+  testWidgets('the row resolves the tab on screen, and sending is not '
+      'ticking off', (tester) async {
     await pump(tester);
     runSessionInATab('s1', title: 'Toolbar rework');
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
@@ -163,11 +188,10 @@ void main() {
     await tester.tap(find.text('Send to Toolbar rework’s message box'));
     await tester.pumpAndSettle();
 
-    // Offered, never dispatched: the box under the transcript is where it
-    // lands, for the user to read and press Enter on.
-    expect(container.read(composerDraftProvider)['s1'], 'Fix the resize');
+    // Offered, never dispatched — whichever face it landed in. That tab shows
+    // its terminal, so this asserts the destination nothing else does: the
+    // session is brought up, and the row is still a row.
     expect(container.read(selectedSessionIdProvider), 's1');
-    // And the todo is still a todo. Sending is not ticking off.
     expect(container.read(todosProvider).single.isDone, isFalse);
   });
 
@@ -212,6 +236,16 @@ void main() {
   ) async {
     await pump(tester);
     runSessionInATab('s1', title: 'Toolbar rework');
+    // In the chat face, because that is the one `ComposerDrafts` serves: a
+    // group showing its terminal is typed into instead, and never queues.
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .focusedPaneId;
+    terminals.showFaceIn(terminals.groupOfPane(paneId)!, terminal: false);
     final todos = container.read(todosProvider.notifier);
     todos.add(body: 'Fix the resize');
     todos.add(body: 'Then the strip');

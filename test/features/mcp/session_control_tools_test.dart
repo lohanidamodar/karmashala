@@ -20,6 +20,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
+import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -201,9 +202,10 @@ void main() {
       });
 
       expect(result.isError, isFalse);
-      // A carriage return, because a PTY reads CR as submit — the message must
-      // arrive sent, not sitting in the composer.
-      expect(written, ['run the tests', '\r']);
+      // `Ctrl+E` then a carriage return: a PTY reads CR as submit, and the
+      // keypress before it is what stops an agent composer reading the whole
+      // burst as a paste — see `SessionLauncher.sendTo`.
+      expect(written, ['run the tests', kEndOfLineKey, '\r']);
     });
 
     test('blank text is refused rather than quietly delivered', () async {
@@ -236,7 +238,7 @@ void main() {
       }, 's1');
 
       expect(result.isError, isFalse);
-      expect(written, ['from myself', '\r']);
+      expect(written, ['from myself', kEndOfLineKey, '\r']);
     });
 
     test('a caller with no session of its own must name one', () async {
@@ -262,6 +264,7 @@ void main() {
           sessionId: 's1',
           title: 'Work',
         ).render('over here'),
+        kEndOfLineKey,
         '\r',
       ]);
       expect((result.structured! as Map)['sessionId'], 's2');
@@ -327,7 +330,7 @@ void main() {
         'text': 'note to self',
       }, 's1');
 
-      expect(written, ['note to self', '\r']);
+      expect(written, ['note to self', kEndOfLineKey, '\r']);
       expect((result.structured! as Map)['attribution'], isNull);
     });
 
@@ -339,7 +342,7 @@ void main() {
         'text': 'note to self',
       }, 's1');
 
-      expect(written, ['note to self', '\r']);
+      expect(written, ['note to self', kEndOfLineKey, '\r']);
     });
 
     test('a caller in no session of ours names nobody', () async {
@@ -354,7 +357,7 @@ void main() {
       });
 
       expect(result.isError, isFalse);
-      expect(written, ['from the bridge', '\r']);
+      expect(written, ['from the bridge', kEndOfLineKey, '\r']);
       expect((result.structured! as Map)['attribution'], isNull);
     });
 
@@ -368,7 +371,7 @@ void main() {
       }, 'gone');
 
       expect(result.isError, isFalse);
-      expect(written, ['from a ghost', '\r']);
+      expect(written, ['from a ghost', kEndOfLineKey, '\r']);
       expect((result.structured! as Map)['attribution'], isNull);
     });
 
@@ -443,7 +446,7 @@ void main() {
       });
 
       expect(result.isError, isFalse);
-      expect(written, ['over to you', '\r']);
+      expect(written, ['over to you', kEndOfLineKey, '\r']);
     });
 
     test('an unrecorded wait sends rather than refusing on ignorance', () async {
@@ -456,7 +459,7 @@ void main() {
 
       await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
 
-      expect(written, ['ping', '\r']);
+      expect(written, ['ping', kEndOfLineKey, '\r']);
     });
 
     test('a busy session receives, because a message queues', () async {
@@ -469,7 +472,7 @@ void main() {
 
       await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
 
-      expect(written, ['ping', '\r']);
+      expect(written, ['ping', kEndOfLineKey, '\r']);
     });
 
     test('a session no source can read receives', () async {
@@ -481,7 +484,7 @@ void main() {
 
       await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
 
-      expect(written, ['ping', '\r']);
+      expect(written, ['ping', kEndOfLineKey, '\r']);
     });
 
     test('the prompt belongs to the target, not the caller', () async {

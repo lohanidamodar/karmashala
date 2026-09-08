@@ -24,6 +24,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/pty_launch.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../../terminal/domain/agent_pane_launch.dart';
+import '../../terminal/domain/enter_key_encoding.dart';
 import '../../terminal/domain/launch_context.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../data/session_repository_dao.dart';
@@ -1617,8 +1618,17 @@ class SessionLauncher {
     if (terminal == null) return false;
     // A carriage return, not a newline: a PTY line discipline reads CR as
     // "submit", and a bare LF leaves the text sitting in the agent's composer.
+    //
+    // The `Ctrl+E` between them is what makes that CR arrive as a keypress.
+    // Measured 2026-09-08 against a real ConPTY: Codex 0.153.4 leaves the
+    // message sitting in its composer, on Windows and in WSL alike, because
+    // `paste_burst.rs` reads characters that arrive with no gap as a paste and
+    // folds a Return inside that run into a newline. Anything that is not a
+    // character ends the run; `Ctrl+E` is the smallest such thing, and it
+    // only asserts what is already true — the caret is at the end of the line.
     terminal
       ..textInput(trimmed)
+      ..textInput(kEndOfLineKey)
       ..textInput('\r');
     return true;
   }

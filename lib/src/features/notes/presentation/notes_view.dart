@@ -14,7 +14,6 @@ import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
 import 'note_edit_dialog.dart';
-import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../../core/widgets/linkable_text.dart';
 
 /// The Notes surface: everything the user kept instead of acting on it.
@@ -355,7 +354,8 @@ class _NoteCard extends ConsumerWidget {
     return 'From $sessionTitle  ·  $role';
   }
 
-  /// Puts the note in a message box, deciding *which* only now.
+  /// Offers the note to a session, deciding *which* — and *where in it* —
+  /// only now.
   ///
   /// A note goes back to the session it came from. One written here goes to
   /// [focusedSessionIdProvider] — the Explorer's selection, else the focused
@@ -381,26 +381,14 @@ class _NoteCard extends ConsumerWidget {
     }
     final title =
         source?.title ?? sessions.getById(sessionId)?.title ?? 'the session';
-    ref.read(composerDraftProvider.notifier).queue(sessionId, note.body);
-    // Bring that session up, so the box the text just landed in is the one on
-    // screen. Selecting is all this does: the note is not sent.
+    // Whichever face that session is showing — the terminal is typed into,
+    // the conversation is queued for. Neither is written to.
+    final outcome = offerToSession(ref, sessionId: sessionId, text: note.body);
+    // Bring that session up, so what the text landed in is the one on screen.
+    // Selecting is all this does: the note is not sent.
     ref.read(selectedSessionIdProvider.notifier).select(sessionId);
-    // And reveal its conversation — the composer *is* the conversation, so a
-    // group showing its terminal has no box for this note to land in.
-    final paneId = sessions.getById(sessionId)?.paneId;
-    if (paneId != null) {
-      ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .revealConversationForPane(paneId);
-    }
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(
-          paneId == null
-              ? 'Waiting for $title — no terminal is running it.'
-              : 'Sent to $title’s message box.',
-        ),
-      ),
+      SnackBar(content: Text(sessionOfferMessage(outcome, title))),
     );
   }
 

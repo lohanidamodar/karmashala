@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -118,9 +119,9 @@ void main() {
     expect(outcome.switchedNow, isTrue);
     expect(outcome.command, '/model opus');
     expect(outcome.deferral, isNull);
-    // The command, then the carriage return that submits it. A bare newline
-    // would leave the line sitting in the agent's composer.
-    expect(session.written, ['/model opus', '\r']);
+    // The command, then the keypress and carriage return that submit it — a
+    // slash command goes through `sendTo` and is typed exactly like a message.
+    expect(session.written, ['/model opus', kEndOfLineKey, '\r']);
     // And it persists, so the next launch agrees with what was just typed.
     expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
   });

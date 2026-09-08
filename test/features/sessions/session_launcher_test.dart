@@ -21,6 +21,7 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
@@ -445,6 +446,44 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(launched.paneId!)!;
     expect(instance.agentLaunch!.wslDistribution, 'Ubuntu');
+  });
+
+  /// **The reported bug: the message arrived and was never submitted.**
+  ///
+  /// Codex's composer (`tui/src/bottom_pane/paste_burst.rs`) reads characters
+  /// that arrive with no gap as a paste, and folds a Return inside that run
+  /// into a newline. Measured 2026-09-08 against a real ConPTY: Codex 0.153.4
+  /// left `body` + `\r` sitting in its composer on Windows *and* in WSL, and
+  /// submitted it as soon as anything that is not a character came between the
+  /// two. So a message now ends its typing before it presses Return.
+  test('a sent message ends the typing before it presses Return', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final launched = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Listening',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    final instance = h.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(launched.paneId!)!;
+    final written = <String>[];
+    instance.terminal.onOutput = written.add;
+
+    expect(launcher.sendTo(launched.session.id, '  ship it  '), isTrue);
+    expect(written, ['ship it', kEndOfLineKey, '\r']);
+
+    // Still a refusal the caller can report rather than a silent drop.
+    written.clear();
+    expect(launcher.sendTo(launched.session.id, '   '), isFalse);
+    expect(launcher.sendTo('no-such-session', 'ship it'), isFalse);
+    expect(written, isEmpty);
   });
 
   test('answering a prompt presses the key and nothing else', () async {

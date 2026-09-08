@@ -61,6 +61,15 @@ import 'package:xterm2/core.dart';
 /// `ESC` followed by carriage return: the meta-prefixed `Enter`.
 const kEscapeEnter = '\x1b\r';
 
+/// `Ctrl+E` — *end of line* — written between a typed message and its Return.
+///
+/// An agent composer that has no bracketed paste to read reads characters
+/// arriving with no gap as a paste, and folds a Return inside that run into a
+/// newline: `SessionLauncher.sendTo` explains what was measured. This is the
+/// smallest input that is not a character, and every composer already treats it
+/// as "the caret is at the end", which it is.
+const kEndOfLineKey = '\x05';
+
 /// The input handler the app installs on every terminal.
 class KarmashalaInputHandler implements TerminalInputHandler {
   const KarmashalaInputHandler([this.fallback = defaultInputHandler]);

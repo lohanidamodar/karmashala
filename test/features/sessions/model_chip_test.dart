@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
@@ -363,7 +364,7 @@ void main() {
     await tester.tap(find.text('Opus'));
     await tester.pumpAndSettle();
 
-    expect(h.written, ['/model opus', '\r']);
+    expect(h.written, ['/model opus', kEndOfLineKey, '\r']);
     expect(find.textContaining('switched now'), findsOneWidget);
     expect(find.textContaining('/model opus'), findsOneWidget);
     expect(SessionDao(h.db).getById(h.sessionId)!.modelId, 'opus');

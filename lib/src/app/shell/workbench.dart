@@ -425,12 +425,12 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
   ///
   /// This claimed to be "the only write of `false` in the app" and had not
   /// been for some time — the dead-pane card's *Read the conversation* is
-  /// another, and `revealConversation` is now a third, for a note or a todo
-  /// offered to a session's message box. What the claim was protecting still
-  /// holds and is worth stating properly: **no ordinary tap opens the
-  /// conversation.** Every writer is a labelled, deliberate request for it —
-  /// which is exactly what the perf change behind the lazy mount needs, since
-  /// what it removed was the transcript read on a tap that did not ask.
+  /// another, and `revealConversationForPane` is a third, for text arriving
+  /// from the phone. What the claim was protecting still holds and is worth
+  /// stating properly: **no ordinary tap opens the conversation.** Every
+  /// writer is a labelled, deliberate request for it — which is exactly what
+  /// the perf change behind the lazy mount needs, since what it removed was
+  /// the transcript read on a tap that did not ask.
   void _showChat() {
     final groupId = widget.groupId;
     if (groupId == null) return;
