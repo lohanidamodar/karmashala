@@ -8,6 +8,7 @@ import '../sessions/application/session_actions.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
+import '../sessions/application/session_wait.dart';
 import '../sessions/domain/session.dart';
 import '../sessions/domain/session_event_types.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
@@ -36,6 +37,7 @@ class SessionControlTools {
   static const Set<String> _names = <String>{
     'session_send',
     'session_answer',
+    'session_wait',
     'session_transcript',
     'session_rename',
     'session_end',
@@ -48,6 +50,12 @@ class SessionControlTools {
         'session_send' => _send(
           _target(args),
           (args['text'] as String?) ?? '',
+          wait: args['wait'] == true,
+          timeoutSeconds: args['timeoutSeconds'] as num?,
+        ),
+        'session_wait' => _wait(
+          _target(args),
+          timeoutSeconds: args['timeoutSeconds'] as num?,
         ),
         'session_answer' => _answer(
           _target(args),
@@ -157,7 +165,22 @@ class SessionControlTools {
   ///
   /// The user's own message box is not gated, and should not be. A person
   /// typing into their own pane can see the prompt they are typing into.
-  Future<Object?> _send(String sessionId, String text) async {
+  ///
+  /// ## And why `wait` checks before it sends
+  ///
+  /// Send-then-wait is the shape a delegating agent actually wants, and the
+  /// order of the two halves is the whole design. A session that has already
+  /// stopped for a person will not move whatever arrives, so sending into it
+  /// and then blocking would spend the caller's bound to learn nothing — and
+  /// would leave the message sitting behind the prompt. So the block is checked
+  /// **first**, and a blocked target is refused with nothing sent and no wait
+  /// started.
+  Future<Object?> _send(
+    String sessionId,
+    String text, {
+    bool wait = false,
+    num? timeoutSeconds,
+  }) async {
     if (text.trim().isEmpty) {
       throw ArgumentError('text is required and cannot be blank.');
     }
@@ -174,6 +197,23 @@ class SessionControlTools {
         'then.',
       );
     }
+    // Before the send, never after it. The prompt gate above already refused a
+    // modal on screen, so what this catches is the wider case: a question
+    // sitting in the attention inbox, which no keystroke of ours answers.
+    if (wait) {
+      if (_container.read(sessionWaitProvider).blockedOn(sessionId)
+          case final block?) {
+        throw StateError(
+          'That session is already blocked on a person (${block.kind}), so '
+          'NOTHING WAS SENT and no wait was started. A message into a session '
+          'that has stopped for an approval or a question sits behind it, and '
+          'this call would have blocked until its bound to learn nothing. Read '
+          'what is being asked with session_transcript and answer it with '
+          'session_answer, then send.'
+          '${block.text == null ? '' : ' It is asking: ${block.text}'}',
+        );
+      }
+    }
     final caller = callerSessionId;
     final attribution = caller == null || caller == sessionId
         ? null
@@ -185,7 +225,7 @@ class SessionControlTools {
       sessionId,
       attribution == null ? text : attribution.render(text),
     );
-    return <String, Object?>{
+    final delivered = <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
       'delivered': true,
@@ -196,7 +236,105 @@ class SessionControlTools {
       'live': _container.read(sessionLauncherProvider).livePaneFor(sessionId) !=
           null,
     };
+    if (!wait) return delivered;
+    // `inputSent: true` is the fact a timeout has to carry: a caller that
+    // retries because its bound ran out submits the same work twice.
+    final outcome = await _container.read(sessionWaitProvider).wait(
+      sessionId,
+      bound: SessionWaitService.boundFor(timeoutSeconds),
+      inputSent: true,
+    );
+    return <String, Object?>{...delivered, ..._renderWait(outcome)};
   }
+
+  /// Blocks until [sessionId] settles, and says what it settled on.
+  ///
+  /// Read-only and idempotent in the sense the catalogue means: it changes
+  /// nothing, and calling it twice is not merely safe but the *intended* answer
+  /// to a timeout. The two calls may well report different states, which is a
+  /// statement about the session rather than about this tool.
+  Future<Object?> _wait(String sessionId, {num? timeoutSeconds}) async {
+    final session = _session(sessionId);
+    final outcome = await _container.read(sessionWaitProvider).wait(
+      sessionId,
+      bound: SessionWaitService.boundFor(timeoutSeconds),
+    );
+    return <String, Object?>{
+      'sessionId': sessionId,
+      'title': session.title,
+      ..._renderWait(outcome),
+    };
+  }
+
+  /// One wait's answer, as the tool reports it.
+  ///
+  /// Every absence here is spelled as an absence. `since` and
+  /// `evidenceAgeSeconds` are null when no source could tell us anything,
+  /// `transcriptChanged` is null when nothing could see the conversation, and
+  /// `exitCode` is null with `exitCodeKnown: false` rather than a zero — the
+  /// same rule `terminal_run` holds itself to, and for the same reason.
+  static Map<String, Object?> _renderWait(SessionWaitOutcome outcome) =>
+      <String, Object?>{
+        'state': outcome.state.name,
+        // The status word behind the state, so a turn that ended in an error is
+        // not flattened into "ready for input" with the reason dropped.
+        'agentStatus': outcome.agentStatus.name,
+        'evidenceSource': outcome.source.name,
+        'since': outcome.since?.toIso8601String(),
+        'evidenceAgeSeconds': outcome.evidenceAge?.inSeconds,
+        'changed': outcome.changed,
+        'transcriptChanged': outcome.transcriptChanged,
+        'transcriptChangedSource': outcome.transcriptChanged == null
+            ? 'not recorded — this session\'s status carries no transcript '
+                  'position, so whether it said anything is unknown'
+            : 'the transcript this session\'s status is read from',
+        'blockedOn': outcome.blockedOn == null
+            ? null
+            : <String, Object?>{
+                'kind': outcome.blockedOn!.kind,
+                'text': outcome.blockedOn!.text,
+              },
+        'exitCode': outcome.exitCode,
+        'exitCodeKnown': outcome.exitCodeKnown,
+        'inputSent': outcome.inputSent,
+        'note': _noteFor(outcome),
+      };
+
+  /// The sentence a model reads before it decides what to do next.
+  ///
+  /// Prose rather than a flag because the two states that cost the most are
+  /// both misread by a caller acting on the word alone: `idle` looks like
+  /// success and is equally the shape of a session that never started, and
+  /// `timeout` looks like failure when it is only this call's bound.
+  static String _noteFor(SessionWaitOutcome outcome) =>
+      switch (outcome.state) {
+        SessionWaitState.idle =>
+          'Ready for input, and nothing moved while this call watched. That is '
+              'not proof it did anything: a session that never started reads '
+              'exactly like one that finished before you asked. "done" is the '
+              'state that means it moved.',
+        SessionWaitState.done =>
+          'Ready for input, and its evidence moved while this call watched — it '
+              'finished something. What it finished is in session_transcript; '
+              'this says only that it stopped.',
+        SessionWaitState.blocked =>
+          'BLOCKED ON A PERSON. This session has stopped for an approval or a '
+              'question and will not move until somebody answers it — waiting '
+              'longer will not change that. Anything you send now lands in that '
+              'prompt as a keystroke rather than arriving as a message. Read '
+              'what is being asked with session_transcript and answer it with '
+              'session_answer, or leave it for the user.',
+        SessionWaitState.ended =>
+          'The pane behind this session is gone. session_transcript still reads '
+              'its record, and open_session will resume it. '
+              '${outcome.exitCodeKnown ? 'It exited with ${outcome.exitCode}.' : 'Its exit code is UNKNOWN — not 0; nothing told us what it exited with.'}',
+        SessionWaitState.timeout =>
+          'TIMEOUT — this is your bound, not a verdict about the session. It is '
+              'STILL RUNNING and may finish a moment from now. '
+              '${outcome.inputSent ?? false ? 'YOUR MESSAGE WAS ALREADY DELIVERED (inputSent: true): a timeout does not prove nothing was sent, so do not send it again' : 'This call sent nothing (inputSent is null)'}'
+              '. Read the session with session_transcript, or call session_wait '
+              'to go on waiting.',
+      };
 
   /// Answers an approval prompt by pressing the key the *agent* names for it.
   ///
@@ -382,7 +520,10 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
         'authenticated, so you can neither borrow another name nor drop your '
         'own. Refused while the target has an approval prompt open: the '
         'keystrokes would land in that prompt instead — answer it with '
-        'session_answer, or wait.',
+        'session_answer, or wait. Pass wait: true to block until the session '
+        'settles afterwards — the common send-then-wait shape. The block is '
+        'checked BEFORE the send, so a target already waiting on a person is '
+        'refused with nothing sent.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -393,6 +534,18 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
               'target; it does not change who you are.',
         },
         'text': {'type': 'string', 'description': 'The message to send.'},
+        'wait': {
+          'type': 'boolean',
+          'description':
+              'Block until the session settles after delivering, adding every '
+              'session_wait field to the result. Refused before sending if the '
+              'target is already blocked on a person.',
+        },
+        'timeoutSeconds': {
+          'type': 'number',
+          'description':
+              'How long to wait, when wait is true. Default 30, capped at 45.',
+        },
       },
       'required': ['text'],
     },
@@ -451,6 +604,110 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
         'effect': {'type': 'string'},
       },
       'required': ['sessionId', 'answered'],
+    },
+  },
+  {
+    'name': 'session_wait',
+    'description':
+        'Block until a session settles, so you can hand work to another agent '
+        'and know when it is done instead of re-reading its transcript on a '
+        'loop. Five answers. "idle" and "done" both mean ready for input, and '
+        'they are two states on purpose: "done" is idle-and-seen-changed, so a '
+        'session that finished something does not read like one that never '
+        'started. "blocked" means it has stopped for a person — an approval or '
+        'a question — and names what it is waiting on. "ended" means the pane '
+        'is gone, with the exit code when one was learned and never a zero '
+        'when none was. "timeout" is YOUR bound and not a verdict: the session '
+        'is still running, and inputSent says whether anything was delivered, '
+        'so call again rather than sending the same work twice. Nothing here '
+        'polls — the wait completes on the events the app already sees.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description':
+              'Which session. Defaults to the calling session — which would '
+              'wait for YOU, and never settle. Name the session you delegated '
+              'to.',
+        },
+        'timeoutSeconds': {
+          'type': 'number',
+          'description':
+              'How long to block. Default 30, capped at 45 — the transports '
+              'between you and this app give up at 60.',
+        },
+      },
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {'type': 'string'},
+        'title': {'type': 'string'},
+        'state': {
+          'type': 'string',
+          'enum': ['idle', 'done', 'blocked', 'ended', 'timeout'],
+        },
+        'agentStatus': {
+          'type': 'string',
+          'description':
+              'The status word behind the state, so a turn that ended in an '
+              'error is not flattened into "ready for input".',
+        },
+        'evidenceSource': {
+          'type': 'string',
+          'description':
+              'What told us: hook, stateFile, terminalGrid, or none.',
+        },
+        'since': {
+          'type': ['string', 'null'],
+          'description':
+              'When the evidence was produced — never when we looked. Null '
+              'when no source could tell us anything.',
+        },
+        'evidenceAgeSeconds': {
+          'type': ['number', 'null'],
+          'description': 'How old that evidence was when this answered.',
+        },
+        'changed': {
+          'type': 'boolean',
+          'description':
+              'Whether the session moved while this call watched. The one '
+              'thing that separates done from idle.',
+        },
+        'transcriptChanged': {
+          'type': ['boolean', 'null'],
+          'description':
+              'Whether the conversation moved, or null when no source could '
+              'see it — which is never the same as "it said nothing".',
+        },
+        'transcriptChangedSource': {'type': 'string'},
+        'blockedOn': {
+          'type': ['object', 'null'],
+          'description':
+              'What it is waiting on, in the source\'s own words. Null unless '
+              'the state is blocked.',
+          'properties': {
+            'kind': {'type': 'string'},
+            'text': {'type': ['string', 'null']},
+          },
+        },
+        'exitCode': {'type': ['number', 'null']},
+        'exitCodeKnown': {
+          'type': 'boolean',
+          'description':
+              'Read this before believing exitCode. A missing code is UNKNOWN '
+              '— it is never a zero.',
+        },
+        'inputSent': {
+          'type': ['boolean', 'null'],
+          'description':
+              'Whether this call delivered anything before waiting. Null means '
+              'it sent nothing, which is a third answer and not a false.',
+        },
+        'note': {'type': 'string'},
+      },
+      'required': ['sessionId', 'state', 'changed', 'note'],
     },
   },
   {
