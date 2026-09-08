@@ -626,7 +626,15 @@ class MediaFoundationRemuxer implements VideoRemuxer {
     // Timestamps arrive from the handset's clock; the file starts at zero.
     _first ??= frame.at;
     final at = frame.at - _first!;
-    final step = at > _last ? at - _last : Duration(microseconds: 1000000 ~/ frameRate);
+    // Each sample's duration is the gap it *closes*, not the one it opens,
+    // because the gap it opens is not known until the next frame arrives.
+    // MP4 accumulates durations, so the whole track sits one frame late — a
+    // fixed offset, not a growing drift, and the length is short by the last
+    // frame. Holding a frame back to get it exact would put a frame of the
+    // live recording in memory for no visible gain.
+    final step = at > _last
+        ? at - _last
+        : Duration(microseconds: 1000000 ~/ frameRate);
     _sink.writeSample(
       length: frame.bytes.length,
       at: at,
