@@ -1386,8 +1386,14 @@ Future<void> _offerAttachment(
   final String visible;
   try {
     visible = _agentVisiblePath(ref, committed.path, environmentId);
-  } on PathTranslationException catch (failure) {
-    throw RemoteApiRefusal(ErrorCode.internal, failure.message);
+  } on PathTranslationException {
+    // The translator's own message quotes the path, and a refusal must not:
+    // it would put this machine's directory layout — and the name the user
+    // picked — on the wire. See [RemoteApiRefusal.message].
+    throw const RemoteApiRefusal(
+      ErrorCode.internal,
+      'this desktop cannot write a file where that agent could open it',
+    );
   }
   // The desktop composer's own wording for the same act, so an agent cannot
   // tell which door the file came through — see `message_composer.dart`.

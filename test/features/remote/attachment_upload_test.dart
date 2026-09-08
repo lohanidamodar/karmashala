@@ -15,7 +15,6 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:karmashala/src/features/remote/transport/remote_transport.dart';

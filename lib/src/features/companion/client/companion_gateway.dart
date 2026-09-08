@@ -8,6 +8,8 @@
 /// carry — and reuses its types (`CapabilitySet`, `DeviceId`) where they fit.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../remote/domain/remote_payloads.dart';
@@ -207,6 +209,7 @@ class CompanionSessionSummary {
     this.imported = false,
     this.archived = false,
     this.folderMissing = false,
+    this.attachments,
   });
 
   final String id;
@@ -254,6 +257,14 @@ class CompanionSessionSummary {
   /// True when the host says this session's folder is no longer on disk.
   final bool folderMissing;
 
+  /// What a file sent to this session may be, straight off the row.
+  ///
+  /// Here so the composer knows **before** the user opens a picker: a phone
+  /// that asked afterwards would have already spent somebody's mobile data on
+  /// a photo the desktop was never going to be able to use. Null from a host
+  /// that was never asked, which offers nothing rather than a guess.
+  final RemoteAttachmentSupport? attachments;
+
   /// A narrow copy: only the facts that change while a session is listed.
   CompanionSessionSummary copyWith({
     CompanionSessionStatus? status,
@@ -278,6 +289,7 @@ class CompanionSessionSummary {
     imported: imported,
     archived: archived ?? this.archived,
     folderMissing: folderMissing,
+    attachments: attachments,
   );
 
   /// What the list groups by: the repository's real identity when the host
@@ -300,6 +312,29 @@ const String kCompanionNoticeRole = 'notice';
 /// state's welcome — a screen offering starter prompts for a session the user
 /// can see running was the "it shows running but no transcript" report.
 const String kCompanionAbsenceRole = 'absence';
+
+/// One file on its way to a desktop: what the phone picked, in memory.
+///
+/// [bytes] rather than a path because the picker on Android hands back a
+/// content URI whose file the host will never see — the bytes are the only
+/// thing that can cross. Bounded by the host's own
+/// [RemoteAttachmentSupport.maxBytes], checked before this is built.
+class CompanionOutgoingAttachment {
+  const CompanionOutgoingAttachment({
+    required this.name,
+    required this.mediaType,
+    required this.bytes,
+  });
+
+  /// The file's name as the phone knows it — a **hint**. The host keeps only
+  /// its basename, strips it, and puts its own extension on.
+  final String name;
+
+  /// One of the session's [RemoteAttachmentSupport.mediaTypes], exactly.
+  final String mediaType;
+
+  final Uint8List bytes;
+}
 
 /// One transcript turn. Role vocabulary matches the desktop chat view:
 /// `user`, `agent`, `tool` or `error`, plus [kCompanionNoticeRole] and
@@ -620,6 +655,8 @@ abstract interface class CompanionGateway {
 
   /// `session.subscribe` + `transcript.get`/`transcript.appended` for one
   /// session, as the full list the chat view renders.
+  ///
+  /// See also [CompanionGateway.sendPrompt].
   Stream<List<CompanionChatMessage>> transcript(String sessionId);
 
   /// **What one session is doing right now**, seeded on listen and then every
@@ -682,7 +719,24 @@ abstract interface class CompanionGateway {
   });
 
   /// `prompt.send`.
-  Future<void> sendPrompt(String sessionId, String text);
+  /// Sends a prompt, optionally with one file.
+  ///
+  /// [attachment] is uploaded first — declared, sliced, and each slice
+  /// acknowledged — and the prompt then quotes it, so a file that did not
+  /// arrive whole takes the prompt with it rather than being half-committed.
+  /// [onProgress] is called with the slices sent and the total; a 4 MB photo
+  /// off a phone is thirty-two of them over somebody's mobile data, and a
+  /// silent spinner for that long is the "did that go?" this composer's whole
+  /// design is against.
+  ///
+  /// Answers what became of it — a prompt carrying a file is **offered** to the
+  /// desktop's own message box rather than typed into the agent.
+  Future<RemotePromptDelivery> sendPrompt(
+    String sessionId,
+    String text, {
+    CompanionOutgoingAttachment? attachment,
+    void Function(int sent, int total)? onProgress,
+  });
 
   /// `approval.answer`.
   Future<void> answerApproval(

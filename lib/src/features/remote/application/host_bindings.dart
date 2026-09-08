@@ -175,23 +175,3 @@ class RemoteHostBindings {
 /// store keys on the device so two phones cannot reach each other's staged
 /// bytes, and a session id would not say which phone this was.
 typedef RemoteAttachmentRef = ({String deviceId, String uploadId});
-
-/// What became of a prompt: typed into the agent, or left in the desktop's own
-/// message box for the person sitting at it.
-///
-/// Told to the phone rather than left to be inferred, because the two are
-/// genuinely different outcomes and "sent" would be a false one. See
-/// [RemoteHostBindings.sendPrompt].
-enum RemotePromptDelivery {
-  sent('sent'),
-  offered('offered');
-
-  const RemotePromptDelivery(this.wire);
-
-  final String wire;
-
-  /// An unknown word from a newer host reads as [sent] — the behaviour every
-  /// build before this one had.
-  static RemotePromptDelivery parse(Object? wire) =>
-      wire == offered.wire ? offered : sent;
-}

@@ -339,6 +339,26 @@ class RemoteAttachmentSupport {
       Object.hash(maxBytes, refusal, Object.hashAll(mediaTypes));
 }
 
+/// What became of a prompt: typed into the agent, or left in the desktop's own
+/// message box for the person sitting at it.
+///
+/// Told to the phone rather than left to be inferred, because the two are
+/// genuinely different outcomes and "sent" would be a false one. See
+/// `RemoteHostBindings.sendPrompt`.
+enum RemotePromptDelivery {
+  sent('sent'),
+  offered('offered');
+
+  const RemotePromptDelivery(this.wire);
+
+  final String wire;
+
+  /// An unknown word from a newer host reads as [sent] — the behaviour every
+  /// build before this one had.
+  static RemotePromptDelivery parse(Object? wire) =>
+      wire == offered.wire ? offered : sent;
+}
+
 /// The phone declaring a file before any of it is sent.
 class RemoteAttachmentBegin {
   const RemoteAttachmentBegin({

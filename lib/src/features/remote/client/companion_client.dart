@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -432,10 +433,51 @@ class CompanionClient {
     return RemoteSessionActivity.fromJson(payload);
   }
 
-  Future<void> sendPrompt(String sessionId, String text) async {
-    await _request(FrameType.promptSend, {
+  /// Sends a prompt, optionally quoting an upload this link completed.
+  ///
+  /// Answers what became of it: a prompt of plain words is typed into the
+  /// agent, and one carrying a file is left in the desktop's own message box
+  /// for the person sitting there. An older host answers neither, which reads
+  /// as [RemotePromptDelivery.sent] — the behaviour every build before this
+  /// one had.
+  Future<RemotePromptDelivery> sendPrompt(
+    String sessionId,
+    String text, {
+    String? attachmentId,
+  }) async {
+    final payload = await _request(FrameType.promptSend, {
       'sessionId': sessionId,
       'text': text,
+      'attachment': ?attachmentId,
+    });
+    return RemotePromptDelivery.parse(payload['delivery']);
+  }
+
+  /// Asks to send a file, **before any of it crosses**.
+  ///
+  /// Where a refusal costs one small frame instead of the megabytes of a photo
+  /// the desktop was never going to be able to use. A pairing without
+  /// `send_attachment` is refused here in words.
+  Future<RemoteAttachmentOffer> beginAttachment(
+    RemoteAttachmentBegin request,
+  ) async => RemoteAttachmentOffer.fromJson(
+    await _request(FrameType.attachmentBegin, request.toJson()),
+  );
+
+  /// Hands over one slice, and waits for the host to say it landed.
+  ///
+  /// Awaited on purpose: the outbound queue drops its **oldest** frame under
+  /// pressure, so a chunk nobody acknowledged is a chunk that is gone, and
+  /// sending the next regardless would commit a file with a hole in it.
+  Future<void> sendAttachmentChunk(
+    String uploadId,
+    int seq,
+    List<int> data,
+  ) async {
+    await _request(FrameType.attachmentChunk, {
+      'uploadId': uploadId,
+      'seq': seq,
+      'data': base64Encode(data),
     });
   }
 

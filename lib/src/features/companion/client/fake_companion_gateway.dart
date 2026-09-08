@@ -177,6 +177,9 @@ class FakeCompanionGateway implements CompanionGateway {
   /// Every prompt the UI sent, in order.
   final sentPrompts = <({String sessionId, String text})>[];
 
+  /// The file each prompt carried, in step with [sentPrompts].
+  final sentAttachments = <CompanionOutgoingAttachment?>[];
+
   /// Every approval answer the UI sent, in order.
   final answeredApprovals =
       <
@@ -619,10 +622,28 @@ class FakeCompanionGateway implements CompanionGateway {
   final _resumesByKey = <String, RemoteSessionStarted>{};
 
   @override
-  Future<void> sendPrompt(String sessionId, String text) async {
+  Future<RemotePromptDelivery> sendPrompt(
+    String sessionId,
+    String text, {
+    CompanionOutgoingAttachment? attachment,
+    void Function(int sent, int total)? onProgress,
+  }) async {
     _requireLink();
     sentPrompts.add((sessionId: sessionId, text: text));
+    sentAttachments.add(attachment);
+    if (attachment != null) {
+      // The slice count the real gateway would report, so a widget test can
+      // watch the progress line without a link.
+      final total = (attachment.bytes.length / kAttachmentChunkBytes).ceil();
+      for (var sent = 0; sent <= total; sent++) {
+        onProgress?.call(sent, total);
+      }
+      // A prompt carrying a file is left in the desktop's own message box, so
+      // nothing is appended to the transcript here.
+      return RemotePromptDelivery.offered;
+    }
     appendMessage(sessionId, CompanionChatMessage(role: 'user', text: text));
+    return RemotePromptDelivery.sent;
   }
 
   @override

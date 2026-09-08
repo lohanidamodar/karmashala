@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import '../../sessions/domain/delivery_stage.dart';
 import '../application/companion_providers.dart';
@@ -82,6 +83,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     });
     final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
     final canApprove = gateway.capabilities.has(Capability.approve);
+    final canAttach = gateway.capabilities.has(Capability.sendAttachment);
     // A null summary is normal for the first frame while sessions.list is
     // arriving. Once the list has a value, it is authoritative: this session
     // was removed and must not keep exposing send/approve controls.
@@ -192,7 +194,30 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 hintText: canPrompt
                     ? 'Send a message…'
                     : 'This phone was not granted prompt rights.',
-                onSend: (text) => gateway.sendPrompt(sessionId, text),
+                // Straight off the row, so the picker is offered only for a
+                // session the host has said what it would take for.
+                attachments: canAttach ? session?.attachments : null,
+                onSend: (text, {attachment, onProgress}) async {
+                  final delivery = await gateway.sendPrompt(
+                    sessionId,
+                    text,
+                    attachment: attachment,
+                    onProgress: onProgress,
+                  );
+                  if (delivery == RemotePromptDelivery.offered &&
+                      context.mounted) {
+                    // A file is left in the desktop's own message box, so the
+                    // phone must not read as though the agent already had it.
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Waiting in the desktop\'s message box — send it '
+                          'from there.',
+                        ),
+                      ),
+                    );
+                  }
+                },
               ),
           ],
         ),
