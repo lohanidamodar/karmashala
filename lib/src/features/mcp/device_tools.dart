@@ -1464,6 +1464,32 @@ class _CoordinateCheck {
   final String? prefer;
 }
 
+/// **The locating policy, written once and spliced into every tool it governs.**
+///
+/// Stated on the tools themselves for the reason `mcp_tool_catalogue.dart`
+/// gives for its four hints: a rule that lives in one file is a survey, and a
+/// rule an agent meets at the moment it is choosing is a rule. It is the *same*
+/// sentence on all four rather than four tailored variants, because four
+/// wordings of one rule read as four hints.
+///
+/// The third sentence is the one that changes behaviour. "Prefer the robust
+/// thing" loses to "the other one is faster" every time, and until
+/// `device_tap` started reading the screen before it acted, the other one
+/// genuinely was faster. It no longer is — counted, a vetted `device_tap` and
+/// a `device_tap_element` are the same six adb invocations — so the policy can
+/// state it as a fact rather than an exhortation.
+const String kDeviceLocatingPolicy =
+    'LOCATING POLICY — dynamic first, coordinates as a checked fallback. '
+    'Prefer device_tap_element: it resolves the element against the screen as '
+    'it is at the instant of the tap, so it survives a layout change, a '
+    'different screen size and a scale factor, and it tells you what it hit. '
+    'Use device_tap only when the dynamic attempt has failed, and only with '
+    'coordinates you verified during exploration — device_ui_dump and '
+    'device_find_elements report them in the space this device actually takes. '
+    'There is no speed reason to skip the dynamic path: device_tap reads the '
+    'screen before it acts, so the two cost the same, and device_tap is the '
+    'one that gets refused when the screen has moved since you looked.';
+
 /// The schemas for [DeviceControlTools].
 const List<Map<String, dynamic>> deviceControlToolSchemas = [
   {
@@ -1515,9 +1541,11 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'Tap the screen at (x, y). On Android these are DEVICE PIXELS (the '
         'space list_devices reports as screen size, not the size of any '
         'screenshot you scaled). On an iOS simulator they are POINTS, which a '
-        'screenshot is NOT in. Prefer device_tap_element; if you must use '
-        'coordinates, take them from device_ui_dump, which reports them in the '
-        'right space for the device.',
+        'screenshot is NOT in. Reads the screen immediately before it acts and '
+        'refuses when the structure has changed since this app last read the '
+        'device — a coordinate for a screen that is gone lands wherever the '
+        'new one happens to put something. Pass verify: false for a surface '
+        'with nothing in its hierarchy. $kDeviceLocatingPolicy',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1825,7 +1853,7 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'including layout containers. Custom-painted views — Flutter '
         'CustomPaint, canvas games, embedded terminals — expose no text here '
         'at all and appear as one empty View; read those with '
-        'device_screenshot rather than dumping again.',
+        'device_screenshot rather than dumping again. $kDeviceLocatingPolicy',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1861,7 +1889,7 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'makes it work on Flutter apps: they put their labels in content-desc '
         'and leave text empty. On iOS the same query runs against the XCUITest '
         'tree, where an element\'s value and label are mapped onto those same '
-        'two fields.',
+        'two fields. $kDeviceLocatingPolicy',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1905,7 +1933,7 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'what it actually hit. It re-reads the hierarchy first, so it acts on '
         'the screen as it is now. Refuses rather than guessing when the query '
         'matches several elements (pass index) or nothing, and refuses to tap '
-        'an element that is scrolled off screen.',
+        'an element that is scrolled off screen. $kDeviceLocatingPolicy',
     'inputSchema': {
       'type': 'object',
       'properties': {
