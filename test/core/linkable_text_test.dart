@@ -100,7 +100,7 @@ void main() {
     // reader cannot see, and a tap near the ellipsis would open it.
     await pump(
       tester,
-      List.filled(40, 'padding').join(' ') + ' https://example.com/a',
+      '${List.filled(40, 'padding').join(' ')} https://example.com/a',
       onTapText: () {},
       maxLines: 2,
     );
