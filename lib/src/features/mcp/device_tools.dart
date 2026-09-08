@@ -6,11 +6,13 @@ import 'package:path/path.dart' as p;
 
 import '../devices/application/device_claims.dart';
 import '../devices/application/device_fleet.dart';
+import '../devices/application/device_screen_memory.dart';
 import '../devices/domain/device_claim.dart';
 import '../devices/domain/device_driver.dart';
 import '../devices/domain/device_input.dart';
 import '../devices/domain/device_target.dart';
 import '../devices/domain/ios_simulator.dart';
+import '../devices/domain/screen_observation.dart';
 import '../devices/domain/ui_node.dart';
 import '../devices/domain/ui_summary.dart';
 
@@ -121,6 +123,10 @@ class DeviceControlTools {
           _id(args),
           (args['x'] as num?)?.round(),
           (args['y'] as num?)?.round(),
+          // Default on. The check is skipped only when the caller says so, so a
+          // screen with nothing in its hierarchy is a decision rather than a
+          // silent gap.
+          verify: args['verify'] != false,
         ),
         'device_type' => _deviceType(
           _id(args),
@@ -182,6 +188,19 @@ class DeviceControlTools {
   Future<DeviceFleet> _fleet() => _container.read(deviceFleetProvider)();
 
   DeviceClaims get _claims => _container.read(deviceClaimsProvider);
+
+  DeviceScreenMemory get _screens =>
+      _container.read(deviceScreenMemoryProvider);
+
+  /// Files a screen this call has just read, so the next coordinate tap has
+  /// something to be checked against.
+  ScreenObservation _recordLook(DeviceDriver driver, ScreenRead read) =>
+      _screens.record(
+        deviceId: driver.target.id,
+        tree: read.tree,
+        app: read.app,
+        bySessionId: callerSessionId,
+      );
 
   /// The driver for this call, or a refusal naming the device.
   Future<DeviceDriver> _driver(String? id, String verb) async =>
@@ -594,20 +613,214 @@ class DeviceControlTools {
   // Touching one
   // ---------------------------------------------------------------------------
 
-  Future<Object?> _deviceTap(String? id, int? x, int? y) async {
+  /// Taps a raw coordinate, having first looked at what is under it.
+  ///
+  /// ## The safety net, and why it is on the fallback tool
+  ///
+  /// This is the one tool that acts on numbers a caller worked out earlier, so
+  /// it is the one tool that can tap where an element *was*. The check is a
+  /// single [DeviceDriver.describeScreen] immediately before the touch — the
+  /// very same read [_deviceTapElement] already pays — which is the argument
+  /// that matters: **vetting the fallback costs exactly what the preferred path
+  /// costs**, so there is no longer a speed reason to prefer coordinates.
+  ///
+  /// It refuses on *positive* evidence and never on the absence of it. A screen
+  /// whose structure has moved since this app last read it is evidence; having
+  /// never read the screen is not, and produces a note rather than a refusal —
+  /// the coordinates may have come from a screenshot, or from the person
+  /// sitting there. Same rule as everywhere else in this codebase: an unknown
+  /// is not a zero.
+  ///
+  /// It also never turns a working call into a refusal for a reason of its own.
+  /// A driver with no [DeviceCapability.uiTree] cannot be checked and is tapped
+  /// anyway, and a screen read that *fails* — uiautomator does fall over
+  /// mid-animation and on secure windows — is reported, not raised. The one
+  /// thing that was silently wrong before and is now refused is a coordinate
+  /// off the display, which used to be sent and reported as a success.
+  ///
+  /// `verify: false` is the documented way out, and the same one Artemis takes
+  /// for its fast-action bursts: a custom-painted surface exposes nothing to
+  /// the hierarchy, so there is nothing there for a check to be about.
+  Future<Object?> _deviceTap(
+    String? id,
+    int? x,
+    int? y, {
+    bool verify = true,
+  }) async {
     if (x == null || y == null) throw ArgumentError('x and y are required.');
     final driver = await _driverToDrive(
       id,
       'device_tap',
       DeviceCapability.input,
     );
+    // After the claim, on purpose: a refusal below tells the caller to look
+    // again, and it should still be holding the device when it does.
+    final checked = verify
+        ? await _vetCoordinate(driver, x, y)
+        : const _CoordinateCheck(
+            verdict:
+                'not checked — verify: false. Nothing was read before the tap, '
+                'so this reply says only that the event was sent.',
+          );
     await driver.tap(x, y);
     return {
       'tapped': '($x, $y)',
       'serial': driver.target.id,
       'platform': driver.target.platform.name,
       'coordinateSpace': driver.coordinateSpace.label,
+      'checked': checked.verdict,
+      'under': ?checked.under,
+      'prefer': ?checked.prefer,
     };
+  }
+
+  /// Reads the screen and says what ([x], [y]) is about to hit, or refuses.
+  Future<_CoordinateCheck> _vetCoordinate(
+    DeviceDriver driver,
+    int x,
+    int y,
+  ) async {
+    if (!driver.can(DeviceCapability.uiTree)) {
+      return _CoordinateCheck(
+        verdict:
+            'not checked — ${driver.missingReason(DeviceCapability.uiTree)!} '
+            'The tap was sent unverified.',
+      );
+    }
+    final ScreenRead read;
+    try {
+      read = await driver.describeScreen();
+    } on Object catch (error) {
+      // Broad on purpose. Every way a screen read can fail — uiautomator
+      // mid-animation, a secure window, a device that went away between the
+      // claim and the read — ends the same way here: the check could not be
+      // performed, which is not the same as the tap being wrong. Turning an
+      // unavailable check into a refusal would break a tool that works today.
+      return _CoordinateCheck(
+        verdict:
+            'not checked — reading the screen failed ($error). The tap was '
+            'sent unverified.',
+      );
+    }
+
+    final screen = read.screen;
+    if (screen != null && (x < 0 || y < 0 || x >= screen.width || y >= screen.height)) {
+      throw DeviceRefusal(
+        'device_tap: ($x, $y) is off a $screen ${read.space.label} screen on '
+        '${driver.target.id}. A tap outside the display does nothing and '
+        'reports success, which is why this is refused rather than sent. '
+        'device_ui_dump reports coordinates already in the right space for '
+        'this device.',
+      );
+    }
+
+    // Read before the new one is filed, or the comparison is with itself.
+    final earlier = _screens.lastLookAt(driver.target.id);
+    final seen = _screens.observationOf(
+      deviceId: driver.target.id,
+      tree: read.tree,
+      app: read.app,
+      bySessionId: callerSessionId,
+    );
+
+    String? staleness;
+    if (earlier != null && !seen.matches(earlier)) {
+      final age = seen.at.difference(earlier.at);
+      if (age <= kDeviceLookWindow) {
+        // Deliberately *not* filed. A refusal that recorded the new screen
+        // would let the identical retry through against a screen the caller
+        // never looked at, which is the same blind tap one round trip later.
+        throw DeviceRefusal(
+          'device_tap: the screen has moved since this app last read it, so '
+          '($x, $y) is a coordinate for a screen that is gone. '
+          '${driver.target.id} was read '
+          '${describeDriveAge(age)} and ${seen.differenceFrom(earlier)}. A '
+          'coordinate computed against the old screen lands wherever the new '
+          'one happens to put something, and the reply would say it worked.\n'
+          'Read it again and act on what is there: device_find_elements then '
+          'device_tap_element, which re-reads the screen, hits the element '
+          'itself, costs exactly what this call costs and survives the next '
+          'change too. To tap blind anyway — a canvas, a game, a '
+          'custom-painted surface with nothing in the hierarchy — pass '
+          'verify: false.',
+        );
+      }
+      staleness =
+          'the screen has changed since it was last read '
+          '${describeDriveAge(age)}, but that reading is older than '
+          '${kDeviceLookWindow.inMinutes}m and so is not evidence about where '
+          'these coordinates came from — not refused for that reason';
+    } else if (earlier == null) {
+      staleness =
+          'nothing this app has read says where ($x, $y) came from — no '
+          'device_ui_dump or device_find_elements has been run on '
+          '${driver.target.id}, so it was checked against the screen as it is '
+          'now and nothing else';
+    }
+
+    _screens.file(seen);
+
+    final node = read.tree.at(x, y);
+    return _CoordinateCheck(
+      verdict: staleness == null
+          ? 'against a read taken just now, which matches the screen last read '
+                '${describeDriveAge(seen.at.difference(earlier!.at))}'
+          : 'against a read taken just now — $staleness',
+      under: node == null
+          ? 'nothing in the hierarchy covers ($x, $y); on a custom-painted '
+                'surface that is normal, elsewhere it means the tap lands on '
+                'no element'
+          : describeUiNode(node, screen: screen),
+      prefer: node == null ? null : _preferElementOver(node),
+    );
+  }
+
+  /// One line when this screen is not the one this app last read, or null.
+  ///
+  /// A note and never a refusal, and that asymmetry is the locating policy
+  /// stated as behaviour: a dynamic locator is resolved against the screen in
+  /// front of it, so a change is something it *survives* — while the same
+  /// change makes a raw coordinate wrong, which is why `device_tap` refuses on
+  /// it. Said anyway, because the caller's wider plan was built on the older
+  /// screen and this tap succeeding is not evidence the rest of it will.
+  List<String>? _screenMovedSince(DeviceDriver driver, ScreenRead read) {
+    final earlier = _screens.lastLookAt(driver.target.id);
+    if (earlier == null) return null;
+    final seen = _screens.observationOf(
+      deviceId: driver.target.id,
+      tree: read.tree,
+      app: read.app,
+      bySessionId: callerSessionId,
+    );
+    if (seen.matches(earlier)) return null;
+    return [
+      'NOTE: the screen changed since it was last read '
+          '${describeDriveAge(seen.at.difference(earlier.at))} — '
+          '${seen.differenceFrom(earlier)}. This tap resolved against the '
+          'screen as it is now, so it is right; any coordinate you are still '
+          'holding from that read is not.',
+    ];
+  }
+
+  /// The `device_tap_element` call that would have found [node], said where the
+  /// caller is already reading — the locating policy at the moment it applies.
+  String? _preferElementOver(UiNode node) {
+    final ({String field, String value})? locator = switch (node) {
+      _ when node.text.isNotEmpty => (field: 'text', value: node.text),
+      _ when node.contentDescription.isNotEmpty => (
+        field: 'text',
+        value: node.contentDescription,
+      ),
+      _ when node.resourceId.isNotEmpty => (
+        field: 'resourceId',
+        value: node.resourceId,
+      ),
+      _ => null,
+    };
+    if (locator == null) return null;
+    return 'device_tap_element(${locator.field}: "${locator.value}") hits that '
+        'element by name: it survives a layout change, cannot be off by a '
+        'scale factor, and costs exactly what this call costs.';
   }
 
   Future<Object?> _deviceType(
@@ -963,6 +1176,7 @@ class DeviceControlTools {
       DeviceCapability.uiTree,
     );
     final read = await driver.describeScreen();
+    _recordLook(driver, read);
     final tree = read.tree;
     final screen = read.screen;
 
@@ -1048,6 +1262,7 @@ class DeviceControlTools {
       DeviceCapability.uiTree,
     );
     final read = await driver.describeScreen();
+    _recordLook(driver, read);
     final tree = read.tree;
     final screen = read.screen;
     final matches = tree.find(query);
@@ -1100,7 +1315,14 @@ class DeviceControlTools {
       DeviceCapability.uiTree,
     );
     _require(driver, 'device_tap_element', DeviceCapability.input);
+    // The read *is* this tool's safety net: it resolves the locator against the
+    // screen as it is now, so a dialog that arrived between look and tap is
+    // caught here rather than by the user. What the note below adds is the
+    // other half — that the plan the caller built is stale even though this
+    // call succeeded.
     final read = await driver.describeScreen();
+    final moved = _screenMovedSince(driver, read);
+    _recordLook(driver, read);
     final tree = read.tree;
     final screen = read.screen;
     final matches = tree.find(query);
@@ -1178,6 +1400,7 @@ class DeviceControlTools {
     return _uiText([
       'Tapped (${point.x}, ${point.y}) ${read.space.label} on '
           '${describeUiNode(element, screen: screen)}',
+      ...?moved,
       'Device ${driver.target.id}, ${read.app ?? 'unknown app'}'
           '${matches.length == 1 ? '' : ', chosen from ${matches.length} matches'}'
           // The runner-up by name: reading "chosen from 2" is what tells you a
@@ -1219,6 +1442,26 @@ class DeviceControlTools {
       {'type': 'text', 'text': sections.join('\n')},
     ],
   };
+}
+
+/// What the pre-tap check found, as the three fields the reply carries.
+///
+/// A record rather than a sentence because the three answer different
+/// questions and an agent skims: what was checked, what is under the finger,
+/// and what it should have called instead.
+class _CoordinateCheck {
+  const _CoordinateCheck({required this.verdict, this.under, this.prefer});
+
+  /// What was compared against what, always said — including when the answer
+  /// is "nothing was".
+  final String verdict;
+
+  /// The element the coordinate lands on.
+  final String? under;
+
+  /// The dynamic locator that would have found it. Null when the element has
+  /// no name to be found by, which is itself the answer.
+  final String? prefer;
 }
 
 /// The schemas for [DeviceControlTools].
@@ -1282,6 +1525,15 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'udid': {'type': 'string', 'description': 'Alias for serial.'},
         'x': {'type': 'number'},
         'y': {'type': 'number'},
+        'verify': {
+          'type': 'boolean',
+          'description':
+              'Read the screen immediately before tapping and refuse if it has '
+              'moved since it was last read. Default true. Pass false only for '
+              'a surface with nothing in its hierarchy — a canvas, a game, a '
+              'custom-painted view — where there is nothing for the check to '
+              'be about; the reply then says the tap was sent unverified.',
+        },
       },
       'required': ['x', 'y'],
     },
