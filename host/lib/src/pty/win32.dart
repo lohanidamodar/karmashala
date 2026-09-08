@@ -1,0 +1,304 @@
+// ignore_for_file: non_constant_identifier_names
+
+import 'dart:ffi';
+
+import 'package:ffi/ffi.dart';
+
+/// `COORD` — the size a pseudoconsole is created and resized with. Passed **by
+/// value**, which is why it is a `Struct` rather than a pair of ints.
+final class Coord extends Struct {
+  @Int16()
+  external int X;
+  @Int16()
+  external int Y;
+}
+
+/// `PROCESS_INFORMATION`. Only the handle and the pid are read; the thread
+/// handle is closed immediately, as `CreateProcess` requires.
+final class ProcessInformation extends Struct {
+  @IntPtr()
+  external int hProcess;
+  @IntPtr()
+  external int hThread;
+  @Uint32()
+  external int dwProcessId;
+  @Uint32()
+  external int dwThreadId;
+}
+
+/// `STARTUPINFOEXW`. Laid out field by field rather than as opaque bytes so the
+/// ABI is the compiler's problem: `lpAttributeList` is the whole reason this
+/// struct exists here, and finding it at the wrong offset would hand
+/// `CreateProcess` garbage that still returns TRUE.
+final class StartupInfoExW extends Struct {
+  @Uint32()
+  external int cb;
+  external Pointer<Utf16> lpReserved;
+  external Pointer<Utf16> lpDesktop;
+  external Pointer<Utf16> lpTitle;
+  @Uint32()
+  external int dwX;
+  @Uint32()
+  external int dwY;
+  @Uint32()
+  external int dwXSize;
+  @Uint32()
+  external int dwYSize;
+  @Uint32()
+  external int dwXCountChars;
+  @Uint32()
+  external int dwYCountChars;
+  @Uint32()
+  external int dwFillAttribute;
+  @Uint32()
+  external int dwFlags;
+  @Uint16()
+  external int wShowWindow;
+  @Uint16()
+  external int cbReserved2;
+  external Pointer<Uint8> lpReserved2;
+  @IntPtr()
+  external int hStdInput;
+  @IntPtr()
+  external int hStdOutput;
+  @IntPtr()
+  external int hStdError;
+  external Pointer<Void> lpAttributeList;
+}
+
+/// `PROCESSENTRY32W`, for the parent-pid walk that closing a session needs.
+/// `szExeFile` is never read — it is here so `dwSize` matches what the OS
+/// expects, which `Process32FirstW` rejects the call over.
+final class ProcessEntry32W extends Struct {
+  @Uint32()
+  external int dwSize;
+  @Uint32()
+  external int cntUsage;
+  @Uint32()
+  external int th32ProcessID;
+  @IntPtr()
+  external int th32DefaultHeapID;
+  @Uint32()
+  external int th32ModuleID;
+  @Uint32()
+  external int cntThreads;
+  @Uint32()
+  external int th32ParentProcessID;
+  @Int32()
+  external int pcPriClassBase;
+  @Uint32()
+  external int dwFlags;
+  @Array(260)
+  external Array<Uint16> szExeFile;
+}
+
+/// `ProcThreadAttributeValue(22, FALSE, TRUE, FALSE)` — number 22, marked as an
+/// input attribute (0x00020000). Spelled as the arithmetic the macro does so it
+/// can be checked against the SDK header rather than trusted as a magic number.
+const int kProcThreadAttributePseudoConsole = 22 | 0x00020000;
+
+const int kExtendedStartupInfoPresent = 0x00080000;
+const int kCreateUnicodeEnvironment = 0x00000400;
+const int kStartfUseStdHandles = 0x00000100;
+const int kInfinite = 0xFFFFFFFF;
+const int kWaitObject0 = 0x00000000;
+const int kTh32csSnapProcess = 0x00000002;
+const int kProcessTerminate = 0x0001;
+const int kErrorBrokenPipe = 109;
+const int kErrorInsufficientBuffer = 122;
+
+typedef CreatePseudoConsoleNative =
+    Int32 Function(Coord, IntPtr, IntPtr, Uint32, Pointer<IntPtr>);
+typedef CreatePseudoConsoleDart = int Function(Coord, int, int, int, Pointer<IntPtr>);
+
+typedef ResizePseudoConsoleNative = Int32 Function(IntPtr, Coord);
+typedef ResizePseudoConsoleDart = int Function(int, Coord);
+
+/// kernel32 as this process sees it, plus the three ConPTY entry points.
+///
+/// One instance per isolate, for the same reason [Libc] is: a `DynamicLibrary`
+/// does not travel over a `SendPort`, so the reader and writer isolates call
+/// [open] again rather than receiving this object.
+class Kernel32 {
+  Kernel32._(DynamicLibrary lib, this.createPseudoConsole, this.resizePseudoConsole,
+      this.closePseudoConsole)
+    : createPipe = lib
+          .lookup<NativeFunction<Int32 Function(Pointer<IntPtr>, Pointer<IntPtr>, Pointer<Void>, Uint32)>>(
+            'CreatePipe',
+          )
+          .asFunction(),
+      createProcessW = lib
+          .lookup<
+            NativeFunction<
+              Int32 Function(
+                Pointer<Utf16>,
+                Pointer<Utf16>,
+                Pointer<Void>,
+                Pointer<Void>,
+                Int32,
+                Uint32,
+                Pointer<Void>,
+                Pointer<Utf16>,
+                Pointer<StartupInfoExW>,
+                Pointer<ProcessInformation>,
+              )
+            >
+          >('CreateProcessW')
+          .asFunction(),
+      initializeProcThreadAttributeList = lib
+          .lookup<NativeFunction<Int32 Function(Pointer<Void>, Uint32, Uint32, Pointer<IntPtr>)>>(
+            'InitializeProcThreadAttributeList',
+          )
+          .asFunction(),
+      updateProcThreadAttribute = lib
+          .lookup<
+            NativeFunction<
+              Int32 Function(
+                Pointer<Void>,
+                Uint32,
+                IntPtr,
+                Pointer<Void>,
+                IntPtr,
+                Pointer<Void>,
+                Pointer<IntPtr>,
+              )
+            >
+          >('UpdateProcThreadAttribute')
+          .asFunction(),
+      deleteProcThreadAttributeList = lib
+          .lookup<NativeFunction<Void Function(Pointer<Void>)>>('DeleteProcThreadAttributeList')
+          .asFunction(),
+      readFile = lib
+          .lookup<
+            NativeFunction<Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>)>
+          >('ReadFile')
+          .asFunction(),
+      writeFile = lib
+          .lookup<
+            NativeFunction<Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>)>
+          >('WriteFile')
+          .asFunction(),
+      closeHandle = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr)>>('CloseHandle')
+          .asFunction(),
+      terminateProcess = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr, Uint32)>>('TerminateProcess')
+          .asFunction(),
+      waitForSingleObject = lib
+          .lookup<NativeFunction<Uint32 Function(IntPtr, Uint32)>>('WaitForSingleObject')
+          .asFunction(),
+      getExitCodeProcess = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<Uint32>)>>('GetExitCodeProcess')
+          .asFunction(),
+      getLastError = lib
+          .lookup<NativeFunction<Uint32 Function()>>('GetLastError')
+          .asFunction(),
+      openProcess = lib
+          .lookup<NativeFunction<IntPtr Function(Uint32, Int32, Uint32)>>('OpenProcess')
+          .asFunction(),
+      createToolhelp32Snapshot = lib
+          .lookup<NativeFunction<IntPtr Function(Uint32, Uint32)>>('CreateToolhelp32Snapshot')
+          .asFunction(),
+      process32FirstW = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>>('Process32FirstW')
+          .asFunction(),
+      process32NextW = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>>('Process32NextW')
+          .asFunction();
+
+  /// Null on a Windows older than 10 1809, which has no pseudoconsole at all.
+  /// Reported as an absence rather than crashed on: the host says it cannot
+  /// serve here instead of dying at the first `open`.
+  final CreatePseudoConsoleDart? createPseudoConsole;
+  final ResizePseudoConsoleDart? resizePseudoConsole;
+  final void Function(int)? closePseudoConsole;
+
+  final int Function(Pointer<IntPtr>, Pointer<IntPtr>, Pointer<Void>, int) createPipe;
+  final int Function(
+    Pointer<Utf16>,
+    Pointer<Utf16>,
+    Pointer<Void>,
+    Pointer<Void>,
+    int,
+    int,
+    Pointer<Void>,
+    Pointer<Utf16>,
+    Pointer<StartupInfoExW>,
+    Pointer<ProcessInformation>,
+  )
+  createProcessW;
+  final int Function(Pointer<Void>, int, int, Pointer<IntPtr>) initializeProcThreadAttributeList;
+  final int Function(Pointer<Void>, int, int, Pointer<Void>, int, Pointer<Void>, Pointer<IntPtr>)
+  updateProcThreadAttribute;
+  final void Function(Pointer<Void>) deleteProcThreadAttributeList;
+  final int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>) readFile;
+  final int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>) writeFile;
+  final int Function(int) closeHandle;
+  final int Function(int, int) terminateProcess;
+  final int Function(int, int) waitForSingleObject;
+  final int Function(int, Pointer<Uint32>) getExitCodeProcess;
+  final int Function() getLastError;
+  final int Function(int, int, int) openProcess;
+  final int Function(int, int) createToolhelp32Snapshot;
+  final int Function(int, Pointer<ProcessEntry32W>) process32FirstW;
+  final int Function(int, Pointer<ProcessEntry32W>) process32NextW;
+
+  /// Whether this machine can host a pseudoconsole at all.
+  bool get providesPseudoConsole => createPseudoConsole != null;
+
+  /// Which library carried the ConPTY entry points, for the host's own `hello`.
+  /// The counterpart of [Libc.ptySymbolLibrary]; it names what was measured,
+  /// not what was assumed.
+  String get ptyLibrary => providesPseudoConsole ? 'kernel32.dll' : 'kernel32.dll (no ConPTY)';
+
+  static Kernel32 open() {
+    final lib = DynamicLibrary.open('kernel32.dll');
+    CreatePseudoConsoleDart? create;
+    ResizePseudoConsoleDart? resize;
+    void Function(int)? close;
+    try {
+      create = lib
+          .lookup<NativeFunction<CreatePseudoConsoleNative>>('CreatePseudoConsole')
+          .asFunction();
+      resize = lib
+          .lookup<NativeFunction<ResizePseudoConsoleNative>>('ResizePseudoConsole')
+          .asFunction();
+      close = lib
+          .lookup<NativeFunction<Void Function(IntPtr)>>('ClosePseudoConsole')
+          .asFunction();
+    } on ArgumentError {
+      // Windows 10 before 1809. Left null; the launcher refuses with a sentence.
+    }
+    return Kernel32._(lib, create, resize, close);
+  }
+}
+
+/// Windows' own quoting rules, which are the *callee's* and not the shell's:
+/// `CreateProcessW` takes one string and every runtime unpicks it the same way.
+/// Ported from `flutter_pty`'s `append_quoted_argument` so a pane launched by
+/// the host receives the argv a pane launched in-process does.
+String quoteWindowsArgument(String argument) {
+  final out = StringBuffer('"');
+  var backslashes = 0;
+  for (final rune in argument.runes) {
+    if (rune == 0x5C) {
+      backslashes++;
+      continue;
+    }
+    if (rune == 0x22) {
+      out.write('\\' * (backslashes * 2 + 1));
+      out.write('"');
+      backslashes = 0;
+      continue;
+    }
+    out.write('\\' * backslashes);
+    backslashes = 0;
+    out.writeCharCode(rune);
+  }
+  // A trailing run would otherwise escape the closing quote itself.
+  out.write('\\' * (backslashes * 2));
+  out.write('"');
+  return out.toString();
+}
+
+String windowsCommandLine(List<String> argv) => argv.map(quoteWindowsArgument).join(' ');

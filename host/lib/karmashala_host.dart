@@ -1,7 +1,10 @@
 export 'src/cli.dart';
 export 'src/host_version.dart';
 export 'src/pty/fake_pty.dart';
+export 'src/pty/conpty.dart';
 export 'src/pty/posix_pty.dart';
+export 'src/pty/pty_platform.dart';
+export 'src/pty/win32.dart';
 export 'src/pty/pty.dart';
 export 'src/domain/age.dart';
 export 'src/domain/host_session.dart';
