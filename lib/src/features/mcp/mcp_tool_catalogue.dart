@@ -114,6 +114,12 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // opened a window per row on the owner's desktop.
       'open_session': McpToolAnnotations(),
       'session_transcript': McpToolAnnotations.read,
+      // Watches, and changes nothing. Idempotent in the sense this file means —
+      // the same call twice leaves the same state — even though the two answers
+      // may differ, because that difference is the session moving rather than
+      // this tool doing anything. Calling it again after a timeout is not
+      // merely safe, it is the intended response to one.
+      'session_wait': McpToolAnnotations.read,
       'session_send': McpToolAnnotations(),
       // Presses the agent's own approve/deny key. Approving is granting
       // permission for something that then happens, and nothing un-happens it.
@@ -438,6 +444,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'session_send': McpToolListing(
     McpToolCategory.sessions,
     'Send a message to a session, as typing into its message box would.',
+  ),
+  'session_wait': McpToolListing(
+    McpToolCategory.sessions,
+    'Block until a session settles — finished, blocked on a person, or ended.',
   ),
   'session_answer': McpToolListing(
     McpToolCategory.sessions,
