@@ -313,4 +313,85 @@ bare
       );
     });
   });
+
+  group('ignoredPaths', () {
+    test('one process asks about the whole list', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          captured = request;
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '.dart_tool\nmacos/Vendor\n',
+            stderr: '',
+          );
+        },
+      );
+      final ignored = await GitService(runner).ignoredPaths(repo(r'C:\app'), [
+        '.dart_tool',
+        'macos/Vendor',
+        'lib',
+      ]);
+      expect(captured.arguments, [
+        '-C',
+        r'C:\app',
+        'check-ignore',
+        '--',
+        '.dart_tool',
+        'macos/Vendor',
+        'lib',
+      ]);
+      expect(ignored, {'.dart_tool', 'macos/Vendor'});
+      expect(runner.requests, hasLength(1));
+    });
+
+    test('no --no-index, so a tracked path reads as not ignored', () async {
+      // The default consults the index on purpose: a pattern may match a path
+      // that is nonetheless tracked, and copying that over a fresh worktree
+      // would replace the new branch's version of it.
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          captured = request;
+          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+        },
+      );
+      final ignored = await GitService(
+        runner,
+      ).ignoredPaths(repo(r'C:\app'), ['lib']);
+      expect(captured.arguments, isNot(contains('--no-index')));
+      expect(ignored, isEmpty, reason: 'exit 1 means none matched');
+    });
+
+    test('an empty list asks git nothing at all', () async {
+      final runner = FakeCommandRunner();
+      expect(
+        await GitService(runner).ignoredPaths(repo(r'C:\app'), const []),
+        isEmpty,
+      );
+      expect(runner.requests, isEmpty);
+    });
+
+    test('git refusing the question is null, never an empty set', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 128,
+          stdout: '',
+          stderr: 'fatal: not a git repository',
+        ),
+      );
+      expect(
+        await GitService(runner).ignoredPaths(repo(r'C:\app'), ['.dart_tool']),
+        isNull,
+      );
+    });
+
+    test('an environment that cannot run git is null', () async {
+      final runner = FakeCommandRunner(throwError: CommandException('down'));
+      expect(
+        await GitService(runner).ignoredPaths(repo(r'C:\app'), ['.dart_tool']),
+        isNull,
+      );
+    });
+  });
 }

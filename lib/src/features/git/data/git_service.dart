@@ -476,6 +476,34 @@ class GitService {
     }
   }
 
+  /// Which of [paths] git ignores in [repo] — or **null when git could not be
+  /// asked**, which is not the same as "none of them".
+  ///
+  /// `check-ignore` consults the index on purpose (no `--no-index`): a path
+  /// that a pattern matches but that is nonetheless *tracked* is reported as
+  /// not ignored, which is exactly the answer the worktree setup needs. Copying
+  /// a tracked path into a fresh worktree would write another branch's version
+  /// of it over the one `git worktree add` just checked out.
+  ///
+  /// One process for the whole list. Exit 1 means none matched and is an
+  /// answer; anything above it is git refusing the question and is not.
+  Future<Set<String>?> ignoredPaths(
+    EnvironmentPath repo,
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return const <String>{};
+    try {
+      final result = await _git(repo, ['check-ignore', '--', ...paths]);
+      if (result.exitCode > 1) return null;
+      return {
+        for (final line in result.stdout.split(RegExp(r'[\r\n]')))
+          if (line.trim().isNotEmpty) line.trim(),
+      };
+    } on CommandException {
+      return null;
+    }
+  }
+
   /// Lists the worktrees of [repo].
   Future<List<GitWorktree>> listWorktrees(EnvironmentPath repo) async {
     final result = await _git(repo, ['worktree', 'list', '--porcelain']);
