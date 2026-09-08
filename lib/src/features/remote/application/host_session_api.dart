@@ -544,6 +544,15 @@ class HostSessionApi {
     // session it has open — so this is "what is on screen", stated by the
     // phone's own behaviour rather than guessed at.
     //
+    // The distinction is load-bearing, and it is the whole of "presence is not
+    // delivery": this is a request the phone *made*, not a signal about
+    // whether it is looking. A request cannot go stale — nothing here ages
+    // out, and only another explicit frame clears it — so there is no reading
+    // that can quietly stop a row from being carried. A heartbeat carrying
+    // visibility and a focused session belongs on the notification path, where
+    // `PushFanout` spends it, and must never be read here: this api is handed
+    // no such value, and that is the enforcement.
+    //
     // Subscription cannot be that signal: the phone subscribes to *every*
     // session it lists, because subscription is also what keeps the session
     // cards live. Polling on it meant a full transcript parse per listed
