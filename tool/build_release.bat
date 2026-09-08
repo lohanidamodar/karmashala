@@ -46,6 +46,26 @@ if errorlevel 1 goto :fail
 "%DARTEXE%" compile exe mcp_bridge\bin\karmashala_mcp.dart -o "%RELEASE%\karmashala_mcp.exe" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
+rem The session host, cross-compiled for the machines it gets deployed to.
+rem Measured 2026-09-08 on Dart 3.13.2 (windows_x64): `compile exe` accepts
+rem --target-os=linux for arm, arm64, riscv64 and x64 and produces glibc-linked
+rem ELF binaries; the x64 one ran unmodified inside WSL. It refuses macOS
+rem outright ("Unsupported target platform macos_arm64"), so macOS hosts fall
+rem back to tmux and HostDeployer says so. musl hosts are out of scope for the
+rem same reason: these are glibc-linked.
+rem
+rem They land in the Release directory beside karmashala_mcp.exe, which the
+rem installer copies wholesale, so no installer change is needed. The version
+rem is in the filename because HostDeployer compares it against what the remote
+rem binary reports rather than trusting the name.
+echo === SESSION HOST (linux x64, arm64) === >> "%LOG%"
+call "%FLUTTER%" pub get --directory host >> "%LOG%" 2>&1
+if errorlevel 1 goto :fail
+"%DARTEXE%" compile exe host\bin\karmashala_host.dart --target-os=linux --target-arch=x64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64" >> "%LOG%" 2>&1
+if errorlevel 1 goto :fail
+"%DARTEXE%" compile exe host\bin\karmashala_host.dart --target-os=linux --target-arch=arm64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-arm64" >> "%LOG%" 2>&1
+if errorlevel 1 goto :fail
+
 echo === INSTALLER === >> "%LOG%"
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DMyAppVersion=!APPVERSHORT! windows\installer\karmashala.iss >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail

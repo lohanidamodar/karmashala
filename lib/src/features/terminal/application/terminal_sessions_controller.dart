@@ -14,6 +14,7 @@ import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../ssh/application/host_session_providers.dart';
 import '../../ssh/application/ssh_providers.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
@@ -84,6 +85,11 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
               profileId: profile.id,
               host: host,
               connection: pool.forHostId(host.id),
+              // Deployed or verified once per host per connection and shared by
+              // every pane on it; null only when this app cannot reach SSH at
+              // all, in which case the pane says nothing about a session host
+              // it never asked about.
+              hostAccess: ref.read(hostSessionAccessLookupProvider)(host),
               workingDirectory:
                   workingDirectory ?? agentLaunch?.workingDirectory,
               agentLaunch: agentLaunch,
