@@ -23,12 +23,19 @@ void main() {
     closers.clear();
   });
 
-  LanTransport dial({int? maxQueuedFrames, bool start = true}) {
+  LanTransport dial({
+    int? maxQueuedFrames,
+    int? maxQueuedBytes,
+    bool start = true,
+    void Function(String message)? onLog,
+  }) {
     final transport = LanTransport(
       host: '127.0.0.1',
       port: server.port,
       backoff: fastBackoff(),
       maxQueuedFrames: maxQueuedFrames ?? 256,
+      maxQueuedBytes: maxQueuedBytes ?? kMaxQueuedBytes,
+      onLog: onLog,
     );
     closers.add(transport.close);
     if (start) transport.start();
@@ -148,6 +155,59 @@ void main() {
     expect(await fromPhone.next, [3]);
     expect(await fromPhone.next, [4]);
     expect(await fromPhone.next, [5]);
+  });
+
+  test('the queue is bounded in BYTES too, and says so when it drops',
+      () async {
+    // A count is not a size. At the frame cap, 256 frames is a quarter of a
+    // gigabyte held for one phone that walked out of range — and the frames
+    // most likely to fill the queue are the large ones, a transcript page for
+    // a session that is busy.
+    final log = <String>[];
+    final phone = dial(maxQueuedBytes: 2500, start: false, onLog: log.add);
+
+    for (var i = 0; i < 5; i++) {
+      phone.send(List<int>.filled(1000, i));
+    }
+
+    expect(phone.queuedBytes, lessThanOrEqualTo(2500));
+    expect(phone.droppedFrames, 3);
+    expect(
+      log.where((line) => line.startsWith('outbound queue full')),
+      isNotEmpty,
+      reason: 'a slow reader that is silently paid for is the failure itself',
+    );
+  });
+
+  test('the newest frame is never the one dropped', () async {
+    // The only frame whose news the peer has had no chance at. A queue that
+    // answered overflow by refusing the present would go deaf the moment it
+    // fell behind.
+    final links = ItemQueue<LanLink>(server.connections);
+    final phone = dial(maxQueuedBytes: 10, start: false);
+
+    phone.send(List<int>.filled(8, 1));
+    phone.send(List<int>.filled(8, 2));
+
+    expect(phone.queuedBytes, 8);
+    phone.start();
+    final host = await links.next;
+    final fromPhone = ItemQueue<Uint8List>(host.frames);
+    expect(await fromPhone.next, List<int>.filled(8, 2));
+  });
+
+  test('a reconnect that could not write everything keeps its byte count '
+      'honest', () async {
+    // `onConnected` re-queues what the socket would not take; a count that
+    // drifted there would either drop a healthy queue or never bound a sick
+    // one.
+    final phone = dial(maxQueuedBytes: 4000, start: false);
+    phone.send(List<int>.filled(1000, 1));
+    phone.send(List<int>.filled(1000, 2));
+
+    expect(phone.queuedBytes, 2000);
+    await phone.close();
+    expect(phone.queuedBytes, 0);
   });
 
   test('a closed transport stays closed', () async {
