@@ -151,10 +151,40 @@ hand-off. It is not a statement that the agent read the message, understood it,
 agreed with it, started work, or finished. There is no acknowledgement in the
 protocol to wait for, so none is reported.
 
-If you need to know what happened next, look: `session_transcript` for what the
-session has said since, or `delivery_status` for what its checkout now owes.
-Sending again because you saw no reply usually produces two of whatever you
-asked for.
+If you need to know what happened next, **wait for it**: `session_wait` blocks
+until the session settles instead of leaving you to re-read a transcript on a
+loop. `session_transcript` still reads what it has said, and `delivery_status`
+what its checkout now owes. Sending again because you saw no reply usually
+produces two of whatever you asked for.
+
+**An agent is not a pane.** A pane exists whether or not it contains an agent;
+an agent is the recognized process currently running inside a pane. These
+`session_*` tools resolve the live agent and refuse when there is not one —
+`session_answer` and `session_end` both say so rather than reporting success
+for a session with nothing running. The `terminal_*` tools are the other half:
+they address the terminal whatever occupies it, and
+`instructions(topic: "terminal")` states the same rule from that side.
+
+**`session_wait` is how you hand work to another agent and know it landed.**
+`idle` and `done` both mean ready for input, and they are two states on
+purpose: `done` is idle-**and-seen-changed**, so a helper that finished
+something does not read like one that never started — and `idle` on its own is
+never proof that your work was done. `blocked` means it has stopped for a
+person and names what it is waiting on; waiting longer will not clear that.
+`ended` carries the exit code when one was learned and says **UNKNOWN — not
+0** when none was. `timeout` is *your* bound and not a verdict: the session is
+still running, and calling again resumes waiting.
+
+**A timeout does not prove that no input was sent.** `session_send` takes
+`wait: true` for the send-then-wait shape, and if that call times out the
+message still went in — `inputSent: true` says so in the result. Sending it
+again because your wait ran out is how the same work gets submitted twice.
+Read the session before you retry.
+
+**A wait refuses a target that is already blocked, before it sends.** A session
+stopped for an approval or a question will not move whatever arrives, so
+`session_send` with `wait: true` checks first and comes back having sent
+nothing and started no wait.
 
 **A message you send to another session arrives with your name on it.**
 Delivery is a keystroke — the same characters the user's own typing produces —
@@ -223,10 +253,19 @@ is **UNKNOWN — not 0**. Read `exitCodeKnown` before you believe anything. No
 exit code is ever invented here, and treating an absent one as success is the
 single most expensive mistake available on this surface.
 
-Two more refusals worth knowing before you hit them:
+**A pane is not an agent.** A pane exists whether or not it contains an agent;
+an agent is the recognized process currently running inside a pane. These
+`terminal_*` tools address the terminal, whatever occupies it — a shell, an
+agent, or nothing at all. The `session_*` tools do the opposite: they resolve
+the live agent and refuse when there is not one. Which family you want follows
+from which of the two you mean, and the refusals below are that one rule doing
+its job rather than two separate quirks.
+
+Two of them worth knowing before you hit them:
 
 * A pane that is running an agent is refused. Typing into another agent's
-  terminal is not a shell command, it is an interruption.
+  terminal is not a shell command, it is an interruption — `session_send` is
+  the tool that talks to an agent, and it is where this sends you.
 * A pane with no shell in it has nothing to run a command and no exit code to
   report, and says that rather than appearing to succeed.
 

@@ -87,6 +87,26 @@ final sessionStatusLookupProvider =
           ref.read(sessionStatusRegistryProvider).reportForOpenId(sessionId),
     );
 
+/// **One session's status now, and every later change to it** — the signal a
+/// wait completes on.
+///
+/// A function behind a provider, for the same reason as
+/// [sessionStatusLookupProvider] and not the same reason as
+/// [agentSessionStatusProvider]: a `family` caches per key, and a wait wants a
+/// subscription it opens and closes, not a shared one it might inherit
+/// mid-flight.
+///
+/// Starts nothing. The registry is already cycling for the badges, and this is
+/// a hundred-and-first subscriber to the broadcast it feeds — which is what
+/// lets `session_wait` block without a poll of its own. A test overrides this
+/// with its own controller and emits the reports the wait is supposed to react
+/// to, so nothing in the suite has to stand up the status pipeline.
+final sessionStatusStreamProvider =
+    Provider<Stream<AgentStatusReport> Function(String sessionId)>(
+      (ref) => (sessionId) =>
+          ref.read(sessionStatusRegistryProvider).reportsFor(sessionId),
+    );
+
 /// paneId → the session standing in it, for the whole workspace.
 ///
 /// One shared producer rather than a lookup per chip. Both tab strips draw one

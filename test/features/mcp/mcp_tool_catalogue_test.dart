@@ -86,6 +86,89 @@ void main() {
     }
   });
 
+  group('the listing a person reads', () {
+    // The annotations above are for a client; this is for whoever opens
+    // Settings → Tools and asks what the thing they installed can do. It rots
+    // the same way the annotation table would without the two assertions at
+    // the top of this file — a tool with no line beside it reads as one nobody
+    // thought was worth explaining — so the coverage is asserted both ways and
+    // the length cap is a gate rather than a convention.
+
+    test('every served tool has a category and a summary', () {
+      expect(
+        servedNames.difference(kMcpToolListings.keys.toSet()),
+        isEmpty,
+        reason:
+            'these tools would be listed with a name and nothing else: give '
+            'each a category and one line in mcp_tool_catalogue.dart',
+      );
+    });
+
+    test('the listing describes no tool that is not served', () {
+      expect(
+        kMcpToolListings.keys.toSet().difference(servedNames),
+        isEmpty,
+        reason: 'these summaries describe a tool that no longer exists',
+      );
+    });
+
+    test('a summary is one line, and short enough to be one', () {
+      for (final entry in kMcpToolListings.entries) {
+        final summary = entry.value.summary;
+        expect(summary.trim(), isNotEmpty, reason: '${entry.key} says nothing');
+        expect(
+          summary,
+          summary.trim(),
+          reason: '${entry.key} is padded, and the page does not trim',
+        );
+        expect(
+          summary,
+          isNot(contains('\n')),
+          reason: '${entry.key} is a paragraph; the schema is where those go',
+        );
+        expect(
+          summary.length,
+          lessThanOrEqualTo(McpToolListing.summaryLimit),
+          reason:
+              '${entry.key} is ${summary.length} chars — over '
+              '${McpToolListing.summaryLimit} it wraps and stops being a line '
+              'the eye can skip',
+        );
+      }
+    });
+
+    test('a summary says something the name does not', () {
+      for (final entry in kMcpToolListings.entries) {
+        expect(
+          entry.value.summary.split(' ').length,
+          greaterThan(3),
+          reason: '${entry.key} is restated, not explained',
+        );
+      }
+    });
+
+    test('every category has at least one tool in it', () {
+      // The page draws a heading per category, so an empty one is a heading
+      // over nothing — and it is the shape a rename leaves behind when a
+      // family is moved but its category is not retired.
+      for (final category in McpToolCategory.values) {
+        expect(
+          kMcpToolsByCategory[category],
+          isNotEmpty,
+          reason: '${category.name} would be a heading with nothing under it',
+        );
+      }
+    });
+
+    test('the grouping lists every tool exactly once', () {
+      final listed = <String>[
+        for (final tools in kMcpToolsByCategory.values) ...tools,
+      ];
+      expect(listed.toSet(), hasLength(listed.length));
+      expect(listed.toSet(), kMcpToolListings.keys.toSet());
+    });
+  });
+
   group('a destructive family names its guide', () {
     // The table above says which tools cannot be undone. That is the right
     // answer to "should a client confirm this", and the wrong answer to "what
