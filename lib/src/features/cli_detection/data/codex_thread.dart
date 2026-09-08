@@ -78,3 +78,59 @@ class CodexThread {
   @override
   String toString() => 'CodexThread($id, $cwd)';
 }
+
+/// How Codex's own record says one file changed in a turn.
+///
+/// Measured against 0.153.4 over the owner's 19 threads on 2026-09-08: 110
+/// changes, 86 `update`, 21 `add`, 3 `delete`. A `type` this build does not know
+/// reads as [unknown] rather than as a modification, because guessing the
+/// weaker claim for a kind Codex adds later is still guessing.
+enum CodexFileChangeKind { add, update, delete, unknown }
+
+/// One file a `fileChange` item names, without its diff.
+///
+/// **The diff is deliberately dropped on the way in.** One `full` page of a
+/// 23-turn thread is 15.4 MB of JSON, of which 127 KB is diff text; keeping
+/// every hunk to draw a list of 58 paths is the cost this type exists to avoid.
+/// Anyone who wants the patch has the working tree and the Changes panel.
+class CodexFileChange {
+  const CodexFileChange({
+    required this.path,
+    required this.kind,
+    this.movedTo,
+  });
+
+  /// The change, or `null` when it names no path to file it under.
+  static CodexFileChange? fromJson(Object? row) {
+    if (row is! Map) return null;
+    final path = row['path'];
+    if (path is! String || path.isEmpty) return null;
+    final kind = row['kind'];
+    final moved = kind is Map ? kind['move_path'] : null;
+    return CodexFileChange(
+      path: path,
+      kind: switch (kind is Map ? kind['type'] : null) {
+        'add' => CodexFileChangeKind.add,
+        'update' => CodexFileChangeKind.update,
+        'delete' => CodexFileChangeKind.delete,
+        _ => CodexFileChangeKind.unknown,
+      },
+      movedTo: moved is String && moved.isNotEmpty ? moved : null,
+    );
+  }
+
+  /// Absolute, and in **Codex's** spelling — a POSIX path inside the
+  /// distribution for a WSL install, which this host cannot open as written.
+  /// `PathTranslator` is the one place that changes that.
+  final String path;
+
+  final CodexFileChangeKind kind;
+
+  /// Where the file moved to, for an `update` carrying a `move_path`. Null in
+  /// all 110 changes measured, so the branch is pinned by a test rather than by
+  /// a sighting.
+  final String? movedTo;
+
+  @override
+  String toString() => 'CodexFileChange(${kind.name} $path)';
+}

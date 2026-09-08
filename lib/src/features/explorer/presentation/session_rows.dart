@@ -19,6 +19,7 @@ import '../../sessions/domain/session_resume.dart';
 import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
+import '../../sessions/presentation/session_changed_files_dialog.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
@@ -228,6 +229,14 @@ class NativeSessionRow extends ConsumerWidget {
             label: 'Add to section…',
             icon: AppIcons.folder,
           ),
+        // Every session gets this, including one whose agent keeps no record
+        // of its own — that case is *why* the dialog exists, and hiding the
+        // entry would leave the only agent that needs git with no way to ask.
+        DesktopMenuItem(
+          value: 'changed-files',
+          label: 'Files changed…',
+          icon: AppIcons.gitDiff,
+        ),
         DesktopMenuItem(
           value: 'copy-cmd',
           label: 'Copy resume command',
@@ -269,6 +278,8 @@ class NativeSessionRow extends ConsumerWidget {
                 .togglePinnedSession(session.id);
           case 'sections':
             await SectionMembershipDialog.show(context, ref, session.id);
+          case 'changed-files':
+            await SessionChangedFilesDialog.show(context, session.id);
           case 'copy-cmd':
             copyCommandToClipboard(
               context,
