@@ -371,6 +371,157 @@ class RemoteTranscriptPage {
   }
 }
 
+/// Why an activity answer carries no calls, when the host can actually say.
+///
+/// The same split [RemoteTranscriptAbsence] is built to, for the same reason:
+/// an empty list has two meanings — *this session is working and nothing is
+/// outstanding* and *this session is working and we cannot see what on* — and
+/// only the host knows which. **A fact, never a sentence.** The wire carries
+/// which nothing it is and the phone words it, so an older phone that has never
+/// heard of a value falls back to the hedge rather than rendering a word it
+/// cannot place.
+enum RemoteActivityAbsence {
+  /// The session is working and nothing the host can read records what on:
+  /// no CLI session id yet, an agent whose store the desktop cannot open, or a
+  /// session whose only record is the engine's event log — which has no result
+  /// event, and so cannot tell a finished call from a running one.
+  noRecord('no_record');
+
+  const RemoteActivityAbsence(this.wire);
+
+  final String wire;
+
+  /// An absent or unrecognised word reads as null — *we were not told why*.
+  static RemoteActivityAbsence? parse(Object? wire) => _byWire[wire];
+
+  static final Map<Object?, RemoteActivityAbsence> _byWire = {
+    for (final value in RemoteActivityAbsence.values) value.wire: value,
+  };
+}
+
+/// One call the agent has issued and not yet answered.
+class RemoteActivityCall {
+  const RemoteActivityCall({
+    required this.summary,
+    required this.toolName,
+    required this.startedAt,
+    this.subagent = false,
+  });
+
+  /// The line the desktop transcript already prints — `Bash(git status)`,
+  /// `Agent(review the diff)`. For a shell call that line **is** the command,
+  /// so nothing extra is carried to name what is running.
+  final String summary;
+
+  /// The tool's own name, so the phone can ask what kind of call this is
+  /// without parsing [summary] back apart.
+  final String toolName;
+
+  /// Whether this is another agent rather than a tool. Sent as a fact rather
+  /// than left to the phone to work out from [toolName]: the CLI renamed that
+  /// tool from `Task` to `Agent` once already, and a phone updates on its own
+  /// schedule.
+  final bool subagent;
+
+  /// When the agent issued it, on the **host's** clock and in UTC. Paired with
+  /// [RemoteSessionActivity.observedAt] so the phone measures elapsed against
+  /// one clock rather than against its own.
+  final DateTime startedAt;
+
+  Map<String, Object?> toJson() => {
+    'summary': summary,
+    'tool': toolName,
+    if (subagent) 'subagent': true,
+    'startedAt': startedAt.toUtc().toIso8601String(),
+  };
+
+  static RemoteActivityCall fromJson(Map<String, Object?> json) {
+    final summary = json['summary'];
+    final tool = json['tool'];
+    final startedAt = json['startedAt'];
+    if (summary is! String || tool is! String || startedAt is! String) {
+      throw const ProtocolException('bad activity call');
+    }
+    final at = DateTime.tryParse(startedAt);
+    if (at == null) throw const ProtocolException('bad activity timestamp');
+    return RemoteActivityCall(
+      summary: summary,
+      toolName: tool,
+      subagent: json['subagent'] == true,
+      startedAt: at.toUtc(),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteActivityCall &&
+      other.summary == summary &&
+      other.toolName == toolName &&
+      other.subagent == subagent &&
+      other.startedAt == startedAt;
+
+  @override
+  int get hashCode => Object.hash(summary, toolName, subagent, startedAt);
+
+  @override
+  String toString() => 'RemoteActivityCall($summary, $startedAt)';
+}
+
+/// **What one session is doing right now**, as `session.activity` carries it.
+///
+/// [observedAt] is not decoration. The phone shows an elapsed time that keeps
+/// counting between frames, and its clock is not the desktop's — so it counts
+/// from `observedAt - startedAt`, which is a duration both ends agree on, plus
+/// whatever has passed locally since the frame landed. Without it the phone
+/// would be subtracting one machine's instant from another's.
+class RemoteSessionActivity {
+  const RemoteSessionActivity({
+    required this.sessionId,
+    required this.observedAt,
+    this.calls = const [],
+    this.absence,
+  });
+
+  final String sessionId;
+
+  /// When the host took this reading, on its own clock and in UTC.
+  final DateTime observedAt;
+
+  /// Oldest first, as the transcript issued them.
+  final List<RemoteActivityCall> calls;
+
+  /// Why [calls] is empty, when the host knows. Null means it could see, and
+  /// there was nothing — which is a different sentence.
+  final RemoteActivityAbsence? absence;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'observedAt': observedAt.toUtc().toIso8601String(),
+    'calls': [for (final call in calls) call.toJson()],
+    if (absence != null) 'absence': absence!.wire,
+  };
+
+  static RemoteSessionActivity fromJson(Map<String, Object?> json) {
+    final sessionId = json['sessionId'];
+    final observedAt = json['observedAt'];
+    final calls = json['calls'];
+    if (sessionId is! String || observedAt is! String) {
+      throw const ProtocolException('bad session activity');
+    }
+    final at = DateTime.tryParse(observedAt);
+    if (at == null) throw const ProtocolException('bad activity timestamp');
+    return RemoteSessionActivity(
+      sessionId: sessionId,
+      observedAt: at.toUtc(),
+      calls: [
+        for (final call in calls is List ? calls : const [])
+          if (call is Map<String, Object?>) RemoteActivityCall.fromJson(call),
+      ],
+      absence: RemoteActivityAbsence.parse(json['absence']),
+    );
+  }
+}
+
 /// What a session that has stopped for the user is actually waiting on — the
 /// wire's copy of the desktop's `AgentWaitKind`.
 ///

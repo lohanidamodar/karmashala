@@ -38,6 +38,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/domain/repository.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
@@ -425,7 +426,7 @@ void main() {
     );
 
     final bindings = container.read(remoteHostBindingsProvider);
-    final page = await bindings.transcriptFor('imp2');
+    final page = (await bindings.transcriptFor('imp2')).page;
 
     expect(page.sessionId, 'imp2');
     expect(page.messages, isEmpty);
@@ -472,7 +473,7 @@ void main() {
       seedPaneSession('s-anti', agentId: 'antigravity');
 
       final bindings = container.read(remoteHostBindingsProvider);
-      final page = await bindings.transcriptFor('s-anti');
+      final page = (await bindings.transcriptFor('s-anti')).page;
 
       expect(page.messages, isEmpty);
       expect(page.absence, RemoteTranscriptAbsence.noChatView);
@@ -483,6 +484,84 @@ void main() {
       );
     });
 
+    // One read, two answers: the page the phone renders and what that same
+    // parse says is in flight. Asking twice would double what the poll sweep
+    // spends on a transcript, and the largest one here is 53 MB.
+    group('the same read says what is running', () {
+      /// Puts the registry's answer under the test's control — its production
+      /// path reads hooks, a state file and a terminal grid.
+      void statusIs(AgentActivityStatus status) {
+        container.dispose();
+        container = ProviderContainer(
+          overrides: [
+            ...fakeTerminalOverrides(database: db),
+            repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+            autoImportRunnerProvider.overrideWithValue(
+              (_) async => const ImportSummary(),
+            ),
+            remoteDeliveryStageProvider.overrideWithValue(
+              (sessionId) async => 'working',
+            ),
+            remoteApprovalEvidenceProvider.overrideWithValue(
+              (sessionId) async => null,
+            ),
+            remoteSessionPresenceProvider.overrideWithValue(
+              (sessionId) => (note: null, lastSeen: null),
+            ),
+            sessionStatusLookupProvider.overrideWithValue(
+              (sessionId) => AgentStatusReport(
+                agentId: 'antigravity',
+                sessionId: sessionId,
+                status: status,
+                observedAt: now,
+                source: AgentStatusSource.hook,
+              ),
+            ),
+          ],
+        );
+      }
+
+      // §19: a session that is working and whose record we cannot read must
+      // not answer with an empty list, which reads as "nothing is running".
+      test('a working session we cannot look into says which nothing', () async {
+        statusIs(AgentActivityStatus.working);
+        seedWorkspace();
+        seedPaneSession('s-anti', agentId: 'antigravity');
+
+        final record = await container
+            .read(remoteHostBindingsProvider)
+            .transcriptFor('s-anti');
+
+        expect(record.page.absence, RemoteTranscriptAbsence.noChatView);
+        expect(record.activity.calls, isEmpty);
+        expect(record.activity.absence, RemoteActivityAbsence.noRecord);
+        // The fact survives the round trip a phone actually reads it through.
+        expect(
+          RemoteSessionActivity.fromJson(
+            record.activity.toJson(),
+          ).absence,
+          RemoteActivityAbsence.noRecord,
+        );
+      });
+
+      test('...and an idle one answers plainly that nothing is', () async {
+        statusIs(AgentActivityStatus.idle);
+        seedWorkspace();
+        seedPaneSession('s-anti', agentId: 'antigravity');
+
+        final record = await container
+            .read(remoteHostBindingsProvider)
+            .transcriptFor('s-anti');
+
+        expect(record.activity.calls, isEmpty);
+        expect(
+          record.activity.absence,
+          isNull,
+          reason: 'nothing is running, and the status badge says so',
+        );
+      });
+    });
+
     test('a nothing the host cannot account for stays unexplained', () async {
       seedWorkspace();
       // The event-log path: an ordinary session with no turns yet. Claiming a
@@ -490,7 +569,7 @@ void main() {
       seedSession('s-quiet');
 
       final bindings = container.read(remoteHostBindingsProvider);
-      final page = await bindings.transcriptFor('s-quiet');
+      final page = (await bindings.transcriptFor('s-quiet')).page;
 
       expect(page.messages, isEmpty);
       expect(page.absence, isNull);
@@ -509,7 +588,7 @@ void main() {
     appendEvent('s1', SessionEventTypes.sessionCancelled, {});
 
     final bindings = container.read(remoteHostBindingsProvider);
-    final page = await bindings.transcriptFor('s1');
+    final page = (await bindings.transcriptFor('s1')).page;
 
     expect(
       [for (final m in page.messages) (m.role, m.text)],
@@ -542,7 +621,7 @@ void main() {
     });
 
     final bindings = container.read(remoteHostBindingsProvider);
-    final page = await bindings.transcriptFor('child');
+    final page = (await bindings.transcriptFor('child')).page;
 
     expect(page.messages.first.text, 'do the thing');
     expect(
@@ -860,7 +939,7 @@ void main() {
       expect(snapshot.status, 'running');
 
       // And so does everything that takes a session id.
-      final page = await bindings.transcriptFor('imp1');
+      final page = (await bindings.transcriptFor('imp1')).page;
       expect([for (final m in page.messages) m.text], ['still here']);
 
       // Not "imported from the CLI — read-only here": this reaches the live

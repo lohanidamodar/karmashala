@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/data/agent_installation_dao.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../domain/session.dart';

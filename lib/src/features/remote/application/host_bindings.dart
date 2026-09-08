@@ -25,6 +25,18 @@ class RemoteApiRefusal implements Exception {
   String toString() => 'RemoteApiRefusal(${code.wire}: $message)';
 }
 
+/// One read of a session's record: the turns the phone renders, and what that
+/// same read says is still in flight.
+///
+/// A record rather than two bindings because it is **one file**. The poll
+/// sweep already re-reads a watched session's whole transcript — the largest in
+/// this repo is 53 MB of JSONL — and asking a second time for the activity
+/// would double exactly the cost that made that sweep starve the link.
+typedef RemoteSessionRecord = ({
+  RemoteTranscriptPage page,
+  RemoteSessionActivity activity,
+});
+
 class RemoteHostBindings {
   const RemoteHostBindings({
     required this.hostName,
@@ -62,7 +74,11 @@ class RemoteHostBindings {
   /// The full transcript, from the same source the desktop chat view reads:
   /// the agent's own record for a PTY session, the engine's event log
   /// otherwise. Attribution is rebuilt from typed fields, never parsed out.
-  final Future<RemoteTranscriptPage> Function(String sessionId) transcriptFor;
+  ///
+  /// Answers with the activity that same read implies — see
+  /// [RemoteSessionRecord] — derived by `sessionActivityFrom`, the one rule the
+  /// desktop strip is also drawn from.
+  final Future<RemoteSessionRecord> Function(String sessionId) transcriptFor;
 
   /// Routes a prompt into the session exactly as the desktop composer does.
   final Future<void> Function(String sessionId, String text) sendPrompt;

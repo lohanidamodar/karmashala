@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_permission_support.dart';
@@ -38,6 +39,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
+import '../../sessions/application/session_activity_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -786,19 +788,34 @@ typedef ResolvedRemoteSession = ({Session? native, ImportedSession? imported});
 /// the engine's event log. Attribution is REBUILT from the parent session's
 /// typed fields and stripped on a whole-string match — never parsed out of
 /// the text (the dray constraint).
-Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
+///
+/// **One read, two answers.** The activity comes off the very same parse — see
+/// [RemoteSessionRecord] — because the poll sweep re-reads this file and the
+/// largest one here is 53 MB.
+Future<RemoteSessionRecord> _transcriptFor(Ref ref, String sessionId) async {
   final resolved = resolveRemoteSession(ref, sessionId);
   final session = resolved.native;
   if (session == null) {
     final imported = resolved.imported;
-    if (imported != null) return _importedTranscript(imported);
+    if (imported != null) {
+      // Imported history is not a running session: it has no row to be
+      // `working`, so the one rule answers "nothing is running" for it.
+      return (
+        page: await _importedTranscript(imported),
+        activity: _activityOf(ref, sessionId, SessionActivity.none),
+      );
+    }
     throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
   }
   final record = session.surface == SessionSurface.pane
       ? await _agentRecordMessages(ref, session)
       // `session.id`, not the id asked with: a superseded imported id has no
       // event log of its own.
-      : (messages: _eventLogMessages(ref, session.id), absence: null);
+      : (
+          messages: _eventLogMessages(ref, session.id),
+          absence: null,
+          turns: null,
+        );
   var messages = record.messages;
 
   final attribution = _attributionOf(ref, session);
@@ -813,18 +830,59 @@ Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
             : message,
     ];
   }
-  return RemoteTranscriptPage(
-    // The row this actually came from. A phone that asked with a superseded
-    // imported id learns the live one here rather than being told its stale id
-    // is fine.
-    sessionId: session.id,
-    messages: messages,
-    cursor: messages.length,
-    // Only ever a reason for a nothing. A page that carries turns needs no
-    // explanation, and one that carried both would be saying two things.
-    absence: messages.isEmpty ? record.absence : null,
+  return (
+    page: RemoteTranscriptPage(
+      // The row this actually came from. A phone that asked with a superseded
+      // imported id learns the live one here rather than being told its stale
+      // id is fine.
+      sessionId: session.id,
+      messages: messages,
+      cursor: messages.length,
+      // Only ever a reason for a nothing. A page that carries turns needs no
+      // explanation, and one that carried both would be saying two things.
+      absence: messages.isEmpty ? record.absence : null,
+    ),
+    activity: _activityOf(
+      ref,
+      session.id,
+      sessionActivityFrom(
+        rowStatus: session.status,
+        surface: session.surface,
+        // The registry's cached answer, read synchronously: the same word the
+        // desktop badge shows, and no poll of its own.
+        status: ref.read(sessionActivityLookupProvider)(session.id),
+        messages: record.turns,
+      ),
+    ),
   );
 }
+
+/// The wire form of one [SessionActivity], stamped with when we looked.
+///
+/// The host's clock rather than the phone's, and said out loud, so the phone
+/// can measure an elapsed time both ends agree on — see
+/// [RemoteSessionActivity.observedAt].
+RemoteSessionActivity _activityOf(
+  Ref ref,
+  String sessionId,
+  SessionActivity activity,
+) => RemoteSessionActivity(
+  sessionId: sessionId,
+  observedAt: ref.read(clockProvider).nowUtc(),
+  calls: [
+    for (final call in activity.calls)
+      RemoteActivityCall(
+        summary: call.summary,
+        toolName: call.toolName,
+        subagent: call.isSubagent,
+        startedAt: call.startedAt,
+      ),
+  ],
+  absence: switch (activity.blindSpot) {
+    ActivityBlindSpot.noRecord => RemoteActivityAbsence.noRecord,
+    null => null,
+  },
+);
 
 /// An imported CLI session's transcript: the agent's own store file, exactly
 /// what the desktop's imported view reads. Tool rows dropped like the pane
@@ -850,11 +908,17 @@ Future<RemoteTranscriptPage> _importedTranscript(
 typedef _AgentRecord = ({
   List<RemoteTranscriptMessage> messages,
   RemoteTranscriptAbsence? absence,
+  /// The parse the [messages] were cut from, kept so the activity can be read
+  /// off the same read. **Null means there was no record to read** — which is
+  /// what tells "nothing is outstanding" from "we cannot see", and is exactly
+  /// the distinction every early return below is already making.
+  List<TranscriptMessage>? turns,
 });
 
 const _AgentRecord _nothingKnown = (
   messages: <RemoteTranscriptMessage>[],
   absence: null,
+  turns: null,
 );
 
 /// The agent's own transcript file — `sessionChatTranscriptProvider`'s source,
@@ -881,6 +945,7 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
     return const (
       messages: <RemoteTranscriptMessage>[],
       absence: RemoteTranscriptAbsence.noChatView,
+      turns: null,
     );
   }
   final path = await ref
@@ -895,6 +960,7 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
           RemoteTranscriptMessage(role: message.role, text: message.text),
     ],
     absence: null,
+    turns: messages,
   );
 }
 

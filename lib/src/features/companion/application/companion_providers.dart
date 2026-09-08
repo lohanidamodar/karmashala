@@ -99,6 +99,13 @@ final companionApprovalProvider = StreamProvider.autoDispose
           ref.watch(companionGatewayProvider).pendingApproval(sessionId),
     );
 
+/// **What one session is doing right now**, live.
+final companionActivityProvider = StreamProvider.autoDispose
+    .family<CompanionActivity, String>(
+      (ref, sessionId) =>
+          ref.watch(companionGatewayProvider).activity(sessionId),
+    );
+
 /// One session's approvals going away, and why. Events-only, so a screen that
 /// opens after the fact stays quiet rather than announcing old news.
 final companionApprovalResolutionProvider = StreamProvider.autoDispose

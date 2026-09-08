@@ -164,6 +164,10 @@ class FakeCompanionGateway implements CompanionGateway {
   final Map<String, List<CompanionSessionSummary>> _sessionsByHost;
   final _transcripts = <String, _Watched<List<CompanionChatMessage>>>{};
   final _approvals = <String, _Watched<CompanionApproval?>>{};
+
+  /// What each session is scripted to be doing. Unset means unknown — a phone
+  /// that has heard nothing has not heard "nothing".
+  final _activity = <String, _Watched<CompanionActivity>>{};
   final _attention = StreamController<CompanionAttentionEvent>.broadcast(
     sync: true,
   );
@@ -383,6 +387,10 @@ class FakeCompanionGateway implements CompanionGateway {
       approval.value = null;
     }
     _approvals.clear();
+    for (final activity in _activity.values) {
+      activity.value = CompanionActivity.unknown;
+    }
+    _activity.clear();
     _setActive(hostId);
     if (switchDelay != Duration.zero) await Future<void>.delayed(switchDelay);
     _pairing.value = CompanionPairing(
@@ -493,6 +501,14 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionApproval?> pendingApproval(String sessionId) =>
       _approvalOf(sessionId).stream;
+
+  @override
+  Stream<CompanionActivity> activity(String sessionId) =>
+      _activityOf(sessionId).stream;
+
+  /// Scripts what one session is doing, as a host frame would.
+  void setActivity(String sessionId, CompanionActivity activity) =>
+      _activityOf(sessionId).value = activity;
 
   /// What `workspace.list` answers with. Settable so a test can script a
   /// desktop with several projects, or with none.
@@ -658,6 +674,9 @@ class FakeCompanionGateway implements CompanionGateway {
 
   _Watched<CompanionApproval?> _approvalOf(String sessionId) =>
       _approvals[sessionId] ??= _Watched(null);
+
+  _Watched<CompanionActivity> _activityOf(String sessionId) =>
+      _activity[sessionId] ??= _Watched(CompanionActivity.unknown);
 
   // ------------------------------------------------------- test-side levers
 

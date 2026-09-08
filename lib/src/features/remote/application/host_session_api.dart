@@ -104,6 +104,16 @@ class HostSessionApi {
   final Stopwatch _uptime = Stopwatch()..start();
   final Map<String, String> _lastSnapshots = <String, String>{};
 
+  /// The activity each watched session was last **told** to have, encoded.
+  ///
+  /// Dedupes the unsolicited frame the way [_lastSnapshots] dedupes
+  /// `session.changed`, and for the same reason: the sweep re-derives this on
+  /// every poll and a phone must not be woken to be told what it already
+  /// knows. `observedAt` is deliberately not part of the comparison — it moves
+  /// on every read by construction, and a frame per poll saying only "still
+  /// the same, later" is the churn this map exists to prevent.
+  final Map<String, String> _lastActivity = <String, String>{};
+
   Set<String> get subscribedSessions => Set.unmodifiable(_subscribed);
 
   /// The `host.status` greeting: the supported version range, so a companion
@@ -191,12 +201,13 @@ class HostSessionApi {
           _transcriptCursors.remove(sessionId);
           _pollNotBefore.remove(sessionId);
           _lastSnapshots.remove(sessionId);
+          _lastActivity.remove(sessionId);
           await _result(envelope.id, const {});
         case FrameType.transcriptGet:
           final sessionId = _requireSession(envelope);
           final after = envelope.payload['after'];
           final from = after is int && after > 0 ? after : 0;
-          final page = await bindings.transcriptFor(sessionId);
+          final page = (await bindings.transcriptFor(sessionId)).page;
           // Opened at the end, and bounded. A conversation view shows the tail,
           // and a long transcript cannot be carried in one frame: this repo's
           // own longest session is 53 MB of JSONL, and sending every message of
@@ -230,6 +241,15 @@ class HostSessionApi {
               absence: page.absence,
             ).toJson(),
           );
+        case FrameType.sessionActivity:
+          // The phone asking outright: when it opens a session, and after a
+          // reconnect, where the unsolicited frames it missed cannot be
+          // replayed. Everything after this comes from [pollTranscript] for
+          // free.
+          final sessionId = _requireSession(envelope);
+          final activity = (await bindings.transcriptFor(sessionId)).activity;
+          _lastActivity[sessionId] = _activityKey(activity);
+          await _result(envelope.id, activity.toJson());
         case FrameType.promptSend:
           final sessionId = _requireSession(envelope);
           final text = _requireString(envelope, 'text');
@@ -452,18 +472,24 @@ class HostSessionApi {
     final startedAt = _uptime.elapsed;
     final notBefore = _pollNotBefore[sessionId];
     if (notBefore != null && startedAt < notBefore) return;
-    final RemoteTranscriptPage page;
+    final RemoteSessionRecord record;
     try {
-      page = await bindings.transcriptFor(sessionId);
+      record = await bindings.transcriptFor(sessionId);
     } on Object {
       return;
     }
+    final page = record.page;
     // Measured after the read, so the budget is set by what this transcript
     // actually costs rather than by a guess about its size.
     final cost = _uptime.elapsed - startedAt;
     if (cost > _pollBackoffFloor) {
       _pollNotBefore[sessionId] = _uptime.elapsed + cost * _pollBackoffFactor;
     }
+    // **Before the cursor check, not after it.** A call *finishing* appends
+    // nothing: the reader attaches the result to the row that is already there,
+    // so the cursor does not move and every early return below would swallow
+    // the one change the phone is waiting to see.
+    await _pushActivity(sessionId, record.activity);
     final cursor = known;
     if (page.cursor <= cursor || cursor > page.messages.length) {
       _transcriptCursors[sessionId] = page.cursor;
@@ -485,6 +511,46 @@ class HostSessionApi {
     );
     if (delivered) _transcriptCursors[sessionId] = page.cursor;
   }
+
+  /// States what a session is doing, when that is not what this device was last
+  /// told.
+  ///
+  /// Gated on [Capability.viewActivity]: an unsolicited frame to a phone that
+  /// was never granted it would be a power growing quietly, which is the thing
+  /// the bit exists to prevent. That phone is refused in words when it asks —
+  /// `session.activity` is a companion frame too — and hears nothing when it
+  /// does not, which is the honest pair.
+  ///
+  /// Called from [pollTranscript], so it follows the session the phone is
+  /// actually reading and costs no read of its own. A device granted this bit
+  /// but not `read_transcript` therefore hears nothing unprompted and has to
+  /// ask; that is the same "what is on screen" signal the poll itself is gated
+  /// on, and inventing a second one would mean a transcript parse per listed
+  /// session per tick.
+  Future<void> _pushActivity(
+    String sessionId,
+    RemoteSessionActivity activity,
+  ) async {
+    if (!device.capabilities.has(Capability.viewActivity)) return;
+    final encoded = _activityKey(activity);
+    if (_lastActivity[sessionId] == encoded) return;
+    // Written down only once it went out, like every other thing this api
+    // remembers having said: a frame no transport took is not news the phone
+    // has, and the next poll must try again rather than find nothing changed.
+    if (await _send(FrameType.sessionActivity, payload: activity.toJson())) {
+      _lastActivity[sessionId] = encoded;
+    }
+  }
+
+  /// What is compared to decide whether the phone already knows this.
+  ///
+  /// Everything except `observedAt`, which moves on every read by construction
+  /// — including it would send a frame per poll saying only "still the same,
+  /// later", which is the churn the dedupe exists to prevent.
+  static String _activityKey(RemoteSessionActivity activity) => jsonEncode({
+    'calls': [for (final call in activity.calls) call.toJson()],
+    if (activity.absence != null) 'absence': activity.absence!.wire,
+  });
 
   /// Sends `approval.requested` with the Loop-49 evidence. Gated on the
   /// `approve` capability — the event exists so the holder can act on it —
