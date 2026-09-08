@@ -201,6 +201,24 @@ const _claudeCode = AgentDescriptor(
     prompt: AgentPromptSupport.positional(
       evidence: 'claude --help (2.1.251): "Usage: claude [options] [prompt]"',
     ),
+    // **The handoff packet's way in that is not a paste.** Claude Code
+    // collapses any paste over 800 characters or three lines into
+    // `[Pasted text #N]`, so a packet delivered as text is the difference
+    // between the next agent reading the brief and reading a placeholder. A
+    // path has no size.
+    //
+    // Recorded against what the flag *did*, not against what is documented:
+    // 2.1.263's option list does not name it, and `--bare`'s own text does.
+    systemPromptFile: AgentSystemPromptFileSupport.append(
+      '--append-system-prompt-file',
+      evidence:
+          'claude 2.1.263 (Windows claude.exe): --help names it only inside '
+          '--bare\'s text ("Explicitly provide context via: '
+          '--system-prompt[-file], --append-system-prompt[-file], …"), and the '
+          'flag validates its argument — `--append-system-prompt-file '
+          'C:\\kw\\nope-does-not-exist.md -p hi` answers "Error: Append system '
+          'prompt file not found: C:\\kw\\nope-does-not-exist.md"',
+    ),
     // Verified, not assumed: two panes were given `--resume` on the same
     // session id with the first still live (`integration_test/
     // resume_conflict_test.dart`). The second opened on the same conversation,
@@ -866,6 +884,23 @@ const _codex = AgentDescriptor(
     prompt: AgentPromptSupport.positional(
       evidence: 'codex --help (0.146): "Usage: codex [OPTIONS] [PROMPT]"',
     ),
+    // Checked and absent, which is a different fact from unchecked. Codex has
+    // config keys in this area — `model_instructions_file`,
+    // `developer_instructions` — reachable through `-c`, and they are
+    // deliberately not used: the first **replaces** Codex's own base
+    // instructions rather than appending to them, so delivering a handoff
+    // through it would strip the agent's system prompt to hand it a brief. A
+    // typed packet is the weaker delivery; an agent with no instructions is a
+    // worse one.
+    systemPromptFile: AgentSystemPromptFileSupport.absent(
+      evidence:
+          'codex 0.153.4 --help: the whole option list is -c/--enable/'
+          '--disable/--remote/--remote-auth-token-env/--strict-config/-i/-m/'
+          '--oss/--local-provider/-p/-s/--approve-for-me/'
+          '--dangerously-bypass-approvals-and-sandbox/'
+          '--dangerously-bypass-hook-trust/-C/--add-dir/-a/--search/'
+          '--no-alt-screen — no system-prompt or instructions file among them',
+    ),
     // Left at the default (false): Codex enforces **one writer per thread**.
     // The lock is real and inspectable — a live Codex holds an flock on
     // `~/.codex/thread-writer-locks/<thread-id>.lock` — and a second resume of
@@ -1527,6 +1562,13 @@ const _antigravity = AgentDescriptor(
           '--prompt-interactive"; value-carrying confirmed by '
           '`agy --prompt-interactive` exiting on '
           '"flag needs an argument: -prompt-interactive"',
+    ),
+    // Checked and absent. `agy`'s only prompt options carry the text itself.
+    systemPromptFile: AgentSystemPromptFileSupport.absent(
+      evidence:
+          'agy 1.1.27 --help: the prompt options are --prompt/--print/'
+          '--prompt-interactive, each taking the text; no system-prompt or '
+          'instructions file is named anywhere in the option list',
     ),
     // Left false, and now with the CLI's own words behind it rather than the
     // default. `agy` does *not* refuse a second opener — it warns, and carries

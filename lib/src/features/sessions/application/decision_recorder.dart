@@ -4,6 +4,7 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../domain/decision_record.dart';
+import 'session_decision_providers.dart';
 import 'session_providers.dart';
 
 /// The only way anything writes to a session's decision record.
@@ -140,6 +141,32 @@ class DecisionRecorder {
     origin: DecisionOrigin.decisionTool,
   );
 
+  /// The user wrote one down by hand, in the Decisions panel.
+  ///
+  /// The fifth explicit act, and the only one whose author is a person typing.
+  /// [kind] is restricted by the panel to what the writer is entitled to
+  /// assert with nothing behind it — a constraint, a rejected approach, and
+  /// (unlike `DecisionControlTools`) an approval, because the user granting one
+  /// is the user's own statement rather than an agent's claim about them. A
+  /// verdict and a marked checkpoint stay out for the reason they stay out of
+  /// the tool: both would point at a run or a checkpoint that does not exist.
+  DecisionRecord? recordByHand({
+    required String sessionId,
+    required DecisionKind kind,
+    required String summary,
+    String? detail,
+    String decidedBy = 'the user',
+  }) => _append(
+    sessionId: sessionId,
+    kind: kind,
+    summary: summary,
+    detail: detail,
+    decidedBy: decidedBy,
+    // No recording session and no origin id: nobody's agent wrote this, and
+    // there is no other record to name.
+    origin: DecisionOrigin.userEntry,
+  );
+
   /// Stamps the decision with the clock and appends it.
   ///
   /// A blank summary is refused rather than stored: a row with nothing in it
@@ -157,7 +184,7 @@ class DecisionRecorder {
   }) {
     if (summary.trim().isEmpty) return null;
     try {
-      return _ref
+      final appended = _ref
           .read(decisionRecordDaoProvider)
           .append(
             DecisionRecord(
@@ -172,6 +199,10 @@ class DecisionRecorder {
               recordedAt: _ref.read(clockProvider).nowUtc(),
             ),
           );
+      // Every write, not just the panel's: an approval answered while the
+      // panel is open must show up in it, and the panel is the only reader.
+      _ref.read(decisionsRevisionProvider.notifier).bump();
+      return appended;
     } catch (error, stack) {
       _log.warning(
         'Could not record a decision for session $sessionId.',

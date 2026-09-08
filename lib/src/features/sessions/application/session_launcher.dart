@@ -11,7 +11,9 @@ import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/conversation_presence.dart';
+import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../git/application/git_providers.dart';
@@ -39,6 +41,7 @@ import '../domain/session_permission.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'decision_recorder.dart';
+import 'handoff_packet_files.dart';
 import 'session_mcp_arguments.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';
@@ -1255,6 +1258,18 @@ class SessionLauncher {
       repositoryDao.link(id, extra.id);
     }
 
+    // The packet's way in that is not a paste, resolved here because the file
+    // is named by the session it belongs to and [id] is minted above. Every
+    // "no" falls back to the opening prompt, which is what carried the packet
+    // before this existed — a session that opens without its brief in the
+    // stronger channel is a smaller loss than one that does not open.
+    final systemPromptFilePath = await _systemPromptFileFor(
+      sessionId: id,
+      request: request,
+      descriptor: descriptor,
+      directory: workingDirectory,
+    );
+
     try {
       final result = switch (request.surface) {
         SessionSurface.pane => _startInPane(
@@ -1266,6 +1281,7 @@ class SessionLauncher {
           workingDirectory,
           assignsOwnId,
           firstMessage,
+          systemPromptFilePath,
           workingDirectoryNotice,
         ),
         SessionSurface.external => await _startInExternalTerminal(
@@ -1277,6 +1293,7 @@ class SessionLauncher {
           workingDirectory,
           assignsOwnId,
           firstMessage,
+          systemPromptFilePath,
           workingDirectoryNotice,
         ),
       };
@@ -1411,6 +1428,7 @@ class SessionLauncher {
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
     String? firstMessage,
+    String? systemPromptFilePath,
     String? workingDirectoryNotice,
   ) {
     // The one resolver: this is the launch that CLAUDE.md 17 is about, and a
@@ -1435,6 +1453,7 @@ class SessionLauncher {
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
+        systemPromptFilePath: systemPromptFilePath,
       ),
       mcpArguments: agentMcpArguments(
         descriptor,
@@ -1502,6 +1521,7 @@ class SessionLauncher {
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
     String? firstMessage,
+    String? systemPromptFilePath,
     String? workingDirectoryNotice,
   ) async {
     // The same resolver as the pane path, so the two surfaces cannot drift.
@@ -1526,6 +1546,7 @@ class SessionLauncher {
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
+        systemPromptFilePath: systemPromptFilePath,
         mcpUrl: mcp?.url,
         mcpConfigPath: mcp?.configPath,
       ),
@@ -1552,6 +1573,73 @@ class SessionLauncher {
       session: session,
       workingDirectoryNotice: workingDirectoryNotice,
     );
+  }
+
+  /// The system-prompt file this launch hands its agent, spelled as **that
+  /// agent** names it, or `null` when there is none to hand.
+  ///
+  /// Four honest `null`s, and each is reported rather than silently taken: the
+  /// request carries no packet, the agent declares no such option (or nobody
+  /// checked, which is a different sentence and gets one), the environment has
+  /// no name for the path — an SSH agent is on another disk — or the write
+  /// failed. In every case the caller's text is still the opening prompt.
+  Future<String?> _systemPromptFileFor({
+    required String sessionId,
+    required SessionLaunchRequest request,
+    required AgentDescriptor? descriptor,
+    required EnvironmentPath directory,
+  }) async {
+    final content = request.systemPromptFile?.trim();
+    if (content == null || content.isEmpty) return null;
+    final support =
+        descriptor?.launch.systemPromptFile ??
+        const AgentSystemPromptFileSupport.unchecked();
+    if (!support.isSupported) {
+      _log.info(
+        'Handoff packet for $sessionId stays in the opening prompt: '
+        '${descriptor?.displayName ?? request.installation.agentId} '
+        '${support.wasChecked ? 'has no system-prompt file option (${support.evidence})' : 'has never been checked for one'}',
+      );
+      return null;
+    }
+    final kind = _ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(directory.environmentId)
+        ?.kind;
+    final path = kind == null
+        ? null
+        : await _writeSystemPromptFile(sessionId, content, kind);
+    _log.info(
+      'Handoff packet for $sessionId: '
+      '${path == null ? 'stays in the opening prompt — no path this agent could open' : 'handed over as ${support.token} $path'}',
+    );
+    return path;
+  }
+
+  Future<String?> _writeSystemPromptFile(
+    String sessionId,
+    String content,
+    EnvironmentKind kind,
+  ) async {
+    try {
+      final files = await _ref.read(handoffPacketFilesProvider.future);
+      final written = files.write(
+        sessionId: sessionId,
+        packet: content,
+        // The sweep, and the only one: this directory grows on a handoff and
+        // on nothing else, so a handoff is the occasion to retire what is no
+        // longer wanted. Nothing polls (CLAUDE.md 19).
+        liveSessionIds: {
+          for (final row in _ref.read(sessionDaoProvider).getAll())
+            if (row.status == SessionStatus.running) row.id,
+        },
+      );
+      return written == null ? null : agentConfigPathFor(written, kind);
+    } on Object {
+      // No support directory (a headless test container), a locked file, a
+      // provider that could not build. None of it is worth failing a launch.
+      return null;
+    }
   }
 
   /// How this session will reach Karmashala's own tools, or `null` when it
@@ -1743,6 +1831,9 @@ class SessionLauncher {
 /// whichever shape the descriptor's [AgentPromptSupport] names — a trailing
 /// positional for Claude and Codex, a flag and its value for Antigravity.
 ///
+/// [systemPromptFilePath] rides with the globals for the same reason the model
+/// flag does, and is the handoff packet's way in for an agent that takes one.
+///
 /// [forkSessionId] **replaces** the resume convention rather than adding to it:
 /// Codex forks with a `fork` subcommand *instead of* `resume`, and emitting
 /// both would put two subcommands on one command line. Claude's fork is its own
@@ -1756,6 +1847,7 @@ List<String> agentPaneArguments(
   String? resumeSessionId,
   String? forkSessionId,
   String? prompt,
+  String? systemPromptFilePath,
   String? mcpUrl,
   String? mcpConfigPath,
 }) {
@@ -1773,6 +1865,11 @@ List<String> agentPaneArguments(
     // it has to be left of Codex's `resume`/`fork` subcommand. Nothing is
     // emitted for a null model or an agent that takes none.
     ...?launch?.model.argumentsFor(modelId),
+    // A global too, and it belongs beside them: the file is context for the
+    // whole session rather than something the resume or the prompt carries.
+    // Nothing is emitted for an agent that takes none, so a packet aimed at one
+    // stays where it was — in the opening prompt.
+    ...?launch?.systemPromptFile.argumentsFor(systemPromptFilePath),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),
