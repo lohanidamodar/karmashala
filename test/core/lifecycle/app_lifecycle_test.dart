@@ -153,6 +153,99 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
     });
   });
 
+  group('nothing it started outlives it', () {
+    /// **The bug this group exists for, and the shape of it.**
+    ///
+    /// `_step` bounds the **wait**, not the work — a Dart future cannot be
+    /// cancelled — and the control server's slice is 100 ms. The handshake
+    /// delete used to sit *last* in `LauncherControlServer.stop`, behind three
+    /// awaited socket closes, so on a loaded machine `shutdown()` returned with
+    /// `mcp_bridge.json` still on disk and the deletes landed afterwards at a
+    /// moment nothing owned. Two symptoms, one event: the assertion this owner
+    /// exists for was false, and the stray deletes raced the suite's own
+    /// `deleteSync(recursive: true)` into a `PathNotFoundException` — a
+    /// different pair of tests each run, because which steps blow their slice
+    /// depends on the load.
+    ///
+    /// Both cases below are **counted, never timed**: the first observes the
+    /// files without awaiting anything, the second compares a removal count
+    /// across a pumped event queue.
+
+    test('the published files are gone before stop() suspends', () async {
+      final server = LauncherControlServer(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final socket = p.join(tmp.path, 'ipc', 'rpc.sock');
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      expect(File(bridge).existsSync(), isTrue);
+
+      // Deliberately not awaited. Everything between this line and the next is
+      // `stop`'s synchronous prefix, which is the only part of it a bounded
+      // step cannot be preempted out of.
+      final pending = server.stop();
+
+      expect(
+        File(bridge).existsSync(),
+        isFalse,
+        reason: 'the handshake outlived the first await',
+      );
+      expect(
+        File(socket).existsSync(),
+        isFalse,
+        reason: 'the socket node outlived the first await',
+      );
+
+      await pending;
+    });
+
+    test('a shutdown that abandons the step still leaves nothing behind', () async {
+      final removals = <String>[];
+      final lifecycle = AppLifecycle(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final server = LauncherControlServer(
+        container,
+        unpublish: (path) {
+          removals.add(path);
+          final file = File(path);
+          if (file.existsSync()) file.deleteSync();
+        },
+      );
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      // A hook step that never returns, so the budget is already under
+      // pressure when the control server's turn comes — the shape of the run
+      // that failed.
+      lifecycle.adopt(
+        controlServer: server,
+        hookInstallation: Completer<void>().future,
+      );
+
+      await lifecycle.shutdown();
+
+      final counted = removals.length;
+      expect(counted, 2, reason: 'the handshake and the socket node');
+      expect(File(bridge).existsSync(), isFalse);
+
+      // **The count, not the clock.** Every continuation the abandoned step
+      // left behind runs here; if any of them still removed something, this
+      // grows. A `pumpEventQueue` drains the microtask and event queues rather
+      // than waiting out a duration, so a slower machine cannot pass it by
+      // being slow.
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(
+        removals.length,
+        counted,
+        reason: 'a filesystem removal outlived shutdown()',
+      );
+    });
+  });
+
   group('the panes it reaps', () {
     /// A container whose panes are fakes with a reap the test controls.
     (ProviderContainer, List<_ReapingInstance>) reapingContainer(
