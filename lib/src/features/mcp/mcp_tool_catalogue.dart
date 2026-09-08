@@ -669,17 +669,21 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.devices,
     'Shut down a running emulator or simulator. Virtual devices only.',
   ),
+  // The eight tools below take the device for their caller: a second session's
+  // call is refused by name while somebody is driving. Reads are not, which is
+  // why only these eight say so.
   'device_install_app': McpToolListing(
     McpToolCategory.devices,
-    'Install an .apk or a simulator .app over any existing copy.',
+    'Install an .apk or simulator .app over any copy. One session drives at a '
+        'time.',
   ),
   'device_launch_app': McpToolListing(
     McpToolCategory.devices,
-    'Launch an installed app by application id or bundle id.',
+    'Launch an app by application or bundle id. One session drives at a time.',
   ),
   'device_terminate_app': McpToolListing(
     McpToolCategory.devices,
-    'Force-stop a running app on a device or simulator.',
+    'Force-stop a running app on a device. One session drives at a time.',
   ),
   'device_screenshot': McpToolListing(
     McpToolCategory.devices,
@@ -695,19 +699,23 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'device_tap_element': McpToolListing(
     McpToolCategory.devices,
-    'Tap the element a query matches, rather than a coordinate.',
+    'Tap what a query matches, not a coordinate. One session drives at a time.',
   ),
+  // The one device tool with a refusal of its own. It re-reads the screen
+  // before it acts, so a coordinate taken from a hierarchy that has since
+  // moved does not go out — which is worth the line more than the pixels-vs-
+  // points note it replaces, now that the policy says to prefer the element.
   'device_tap': McpToolListing(
     McpToolCategory.devices,
-    'Tap at a coordinate — device pixels on Android, points on iOS.',
+    'Tap a coordinate; refused if the screen moved (verify: false) or in use.',
   ),
   'device_type': McpToolListing(
     McpToolCategory.devices,
-    'Type text into whatever field currently has focus.',
+    'Type into the field with focus. One session drives at a time.',
   ),
   'device_key': McpToolListing(
     McpToolCategory.devices,
-    'Press a hardware button: back, home, recents, power, volume, enter.',
+    'Press back, home, recents, power or volume. One session drives at a time.',
   ),
   'device_logcat': McpToolListing(
     McpToolCategory.devices,
@@ -723,7 +731,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'device_file_push': McpToolListing(
     McpToolCategory.devices,
-    'Copy a file onto the device; refuses to replace unless told to.',
+    'Push a file, replacing one only if told to. One session drives at a time.',
   ),
   'device_record_start': McpToolListing(
     McpToolCategory.devices,
