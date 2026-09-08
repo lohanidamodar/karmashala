@@ -59,7 +59,7 @@ class ConPtyLauncher implements PtyLauncher {
     }
 
     final arena = Arena();
-    var inRead = 0, inWrite = 0, outRead = 0, outWrite = 0, hPc = 0;
+    var inRead = 0, inWrite = 0, outRead = 0, outWrite = 0, hPc = 0, job = 0;
     var attributes = nullptr as Pointer<Void>;
     var attributesInitialised = false;
     try {
@@ -168,29 +168,69 @@ class ConPtyLauncher implements PtyLauncher {
       // or waits on the primary thread.
       _k.closeHandle(info.ref.hThread);
 
+      job = _adopt(arena, info.ref.hProcess);
+
       final handle = _ConPtyHandle(
         kernel32: _k,
         pseudoConsole: hPc,
         inputWrite: inWrite,
         outputRead: outRead,
         processHandle: info.ref.hProcess,
+        job: job,
         pid: info.ref.dwProcessId,
       );
       hPc = 0;
       inWrite = 0;
       outRead = 0;
+      job = 0;
       return handle;
     } finally {
       if (attributes != nullptr) {
         if (attributesInitialised) _k.deleteProcThreadAttributeList(attributes);
         calloc.free(attributes);
       }
-      for (final h in [inRead, inWrite, outRead, outWrite]) {
+      for (final h in [inRead, inWrite, outRead, outWrite, job]) {
         if (h != 0) _k.closeHandle(h);
       }
       if (hPc != 0) closePc(hPc);
       arena.releaseAll();
     }
+  }
+
+  /// Puts the child in a job that dies with this process, and answers with the
+  /// job handle (0 when the OS would not give us one).
+  ///
+  /// The restore path tells a person their sessions' processes "did not survive"
+  /// the host. Without this that sentence is false on Windows: a host killed
+  /// with `TerminateProcess` gets no chance to run [terminateProcessTree], and
+  /// every shell and agent it held is left orphaned, invisible and still
+  /// holding its working directory. `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` makes
+  /// the operating system keep the promise instead: the last handle to the job
+  /// closes when this process dies, however it dies.
+  ///
+  /// A failure is not fatal. The job is a safety net under [PtyHandle.kill],
+  /// which is what ends a session that is closed on purpose.
+  int _adopt(Arena arena, int processHandle) {
+    final job = _k.createJobObjectW(nullptr, nullptr);
+    if (job == 0) return 0;
+    final limits = arena<Uint8>(kJobExtendedLimitBytes);
+    limits
+        .cast<Uint8>()
+        .asTypedList(kJobExtendedLimitBytes)
+        .fillRange(0, kJobExtendedLimitBytes, 0);
+    (limits + kJobLimitFlagsOffset).cast<Uint32>().value = kJobObjectLimitKillOnJobClose;
+    if (_k.setInformationJobObject(
+              job,
+              kJobObjectExtendedLimitInformation,
+              limits.cast<Void>(),
+              kJobExtendedLimitBytes,
+            ) ==
+            0 ||
+        _k.assignProcessToJobObject(job, processHandle) == 0) {
+      _k.closeHandle(job);
+      return 0;
+    }
+    return job;
   }
 
   /// `KEY=VALUE\0…\0\0`, UTF-16, over this process's own environment.
@@ -237,10 +277,12 @@ class _ConPtyHandle implements PtyHandle {
     required int inputWrite,
     required int outputRead,
     required int processHandle,
+    required int job,
     required this.pid,
   }) : _k = kernel32,
        _pseudoConsole = pseudoConsole,
-       _inputWrite = inputWrite {
+       _inputWrite = inputWrite,
+       _job = job {
     _startReader(outputRead);
     _startExitWatch(processHandle);
   }
@@ -248,6 +290,11 @@ class _ConPtyHandle implements PtyHandle {
   final Kernel32 _k;
   final int _pseudoConsole;
   final int _inputWrite;
+
+  /// Closed last: while this handle is open the OS will kill the child if this
+  /// process dies, which is the only thing that makes "their processes died
+  /// with it" true of a host that was terminated rather than asked to stop.
+  final int _job;
 
   @override
   final int pid;
@@ -395,6 +442,7 @@ class _ConPtyHandle implements PtyHandle {
     _writer?.kill(priority: Isolate.beforeNextEvent);
     _k.closeHandle(_inputWrite);
     _closePseudoConsole();
+    if (_job != 0) _k.closeHandle(_job);
     if (!_output.isClosed) await _output.close();
     // A close that raced the exit leaves nothing to wait for; the code stays
     // unknown rather than being invented as a zero.

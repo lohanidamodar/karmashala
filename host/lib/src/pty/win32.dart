@@ -104,7 +104,21 @@ const int kInfinite = 0xFFFFFFFF;
 const int kWaitObject0 = 0x00000000;
 const int kTh32csSnapProcess = 0x00000002;
 const int kProcessTerminate = 0x0001;
+const int kProcessQueryLimitedInformation = 0x1000;
+const int kSynchronize = 0x00100000;
 const int kErrorBrokenPipe = 109;
+
+/// `JobObjectExtendedLimitInformation`, and the one limit that matters here:
+/// when the last handle to the job closes, everything in it is killed.
+const int kJobObjectExtendedLimitInformation = 9;
+const int kJobObjectLimitKillOnJobClose = 0x00002000;
+
+/// `sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)` on x64, and the byte offset
+/// of `BasicLimitInformation.LimitFlags` inside it. Written as two numbers
+/// rather than a struct because every other field is zero and declaring 20 of
+/// them to reach one would be more to get wrong, not less.
+const int kJobExtendedLimitBytes = 144;
+const int kJobLimitFlagsOffset = 16;
 const int kErrorInsufficientBuffer = 122;
 
 typedef CreatePseudoConsoleNative =
@@ -204,6 +218,17 @@ class Kernel32 {
           .asFunction(),
       process32NextW = lib
           .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>>('Process32NextW')
+          .asFunction(),
+      createJobObjectW = lib
+          .lookup<NativeFunction<IntPtr Function(Pointer<Void>, Pointer<Utf16>)>>('CreateJobObjectW')
+          .asFunction(),
+      setInformationJobObject = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr, Uint32, Pointer<Void>, Uint32)>>(
+            'SetInformationJobObject',
+          )
+          .asFunction(),
+      assignProcessToJobObject = lib
+          .lookup<NativeFunction<Int32 Function(IntPtr, IntPtr)>>('AssignProcessToJobObject')
           .asFunction();
 
   /// Null on a Windows older than 10 1809, which has no pseudoconsole at all.
@@ -242,6 +267,9 @@ class Kernel32 {
   final int Function(int, int) createToolhelp32Snapshot;
   final int Function(int, Pointer<ProcessEntry32W>) process32FirstW;
   final int Function(int, Pointer<ProcessEntry32W>) process32NextW;
+  final int Function(Pointer<Void>, Pointer<Utf16>) createJobObjectW;
+  final int Function(int, int, Pointer<Void>, int) setInformationJobObject;
+  final int Function(int, int) assignProcessToJobObject;
 
   /// Whether this machine can host a pseudoconsole at all.
   bool get providesPseudoConsole => createPseudoConsole != null;

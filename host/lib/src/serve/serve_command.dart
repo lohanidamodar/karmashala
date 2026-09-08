@@ -7,6 +7,7 @@ import '../pty/pty_platform.dart';
 import '../transport/socket_transport.dart';
 import 'host_paths.dart';
 import 'host_server.dart';
+import 'session_store.dart';
 
 /// The daemon.
 ///
@@ -60,8 +61,13 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     return 4;
   }
 
-  final registry = SessionRegistry(launcher: pty.launcher);
+  // Read before anything binds, so the first client to connect already sees
+  // what the last host left — including the sessions that were running when it
+  // stopped, which come back ended with no exit code and a reason saying so.
+  final store = SessionStore(Directory(paths.sessionsDirectory))..ensureDirectory();
+  final registry = SessionRegistry(launcher: pty.launcher, store: store);
   final server = HostServer(registry: registry, ptyLibrary: pty.library);
+  final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
 
   final stopping = Completer<int>();
@@ -91,7 +97,11 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
 
   sink
     ..writeln('karmashala_host serving on ${listener.address}')
-    ..writeln('pty library ${pty.library}');
+    ..writeln('pty library ${pty.library}')
+    // Counted, and said out loud: a host that came back holding nothing and one
+    // that came back holding four dead sessions are different situations, and
+    // the difference is what the log is for.
+    ..writeln('restored $remembered session(s) from ${paths.sessionsDirectory}');
   await sink.flush();
 
   final code = await stopping.future;

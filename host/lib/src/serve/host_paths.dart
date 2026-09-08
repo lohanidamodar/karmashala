@@ -53,6 +53,12 @@ class HostPaths {
   String get logPath => '${directory.path}/host.log';
   String get binDirectory => '${directory.path}/bin';
 
+  /// Where each session's output and metadata are kept so a restart can answer
+  /// for them. Inside the same owner-only directory as the socket, because the
+  /// scrollback of an agent session is at least as sensitive as the channel
+  /// that carries it.
+  String get sessionsDirectory => '${directory.path}/sessions';
+
   void ensureDirectory() {
     if (!directory.existsSync()) directory.createSync(recursive: true);
   }
