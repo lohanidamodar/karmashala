@@ -522,6 +522,7 @@ class RemoteTranscriptPage {
     required this.messages,
     required this.cursor,
     this.omitted = 0,
+    this.hasNewer = false,
     this.absence,
   });
 
@@ -542,6 +543,21 @@ class RemoteTranscriptPage {
   /// — which is what it was.
   final int omitted;
 
+  /// Whether the host holds messages **after** [cursor] that this page could
+  /// not carry.
+  ///
+  /// The end condition of a gap recovery, and the reason it is a fact on the
+  /// wire rather than a count the reader infers: a phone that came back after
+  /// a hundred turns asks from its cursor, is answered a bounded page, and
+  /// asks again — recovery is finished when, and only when, this reads false.
+  /// Inferring it from `messages.length == kRemoteTranscriptPageMax` would
+  /// stop one page early whenever the last page happened to be full, and the
+  /// missing turns would look exactly like a quiet session.
+  ///
+  /// Absent on the wire from a host that predates it, which decodes as false —
+  /// what that host meant, since it always answered with the whole remainder.
+  final bool hasNewer;
+
   /// Why [messages] is empty, when the host knows. Null means it did not say —
   /// an older host, or a nothing it cannot account for either.
   final RemoteTranscriptAbsence? absence;
@@ -551,6 +567,7 @@ class RemoteTranscriptPage {
     'messages': [for (final m in messages) m.toJson()],
     'cursor': cursor,
     if (omitted > 0) 'omitted': omitted,
+    if (hasNewer) 'hasNewer': true,
     if (absence != null) 'absence': absence!.wire,
   };
 
@@ -564,6 +581,7 @@ class RemoteTranscriptPage {
     final omitted = json['omitted'];
     return RemoteTranscriptPage(
       omitted: omitted is int && omitted > 0 ? omitted : 0,
+      hasNewer: json['hasNewer'] == true,
       absence: RemoteTranscriptAbsence.parse(json['absence']),
       sessionId: sessionId,
       messages: [

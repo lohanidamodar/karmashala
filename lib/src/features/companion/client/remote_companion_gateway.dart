@@ -1816,10 +1816,25 @@ class RemoteCompanionGateway implements CompanionGateway {
         state.stale = false;
         continue;
       }
+      // Resume from the cursor rather than re-read the tail. A phone that was
+      // away for a hundred turns is entitled to all hundred, and the tail is
+      // only the last page of them — the rest simply stopped existing, with a
+      // notice about "earlier messages" standing in for turns this phone had
+      // already been shown. `stale` is cleared first because the appends it
+      // blocks are precisely the ones being fetched here.
+      state.stale = false;
+      var resumed = false;
+      try {
+        resumed = await _drainNewer(entry.key);
+      } on Object catch (error) {
+        onLog?.call('transcript resume for ${entry.key} failed: $error');
+      }
+      if (resumed) continue;
       try {
         await _reloadTranscript(entry.key);
       } on Object catch (error) {
         onLog?.call('transcript recover for ${entry.key} failed: $error');
+        state.stale = true;
       }
     }
   }
@@ -2057,13 +2072,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     final needed = page.cursor - state.cursor;
     if (needed > page.messages.length) {
       // A stretch went missing (a reconnect raced the poll): re-read truth.
-      unawaited(
-        _reloadTranscript(page.sessionId).then(
-          (_) {},
-          onError: (Object error) =>
-              onLog?.call('transcript reload failed: $error'),
-        ),
-      );
+      _startReload(page.sessionId);
       return;
     }
     final delta = page.messages.sublist(page.messages.length - needed);
@@ -2078,6 +2087,35 @@ class RemoteCompanionGateway implements CompanionGateway {
     ]);
     state.cursor = page.cursor;
     _pushTranscript(state);
+    // A live page is bounded too, so one is not necessarily all of it.
+    if (page.hasNewer) _startDrain(page.sessionId);
+  }
+
+  /// Kicks a gap recovery that nothing is waiting on, and swallows nothing.
+  void _startDrain(String sessionId) {
+    unawaited(
+      _drainNewer(sessionId).then(
+        (complete) {
+          // A page that would not join on is a transcript that moved under us;
+          // only a full re-read settles it.
+          if (!complete) _startReload(sessionId);
+        },
+        onError: (Object error) {
+          onLog?.call('transcript drain for $sessionId failed: $error');
+          _startReload(sessionId);
+        },
+      ),
+    );
+  }
+
+  void _startReload(String sessionId) {
+    unawaited(
+      _reloadTranscript(sessionId).then(
+        (_) {},
+        onError: (Object error) =>
+            onLog?.call('transcript reload failed: $error'),
+      ),
+    );
   }
 
   void _applyApproval(RemoteApprovalRequest request) {
@@ -2182,6 +2220,72 @@ class RemoteCompanionGateway implements CompanionGateway {
         controller.addError(_asGatewayError(error));
       }
     }
+  }
+
+  /// Sessions with a gap recovery in flight, so two never race each other.
+  final _draining = <String>{};
+
+  /// Pages forward from what this phone holds until the host says there is
+  /// nothing newer, and answers whether it got there.
+  ///
+  /// **The rule the reconnect path turns on.** A page is bounded, so one answer
+  /// is not an answer: recovery is finished when, and only when, `hasNewer`
+  /// reads false. Re-reading the tail instead — which is what a reconnect used
+  /// to do — is correct only while the gap is smaller than a page; past that it
+  /// replaces the conversation with its end and says so in a line the reader
+  /// has no reason to connect to the turns that went missing.
+  ///
+  /// False means the pages stopped joining on to what is held, which is a
+  /// transcript that moved under us (a rotated store, a compaction) rather than
+  /// a gap. Only a full re-read settles that, and the caller does it.
+  Future<bool> _drainNewer(String sessionId) async {
+    if (!_draining.add(sessionId)) return true;
+    try {
+      while (true) {
+        final state = _transcripts[sessionId];
+        if (state == null || !state.loaded) return false;
+        final client = _client;
+        if (client == null) return false;
+        await _ensureSubscribed(client, sessionId);
+        final page = await _mapRefusals(
+          () => client.transcript(sessionId, after: state.cursor),
+        );
+        if (!_appendResumed(sessionId, page)) return false;
+        // An older host says nothing here, which decodes as false — and false
+        // is what it meant: it answered with the whole remainder.
+        if (!page.hasNewer) return true;
+      }
+    } finally {
+      _draining.remove(sessionId);
+    }
+  }
+
+  /// Appends one resumed page, or answers false when it does not join on.
+  ///
+  /// Keyed by the id this phone *asked* with, never [RemoteTranscriptPage
+  /// .sessionId] — a superseded imported id is answered under the live one, and
+  /// the screen is still watching the id it opened.
+  bool _appendResumed(String sessionId, RemoteTranscriptPage page) {
+    final state = _transcripts[sessionId];
+    if (state == null || !state.loaded) return false;
+    // The host windows from where it was asked, so a contiguous page opens
+    // exactly at the cursor. Anything else is a transcript that shrank.
+    if (page.omitted != state.cursor) return false;
+    if (page.messages.isEmpty) {
+      state.cursor = page.cursor;
+      return true;
+    }
+    state.messages = List.unmodifiable([
+      // A turn arriving is the reason going away, as on the live path.
+      for (final message in state.messages)
+        if (message.role != kCompanionAbsenceRole) message,
+      for (final message in page.messages)
+        CompanionChatMessage(role: message.role, text: message.text),
+    ]);
+    state.cursor = page.cursor;
+    state.stale = false;
+    _pushTranscript(state);
+    return true;
   }
 
   Future<void> _reloadTranscript(String sessionId) async {

@@ -222,20 +222,37 @@ class HostSessionApi {
               : (total > kRemoteTranscriptPageMax
                     ? total - kRemoteTranscriptPageMax
                     : 0);
+          // **Bounded at both ends now.** `after` used to answer with the
+          // whole remainder, which is the frame nobody could receive wearing a
+          // different name: a phone resuming from a cursor a hundred turns
+          // back asked once, got a result the link could not carry, and the
+          // turns it was recovering never arrived — a transcript that looked
+          // merely quiet. It gets a page, and `hasNewer` is what tells it to
+          // ask again.
+          final end = total - start > kRemoteTranscriptPageMax
+              ? start + kRemoteTranscriptPageMax
+              : total;
           // Serving history is also what marks this session as *watched*: from
           // here the poll sweep carries its growth, and until here it does not
           // read it at all. The phone asks for history only for the session it
           // has open, so this is the cheapest true signal of what is on screen
           // — and it costs no extra read, because the cursor is a by-product
           // of the page just built.
-          _transcriptCursors[sessionId] = page.cursor;
+          // The window's end, not the whole count. They are the same number
+          // for a tail read, and only for a tail read: a page that stopped
+          // short while claiming the count would have told the poll sweep the
+          // phone already held turns nobody had sent it.
+          _transcriptCursors[sessionId] = end;
           await _result(
             envelope.id,
             RemoteTranscriptPage(
               sessionId: sessionId,
-              messages: collapseTaskNotifications(page.messages.sublist(start)),
-              cursor: page.cursor,
+              messages: collapseTaskNotifications(
+                page.messages.sublist(start, end),
+              ),
+              cursor: end,
               omitted: start,
+              hasNewer: end < total,
               // Carried, not re-derived: this rebuilds the page to window it,
               // and dropping the reason here would have thrown away the one
               // thing that tells the phone which nothing it is looking at.
@@ -560,6 +577,16 @@ class HostSessionApi {
       _transcriptCursors[sessionId] = page.cursor;
       return;
     }
+    // One page, never the whole delta. A session that grew by five thousand
+    // messages between polls — a resumed agent replaying its history, a phone
+    // that was away — built a frame past the envelope cap, and because the
+    // cursor only moves on a `true` the very same frame was rebuilt and
+    // refused on every poll after it. The turns were not late; they were
+    // unreachable, for ever, and nothing said so.
+    final total = page.messages.length;
+    final end = total - cursor > kRemoteTranscriptPageMax
+        ? cursor + kRemoteTranscriptPageMax
+        : total;
     // The cursor is what the phone has been *told*, so it moves only when the
     // delta was carried. Advancing first lost the messages outright — the next
     // poll started after them and nothing ever went back for them.
@@ -570,11 +597,14 @@ class HostSessionApi {
         // The live path matters as much as the opening one: a subagent that
         // finishes while the phone is watching arrives here, not through
         // `transcript.get`.
-        messages: collapseTaskNotifications(page.messages.sublist(cursor)),
-        cursor: page.cursor,
+        messages: collapseTaskNotifications(
+          page.messages.sublist(cursor, end),
+        ),
+        cursor: end,
+        hasNewer: end < total,
       ).toJson(),
     );
-    if (delivered) _transcriptCursors[sessionId] = page.cursor;
+    if (delivered) _transcriptCursors[sessionId] = end;
   }
 
   /// States what a session is doing, when that is not what this device was last
