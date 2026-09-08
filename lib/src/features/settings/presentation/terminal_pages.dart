@@ -9,6 +9,7 @@ import '../../terminal/data/theme_discovery.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
+import 'session_host_status_line.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import '../../terminal/application/terminal_profiles.dart';
@@ -65,6 +66,22 @@ class TerminalPage extends ConsumerWidget {
                 value: settings.shellIntegrationEnabled,
                 onChanged: controller.setShellIntegrationEnabled,
               ),
+              SettingsSwitchRow(
+                label: 'Run local terminals in the session host',
+                help:
+                    'A pane\'s shell is started by karmashala_host instead of '
+                    'by this app, so it survives a crash or a restart and '
+                    'reopening the pane resumes it where it left off. Applies '
+                    'to new terminals. Off by default: the host path carries no '
+                    'shell integration, so command blocks and terminal_run exit '
+                    'codes are not available in a pane that uses it.',
+                value: settings.hostBackedLocalPanes,
+                onChanged: controller.setHostBackedLocalPanes,
+              ),
+              // Under the switch whether it is on or off: whether a host is
+              // running here is a fact about the machine, and somebody deciding
+              // whether to turn this on is exactly who needs it.
+              const SessionHostStatusLine(),
               SettingsSwitchRow(
                 label: 'Resume running panes on launch',
                 help:
