@@ -125,6 +125,111 @@ void main() {
     // subagent directory is never looked at either.
     expect(opened, [ref.filePath]);
   });
+
+  /// A parent transcript that runs [count] subagents **in the background**, the
+  /// way Claude Code actually runs them — the call answered at once with
+  /// `async_launched`, the outcome arriving later in a `<task-notification>` —
+  /// with a compaction re-enumerating what is live in between.
+  ///
+  /// [reported] of them report back and are retired; the rest stay in the
+  /// ledger, which is the state a strip draws from.
+  void seedBackground({required int count, required int reported}) {
+    final lines = <String>[
+      '{"type":"user","message":{"role":"user","content":"go"}}',
+    ];
+    for (var i = 0; i < count; i++) {
+      lines
+        ..add(
+          '{"type":"assistant","timestamp":"2026-09-08T09:0$i:00.000Z",'
+          '"message":{"content":[{"type":"tool_use","id":"toolu_$i",'
+          '"name":"Agent","input":{"description":"job $i"}}]}}',
+        )
+        ..add(
+          '{"type":"user","timestamp":"2026-09-08T09:0$i:01.000Z",'
+          '"message":{"content":[{"type":"tool_result",'
+          '"tool_use_id":"toolu_$i","content":"launched"}]},'
+          '"toolUseResult":{"isAsync":true,"status":"async_launched",'
+          '"agentId":"a$i","description":"job $i"}}',
+        );
+    }
+    // The reconciliation point, and the CLI re-stating everything still live.
+    lines.add(
+      '{"type":"system","subtype":"compact_boundary",'
+      '"timestamp":"2026-09-08T10:00:00.000Z"}',
+    );
+    for (var i = 0; i < count; i++) {
+      lines.add(
+        '{"type":"attachment","timestamp":"2026-09-08T10:00:01.000Z",'
+        '"attachment":{"type":"task_status","taskId":"a$i",'
+        '"taskType":"local_agent","status":"running","description":"job $i"}}',
+      );
+    }
+    for (var i = 0; i < reported; i++) {
+      lines.add(
+        '{"type":"user","timestamp":"2026-09-08T11:0$i:00.000Z",'
+        '"message":{"role":"user","content":"<task-notification>'
+        '<task-id>a$i</task-id><status>completed</status>'
+        '</task-notification>"}}',
+      );
+    }
+    File(parentPath()).writeAsStringSync(lines.join('\n'));
+    final dir = Directory('${root.path}/s1/subagents')
+      ..createSync(recursive: true);
+    for (var i = 0; i < count; i++) {
+      File('${dir.path}/agent-$i.meta.json').writeAsStringSync(
+        '{"agentType":"general-purpose","description":"job $i",'
+        '"spawnDepth":1,"toolUseId":"toolu_$i"}',
+      );
+      File('${dir.path}/agent-$i.jsonl').writeAsStringSync(
+        '{"type":"assistant","message":{"content":[{"type":"text",'
+        '"text":"${'x' * 20000}"}]}}',
+      );
+    }
+  }
+
+  test('knowing which background subagents are running opens no extra file',
+      () async {
+    // **The promise this whole ledger is built to keep.** Whether a background
+    // subagent is running is answered entirely from records the CLI wrote into
+    // the *parent* transcript — the `async_launched` result, the compaction's
+    // re-enumeration, the notification envelope — which is the one file the
+    // chat view is reading anyway. Nothing here stats a delegate, reads one, or
+    // opens anything the join did not already open.
+    for (final count in [1, 10, 50]) {
+      root.listSync().forEach((e) => e.deleteSync(recursive: true));
+      seedBackground(count: count, reported: count ~/ 2);
+
+      final opened = await _filesOpenedBy(
+        () => readCliTranscript(parentPath(), AgentIds.claudeCode),
+      );
+
+      expect(
+        opened,
+        hasLength(count + 1),
+        reason: 'the metas and the parent — the same count as before',
+      );
+      expect(
+        opened.where((p) => RegExp(r'agent-\d+\.jsonl$').hasMatch(p)),
+        isEmpty,
+        reason: 'a running subagent is still not a transcript we read',
+      );
+    }
+  });
+
+  test('and the ledger it built is the one the strip draws', () async {
+    // Counted, not timed: how many rows carry a live agent id, and which.
+    seedBackground(count: 4, reported: 2);
+
+    final messages = await readCliTranscript(parentPath(), AgentIds.claudeCode);
+
+    expect(
+      [
+        for (final m in messages)
+          if (m.pendingBackgroundAgentId != null) m.pendingBackgroundAgentId,
+      ],
+      ['a2', 'a3'],
+    );
+  });
 }
 
 /// The distinct files [body] opened, in the order it first reached each one.
