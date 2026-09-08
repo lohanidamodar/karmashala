@@ -12,6 +12,60 @@ import '../../git/domain/file_change.dart';
 import '../data/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
 
+/// **The half of an undo this app cannot do, said where the decision is made.**
+///
+/// A checkpoint is a git tree. We keep no cursor into any of the three CLIs'
+/// conversations, so an agent whose edits have just been rolled back still
+/// believes it made them and carries on from there — which is how a restore
+/// quietly becomes a second way to lose work. It is structural, and that is
+/// precisely why it has to be on screen rather than discovered afterwards.
+const String kRestoreLeavesTheConversation =
+    'Files only: the agent’s conversation is not rewound. It still believes it '
+    'made these edits and will carry on from there, so tell it what you rolled '
+    'back.';
+
+/// Why restoring would be refused, or `null` when it would not.
+///
+/// **One function, and the write path asserts on it.**
+/// [CheckpointService.restore] refuses on what this returns and the dialog
+/// shows the same string verbatim, so the reason on screen and the rule that
+/// was applied cannot drift apart. The MCP tool re-throws it for the same
+/// reason.
+String? checkpointRestoreRefusal({
+  required bool treeMovedSinceLastCheckpoint,
+  required int? safetySequence,
+}) {
+  if (!treeMovedSinceLastCheckpoint) return null;
+  // A safety capture that returned null means the tree was already recorded,
+  // so there is a checkpoint to come back to either way — never a number we
+  // do not have.
+  final saved = safetySequence == null
+      ? 'Those changes are already checkpointed'
+      : 'Those changes were saved as checkpoint $safetySequence';
+  return 'The working tree has changed since the last checkpoint. $saved, so '
+      'nothing is lost either way; confirm to restore anyway.\n\n'
+      '$kRestoreLeavesTheConversation';
+}
+
+/// What a restore just did, in the vocabulary the refusal is written in.
+///
+/// [kRestoreLeavesTheConversation] again, because it is true of a restore that
+/// nobody had to confirm as much as of one that was refused first. The one
+/// case it is left off is the restore that wrote nothing: there is no rollback
+/// to tell the agent about.
+String restoreOutcomeMessage(RestoreOutcome outcome) {
+  if (outcome.alreadyThere) {
+    return 'The working tree already matched that checkpoint. Nothing changed.';
+  }
+  final count = outcome.files.length;
+  final safety = outcome.safetyCheckpoint;
+  final undo = safety == null
+      ? ''
+      : ' Undo it by restoring checkpoint ${safety.sequence}.';
+  return 'Restored $count file${count == 1 ? '' : 's'}.$undo\n\n'
+      '$kRestoreLeavesTheConversation';
+}
+
 /// Raised when a restore would throw away work the user has not seen recorded.
 ///
 /// Carries what would be lost so the caller can say so before asking again with
@@ -228,13 +282,12 @@ class CheckpointService {
       );
     }
 
-    if (movedSinceLastCheckpoint && !confirm) {
-      throw CheckpointConflict(
-        'The working tree has changed since the last checkpoint. Those changes '
-        'were saved as checkpoint ${safety?.sequence}; confirm to restore '
-        'anyway.',
-        safetyCheckpoint: safety,
-      );
+    final refusal = checkpointRestoreRefusal(
+      treeMovedSinceLastCheckpoint: movedSinceLastCheckpoint,
+      safetySequence: safety?.sequence,
+    );
+    if (refusal != null && !confirm) {
+      throw CheckpointConflict(refusal, safetyCheckpoint: safety);
     }
 
     if (current == checkpoint.treeSha && selection.isEmpty) {

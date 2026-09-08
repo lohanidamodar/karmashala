@@ -128,16 +128,9 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
           .read(checkpointServiceProvider)
           .restore(checkpoint, confirm: confirm);
       ref.read(checkpointsRevisionProvider.notifier).bump();
+      // The service's own sentence, not a second one written here.
       messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            outcome.alreadyThere
-                ? 'The working tree already matched that checkpoint.'
-                : 'Restored ${outcome.files.length} file(s). '
-                      'Undo it by restoring checkpoint '
-                      '#${outcome.safetyCheckpoint?.sequence}.',
-          ),
-        ),
+        SnackBar(content: Text(restoreOutcomeMessage(outcome))),
       );
     } on CheckpointConflict catch (conflict) {
       if (!mounted) return;
@@ -153,15 +146,19 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     }
   }
 
+  /// The refusal, in the service's words.
+  ///
+  /// Not a sentence of its own: [checkpointRestoreRefusal] is the function
+  /// `restore` refuses on, so what is shown here *is* the rule that was
+  /// applied — including the half of an undo we cannot do
+  /// ([kRestoreLeavesTheConversation]), which is the reason this dialog was
+  /// wrong before it was long.
   Future<bool> _askToOverwrite(CheckpointConflict conflict) async {
     final answer = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Discard newer changes?'),
-        content: Text(
-          '${conflict.message}\n\nNothing is lost either way: the working tree '
-          'as it is now has just been checkpointed, so this is undoable.',
-        ),
+        content: SingleChildScrollView(child: Text(conflict.message)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
