@@ -365,6 +365,7 @@ class DeviceStreamSession {
     required this.serial,
     required this.url,
     required this.onStop,
+    required this.openTransportStream,
     required this.videoSizeChanges,
     required this.health,
     required this.mark,
@@ -373,6 +374,22 @@ class DeviceStreamSession {
   });
 
   final String serial;
+
+  /// Opens a fresh MPEG-TS stream of this session's video, for one more
+  /// consumer — the live picture is one, a recording is another.
+  ///
+  /// **A second consumer costs the device nothing.** The frames behind it are
+  /// already parsed and already on a broadcast controller, so there is no
+  /// second capture, no second encode on the handset and no second socket:
+  /// these are the same encoded frames the picture is made of. What is not
+  /// shared is the muxer — continuity counters and the timestamp base belong
+  /// to one output stream — which is why this is a factory rather than a
+  /// stream.
+  ///
+  /// The first event is the container tables; every event after it is one
+  /// access unit, keyframes carrying their SPS/PPS. A consumer that stops
+  /// reading stops the fan-out to itself and nothing else.
+  final MediaStreamFactory openTransportStream;
 
   /// Newest frame seen and the timestamps needed to measure lag against it.
   final LiveFrameMark mark;
@@ -1078,6 +1095,7 @@ class DeviceStreamService {
       serial: serial,
       url: http.url,
       onStop: stop,
+      openTransportStream: muxedForOneViewer,
       videoSizeChanges: sizes.stream,
       health: healthController.stream,
       mark: mark,

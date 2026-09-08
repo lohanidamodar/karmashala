@@ -5,10 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../application/device_recording_controller.dart';
 import '../application/ios_device_providers.dart';
 import '../application/simulator_live_view.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_keyboard_sink.dart';
+import '../domain/device_recording.dart';
+import '../domain/device_target.dart';
 import '../domain/simulator_backend.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
@@ -253,9 +256,25 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
     await simctl.openUrl(widget.udid, url.trim());
   }
 
+  /// The recorder needs the simulator, not only its udid: the file is named
+  /// after [DeviceTarget.fileSafeId] and the banner after its label.
+  SimulatorTarget? get _target {
+    final simulator = ref
+        .watch(bootedSimulatorsProvider)
+        .where((s) => s.udid == widget.udid)
+        .firstOrNull;
+    return simulator == null ? null : SimulatorTarget(simulator);
+  }
+
   @override
   Widget build(BuildContext context) {
     final canPress = ref.watch(simulatorBackendProvider) != null;
+    final recording = ref.watch(deviceRecordingProvider);
+    final target = _target;
+    // `simctl` is what records, and it is null on any host without Xcode —
+    // the same gate every other simulator verb uses.
+    final canRecord =
+        target != null && ref.watch(simctlServiceProvider) != null;
 
     return DeviceControlBar(
       controls: [
@@ -297,6 +316,29 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
           icon: AppIcons.globe,
           onPressed: _openUrl,
           buttonKey: const Key('simulator-open-url'),
+        ),
+        // `simctl io … recordVideo`, not a tee of the picture above: that
+        // picture is WebDriverAgent's MJPEG, a feed of screenshots with no
+        // encoded video behind it, while simctl records the display itself and
+        // writes a QuickTime movie.
+        DeviceControl(
+          name: 'Record',
+          tooltip: recording is DeviceRecordingActive
+              ? 'Stop recording'
+              : canRecord
+              ? 'Record the screen to a QuickTime (.mov) file'
+              : 'Recording a simulator needs simctl, which is macOS only',
+          icon: recording is DeviceRecordingActive
+              ? AppIcons.stopCircle
+              : AppIcons.circle,
+          onPressed: recording is DeviceRecordingActive
+              ? ref.read(deviceRecordingProvider.notifier).stop
+              : canRecord
+              ? () => ref
+                    .read(deviceRecordingProvider.notifier)
+                    .startSimulatorRecording(target)
+              : null,
+          buttonKey: const Key('simulator-record'),
         ),
       ],
     );

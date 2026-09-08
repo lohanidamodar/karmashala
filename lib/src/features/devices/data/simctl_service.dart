@@ -532,6 +532,24 @@ class SimctlService {
     return controller.stream;
   }
 
+  /// Starts recording the simulator's display to [hostPath].
+  ///
+  /// The recording runs until the process is stopped, and it is stopped with
+  /// [ProcessHandle.interrupt] rather than [ProcessHandle.kill]: `recordVideo`
+  /// writes the QuickTime container's index on the interrupt, and a terminated
+  /// one leaves frames with no index behind them.
+  ///
+  /// No codec, display or mask flags. `simctl` picks its own defaults, this
+  /// app has no reason to disagree with them, and every flag added here is one
+  /// more spelling that can only be checked on a Mac.
+  ///
+  /// **Unverified against a real simulator.** This machine is Windows, where
+  /// [SimctlService] cannot run at all — the argv shape is the same
+  /// `io <udid> <verb> <file>` [screenshot] uses and is pinned by a test, but
+  /// nothing here has been watched producing a file.
+  Future<ProcessHandle> startRecording(String udid, String hostPath) =>
+      runner.start(_simctl(['io', udid, 'recordVideo', hostPath]));
+
   /// Recent log lines, newest last, capped at [lines].
   ///
   /// `log show` slices by **time**, not by line count — there is no `-t 200` —

@@ -66,6 +66,10 @@ class FakeProcessHandle implements ProcessHandle {
   final List<String> written = [];
   bool killed = false;
 
+  /// Whether the process was asked to stop the way Ctrl-C would, rather than
+  /// terminated. The two are a real difference for `simctl recordVideo`.
+  bool interrupted = false;
+
   final StreamController<List<int>> _stdoutBytes =
       StreamController<List<int>>();
 
@@ -104,6 +108,12 @@ class FakeProcessHandle implements ProcessHandle {
 
   @override
   Future<int> get exitCode => _exit.future;
+
+  @override
+  Future<void> interrupt() async {
+    interrupted = true;
+    complete(0);
+  }
 
   @override
   Future<void> kill() async {

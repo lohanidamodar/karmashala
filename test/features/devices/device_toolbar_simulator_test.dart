@@ -335,6 +335,30 @@ void main() {
       expect(find.byKey(const Key('android-appearance')), findsOneWidget);
       expect(find.byKey(const Key('android-screenshot')), findsOneWidget);
       expect(find.byKey(const Key('android-open-url')), findsOneWidget);
+      expect(find.byKey(const Key('android-record')), findsOneWidget);
+    });
+
+    testWidgets('Record is inert with no live view, and says why', (
+      tester,
+    ) async {
+      // Everything else on this row reaches the device through adb. Record
+      // reaches it through the *frames the picture is made of*, so with no live
+      // view there is nothing to write — a different reason from the other
+      // buttons', and the tooltip is what carries it.
+      await pump(
+        tester,
+        live: const SimulatorLiveViewIdle(),
+        devices: [_device()],
+      );
+
+      expect(
+        tester.widget<IconButton>(find.byKey(const Key('android-record'))).onPressed,
+        isNull,
+      );
+      expect(
+        find.byTooltip('Start the live view to record the screen'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('leaves them all inert while no live view is running', (

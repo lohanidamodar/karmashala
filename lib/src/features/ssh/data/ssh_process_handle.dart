@@ -49,6 +49,16 @@ class SshProcessHandle implements ProcessHandle {
   }
 
   @override
+  Future<void> interrupt() async {
+    _session.kill(SSHSignal.INT);
+    try {
+      await _session.done.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      await kill();
+    }
+  }
+
+  @override
   Future<void> kill() async {
     _session.kill(SSHSignal.TERM);
     try {

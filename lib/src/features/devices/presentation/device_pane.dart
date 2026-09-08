@@ -10,6 +10,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/app_logger.dart';
 import '../application/device_clipboard_bridge.dart';
 import '../application/device_providers.dart';
+import '../application/device_recording_controller.dart';
 import '../application/stream_restart_policy.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_keyboard_sink.dart';
@@ -19,12 +20,15 @@ import '../application/ios_device_providers.dart';
 import '../domain/android_device.dart';
 import '../domain/ios_simulator.dart';
 import '../domain/device_input.dart';
+import '../domain/device_recording.dart';
+import '../domain/device_target.dart';
 import 'android_slimming_dialog.dart';
 import 'device_clipboard_controls.dart';
 import 'device_files_dialog.dart';
 import 'device_section_header.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
+import 'device_recording_banner.dart';
 import 'device_stream_status.dart';
 import '../application/simulator_live_view.dart';
 import 'simulator_live_pane.dart';
@@ -485,6 +489,17 @@ class _DevicePaneState extends ConsumerState<DevicePane>
         // does not.
         _keyboardSink = _keyboardSinkFor(session);
       });
+      // A recording that lost its frames when this pane last unmounted picks
+      // them up here. Offered on every start, not only when one is running:
+      // the recorder is what decides whether it wants them, and it is the only
+      // thing that knows whether a recording is open.
+      ref.read(deviceRecordingProvider.notifier).offerLiveView(
+        LiveViewRecordingSource(
+          target: AndroidTarget(device),
+          openTransportStream: session.openTransportStream,
+          geometryChanges: session.videoSizeChanges,
+        ),
+      );
       // After the frame that shows the new picture, never before: disposing a
       // player whose texture is still on screen is how a live view flashes.
       WidgetsBinding.instance.addPostFrameCallback(
@@ -891,6 +906,11 @@ class _DevicePaneState extends ConsumerState<DevicePane>
               : null,
           onStop: _liveSerial == null ? null : _stopAndRebuild,
         ),
+        // Above the picture and outside both platform branches: a recording is
+        // the one thing on this pane that outlives the surface it was started
+        // from, so it cannot live inside the row that is replaced when the
+        // simulator's picture wins.
+        const DeviceRecordingBanner(),
         const Divider(height: 1),
         Expanded(
           // The simulator's picture wins while it is up. It is the only thing
@@ -962,7 +982,11 @@ class _DevicePaneState extends ConsumerState<DevicePane>
           // happened to be selected — the user believed they had disconnected
           // and had not. The row stays on screen, disabled, because a control
           // that vanishes reads as a fault while an inert one says why.
-          _AndroidControls(device: live, clipboard: _clipboard),
+          _AndroidControls(
+            device: live,
+            clipboard: _clipboard,
+            recordable: _session != null,
+          ),
         ],
       ],
     );
@@ -1502,9 +1526,18 @@ class _LiveView extends ConsumerWidget {
 /// refactor away from being effective again, and "silently drives a device the
 /// user thinks is disconnected" is the failure this widget must not have.
 class _AndroidControls extends ConsumerStatefulWidget {
-  const _AndroidControls({required this.device, this.clipboard});
+  const _AndroidControls({
+    required this.device,
+    this.clipboard,
+    this.recordable = false,
+  });
 
   final AndroidDevice? device;
+
+  /// Whether there is a running live view whose frames a recording could be
+  /// written from. Not derived from [device]: the pane names the device the
+  /// moment the user picks it, and the session takes a second to come up.
+  final bool recordable;
 
   /// The live view's clipboard bridge, or `null` when there is no control
   /// socket to carry one. Not a capability flag: `null` is the only honest
@@ -1581,6 +1614,7 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     // Watched, not read: a pane whose SDK is discovered after the first frame
     // must not be left with a row that can never reach the device.
     final canReach = target != null && ref.watch(adbServiceProvider) != null;
+    final recording = ref.watch(deviceRecordingProvider);
     const idle = 'Start the live view to use the device controls';
     String tooltip(String label) =>
         target == null ? idle : '$label — ${target.displayName}';
@@ -1632,6 +1666,30 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
           icon: AppIcons.globe,
           onPressed: canReach ? _openUrl : null,
           buttonKey: const Key('android-open-url'),
+        ),
+        // Gated on the live view rather than on adb, because a recording is
+        // written from the frames the picture is made of — there is nothing to
+        // record without one. See
+        // `DeviceRecordingController.startLiveViewRecording` for why the file
+        // is a `.ts`.
+        DeviceControl(
+          name: 'Record',
+          tooltip: recording is DeviceRecordingActive
+              ? 'Stop recording'
+              : widget.recordable
+              ? 'Record the screen to an MPEG-TS (.ts) file'
+              : 'Start the live view to record the screen',
+          icon: recording is DeviceRecordingActive
+              ? AppIcons.stopCircle
+              : AppIcons.circle,
+          onPressed: recording is DeviceRecordingActive
+              ? ref.read(deviceRecordingProvider.notifier).stop
+              : widget.recordable
+              ? ref
+                    .read(deviceRecordingProvider.notifier)
+                    .startLiveViewRecording
+              : null,
+          buttonKey: const Key('android-record'),
         ),
         // The clipboard is gated on the *control socket*, not on adb, which is
         // why these two do not use [canReach]: adb can drive every other

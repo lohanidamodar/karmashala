@@ -565,6 +565,41 @@ Port:
     });
   });
 
+  group('recordVideo', () {
+    test('is `io <udid> recordVideo <file>` and nothing else', () async {
+      final runner = FakeCommandRunner();
+      await _service(runner).startRecording(_udid, '/rec/sim.mov');
+
+      expect(runner.startRequests.single.executable, 'xcrun');
+      expect(runner.startRequests.single.arguments, [
+        'simctl',
+        'io',
+        _udid,
+        'recordVideo',
+        '/rec/sim.mov',
+      ]);
+    });
+
+    test('goes through start, so the recording can be stopped', () async {
+      final runner = FakeCommandRunner();
+      await _service(runner).startRecording(_udid, '/rec/sim.mov');
+
+      // `run` would wait for a process that only ends when it is asked to.
+      expect(runner.requests, isEmpty);
+    });
+
+    test('a host with no Xcode fails as a CommandException', () async {
+      final runner = FakeCommandRunner(
+        throwError: CommandException('xcrun is not on this machine'),
+      );
+
+      expect(
+        () => _service(runner).startRecording(_udid, '/rec/sim.mov'),
+        throwsA(isA<CommandException>()),
+      );
+    });
+  });
+
   group('actionSink', () {
     test('a broken recorder never breaks the command it watches', () async {
       final runner = FakeCommandRunner();
