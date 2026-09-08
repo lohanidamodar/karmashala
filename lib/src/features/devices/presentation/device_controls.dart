@@ -86,8 +86,13 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      // A [Wrap], not a [Row]. The row is as wide as the controls its platform
+      // has, the pane is as wide as the user made the side panel, and the two
+      // are unrelated — adding a Record button overflowed a compact pane by 42
+      // pixels. Wrapping keeps every control reachable at every width instead
+      // of clipping the last ones.
+      child: Wrap(
+        alignment: WrapAlignment.center,
         children: [
           for (final control in widget.controls)
             IconButton(
