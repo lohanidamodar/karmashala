@@ -163,6 +163,9 @@ class AttentionControlTools {
             'imported': item.session.imported,
             'agentId': item.session.key.agentId,
             'seen': item.seen,
+            // The source's own words — the question a blocked agent is
+            // waiting on. Null when it quoted none; never synthesised.
+            'detail': item.detail,
             // When it entered the inbox, not when it happened at the agent —
             // which we generally cannot know, so it is not claimed.
             'noticedAt': item.at.toIso8601String(),
@@ -233,9 +236,10 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
     'description':
         'Everything waiting on somebody: agents asking for approval, turns '
         'that failed, turns that finished unread, and pull requests that went '
-        'red, were sent back, or are ready to merge. This is where an agent '
-        'orchestrating other agents finds out what to do next. Unseen items '
-        'only unless includeSeen is set.',
+        'red, were sent back, or are ready to merge. Each item carries the '
+        'source\'s own detail, so the prompt a blocked agent is waiting on is '
+        'here too. This is where an agent orchestrating other agents finds '
+        'out what to do next. Unseen items only unless includeSeen is set.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -278,6 +282,12 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
               'imported': {'type': 'boolean'},
               'agentId': {'type': 'string'},
               'seen': {'type': 'boolean'},
+              'detail': {
+                'type': 'string',
+                'description':
+                    'The source\'s own words about this item — the prompt a '
+                    'blocked agent is waiting on. Absent when it quoted none.',
+              },
               'noticedAt': {'type': 'string'},
             },
             'required': ['id', 'kind', 'label', 'sessionId'],
