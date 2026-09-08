@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../features/cli_detection/application/cli_detection_providers.dart';
+import '../../../features/cli_detection/data/conversation_index_dao.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/design_tokens.dart';
@@ -36,15 +38,19 @@ final quickOpenRequestProvider = NotifierProvider<QuickOpenRequest, int>(
 const _headerHeight = 24.0;
 
 /// One search box over the whole workspace: projects, repositories, sessions,
-/// the selected repository's files, its branches, the GitHub work already
-/// loaded, agents, and the commands the palette always had.
+/// **what was said inside them**, the selected repository's files, its
+/// branches, the GitHub work already loaded, agents, and the commands the
+/// palette always had.
 ///
 /// **Three rules it is built around.**
 ///
 /// 1. *Nothing here fetches.* Opening quick open must never start a `gh` call,
 ///    a `git status` or a PTY. Branches, pull requests and issues come from
 ///    [QuickOpenCache] — data some other surface already loaded — and the file
-///    index is a bounded local walk that starts only once the user types.
+///    index is a bounded local walk that starts only once the user types. The
+///    conversation search reads an index this app already built on its own
+///    triggers (`ConversationIndexer`); it opens no transcript and walks no
+///    store, which is the difference between a search and a grep.
 /// 2. *Ranked across kinds, grouped for reading.* Sections are ordered by their
 ///    best match, so the group you meant is at the top; see [rankQuickOpen].
 /// 3. *Enter opens the exact thing*, through whatever already owns that jump.
@@ -72,6 +78,15 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   final _scroll = ScrollController();
 
   List<QuickOpenItem> _items = const [];
+
+  /// The conversation rows for the query as typed, and the query they were
+  /// built for.
+  ///
+  /// Held apart from [_items] because they are the only source that depends on
+  /// the query: everything else is built once and re-ranked.
+  List<QuickOpenItem> _conversationItems = const [];
+  String _conversationQuery = '';
+
   List<QuickOpenSection> _sections = const [];
   List<QuickOpenResult> _flat = const [];
   int _selected = 0;
@@ -126,31 +141,59 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     return {for (final change in changes ?? const []) change.path};
   }
 
+  QuickOpenSources _sources() {
+    final navigator = Navigator.of(context);
+    return QuickOpenSources(
+      ref: ref,
+      // The navigator's own context, not this dialog's: an item's action runs
+      // *after* quick open has popped itself, and a route on its way out is
+      // not somewhere to open the next dialog or show a snack bar from.
+      context: navigator.context,
+      dismiss: (action) {
+        navigator.pop();
+        action();
+      },
+    );
+  }
+
   void _rebuildItems() {
     final root = ref.read(quickOpenFileRootProvider);
-    final navigator = Navigator.of(context);
-    _items =
-        QuickOpenSources(
-          ref: ref,
-          // The navigator's own context, not this dialog's: an item's action
-          // runs *after* quick open has popped itself, and a route on its way
-          // out is not somewhere to open the next dialog or show a snack bar
-          // from.
-          context: navigator.context,
-          dismiss: (action) {
-            navigator.pop();
-            action();
-          },
-        ).build(
-          files: root == null ? const [] : _index.cached(root),
-          changedPaths: _changedPaths(),
-        );
+    _items = _sources().build(
+      files: root == null ? const [] : _index.cached(root),
+      changedPaths: _changedPaths(),
+    );
     _rerank();
+  }
+
+  /// Runs the conversation search for the query as typed.
+  ///
+  /// One indexed FTS5 statement, bounded by `kConversationSearchLimit`, on the
+  /// synchronous connection like every other read in this app — and skipped
+  /// entirely for a query it has already run, and for a sigil that means
+  /// another group. No debounce: the palette's other sources re-rank on the
+  /// keystroke, and a search lagging the list it shares a window with would
+  /// read as a bug.
+  void _searchConversations() {
+    final query = _query;
+    final only = query.only;
+    final text = only == null || only == QuickOpenGroup.conversations
+        ? query.text
+        : '';
+    if (text == _conversationQuery) return;
+    _conversationQuery = text;
+    if (text.isEmpty) {
+      _conversationItems = const [];
+      return;
+    }
+    final List<ConversationHit> hits = ref
+        .read(conversationIndexDaoProvider)
+        .search(text);
+    _conversationItems = _sources().conversations(hits, text);
   }
 
   void _rerank() {
     final query = _query;
-    _sections = rankQuickOpen(query, _items);
+    _sections = rankQuickOpen(query, [..._items, ..._conversationItems]);
     _flat = [
       for (final section in _sections)
         for (final result in section.results) result,
@@ -191,6 +234,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     if (!_query.isEmpty) _ensureFileIndex();
     setState(() {
       _selected = 0;
+      _searchConversations();
       _rerank();
     });
     _revealSelectedAfterLayout();
@@ -322,7 +366,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
                 controller: _controller,
                 onChanged: _onQueryChanged,
                 hintText:
-                    'Go to a session, file, branch, PR — or run a command',
+                    'Go to a session, file or branch — or search what was '
+                    'said',
               ),
               const Divider(height: 1),
               Flexible(
@@ -538,8 +583,8 @@ class _Footer extends StatelessWidget {
             // ellipsise rather than push the result count off the row.
             const Flexible(
               child: Text(
-                r'>  commands   ·   #  sessions   ·   /  files   ·   '
-                r'$  snippets',
+                r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
+                r'/  files   ·   $  snippets',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

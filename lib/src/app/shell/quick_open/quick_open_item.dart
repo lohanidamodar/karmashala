@@ -13,6 +13,7 @@ enum QuickOpenGroup {
   attention('Needs you'),
   tabs('Open tabs'),
   sessions('Sessions'),
+  conversations('Conversations'),
   workspace('Projects & repositories'),
   contexts('Contexts'),
   files('Files'),
@@ -30,10 +31,12 @@ enum QuickOpenGroup {
   ///
   /// `$` for snippets because that is what a prompt looks like, and because it
   /// is the one character on the list that a shell user already reads as "a
-  /// command follows".
+  /// command follows". `?` for conversations because the question this group
+  /// answers is *"where did I decide this?"*.
   String? get sigil => switch (this) {
     QuickOpenGroup.commands => '>',
     QuickOpenGroup.sessions => '#',
+    QuickOpenGroup.conversations => '?',
     QuickOpenGroup.files => '/',
     QuickOpenGroup.snippets => r'$',
     _ => null,
