@@ -77,13 +77,96 @@ void main() {
       expect(annotated[i]['inputSchema'], original['inputSchema']);
       // All four are written out. The spec defaults `destructiveHint` to true
       // and `openWorldHint` to true, so an omitted hint is a claim of its own.
+      // The fifth is ours and travels with them, because the caller deciding
+      // whether to run this over a list is the reader it is written for.
       expect(hints.keys, <String>{
         'readOnlyHint',
         'destructiveHint',
         'idempotentHint',
         'openWorldHint',
+        'movesAttentionHint',
       });
     }
+  });
+
+  group('the fifth axis: does it move the user out of what they were at', () {
+    // Named individually, and asserted **both ways** — one step stricter than
+    // the destructive list above. The value of this axis is entirely that
+    // somebody opened each of the ninety-odd implementations and followed the
+    // call chain; a one-way list would let a tool acquire the mark on a guess,
+    // and a total would pass while every answer rotted underneath it.
+    const movers = <String>{
+      // Opens an agent tab, makes it the active tab, focuses its pane.
+      'open_new_session',
+      // Reattaches and focuses the pane and rewrites the selected session; an
+      // imported session opens an external terminal window instead.
+      'open_session',
+      // Both launch the continuing session into a focused tab.
+      'session_handoff',
+      'session_fork',
+      // A new external terminal window running the generated tmux script.
+      'open_sessions_in_tmux',
+      // Takes the pane away; the next tab becomes active and takes the keys.
+      'session_end',
+      'terminal_open',
+      'terminal_close',
+      // `focusWatchedSession`: project, repository and session selection.
+      'inbox_open',
+      // Repoints the Explorer, the diff view and the side panel.
+      'select_checkout',
+      // Opens a terminal tab for the run and focuses it.
+      'flutter_run',
+      // Puts the running app into widget-select mode and waits on a person.
+      'flutter_pick_widget',
+      // Each can end up launching a visible Chrome; `browser_tabs` opens a
+      // foreground tab in it, and `browser_pick` fronts it and blocks.
+      'browser_connect',
+      'browser_navigate',
+      'browser_tabs',
+      'browser_pick',
+      // Selects the simulator in the device pane, and with headless off opens
+      // Simulator.app.
+      'device_boot',
+      // Connects a browser for a URL run, which can be a new window.
+      'verification_start',
+    };
+
+    test('these tools move the user\'s attention, and exactly these', () {
+      expect(<String>{
+        for (final entry in kMcpToolAnnotations.entries)
+          if (entry.value.movesAttention) entry.key,
+      }, movers);
+    });
+
+    test('a shared const never carries the answer for one of them', () {
+      // `read` and `readOutside` answer for about a third of the table, so
+      // they answer "moves nothing" and a read-only tool that *does* move
+      // attention has to spell its annotations out. Two do — the two pickers,
+      // which change nothing and interrupt everything.
+      expect(McpToolAnnotations.read.movesAttention, isFalse);
+      expect(McpToolAnnotations.readOutside.movesAttention, isFalse);
+      for (final name in const ['browser_pick', 'flutter_pick_widget']) {
+        expect(kMcpToolAnnotations[name]?.readOnly, isTrue);
+        expect(kMcpToolAnnotations[name]?.movesAttention, isTrue);
+      }
+    });
+
+    test('the payload tools describe their delivery, not their payload', () {
+      // `terminal_run`, `snippet_insert` and `browser_evaluate` carry a
+      // command the caller wrote, which could open anything. They are marked
+      // destructive for exactly that reason and are **not** marked here: a
+      // hint that says "possibly" on every one of them tells a client nothing,
+      // and what these three do themselves is type into a pane the caller
+      // named or evaluate in a page it is already driving.
+      for (final name in const [
+        'terminal_run',
+        'snippet_insert',
+        'browser_evaluate',
+      ]) {
+        expect(kMcpToolAnnotations[name]?.destructive, isTrue);
+        expect(kMcpToolAnnotations[name]?.movesAttention, isFalse);
+      }
+    });
   });
 
   group('the listing a person reads', () {
