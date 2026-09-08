@@ -54,6 +54,20 @@ class CountingRelayTransport extends RelayTransport {
   }
 }
 
+/// Counts resets, so a test can say the schedule was put back rather than
+/// racing the dial that follows it.
+class RecordingBackoff extends Backoff {
+  RecordingBackoff() : super(jitter: 0);
+
+  int resets = 0;
+
+  @override
+  void reset() {
+    resets++;
+    super.reset();
+  }
+}
+
 /// A scout that beacons on demand and can never dial what it hears — the
 /// ordinary shape of a desktop behind a firewall on its own LAN port.
 class ScriptedScout extends LanPathScout {
@@ -166,7 +180,11 @@ void main() {
     return started;
   }
 
-  RemoteCompanionGateway makeGateway({LanPathScout? scout, Backoff? backoff}) {
+  RemoteCompanionGateway makeGateway({
+    LanPathScout? scout,
+    Backoff? backoff,
+    Backoff? localBackoff,
+  }) {
     final gateway = RemoteCompanionGateway(
       store: store,
       deviceName: 'Test phone',
@@ -184,6 +202,9 @@ void main() {
       helloTimeout: const Duration(milliseconds: 400),
       linkHealGrace: const Duration(milliseconds: 800),
       reconnectBackoff: backoff ?? fastBackoff(),
+      // Null leaves the gateway its own local schedule, which is what every
+      // other test here is measuring.
+      localReconnectBackoff: localBackoff,
       now: () => DateTime.now().add(clockShift),
     );
     gateways.add(gateway);
@@ -401,6 +422,49 @@ void main() {
     );
     expect(gateway.link, CompanionLinkState.connected);
     expect((await gateway.listSessions()).single.id, 's1');
+  });
+
+  test('a resume resets the schedule, not just the wait in front of it',
+      timeout: const Timeout(Duration(minutes: 3)), () async {
+    // The reason this is not covered by "a success resets it": the phone that
+    // needs the reset is the one that has NOT succeeded — it has been climbing
+    // toward the ceiling in the user's pocket, and the moment the app comes
+    // back is the moment everything it learned while away stopped being true.
+    // Completing the wait it happens to be sitting in is not the same thing:
+    // the very next failure would be answered with the delay it had climbed
+    // to.
+    await startService();
+    // Both schedules, because which one the next wait comes from is decided
+    // by the path that was lost — and a relay on this machine is a local one.
+    final backoff = RecordingBackoff();
+    final gateway = makeGateway(backoff: backoff, localBackoff: backoff);
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet.all,
+      relay: relayUri,
+      relayIsLocal: true,
+    );
+    await gateway.pairWithQr(session.payload.encode());
+    await session.done;
+    await awaitLink(gateway, CompanionLinkState.connected);
+
+    // The desktop goes away, and the schedule starts climbing.
+    await service!.stop();
+    service = null;
+    await awaitLink(gateway, CompanionLinkState.disconnected);
+    await until(
+      () => backoff.attempts > 0,
+      reason: 'the phone waits out at least one failed dial',
+    );
+    final resetsBefore = backoff.resets;
+
+    CompanionLifecycleReconnector(
+      gateway,
+    ).didChangeAppLifecycleState(AppLifecycleState.resumed);
+
+    await until(
+      () => backoff.resets > resetsBefore,
+      reason: 'coming back to the foreground resets the schedule',
+    );
   });
 
   test('a local link that does break comes back in a moment, not on the '

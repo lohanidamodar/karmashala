@@ -3,6 +3,7 @@ import '../../settings/domain/permission_risk.dart';
 import 'agent_kind.dart';
 import 'agent_plan.dart';
 import 'agent_permission_support.dart';
+import 'agent_skill_support.dart';
 import 'agent_status.dart';
 
 /// How an agent CLI expresses "continue this session".
@@ -904,6 +905,7 @@ class AgentDescriptor {
     this.approval = const AgentApprovalRules(),
     this.attachments = const AgentAttachmentSupport.none(),
     this.plan = const AgentPlanSupport.none(),
+    this.skills = const AgentSkillSupport.none(),
   });
 
   final String id;
@@ -949,6 +951,16 @@ class AgentDescriptor {
   /// somewhere this app can read"*, and on 2026-09-08 that had three different
   /// answers.
   final AgentPlanSupport plan;
+
+  /// **Where this agent discovers user-level skills, and how that was
+  /// learned.**
+  ///
+  /// Declared data with required evidence, exactly like [plan], and defaulting
+  /// the same conservative way — the reasoning is at [AgentSkillSupport] and
+  /// the install and uninstall story is the library doc above it. The question
+  /// is not "does this CLI have skills": all three of them do. It is *where*,
+  /// and on 2026-09-09 that had two different shapes.
+  final AgentSkillSupport skills;
 
   @override
   String toString() => 'AgentDescriptor($id)';

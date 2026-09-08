@@ -25,6 +25,7 @@ class LanTransport extends ReconnectingTransport {
     this.connectTimeout = kLanConnectTimeout,
     super.backoff,
     super.maxQueuedFrames,
+    super.maxQueuedBytes,
     super.onLog,
   });
 

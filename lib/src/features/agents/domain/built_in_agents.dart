@@ -3,6 +3,7 @@ import 'agent_descriptor.dart';
 import 'agent_kind.dart';
 import 'agent_plan.dart';
 import 'agent_permission_support.dart';
+import 'agent_skill_support.dart';
 import 'agent_status.dart';
 
 /// The agents Karmashala ships knowledge of.
@@ -692,6 +693,13 @@ const _claudeCode = AgentDescriptor(
   // reader looks the same value up by tool name, and two copies of a schema is
   // how one of them goes stale.
   plan: kClaudeCodeTodoWrite,
+  skills: AgentSkillSupport.homeDirectory(
+    ['.claude', 'skills'],
+    evidence:
+        'claude 2.1.263: --safe-mode names skills among the customizations it '
+        'disables, and ~/.claude/skills/pinokio/SKILL.md is one already '
+        'installed at user level on this machine. Read 2026-09-09.',
+  ),
 );
 
 const _codex = AgentDescriptor(
@@ -1290,6 +1298,14 @@ const _codex = AgentDescriptor(
         '(--image), so a running session cannot be handed one.',
   ),
   plan: kCodexUpdatePlan,
+  skills: AgentSkillSupport.homeDirectory(
+    ['.codex', 'skills'],
+    evidence:
+        'codex-cli 0.153.4: `codex features list` reports skill_search as '
+        'stable, and the bundled skill-installer skill installs into '
+        '\$CODEX_HOME/skills — ~/.codex/skills/.system/<name>/SKILL.md on '
+        'disk. Read 2026-09-09.',
+  ),
 );
 
 const _antigravity = AgentDescriptor(
@@ -1895,5 +1911,15 @@ const _antigravity = AgentDescriptor(
         'Antigravity keeps no plan we can read: its CLI has no todo or plan '
         'tool, and its conversation store is protobuf in an unpublished '
         'schema.',
+  ),
+  // Not under this agent's store home: sessions are in `.gemini/antigravity-cli`
+  // and skills are in `.gemini/config`, which is why the root is home-relative.
+  skills: AgentSkillSupport.homeDirectory(
+    ['.gemini', 'config', 'skills'],
+    evidence:
+        'agy 1.1.27: the binary carries the literal '
+        '`~/.gemini/config/skills/<name>/SKILL.md`, and its bundled '
+        'agy-customizations skill names ~/.gemini/config/ as the global '
+        'discovery root. Read 2026-09-09.',
   ),
 );
