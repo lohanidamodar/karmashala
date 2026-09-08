@@ -4,6 +4,7 @@ import '../pty/pty.dart';
 import 'host_session.dart';
 import 'output_backlog.dart';
 import 'session_lifecycle.dart';
+import 'session_recorder.dart';
 
 /// What `list` answers with. Every field is something the host observed; the
 /// reading's own age is the caller's to compute from [observedAt].
@@ -62,11 +63,14 @@ class UnknownSession implements Exception {
 class SessionRegistry {
   SessionRegistry({
     required PtyLauncher launcher,
+    this.store,
     this.backlogCapacityBytes = OutputBacklog.defaultCapacityBytes,
     this.keepEndedSessions = defaultKeepEndedSessions,
     DateTime Function()? clock,
   }) : _launcher = launcher,
-       _now = clock ?? DateTime.now;
+       _now = clock ?? DateTime.now {
+    _restore();
+  }
 
   /// How many ended sessions are kept around after they finish.
   ///
@@ -78,6 +82,12 @@ class SessionRegistry {
   static const int defaultKeepEndedSessions = 16;
 
   final PtyLauncher _launcher;
+
+  /// Where sessions are kept beyond this process. Null means the host holds
+  /// them in memory only, which is what every host did before the local stage
+  /// and what a test wants by default.
+  final SessionBacklogStore? store;
+
   final int backlogCapacityBytes;
   final int keepEndedSessions;
   final DateTime Function() _now;
@@ -86,6 +96,30 @@ class SessionRegistry {
   Iterable<HostSession> get sessions => _sessions.values;
 
   HostSession? find(String id) => _sessions[id];
+
+  /// What the previous host left behind, put back where a client can attach to
+  /// it. Read once, at construction — nothing rescans the directory later.
+  ///
+  /// A session the record says was **running** is the one this exists for: its
+  /// process died with the host that owned it, and it comes back ended with no
+  /// exit code and a reason that says exactly that, rather than as a session
+  /// somebody could type into.
+  void _restore() {
+    final source = store;
+    if (source == null) return;
+    for (final persisted in source.restore()) {
+      _sessions[persisted.id] = HostSession.restored(
+        id: persisted.id,
+        request: persisted.request,
+        startedAt: persisted.startedAt,
+        restoredBacklog: persisted.backlog,
+        lifecycle: persisted.lifecycle,
+      );
+    }
+    // The bound applies across a restart too, or a host that crashed sixteen
+    // times would come back holding every session any of them ever ran.
+    _pruneEnded();
+  }
 
   HostSession require(String id) {
     final session = _sessions[id];
@@ -96,13 +130,25 @@ class SessionRegistry {
   /// Opens a session under an id the client chose, so the same pane reattaches
   /// to the same session after a reconnect without the host inventing names.
   HostSession open(String id, PtySpawnRequest request) {
-    if (_sessions.containsKey(id)) throw SessionAlreadyExists(id);
+    final existing = _sessions[id];
+    if (existing != null) {
+      // An *ended* session under this id is a record, not an owner: a pane
+      // restarted after its process died — or after the host that held it
+      // stopped — must be able to start one, and refusing would leave that id
+      // unusable until somebody closed it explicitly.
+      if (!existing.lifecycle.hasEnded) throw SessionAlreadyExists(id);
+      _sessions.remove(id);
+      existing.recorder?.close();
+      store?.forget(id);
+    }
+    final startedAt = _now();
     final session = HostSession(
       id: id,
       request: request,
       pty: _launcher.start(request),
-      startedAt: _now(),
+      startedAt: startedAt,
       backlogCapacityBytes: backlogCapacityBytes,
+      recorder: store?.open(id, request, startedAt),
     );
     _sessions[id] = session;
     // Pruning happens when a session *ends*, not on a timer and not on a scan:
@@ -130,6 +176,8 @@ class SessionRegistry {
     });
     for (final session in ended.take(ended.length - keepEndedSessions)) {
       _sessions.remove(session.id);
+      session.recorder?.close();
+      store?.forget(session.id);
     }
   }
 
@@ -171,13 +219,21 @@ class SessionRegistry {
     final session = require(id);
     final end = await session.terminate(signal: signal);
     _sessions.remove(id);
+    // Closed on purpose, so the record goes too. A client merely disconnecting
+    // never reaches here — that is the whole point of the host.
+    store?.forget(id);
     return end;
   }
 
+  /// Ends every session because this host is stopping.
+  ///
+  /// Deliberately not [close] for each: closing is a client saying *forget
+  /// this*, and forgetting the record is what it means. A host shutting down
+  /// wants the opposite — the record is the only thing that will survive it, so
+  /// each session is terminated, its end written down, and nothing is dropped.
   Future<void> shutdown() async {
-    final ids = _sessions.keys.toList();
-    for (final id in ids) {
-      await close(id, signal: 15);
+    for (final session in _sessions.values.toList()) {
+      await session.terminate(signal: 15);
     }
   }
 }

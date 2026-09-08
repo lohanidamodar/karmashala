@@ -116,7 +116,7 @@ void main() {
   }
 
   /// Files one item, through the same `apply` the watcher polls with.
-  void queue({required bool approval}) => container
+  void queue({required bool approval, String? detail}) => container
       .read(attentionInboxProvider.notifier)
       .apply(
         InboxUpdate(
@@ -132,6 +132,7 @@ void main() {
           news: approval
               ? const []
               : const [(session: watched, reason: NotificationReason.finished)],
+          details: detail == null ? const {} : {key: detail},
         ),
       );
 
@@ -165,6 +166,32 @@ void main() {
 
       expect(item['kind'], 'finished');
       expect(item['stillTrue'], isFalse);
+    });
+
+    test('the prompt the agent is blocked on comes back', () async {
+      // The reason the tool exists: without `detail` the question itself
+      // reached an MCP caller only through `session_wait`'s `blockedOn`.
+      queue(approval: true, detail: 'Overwrite lib/main.dart? (y/n)');
+
+      final structured =
+          (await callTool('inbox_list')).structured! as Map<String, Object?>;
+      final item =
+          (structured['items']! as List<Object?>).single as Map<String, Object?>;
+
+      expect(item['detail'], 'Overwrite lib/main.dart? (y/n)');
+    });
+
+    test('a source that quoted nothing says nothing', () async {
+      // Never synthesised, the rule `InboxItem.detail` holds itself to.
+      queue(approval: true);
+
+      final structured =
+          (await callTool('inbox_list')).structured! as Map<String, Object?>;
+      final item =
+          (structured['items']! as List<Object?>).single as Map<String, Object?>;
+
+      expect(item.containsKey('detail'), isTrue);
+      expect(item['detail'], isNull);
     });
 
     test('an empty inbox is empty, not an error', () async {

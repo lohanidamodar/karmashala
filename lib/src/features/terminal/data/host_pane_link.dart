@@ -158,6 +158,26 @@ class HostPaneLink {
     );
   }
 
+  /// Ends a session on the host for good, and forgets its record.
+  ///
+  /// Never called by a pane closing — that is a *disconnect*, and keeping the
+  /// session running through one is the whole point. It is for the one case
+  /// where a session is known to be over and its record is in the way: a
+  /// restored session whose process died with the host, once its scrollback has
+  /// been shown.
+  Future<void> closeSession(String sessionId) async {
+    if (_closed) return;
+    try {
+      await _request<ClosedMessage>(
+        (id) => CloseMessage(id, sessionId),
+        const Duration(seconds: 10),
+      );
+    } on HostLinkException {
+      // Already gone, or the link went with it. Either way there is nothing
+      // left to clear away and nothing a pane could do about it.
+    }
+  }
+
   void write(Uint8List bytes) {
     if (_closed || bytes.isEmpty) return;
     _send(InputMessage(_sessionRef, bytes));
