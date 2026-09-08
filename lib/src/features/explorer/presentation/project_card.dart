@@ -205,7 +205,9 @@ class ProjectCard extends StatelessWidget {
             ),
           ),
         ],
-        if (path.isNotEmpty || missing) ...[
+        // The badge lives on line 2, so a project reported without a path
+        // still gets the line when there is an environment to name.
+        if (path.isNotEmpty || missing || environmentBadge != null) ...[
           SizedBox(height: density.lineGap),
           Padding(padding: indent, child: _pathLine(context, muted, density)),
         ],
