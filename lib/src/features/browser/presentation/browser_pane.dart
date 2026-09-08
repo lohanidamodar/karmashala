@@ -126,10 +126,13 @@ class _ConnectionBar extends StatelessWidget {
             child: Tooltip(
               message: state.isConnected
                   ? '${state.connection}\n${state.title}\n${state.url}'
-                  : 'Karmashala attaches to a browser started with '
-                        '--remote-debugging-port=${state.port}, and only '
-                        'launches its own (on a throwaway profile) when '
-                        'nothing is listening.',
+                  : 'Karmashala attaches to a browser already listening on '
+                        'port ${state.port}. Since Chrome 136 that takes '
+                        '--remote-debugging-port=${state.port} together with '
+                        'a --user-data-dir of its own; the flag alone is '
+                        'ignored on the default profile. It only launches its '
+                        'own (on a throwaway profile) when nothing is '
+                        'listening.',
               child: Text(
                 label,
                 maxLines: 1,
@@ -368,10 +371,15 @@ class _Body extends ConsumerWidget {
         message: switch (state.status) {
           BrowserPaneStatus.disconnected =>
             'Attach to a browser to drive it from here.\n\n'
-                'Karmashala attaches to a Chrome started with '
-                '--remote-debugging-port=${state.port} — your window, your '
-                'logins — and only launches one of its own, on a throwaway '
-                'profile, if nothing is listening.',
+                'Karmashala attaches to a Chrome already listening on port '
+                '${state.port} — your window, your logins. Since Chrome 136 '
+                'that takes --remote-debugging-port=${state.port} together '
+                'with a --user-data-dir of its own: on your normal profile '
+                'the flag is ignored and no port opens. Chrome for Testing '
+                'honours it either way.\n\n'
+                'If nothing is listening, Karmashala launches one of its own '
+                'on a throwaway profile — which is not your logged-in '
+                'session. The status line above always says which you got.',
           BrowserPaneStatus.picking =>
             'Point at an element in the browser and click it.\n'
                 'Escape cancels.',

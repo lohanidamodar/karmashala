@@ -7,7 +7,8 @@ import '../data/browser_service.dart';
 /// The debugging port Karmashala attaches to (or launches a browser on).
 ///
 /// Chrome's own default, so a browser the user started with
-/// `--remote-debugging-port=9222` is found without configuring anything.
+/// `--remote-debugging-port=9222` — and, since Chrome 136, its own
+/// `--user-data-dir` — is found without configuring anything.
 final browserDebugPortProvider = Provider<int>(
   (ref) => BrowserLauncher.defaultPort,
 );

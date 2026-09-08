@@ -12,6 +12,12 @@ enum BrowserFailure {
   portInUse,
 
   /// Nothing is listening on the debugging port and we were told not to spawn.
+  ///
+  /// Also covers a Chrome that *is* running and ignored
+  /// `--remote-debugging-port` because it is on the default data directory
+  /// (Chrome 136 and later). There is no separate kind for that: both are a
+  /// refused connection, so nothing here can tell them apart, and the message
+  /// names both rather than picking one.
   notRunning,
 
   /// A browser was spawned but never opened its debugging endpoint.
@@ -82,9 +88,13 @@ String describeBrowserFailure(
       'Port ${port ?? 0} is in use by something that is not a Chrome DevTools '
           'endpoint. Close whatever owns the port, or pick another one.$suffix',
     BrowserFailure.notRunning =>
-      'No browser is listening on port ${port ?? 0}. Start Chrome with '
-          '--remote-debugging-port=${port ?? 0}, or allow Karmashala to '
-          'launch its own Chrome.$suffix',
+      'Nothing is listening on port ${port ?? 0}. Since Chrome 136 that is '
+          'also what a Chrome started with the flag on its default profile '
+          'looks like — the switch is ignored there and the port never opens '
+          '— and from here the two are the same silence. Start Chrome with '
+          '--remote-debugging-port=${port ?? 0} *and* a --user-data-dir of '
+          'its own, run Chrome for Testing, or let Karmashala launch its own '
+          'on a throwaway profile.$suffix',
     BrowserFailure.startupFailed =>
       'Chrome was launched but never opened its debugging port '
           '(${port ?? 0}). It may have exited immediately, or another Chrome '

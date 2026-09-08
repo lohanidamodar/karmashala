@@ -105,6 +105,11 @@ void main() {
     expect(find.text('Attach · 9222'), findsOneWidget);
     expect(find.textContaining('--remote-debugging-port=9222'), findsOneWidget);
     expect(find.textContaining('throwaway profile'), findsOneWidget);
+    // Attach-first still works, and since Chrome 136 it takes two switches.
+    // The flag on its own is ignored on the user's normal profile, so a pane
+    // that promises "your window, your logins" for it is promising a session
+    // they will not get.
+    expect(find.textContaining('--user-data-dir'), findsOneWidget);
   });
 
   testWidgets('attaching reports which browser, verbatim', (tester) async {

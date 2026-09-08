@@ -22,6 +22,36 @@ void main() {
       );
     });
 
+    test('notRunning names both switches Chrome 136 now requires', () {
+      // Since Chrome 136 `--remote-debugging-port` is ignored on the default
+      // data directory, so the old remedy — the flag on its own — produces a
+      // Chrome that starts fine and never opens the port.
+      final message = describeBrowserFailure(
+        BrowserFailure.notRunning,
+        port: 9222,
+      );
+      expect(message, contains('--remote-debugging-port=9222'));
+      expect(message, contains('--user-data-dir'));
+      expect(message, contains('136'));
+    });
+
+    test('notRunning does not claim to know why the port is silent', () {
+      // We cannot tell "no Chrome is running" from "a Chrome is running on its
+      // default profile and ignored the flag": both are a refused connection
+      // on 9222. So there is no fifteenth failure kind for the second case,
+      // and this message names both rather than picking one.
+      final message = describeBrowserFailure(
+        BrowserFailure.notRunning,
+        port: 9222,
+      );
+      expect(message, contains('default profile'));
+      expect(
+        message,
+        contains('the same silence'),
+        reason: 'the two cases are indistinguishable from here, and say so',
+      );
+    });
+
     test('a missing browser tells the user what to install or set', () {
       final message = describeBrowserFailure(BrowserFailure.chromeNotFound);
       expect(message, contains('Chrome'));
