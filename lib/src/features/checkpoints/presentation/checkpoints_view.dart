@@ -1,19 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../explorer/application/session_context.dart';
 import '../../git/data/git_diff_parsing.dart';
 import '../../git/domain/diff_line.dart';
+import '../../sessions/application/session_ui_providers.dart';
+import '../../git/data/hunk_patch.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../application/checkpoint_providers.dart';
 import '../application/checkpoint_service.dart';
+import '../application/session_checkpoint_recorder.dart';
 import '../domain/checkpoint.dart';
 
-/// The checkpoints of a session, and the way back to one.
+/// Which session's checkpoints the panel is describing.
+///
+/// The session **on screen**, not the one last clicked in the Explorer — the
+/// same rule [planPanelSessionIdProvider] and [mediaPanelSessionIdProvider]
+/// follow, and for the same reason: switching terminal tabs changes which
+/// agent has been editing your checkout.
+final checkpointsPanelSessionIdProvider = Provider<String?>(
+  (ref) =>
+      ref.watch(activePaneSessionIdProvider) ??
+      ref.watch(selectedSessionIdProvider),
+);
+
+/// **The checkpoints of a session, and the way back to one.**
 ///
 /// Deliberately plain. The place this belongs is beside the turn it belongs to,
 /// in the transcript — that is the sessions owner's surface, and a follow-up.
 /// Until then this is the honest minimum: a list you can read, a diff you can
 /// check, and a restore that tells you what it will cost before it does it.
+///
+/// Nothing here polls. The list is read when the panel opens and again when a
+/// checkpoint is written, and **every row carries the age of its capture**
+/// (§19) — a chain of turns with no ages on it cannot be used to pick the one
+/// you meant.
+///
+/// It now offers the two verbs the MCP tools had and the widget did not:
+/// `checkpoint_capture` as **Capture now** in the header, and
+/// `checkpoint_restore`'s `paths:` as a restore beside each file a checkpoint
+/// touched. Both go through [CheckpointService] — the per-file one as a
+/// [HunkSelection] over the whole file, which is exactly what the tool sends.
+/// The per-file verb sits next to the evidence for it, one tap from the diff
+/// you would read before using it, because putting back one file is the safer
+/// of the two and should not be the harder to find.
 class CheckpointsView extends ConsumerStatefulWidget {
   const CheckpointsView({super.key});
 
@@ -24,26 +58,55 @@ class CheckpointsView extends ConsumerStatefulWidget {
 class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
   String? _expandedId;
   String? _busyId;
+  bool _capturing = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final checkpoints = ref.watch(sessionCheckpointsProvider);
-
-    if (checkpoints.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.lg),
-          child: Text(
-            'No checkpoints yet. One is recorded each time an agent session '
-            'finishes a turn.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall,
-          ),
+    final sessionId = ref.watch(checkpointsPanelSessionIdProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PaneHeader(
+          icon: AppIcons.clockCounterClockwise,
+          title: 'Checkpoints',
+          actions: [
+            IconButton(
+              tooltip: 'Capture the working tree now',
+              icon: const Icon(AppIcons.plusCircle, size: Chrome.iconAction),
+              // Disabled rather than absent while a capture is in flight: two
+              // `git add -A` runs over one private index is the collision the
+              // recorder guards against, and a button that silently did
+              // nothing would be the worse half of that.
+              onPressed: sessionId == null || _capturing
+                  ? null
+                  : () => _captureNow(sessionId),
+            ),
+          ],
         ),
+        Expanded(child: _list(context, sessionId)),
+      ],
+    );
+  }
+
+  Widget _list(BuildContext context, String? sessionId) {
+    final theme = Theme.of(context);
+    if (sessionId == null) {
+      return const PanePlaceholder(
+        message: 'Open a session to see the checkpoints of its turns.',
+        icon: AppIcons.clockCounterClockwise,
       );
     }
 
+    final checkpoints = ref.watch(sessionCheckpointsProvider(sessionId));
+    if (checkpoints.isEmpty) {
+      return const PanePlaceholder(
+        message: 'No checkpoints yet. One is recorded each time this session '
+            'finishes a turn, and Capture now records one on demand.',
+        icon: AppIcons.clockCounterClockwise,
+      );
+    }
+
+    final now = ref.watch(clockProvider).nowUtc();
     return ListView.separated(
       itemCount: checkpoints.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
@@ -61,10 +124,12 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
                         '#${checkpoint.sequence}',
                 style: theme.textTheme.bodyMedium,
               ),
+              // §19 at the line the reading is on: a turn is only pickable if
+              // you can tell how long ago it was.
               subtitle: Text(
                 '${checkpoint.files.length} file'
                 '${checkpoint.files.length == 1 ? '' : 's'} · '
-                '${checkpoint.createdAt.toLocal()}',
+                '${describeAge(now.difference(checkpoint.createdAt))}',
                 style: theme.textTheme.bodySmall,
               ),
               onTap: () =>
@@ -80,7 +145,16 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
                       child: const Text('Restore'),
                     ),
             ),
-            if (expanded) _CheckpointDiff(checkpoint: checkpoint),
+            if (expanded) ...[
+              for (final file in checkpoint.files)
+                _FileRow(
+                  path: file.path,
+                  onRestore: _busyId == checkpoint.id
+                      ? null
+                      : () => _restore(checkpoint, paths: [file.path]),
+                ),
+              _CheckpointDiff(checkpoint: checkpoint),
+            ],
           ],
         );
       },
@@ -93,30 +167,36 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     CheckpointReason.manual => 'Checkpoint',
   };
 
-  Future<void> _restore(Checkpoint checkpoint, {bool confirm = false}) async {
+  /// Puts [checkpoint] back — the whole tree, or only [paths].
+  ///
+  /// `paths` is the widget's half of `checkpoint_restore`'s `paths:`, sent the
+  /// same way: one whole-file [HunkSelection] each, so the service decides what
+  /// is applied and this never writes to a working tree itself.
+  Future<void> _restore(
+    Checkpoint checkpoint, {
+    bool confirm = false,
+    List<String> paths = const [],
+  }) async {
     setState(() => _busyId = checkpoint.id);
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       final outcome = await ref
           .read(checkpointServiceProvider)
-          .restore(checkpoint, confirm: confirm);
+          .restore(
+            checkpoint,
+            confirm: confirm,
+            selection: [for (final path in paths) HunkSelection(path)],
+          );
       ref.read(checkpointsRevisionProvider.notifier).bump();
+      // The service's own sentence, not a second one written here.
       messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            outcome.alreadyThere
-                ? 'The working tree already matched that checkpoint.'
-                : 'Restored ${outcome.files.length} file(s). '
-                      'Undo it by restoring checkpoint '
-                      '#${outcome.safetyCheckpoint?.sequence}.',
-          ),
-        ),
+        SnackBar(content: Text(restoreOutcomeMessage(outcome))),
       );
     } on CheckpointConflict catch (conflict) {
       if (!mounted) return;
       final proceed = await _askToOverwrite(conflict);
       if (proceed) {
-        await _restore(checkpoint, confirm: true);
+        await _restore(checkpoint, confirm: true, paths: paths);
         return;
       }
     } catch (error) {
@@ -126,15 +206,46 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     }
   }
 
+  /// **Capture now** — the user's own hand on `checkpoint_capture`.
+  ///
+  /// Through [SessionCheckpointRecorder], which is the door the MCP tool uses:
+  /// it holds the per-session guard against two captures at once, bumps the
+  /// revision every reader watches, and files a labelled capture in the
+  /// decision record. Going straight to the service would skip all three.
+  Future<void> _captureNow(String sessionId) async {
+    setState(() => _capturing = true);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final checkpoint = await ref
+          .read(sessionCheckpointRecorderProvider.notifier)
+          .captureNow(sessionId, decidedBy: 'the user');
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            checkpoint == null
+                ? kNothingToCapture
+                : 'Captured checkpoint ${checkpoint.sequence}.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  /// The refusal, in the service's words.
+  ///
+  /// Not a sentence of its own: [checkpointRestoreRefusal] is the function
+  /// `restore` refuses on, so what is shown here *is* the rule that was
+  /// applied — including the half of an undo we cannot do
+  /// ([kRestoreLeavesTheConversation]), which is the reason this dialog was
+  /// wrong before it was long.
   Future<bool> _askToOverwrite(CheckpointConflict conflict) async {
     final answer = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Discard newer changes?'),
-        content: Text(
-          '${conflict.message}\n\nNothing is lost either way: the working tree '
-          'as it is now has just been checkpointed, so this is undoable.',
-        ),
+        content: SingleChildScrollView(child: Text(conflict.message)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -214,6 +325,50 @@ class _CheckpointDiff extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// One file a checkpoint touched, and the safer of the two ways back.
+///
+/// Restoring a single path is the verb somebody actually wants most of the
+/// time — one file an agent broke, out of a turn that was otherwise right —
+/// and it is the one the widget had no way to ask for at all.
+class _FileRow extends StatelessWidget {
+  const _FileRow({required this.path, required this.onRestore});
+
+  final String path;
+  final VoidCallback? onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: Insets.lg, right: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              path,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: kMonoFamily,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Restore this file only',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              AppIcons.arrowCounterClockwise,
+              size: Chrome.iconAction,
+            ),
+            onPressed: onRestore,
+          ),
+        ],
+      ),
     );
   }
 }
