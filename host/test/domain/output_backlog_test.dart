@@ -96,4 +96,47 @@ void main() {
       expect(backlog.since(0).bytes, hasLength(OutputBacklog.defaultCapacityBytes));
     });
   });
+
+  group('restored from a record', () {
+    test('keeps the absolute numbering the session really had', () {
+      // A session that produced 40_000 bytes and kept the last 10: the two
+      // numbers are separately true, and a restarted host that reset the total
+      // would hand every client an offset from a different numbering.
+      final backlog = OutputBacklog.restored(
+        capacityBytes: 16,
+        totalBytes: 40000,
+        tail: filled(10, 90),
+      );
+
+      expect(backlog.totalBytes, 40000);
+      expect(backlog.heldBytes, 10);
+      expect(backlog.firstAvailableOffset, 39990);
+      expect(backlog.since(39990).bytes, hasLength(10));
+      expect(backlog.since(39995).offset, 39995);
+      expect(backlog.since(39995).bytes, hasLength(5));
+    });
+
+    test('tells a client from before the bound how much it lost', () {
+      final backlog = OutputBacklog.restored(
+        capacityBytes: 16,
+        totalBytes: 1000,
+        tail: filled(16, 65),
+      );
+      final slice = backlog.since(0);
+      expect(slice.droppedBytes, 984);
+      expect(slice.offset, 984);
+      expect(slice.bytes, hasLength(16));
+    });
+
+    test('carries on from where the record left off', () {
+      final backlog = OutputBacklog.restored(
+        capacityBytes: 16,
+        totalBytes: 100,
+        tail: filled(4, 65),
+      )..add(filled(3, 66));
+
+      expect(backlog.totalBytes, 103);
+      expect(backlog.since(96).bytes, hasLength(7));
+    });
+  });
 }

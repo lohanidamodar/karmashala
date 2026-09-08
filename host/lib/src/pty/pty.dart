@@ -15,6 +15,9 @@ class PtySpawnRequest {
   /// argv[0] is the executable; it is resolved on PATH by the launcher.
   final List<String> argv;
   final String? workingDirectory;
+  /// The child's environment. POSIX takes it as the whole of one; Windows
+  /// layers it over the host process's, because a block with no `SystemRoot`
+  /// cannot load a DLL. See [ConPtyLauncher].
   final Map<String, String> environment;
   final int columns;
   final int rows;

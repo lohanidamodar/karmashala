@@ -8,3 +8,9 @@ tags:
   # answer for it. Run it deliberately:
   #   dart test --tags=live-wsl
   live-wsl:
+  # Spawns real processes on this machine: a ConPTY with a real `cmd.exe`
+  # behind it. Excluded from the ordinary gate for the same reason live-wsl
+  # is — no stand-in can answer whether the FFI struct layouts are right, and
+  # a failure here is as often the machine's as ours. Run it deliberately:
+  #   dart test --tags=live
+  live:

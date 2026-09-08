@@ -62,6 +62,45 @@ void main() {
     });
   });
 
+  group('host-backed local panes setting', () {
+    test('is off, so nothing changes until somebody asks for it', () {
+      expect(const Settings().hostBackedLocalPanes, isFalse);
+      expect(Settings.fromJson(const {}).hostBackedLocalPanes, isFalse);
+    });
+
+    test('survives a JSON round-trip, on as well as off', () {
+      const on = Settings(hostBackedLocalPanes: true);
+      expect(Settings.fromJson(on.toJson()).hostBackedLocalPanes, isTrue);
+      expect(Settings.fromJson(on.toJson()), on);
+    });
+
+    test('participates in equality', () {
+      expect(const Settings(hostBackedLocalPanes: true), isNot(const Settings()));
+      expect(
+        const Settings(hostBackedLocalPanes: true).hashCode,
+        isNot(const Settings().hashCode),
+      );
+    });
+
+    test('the controller persists it', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+
+      container.read(settingsControllerProvider.notifier).setHostBackedLocalPanes(true);
+
+      expect(container.read(settingsControllerProvider).hostBackedLocalPanes, isTrue);
+      expect(
+        SettingsRepository(db).load().hostBackedLocalPanes,
+        isTrue,
+        reason: 'the change must reach the database, not just the notifier',
+      );
+    });
+  });
+
   group('resume-running-panes setting', () {
     test('is on by default', () {
       // The owner asked for it: "if there were active panes on last close start
