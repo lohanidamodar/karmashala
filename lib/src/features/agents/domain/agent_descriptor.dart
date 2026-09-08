@@ -3,6 +3,7 @@ import '../../settings/domain/permission_risk.dart';
 import 'agent_kind.dart';
 import 'agent_plan.dart';
 import 'agent_permission_support.dart';
+import 'agent_skill_support.dart';
 import 'agent_status.dart';
 
 /// How an agent CLI expresses "continue this session".
@@ -528,6 +529,60 @@ class AgentPromptSupport {
   }
 }
 
+/// Whether an agent takes an extra system prompt as a **file**, and how.
+///
+/// The question a handoff turns on. A packet is large by design, and every
+/// other way in is a paste: Claude Code collapses one over 800 characters or
+/// three lines into `[Pasted text #N]`, so the receiving agent can read a
+/// placeholder where the brief should be. A path is the same size whatever it
+/// points at.
+///
+/// **Three values rather than two**, for §19's reason. An agent whose `--help`
+/// was read and names no such option is a different fact from one nobody has
+/// checked, and only the first is evidence. The launch diagnostics say which,
+/// so "this packet was typed" always comes with why.
+class AgentSystemPromptFileSupport {
+  /// The file rides on [token], as two argv entries. [evidence] is what it was
+  /// read off, so a future CLI version is re-checked rather than trusted.
+  const AgentSystemPromptFileSupport.append(
+    this.token, {
+    required this.evidence,
+  }) : isSupported = true,
+       wasChecked = true;
+
+  /// Checked, and this agent has no such option. [evidence] is the `--help`
+  /// that says so.
+  const AgentSystemPromptFileSupport.absent({required this.evidence})
+    : token = '',
+      isSupported = false,
+      wasChecked = true;
+
+  /// Nobody looked. **The default**, and never reported as an absence.
+  const AgentSystemPromptFileSupport.unchecked()
+    : token = '',
+      evidence = '',
+      isSupported = false,
+      wasChecked = false;
+
+  /// The option itself, e.g. `--append-system-prompt-file`. Empty otherwise.
+  final String token;
+
+  /// Where this was verified. Empty exactly when nobody looked.
+  final String evidence;
+
+  final bool isSupported;
+
+  /// Whether this answer was measured. False is the unchecked default, which
+  /// must not be read as "this agent has none".
+  final bool wasChecked;
+
+  /// The arguments that hand this agent the file at [path], or nothing.
+  List<String> argumentsFor(String? path) =>
+      isSupported && path != null && path.isNotEmpty
+      ? [token, path]
+      : const [];
+}
+
 /// Executable base names to probe, per execution-environment kind. Each list is
 /// tried in order and the first hit wins.
 ///
@@ -672,6 +727,7 @@ class AgentLaunchSpec {
     this.sessionIdAnnouncement = const AgentSessionIdAnnouncement.none(),
     this.continueLatest = const AgentContinueSupport.unsupported(),
     this.prompt = const AgentPromptSupport.unsupported(),
+    this.systemPromptFile = const AgentSystemPromptFileSupport.unchecked(),
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.missingConversation = const AgentMissingConversationRules(),
@@ -770,6 +826,10 @@ class AgentLaunchSpec {
   /// no reliable "ready" marker.
   final AgentPromptSupport prompt;
 
+  /// Whether this agent takes an extra system prompt as a file, and how. See
+  /// [AgentSystemPromptFileSupport]. Defaults to "nobody checked".
+  final AgentSystemPromptFileSupport systemPromptFile;
+
   /// Whether an opening prompt can be delivered at all — [prompt]'s *whether*,
   /// for the refusal gates that only ever asked that. They read the same answer
   /// they always did; what widened underneath them is the *how*.
@@ -845,6 +905,7 @@ class AgentDescriptor {
     this.approval = const AgentApprovalRules(),
     this.attachments = const AgentAttachmentSupport.none(),
     this.plan = const AgentPlanSupport.none(),
+    this.skills = const AgentSkillSupport.none(),
   });
 
   final String id;
@@ -890,6 +951,16 @@ class AgentDescriptor {
   /// somewhere this app can read"*, and on 2026-09-08 that had three different
   /// answers.
   final AgentPlanSupport plan;
+
+  /// **Where this agent discovers user-level skills, and how that was
+  /// learned.**
+  ///
+  /// Declared data with required evidence, exactly like [plan], and defaulting
+  /// the same conservative way — the reasoning is at [AgentSkillSupport] and
+  /// the install and uninstall story is the library doc above it. The question
+  /// is not "does this CLI have skills": all three of them do. It is *where*,
+  /// and on 2026-09-09 that had two different shapes.
+  final AgentSkillSupport skills;
 
   @override
   String toString() => 'AgentDescriptor($id)';

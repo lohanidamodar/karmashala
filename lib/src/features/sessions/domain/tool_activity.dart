@@ -1,3 +1,4 @@
+import '../../../core/util/bounded_text.dart';
 import '../../agents/domain/agent_plan.dart';
 
 /// What one tool call in a transcript is actually *about*.
@@ -87,7 +88,13 @@ class ToolActivity {
 /// transcript file is re-parsed on a two-second poll, so holding every result
 /// whole would grow without limit for as long as a session is on screen. The
 /// head is what a reader wants; the rest is one click away in the terminal.
-const int kMaxToolOutputChars = 20000;
+///
+/// **The number is no longer this file's to choose.** It was 20,000 UTF-16
+/// code units while the live stream to the phone and the rows a session stores
+/// bounded nothing at all, so the same turn read differently depending on which
+/// of the three paths it arrived through — and the one that kept least was the
+/// one a reopened session rehydrated from. See [kMaxTranscriptTextBytes].
+const int kMaxToolOutputBytes = kMaxTranscriptTextBytes;
 
 /// The extensions Flutter's decoder can open, and the ones the composer already
 /// offers to attach. A path outside this set is never handed to `Image.file`.
@@ -170,8 +177,9 @@ ToolActivity toolActivityFor(String name, Object? input) {
   );
 }
 
-/// [text] cut to [kMaxToolOutputChars], and whether cutting was needed.
+/// [text] cut to [kMaxToolOutputBytes], and whether cutting was needed.
+///
+/// The tool-output *policy* keeps its name; the cut itself is the one every
+/// path shares.
 (String, bool) boundedToolOutput(String text) =>
-    text.length <= kMaxToolOutputChars
-    ? (text, false)
-    : (text.substring(0, kMaxToolOutputChars), true);
+    boundedText(text, maxBytes: kMaxToolOutputBytes);

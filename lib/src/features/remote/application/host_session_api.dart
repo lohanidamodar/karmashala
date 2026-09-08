@@ -9,6 +9,7 @@ library;
 
 import 'dart:convert';
 
+import '../../../core/util/bounded_text.dart';
 import '../domain/paired_device.dart';
 import '../domain/remote_payloads.dart';
 import '../protocol.dart';
@@ -221,20 +222,37 @@ class HostSessionApi {
               : (total > kRemoteTranscriptPageMax
                     ? total - kRemoteTranscriptPageMax
                     : 0);
+          // **Bounded at both ends now.** `after` used to answer with the
+          // whole remainder, which is the frame nobody could receive wearing a
+          // different name: a phone resuming from a cursor a hundred turns
+          // back asked once, got a result the link could not carry, and the
+          // turns it was recovering never arrived — a transcript that looked
+          // merely quiet. It gets a page, and `hasNewer` is what tells it to
+          // ask again.
+          final end = total - start > kRemoteTranscriptPageMax
+              ? start + kRemoteTranscriptPageMax
+              : total;
           // Serving history is also what marks this session as *watched*: from
           // here the poll sweep carries its growth, and until here it does not
           // read it at all. The phone asks for history only for the session it
           // has open, so this is the cheapest true signal of what is on screen
           // — and it costs no extra read, because the cursor is a by-product
           // of the page just built.
-          _transcriptCursors[sessionId] = page.cursor;
+          // The window's end, not the whole count. They are the same number
+          // for a tail read, and only for a tail read: a page that stopped
+          // short while claiming the count would have told the poll sweep the
+          // phone already held turns nobody had sent it.
+          _transcriptCursors[sessionId] = end;
           await _result(
             envelope.id,
             RemoteTranscriptPage(
               sessionId: sessionId,
-              messages: collapseTaskNotifications(page.messages.sublist(start)),
-              cursor: page.cursor,
+              messages: collapseTaskNotifications(
+                page.messages.sublist(start, end),
+              ),
+              cursor: end,
               omitted: start,
+              hasNewer: end < total,
               // Carried, not re-derived: this rebuilds the page to window it,
               // and dropping the reason here would have thrown away the one
               // thing that tells the phone which nothing it is looking at.
@@ -526,6 +544,15 @@ class HostSessionApi {
     // session it has open — so this is "what is on screen", stated by the
     // phone's own behaviour rather than guessed at.
     //
+    // The distinction is load-bearing, and it is the whole of "presence is not
+    // delivery": this is a request the phone *made*, not a signal about
+    // whether it is looking. A request cannot go stale — nothing here ages
+    // out, and only another explicit frame clears it — so there is no reading
+    // that can quietly stop a row from being carried. A heartbeat carrying
+    // visibility and a focused session belongs on the notification path, where
+    // `PushFanout` spends it, and must never be read here: this api is handed
+    // no such value, and that is the enforcement.
+    //
     // Subscription cannot be that signal: the phone subscribes to *every*
     // session it lists, because subscription is also what keeps the session
     // cards live. Polling on it meant a full transcript parse per listed
@@ -559,6 +586,16 @@ class HostSessionApi {
       _transcriptCursors[sessionId] = page.cursor;
       return;
     }
+    // One page, never the whole delta. A session that grew by five thousand
+    // messages between polls — a resumed agent replaying its history, a phone
+    // that was away — built a frame past the envelope cap, and because the
+    // cursor only moves on a `true` the very same frame was rebuilt and
+    // refused on every poll after it. The turns were not late; they were
+    // unreachable, for ever, and nothing said so.
+    final total = page.messages.length;
+    final end = total - cursor > kRemoteTranscriptPageMax
+        ? cursor + kRemoteTranscriptPageMax
+        : total;
     // The cursor is what the phone has been *told*, so it moves only when the
     // delta was carried. Advancing first lost the messages outright — the next
     // poll started after them and nothing ever went back for them.
@@ -569,11 +606,14 @@ class HostSessionApi {
         // The live path matters as much as the opening one: a subagent that
         // finishes while the phone is watching arrives here, not through
         // `transcript.get`.
-        messages: collapseTaskNotifications(page.messages.sublist(cursor)),
-        cursor: page.cursor,
+        messages: collapseTaskNotifications(
+          page.messages.sublist(cursor, end),
+        ),
+        cursor: end,
+        hasNewer: end < total,
       ).toJson(),
     );
-    if (delivered) _transcriptCursors[sessionId] = page.cursor;
+    if (delivered) _transcriptCursors[sessionId] = end;
   }
 
   /// States what a session is doing, when that is not what this device was last
@@ -781,6 +821,10 @@ final RegExp _taskNotificationSummary = RegExp(
 /// One in, one out. `transcript.appended` pages by index into this list, so a
 /// dropped turn would shift every delta after it; and a reader whose
 /// conversation quietly jumped would have no way to know that it had.
+///
+/// It is also where the wire's own 64 KiB bound on a message is spent — see
+/// [boundedText] — because this is the one function both `transcript.get` and
+/// `transcript.appended` hand their slice to.
 List<RemoteTranscriptMessage> collapseTaskNotifications(
   List<RemoteTranscriptMessage> messages,
 ) => [for (final message in messages) _collapseTaskNotification(message)];
@@ -794,7 +838,16 @@ RemoteTranscriptMessage _collapseTaskNotification(
   final text = message.text.trim();
   if (!text.startsWith(_taskNotificationOpen) ||
       !text.endsWith(_taskNotificationClose)) {
-    return message;
+    // **The live path's own bound**, applied where both wire paths already
+    // meet. The two sources behind it bound their own text — the reader that
+    // rehydrates an agent's store, and the row a session stores — but a bound
+    // the wire merely inherits is one a third source could walk around, and a
+    // row already in the database from before those cuts existed is exactly
+    // such a source. Bytes, and the same 64 KiB the other two spend.
+    final (bounded, truncated) = boundedText(text);
+    return truncated
+        ? RemoteTranscriptMessage(role: message.role, text: bounded)
+        : message;
   }
   final summary = _taskNotificationSummary.firstMatch(text)?.group(1)?.trim();
   return RemoteTranscriptMessage(

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../core/util/bounded_text.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/domain/session_event_types.dart';
@@ -789,5 +790,11 @@ void _add(List<TranscriptMessage> out, String role, Object? text, DateTime? at) 
   if (text is! String) return;
   final trimmed = text.trim();
   if (trimmed.isEmpty) return;
-  out.add(TranscriptMessage(role: role, text: trimmed, at: at));
+  // Bounded here, not only on the tool result beside it. A tool row never
+  // reaches the phone — the wire drops it — so a turn is the payload that
+  // actually crosses, and leaving it whole meant rehydration could restore
+  // text the live stream had already trimmed.
+  out.add(
+    TranscriptMessage(role: role, text: boundedText(trimmed).$1, at: at),
+  );
 }

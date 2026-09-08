@@ -6,6 +6,8 @@ HandoffPacket _packet({
   int omittedTurns = 0,
   List<HandoffChange>? changes = const [],
   List<String> unresolvedTasks = const [],
+  List<HandoffClaim>? deadEnds = const [],
+  HandoffSourceBrief? sourceBrief,
   List<HandoffDecision>? decisions = const [],
   int omittedDecisions = 0,
   String? branch = 'feature/x',
@@ -29,6 +31,8 @@ HandoffPacket _packet({
   decisions: decisions,
   omittedDecisions: omittedDecisions,
   unresolvedTasks: unresolvedTasks,
+  deadEnds: deadEnds,
+  sourceBrief: sourceBrief,
   isFork: isFork,
 );
 
@@ -436,4 +440,194 @@ void main() {
       expect(result.omitted, 0);
     });
   });
+
+  group('the two rules — ownership and evidence', () {
+    test('states the evidence rule, and that a packet is not evidence', () {
+      final text = _packet().render();
+      expect(text, contains('a command and what it printed'));
+      expect(text, contains('"not checked yet"'));
+      // The clause the rule exists for: a prior packet is a claim.
+      expect(
+        text,
+        contains('A previous packet is a claim, not evidence'),
+      );
+      expect(text, contains('the files win'));
+      // And the mismatch is reported rather than quietly corrected.
+      expect(text, contains('worth reporting rather than quietly correcting'));
+    });
+
+    test('gives every section an owner, and says who may edit it', () {
+      final text = _packet(
+        decisions: [_decision()],
+        recap: const [HandoffTurn(speaker: 'The user', text: 'Go.')],
+        unresolvedTasks: const ['the parser'],
+      ).render();
+
+      // The quoted recap has no editors at all — an edited quotation is not
+      // evidence any more.
+      expect(
+        text,
+        contains(
+          '_Owner: Claude Code and the user. No editors — if you disagree '
+          'with something here, say so; do not rewrite it._',
+        ),
+      );
+      // The decision record does: the receiving agent adds to it.
+      expect(
+        text,
+        contains('_Owner: Claude Code and the user. May edit: Codex CLI'),
+      );
+      expect(text, contains('_Owner: the user.'));
+      expect(text, contains('_Owner: Karmashala, read from git.'));
+    });
+
+    test('the ownership rule is stated once, above the sections', () {
+      final text = _packet().render();
+      expect(text, contains('Each section names its owner and who may edit'));
+      expect(
+        text.indexOf('Each section names its owner'),
+        lessThan(text.indexOf('## Where this came from')),
+      );
+    });
+  });
+
+  group('the dead ends already ruled out', () {
+    test('are their own section, above the rest of the record', () {
+      final text = _packet(
+        deadEnds: const [
+          HandoffClaim(
+            statement: 'An isolate pool for the parser.',
+            evidence: 'lib/src/parser.dart:88 — deadlocks on Windows',
+            attributedTo: 'Claude Code',
+          ),
+        ],
+        decisions: [_decision()],
+      ).render();
+
+      expect(text, contains("## Don't do"));
+      expect(text, contains('- **An isolate pool for the parser.**'));
+      expect(text, contains('said by: Claude Code'));
+      expect(
+        text,
+        contains('evidence: lib/src/parser.dart:88 — deadlocks on Windows'),
+      );
+      expect(
+        text.indexOf("## Don't do"),
+        lessThan(text.indexOf('## Decisions on record')),
+      );
+      // It is the receiving agent's to add to — that is the whole use of it.
+      expect(text, contains('_Owner: Claude Code. May edit: Codex CLI'));
+    });
+
+    test('a claim with no evidence says "not checked yet"', () {
+      final text = _packet(
+        deadEnds: const [HandoffClaim(statement: 'Threads.')],
+      ).render();
+      expect(text, contains('evidence: not checked yet'));
+      // And the attribution is never simply dropped.
+      expect(text, contains('said by: not recorded'));
+    });
+
+    test('an empty list is not "nothing was ruled out"', () {
+      final text = _packet(deadEnds: const []).render();
+      expect(text, contains('Nothing was recorded as ruled out'));
+      expect(
+        text,
+        contains('That is not the same as "nothing was ruled out"'),
+      );
+      expect(text, isNot(contains('None.')));
+    });
+
+    test('a record that could not be read says so, not "none"', () {
+      final text = _packet(deadEnds: null).render();
+      expect(text, contains('Could not be read'));
+      expect(text, contains('before spending a turn re-deriving it'));
+    });
+  });
+
+
+  group("the source agent's own brief", () {
+    test('is absent entirely when nobody asked for one', () {
+      // Declining has to leave the packet exactly as it was.
+      expect(_packet().render(), isNot(contains('own words')));
+    });
+
+    test('is quoted, attributed, and marked as unchecked', () {
+      final text = _packet(
+        sourceBrief: const HandoffSourceBrief.written(
+          'The parser is half done.\nThe Windows build is untested.',
+        ),
+      ).render();
+
+      expect(text, contains("## In Claude Code's own words"));
+      expect(text, contains('> The parser is half done.'));
+      expect(text, contains('> The Windows build is untested.'));
+      // Its words, said to be its words — the packet's one rule.
+      expect(text, contains('Claude Code wrote this when the handoff was'));
+      expect(text, contains('nobody has checked it'));
+      // And the evidence rule reaches it like everything else.
+      expect(text, contains('the evidence rule above applies'));
+      expect(text, contains('the verbatim quotes further down'));
+      // Quoted, so it has no editors.
+      expect(
+        text,
+        contains('_Owner: Claude Code. No editors'),
+      );
+    });
+
+    test('a brief that was asked for and not written says why', () {
+      final text = _packet(
+        sourceBrief: const HandoffSourceBrief.notWritten(
+          'it had not answered when this stopped waiting.',
+        ),
+      ).render();
+
+      expect(text, contains("## In Claude Code's own words"));
+      expect(
+        text,
+        contains(
+          'Claude Code was asked to write this and did not: it had not '
+          'answered when this stopped waiting.',
+        ),
+      );
+      // And nothing else in the packet is weaker for it.
+      expect(text, contains('Nothing else in this packet depends on it'));
+    });
+
+    test('sits above the files and the record, not buried under them', () {
+      final text = _packet(
+        sourceBrief: const HandoffSourceBrief.written('Half done.'),
+      ).render();
+      expect(
+        text.indexOf("## In Claude Code's own words"),
+        lessThan(text.indexOf('## Files changed in the working tree')),
+      );
+    });
+
+    test('the receiving prefix frames the work as inherited, not remembered', () {
+      final text = _packet().render();
+      expect(text, contains('Another model started this and has stopped'));
+      expect(text, contains('Build on what it did rather than repeating it'));
+      // And the half of Codex's framing that would be false here is not
+      // claimed: nothing says the reader has the other model's tool state.
+      expect(text, isNot(contains('tool state')));
+    });
+
+    test('the request is the compaction prompt, not a paraphrase', () {
+      expect(
+        kSourceBriefRequest,
+        startsWith(
+          'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a '
+          'handoff summary for another LLM that will resume the task.',
+        ),
+      );
+      expect(kSourceBriefRequest, contains('- Current progress and key decisions made'));
+      expect(kSourceBriefRequest, contains('- What remains to be done (clear next steps)'));
+      expect(
+        kSourceBriefRequest,
+        endsWith('helping the next LLM seamlessly continue the work.'),
+      );
+    });
+  });
+
 }

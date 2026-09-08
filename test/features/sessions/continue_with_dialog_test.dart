@@ -148,6 +148,12 @@ class _RecordingService extends SessionHandoffService {
   PermissionSelection? handedOffUnder;
   bool forked = false;
   PermissionSelection? forkedUnder;
+  HandoffSourceBrief? packetBrief;
+  HandoffSourceBrief? handedOffBrief;
+  int briefRequests = 0;
+  HandoffSourceBrief briefAnswer = const HandoffSourceBrief.written(
+    'Half the parser is done.',
+  );
 
   @override
   Future<SessionLaunchResult> handoffTo({
@@ -157,10 +163,21 @@ class _RecordingService extends SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async {
     handedOffTo = targetInstallationId;
     handedOffUnder = permissionMode;
+    handedOffBrief = sourceBrief;
     return SessionLaunchResult(session: session());
+  }
+
+  @override
+  Future<HandoffSourceBrief> requestSourceBrief({
+    required String sessionId,
+    num? timeoutSeconds,
+  }) async {
+    briefRequests++;
+    return briefAnswer;
   }
 
   @override
@@ -183,12 +200,14 @@ class _RecordingService extends SessionHandoffService {
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool isFork = false,
+    HandoffSourceBrief? sourceBrief,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
     HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async {
     packetFor = targetAgentName;
     packetInstruction = instruction;
     packetWasFork = isFork;
+    packetBrief = sourceBrief;
     return HandoffPacket(
       sourceAgentName: 'Prompting CLI',
       targetAgentName: targetAgentName,
@@ -196,10 +215,19 @@ class _RecordingService extends SessionHandoffService {
       sourceSessionId: 'cli-1',
       instruction: instruction,
       unresolvedTasks: unresolvedTasks,
+      sourceBrief: sourceBrief,
       isFork: isFork,
     );
   }
 }
+
+/// The row that offers the source agent's own brief. Named rather than taken
+/// by position: the dialog has two checkboxes now and position is not what
+/// either test means.
+final _askRow = find.widgetWithText(
+  CheckboxListTile,
+  'Ask Prompting CLI to write the brief first',
+);
 
 void main() {
   // Null until the dialog reads the provider, which is itself the answer to
@@ -209,6 +237,10 @@ void main() {
   Future<void> pump(
     WidgetTester tester, {
     required SessionContinuation continuation,
+    // Seeded here rather than set on `service` afterwards: the provider is
+    // read lazily, so `service` still holds the *previous* test's recorder
+    // until the dialog first asks for one.
+    HandoffSourceBrief? briefAnswer,
   }) async {
     // A desktop window, which is where this dialog lives. At the test
     // default's 600px it is taller than the screen and the segmented button
@@ -221,9 +253,11 @@ void main() {
       ProviderScope(
         overrides: [
           sessionContinuationProvider.overrideWith((ref, _) => continuation),
-          sessionHandoffServiceProvider.overrideWith(
-            (ref) => service = _RecordingService(ref),
-          ),
+          sessionHandoffServiceProvider.overrideWith((ref) {
+            final recorder = _RecordingService(ref);
+            if (briefAnswer != null) recorder.briefAnswer = briefAnswer;
+            return service = recorder;
+          }),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ContinueWithDialog(sessionId: 's1')),
@@ -441,7 +475,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining('This is exactly what the next agent receives'),
+      find.textContaining('This is exactly what the next agent is told'),
       findsOneWidget,
     );
     expect(service!.packetInstruction, 'Finish the parser.');
@@ -458,6 +492,12 @@ void main() {
 
     expect(
       find.textContaining('Prompting CLI forks this itself'),
+      findsOneWidget,
+    );
+    // And which of the two forks it is: a new process, not this session
+    // branching in place.
+    expect(
+      find.textContaining('not this session branching in place'),
       findsOneWidget,
     );
     expect(find.text('Fork'), findsOneWidget);
@@ -496,7 +536,7 @@ void main() {
   testWidgets('defaults to continuing in the same worktree', (tester) async {
     await pump(tester, continuation: continuation());
     final checkbox = tester.widget<CheckboxListTile>(
-      find.byType(CheckboxListTile),
+      find.widgetWithText(CheckboxListTile, 'Start in a new worktree'),
     );
     expect(checkbox.value, isFalse);
     expect(
@@ -504,4 +544,69 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('offers the source agent its own brief, and does not take it', (
+    tester,
+  ) async {
+    await pump(tester, continuation: continuation());
+    // Named, because it is that agent's quota being spent.
+    expect(
+      find.text('Ask Prompting CLI to write the brief first'),
+      findsOneWidget,
+    );
+    final ask = tester.widget<CheckboxListTile>(_askRow);
+    expect(ask.value, isFalse, reason: 'declining is the default');
+
+    // Declining asks the source for nothing at all.
+    await tester.enterText(find.byType(TextField).first, 'Finish it.');
+    await tester.tap(find.text('Hand off'));
+    await tester.pumpAndSettle();
+    expect(service!.briefRequests, 0);
+    expect(service!.handedOffBrief, isNull);
+  });
+
+  testWidgets('asks once, and the same answer reaches preview and launch', (
+    tester,
+  ) async {
+    await pump(tester, continuation: continuation());
+    await tester.ensureVisible(_askRow);
+    await tester.tap(_askRow);
+    await tester.enterText(find.byType(TextField).first, 'Finish it.');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Preview packet'));
+    await tester.pumpAndSettle();
+    expect(service!.packetBrief?.text, 'Half the parser is done.');
+
+    await tester.tap(find.text('Hand off'));
+    await tester.pumpAndSettle();
+    expect(service!.handedOffBrief?.text, 'Half the parser is done.');
+    // One turn of the source agent's quota, not two.
+    expect(service!.briefRequests, 1);
+  });
+
+  testWidgets('says so on the row when the source did not write one', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      continuation: continuation(),
+      briefAnswer: const HandoffSourceBrief.notWritten(
+        'it had not answered when this stopped waiting.',
+      ),
+    );
+    await tester.ensureVisible(_askRow);
+    await tester.tap(_askRow);
+    await tester.enterText(find.byType(TextField).first, 'Finish it.');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Preview packet'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('It did not: it had not answered'),
+      findsOneWidget,
+    );
+  });
+
 }

@@ -630,4 +630,9 @@ const int kMaxAttachmentBytes = 12 * 1024 * 1024;
 /// a whole transcript is not something a frame can hold: the largest in this
 /// repo is 53 MB of JSONL and produced a result the phone never finished
 /// receiving. A caller that wants an earlier window asks for it with `after`.
+///
+/// **Every** page is bounded by it, including one asked for with `after` — a
+/// resume from a cursor used to answer with the whole remainder, which is the
+/// same frame nobody could receive wearing a different name. A page that could
+/// not carry everything says so with `hasNewer`, and the reader asks again.
 const int kRemoteTranscriptPageMax = 300;

@@ -25,6 +25,37 @@ void main() {
       expect(plan.explanation, contains('left exactly as it is'));
     });
 
+    test('says it is the weaker of the two forks, and what stays behind', () {
+      // A CLI's own in-session branch switches the running process into a
+      // copy; this starts a second one from outside, and only the conversation
+      // crosses. The dialog has to say which of the two the user is getting.
+      final plan = _plan(AgentIds.claudeCode, externalSessionId: '7f3a');
+      expect(plan.explanation, contains('It is a **new process**'));
+      expect(plan.explanation, contains('not this session branching in place'));
+      expect(plan.explanation, contains('only the conversation crosses'));
+      expect(
+        plan.explanation,
+        contains('permissions granted for this session'),
+      );
+      expect(plan.explanation, contains('work already in flight'));
+      expect(plan.explanation, contains('any link the CLI opened for it'));
+      expect(
+        plan.explanation,
+        contains("Use Claude Code's own in-session branch command instead"),
+      );
+    });
+
+    test('the sentence names the agent rather than one CLI\'s vocabulary', () {
+      // Shown for every natively forking agent, so it states what is true of a
+      // second process by construction instead of listing Claude's grants.
+      final codex = _plan(AgentIds.codex, externalSessionId: '01a0-9');
+      expect(codex.explanation, contains('It is a **new process**'));
+      expect(
+        codex.explanation,
+        contains("Use Codex CLI's own in-session branch command instead"),
+      );
+    });
+
     test('Codex forks natively too, with its own subcommand', () {
       final plan = _plan(AgentIds.codex, externalSessionId: '01a0-9');
       expect(plan.kind, SessionForkKind.native);

@@ -33,6 +33,7 @@ class RelayTransport extends ReconnectingTransport {
     this.connectTimeout = kDefaultConnectTimeout,
     super.backoff,
     super.maxQueuedFrames,
+    super.maxQueuedBytes,
     super.onLog,
   });
 

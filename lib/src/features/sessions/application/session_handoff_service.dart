@@ -13,16 +13,19 @@ import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../agents/domain/agent_permission_support.dart';
 import '../../settings/domain/permission_risk.dart';
+import '../domain/decision_record.dart';
 import '../domain/handoff_packet.dart';
 import '../domain/session.dart';
 import '../domain/session_fork.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_lineage.dart';
 import 'delivery_providers.dart';
+import 'session_actions.dart';
 import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
+import 'session_wait.dart';
 import 'session_working_directory.dart';
 
 /// One agent this session could be continued in.
@@ -193,6 +196,7 @@ class SessionHandoffService {
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool isFork = false,
+    HandoffSourceBrief? sourceBrief,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
     HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async {
@@ -213,12 +217,12 @@ class SessionHandoffService {
     // it must be the quoted tail: a dropped turn is still in the transcript
     // the new agent can read, while a dropped decision is the thing nobody
     // wrote down twice.
-    final decisions = _decisionsFor(sessionId, decisionBudget);
+    final recorded = _decisionsFor(sessionId, decisionBudget);
     final recap = await _recapFor(
       session,
       agentId,
       sourceName,
-      budget.reducedBy(decisions.cost),
+      budget.reducedBy(recorded.cost),
     );
     final changes = directory == null ? null : await _changesIn(directory);
     final delivery = directory == null
@@ -238,8 +242,10 @@ class SessionHandoffService {
       changes: changes,
       recap: recap.turns,
       omittedTurns: recap.omitted,
-      decisions: decisions.decisions,
-      omittedDecisions: decisions.omitted,
+      decisions: recorded.decisions,
+      omittedDecisions: recorded.omitted,
+      deadEnds: recorded.deadEnds,
+      sourceBrief: sourceBrief,
       unresolvedTasks: [
         for (final task in unresolvedTasks)
           if (task.trim().isNotEmpty) task.trim(),
@@ -260,7 +266,13 @@ class SessionHandoffService {
   /// record, which means nobody wrote anything down — and the packet says so
   /// in different words, because an agent taking over a long session must not
   /// read either as "nothing was decided".
-  ({List<HandoffDecision>? decisions, int omitted, int cost}) _decisionsFor(
+  ({
+    List<HandoffDecision>? decisions,
+    List<HandoffClaim>? deadEnds,
+    int omitted,
+    int cost,
+  })
+  _decisionsFor(
     String sessionId,
     HandoffDecisionBudget budget,
   ) {
@@ -278,14 +290,48 @@ class SessionHandoffService {
             recordedAt: row.recordedAt,
           ),
       ], budget);
+      // Partitioned *after* the trim, so the budget is charged once over the
+      // whole record and the split cannot change what survives it. A rejected
+      // approach is not a second copy of a decision — it moves, because the
+      // reader needs it before they start work rather than among the rest.
+      // From the enum rather than spelled again: the heading and the split
+      // must not be able to drift apart.
+      final ruledOut = DecisionKind.approachRejected.label;
       return (
-        decisions: trimmed.decisions,
+        decisions: [
+          for (final decision in trimmed.decisions)
+            if (decision.kind != ruledOut) decision,
+        ],
+        deadEnds: [
+          for (final decision in trimmed.decisions)
+            if (decision.kind == ruledOut) _deadEnd(decision),
+        ],
         omitted: trimmed.omitted,
         cost: trimmed.cost,
       );
     } catch (_) {
-      return (decisions: null, omitted: 0, cost: 0);
+      return (decisions: null, deadEnds: null, omitted: 0, cost: 0);
     }
+  }
+
+  /// A rejected approach as the claim it is: what was ruled out, who said so,
+  /// and what backs it — or **"not checked yet"**, which the claim itself
+  /// renders rather than leaving the qualifier off.
+  static HandoffClaim _deadEnd(HandoffDecision decision) {
+    final detail = decision.detail?.trim();
+    final origin = decision.origin;
+    final backing = <String>[
+      if (detail != null && detail.isNotEmpty) detail,
+      if (origin != null)
+        decision.originId == null
+            ? 'recorded from $origin'
+            : 'recorded from $origin `${decision.originId}`',
+    ];
+    return HandoffClaim(
+      statement: decision.summary,
+      evidence: backing.isEmpty ? null : backing.join(' — '),
+      attributedTo: decision.decidedBy,
+    );
   }
 
   /// The tail of the conversation, read from the **agent's own transcript** —
@@ -371,6 +417,120 @@ class SessionHandoffService {
     return kind;
   }
 
+  /// Asks [sessionId] to write its own handoff summary, and waits for it.
+  ///
+  /// **Offered, never automatic.** It spends a turn of the source agent's
+  /// quota, and running out of that quota is one of the reasons people hand
+  /// off at all — so the person asks for this, and declining leaves the packet
+  /// exactly as it was.
+  ///
+  /// The request is Codex's own compaction prompt ([kSourceBriefRequest]),
+  /// sent down the same path the message box uses, and the wait is the same
+  /// event-driven machinery `session_wait` runs on: nothing here polls and
+  /// nothing counts seconds of its own.
+  ///
+  /// **A handoff is never blocked on an agent that does not answer.** The
+  /// wait's bound is the whole of the limit, and every way this can fail comes
+  /// back as a [HandoffSourceBrief.notWritten] the packet prints — including
+  /// the one that matters most, a source that answered nothing, which must not
+  /// be reported as an empty brief.
+  Future<HandoffSourceBrief> requestSourceBrief({
+    required String sessionId,
+    num? timeoutSeconds,
+  }) async {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) throw StateError('This session no longer exists.');
+    final agentId = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+
+    // Every sentence below is a *reason*, and the packet supplies the subject
+    // — it names the source agent already, so naming it again here would put
+    // that name in two places that could disagree.
+    //
+    // Before the send, exactly as `session_send` asks it: a message into a
+    // session that has stopped for a person sits behind that prompt, and this
+    // would then spend its whole bound learning nothing.
+    if (_ref.read(sessionWaitProvider).blockedOn(sessionId) case final block?) {
+      return HandoffSourceBrief.notWritten(
+        'it is stopped waiting for a person (${block.kind}), so nothing was '
+        'sent — a request would have sat behind that prompt. Answer it and '
+        'ask again, or hand off without a brief.',
+      );
+    }
+
+    final before = (await _agentTurnsIn(session, agentId)).length;
+    try {
+      await _ref
+          .read(sessionActionsProvider)
+          .continueSession(sessionId, kSourceBriefRequest);
+    } on Object catch (error) {
+      return HandoffSourceBrief.notWritten(
+        'the request could not be delivered to it ($error).',
+      );
+    }
+
+    final outcome = await _ref
+        .read(sessionWaitProvider)
+        .wait(
+          sessionId,
+          bound: SessionWaitService.boundFor(timeoutSeconds),
+          // The fact a caller has to have: the request went in, so asking
+          // again would ask twice.
+          inputSent: true,
+        );
+
+    final after = await _agentTurnsIn(session, agentId);
+    // Counted, not timed, and counted against what was there before the
+    // request: the newest turn in an unchanged transcript is something the
+    // agent said earlier, and printing that as its brief would be the packet
+    // inventing an answer.
+    if (after.length <= before) {
+      return HandoffSourceBrief.notWritten(
+        switch (outcome.state) {
+          SessionWaitState.timeout =>
+            'it had not answered when this stopped waiting. The request was '
+                'delivered and may still be answered in that session — the '
+                'brief is simply not in this packet.',
+          SessionWaitState.blocked =>
+            'it stopped for a person before answering. Whatever it is asking '
+                'is in that session.',
+          SessionWaitState.ended =>
+            'its pane is gone; nothing is running there to answer.',
+          _ =>
+            'it settled without saying anything (${outcome.state.name}), so '
+                'there is nothing of its own to quote.',
+        },
+      );
+    }
+    return HandoffSourceBrief.written(after.last);
+  }
+
+  /// Everything the source agent has said, oldest first, read from its own
+  /// transcript. Empty for a session whose transcript cannot be found or read,
+  /// which is the same answer as one that has said nothing — and the caller
+  /// only ever compares two readings of it, so the two cannot be confused.
+  Future<List<String>> _agentTurnsIn(Session session, String? agentId) async {
+    final externalId = session.externalSessionId;
+    if (agentId == null || externalId == null || externalId.isEmpty) {
+      return const [];
+    }
+    try {
+      final path = await _ref
+          .read(sessionTranscriptLocatorProvider)
+          .locate(agentId: agentId, externalSessionId: externalId);
+      if (path == null) return const [];
+      return [
+        for (final message in await readCliTranscript(path, agentId))
+          if (message.role == 'agent' && message.text.trim().isNotEmpty)
+            message.text.trim(),
+      ];
+    } on Object {
+      return const [];
+    }
+  }
+
   // --- starting the new session ----------------------------------------------
 
   /// Continues [sessionId] in another agent.
@@ -392,6 +552,7 @@ class SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) => _continue(
     sessionId: sessionId,
     targetInstallationId: targetInstallationId,
@@ -400,6 +561,7 @@ class SessionHandoffService {
     intoNewWorktree: intoNewWorktree,
     link: SessionLink.handoff,
     permissionMode: permissionMode,
+    sourceBrief: sourceBrief,
   );
 
   /// Branches [sessionId] into a new session that shares its history.
@@ -483,6 +645,7 @@ class SessionHandoffService {
     required SessionLink link,
     bool isFork = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -505,6 +668,7 @@ class SessionHandoffService {
       instruction: instruction,
       unresolvedTasks: unresolvedTasks,
       isFork: isFork,
+      sourceBrief: sourceBrief,
     );
 
     final carried = _resolvePermission(
@@ -516,10 +680,17 @@ class SessionHandoffService {
     );
 
     final rendered = packet.render();
+    // Which channel the packet is aimed at, decided by the target's own
+    // declared capability. Whether it *lands* there is the launcher's answer —
+    // it writes the file and logs the outcome — and the two lines together are
+    // what say why a packet was typed at a given CLI.
+    final support = descriptor?.launch.systemPromptFile ??
+        const AgentSystemPromptFileSupport.unchecked();
     _log.info(
       '${isFork ? 'Fork' : 'Handoff'} from $sessionId to '
       '${context.installation.agentId} ($targetName): '
       'packet=${rendered.length} chars '
+      'delivery=${support.isSupported ? support.token : support.wasChecked ? 'typed — $targetName has no system-prompt file option' : 'typed — $targetName has never been checked for one'} '
       'worktree=${intoNewWorktree ? 'new' : 'shared'} '
       'mode=${carried.override?.canonical ?? 'default'}',
     );
@@ -534,7 +705,12 @@ class SessionHandoffService {
                 ? _forkTitle(sessionId, session.title)
                 : '${session.title} · $targetName',
             purpose: SessionPurpose.newSession,
-            firstMessage: rendered,
+            // The whole packet when it has to be typed, and the instruction
+            // alone when the rest of it travels as a file: the packet's own
+            // last section is that instruction, so repeating it would spend
+            // the receiving agent's first turn reading it twice.
+            firstMessage: support.isSupported ? instruction.trim() : rendered,
+            systemPromptFile: support.isSupported ? rendered : null,
             parentSessionId: sessionId,
             parentLink: link,
             useWorktree: intoNewWorktree,
