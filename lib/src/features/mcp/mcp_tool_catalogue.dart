@@ -377,8 +377,8 @@ enum McpToolCategory {
     'A real Chrome or Edge — the developer\'s own logged-in window.',
   ),
   flutterApps(
-    'Running Flutter apps',
-    'A Flutter app already running under "flutter run".',
+    'Flutter apps',
+    'Starting a Flutter project, and the app once it is running.',
   ),
   guides(
     'Guides',
@@ -812,7 +812,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     'Run JavaScript in the page. Needs a one-time grant, per project.',
   ),
 
-  // Running Flutter apps.
+  // Flutter: starting a project, and the app once it is running.
   'flutter_apps': McpToolListing(
     McpToolCategory.flutterApps,
     'Every running app this can reach, and how to name each one.',
@@ -832,6 +832,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'flutter_pick_widget': McpToolListing(
     McpToolCategory.flutterApps,
     'Ask the developer to tap a widget; get the file and line it came from.',
+  ),
+  'flutter_run': McpToolListing(
+    McpToolCategory.flutterApps,
+    'Start a project: pub get, launch on a device, and run its gates.',
   ),
 
   // Guides.
