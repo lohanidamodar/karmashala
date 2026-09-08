@@ -9,6 +9,37 @@ import '../../sessions/domain/session_event_types.dart';
 import '../../sessions/domain/tool_activity.dart';
 import 'subagent_transcript.dart';
 
+/// The compaction the CLI ran immediately before the row that carries this.
+///
+/// A real boundary record on this machine is `type: system` with
+/// `subtype: compact_boundary`, `parentUuid: null`, a `logicalParentUuid`
+/// naming the pre-compaction tail, and a `compactMetadata` — the conversation's
+/// DAG is cut there deliberately. Everything before it in the file is history
+/// the CLI dropped from its own context and then restated as the summary that
+/// follows, so a reader walking the file linearly shows the history, then a
+/// summary of it, then the continuation.
+///
+/// **Measured rather than assumed.** `readCliTranscript` over a real compacted
+/// transcript here returns **2,793 rows across two boundaries**: row 1,287 is a
+/// 17,795-character `user` row restating the 1,287 before it, and row 2,556 is
+/// a 21,070-character one restating everything up to there. In the chat view
+/// both are drawn as the *user's* own turn.
+///
+/// This marks **where** the cut is and decides nothing else. The list
+/// `readCliTranscript` returns keeps its length, order, roles and text, so the
+/// conversation index still holds every pre-compaction turn and search still
+/// finds them; only the renderer collapses.
+class CompactionBoundary {
+  const CompactionBoundary({this.trigger});
+
+  /// `auto` when the context filled, `manual` for `/compact`, and null when the
+  /// record did not say. Never inferred from anything else.
+  final String? trigger;
+
+  @override
+  String toString() => 'CompactionBoundary(${trigger ?? 'unrecorded'})';
+}
+
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
@@ -21,6 +52,7 @@ class TranscriptMessage {
     this.pendingToolUseId,
     this.pendingBackgroundAgentId,
     this.thinking,
+    this.compaction,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -78,6 +110,11 @@ class TranscriptMessage {
   /// Null on every other row, and on a launch with no `agentId`: a launch we
   /// cannot name is one we could never retire.
   final String? pendingBackgroundAgentId;
+
+  /// Set on the **first row after a compaction boundary** — which is the
+  /// summary the CLI wrote of everything before it. Null everywhere else. See
+  /// [CompactionBoundary].
+  final CompactionBoundary? compaction;
 }
 
 /// Reads a CLI session's full transcript (Claude Code / Codex JSONL) into a flat
@@ -127,6 +164,11 @@ Future<List<TranscriptMessage>> readCliTranscript(
   // [TranscriptMessage.pendingBackgroundAgentId].
   final background = <String, int>{};
   final acrossBoundary = <String, int>{};
+  // The boundary whose summary has not been reached yet. Held here rather than
+  // returned from `_parseClaudeLine`, because the record that announces a
+  // compaction produces no row of its own — the row it belongs to is the next
+  // one the file yields, and only this loop can see that happen.
+  CompactionBoundary? pendingCompaction;
   try {
     await for (final line
         in file
@@ -149,6 +191,8 @@ Future<List<TranscriptMessage>> readCliTranscript(
       if (cli == AgentIds.codex) {
         _parseCodexLine(decoded, messages, pending, at);
       } else {
+        pendingCompaction = _compactionBoundaryOf(decoded) ?? pendingCompaction;
+        final before = messages.length;
         _parseClaudeLine(
           decoded,
           messages,
@@ -158,6 +202,13 @@ Future<List<TranscriptMessage>> readCliTranscript(
           acrossBoundary,
           at,
         );
+        if (pendingCompaction != null && messages.length > before) {
+          messages[before] = _withCompaction(
+            messages[before],
+            pendingCompaction,
+          );
+          pendingCompaction = null;
+        }
       }
     }
   } catch (_) {
@@ -168,6 +219,36 @@ Future<List<TranscriptMessage>> readCliTranscript(
   _stampBackgroundAgents(messages, background);
   return messages;
 }
+
+/// The compaction [json] announces, or null for every other line.
+///
+/// Gated on `compactMetadata` as well as the subtype: `type: system` is the
+/// CLI's own catch-all — `agents_killed` arrives the same way — and the
+/// metadata is the field only a real boundary carries.
+CompactionBoundary? _compactionBoundaryOf(Map<String, dynamic> json) {
+  if (json['type'] != 'system') return null;
+  if (json['subtype'] != 'compact_boundary') return null;
+  final metadata = json['compactMetadata'];
+  if (metadata is! Map) return null;
+  final trigger = metadata['trigger'];
+  return CompactionBoundary(trigger: trigger is String ? trigger : null);
+}
+
+/// [row] again, carrying the boundary it follows. One row per compaction.
+TranscriptMessage _withCompaction(
+  TranscriptMessage row,
+  CompactionBoundary boundary,
+) => TranscriptMessage(
+  role: row.role,
+  text: row.text,
+  tool: row.tool,
+  subagent: row.subagent,
+  at: row.at,
+  pendingToolUseId: row.pendingToolUseId,
+  pendingBackgroundAgentId: row.pendingBackgroundAgentId,
+  thinking: row.thinking,
+  compaction: boundary,
+);
 
 /// Marks the calls whose background subagents nothing has reported finished.
 ///
@@ -190,6 +271,7 @@ void _stampBackgroundAgents(
       pendingToolUseId: row.pendingToolUseId,
       pendingBackgroundAgentId: agentId,
       thinking: row.thinking,
+      compaction: row.compaction,
     );
   });
 }
@@ -221,6 +303,7 @@ Future<void> _attachSubagents(
       subagent: reference,
       at: row.at,
       pendingToolUseId: row.pendingToolUseId,
+      compaction: row.compaction,
     );
   });
 }
@@ -554,6 +637,7 @@ void _attachResult(
     // dropping the id here is what keeps the call from looking in-flight
     // forever.
     at: row.at,
+    compaction: row.compaction,
   );
 }
 
