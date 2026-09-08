@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../notifications/application/notification_providers.dart';
 import '../data/browser_service.dart';
 import '../domain/browser_failure.dart';
 import '../domain/browser_target.dart';
@@ -188,7 +189,15 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
     });
   }
 
-  /// Hands the page over to the user to point at an element.
+  /// Hands the page over to the user to point at an element, and takes the
+  /// window back when they have.
+  ///
+  /// The raise lives here rather than in `ElementPicker`, which is `data/` and
+  /// speaks CDP to a browser: raising *this* app is a shell concern, and the
+  /// picker would need a seam it has no other use for. It lives here rather
+  /// than in the pane widget because only this method knows which way the pick
+  /// went — a cancelled, timed-out or disconnected one arrives in the `catch`
+  /// below, where there is nothing to come back to.
   Future<void> pickElement() async {
     if (!_service.isConnected) return;
     state = state.copyWith(
@@ -206,6 +215,10 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
         url: capture.pageUrl,
         title: capture.pageTitle,
       );
+      // The same seam a clicked toast uses: `SystemIntegrationService` listens
+      // and drives the injected `WindowAdapter`. Nothing here touches
+      // `window_manager`.
+      ref.read(windowRaiseRequestProvider.notifier).bump();
     } on Object catch (error) {
       state = state.copyWith(
         status: _service.isConnected
