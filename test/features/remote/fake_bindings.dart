@@ -15,6 +15,14 @@ class FakeRemoteBindings {
   /// Why a session's transcript is empty, for a host that can say — the
   /// `agentSupportsChatView` refusal, as the production bindings report it.
   final Map<String, RemoteTranscriptAbsence> absences = {};
+
+  /// What each session is doing, as the same read that served the transcript
+  /// reports it. Unset answers "nothing is running, observed at [observedAt]".
+  final Map<String, RemoteSessionActivity> activities = {};
+
+  /// The host clock these readings are stamped with, so a test can say what a
+  /// call's elapsed time is rather than race the wall.
+  DateTime observedAt = DateTime.utc(2026, 9, 7, 12);
   final Map<String, String?> stages = {};
   final Map<String, RemoteApprovalRequest> approvals = {};
   final List<({String sessionId, String text})> prompts = [];
@@ -98,11 +106,16 @@ class FakeRemoteBindings {
         await Future<void>.delayed(transcriptCost);
       }
       final messages = transcripts[id] ?? const <RemoteTranscriptMessage>[];
-      return RemoteTranscriptPage(
-        sessionId: id,
-        messages: List.of(messages),
-        cursor: messages.length,
-        absence: messages.isEmpty ? absences[id] : null,
+      return (
+        page: RemoteTranscriptPage(
+          sessionId: id,
+          messages: List.of(messages),
+          cursor: messages.length,
+          absence: messages.isEmpty ? absences[id] : null,
+        ),
+        activity:
+            activities[id] ??
+            RemoteSessionActivity(sessionId: id, observedAt: observedAt),
       );
     },
     sendPrompt: (sessionId, text) async {

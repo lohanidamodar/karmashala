@@ -424,6 +424,72 @@ void main() {
     expect(messages.single.text, contains('still reach it'));
   });
 
+  // **The whole point of the new bit, end to end.** The phone asks, the host
+  // answers from the read it already made, and the elapsed time is a duration
+  // both ends agree on because both instants came off the desktop's clock.
+  test("what a session is doing crosses, measured on the host's clock",
+      () async {
+    final observed = DateTime.utc(2026, 9, 7, 12);
+    fake.observedAt = observed;
+    fake.activities['s1'] = RemoteSessionActivity(
+      sessionId: 's1',
+      observedAt: observed,
+      calls: [
+        RemoteActivityCall(
+          summary: 'Agent(review the diff)',
+          toolName: 'Agent',
+          subagent: true,
+          // 4,549,121 ms — one of the two subagent runs this feature exists
+          // for, and more than twice the ceiling that used to hide it.
+          startedAt: observed.subtract(const Duration(milliseconds: 4549121)),
+        ),
+      ],
+    );
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final activity = await gateway
+        .activity('s1')
+        .firstWhere((reading) => reading.known);
+
+    expect(activity.calls.single.summary, 'Agent(review the diff)');
+    expect(activity.calls.single.subagent, isTrue);
+    expect(
+      activity.calls.single.elapsed,
+      const Duration(milliseconds: 4549121),
+    );
+    expect(activity.absence, isNull);
+  });
+
+  test('a pairing without view_activity is told so, not left empty', () async {
+    fake.activities['s1'] = RemoteSessionActivity(
+      sessionId: 's1',
+      observedAt: DateTime.utc(2026, 9, 7, 12),
+    );
+    await startService();
+    final gateway = makeGateway();
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet(
+        CapabilitySet.all.bits & ~Capability.viewActivity.bit,
+      ),
+    );
+    await gateway.pairWithQr(session.payload.encode());
+    await session.done;
+    await awaitLink(gateway, CompanionLinkState.connected);
+
+    final activity = await gateway
+        .activity('s1')
+        .firstWhere((reading) => reading.known);
+
+    expect(activity.refused, contains('view_activity'));
+    expect(
+      activity.calls,
+      isEmpty,
+      reason: 'and the screen shows the sentence, never the empty list',
+    );
+  });
+
   test('a transcript with turns carries no reason at all', () async {
     // A reason beside turns would be describing a transcript that exists.
     fake.absences['s1'] = RemoteTranscriptAbsence.noChatView;

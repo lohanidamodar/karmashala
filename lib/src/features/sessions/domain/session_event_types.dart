@@ -42,7 +42,7 @@ class SessionEventTypes {
 /// as `id` and echoes it on the matching `tool_result` as `tool_use_id`.
 const String kToolUseIdKey = 'toolUseId';
 
-/// The tool name Claude Code uses to launch an **in-agent subagent**.
+/// The tool names Claude Code uses to launch an **in-agent subagent**.
 ///
 /// Worth naming because there are two unrelated things called a subagent and
 /// conflating them would be a real bug:
@@ -51,4 +51,24 @@ const String kToolUseIdKey = 'toolUseId';
 ///   creates a session row — so the spawn-depth cap must **not** apply to it;
 /// * a session an agent creates through the MCP bridge is a separate row with a
 ///   `parent_session_id`, and the cap **must** apply to that (`SessionDepth`).
-const String kSubagentToolName = 'Task';
+///
+/// **Two names, and the second one is the one that ships.** Counted over the
+/// owner's whole Claude Code store on 2026-09-08: **650 `Agent` calls and zero
+/// `Task` calls**. The tool was renamed, and while this held `Task` alone
+/// nothing keyed on it fired — a subagent never read as one in the activity
+/// strip, and `_attachSubagents` never hung a delegate's turns under the row
+/// that spawned it, because the `subagents/*.meta.json` on disk join on the
+/// `tool_use.id` of an **`Agent`** call (verified against
+/// `toolu_01QzeLLf11K6C9wLFJMKivkE`, agent type `Explore`, spawn depth 2).
+///
+/// Both are kept: an older CLI still writes `Task`, and a store is read long
+/// after the binary that wrote it was replaced.
+const Set<String> kSubagentToolNames = {'Agent', 'Task'};
+
+/// The name a *new* subagent row is written with — the one the installed CLI
+/// uses. Read [kSubagentToolNames] to recognise one.
+const String kSubagentToolName = 'Agent';
+
+/// Whether [toolName] is one of the tools that spawns an in-agent subagent.
+bool isSubagentToolName(String toolName) =>
+    kSubagentToolNames.contains(toolName);

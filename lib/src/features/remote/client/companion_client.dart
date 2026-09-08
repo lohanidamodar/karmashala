@@ -68,6 +68,12 @@ class TranscriptAppendedEvent extends CompanionEvent {
   final RemoteTranscriptPage page;
 }
 
+/// What one session is doing right now — see [FrameType.sessionActivity].
+class SessionActivityEvent extends CompanionEvent {
+  const SessionActivityEvent(this.activity);
+  final RemoteSessionActivity activity;
+}
+
 class ApprovalRequestedEvent extends CompanionEvent {
   const ApprovalRequestedEvent(this.request);
   final RemoteApprovalRequest request;
@@ -334,6 +340,14 @@ class CompanionClient {
             ),
           ),
         );
+      case FrameType.sessionActivity:
+        _tolerant(
+          () => _emit(
+            SessionActivityEvent(
+              RemoteSessionActivity.fromJson(envelope.payload),
+            ),
+          ),
+        );
       case FrameType.approvalRequested:
         _tolerant(
           () => _emit(
@@ -404,6 +418,18 @@ class CompanionClient {
       'after': after,
     });
     return RemoteTranscriptPage.fromJson(payload);
+  }
+
+  /// Asks outright what one session is doing right now.
+  ///
+  /// The phone's own question, for opening a session and for coming back from
+  /// a reconnect — the unsolicited frames it missed while away cannot be
+  /// replayed. A pairing without `view_activity` is refused here in words.
+  Future<RemoteSessionActivity> activity(String sessionId) async {
+    final payload = await _request(FrameType.sessionActivity, {
+      'sessionId': sessionId,
+    });
+    return RemoteSessionActivity.fromJson(payload);
   }
 
   Future<void> sendPrompt(String sessionId, String text) async {

@@ -95,6 +95,7 @@ const Map<FrameType, Map<String, Object?>> kRequests = {
   FrameType.promptSend: {'sessionId': 's1', 'text': 'carry on'},
   FrameType.approvalAnswer: {'sessionId': 's1', 'decision': 'approve'},
   FrameType.notificationsRegister: {'token': 't0k', 'platform': 'android'},
+  FrameType.sessionActivity: {'sessionId': 's1'},
 };
 
 void main() {
@@ -387,6 +388,176 @@ void main() {
         expect(harness.sent.length, before);
       },
     );
+
+    // **What the owner could not see from a pocket.** The desktop strip has
+    // answered "what is it doing right now" for a while; the wire carried
+    // nothing about it, so a phone had a card reading "working" and a
+    // transcript that had not moved.
+    group('session.activity', () {
+      RemoteSessionActivity running(
+        String sessionId, {
+        String summary = 'Bash(flutter test)',
+        String tool = 'Bash',
+        bool subagent = false,
+        Duration elapsed = const Duration(minutes: 76),
+      }) => RemoteSessionActivity(
+        sessionId: sessionId,
+        observedAt: DateTime.utc(2026, 9, 7, 12),
+        calls: [
+          RemoteActivityCall(
+            summary: summary,
+            toolName: tool,
+            subagent: subagent,
+            startedAt: DateTime.utc(2026, 9, 7, 12).subtract(elapsed),
+          ),
+        ],
+      );
+
+      test('is stated when a session starts running something', () async {
+        final harness = Harness();
+        await harness.watch('s1');
+        final before = harness.sent.length;
+
+        // A real one: the two subagents launched from this repo on 2026-09-07
+        // reported 4,549,121 ms and 4,798,063 ms of runtime, and the longest
+        // unanswered tool window in the owner's store is 514.8 minutes.
+        harness.fake.activities['s1'] = running(
+          's1',
+          summary: 'Agent(review the diff)',
+          tool: 'Agent',
+          subagent: true,
+        );
+        await harness.api.pollTranscripts();
+
+        expect(harness.sent.length, before + 1);
+        expect(harness.last.type, FrameType.sessionActivity);
+        final activity = RemoteSessionActivity.fromJson(harness.last.payload);
+        expect(activity.calls.single.summary, 'Agent(review the diff)');
+        expect(activity.calls.single.subagent, isTrue);
+        expect(
+          activity.observedAt.difference(activity.calls.single.startedAt),
+          const Duration(minutes: 76),
+          reason: 'both instants are the host clock, so the phone need not '
+              'subtract one machine from another',
+        );
+      });
+
+      // A call *finishing* appends nothing — the reader attaches the result to
+      // the row already there — so every cursor check in the poll would have
+      // swallowed the one change the phone is waiting to see.
+      test('...and again when it stops, though nothing was appended', () async {
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = [
+          const RemoteTranscriptMessage(role: 'user', text: 'go'),
+        ];
+        harness.fake.activities['s1'] = running('s1');
+        await harness.watch('s1');
+        await harness.api.pollTranscripts();
+        final before = harness.sent.length;
+
+        harness.fake.activities['s1'] = RemoteSessionActivity(
+          sessionId: 's1',
+          observedAt: DateTime.utc(2026, 9, 7, 13),
+        );
+        await harness.api.pollTranscripts();
+
+        expect(harness.sent.length, before + 1);
+        expect(harness.last.type, FrameType.sessionActivity);
+        expect(
+          RemoteSessionActivity.fromJson(harness.last.payload).calls,
+          isEmpty,
+        );
+      });
+
+      // `observedAt` moves on every read by construction, so comparing whole
+      // payloads would wake the phone once a poll to say "still the same".
+      test('says nothing while the answer has not changed', () async {
+        final harness = Harness();
+        harness.fake.activities['s1'] = running('s1');
+        await harness.watch('s1');
+        await harness.api.pollTranscripts();
+        final before = harness.sent.length;
+
+        harness.fake.observedAt = DateTime.utc(2026, 9, 7, 14);
+        harness.fake.activities['s1'] = RemoteSessionActivity(
+          sessionId: 's1',
+          observedAt: DateTime.utc(2026, 9, 7, 14),
+          calls: running('s1').calls,
+        );
+        await harness.api.pollTranscripts();
+
+        expect(harness.sent.length, before);
+      });
+
+      // §19 on the wire: a session we cannot look into must not report an
+      // empty list, which reads as "nothing is running".
+      test('carries which nothing it is', () async {
+        final harness = Harness();
+        harness.fake.activities['s1'] = RemoteSessionActivity(
+          sessionId: 's1',
+          observedAt: DateTime.utc(2026, 9, 7, 12),
+          absence: RemoteActivityAbsence.noRecord,
+        );
+        await harness.watch('s1');
+        await harness.api.pollTranscripts();
+
+        final stated = harness.sent.lastWhere(
+          (f) => f.type == FrameType.sessionActivity,
+        );
+        expect(
+          RemoteSessionActivity.fromJson(stated.payload).absence,
+          RemoteActivityAbsence.noRecord,
+        );
+      });
+
+      test('a pairing without the bit is refused in words', () async {
+        final harness = Harness(
+          capabilities: CapabilitySet(
+            CapabilitySet.all.bits & ~Capability.viewActivity.bit,
+          ),
+        );
+        harness.fake.activities['s1'] = running('s1');
+        await harness.watch('s1');
+        final before = harness.sent.length;
+
+        await harness.api.pollTranscripts();
+        await harness.request(
+          FrameType.sessionActivity,
+          payload: const {'sessionId': 's1'},
+        );
+
+        expect(
+          harness.sent
+              .skip(before)
+              .where((f) => f.type == FrameType.sessionActivity),
+          isEmpty,
+          reason: 'nothing unprompted may grow into a power never granted',
+        );
+        expect(harness.lastErrorCode(), ErrorCode.notPermitted.wire);
+        expect(
+          harness.last.payload['message'],
+          contains(Capability.viewActivity.wire),
+          reason: 'refused with a sentence, never silently degraded',
+        );
+      });
+
+      // The phone asking outright, which is what it does on opening a session
+      // and after a reconnect — the frames it missed cannot be replayed.
+      test('answers the phone asking for itself', () async {
+        final harness = Harness();
+        harness.fake.activities['s1'] = running('s1');
+
+        await harness.request(
+          FrameType.sessionActivity,
+          payload: const {'sessionId': 's1'},
+        );
+
+        expect(harness.last.type, FrameType.result);
+        expect(harness.last.id, 'q1');
+        final activity = RemoteSessionActivity.fromJson(harness.last.payload);
+        expect(activity.calls.single.summary, 'Bash(flutter test)');
+      });
+    });
 
     test(
       'approval.requested goes only to devices that can act on it',

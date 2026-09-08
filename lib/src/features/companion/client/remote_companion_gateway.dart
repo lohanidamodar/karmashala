@@ -216,6 +216,10 @@ class RemoteCompanionGateway implements CompanionGateway {
   final _lastAttention = <String, String?>{};
   final _transcripts = <String, _TranscriptState>{};
   final _approvals = <String, _Watched<CompanionApproval?>>{};
+
+  /// What each session was last heard to be doing. Seeded unknown, because a
+  /// phone that has heard nothing has not heard "nothing".
+  final _activity = <String, _Watched<CompanionActivity>>{};
   final _approvalResolutions =
       StreamController<CompanionApprovalResolution>.broadcast();
   int _nextApprovalId = 1;
@@ -651,6 +655,12 @@ class RemoteCompanionGateway implements CompanionGateway {
       approval.value = null;
     }
     _approvals.clear();
+    // A reading of another desktop is not a reading of this one, and an empty
+    // list here would be the confident nothing the whole feature refuses.
+    for (final activity in _activity.values) {
+      activity.value = CompanionActivity.unknown;
+    }
+    _activity.clear();
     for (final state in _transcripts.values) {
       state.loaded = false;
       state.stale = false;
@@ -943,6 +953,63 @@ class RemoteCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionApproval?> pendingApproval(String sessionId) =>
       _approvalOf(sessionId).stream;
+
+  @override
+  Stream<CompanionActivity> activity(String sessionId) =>
+      Stream.multi((controller) {
+        final watched = _activityOf(sessionId);
+        final subscription = watched.stream.listen(controller.add);
+        controller.onCancel = subscription.cancel;
+        // Asked outright once, because the host states this unprompted and an
+        // unprompted frame cannot be replayed for a screen that opened after
+        // it. Everything after this arrives on its own.
+        unawaited(_primeActivity(sessionId));
+      });
+
+  /// Reads the current activity from the host, and words its refusal when it
+  /// has one.
+  ///
+  /// A pairing without `view_activity` is refused here, in a sentence, and the
+  /// sentence is what the screen shows — never an empty list, which would say
+  /// the session is running nothing.
+  Future<void> _primeActivity(String sessionId) async {
+    try {
+      await _ready;
+      final client = _client;
+      if (client == null) return;
+      final activity = await client.activity(sessionId);
+      _acceptActivity(activity);
+    } on RemoteApiException catch (error) {
+      _activityOf(sessionId).value = CompanionActivity(
+        at: _now(),
+        refused: error.message,
+      );
+    } on Object catch (error) {
+      onLog?.call('activity for a session could not be read: $error');
+    }
+  }
+
+  /// Folds one `session.activity` reading in, whether it was asked for or
+  /// stated.
+  void _acceptActivity(RemoteSessionActivity activity) {
+    _activityOf(activity.sessionId).value = CompanionActivity(
+      at: _now(),
+      absence: activity.absence,
+      calls: [
+        for (final call in activity.calls)
+          CompanionActivityCall(
+            summary: call.summary,
+            subagent: call.subagent,
+            // Both instants are the host's, so this duration is the one number
+            // here that needs no clock of ours.
+            elapsed: _nonNegative(activity.observedAt.difference(call.startedAt)),
+          ),
+      ],
+    );
+  }
+
+  static Duration _nonNegative(Duration value) =>
+      value.isNegative ? Duration.zero : value;
 
   @override
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {
@@ -1811,6 +1878,8 @@ class RemoteCompanionGateway implements CompanionGateway {
         _applySnapshot(snapshot, raw: raw);
       case TranscriptAppendedEvent(:final page):
         _applyAppended(page);
+      case SessionActivityEvent(:final activity):
+        _acceptActivity(activity);
       case ApprovalRequestedEvent(:final request):
         _applyApproval(request);
       case ApprovalResolvedEvent(:final resolution):
@@ -2387,4 +2456,7 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   _Watched<CompanionApproval?> _approvalOf(String sessionId) =>
       _approvals[sessionId] ??= _Watched(null);
+
+  _Watched<CompanionActivity> _activityOf(String sessionId) =>
+      _activity[sessionId] ??= _Watched(CompanionActivity.unknown);
 }

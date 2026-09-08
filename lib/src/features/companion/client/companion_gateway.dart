@@ -311,6 +311,96 @@ class CompanionChatMessage {
   final String text;
 }
 
+/// One call a session has issued and not yet answered, as the phone shows it.
+class CompanionActivityCall {
+  const CompanionActivityCall({
+    required this.summary,
+    required this.elapsed,
+    this.subagent = false,
+  });
+
+  /// The desktop's own line for the call — `Bash(flutter test)`,
+  /// `Agent(review the diff)`. For a shell call that is the command itself.
+  final String summary;
+
+  /// Whether this is another agent rather than a tool. The host says so; the
+  /// phone does not work it out from the name.
+  final bool subagent;
+
+  /// How long it had been running **when the host looked**.
+  ///
+  /// A duration rather than an instant, on purpose: it is `observedAt -
+  /// startedAt`, both read off the desktop's clock, so nothing here subtracts
+  /// one machine's time from another's. A screen that wants a live number adds
+  /// its own elapsed since the frame landed — see [CompanionActivity.at].
+  final Duration elapsed;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CompanionActivityCall &&
+      other.summary == summary &&
+      other.subagent == subagent &&
+      other.elapsed == elapsed;
+
+  @override
+  int get hashCode => Object.hash(summary, subagent, elapsed);
+}
+
+/// **What one session is doing right now**, as the phone last heard it.
+class CompanionActivity {
+  const CompanionActivity({
+    required this.at,
+    this.calls = const [],
+    this.absence,
+    this.refused,
+  });
+
+  /// Nothing has been heard yet — not "nothing is running".
+  static final unknown = CompanionActivity(at: DateTime.fromMillisecondsSinceEpoch(0));
+
+  /// When this reading landed here, on the **phone's** clock. What a live
+  /// elapsed time is counted from, added to each call's own [
+  /// CompanionActivityCall.elapsed].
+  final DateTime at;
+
+  final List<CompanionActivityCall> calls;
+
+  /// Why [calls] is empty, when the host said. Null means it could see and
+  /// there was nothing — or that we were never told, which [refused] and a
+  /// zero [at] tell apart.
+  final RemoteActivityAbsence? absence;
+
+  /// The host's sentence when it would not answer — an older pairing that was
+  /// never granted `view_activity` is refused in words, and those words are
+  /// shown rather than swallowed into an empty list.
+  final String? refused;
+
+  /// Whether this is a reading at all, as opposed to the seed before one.
+  bool get known => at.millisecondsSinceEpoch != 0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CompanionActivity &&
+      other.at == at &&
+      other.absence == absence &&
+      other.refused == refused &&
+      _sameCalls(other.calls, calls);
+
+  @override
+  int get hashCode => Object.hash(at, absence, refused, Object.hashAll(calls));
+
+  static bool _sameCalls(
+    List<CompanionActivityCall> a,
+    List<CompanionActivityCall> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
 /// A pending approval, as `approval.requested` carries it.
 ///
 /// [evidence] is the agent's own rows or hook message **verbatim** — the host
@@ -531,6 +621,16 @@ abstract interface class CompanionGateway {
   /// `session.subscribe` + `transcript.get`/`transcript.appended` for one
   /// session, as the full list the chat view renders.
   Stream<List<CompanionChatMessage>> transcript(String sessionId);
+
+  /// **What one session is doing right now**, seeded on listen and then every
+  /// change the host states.
+  ///
+  /// Costs the host no read of its own: the desktop derives this from the same
+  /// transcript parse the transcript poll already pays for. A pairing without
+  /// `view_activity` gets one reading carrying the host's refusal in words —
+  /// see [CompanionActivity.refused] — rather than an empty list that would
+  /// read as "nothing is running".
+  Stream<CompanionActivity> activity(String sessionId);
 
   /// The pending approval for one session, or null when nothing is waiting.
   ///

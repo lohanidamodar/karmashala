@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/companion_activity_strip.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
@@ -92,6 +93,135 @@ void main() {
     expect(find.text('AGENT'), findsOneWidget);
     expect(find.text('hello', findRichText: true), findsOneWidget);
     expect(find.text('hi', findRichText: true), findsOneWidget);
+  });
+
+  // **What a pocket could not see.** A card reading "working" beside a
+  // transcript that had not moved was the whole of it; the wire carried nothing
+  // about activity at all.
+  group('what the session is doing right now', () {
+    testWidgets('names a running subagent and how long it has run', (
+      tester,
+    ) async {
+      final fake = gateway();
+      // The real case this exists for: subagent runs of 4,549,121 ms and
+      // 4,798,063 ms were launched from this repo on 2026-09-07.
+      fake.setActivity(
+        's1',
+        CompanionActivity(
+          at: DateTime.now(),
+          calls: const [
+            CompanionActivityCall(
+              summary: 'Agent(review the diff)',
+              subagent: true,
+              elapsed: Duration(milliseconds: 4549121),
+            ),
+          ],
+        ),
+      );
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text('Agent(review the diff)'), findsOneWidget);
+      expect(find.textContaining('1h 15m'), findsOneWidget);
+    });
+
+    testWidgets('a shell call is named by its command', (tester) async {
+      final fake = gateway();
+      fake.setActivity(
+        's1',
+        CompanionActivity(
+          at: DateTime.now(),
+          calls: const [
+            CompanionActivityCall(
+              summary: 'Bash(flutter test --exclude-tags=live-ssh)',
+              elapsed: Duration(seconds: 12),
+            ),
+          ],
+        ),
+      );
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(
+        find.text('Bash(flutter test --exclude-tags=live-ssh)'),
+        findsOneWidget,
+      );
+    });
+
+    // A phone that has heard nothing has not heard "nothing".
+    testWidgets('says nothing before the host has answered', (tester) async {
+      await pumpPhone(
+        tester,
+        gateway: gateway(),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.byType(CompanionActivityStrip), findsOneWidget);
+      // Stretched by the column, so height rather than area is what says the
+      // strip drew nothing: no box, no reserved row.
+      expect(tester.getSize(find.byType(CompanionActivityStrip)).height, 0);
+    });
+
+    // §19, on the phone: the wire carries which nothing it is, and the phone
+    // words it. An empty list would read as "nothing is running".
+    testWidgets('words the nothing the host could account for', (tester) async {
+      final fake = gateway();
+      fake.setActivity(
+        's1',
+        CompanionActivity(
+          at: DateTime.now(),
+          absence: RemoteActivityAbsence.noRecord,
+        ),
+      );
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(
+        find.text(
+          companionActivityAbsenceSentence(RemoteActivityAbsence.noRecord),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    // An older pairing was never granted `view_activity`. The host refuses it
+    // in words, and the words are what the screen shows.
+    testWidgets('shows the host refusal rather than an empty answer', (
+      tester,
+    ) async {
+      final fake = gateway();
+      fake.setActivity(
+        's1',
+        CompanionActivity(
+          at: DateTime.now(),
+          refused: 'this device was not granted view_activity',
+        ),
+      );
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(
+        find.text('this device was not granted view_activity'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('sending a prompt goes through the gateway', (tester) async {

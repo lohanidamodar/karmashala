@@ -184,6 +184,7 @@ void main() {
         'project.add',
         'session.start',
         'session.resume',
+        'session.activity',
         'session.changed',
         'transcript.appended',
         'approval.requested',
@@ -210,6 +211,26 @@ void main() {
       expect(FrameType.projectAdd.capability, Capability.addProject);
       expect(FrameType.sessionStart.capability, Capability.startSession);
       expect(FrameType.sessionResume.capability, Capability.startSession);
+      expect(FrameType.sessionActivity.capability, Capability.viewActivity);
+    });
+
+    // One fact travelling both ways: the phone asks with it, the host states
+    // it. That is what lets an older pairing be refused *in words* on a frame
+    // the host also sends unprompted.
+    test('session.activity travels in both directions, gated one way', () {
+      expect(FrameType.sessionActivity.sentBy(FrameOrigin.companion), isTrue);
+      expect(FrameType.sessionActivity.sentBy(FrameOrigin.host), isTrue);
+      expect(
+        CapabilitySet.none.allows(FrameType.sessionActivity),
+        isFalse,
+        reason: 'a pairing without the bit must be refused rather than served',
+      );
+      expect(
+        CapabilitySet.of([
+          Capability.viewActivity,
+        ]).allows(FrameType.sessionActivity),
+        isTrue,
+      );
     });
 
     test('host events need no capability and are host-sent', () {
@@ -263,6 +284,11 @@ void main() {
       expect(Capability.approve.bit, 8);
       expect(Capability.receiveNotifications.bit, 16);
       expect(Capability.startSession.bit, 32);
+      expect(Capability.addProject.bit, 64);
+      // Its own bit, so a phone paired before this existed holds a bitset
+      // without it and is refused for ever rather than quietly gaining a live
+      // read of the machine.
+      expect(Capability.viewActivity.bit, 128);
       expect(
         Capability.values.map((c) => c.bit).toSet().length,
         Capability.values.length,

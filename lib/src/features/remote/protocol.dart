@@ -104,8 +104,20 @@ enum Capability {
   /// bitset without it and is refused, in words, for ever — nothing already
   /// granted quietly grows into permission to start processes.
   startSession('start_session', 1 << 5),
+
   /// Add an existing local desktop folder as a project.
-  addProject('add_project', 1 << 6);
+  addProject('add_project', 1 << 6),
+
+  /// Read what a session is **doing right now**: the tool calls and subagents
+  /// it has issued and not yet answered.
+  ///
+  /// Its own bit rather than a second meaning for [readTranscript], and the
+  /// reason is the same one [startSession] states. A transcript is what a
+  /// session has already said; this is a live read of the machine — which
+  /// commands are running on it at this moment, and under what description a
+  /// delegated agent was launched. A phone paired before this existed holds a
+  /// bitset without it and is refused, in words, for ever.
+  viewActivity('view_activity', 1 << 7);
 
   const Capability(this.wire, this.bit);
 
@@ -247,6 +259,25 @@ enum FrameType {
     'session.resume',
     origin: FrameOrigin.companion,
     capability: Capability.startSession,
+  ),
+  /// **What one session is doing right now** — asked for by the phone, and
+  /// stated by the host whenever the answer changes.
+  ///
+  /// [FrameOrigin.either], which only [error] is otherwise, and for a
+  /// deliberate reason: one fact travelling both ways is one payload shape and
+  /// one capability. The phone asks when it opens a session or comes back from
+  /// a reconnect; the host states it unprompted from the same transcript read
+  /// the poll sweep already pays for, so nothing here adds a read or a timer.
+  ///
+  /// An unsolicited frame is sent only to a device holding
+  /// [Capability.viewActivity]. A request from one that does not is refused
+  /// with a sentence — the frame exists so an old pairing hears a `not
+  /// permitted` naming `view_activity`, rather than reading a live answer as
+  /// silence.
+  sessionActivity(
+    'session.activity',
+    origin: FrameOrigin.either,
+    capability: Capability.viewActivity,
   ),
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),

@@ -28,6 +28,11 @@ import '../../support/fixtures.dart';
 /// `tool_use` means "running now" and "the transcript stops here" equally, and a
 /// strip that cannot tell them apart will confidently report a call on a session
 /// that died hours ago.
+///
+/// What tells them apart is **whether the session is still observably working**
+/// — a reading the app already takes every 1.2 s — and not how long the call has
+/// been out. The two long-call cases below are the measurements that killed the
+/// old thirty-minute ceiling.
 void main() {
   /// The instant the fixture transcript is written at.
   final issued = DateTime.utc(2026, 9, 2, 10);
@@ -55,6 +60,8 @@ void main() {
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
     SessionSurface surface = SessionSurface.pane,
+    DateTime? observedAt,
+    String? externalSessionId = 'ext-1',
   }) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -72,7 +79,7 @@ void main() {
         status: rowStatus,
         createdAt: testTime,
         surface: surface,
-        externalSessionId: 'ext-1',
+        externalSessionId: externalSessionId,
       ),
     );
 
@@ -85,7 +92,7 @@ void main() {
               agentId: AgentIds.claudeCode,
               sessionId: id,
               status: status,
-              observedAt: testTime,
+              observedAt: observedAt ?? issued,
               source: AgentStatusSource.stateFile,
             ),
           ),
@@ -104,12 +111,16 @@ void main() {
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
     SessionSurface surface = SessionSurface.pane,
+    DateTime? observedAt,
+    String? externalSessionId = 'ext-1',
   }) async {
     final container = containerFor(
       messages: messages,
       status: status,
       rowStatus: rowStatus,
       surface: surface,
+      observedAt: observedAt,
+      externalSessionId: externalSessionId,
     );
     final subscription = container.listen(
       sessionOutstandingCallsProvider('s1'),
@@ -137,9 +148,6 @@ void main() {
 
     expect(activity.calls.single.summary, 'Bash(git status)');
     expect(activity.calls.single.startedAt, issued);
-    expect(activity.runningAt(issued.add(const Duration(seconds: 4))), [
-      activity.calls.single,
-    ]);
   });
 
   test('...and stops being outstanding once its result arrives', () async {
@@ -191,34 +199,26 @@ void main() {
   // A session outside our panes renders from the engine's event log, which
   // emits `tool.call` and never `tool.result` — nothing emits one — so every
   // call in it is unanswered by construction and would read as running forever.
-  test('a session not hosted in one of our panes is left alone', () async {
-    final activity = await activityFor(
-      messages: [call(id: 't1')],
-      surface: SessionSurface.external,
-    );
 
-    expect(activity.calls, isEmpty);
-  });
+  // **The measurement that replaced the thirty-minute ceiling.** Two subagents
+  // launched from this repo on 2026-09-07 reported 4,549,121 ms and 4,798,063 ms
+  // of runtime — 76 and 80 minutes — and the longest unanswered tool window in
+  // the owner's whole Claude Code store is a `Bash` call at 514.8 minutes. A
+  // ceiling above every real call is not a thing that can be chosen; the age of
+  // a call says nothing about whether it is running.
+  group('a call is running for as long as the session is observably working', () {
+    for (final (name, elapsed) in [
+      ('a 76-minute subagent', const Duration(milliseconds: 4549121)),
+      ('an 80-minute subagent', const Duration(milliseconds: 4798063)),
+      ('a 514-minute Bash call', const Duration(minutes: 514, seconds: 48)),
+    ]) {
+      test(name, () async {
+        final activity = await activityFor(messages: [call(id: 't1')]);
 
-  // The other half of the trap. Without a bound this reports `Bash · 4h12m` on
-  // a session that died before lunch — a confident lie about the user's own
-  // machine, which is worse than showing nothing.
-  test('an implausibly old call ages out', () async {
-    final activity = await activityFor(messages: [call(id: 't1')]);
-
-    final justInside = issued.add(
-      kOutstandingCallMaxAge - const Duration(seconds: 1),
-    );
-    final justOutside = issued.add(
-      kOutstandingCallMaxAge + const Duration(seconds: 1),
-    );
-
-    expect(activity.runningAt(justInside), hasLength(1));
-    expect(activity.runningAt(justOutside), isEmpty);
-    expect(
-      activity.runningAt(issued.add(const Duration(hours: 4, minutes: 12))),
-      isEmpty,
-    );
+        expect(activity.calls, hasLength(1));
+        expect(activity.calls.single.ageAt(issued.add(elapsed)), elapsed);
+      });
+    }
   });
 
   test('a clock that runs behind the transcript never yields a negative age',
@@ -281,6 +281,50 @@ void main() {
         TranscriptMessage(role: 'user', text: 'hello', at: issued),
         TranscriptMessage(role: 'agent', text: 'hi', at: issued),
       ],
+    );
+
+    expect(activity, SessionActivity.none);
+    expect(
+      activity.blindSpot,
+      isNull,
+      reason: 'we could read the record and there was nothing in it',
+    );
+  });
+
+  // §19, on the wire and on screen alike: "nothing is running" and "we cannot
+  // tell what is running" are different sentences.
+  group('a working session with no record to read says so', () {
+    // The window right after a launch: the pane is up and the agent is already
+    // working, and the CLI has not told us its session id yet — so there is no
+    // transcript to find. The chat source answers that with an empty list and
+    // never an error, on purpose, which is exactly the shape that used to read
+    // as "nothing is running".
+    test('one of ours, with no CLI session id yet', () async {
+      final activity = await activityFor(
+        messages: [call(id: 't1')],
+        externalSessionId: null,
+      );
+
+      expect(activity.blindSpot, ActivityBlindSpot.noRecord);
+      expect(activity.calls, isEmpty);
+    });
+
+    test('a session outside our panes', () async {
+      final activity = await activityFor(
+        messages: [call(id: 't1')],
+        surface: SessionSurface.external,
+      );
+
+      expect(activity.blindSpot, ActivityBlindSpot.noRecord);
+    });
+  });
+
+  // The badge one row above already says `unknown`, and §19's own rule is one
+  // reading rather than two — so this is not a second hedge, it is silence.
+  test('a session nothing can see makes no claim either way', () async {
+    final activity = await activityFor(
+      messages: [call(id: 't1')],
+      status: AgentActivityStatus.unknown,
     );
 
     expect(activity, SessionActivity.none);

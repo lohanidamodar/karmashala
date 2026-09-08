@@ -8,6 +8,7 @@ import '../../remote/protocol.dart';
 import '../../sessions/domain/delivery_stage.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_activity_strip.dart';
 import 'companion_approval_card.dart';
 import 'companion_chrome.dart';
 import 'companion_composer.dart';
@@ -167,6 +168,12 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 onAnswer: (decision) =>
                     gateway.answerApproval(sessionId, approval.id, decision),
               ),
+            // Directly above the composer, as the desktop puts it directly
+            // above its own: "what is it doing right now" is the question a
+            // phone in a pocket is holding, and the transcript's own tail
+            // could only answer it by not moving.
+            if (!sessionGone && !imported)
+              CompanionActivityStrip(sessionId: sessionId),
             if (resumeOffer)
               _ResumePanel(
                 busy: _resuming,
