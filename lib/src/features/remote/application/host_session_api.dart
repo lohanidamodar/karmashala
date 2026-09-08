@@ -9,6 +9,7 @@ library;
 
 import 'dart:convert';
 
+import '../../../core/util/bounded_text.dart';
 import '../domain/paired_device.dart';
 import '../domain/remote_payloads.dart';
 import '../protocol.dart';
@@ -781,6 +782,10 @@ final RegExp _taskNotificationSummary = RegExp(
 /// One in, one out. `transcript.appended` pages by index into this list, so a
 /// dropped turn would shift every delta after it; and a reader whose
 /// conversation quietly jumped would have no way to know that it had.
+///
+/// It is also where the wire's own 64 KiB bound on a message is spent — see
+/// [boundedText] — because this is the one function both `transcript.get` and
+/// `transcript.appended` hand their slice to.
 List<RemoteTranscriptMessage> collapseTaskNotifications(
   List<RemoteTranscriptMessage> messages,
 ) => [for (final message in messages) _collapseTaskNotification(message)];
@@ -794,7 +799,16 @@ RemoteTranscriptMessage _collapseTaskNotification(
   final text = message.text.trim();
   if (!text.startsWith(_taskNotificationOpen) ||
       !text.endsWith(_taskNotificationClose)) {
-    return message;
+    // **The live path's own bound**, applied where both wire paths already
+    // meet. The two sources behind it bound their own text — the reader that
+    // rehydrates an agent's store, and the row a session stores — but a bound
+    // the wire merely inherits is one a third source could walk around, and a
+    // row already in the database from before those cuts existed is exactly
+    // such a source. Bytes, and the same 64 KiB the other two spend.
+    final (bounded, truncated) = boundedText(text);
+    return truncated
+        ? RemoteTranscriptMessage(role: message.role, text: bounded)
+        : message;
   }
   final summary = _taskNotificationSummary.firstMatch(text)?.group(1)?.trim();
   return RemoteTranscriptMessage(

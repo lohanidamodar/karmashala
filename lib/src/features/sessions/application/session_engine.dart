@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../../../core/util/bounded_text.dart';
 import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
 import '../../agents/domain/agent_adapter.dart';
@@ -211,12 +212,20 @@ class SessionEngine {
     String type,
     Map<String, Object?> data,
   ) {
+    // The one field that ever carries a tool's output, bounded at the row —
+    // the same cut the live stream and provider-history rehydration make. A
+    // stored row that kept more was a payload a reopened session could restore
+    // after the phone had already been sent the trimmed one.
+    final text = data['text'];
+    final payload = text is String
+        ? {...data, 'text': boundedText(text).$1}
+        : data;
     final stored = eventDao.append(
       SessionEvent(
         sessionId: sessionId,
         seq: 0, // assigned by the DAO
         type: type,
-        payload: jsonEncode(data),
+        payload: jsonEncode(payload),
         createdAt: clock.nowUtc(),
       ),
     );

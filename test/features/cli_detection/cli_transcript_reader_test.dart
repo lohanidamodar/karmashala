@@ -146,7 +146,7 @@ void main() {
   });
 
   test('a result too big to hold is kept as a bounded head', () async {
-    final huge = 'x' * (kMaxToolOutputChars + 500);
+    final huge = 'x' * (kMaxToolOutputBytes + 500);
     final file = write('claude.jsonl', [
       '{"type":"assistant","message":{"content":[{"type":"tool_use",'
           '"id":"t1","name":"Read","input":{"file_path":"/repo/huge.log"}}]}}',
@@ -156,7 +156,7 @@ void main() {
 
     final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
 
-    expect(messages.single.tool?.output, hasLength(kMaxToolOutputChars));
+    expect(messages.single.tool?.output, hasLength(kMaxToolOutputBytes));
     expect(messages.single.tool?.outputTruncated, isTrue);
   });
 
