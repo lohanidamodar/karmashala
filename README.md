@@ -68,9 +68,9 @@ comments explain *why* a line is the way it is at the line itself. What is left:
   Windows-toolchain rule (§17), the opt-in live tests (§18) and system health
   (§19).
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — the only planning document: what is
-  wanted, what is deliberately refused, and what was measured.
-- [`docs/what-is-left.md`](docs/what-is-left.md) — 2026-09-03 reconciliation of
-  three competitor comparisons against the code, with a ranked shortlist.
+  wanted, what is deliberately refused, and what was measured. It also carries
+  the reconciled findings from every competitor survey; the comparison documents
+  below are the evidence behind them, not a second plan.
 - Design notes: [agent status](docs/agent-status-integration.md),
   [inter-agent communication](docs/inter-agent-communication.md),
   [spawn approval](docs/spawn-approval.md),
