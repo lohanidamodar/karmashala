@@ -279,6 +279,9 @@ class AgentDiscoveryService {
           agentId: agent.descriptor.id,
           executable: agent.executable,
           version: agent.version,
+          // Dated only when there is something to date. A located binary whose
+          // `--version` failed carries no reading, so it carries no time.
+          versionReadAt: agent.version == null ? null : clock.nowUtc(),
           createdAt: clock.nowUtc(),
         ),
     ];

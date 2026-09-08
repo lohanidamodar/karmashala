@@ -2,6 +2,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/paths/path_probe.dart';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_path_repair_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
@@ -13,9 +14,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_path_probe.dart';
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 const _stored = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe';
+const _claude = r'C:\Users\d\.local\bin\claude.exe';
 
 void main() {
   late AppDatabase db;
@@ -34,11 +37,13 @@ void main() {
     WidgetTester tester, {
     AgentPathRepairReport report = const AgentPathRepairReport.unchecked(),
     Size size = const Size(1440, 900),
+    DateTime? now,
   }) async {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         pathProbeProvider.overrideWithValue(FakePathProbe()),
+        clockProvider.overrideWithValue(FixedClock(now ?? testTime)),
       ],
     );
     container.read(agentPathRepairProvider.notifier).set(report);
@@ -203,5 +208,68 @@ void main() {
     expect(t.takeException(), isNull);
     expect(find.byType(TextField), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Browse'), findsOneWidget);
+  });
+
+  group('the version beside a path is a reading, and shows its age', () {
+    testWidgets('a fresh reading renders the number with how old it is', (
+      t,
+    ) async {
+      AgentInstallationDao(db).insert(
+        agentInstallation(
+          agentId: AgentIds.codex,
+          path: _stored,
+          version: '0.153.4',
+          versionReadAt: testTime,
+        ),
+      );
+
+      await pumpSection(t, now: testTime.add(const Duration(minutes: 5)));
+
+      expect(find.textContaining('0.153.4 · read 5m ago'), findsOneWidget);
+    });
+
+    testWidgets('a reading past the bound says it may be out of date', (
+      t,
+    ) async {
+      // The owner's row. A bare "2.1.252" beside a binary answering 2.1.263 is
+      // a confident false statement; the same number wearing its age is not.
+      AgentInstallationDao(db).insert(
+        agentInstallation(path: _claude, version: '2.1.252', versionReadAt: testTime),
+      );
+
+      await pumpSection(t, now: testTime.add(const Duration(days: 2)));
+
+      expect(
+        find.textContaining('2.1.252 · last read 2d ago, may be out of date'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a number nobody dated says that, rather than nothing', (
+      t,
+    ) async {
+      // Every row written before v40, including the one whose binary is gone:
+      // its version is kept and its age is admitted to be unknown.
+      AgentInstallationDao(db).insert(
+        agentInstallation(path: _claude, version: '2.1.245'),
+      );
+
+      await pumpSection(t);
+
+      expect(
+        find.textContaining('2.1.245 · read at an unknown time'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a row with no version at all claims nothing', (t) async {
+      AgentInstallationDao(db).insert(
+        agentInstallation(agentId: AgentIds.codex, path: _stored, version: null),
+      );
+
+      await pumpSection(t);
+
+      expect(find.textContaining('read'), findsNothing);
+    });
   });
 }

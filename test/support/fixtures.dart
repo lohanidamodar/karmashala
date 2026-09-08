@@ -73,11 +73,13 @@ AgentInstallation agentInstallation({
   String environmentId = 'windows',
   String path = r'C:\Users\me\.bin\claude.exe',
   String? version = '1.0.0',
+  DateTime? versionReadAt,
 }) => AgentInstallation(
   id: id,
   agentId: agentId,
   executable: EnvironmentPath(environmentId: environmentId, path: path),
   version: version,
+  versionReadAt: versionReadAt,
   createdAt: testTime,
 );
 

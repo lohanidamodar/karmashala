@@ -165,4 +165,82 @@ void main() {
       expect(container.read(agentPathRepairProvider).isClean, isTrue);
     });
   });
+
+  group('the startup version refresh', () {
+    test('waits for the first frame, and for the path check', () async {
+      // Ordered, not just gated: a row the repair moves has had its version
+      // re-read by that sweep, and a row whose executable is gone must not be
+      // spawned at.
+      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      AgentInstallationDao(db).insert(
+        agentInstallation(agentId: AgentIds.codex, path: _real),
+      );
+      final probe = FakePathProbe(files: const {_real});
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
+      );
+      final container = scoped(probe: probe, runner: runner);
+      final gate = Completer<void>();
+
+      unawaited(
+        AppLifecycle(container).refreshAgentVersions(
+          afterFirstFrame: () => gate.future,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(runner.requests, isEmpty, reason: 'the window has not painted');
+
+      gate.complete();
+      await pumpEventQueue();
+
+      // One process, for the executable already on record — the row's version
+      // was undated, which is every row written before v40.
+      expect(runner.requests.single.executable, _real);
+      expect(AgentInstallationDao(db).getById('a1')!.version, '0.153.4');
+    });
+
+    test('runs once per launch however many callers ask', () async {
+      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      AgentInstallationDao(db).insert(
+        agentInstallation(agentId: AgentIds.codex, path: _real),
+      );
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
+      );
+      final container = scoped(
+        probe: FakePathProbe(files: const {_real}),
+        runner: runner,
+      );
+      final lifecycle = AppLifecycle(container);
+
+      await Future.wait([
+        lifecycle.refreshAgentVersions(),
+        lifecycle.refreshAgentVersions(),
+      ]);
+
+      // Counted: two concurrent readings of the same row is a wasted process
+      // and a race over the same column.
+      expect(runner.requests, hasLength(1));
+    });
+
+    test('a workspace that has never discovered leaves it to the first run', () async {
+      AgentInstallationDao(db).insert(
+        agentInstallation(agentId: AgentIds.codex, path: _real),
+      );
+      final runner = FakeCommandRunner(
+        responder: (_) => fail('the first-run scan is writing these rows'),
+      );
+      final container = scoped(
+        probe: FakePathProbe(files: const {_real}),
+        runner: runner,
+      );
+
+      await AppLifecycle(container).refreshAgentVersions();
+
+      expect(runner.requests, isEmpty);
+    });
+  });
 }

@@ -21,15 +21,18 @@ class AgentInstallationDao {
   void insert(AgentInstallation installation) {
     _db.execute(
       'INSERT INTO agent_installations '
-      '(id, agent_kind, environment_id, executable_path, version, created_at, '
-      'executable_by_user) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?);',
+      '(id, agent_kind, environment_id, executable_path, version, '
+      'version_read_at, created_at, executable_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
       [
         installation.id,
         installation.agentId,
         installation.executable.environmentId,
         installation.executable.path,
         installation.version,
+        installation.versionReadAt == null
+            ? null
+            : isoFromDate(installation.versionReadAt!),
         isoFromDate(installation.createdAt),
         intFromBool(installation.executableByUser),
       ],
@@ -75,22 +78,37 @@ class AgentInstallationDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// Records a new [version] for an installation that is still in the same
-  /// place.
+  /// Records what the CLI at this installation answered, and **when it was
+  /// asked**.
   ///
   /// An upgraded CLI is the same installation, so it keeps its row and its id —
   /// which matters because the id is what settings pin as the default agent.
   /// Deleting and re-inserting would silently unpick that choice.
-  void updateVersion(String id, String? version) {
-    _db.execute('UPDATE agent_installations SET version = ? WHERE id = ?;', [
-      version,
-      id,
-    ]);
+  ///
+  /// [readAt] is written on every reading, including one that matches what is
+  /// already stored. That is the whole point: the old `updateVersion` wrote
+  /// only when the *number* changed, so a re-read that confirmed the number
+  /// left it looking exactly as old as before. A confirmed reading is a fresh
+  /// reading.
+  ///
+  /// A null [version] is refused rather than written. Discovery can locate a
+  /// binary and fail to run `--version`, and storing that as "no version" would
+  /// erase a number we did know for an answer we never got — an unknown
+  /// presenting itself as a reading of zero (CLAUDE.md §19). The caller keeps
+  /// the previous number *and* its previous timestamp, because nothing was
+  /// learned.
+  void recordVersion(String id, String? version, {required DateTime readAt}) {
+    if (version == null) return;
+    _db.execute(
+      'UPDATE agent_installations SET version = ?, version_read_at = ? '
+      'WHERE id = ?;',
+      [version, isoFromDate(readAt), id],
+    );
   }
 
   /// Moves an installation to [path], keeping its row and its id.
   ///
-  /// The same reasoning as [updateVersion], for the same reason: the id is what
+  /// The same reasoning as [recordVersion], for the same reason: the id is what
   /// settings pin as the default agent and what every session row references,
   /// so an executable that moved must not become a new installation. That is
   /// what made the junction failure worse than it had to be — the repair had no
@@ -167,6 +185,9 @@ class AgentInstallationDao {
       path: row['executable_path']! as String,
     ),
     version: row['version'] as String?,
+    versionReadAt: row['version_read_at'] == null
+        ? null
+        : dateFromIso(row['version_read_at']),
     createdAt: dateFromIso(row['created_at']),
     executableByUser: boolFromInt(row['executable_by_user'] ?? 0),
   );
