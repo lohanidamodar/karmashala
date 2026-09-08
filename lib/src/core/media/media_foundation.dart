@@ -265,26 +265,19 @@ Pointer<Uint16> _wide(String text) {
 }
 
 /// Everything both writers share: one MP4 sink, one video stream, samples in.
+///
+/// It knows nothing about the picture: the media types come from the writer
+/// above it, which is what lets the same sink both encode and stream-copy.
 class _Mp4Sink {
-  _Mp4Sink({
-    required this.path,
-    required this.width,
-    required this.height,
-    required this.frameRate,
-  });
+  _Mp4Sink(this.path);
 
   final String path;
-  final int width;
-  final int height;
-  final int frameRate;
 
   final _mf = _Mf.instance;
   Pointer<Void> _writer = nullptr;
   int _stream = 0;
   bool _closed = false;
   int _samples = 0;
-
-  int get samples => _samples;
 
   /// Opens the file. [configureOutput] fills in the H.264 type; when
   /// [passthrough] the same type is set as the input, which is what tells MF to
@@ -496,12 +489,7 @@ class MediaFoundationEncoder implements VideoEncoder {
        // than refused.
        width = width - (width % 2),
        height = height - (height % 2),
-       _sink = _Mp4Sink(
-         path: path,
-         width: width - (width % 2),
-         height: height - (height % 2),
-         frameRate: frameRate,
-       ) {
+       _sink = _Mp4Sink(path) {
     _sink.open(
       passthrough: false,
       configureOutput: (type) {
@@ -608,12 +596,7 @@ class MediaFoundationRemuxer implements VideoRemuxer {
     required this.height,
     required this.frameRate,
     required Uint8List sequenceHeader,
-  }) : _sink = _Mp4Sink(
-         path: path,
-         width: width,
-         height: height,
-         frameRate: frameRate,
-       ) {
+  }) : _sink = _Mp4Sink(path) {
     _sink.open(
       passthrough: true,
       configureOutput: (type) {
@@ -718,7 +701,7 @@ VideoSupport probeVideoSupport() {
   // MF_E_INVALIDMEDIATYPE (0xC00D36B4) to a 16x16 frame, which would have read
   // as "no encoder here".
   try {
-    _Mp4Sink(path: probe.path, width: 64, height: 64, frameRate: 12)
+    _Mp4Sink(probe.path)
       ..open(
         passthrough: false,
         configureOutput: (type) {

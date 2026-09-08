@@ -122,20 +122,6 @@ class _FormatChoices extends ConsumerWidget {
     final terminalTheme = terminalThemeFor(theme, null);
     final support = ref.watch(videoSupportProvider);
 
-    CastFrameStyle styleFor(RecordingFormat format) => switch (format) {
-      RecordingFormat.gif => CastFrameStyle.gif(
-        theme: terminalTheme,
-        fontFamily: kMonoFamily,
-        title: saved.cast.title,
-      ),
-      RecordingFormat.mp4 || RecordingFormat.pngSequence =>
-        CastFrameStyle.fullHd(
-          theme: terminalTheme,
-          fontFamily: kMonoFamily,
-          title: saved.cast.title,
-        ),
-    };
-
     // Where the OS can write an MP4, the frame sequence has nothing left to
     // offer: it was only ever the way to reach one.
     final offered = <RecordingFormat>[
@@ -161,7 +147,15 @@ class _FormatChoices extends ConsumerWidget {
           const SizedBox(height: Insets.sm),
         ],
         for (final format in offered) ...[
-          _FormatRow(saved: saved, format: format, style: styleFor(format)),
+          _FormatRow(
+            saved: saved,
+            format: format,
+            style: TerminalRecordingController.styleFor(
+              format: format,
+              cast: saved.cast,
+              theme: terminalTheme,
+            ),
+          ),
           const SizedBox(height: Insets.sm),
         ],
       ],

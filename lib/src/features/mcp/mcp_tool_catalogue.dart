@@ -139,6 +139,15 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // see which argument was passed.
       'terminal_close': McpToolAnnotations(destructive: true),
 
+      // Recording. None of it is destructive — a recording writes a new file
+      // and takes nothing away — but none of it is read-only either: it turns
+      // capture on, and what it captures is whatever is on screen.
+      'terminal_record_start': McpToolAnnotations(),
+      'terminal_record_stop': McpToolAnnotations(),
+      // Reads a phone, writes this computer, the way `device_file_pull` does.
+      'device_record_start': McpToolAnnotations(openWorld: true),
+      'device_record_stop': McpToolAnnotations(openWorld: true),
+
       // Saved command snippets.
       'snippets_list': McpToolAnnotations.read,
       // Appends a row to the user's own library. Not idempotent: twice is two

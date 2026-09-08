@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:xterm2/xterm.dart';
 
+import '../../../app/theme/design_tokens.dart';
 import '../../../core/media/frame_sink.dart';
 import '../../../core/paths/app_support_directory.dart';
 import '../data/cast_frame_renderer.dart';
@@ -249,6 +251,32 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
     if (ref.mounted) state = state.copyWith(saved: saved, clearExport: true);
     return saved;
   }
+
+  /// Which resolution goes with which format.
+  ///
+  /// Here rather than in the dialog because the export dialog and the MCP tool
+  /// both need it, and two definitions would let an agent's MP4 come out a
+  /// different size from the user's.
+  ///
+  /// [theme] is the app's terminal colours when there is a widget to ask; the
+  /// default terminal theme otherwise, which is all an agent can honestly use.
+  static CastFrameStyle styleFor({
+    required RecordingFormat format,
+    required TerminalCast cast,
+    TerminalTheme? theme,
+    String fontFamily = kMonoFamily,
+  }) => switch (format) {
+    RecordingFormat.gif => CastFrameStyle.gif(
+      theme: theme ?? TerminalThemes.defaultTheme,
+      fontFamily: fontFamily,
+      title: cast.title,
+    ),
+    RecordingFormat.mp4 || RecordingFormat.pngSequence => CastFrameStyle.fullHd(
+      theme: theme ?? TerminalThemes.defaultTheme,
+      fontFamily: fontFamily,
+      title: cast.title,
+    ),
+  };
 
   /// Renders [saved] into a video file, one frame at a time.
   Future<void> render(
