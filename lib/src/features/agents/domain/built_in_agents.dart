@@ -1,6 +1,7 @@
 import '../../settings/domain/permission_risk.dart';
 import 'agent_descriptor.dart';
 import 'agent_kind.dart';
+import 'agent_plan.dart';
 import 'agent_permission_support.dart';
 import 'agent_status.dart';
 
@@ -668,6 +669,11 @@ const _claudeCode = AgentDescriptor(
         'Karmashala transcripts, 2026-09: Read tool calls naming .png/.jpg '
         'files, drawn by TranscriptImagePreview from that path',
   ),
+  // The whole declaration, with the counts it was read off, is at
+  // [kClaudeCodeTodoWrite]. It is not inlined here because the transcript
+  // reader looks the same value up by tool name, and two copies of a schema is
+  // how one of them goes stale.
+  plan: kClaudeCodeTodoWrite,
 );
 
 const _codex = AgentDescriptor(
@@ -1248,6 +1254,7 @@ const _codex = AgentDescriptor(
         'Codex only takes a picture on the command line that starts it '
         '(--image), so a running session cannot be handed one.',
   ),
+  plan: kCodexUpdatePlan,
 );
 
 const _antigravity = AgentDescriptor(
@@ -1829,5 +1836,22 @@ const _antigravity = AgentDescriptor(
   // as a yes.
   attachments: AgentAttachmentSupport.none(
     refusal: 'Nobody here has seen Antigravity open a file named in a prompt.',
+  ),
+  // **Measured, not assumed absent.** Its store was read on 2026-09-08: 21
+  // conversations, 4,451 steps, and the whole tool vocabulary its own calls
+  // name is view_file, run_command, grep_search, replace_file_content,
+  // manage_task, find_by_name, schedule, search_web, list_dir, call_mcp_tool,
+  // write_to_file — no plan or todo tool anywhere in it. `manage_task` and the
+  // `steps.task_details` column beside it look like the thing and are not: both
+  // describe a **background shell command** (a task id, a log file URL and the
+  // command line), which is what `schedule` starts. Message content is
+  // protobuf in an unpublished schema, so even a plan written in prose would
+  // be unreadable — the same finding `agentSupportsChatView` already refuses
+  // this agent for.
+  plan: AgentPlanSupport.none(
+    refusal:
+        'Antigravity keeps no plan we can read: its CLI has no todo or plan '
+        'tool, and its conversation store is protobuf in an unpublished '
+        'schema.',
   ),
 );

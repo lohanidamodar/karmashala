@@ -1,3 +1,5 @@
+import '../../agents/domain/agent_plan.dart';
+
 /// What one tool call in a transcript is actually *about*.
 ///
 /// The transcript used to reduce every call to its tool name, which is why the
@@ -17,6 +19,7 @@ class ToolActivity {
     this.output,
     this.outputTruncated = false,
     this.isError = false,
+    this.plan,
   });
 
   /// The tool's own name: `Bash`, `Read`, `Edit`, `mcp__…`.
@@ -44,6 +47,17 @@ class ToolActivity {
   /// Whether the agent was told the call failed (`tool_result.is_error`).
   final bool isError;
 
+  /// **The plan this call published**, for the one tool per CLI that publishes
+  /// one. Null for every other call, which is nearly all of them.
+  ///
+  /// It rides here rather than in a second reader because the plan lives in a
+  /// tool call's *input*, which the transcript parse already has decoded in its
+  /// hand — so the panel that draws it adds no read, no parse and no poll (the
+  /// property `sessionOutstandingCallsProvider` relies on for the same reason).
+  /// The alternative was a second pass over the same file, and the owner's
+  /// largest transcript is 43.8 MB.
+  final AgentPlan? plan;
+
   /// The one-line form: what Copy puts on the clipboard, and what the remote
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
@@ -63,6 +77,7 @@ class ToolActivity {
     output: output,
     outputTruncated: outputTruncated,
     isError: isError,
+    plan: plan,
   );
 }
 
@@ -134,14 +149,24 @@ MapEntry<String, String>? toolSubjectEntryFor(Object? input) {
 const Set<String> kToolFileKeys = {'file_path', 'notebook_path', 'path'};
 
 /// Builds the activity for a `tool_use`-shaped call.
+///
+/// A plan tool's input carries none of [kToolSubjectKeys], so `TodoWrite` used
+/// to render as the bare word `TodoWrite` — the very "the command is printed
+/// twice" complaint this class was written to fix. Its own progress line is the
+/// honest subject, and it comes out of the same decode.
 ToolActivity toolActivityFor(String name, Object? input) {
+  final plan = agentPlanForToolCall(name, input);
   final entry = toolSubjectEntryFor(input);
-  final subject = entry?.value;
-  final isFile = entry != null && kToolFileKeys.contains(entry.key);
+  final subject = plan?.headline ?? entry?.value;
+  final isFile =
+      plan == null && entry != null && kToolFileKeys.contains(entry.key);
   return ToolActivity(
     name: name,
     subject: subject,
-    imagePath: isFile && looksLikeImagePath(subject!) ? subject : null,
+    imagePath: isFile && looksLikeImagePath(entry.value)
+        ? entry.value
+        : null,
+    plan: plan,
   );
 }
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../agents/domain/agent_ids.dart';
+import '../../agents/domain/agent_plan.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../../sessions/domain/tool_activity.dart';
 import 'subagent_transcript.dart';
@@ -427,9 +428,15 @@ void _parseCodexLine(
     case 'custom_tool_call':
       final name = payload['name'];
       if (name is! String) return;
+      // `arguments` is a JSON *string* for Codex, which is why the plan reader
+      // takes either — see [AgentPlanSupport.planIn]. Its headline is a better
+      // subject than the fallback below, which for `update_plan` was the whole
+      // argument blob on one line.
+      final plan = agentPlanForToolCall(name, payload['arguments']);
       final activity = ToolActivity(
         name: name,
-        subject: _codexSubject(payload),
+        subject: plan?.headline ?? _codexSubject(payload),
+        plan: plan,
       );
       final callId = payload['call_id'];
       if (callId is String) pending[callId] = out.length;
