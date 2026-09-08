@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/paths/path_probe.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_path_repair.dart';
+import '../../agents/domain/agent_version_reading.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import 'agent_label.dart';
@@ -30,6 +32,14 @@ import 'settings_section.dart';
 /// * **cannot be reached** — the file is somewhere the OS will not let this
 ///   app go. Installing it again will not help; a path that avoids the link
 ///   will.
+///
+/// **The version beside each path is a reading too, and it shows its age.** It
+/// used to render as a bare number, written by the workspace's first scan and
+/// never re-read: the app said Claude Code 2.1.252 while the binary answered
+/// 2.1.263, and nothing here could tell those apart. A refresh rate cannot fix
+/// that — the reader has no way to know which reading they are looking at — so
+/// the number carries when it was taken and says outright when it is old
+/// enough to have been overtaken. See `describeVersionReading`.
 class AgentPathSection extends ConsumerWidget {
   const AgentPathSection({super.key});
 
@@ -56,7 +66,7 @@ class AgentPathSection extends ConsumerWidget {
                 // and a measurement with no timestamp invites more trust than
                 // it has earned.
                 ? '${repair.summary} Checked '
-                      '${describeAge(DateTime.now().toUtc().difference(repair.checkedAt!))}.'
+                      '${describeAge(ref.watch(clockProvider).nowUtc().difference(repair.checkedAt!))}.'
                 // And never a claim of health that was not observed at all.
                 : 'These paths have not been checked yet this run.',
             style: theme.textTheme.bodySmall,
@@ -154,6 +164,12 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
       environmentLabelForIdProvider(install.environmentId),
     );
     final status = _status(widget.reading);
+    // A version is entirely a measurement, and these CLIs self-update. The
+    // number never appears here without the age of the reading behind it.
+    final version = describeVersionReading(
+      install,
+      now: ref.watch(clockProvider).nowUtc(),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(top: Insets.sm),
@@ -165,7 +181,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
               Expanded(
                 child: Text(
                   '${agentLabel(install.agentId)} · $environment'
-                  '${install.version == null ? '' : ' · ${install.version}'}',
+                  '${version == null ? '' : ' · $version'}',
                   style: theme.textTheme.bodyMedium,
                   overflow: TextOverflow.ellipsis,
                 ),
