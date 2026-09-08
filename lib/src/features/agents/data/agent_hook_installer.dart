@@ -834,6 +834,14 @@ class AgentHookInstaller {
   /// the entry names this script, the script asks the file, and the file is the
   /// only thing a launch rewrites.
   ///
+  /// **And both branches stop reading at [kAgentHookPayloadLimitBytes]**, which
+  /// is the receiver's own cap. `head -c` replaces the `cat` in the spool
+  /// branch — the same one fork, so the bound is free there — and stands in
+  /// front of `curl` in the HTTP branch, which is one more. The payload is the
+  /// agent's event and a `PostToolUse` can carry a whole file's contents, so
+  /// this is what stops a runaway one being read into memory, written to a
+  /// spool file and posted, only to be refused at the far end.
+  ///
   /// The spool branch is three syscalls and two forks and cannot fail slowly:
   /// measured at **3.6 ms per hook** inside the owner's distribution, against
   /// 2008 ms for the `curl` branch on the same machine, where the probe times
@@ -875,7 +883,8 @@ class AgentHookInstaller {
       '    n=\$((n+1))\n'
       '    [ "\$n" -lt 64 ] || exit 0\n'
       '  done\n'
-      "  { printf 'agent=%s\\nevent=%s\\n\\n' \"\$agent\" \"\$event\"; cat; } "
+      "  { printf 'agent=%s\\nevent=%s\\n\\n' \"\$agent\" \"\$event\"; "
+      'head -c $kAgentHookPayloadLimitBytes; } '
       '> "\$dir/\$\$-\$n.part" 2>/dev/null || exit 0\n'
       '  mv -f "\$dir/\$\$-\$n.part" "\$dir/\$\$-\$n.json" 2>/dev/null\n'
       '  exit 0\n'
@@ -884,7 +893,8 @@ class AgentHookInstaller {
       "code=\$(curl -s -o /dev/null -m 2 -w '%{http_code}' \"\$url\" "
       '2>/dev/null)\n'
       '[ "\$code" = "401" ] || exit 0\n'
-      'curl -s -o /dev/null -m 2 -X POST \\\n'
+      'head -c $kAgentHookPayloadLimitBytes '
+      '| curl -s -o /dev/null -m 2 -X POST \\\n'
       '  -H "Authorization: Bearer \$token" \\\n'
       '  --data-binary @- \\\n'
       '  "\$url\$event" 2>/dev/null\n'
@@ -905,6 +915,29 @@ class AgentHookInstaller {
   /// the one cost this design cannot afford. The file goes to `%TEMP%` and is
   /// deleted immediately; a `%RANDOM%` in its name keeps two hooks firing at
   /// once out of each other's way.
+  ///
+  /// ### The payload bound, and why it is spelled so differently here
+  ///
+  /// `cmd` has no `head -c`. It has no byte-exact way to copy a stream at all:
+  /// `more` re-encodes and expands tabs (measured — 118 bytes of JSON came back
+  /// as 61 of mojibake), `findstr` and `sort` are line-oriented, and `copy con`
+  /// does not read a redirected handle. So the bound is applied by **measuring
+  /// rather than cutting**: `curl -T -` spills stdin into `%TEMP%` byte for
+  /// byte, `%%~zI` reads its size, and the POST happens only if it is within
+  /// [kAgentHookPayloadLimitBytes]. A payload over the bound is dropped, which
+  /// is what the receiver would do with it anyway — and a truncated JSON body
+  /// is not a payload either, so the two ends agree on the outcome.
+  ///
+  /// It costs one more `curl` on the path that actually posts, and none on the
+  /// path that does not: the spill sits *after* the 401 probe, so a dead port
+  /// still costs exactly one process.
+  ///
+  /// `enabledelayedexpansion` is for one line — `%20` cannot be written into a
+  /// `%VAR:from=to%` replacement, because `cmd` reads `%2` as an argument — and
+  /// a space in `%TEMP%` (`C:\Users\John Doe\…`) is otherwise enough to make
+  /// `curl` refuse the URL. It is safe here because every value this script
+  /// holds is one we generated: a base64url token and a URL whose query
+  /// components are encoded, neither of which can contain a `!`.
   static const String _windowsScript =
       '@echo off\r\n'
       'rem Karmashala agent status callback. Generated; edits will not '
@@ -915,7 +948,7 @@ class AgentHookInstaller {
       'fires.\r\n'
       'rem Nothing is sent until an unauthenticated probe proves the port\r\n'
       'rem still belongs to Karmashala.\r\n'
-      'setlocal\r\n'
+      'setlocal enabledelayedexpansion\r\n'
       'set "KS_ENDPOINT=%~dp0$_endpointFileName"\r\n'
       'if not exist "%KS_ENDPOINT%" exit /b 0\r\n'
       'set "KS_URL="\r\n'
@@ -934,9 +967,17 @@ class AgentHookInstaller {
       'set /p KS_CODE=<"%KS_PROBE%"\r\n'
       'del "%KS_PROBE%" >NUL 2>NUL\r\n'
       'if not "%KS_CODE%"=="401" exit /b 0\r\n'
+      'set "KS_BODY=%TEMP%\\$_scriptBaseName.%RANDOM%.body"\r\n'
+      'set "KS_BODYURL=!KS_BODY:\\=/!"\r\n'
+      'set "KS_BODYURL=!KS_BODYURL: =%%20!"\r\n'
+      'curl -s -T - "file:///!KS_BODYURL!" 2>NUL\r\n'
+      'set "KS_SIZE="\r\n'
+      'for %%I in ("%KS_BODY%") do set "KS_SIZE=%%~zI"\r\n'
+      'if defined KS_SIZE if !KS_SIZE! LEQ $kAgentHookPayloadLimitBytes '
       'curl -s -o NUL -m 2 -X POST '
       '-H "Authorization: Bearer %KS_TOKEN%" '
-      '--data-binary @- "%KS_URL%%~1" 2>NUL\r\n'
+      '--data-binary @"%KS_BODY%" "%KS_URL%%~1" 2>NUL\r\n'
+      'del "%KS_BODY%" >NUL 2>NUL\r\n'
       'exit /b 0\r\n';
 
   /// Deletes every generated file under [storeHome] — both spellings of the

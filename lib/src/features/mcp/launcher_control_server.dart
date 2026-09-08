@@ -397,7 +397,9 @@ class LauncherControlServer implements SessionMcp {
   /// [controlServerStatusProvider] so the settings screen can say so.
   ControlServerStatus get status => _status;
 
-  static const _maxRequestBytes = 1024 * 1024;
+  /// Shared with the hook scripts that produce the payloads, so the two ends
+  /// of the wire cannot come to disagree about what is too big.
+  static const _maxRequestBytes = kAgentHookPayloadLimitBytes;
 
   /// What `serverInfo` reports. Not the app's version: this is the version of
   /// the *tool surface*, and it moves when the tools do.
