@@ -76,6 +76,10 @@ dependencies:
       url: https://github.com/lohanidamodar/xterm2.git
       ref: 5ea40a7849cab079168bcce7695348b6237f95f1
   yaml: ^3.1.4
+  # Encodes a terminal recording's frames — animated GIF and PNG — and packs
+  # the tray .ico files in tool/icon/write_ico.dart. Pure Dart, so the encode
+  # runs on a worker isolate rather than the one drawing the app.
+  image: ^4.8.0
 
 # Dart-only stand-ins for the two Windows plugin implementations, whose C++
 # needs ATL and /await — both gone from the VS 2026 toolchain (MSVC 14.51).
@@ -94,8 +98,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  # tool/icon/write_ico.dart packs the tray .ico files.
-  image: ^4.8.0
 
 # App icons: `flutter test tool/icon/render_icons.dart` draws the mark and its
 # Android layers, then `dart run flutter_launcher_icons` fans them out to every
