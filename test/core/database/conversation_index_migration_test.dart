@@ -100,7 +100,7 @@ void main() {
     expect(tables.where((t) => t == 'conversation_index_state'), hasLength(1));
   });
 
-  test('a conversation with no watermark is a real state, not a missing one', () {
+  test('a conversation with no watermark is a real state, not a gap', () {
     final db = _migratedTo(41);
     addTearDown(db.close);
     // A transcript read from a path we could not stat is indexed all the same;
