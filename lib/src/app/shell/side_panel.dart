@@ -12,6 +12,7 @@ import 'side_panel_context.dart';
 import 'side_panel_state.dart';
 
 import '../../features/browser/presentation/browser_pane.dart';
+import '../../features/flutter_apps/presentation/flutter_app_pane.dart';
 import '../../features/detail/presentation/repository_info_view.dart';
 import '../../features/detail/presentation/verification_view.dart';
 import '../../features/devices/presentation/device_pane.dart';
@@ -53,6 +54,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.device => AppIcons.deviceMobile,
     SidePanelSurface.verification => AppIcons.checkCircle,
     SidePanelSurface.browser => AppIcons.globe,
+    SidePanelSurface.flutterApp => AppIcons.play,
     SidePanelSurface.media => AppIcons.image,
     SidePanelSurface.repository => AppIcons.bookBookmark,
     SidePanelSurface.todos => AppIcons.listChecks,
@@ -311,6 +313,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.files => const FileExplorerView(),
     SidePanelSurface.device => const DevicePane(),
     SidePanelSurface.browser => const BrowserPane(),
+    SidePanelSurface.flutterApp => const FlutterAppPane(),
     SidePanelSurface.media => const SessionMediaPanel(),
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
