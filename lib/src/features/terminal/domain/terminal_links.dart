@@ -20,6 +20,8 @@ library;
 
 import 'package:xterm2/xterm.dart';
 
+import '../../../core/util/text_links.dart';
+
 import 'terminal_search.dart';
 
 /// What a link points at.
@@ -279,7 +281,7 @@ TerminalLink? osc8LinkAt(
 }) {
   final id = terminal.hyperlinkIdAt(CellOffset(column, row));
   if (id == 0) return null;
-  final url = _httpUrl(terminal.hyperlinkAt(CellOffset(column, row)) ?? '');
+  final url = httpUrlOf(terminal.hyperlinkAt(CellOffset(column, row)) ?? '');
   if (url == null) return null;
 
   final lines = terminal.buffer.lines;
@@ -326,17 +328,6 @@ TerminalLink? osc8LinkAt(
   );
 }
 
-/// What a URL is allowed to be made of.
-///
-/// Everything up to whitespace or a delimiter that cannot appear in one:
-/// angle brackets and quotes bracket URLs in prose, a backslash is a Windows
-/// path separator rather than a URL one, and the C0/C1 controls are what an
-/// unparsed escape sequence would leave behind.
-final RegExp _urlPattern = RegExp(
-  r'(?:https?://|file://|www\.)[^\s<>"' "'" r'`\\]+',
-  caseSensitive: false,
-);
-
 /// What a path candidate is allowed to be made of: everything up to whitespace
 /// or a character that ends a path in practice.
 ///
@@ -345,12 +336,6 @@ final RegExp _urlPattern = RegExp(
 /// break so `--out=build/app` offers the path. `,`, `;`, `|`, `*` and `?` are
 /// separators in lists, shell pipelines and globs, none of which is one path.
 final RegExp _tokenPattern = RegExp('[^\\s\'"`<>|*?,;=(){}\\[\\]]+');
-
-/// Characters a URL may not end with, because prose puts them there.
-const String _trailingPunctuation = '.,;:!?*_~';
-
-/// Closing brackets that only belong to the URL if it opened them.
-const Map<String, String> _closers = {')': '(', ']': '[', '}': '{'};
 
 /// A drive-letter path: `C:\src`, `c:/src`.
 final RegExp _windowsAbsolute = RegExp(r'^[A-Za-z]:[\\/]');
@@ -375,9 +360,9 @@ List<TerminalLink> linksIn(TerminalLinkLine line) {
   // contains a `/`, so a path scan would otherwise carve a second link out of
   // the middle of one.
   final urlSpans = <(int, int)>[];
-  for (final match in _urlPattern.allMatches(line.text)) {
+  for (final match in urlPattern.allMatches(line.text)) {
     urlSpans.add((match.start, match.end));
-    final trimmed = _trimTrailing(match[0]!);
+    final trimmed = trimTrailingPunctuation(match[0]!);
     if (trimmed.isEmpty) continue;
     // A `file://` URL is a *path*, and is resolved as one — see
     // [_fileUrlPath]. The span is still claimed either way, so the path scan
@@ -398,7 +383,7 @@ List<TerminalLink> linksIn(TerminalLinkLine line) {
   for (final match in _tokenPattern.allMatches(line.text)) {
     if (urlSpans.any((s) => match.start < s.$2 && match.end > s.$1)) continue;
     final raw = match[0]!;
-    final trimmed = _trimTrailing(raw);
+    final trimmed = trimTrailingPunctuation(raw);
     if (trimmed.isEmpty) continue;
     final target = _pathTargetOf(trimmed);
     if (target == null) continue;
@@ -481,39 +466,13 @@ bool _looksLikePath(String text) {
 /// ending in a full stop, and `edit lib/main.dart.` is the same sentence about
 /// a file. A closing bracket is kept only when the text opened it, so
 /// `https://en.wikipedia.org/wiki/Foo_(bar)` survives.
-String _trimTrailing(String raw) {
-  var end = raw.length;
-  while (end > 0) {
-    final char = raw[end - 1];
-    if (_trailingPunctuation.contains(char)) {
-      end--;
-      continue;
-    }
-    final opener = _closers[char];
-    if (opener != null &&
-        _countOf(raw, opener, end) < _countOf(raw, char, end)) {
-      end--;
-      continue;
-    }
-    break;
-  }
-  return raw.substring(0, end);
-}
-
-int _countOf(String text, String char, int end) {
-  var count = 0;
-  for (var i = 0; i < end; i++) {
-    if (text[i] == char) count++;
-  }
-  return count;
-}
 
 /// The absolute http(s) URL scanned [text] means, or null when it is not one.
 ///
 /// A bare `www.…` is what the scan may hand over, and it means https. An
 /// `OSC 8` URI is not run through this: a program writing the sequence wrote a
 /// scheme or wrote nothing usable.
-String? _resolveUrl(String text) => _httpUrl(
+String? _resolveUrl(String text) => httpUrlOf(
   text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
 );
 
@@ -563,7 +522,7 @@ final RegExp _driveRooted = RegExp(r'^/[A-Za-z]:');
 /// not become a clickable nothing. A *dotted* host is not required, because
 /// `http://localhost:3000` is what half the dev servers an agent starts print,
 /// and so is a bare IP.
-String? _httpUrl(String text) {
+String? httpUrlOf(String text) {
   final uri = Uri.tryParse(text);
   if (uri == null) return null;
   if (uri.scheme != 'http' && uri.scheme != 'https') return null;

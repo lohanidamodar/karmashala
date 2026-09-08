@@ -15,6 +15,7 @@ import '../application/notes_providers.dart';
 import '../domain/note.dart';
 import 'note_edit_dialog.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../../core/widgets/linkable_text.dart';
 
 /// The Notes surface: everything the user kept instead of acting on it.
 ///
@@ -228,7 +229,11 @@ class _NoteCard extends ConsumerWidget {
                   // Clipped, never rewritten: a long note shows its opening and says
                   // nothing about the rest. The whole text is one tap away in the
                   // editor, and is what gets sent.
-                  Text(
+                  // A URL in the body is clickable; anything else still opens
+                  // the editor, which is what a tap on this card has always
+                  // meant. The clip is passed to the hit test too — see
+                  // [LinkableText].
+                  LinkableText(
                     note.body,
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,

@@ -16,6 +16,7 @@ import '../domain/project_scope.dart';
 import '../domain/todo.dart';
 import 'project_menu.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../../core/widgets/linkable_text.dart';
 
 /// The resting height of either text field, in lines. Both start at one, which
 /// is how the panel has always looked when there is nothing in it.
@@ -565,16 +566,16 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                       // A tap edits. There is nowhere else for a tap on a todo
                       // to go, and a one-line thing whose typo you cannot fix is
                       // a thing you delete and retype.
-                      InkWell(
-                        onTap: _startEditing,
-                        child: Text(
-                          todo.body,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: todo.isDone ? scheme.onSurfaceVariant : null,
-                            decoration: todo.isDone
-                                ? TextDecoration.lineThrough
-                                : null,
-                          ),
+                      // A URL opens; a tap anywhere else still edits, which is
+                      // the only thing a tap on a todo has ever meant.
+                      LinkableText(
+                        todo.body,
+                        onTapText: _startEditing,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: todo.isDone ? scheme.onSurfaceVariant : null,
+                          decoration: todo.isDone
+                              ? TextDecoration.lineThrough
+                              : null,
                         ),
                       ),
                     if (project != null && widget.showProject)
