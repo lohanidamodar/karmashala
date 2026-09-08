@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../sessions/application/session_outcome_writer.dart';
 import '../domain/agent_status.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_status_providers.dart';
@@ -89,6 +90,19 @@ AgentStatusReport applyAgentHookCallback(
     );
   } on Object catch (error) {
     logger?.warning('Applying a hook report to the registry failed: $error');
+  }
+  // The durable half, and the only thing in the app that writes an *ending*
+  // onto a session row. Almost every callback carries none — see
+  // `SessionOutcomeWriter` — so this is a null check on the common path.
+  try {
+    container
+        .read(sessionOutcomeWriterProvider)
+        .record(
+          agentSessionId: report.sessionId,
+          ending: report.ending,
+        );
+  } on Object catch (error) {
+    logger?.warning('Recording a session ending from a hook failed: $error');
   }
   return report;
 }

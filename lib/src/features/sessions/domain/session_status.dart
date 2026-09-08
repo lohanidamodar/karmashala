@@ -59,4 +59,27 @@ enum SessionStatus {
   /// neither is [unknown], which is what the contradiction produces.
   bool get claimsLive =>
       this == SessionStatus.running || this == SessionStatus.idle;
+
+  /// Whether this row has already recorded how the session ended.
+  ///
+  /// The guard `SessionOutcomeWriter` turns on, so a hook that arrives after
+  /// the user stopped a session cannot replace their `cancelled` with its own
+  /// `completed`. [unknown] is deliberately not one: it is the row admitting it
+  /// lost sight of the session, and a spool payload drained afterwards that
+  /// finally says how it ended is an improvement on it, not a contradiction.
+  bool get isEnded =>
+      this == SessionStatus.completed ||
+      this == SessionStatus.failed ||
+      this == SessionStatus.cancelled;
+
+  /// **The word to show a reader**, given whether anything can see the session
+  /// running right now.
+  ///
+  /// A row claiming to be live with no live pane of ours behind it is the whole
+  /// reason this exists. `running` there is a confident false statement — §19's
+  /// rule — and the Explorer drew it for every session launched into somebody
+  /// else's terminal, for as long as the row existed. The honest sentence is
+  /// what is actually true: the agent never told us it stopped.
+  String labelWhen({required bool hostedLive}) =>
+      claimsLive && !hostedLive ? 'no ending was reported' : name;
 }

@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock.dart';
@@ -241,8 +243,14 @@ void main() {
                 stdout: '/usr/local/bin/flutter\nFlutter 3.38.5\n',
                 stderr: '',
               );
+      // A database, because a reading now consults the one path that *is*
+      // stored — `Settings.flutterSdkPaths`, which is where a person names an
+      // SDK PATH does not mention. Empty here, so every test below measures
+      // exactly what it did before.
+      final db = AppDatabase.memory();
       container = ProviderContainer(
         overrides: [
+          databaseProvider.overrideWithValue(db),
           clockProvider.overrideWithValue(clock),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
@@ -250,6 +258,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
+      addTearDown(db.close);
     });
 
     FlutterSdkReadings readings() =>
