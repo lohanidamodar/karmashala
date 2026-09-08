@@ -28,6 +28,7 @@ import 'device_clipboard_controls.dart';
 import 'device_files_dialog.dart';
 import 'device_section_header.dart';
 import 'device_controls.dart';
+import 'device_app_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_logcat_section.dart';
 import 'device_recording_banner.dart';
@@ -990,6 +991,9 @@ class _DevicePaneState extends ConsumerState<DevicePane>
             clipboard: _clipboard,
             recordable: _session != null,
           ),
+          // Install / launch / force-stop, through the same claim the tools
+          // take — so a device an agent is driving refuses these by name.
+          DeviceAppControls(device: paneDevice),
           // [paneDevice], not [live]: reading a log is not driving, so it
           // follows the selection and works with no live view up at all.
           DeviceLogcatSection(device: paneDevice),
