@@ -1,0 +1,10 @@
+# The host package's own tags. Declaring one here is what stops `dart test`
+# warning about it; it changes no default behaviour.
+tags:
+  # Cross-compiles the host for linux-x64 and runs it inside a real WSL
+  # distribution. Excluded from the ordinary gate exactly as the app's
+  # live-wsl tag is (CLAUDE.md §18) — the pty layer is FFI to a libc that
+  # does not exist on the machine running the gate, so no stand-in can
+  # answer for it. Run it deliberately:
+  #   dart test --tags=live-wsl
+  live-wsl:

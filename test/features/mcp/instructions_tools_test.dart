@@ -170,6 +170,46 @@ void main() {
       expect(schema['description'], contains('OSC 133'));
     });
 
+    /// **The pane/agent rule, stated on both surfaces.**
+    ///
+    /// A pane and an agent are different things, and the two families are
+    /// split along exactly that line — so a reader who arrives at either one
+    /// must find the rule there rather than having to have read the other.
+    test('both guides state that a pane and an agent are not the same', () {
+      // Collapsed, because the guides are prose wrapped for reading and where
+      // a sentence happens to break is not what is being pinned.
+      String body(String topic) => kMcpGuides
+          .firstWhere((g) => g.topic == topic)
+          .render()
+          .replaceAll(RegExp(r'\s+'), ' ');
+
+      for (final topic in ['sessions', 'terminal']) {
+        final text = body(topic);
+        expect(
+          text,
+          contains(
+            'A pane exists whether or not it contains an agent; an agent is '
+            'the recognized process currently running inside a pane.',
+          ),
+          reason: 'the $topic guide does not state the rule',
+        );
+        // And each says which half it owns, so the rule is actionable rather
+        // than a definition sitting on its own.
+        expect(text, contains('terminal_'), reason: '$topic names no terminal half');
+        expect(text, contains('session_'), reason: '$topic names no session half');
+      }
+    });
+
+    test('the sessions guide teaches the two rules a wait turns on', () {
+      final sessions =
+          kMcpGuides.firstWhere((g) => g.topic == 'sessions').render();
+      // done vs idle: "finished something" must not read like "never started".
+      expect(sessions, contains('never started'));
+      // And a timeout is not proof that nothing was sent.
+      expect(sessions, contains('does not prove that no input was sent'));
+      expect(sessions, contains('session_wait'));
+    });
+
     test('it handles only itself', () {
       expect(InstructionsTools.handles('instructions'), isTrue);
       expect(InstructionsTools.handles('instructions_list'), isFalse);

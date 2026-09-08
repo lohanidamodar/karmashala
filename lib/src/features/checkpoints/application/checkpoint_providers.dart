@@ -35,18 +35,6 @@ EnvironmentPath? checkpointTargetFor(Ref ref, String sessionId) {
   return ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
 }
 
-/// The session whose checkpoints the list view is showing.
-class SelectedCheckpointSessionController extends Notifier<String?> {
-  @override
-  String? build() => null;
-  void select(String? id) => state = id;
-}
-
-final selectedCheckpointSessionProvider =
-    NotifierProvider<SelectedCheckpointSessionController, String?>(
-      SelectedCheckpointSessionController.new,
-    );
-
 /// Bumped whenever a checkpoint is written, so views refresh without polling.
 class CheckpointsRevisionController extends Notifier<int> {
   @override
@@ -59,19 +47,18 @@ final checkpointsRevisionProvider =
       CheckpointsRevisionController.new,
     );
 
-/// Checkpoints for the selected session, newest first.
-final sessionCheckpointsProvider = Provider.autoDispose<List<Checkpoint>>((
-  ref,
-) {
-  ref.watch(checkpointsRevisionProvider);
-  final sessionId = ref.watch(selectedCheckpointSessionProvider);
-  final dao = ref.watch(checkpointDaoProvider);
-  if (sessionId == null) return dao.recent(limit: 50);
-  return dao.forSession(sessionId).reversed.toList();
-});
-
-/// Sessions that have checkpoints, most recently active first.
-final checkpointedSessionsProvider = Provider.autoDispose<List<String>>((ref) {
-  ref.watch(checkpointsRevisionProvider);
-  return ref.watch(checkpointDaoProvider).sessionsWithCheckpoints();
-});
+/// Checkpoints for [sessionId], newest first.
+///
+/// `autoDispose`, and read only by the panel: a closed panel holds no
+/// subscription, and an open one re-reads when the revision moves — never on a
+/// tick. A checkpoint set changes exactly when one is written, and that write
+/// bumps [checkpointsRevisionProvider].
+final sessionCheckpointsProvider = Provider.autoDispose
+    .family<List<Checkpoint>, String>((ref, sessionId) {
+      ref.watch(checkpointsRevisionProvider);
+      return ref
+          .watch(checkpointDaoProvider)
+          .forSession(sessionId)
+          .reversed
+          .toList();
+    });

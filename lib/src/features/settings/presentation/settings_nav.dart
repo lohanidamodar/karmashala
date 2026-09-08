@@ -61,6 +61,9 @@ enum SettingsSectionId {
     'resume',
     'mcp',
     'bridge',
+    'agent tools',
+    'tool list',
+    'browser consent',
   ]),
   agents('Agents', AppIcons.robot, [
     'default agent',
