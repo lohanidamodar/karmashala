@@ -27,6 +27,24 @@
 /// Nothing here is enforcement. What actually keeps a destructive call from
 /// happening by accident is that it is its own tool with its own required
 /// arguments, never a flag on a read.
+///
+/// ## What is never served here at all
+///
+/// **No automation tool.** Scheduled automations have no `automation_*` tool
+/// and never will: create, run, pause and delete would let an agent schedule
+/// an agent, and the invariant the whole feature is built on is that *nothing
+/// starts an agent the user did not authorise*. An automation is that
+/// authorisation, given in advance, **by a person, in the UI, at arming** — a
+/// tool that could arm one would be the same act with the person taken out of
+/// it. `automations_page.dart` is the only place it happens, and
+/// `no_automation_tools_test.dart` fails if any served name so much as begins
+/// with `automation`.
+///
+/// This is a rule about the surface, not a fifth annotation. Reading an
+/// automation's record is not carved out either — a read tool would be the
+/// obvious next step and it is not one taken here, because the argument above
+/// is about the family, and the day a read is wanted it should be argued for
+/// on its own.
 library;
 
 /// The behaviour of one tool, as `tools/list` reports it.
