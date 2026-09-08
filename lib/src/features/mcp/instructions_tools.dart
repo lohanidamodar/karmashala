@@ -445,6 +445,51 @@ All of it is open-world. Nothing here is confined to this machine.
 ''',
   ),
   McpGuide(
+    topic: 'flutter-app',
+    summary:
+        'What a successful flutter_reload proves, and why an app id dies with '
+        'the run that printed it.',
+    prefixes: <String>['flutter_'],
+    body: '''
+**A successful `flutter_reload` means the reload reached the VM. Nothing else.**
+
+The recompile comes from the `flutter run` that owns the app, and this tool
+reports that it was accepted. It says nothing about the app rebuilding
+correctly: a widget that threw on the way back up reports itself on the
+framework's error stream, which is `flutter_logs`. Read that next, every time.
+A reload that "succeeded" over a screen full of red is the expensive mistake
+available here.
+
+`fullRestart` re-runs `main()` and the app loses the state it had, which is why
+`flutter_reload` is annotated destructive — there is no undo for a form
+half-filled or a screen navigated to, and a client deciding whether to confirm
+cannot see which argument you passed.
+
+**An app id lasts only as long as the `flutter run` that produced it.** An id
+from a finished run is refused rather than resolved to whatever is attached
+now: acting on a different app silently is worse than being told the id is
+gone. Omit `appId` when exactly one app is attached, and expect a refusal
+rather than a guess when two are.
+
+**`flutter_apps` keeps three answers apart that one list would flatten**: we
+have not looked, nothing is running, and an address nothing answers on.
+Karmashala does not start the app and will never rewrite a command you typed,
+so an empty list comes back with the flag to add — `--vmservice-out-file` — for
+the developer's next run. `flutter_attach` is the other way in, from the
+address `flutter run` already printed.
+
+**An empty `flutter_logs` tail means the app has said nothing since the
+attach**, not that it said nothing at all. Lines marked "before attach" were
+replayed out of the VM service buffer and are history rather than now.
+
+**`flutter_pick_widget` blocks on a person.** It asks the developer to tap the
+widget they mean and comes back with the file, line and column it was written
+at — reach for it when they say "this button" and you cannot tell which one. A
+build compiled without `--track-widget-creation` names the widget and cannot
+name a line, and says so instead of showing nothing.
+''',
+  ),
+  McpGuide(
     topic: 'records',
     summary:
         'Todos, notes, the inbox and the decision record: what is written, '

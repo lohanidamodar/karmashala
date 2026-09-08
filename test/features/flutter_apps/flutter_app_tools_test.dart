@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_tools.dart';
 import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
 
 import '../../support/fakes.dart';
 import 'fake_vm_service.dart';
@@ -54,11 +56,6 @@ void main() {
   }
 
   group('the tool surface', () {
-    // Not yet spread into `LauncherControlServer.toolSchemas`: that file and
-    // the annotation table beside it belong to another change in flight, so
-    // the group is complete and tested here and the four-line registration is
-    // deferred rather than raced. What this test can still prove is that the
-    // registration will be a clean addition.
     const names = <String>[
       'flutter_apps',
       'flutter_attach',
@@ -87,12 +84,60 @@ void main() {
       expect(FlutterAppTools.handles('device_tap'), isFalse);
     });
 
-    test('none of these names is already taken', () {
+    test('all five are served, and each says what it does', () {
       final served = <String>{
         for (final schema in LauncherControlServer.toolSchemas)
           schema['name'] as String,
       };
-      expect(served.intersection(names.toSet()), isEmpty);
+      expect(served.intersection(names.toSet()), names.toSet());
+      for (final name in names) {
+        expect(kMcpToolAnnotations[name], isNotNull, reason: name);
+      }
+      // A restart ends the app's state, and the annotation describes the worse
+      // case of the one tool that can do it.
+      expect(kMcpToolAnnotations['flutter_reload']!.destructive, isTrue);
+      expect(kMcpToolAnnotations['flutter_apps']!.readOnly, isTrue);
+    });
+
+    // The schemas being served proves the catalogue; only a call proves the
+    // dispatch arm. Over `/rpc`, so the name is resolved by the registry the
+    // bridge actually talks to rather than by `FlutterAppTools` directly — an
+    // unregistered arm answers "Unknown tool" here.
+    test('a name resolves through the real registry', () async {
+      final bridge = File(
+        '${temp.path}${Platform.pathSeparator}bridge.json',
+      ).path;
+      final server = LauncherControlServer(container);
+      await server.start(bridgeFilePath: bridge, useLocalSocket: false);
+      final client = HttpClient();
+      try {
+        final handshake =
+            jsonDecode(File(bridge).readAsStringSync())
+                as Map<String, Object?>;
+        final request = await client.post(
+          '127.0.0.1',
+          handshake['port']! as int,
+          '/rpc',
+        );
+        request.headers.set(
+          'authorization',
+          'Bearer ${handshake['token']! as String}',
+        );
+        request.write(
+          jsonEncode({'tool': 'flutter_apps', 'arguments': <String, Object?>{}}),
+        );
+        final reply =
+            jsonDecode(await utf8.decoder.bind(await request.close()).join())
+                as Map<String, Object?>;
+        expect(reply['ok'], isTrue, reason: 'RPC failed: ${reply['error']}');
+        expect(
+          (reply['result']! as Map)['howToMakeOneVisible'],
+          contains('--vmservice-out-file'),
+        );
+      } finally {
+        client.close(force: true);
+        await server.stop();
+      }
     });
   });
 

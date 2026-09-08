@@ -26,6 +26,7 @@ import '../fanout/application/comparison_providers.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
+import '../flutter_apps/application/flutter_app_tools.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
@@ -1251,6 +1252,14 @@ class LauncherControlServer implements SessionMcp {
             callerSessionId: callerSessionId,
           ),
         ).call(name, args);
+      // The Flutter app the developer is running right now, through the same
+      // registry the pane reads — so an agent asks the app it just edited
+      // whether the edit compiled, instead of asking over their shoulder.
+      case final String name when FlutterAppTools.handles(name):
+        return FlutterAppTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // Verification runs record what the browser and device tools above do,
       // so they share those same services rather than driving anything of their
       // own. The artifact root is resolved here because it is the first thing
@@ -1599,6 +1608,7 @@ class LauncherControlServer implements SessionMcp {
     ...decisionControlToolSchemas,
     ...reviewThreadToolSchemas,
     ...browserToolSchemas,
+    ...flutterAppToolSchemas,
     ...verificationToolSchemas,
   ];
 
