@@ -110,4 +110,47 @@ void main() {
     expect(groups.first.summary.sessions, 0);
     expect(groups.last.sessions, hasLength(1));
   });
+
+  group('environmentBadge', () {
+    test('uses project environmentBadge when present', () {
+      final groups = mergeProjectsAndSessions(
+        const [
+          RemoteWorkspaceProject(
+            projectId: 'p1',
+            name: 'WSL project',
+            environmentBadge: 'WSL · Ubuntu',
+          ),
+        ],
+        [summary('s1', project: 'WSL project', projectId: 'p1')],
+      );
+      expect(groups.single.environmentBadge, 'WSL · Ubuntu');
+    });
+
+    test('falls back to non-local environmentName from project', () {
+      final groups = mergeProjectsAndSessions(
+        const [
+          RemoteWorkspaceProject(
+            projectId: 'p1',
+            name: 'SSH project',
+            environmentName: 'SSH · build-box',
+          ),
+          RemoteWorkspaceProject(
+            projectId: 'p2',
+            name: 'Local project',
+            environmentName: 'Windows',
+          ),
+        ],
+        [],
+      );
+      expect(groups.first.environmentBadge, 'SSH · build-box');
+      expect(groups.last.environmentBadge, isNull);
+    });
+
+    test('falls back to session environmentBadge when project is missing', () {
+      final groups = groupByProject([
+        summary('s1', project: 'wsl-proj', environmentBadge: 'WSL · Debian'),
+      ]);
+      expect(groups.single.environmentBadge, 'WSL · Debian');
+    });
+  });
 }

@@ -39,6 +39,18 @@ class CompanionProjectGroup {
   /// The folder on the host, or '' when the host is too old to send one.
   String get path => project?.path ?? sessions.firstOrNull?.projectPath ?? '';
 
+  /// Which execution environment this project lives in, formatted for a badge
+  /// or tag (e.g. "WSL · Ubuntu", "SSH · build-box"). Null for local host.
+  String? get environmentBadge =>
+      project?.environmentBadge ??
+      (project?.environmentName != null &&
+              project!.environmentName != 'Windows' &&
+              project!.environmentName != 'macOS' &&
+              project!.environmentName != 'Linux'
+          ? project!.environmentName
+          : null) ??
+      sessions.firstOrNull?.environmentBadge;
+
   /// Sessions the host says are waiting on the user.
   int get attentionCount => sessions.where((s) => s.attention != null).length;
 

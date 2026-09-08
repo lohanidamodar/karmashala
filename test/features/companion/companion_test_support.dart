@@ -97,6 +97,7 @@ CompanionSessionSummary summary(
   bool folderMissing = false,
   bool imported = false,
   RemoteAttachmentSupport? attachments,
+  String? environmentBadge,
 }) => CompanionSessionSummary(
   id: id,
   title: title ?? 'Session $id',
@@ -115,4 +116,5 @@ CompanionSessionSummary summary(
   folderMissing: folderMissing,
   imported: imported,
   attachments: attachments,
+  environmentBadge: environmentBadge,
 );

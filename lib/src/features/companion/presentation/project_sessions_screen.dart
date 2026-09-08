@@ -60,6 +60,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
             ),
             subtitle: Text(
               [
+                ?group.environmentBadge,
                 ?group.summary.label,
                 ?group.summary.attentionLabel,
               ].join('  ·  '),
@@ -304,10 +305,30 @@ class _Facts extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: muted,
           ),
-          if (group.path.isNotEmpty || group.folderMissing) ...[
+          if (group.path.isNotEmpty || group.folderMissing || group.environmentBadge != null) ...[
             SizedBox(height: UiDensity.of(context).lineGap),
             Row(
               children: [
+                if (group.environmentBadge != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      group.environmentBadge!,
+                      style: muted?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 if (group.folderMissing) ...[
                   Icon(
                     AppIcons.warningCircle,
@@ -316,20 +337,21 @@ class _Facts extends StatelessWidget {
                   ),
                   const SizedBox(width: Insets.xs),
                 ],
-                Expanded(
-                  child: Text(
-                    group.folderMissing
-                        ? (group.path.isEmpty
-                              ? 'Folder not found'
-                              : 'Folder not found — ${group.path}')
-                        : group.path,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: group.folderMissing
-                        ? muted?.copyWith(color: scheme.error)
-                        : muted,
+                if (group.path.isNotEmpty || group.folderMissing)
+                  Expanded(
+                    child: Text(
+                      group.folderMissing
+                          ? (group.path.isEmpty
+                                ? 'Folder not found'
+                                : 'Folder not found — ${group.path}')
+                          : group.path,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: group.folderMissing
+                          ? muted?.copyWith(color: scheme.error)
+                          : muted,
+                    ),
                   ),
-                ),
               ],
             ),
           ],

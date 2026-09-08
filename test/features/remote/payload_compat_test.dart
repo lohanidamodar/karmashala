@@ -171,6 +171,7 @@ void main() {
       subPath: 'projects/app',
       worktree: r'C:\work\popupbits\wt-app',
       branch: 'feature/x',
+      environmentBadge: 'WSL · Ubuntu',
     );
 
     test('an old host says none of them, and nothing is invented', () {
@@ -186,6 +187,7 @@ void main() {
       expect(snapshot.subPath, isNull);
       expect(snapshot.worktree, isNull);
       expect(snapshot.branch, isNull);
+      expect(snapshot.environmentBadge, isNull);
       // Both booleans read false, which is "no claim", not "we checked".
       expect(snapshot.pinned, isFalse);
       expect(snapshot.folderMissing, isFalse);
@@ -196,6 +198,7 @@ void main() {
       expect(rich.toJson().containsKey('pinned'), isFalse);
       expect(rich.toJson().containsKey('folderMissing'), isFalse);
       expect(rich.toJson().containsKey('projectId'), isFalse);
+      expect(rich.toJson().containsKey('environmentBadge'), isFalse);
     });
 
     test('wrongly typed values degrade rather than throw', () {

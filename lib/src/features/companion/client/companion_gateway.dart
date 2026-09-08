@@ -210,6 +210,7 @@ class CompanionSessionSummary {
     this.archived = false,
     this.folderMissing = false,
     this.attachments,
+    this.environmentBadge,
   });
 
   final String id;
@@ -265,12 +266,17 @@ class CompanionSessionSummary {
   /// that was never asked, which offers nothing rather than a guess.
   final RemoteAttachmentSupport? attachments;
 
+  /// The badge shown on non-local project/session cards (e.g. "WSL · Ubuntu", "SSH · build-box").
+  /// Null for local-host sessions.
+  final String? environmentBadge;
+
   /// A narrow copy: only the facts that change while a session is listed.
   CompanionSessionSummary copyWith({
     CompanionSessionStatus? status,
     CompanionAttention? attention,
     DateTime? lastActivityAt,
     bool? archived,
+    String? environmentBadge,
   }) => CompanionSessionSummary(
     id: id,
     title: title,
@@ -290,6 +296,7 @@ class CompanionSessionSummary {
     archived: archived ?? this.archived,
     folderMissing: folderMissing,
     attachments: attachments,
+    environmentBadge: environmentBadge ?? this.environmentBadge,
   );
 
   /// What the list groups by: the repository's real identity when the host

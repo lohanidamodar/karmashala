@@ -321,6 +321,11 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         agentId,
         installation?.executable.environmentId,
       ),
+      environmentBadge: () {
+        final envDao = ref.read(executionEnvironmentDaoProvider);
+        final env = envDao.getById(owner?.environmentId ?? session.environmentId);
+        return env == null ? null : environmentBadge(env);
+      }(),
     );
   }
 
@@ -368,6 +373,12 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         'This is imported history, read-only here — continue it in its own '
         'terminal to attach anything.',
       ),
+      environmentBadge: () {
+        final envDao = ref.read(executionEnvironmentDaoProvider);
+        final envId = owner?.environmentId ?? repository?.path.environmentId;
+        final env = envId == null ? null : envDao.getById(envId);
+        return env == null ? null : environmentBadge(env);
+      }(),
     );
   }
 
@@ -566,6 +577,10 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       final environment = environments[environmentId];
       return environment == null ? null : environmentLabel(environment);
     }
+    String? badgeOf(String environmentId) {
+      final environment = environments[environmentId];
+      return environment == null ? null : environmentBadge(environment);
+    }
 
     final out = <RemoteWorkspaceProject>[];
     for (final project in ref.read(sortedProjectsProvider)) {
@@ -582,6 +597,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
           name: project.name,
           path: project.root.path,
           environmentName: nameOf(project.environmentId),
+          environmentBadge: badgeOf(project.environmentId),
           checkouts: [
             for (final repository in repositories)
               RemoteCheckoutOption(
@@ -658,15 +674,25 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       ref.read(pairedDevicesRevisionProvider.notifier).bump();
     },
     listWorkspace: listWorkspace,
-    listProjects: () => [
-      for (final project in ref.read(projectDaoProvider).getAll())
-        RemoteWorkspaceProject(
-          projectId: project.id,
-          name: project.name,
-          path: project.root.path,
-          environmentName: null,
-        ),
-    ],
+    listProjects: () {
+      final envDao = ref.read(executionEnvironmentDaoProvider);
+      return [
+        for (final project in ref.read(projectDaoProvider).getAll())
+          RemoteWorkspaceProject(
+            projectId: project.id,
+            name: project.name,
+            path: project.root.path,
+            environmentName: () {
+              final env = envDao.getById(project.environmentId);
+              return env == null ? null : environmentLabel(env);
+            }(),
+            environmentBadge: () {
+              final env = envDao.getById(project.environmentId);
+              return env == null ? null : environmentBadge(env);
+            }(),
+          ),
+      ];
+    },
     startSession: (request) => _startSession(ref, request),
     beginAttachment: (deviceId, request) async {
       try {
@@ -743,13 +769,17 @@ Future<RemoteWorkspaceProject> _addProject(
     );
   }
   final canonical = canonicalPathKey(trimmedPath);
+  final envDao = ref.read(executionEnvironmentDaoProvider);
   for (final project in ref.read(projectDaoProvider).getAll()) {
     if (project.root.environmentId == localHostEnvironmentId &&
         canonicalPathKey(project.root.path) == canonical) {
+      final env = envDao.getById(project.environmentId);
       return RemoteWorkspaceProject(
         projectId: project.id,
         name: project.name,
         path: project.root.path,
+        environmentName: env == null ? null : environmentLabel(env),
+        environmentBadge: env == null ? null : environmentBadge(env),
       );
     }
   }
@@ -757,10 +787,13 @@ Future<RemoteWorkspaceProject> _addProject(
     name: trimmedName,
     path: trimmedPath,
   );
+  final createdEnv = envDao.getById(result.project.environmentId);
   return RemoteWorkspaceProject(
     projectId: result.project.id,
     name: result.project.name,
     path: result.project.root.path,
+    environmentName: createdEnv == null ? null : environmentLabel(createdEnv),
+    environmentBadge: createdEnv == null ? null : environmentBadge(createdEnv),
     checkouts: [
       for (final repository in result.repositories)
         RemoteCheckoutOption(

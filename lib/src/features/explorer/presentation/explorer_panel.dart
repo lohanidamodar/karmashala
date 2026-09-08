@@ -20,6 +20,7 @@ import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_label.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
@@ -644,11 +645,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final summary = ref.watch(projectSummaryProvider(project.id));
     final envDao = ref.watch(executionEnvironmentDaoProvider);
     final env = envDao.getById(project.environmentId);
-    final envBadge = env?.kind == EnvironmentKind.ssh
-        ? 'SSH · ${env?.name ?? 'remote'}'
-        : (env?.kind == EnvironmentKind.wsl
-            ? 'WSL · ${env?.wslDistribution ?? env?.name ?? 'distro'}'
-            : null);
+    final envBadge = env == null ? null : environmentBadge(env);
 
     final rows = <Widget>[
       ProjectCard(

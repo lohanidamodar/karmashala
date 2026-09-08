@@ -256,6 +256,7 @@ class ProjectHeaderCard extends StatelessWidget {
     expanded: false,
     selected: false,
     missing: group.folderMissing,
+    environmentBadge: group.environmentBadge,
     summary: group.summary,
     onTap: onTap,
     menuItemsBuilder: () => const [],

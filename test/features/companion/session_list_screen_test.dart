@@ -86,6 +86,29 @@ void main() {
       expect(find.text('Fix the login flow'), findsNothing);
     });
 
+    testWidgets('shows the environment tag on a project row when present', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        sessions: [
+          summary(
+            's1',
+            project: 'wsl-app',
+            projectId: 'p1',
+            environmentBadge: 'WSL · Ubuntu',
+          ),
+          summary('s2', project: 'local-app', projectId: 'p2'),
+        ],
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const SessionListScreen(),
+      );
+
+      expect(find.text('WSL · Ubuntu'), findsOneWidget);
+    });
+
     testWidgets('a project row is a 48dp target and says what needs you', (
       tester,
     ) async {

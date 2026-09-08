@@ -35,6 +35,23 @@ String? environmentLabel(ExecutionEnvironment environment) =>
       EnvironmentKind.ssh => _qualified('SSH', [environment.name]),
     };
 
+/// The badge to show on a project card for non-local environments.
+///
+/// Local host projects (Windows native or local POSIX) have no badge because
+/// they are the host the user is sitting at. Remote (SSH) and subsystem (WSL)
+/// projects are tagged so they are told apart from host folders.
+String? environmentBadge(ExecutionEnvironment environment) {
+  if (isLocalHost(environment.kind)) return null;
+  return switch (environment.kind) {
+    EnvironmentKind.ssh =>
+      _qualified('SSH', [environment.name]) ?? 'SSH · remote',
+    EnvironmentKind.wsl =>
+      _qualified('WSL', [environment.wslDistribution, environment.name]) ??
+          'WSL · distro',
+    EnvironmentKind.windowsNative || EnvironmentKind.localPosix => null,
+  };
+}
+
 /// `kind · <first candidate that says something>`, or null when none does.
 String? _qualified(String kind, List<String?> candidates) {
   for (final candidate in candidates) {

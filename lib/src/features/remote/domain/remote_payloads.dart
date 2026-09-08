@@ -42,6 +42,7 @@ class RemoteSessionSnapshot {
     this.worktree,
     this.branch,
     this.attachments,
+    this.environmentBadge,
   });
 
   final String sessionId;
@@ -122,12 +123,17 @@ class RemoteSessionSnapshot {
   /// the phone offers nothing, which is the honest reading of silence.
   final RemoteAttachmentSupport? attachments;
 
+  /// The badge shown on non-local project/session cards (e.g. "WSL · Ubuntu", "SSH · build-box").
+  /// Null for local-host sessions.
+  final String? environmentBadge;
+
   /// [clearAttention] because "nothing is waiting" is a value a null argument
   /// cannot express, and an approval being answered is exactly that move.
   RemoteSessionSnapshot copyWith({
     String? attention,
     String? stage,
     bool clearAttention = false,
+    String? environmentBadge,
   }) => RemoteSessionSnapshot(
         sessionId: sessionId,
         title: title,
@@ -151,6 +157,7 @@ class RemoteSessionSnapshot {
         worktree: worktree,
         branch: branch,
         attachments: attachments,
+        environmentBadge: environmentBadge ?? this.environmentBadge,
       );
 
   Map<String, Object?> toJson() => {
@@ -177,6 +184,7 @@ class RemoteSessionSnapshot {
     if (worktree != null) 'worktree': worktree,
     if (branch != null) 'branch': branch,
     if (attachments != null) 'attach': attachments!.toJson(),
+    if (environmentBadge != null) 'environmentBadge': environmentBadge,
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -210,6 +218,7 @@ class RemoteSessionSnapshot {
       worktree: str(json['worktree']),
       branch: str(json['branch']),
       attachments: RemoteAttachmentSupport.parse(json['attach']),
+      environmentBadge: str(json['environmentBadge']),
     );
   }
 
@@ -237,7 +246,8 @@ class RemoteSessionSnapshot {
       other.subPath == subPath &&
       other.worktree == worktree &&
       other.branch == branch &&
-      other.attachments == attachments;
+      other.attachments == attachments &&
+      other.environmentBadge == environmentBadge;
 
   @override
   int get hashCode => Object.hash(
@@ -1157,6 +1167,7 @@ class RemoteWorkspaceProject {
     required this.name,
     this.path,
     this.environmentName,
+    this.environmentBadge,
     this.checkouts = const [],
   });
 
@@ -1169,6 +1180,10 @@ class RemoteWorkspaceProject {
   /// — one per environment — are otherwise told apart only by their paths.
   final String? environmentName;
 
+  /// The badge shown on non-local project cards (e.g. "WSL · Ubuntu", "SSH · build-box").
+  /// Null for local-host projects.
+  final String? environmentBadge;
+
   final List<RemoteCheckoutOption> checkouts;
 
   Map<String, Object?> toJson() => {
@@ -1176,6 +1191,7 @@ class RemoteWorkspaceProject {
     'name': name,
     if (path != null) 'path': path,
     if (environmentName != null) 'environmentName': environmentName,
+    if (environmentBadge != null) 'environmentBadge': environmentBadge,
     'checkouts': [for (final checkout in checkouts) checkout.toJson()],
   };
 
@@ -1191,6 +1207,9 @@ class RemoteWorkspaceProject {
       path: json['path'] is String ? json['path']! as String : null,
       environmentName: json['environmentName'] is String
           ? json['environmentName']! as String
+          : null,
+      environmentBadge: json['environmentBadge'] is String
+          ? json['environmentBadge']! as String
           : null,
       checkouts: [
         if (checkouts is List)

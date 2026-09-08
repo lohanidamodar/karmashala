@@ -68,6 +68,27 @@ void main() {
     expect(find.text('/w/alpha'), findsOneWidget);
   });
 
+  testWidgets('shows environment tag in facts when present', (tester) async {
+    final gateway = FakeCompanionGateway.paired(
+      sessions: [
+        summary(
+          's1',
+          project: 'alpha',
+          projectId: 'p1',
+          projectPath: '/w/alpha',
+          environmentBadge: 'WSL · Ubuntu',
+        ),
+      ],
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const ProjectSessionsScreen(projectKey: 'p1'),
+    );
+
+    expect(find.text('WSL · Ubuntu'), findsOneWidget);
+  });
+
   testWidgets('a session row is at least a 48dp target', (tester) async {
     final gateway = FakeCompanionGateway.paired(
       sessions: [summary('s1', project: 'alpha', projectId: 'p1')],

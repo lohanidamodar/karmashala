@@ -373,6 +373,7 @@ class HostSessionApi {
                     name: project.name,
                     path: project.path,
                     environmentName: project.environmentName,
+                    environmentBadge: project.environmentBadge,
                   ).toJson()
                     ..remove('checkouts'),
                 },

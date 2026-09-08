@@ -2462,6 +2462,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       archived: snapshot.archived,
       folderMissing: snapshot.folderMissing || raw?['folderMissing'] == true,
       attachments: snapshot.attachments,
+      environmentBadge: snapshot.environmentBadge ?? text('environmentBadge'),
     );
   }
 
