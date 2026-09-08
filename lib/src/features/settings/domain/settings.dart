@@ -98,6 +98,7 @@ class Settings {
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
+    this.hostBackedLocalPanes = false,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
     this.remoteAccessEnabled = false,
@@ -278,6 +279,20 @@ class Settings {
   /// in `shouldRestartOnLaunch` — in particular it never starts an agent pane.
   final bool restoreLivePanes;
 
+  /// Whether a local pane's process belongs to the **session host** rather than
+  /// to this app.
+  ///
+  /// Off, and the default matters: with it off nothing changes at all — every
+  /// pane is the `flutter_pty` child it has always been. With it on, a pane's
+  /// shell is started by `karmashala_host` and outlives this app, so a crash
+  /// stops taking every agent with it and reopening a pane resumes its session
+  /// from the byte it last rendered.
+  ///
+  /// The cost of that is what keeps it off by default: there is no OSC 133 on
+  /// the host path, so a host-backed pane reports no command boundaries and
+  /// `terminal_run` will not claim an exit code for a command typed into one.
+  final bool hostBackedLocalPanes;
+
   /// The imported terminal colour theme, as `<format>:<path>` (for example
   /// `warp:C:\\Users\\a\\...\\nord.yaml`), or `null` for the built-in theme.
   ///
@@ -410,6 +425,7 @@ class Settings {
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
+    bool? hostBackedLocalPanes,
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
@@ -465,6 +481,7 @@ class Settings {
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
+    hostBackedLocalPanes: hostBackedLocalPanes ?? this.hostBackedLocalPanes,
     terminalChordOverrides:
         terminalChordOverrides ?? this.terminalChordOverrides,
     terminalThemeSource: clearTerminalThemeSource
@@ -534,6 +551,7 @@ class Settings {
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
+    'hostBackedLocalPanes': hostBackedLocalPanes,
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
@@ -661,6 +679,9 @@ class Settings {
       // file written before the key existed has to read as on rather than as
       // the absent value's `false`.
       restoreLivePanes: json['restoreLivePanes'] != false,
+      // `== true`, not `!= false`: this defaults **off**, so a settings file
+      // written before the key existed reads as off.
+      hostBackedLocalPanes: json['hostBackedLocalPanes'] == true,
       terminalChordOverrides: {
         if (json['terminalChordOverrides'] is Map)
           for (final entry in (json['terminalChordOverrides'] as Map).entries)
@@ -744,6 +765,7 @@ class Settings {
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
+      other.hostBackedLocalPanes == hostBackedLocalPanes &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
       other.remoteAccessEnabled == remoteAccessEnabled &&
@@ -806,6 +828,7 @@ class Settings {
       // Folded in here rather than added to the outer call, which was already
       // at `Object.hash`'s limit of 20 arguments.
       Object.hash(
+        hostBackedLocalPanes,
         androidSlimming,
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
