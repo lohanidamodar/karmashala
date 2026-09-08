@@ -62,6 +62,34 @@ class FlutterProjectScanner {
     );
   }
 
+  /// The project **at** [directory], or null when that directory is not one.
+  ///
+  /// The same decision as [scan] with no descent, for a caller that already
+  /// knows which directory it means.
+  Future<FlutterProject?> projectAt(EnvironmentPath directory) async {
+    final found = await scan(directory, maxDepth: 0);
+    return found.isEmpty ? null : found.single;
+  }
+
+  /// Whether `pub get` has been run in [directory] — or **null when that could
+  /// not be established**, which is not false (§19).
+  ///
+  /// `.dart_tool/package_config.json` rather than `.dart_tool/`: the directory
+  /// is created by things that are not `pub get`, and the file is what a build
+  /// actually reads.
+  Future<bool?> hasPackageConfig(EnvironmentPath directory) async {
+    final path = _context.join(directory.path, '.dart_tool', 'package_config.json');
+    if (isLocalHost(kind)) return File(path).existsSync();
+    try {
+      final result = await runner.run(
+        CommandRequest(executable: 'test', arguments: <String>['-f', path]),
+      );
+      return result.exitCode == 0;
+    } on CommandException {
+      return null;
+    }
+  }
+
   /// This machine's own disk, walked breadth-first and stopped at [maxDepth].
   Future<List<PubspecCandidate>> _readLocally(String root, int maxDepth) async {
     final found = <PubspecCandidate>[];
