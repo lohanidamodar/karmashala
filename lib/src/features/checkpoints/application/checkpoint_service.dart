@@ -322,15 +322,25 @@ class CheckpointService {
     // back, without this code ever writing to the working tree itself.
     await git.applyPatch(repo, dirs, wanted, reverse: true);
 
-    final files = await git.diffNameStatus(
+    final changed = await git.diffNameStatus(
       repo,
       from: checkpoint.treeSha,
       to: current,
     );
+    // What was *written*, not what differs. A per-path restore applied only
+    // the paths it was given, and an outcome naming every file that moved
+    // would overstate it to the panel that counts it and to the agent that
+    // reads it back through `checkpoint_restore`.
+    final restoredPaths = {for (final choice in selection) choice.path};
     return RestoreOutcome(
       restored: checkpoint,
       safetyCheckpoint: safety,
-      files: files,
+      files: restoredPaths.isEmpty
+          ? changed
+          : [
+              for (final file in changed)
+                if (restoredPaths.contains(file.path)) file,
+            ],
       alreadyThere: false,
     );
   }

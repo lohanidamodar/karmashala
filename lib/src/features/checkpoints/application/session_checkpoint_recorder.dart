@@ -10,6 +10,16 @@ import '../../sessions/domain/session_status.dart';
 import '../domain/checkpoint.dart';
 import 'checkpoint_providers.dart';
 
+/// Why [SessionCheckpointRecorder.captureNow] can answer with no checkpoint.
+///
+/// Two reasons, and nothing above this can tell them apart: the tree is
+/// byte-for-byte the last checkpoint, or the session has no working tree to
+/// checkpoint at all. Saying both is §19's rule — an admission of ignorance
+/// beats picking the likelier one and being confidently wrong.
+const String kNothingToCapture =
+    'Nothing has changed since the last checkpoint, or this session has no '
+    'repository to checkpoint.';
+
 /// Turns "an agent finished a turn" into a checkpoint.
 ///
 /// **Which signal, and why this one.** `SessionEventTypes.sessionCompleted`

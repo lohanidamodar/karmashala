@@ -51,7 +51,7 @@ enum SidePanelSurface {
   /// this agent been doing to my checkout" — what it says it intends, and what
   /// it has already written. It is also the only undo in the app for an
   /// agent's edits, which is why it is on the rail rather than behind a menu.
-  checkpoints('Checkpoints'),
+  checkpoints('Checkpoints', drawsOwnHeader: true),
 
   /// The user's own list: a line of text, done or not, filed under a project
   /// or under nothing.
