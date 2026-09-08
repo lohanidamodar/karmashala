@@ -334,6 +334,113 @@ void main() {
     expect(bindings.sessionById('nope'), isNull);
   });
 
+  group('what a file sent to one session may be', () {
+    /// Points `i1` at [agentId], running in [environmentId]. The agent's *own*
+    /// environment is what decides this, not the checkout's: the executable is
+    /// the thing that has to be able to open the path.
+    void installAgent(String agentId, {String environmentId = 'windows'}) {
+      // `seedWorkspace` already put `mystery` under this id.
+      AgentInstallationDao(db).delete('i1');
+      AgentInstallationDao(db).insert(
+        AgentInstallation(
+          id: 'i1',
+          agentId: agentId,
+          executable: EnvironmentPath(
+            environmentId: environmentId,
+            path: '/usr/bin/$agentId',
+          ),
+          createdAt: now,
+        ),
+      );
+    }
+
+    RemoteAttachmentSupport? supportFor(String sessionId) => container
+        .read(remoteHostBindingsProvider)
+        .sessionById(sessionId)
+        ?.attachments;
+
+    test('a Claude Code session on this machine takes a picture', () {
+      seedWorkspace();
+      installAgent('claudeCode');
+      seedSession('s1');
+
+      final support = supportFor('s1')!;
+
+      expect(support.allowsAnything, isTrue);
+      expect(support.mediaTypes, contains('image/jpeg'));
+      expect(support.maxBytes, kMaxAttachmentBytes);
+      expect(support.refusal, isNull);
+    });
+
+    test('the same agent over SSH does not, and the row says why', () {
+      seedWorkspace();
+      ExecutionEnvironmentDao(db).upsert(
+        ExecutionEnvironment(
+          id: 'buildbox',
+          kind: EnvironmentKind.ssh,
+          name: 'build-box',
+          createdAt: now,
+        ),
+      );
+      installAgent('claudeCode', environmentId: 'buildbox');
+      seedSession('s1');
+
+      final support = supportFor('s1')!;
+
+      expect(support.allowsAnything, isFalse);
+      expect(
+        support.refusal,
+        contains('another machine'),
+        reason: 'the agent has its own filesystem; a path written here names '
+            'nothing there — and that is nothing to do with the CLI',
+      );
+    });
+
+    test('an agent that cannot be handed one carries its own sentence', () {
+      seedWorkspace();
+      installAgent('codex');
+      seedSession('s1');
+
+      expect(supportFor('s1')!.allowsAnything, isFalse);
+      expect(supportFor('s1')!.refusal, contains('--image'));
+    });
+
+    test('an agent nobody has written anything about is refused too', () {
+      seedWorkspace();
+      seedSession('s1');
+
+      // `seedWorkspace` installs `mystery`, which is in no registry.
+      expect(supportFor('s1')!.allowsAnything, isFalse);
+      expect(supportFor('s1')!.refusal, isNotEmpty);
+    });
+
+    test('imported history says it is read-only rather than saying nothing',
+        () async {
+      seedWorkspace();
+      installAgent('claudeCode');
+      ImportedSessionDao(db).insertIfAbsent(
+        ImportedSession(
+          id: 'imp1',
+          repositoryId: 'r1',
+          cli: 'claudeCode',
+          externalId: 'x1',
+          environmentId: 'windows',
+          filePath: r'C:\nowhere\imp1.jsonl',
+          storeHome: r'C:\nowhere',
+          isSubagent: false,
+          preview: 'an old conversation',
+          title: 'Old CLI chat',
+          createdAt: now,
+        ),
+      );
+
+      final support = supportFor('imp1')!;
+
+      expect(support.allowsAnything, isFalse);
+      expect(support.refusal, contains('read-only'));
+    });
+  });
+
   test('imported CLI sessions are listed, flagged, and read-only', () async {
     seedWorkspace();
     seedSession('s1');

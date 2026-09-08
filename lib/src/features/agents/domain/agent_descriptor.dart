@@ -842,6 +842,7 @@ class AgentDescriptor {
     this.stateFile,
     this.grid = const AgentGridRules(),
     this.approval = const AgentApprovalRules(),
+    this.attachments = const AgentAttachmentSupport.none(),
   });
 
   final String id;
@@ -868,8 +869,54 @@ class AgentDescriptor {
   /// mode worse than making the user switch to the terminal.
   final AgentApprovalRules approval;
 
+  /// What this agent will look at when a prompt **names a file's path**.
+  ///
+  /// Declared data with required evidence, exactly like [AgentForkSupport], and
+  /// defaulting the same conservative way. The question is narrower than "does
+  /// this CLI understand pictures": Karmashala delivers a message to a running
+  /// session by typing it into that session's PTY, so a launch flag the CLI
+  /// has is not a door that is open once the session is up. Only a path in the
+  /// prompt is.
+  final AgentAttachmentSupport attachments;
+
   @override
   String toString() => 'AgentDescriptor($id)';
+}
+
+/// The media types one agent reads from a path written into its prompt.
+///
+/// **Defaults to none**, and the asymmetry is the same one [AgentForkSupport]
+/// argues. Not offering an attachment an agent would have read costs a button;
+/// offering one it will not read means a phone spends a megabyte of somebody's
+/// mobile data on a file that lands on a desktop and is never looked at — and
+/// the user is told it worked.
+class AgentAttachmentSupport {
+  /// Nothing may be sent to this agent. [refusal] is the sentence the phone is
+  /// shown in place of the button; it is the host's words because only the
+  /// host has ever seen this CLI.
+  const AgentAttachmentSupport.none({this.refusal = ''})
+    : mediaTypes = const [],
+      evidence = '';
+
+  /// This agent reads [mediaTypes] from a path in its prompt. [evidence] is
+  /// where that was read off, so a future CLI version can be re-checked rather
+  /// than trusted because it is written down.
+  const AgentAttachmentSupport.byPath(
+    this.mediaTypes, {
+    required this.evidence,
+  }) : refusal = '';
+
+  final List<String> mediaTypes;
+
+  /// Empty exactly when nothing is accepted.
+  final String evidence;
+
+  /// Why nothing is accepted, when there are words for it. Empty for an agent
+  /// nobody has written a sentence about, which the phone shows as nothing
+  /// rather than as a guess.
+  final String refusal;
+
+  bool get isSupported => mediaTypes.isNotEmpty;
 }
 
 /// Whether an agent lets us choose its session id, and how.

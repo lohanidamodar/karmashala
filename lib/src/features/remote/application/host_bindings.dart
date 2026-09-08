@@ -53,6 +53,9 @@ class RemoteHostBindings {
     required this.startSession,
     required this.addProject,
     required this.resumeSession,
+    required this.beginAttachment,
+    required this.writeAttachmentChunk,
+    required this.discardAttachment,
   });
 
   /// What `host.status` calls this desktop.
@@ -81,7 +84,20 @@ class RemoteHostBindings {
   final Future<RemoteSessionRecord> Function(String sessionId) transcriptFor;
 
   /// Routes a prompt into the session exactly as the desktop composer does.
-  final Future<void> Function(String sessionId, String text) sendPrompt;
+  ///
+  /// [attachment] names an upload the sending device completed — the device
+  /// travels with it because an upload belongs to a link, not to a session. **A prompt carrying
+  /// one is offered, not sent**: it lands in the session's composer draft,
+  /// where the desktop user reads the path before an agent is told to open a
+  /// file off their disk — the rule `ComposerDrafts` was written for. A prompt
+  /// without one keeps going straight through, which is what a phone sending
+  /// words has always done. Answers which of the two happened.
+  final Future<RemotePromptDelivery> Function(
+    String sessionId,
+    String text, {
+    RemoteAttachmentRef? attachment,
+  })
+  sendPrompt;
 
   /// Answers a pending approval; [decision] is `approve` or `deny`. Returns
   /// the label of the key actually pressed, or throws [RemoteApiRefusal].
@@ -125,4 +141,37 @@ class RemoteHostBindings {
   addProject;
 
   final Future<RemoteSessionStarted> Function(String sessionId) resumeSession;
+
+  /// Opens an upload for one device, after the caller has checked the request
+  /// against the session's own [RemoteAttachmentSupport].
+  ///
+  /// A device has at most one upload in flight; a second [beginAttachment]
+  /// abandons the first. Throws [RemoteApiRefusal] for anything the
+  /// declaration alone can be refused for.
+  final Future<RemoteAttachmentOffer> Function(
+    String deviceId,
+    RemoteAttachmentBegin request,
+  )
+  beginAttachment;
+
+  /// Appends one chunk, in order. Out of order is a lost slice, and refused.
+  final Future<void> Function(
+    String deviceId,
+    String uploadId,
+    int seq,
+    List<int> data,
+  )
+  writeAttachmentChunk;
+
+  /// Drops whatever [deviceId] left half-sent — called when its link ends, so
+  /// staged bytes nothing will ever quote do not outlive the link that made
+  /// them.
+  final Future<void> Function(String deviceId) discardAttachment;
 }
+
+/// One completed upload, named by the link that carried it.
+///
+/// The device travels with the id because an upload belongs to a **link**: the
+/// store keys on the device so two phones cannot reach each other's staged
+/// bytes, and a session id would not say which phone this was.
+typedef RemoteAttachmentRef = ({String deviceId, String uploadId});

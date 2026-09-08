@@ -1,6 +1,7 @@
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +96,7 @@ CompanionSessionSummary summary(
   bool archived = false,
   bool folderMissing = false,
   bool imported = false,
+  RemoteAttachmentSupport? attachments,
 }) => CompanionSessionSummary(
   id: id,
   title: title ?? 'Session $id',
@@ -112,4 +114,5 @@ CompanionSessionSummary summary(
   archived: archived,
   folderMissing: folderMissing,
   imported: imported,
+  attachments: attachments,
 );

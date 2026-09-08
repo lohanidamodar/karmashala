@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
+import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
 import 'package:karmashala/src/features/remote/domain/paired_device.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
@@ -26,6 +27,33 @@ class FakeRemoteBindings {
   final Map<String, String?> stages = {};
   final Map<String, RemoteApprovalRequest> approvals = {};
   final List<({String sessionId, String text})> prompts = [];
+
+  /// The upload each prompt quoted, in step with [prompts]. Kept beside them
+  /// rather than in them so the existing expectations still read as a list of
+  /// what was said.
+  final List<String?> promptAttachments = [];
+
+  /// Every chunk that reached the store, so a test can count slices rather
+  /// than reach for a real file.
+  final Map<String, List<int>> uploads = {};
+
+  /// The upload each device has open, or null once it is committed or dropped.
+  final Map<String, String> openUploads = {};
+
+  /// Declared lengths and the next slice expected, so this refuses a short or
+  /// gapped upload the way [CompanionAttachmentStore] does — the rules the api
+  /// is tested against, with the real store's own test proving it keeps them.
+  final Map<String, int> uploadDeclared = {};
+  final Map<String, int> uploadNextSeq = {};
+
+  /// When set, the next [RemoteHostBindings.beginAttachment] throws it.
+  RemoteApiRefusal? attachmentRefusal;
+
+  /// Uploads that became a file the desktop composer was offered.
+  final List<String> committed = [];
+
+  int discardCalls = 0;
+  int _uploadCounter = 0;
 
   /// Every answer that actually reached the terminal. A refused one must not
   /// appear here — that is the whole point of refusing it.
@@ -118,11 +146,41 @@ class FakeRemoteBindings {
             RemoteSessionActivity(sessionId: id, observedAt: observedAt),
       );
     },
-    sendPrompt: (sessionId, text) async {
+    sendPrompt: (sessionId, text, {attachment}) async {
       final gate = promptGate;
       if (gate != null) await gate.future;
       if (promptError != null) throw promptError!;
+      // The attachment is settled first, because the production binding
+      // commits before it offers anything: a prompt whose file did not
+      // arrive does not go either.
+      if (attachment == null) {
+        prompts.add((sessionId: sessionId, text: text));
+        promptAttachments.add(null);
+        return RemotePromptDelivery.sent;
+      }
+      final open = openUploads[attachment.deviceId];
+      if (open != attachment.uploadId) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'that attachment is not waiting to be sent',
+        );
+      }
+      final sent = uploads[attachment.uploadId]!.length;
+      final declared = uploadDeclared[attachment.uploadId]!;
+      if (sent != declared) {
+        openUploads.remove(attachment.deviceId);
+        throw RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'only $sent of $declared bytes arrived',
+        );
+      }
+      openUploads.remove(attachment.deviceId);
+      committed.add(attachment.uploadId);
       prompts.add((sessionId: sessionId, text: text));
+      promptAttachments.add(attachment.uploadId);
+      // Offered to the desktop composer rather than typed in — see
+      // [RemoteHostBindings.sendPrompt].
+      return RemotePromptDelivery.offered;
     },
     answerApproval: (sessionId, decision) async {
       final refusal = approvalRefusal;
@@ -147,6 +205,40 @@ class FakeRemoteBindings {
         sessionId: sessionId,
         title: sessions[sessionId]?.title ?? 'Resumed',
       );
+    },
+    beginAttachment: (deviceId, request) async {
+      final refusal = attachmentRefusal;
+      if (refusal != null) throw refusal;
+      final id = 'up${++_uploadCounter}';
+      openUploads[deviceId] = id;
+      uploadDeclared[id] = request.bytes;
+      uploadNextSeq[id] = 0;
+      uploads[id] = <int>[];
+      return const RemoteAttachmentOffer(
+        uploadId: '',
+        chunkBytes: kAttachmentChunkBytes,
+      ).named(id);
+    },
+    writeAttachmentChunk: (deviceId, uploadId, seq, data) async {
+      if (openUploads[deviceId] != uploadId) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'no attachment is being sent',
+        );
+      }
+      if (uploadNextSeq[uploadId] != seq) {
+        throw RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'expected chunk ${uploadNextSeq[uploadId]}, got $seq — '
+          'a slice was lost',
+        );
+      }
+      uploads[uploadId]!.addAll(data);
+      uploadNextSeq[uploadId] = seq + 1;
+    },
+    discardAttachment: (deviceId) async {
+      discardCalls++;
+      openUploads.remove(deviceId);
     },
     startSession: (request) async {
       final gate = startGate;
@@ -225,6 +317,10 @@ class FakeRemoteBindings {
     String? lastActivityAt,
     bool imported = false,
     String? attention,
+    RemoteAttachmentSupport? attachments = const RemoteAttachmentSupport(
+      mediaTypes: ['image/png', 'image/jpeg'],
+      maxBytes: kMaxAttachmentBytes,
+    ),
   }) {
     sessions[id] = RemoteSessionSnapshot(
       sessionId: id,
@@ -235,6 +331,7 @@ class FakeRemoteBindings {
       lastActivityAt: lastActivityAt,
       imported: imported,
       attention: attention,
+      attachments: attachments,
     );
   }
 
@@ -251,10 +348,14 @@ class FakeRemoteBindings {
   }
 }
 
+/// The id [fakeDevice] carries, named so a test can address the same device
+/// the api will — an upload belongs to a link, so the id is the key.
+const String kFakeDeviceId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 /// A paired device carrying [capabilities], with a throwaway key.
 PairedDevice fakeDevice({
   CapabilitySet? capabilities,
-  String id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  String id = kFakeDeviceId,
 }) => PairedDevice(
   id: id,
   name: 'OPPO',
@@ -263,3 +364,8 @@ PairedDevice fakeDevice({
   generation: 1,
   createdAt: DateTime.utc(2026, 8, 31),
 );
+
+extension on RemoteAttachmentOffer {
+  RemoteAttachmentOffer named(String uploadId) =>
+      RemoteAttachmentOffer(uploadId: uploadId, chunkBytes: chunkBytes);
+}

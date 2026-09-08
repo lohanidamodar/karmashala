@@ -117,7 +117,17 @@ enum Capability {
   /// commands are running on it at this moment, and under what description a
   /// delegated agent was launched. A phone paired before this existed holds a
   /// bitset without it and is refused, in words, for ever.
-  viewActivity('view_activity', 1 << 7);
+  viewActivity('view_activity', 1 << 7),
+
+  /// Put a **file** on the desktop's disk and name its path to an agent.
+  ///
+  /// Its own bit, and the widest gap yet between it and anything already
+  /// granted. [sendPrompt] carries words the phone typed; this writes bytes the
+  /// phone chose into the host's filesystem and then tells a CLI to open them.
+  /// A phone paired before this existed holds a bitset without it and is
+  /// refused, in words, for ever — nothing already granted quietly grows into
+  /// permission to write to this machine.
+  sendAttachment('send_attachment', 1 << 8);
 
   const Capability(this.wire, this.bit);
 
@@ -279,6 +289,35 @@ enum FrameType {
     origin: FrameOrigin.either,
     capability: Capability.viewActivity,
   ),
+  /// **Ask to send a file**, before any of it has crossed the link.
+  ///
+  /// The whole point of a separate frame: the host answers *here* — with the
+  /// media types the session's agent will actually look at, and the byte cap —
+  /// so a refusal costs one small frame rather than the megabytes of a photo
+  /// the desktop was never going to be able to use. The phone already knows
+  /// the same answer from [FrameOrigin.host]'s session rows; this is the
+  /// re-check, because a row can be minutes old and the agent behind it can
+  /// have changed.
+  attachmentBegin(
+    'attachment.begin',
+    origin: FrameOrigin.companion,
+    capability: Capability.sendAttachment,
+  ),
+
+  /// One slice of the file, base64 in the envelope, answered before the next
+  /// is sent.
+  ///
+  /// Chunked because an envelope stops at [kMaxEnvelopeBytes] and a photo off
+  /// a phone is several times that. Answered one at a time on purpose: the
+  /// outbound queue drops its **oldest** frame on overflow, so a fire-and-
+  /// forget upload could lose a slice out of the middle and commit a corrupt
+  /// file. A chunk that is not acknowledged is a chunk that did not land.
+  attachmentChunk(
+    'attachment.chunk',
+    origin: FrameOrigin.companion,
+    capability: Capability.sendAttachment,
+  ),
+
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),
   approvalRequested('approval.requested', origin: FrameOrigin.host),
@@ -563,6 +602,27 @@ bool _bytesEqual(Uint8List a, Uint8List b) {
   }
   return true;
 }
+
+/// Raw bytes carried by one `attachment.chunk`.
+///
+/// Sized backwards from [kMaxEnvelopeBytes], which is the hard stop, with room
+/// for everything that sits on top of the bytes themselves: base64 costs four
+/// characters per three bytes, the envelope adds its own JSON, and the sealing
+/// layer adds a nonce, a tag and a sequence. 128 KiB encodes to 174,764
+/// characters — about a sixth of the cap — which is deliberately conservative
+/// rather than maximal: every frame on a device's chain queues behind the
+/// transcript sweep, and one that occupies most of an envelope is the shape of
+/// payload that starved this link before (see `kRemoteTranscriptPageMax`).
+const int kAttachmentChunkBytes = 128 * 1024;
+
+/// The largest file one attachment will carry.
+///
+/// The same number `kMaxSessionMediaBytes` uses for the biggest picture this
+/// app will move to disk and hand a decoder, so a file the phone can send is
+/// one the desktop's own media surfaces can already draw. It is 96 chunks, and
+/// the phone shows the count as it goes rather than pretending a 12 MB upload
+/// over a relay is instant.
+const int kMaxAttachmentBytes = 12 * 1024 * 1024;
 
 /// The most messages one `transcript.get` will carry.
 ///

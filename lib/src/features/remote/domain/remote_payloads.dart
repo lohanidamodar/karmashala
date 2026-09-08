@@ -41,6 +41,7 @@ class RemoteSessionSnapshot {
     this.subPath,
     this.worktree,
     this.branch,
+    this.attachments,
   });
 
   final String sessionId;
@@ -111,6 +112,16 @@ class RemoteSessionSnapshot {
   /// this reads the cached checkout stat and deliberately starts no git.
   final String? branch;
 
+  /// What a file sent to **this** session would be allowed to be — carried on
+  /// the row so the phone knows before the user picks anything.
+  ///
+  /// Here rather than on `host.status` because the answer is per session, not
+  /// per desktop: it turns on the agent behind the row, on whether that agent
+  /// runs somewhere this desktop can write a file it will see, and on whether
+  /// the row is live at all. Null means an older host that was never asked —
+  /// the phone offers nothing, which is the honest reading of silence.
+  final RemoteAttachmentSupport? attachments;
+
   /// [clearAttention] because "nothing is waiting" is a value a null argument
   /// cannot express, and an approval being answered is exactly that move.
   RemoteSessionSnapshot copyWith({
@@ -139,6 +150,7 @@ class RemoteSessionSnapshot {
         subPath: subPath,
         worktree: worktree,
         branch: branch,
+        attachments: attachments,
       );
 
   Map<String, Object?> toJson() => {
@@ -164,6 +176,7 @@ class RemoteSessionSnapshot {
     if (subPath != null) 'subPath': subPath,
     if (worktree != null) 'worktree': worktree,
     if (branch != null) 'branch': branch,
+    if (attachments != null) 'attach': attachments!.toJson(),
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -196,6 +209,7 @@ class RemoteSessionSnapshot {
       subPath: str(json['subPath']),
       worktree: str(json['worktree']),
       branch: str(json['branch']),
+      attachments: RemoteAttachmentSupport.parse(json['attach']),
     );
   }
 
@@ -222,7 +236,8 @@ class RemoteSessionSnapshot {
       other.folderMissing == folderMissing &&
       other.subPath == subPath &&
       other.worktree == worktree &&
-      other.branch == branch;
+      other.branch == branch &&
+      other.attachments == attachments;
 
   @override
   int get hashCode => Object.hash(
@@ -244,8 +259,187 @@ class RemoteSessionSnapshot {
     projectPath,
     pinned,
     folderMissing,
-    Object.hash(subPath, worktree, branch),
+    Object.hash(subPath, worktree, branch, attachments),
   );
+}
+
+/// What a file sent to one session may be, or the host's sentence for why none
+/// may be.
+///
+/// **A fact and a sentence, and they are not the same fact.** [mediaTypes] is
+/// what the phone filters its picker by; [refusal] is what it shows in place of
+/// the button when there is nothing to filter for. The host words the refusal
+/// because only the host knows which of the several reasons it is — an agent
+/// that cannot be handed a picture, a session running on a machine whose disk
+/// this one cannot write to, imported history that is read-only here — and a
+/// phone inventing that sentence would be inventing a claim about a CLI it has
+/// never seen. The same rule [RemotePermissionOption] follows.
+class RemoteAttachmentSupport {
+  const RemoteAttachmentSupport({
+    required this.mediaTypes,
+    required this.maxBytes,
+    this.refusal,
+  });
+
+  /// Nothing may be sent here, and this is why — in the host's own words.
+  const RemoteAttachmentSupport.refused(String reason)
+    : mediaTypes = const [],
+      maxBytes = 0,
+      refusal = reason;
+
+  /// The exact media types the agent behind this session will look at when a
+  /// prompt names a file's path. Never a wildcard: the phone hands one of
+  /// these back on `attachment.begin` and the host matches it literally, so a
+  /// pattern here would be a pattern two builds could disagree about.
+  final List<String> mediaTypes;
+
+  /// The largest file this session will take, in bytes. Never above
+  /// [kMaxAttachmentBytes]; may be below it.
+  final int maxBytes;
+
+  /// Why [mediaTypes] is empty, when the host can say. Null with an empty list
+  /// means the host had no words for it, which the phone shows as nothing
+  /// rather than as a guess.
+  final String? refusal;
+
+  bool get allowsAnything => mediaTypes.isNotEmpty && maxBytes > 0;
+
+  Map<String, Object?> toJson() => {
+    'types': mediaTypes,
+    'max': maxBytes,
+    if (refusal != null) 'why': refusal,
+  };
+
+  /// An absent or malformed value reads as null — *we were not told* — which
+  /// is not the same as being told nothing is allowed.
+  static RemoteAttachmentSupport? parse(Object? json) {
+    if (json is! Map) return null;
+    final max = json['max'];
+    final why = json['why'];
+    return RemoteAttachmentSupport(
+      mediaTypes: [
+        for (final type in (json['types'] as List? ?? const []))
+          if (type is String && type.isNotEmpty) type,
+      ],
+      maxBytes: max is int && max > 0 ? max : 0,
+      refusal: why is String && why.isNotEmpty ? why : null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteAttachmentSupport &&
+      other.maxBytes == maxBytes &&
+      other.refusal == refusal &&
+      other.mediaTypes.length == mediaTypes.length &&
+      other.mediaTypes.every(mediaTypes.contains);
+
+  @override
+  int get hashCode =>
+      Object.hash(maxBytes, refusal, Object.hashAll(mediaTypes));
+}
+
+/// What became of a prompt: typed into the agent, or left in the desktop's own
+/// message box for the person sitting at it.
+///
+/// Told to the phone rather than left to be inferred, because the two are
+/// genuinely different outcomes and "sent" would be a false one. See
+/// `RemoteHostBindings.sendPrompt`.
+enum RemotePromptDelivery {
+  sent('sent'),
+  offered('offered');
+
+  const RemotePromptDelivery(this.wire);
+
+  final String wire;
+
+  /// An unknown word from a newer host reads as [sent] — the behaviour every
+  /// build before this one had.
+  static RemotePromptDelivery parse(Object? wire) =>
+      wire == offered.wire ? offered : sent;
+}
+
+/// The phone declaring a file before any of it is sent.
+class RemoteAttachmentBegin {
+  const RemoteAttachmentBegin({
+    required this.sessionId,
+    required this.name,
+    required this.mediaType,
+    required this.bytes,
+  });
+
+  final String sessionId;
+
+  /// The file's name as the phone knows it. **A hint, never a path**: the host
+  /// keeps only its basename, strips it to a safe set of characters and puts
+  /// its own extension on, so nothing the phone says can decide where a byte
+  /// lands.
+  final String name;
+
+  /// One of the session's [RemoteAttachmentSupport.mediaTypes], exactly.
+  final String mediaType;
+
+  /// The whole file's length. Declared up front so the host can refuse an
+  /// oversized one before a byte crosses, and so a short delivery is a fact
+  /// rather than something nobody notices.
+  final int bytes;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'name': name,
+    'type': mediaType,
+    'bytes': bytes,
+  };
+
+  static RemoteAttachmentBegin fromJson(Map<String, Object?> json) {
+    final sessionId = json['sessionId'];
+    final name = json['name'];
+    final type = json['type'];
+    final bytes = json['bytes'];
+    if (sessionId is! String ||
+        name is! String ||
+        type is! String ||
+        bytes is! int) {
+      throw const ProtocolException('bad attachment request');
+    }
+    return RemoteAttachmentBegin(
+      sessionId: sessionId,
+      name: name,
+      mediaType: type,
+      bytes: bytes,
+    );
+  }
+}
+
+/// The host agreeing to take a file, and saying how to hand it over.
+class RemoteAttachmentOffer {
+  const RemoteAttachmentOffer({
+    required this.uploadId,
+    required this.chunkBytes,
+  });
+
+  /// Names this upload for the life of the link. Nothing is a file until a
+  /// `prompt.send` quotes it, and nothing outside that link can quote it.
+  final String uploadId;
+
+  /// Raw bytes per `attachment.chunk`. Sent rather than assumed so an older
+  /// phone and a newer host cannot disagree about it — and so this can be
+  /// lowered later without stranding a build.
+  final int chunkBytes;
+
+  Map<String, Object?> toJson() => {
+    'uploadId': uploadId,
+    'chunkBytes': chunkBytes,
+  };
+
+  static RemoteAttachmentOffer fromJson(Map<String, Object?> json) {
+    final uploadId = json['uploadId'];
+    final chunk = json['chunkBytes'];
+    if (uploadId is! String || uploadId.isEmpty || chunk is! int || chunk < 1) {
+      throw const ProtocolException('bad attachment offer');
+    }
+    return RemoteAttachmentOffer(uploadId: uploadId, chunkBytes: chunk);
+  }
 }
 
 /// One transcript line, in the roles the desktop chat view renders.

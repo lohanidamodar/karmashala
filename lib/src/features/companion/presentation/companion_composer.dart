@@ -2,27 +2,55 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/file_picking.dart';
+import '../../remote/domain/remote_payloads.dart';
 import '../client/companion_gateway.dart';
 
-/// The phone's message box: what the composer is once it is reduced to the one
-/// thing the protocol lets a phone do — send a prompt. No attachments, no
-/// permission chips; those are desktop verbs.
+/// The phone's message box: a prompt, and at most one file to go with it.
+///
+/// **The picker is only offered when the host has said what it would take.**
+/// [attachments] comes straight off the session row, so the button is absent
+/// for a session whose agent cannot be handed a file and the host's own
+/// sentence says why — rather than the phone letting somebody pick a 4 MB
+/// photo and learning after it has crossed. One file at a time: an attachment
+/// means something on its own, and a queue would be a second mechanism for
+/// nothing.
 class CompanionComposer extends StatefulWidget {
   const CompanionComposer({
     required this.onSend,
     this.hintText = 'Send a message…',
     this.enabled = true,
     this.controller,
+    this.attachments,
+    this.pickFile,
     super.key,
   });
 
-  /// Sends the prompt; awaited so the box can show a busy state and keep the
-  /// text for retry when the host refuses.
-  final Future<void> Function(String text) onSend;
+  /// Sends the prompt and whatever is attached; awaited so the box can show a
+  /// busy state and keep both for retry when the host refuses.
+  ///
+  /// [onProgress] is handed on so the slice count can be shown: a photo is
+  /// dozens of round trips over somebody's mobile data, and a silent spinner
+  /// for that long is the "did that go?" this box is built against.
+  final Future<void> Function(
+    String text, {
+    CompanionOutgoingAttachment? attachment,
+    void Function(int sent, int total)? onProgress,
+  })
+  onSend;
 
   final String hintText;
   final bool enabled;
   final TextEditingController? controller;
+
+  /// What the host said this session would take, or null when it said nothing.
+  final RemoteAttachmentSupport? attachments;
+
+  /// The picker, so a test can stand where the platform dialog would.
+  /// Production leaves it null and goes through `pickOneFile`, which announces
+  /// the call to the log before it blocks the isolate.
+  @visibleForTesting
+  final Future<XFile?> Function(List<XTypeGroup> accepted)? pickFile;
 
   @override
   State<CompanionComposer> createState() => _CompanionComposerState();
@@ -36,6 +64,12 @@ class _CompanionComposerState extends State<CompanionComposer> {
   /// after every message — the phone's version of "did that go?".
   final _focus = FocusNode();
   bool _busy = false;
+
+  /// The one file waiting to go, or null.
+  CompanionOutgoingAttachment? _attachment;
+
+  /// Slices acknowledged and slices in total, while an upload is in flight.
+  (int, int)? _progress;
 
   @override
   void initState() {
@@ -69,16 +103,100 @@ class _CompanionComposerState extends State<CompanionComposer> {
     super.dispose();
   }
 
+  /// What the picker offers, and what a chosen file is called on the wire.
+  ///
+  /// Derived from the host's list rather than from a list of our own, so a
+  /// desktop that narrows what it takes narrows this without a phone release.
+  static const Map<String, String> _extensionsByType = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+  };
+
+  Future<void> _attach(RemoteAttachmentSupport support) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final extensions = <String>{
+      for (final type in support.mediaTypes) ?_extensionsByType[type],
+      // The picker matches on extension, and a JPEG is spelled both ways.
+      if (support.mediaTypes.contains('image/jpeg')) 'jpeg',
+    }.toList();
+    final groups = [XTypeGroup(label: 'Files', extensions: extensions)];
+    final show = widget.pickFile;
+    final file = show != null
+        ? await show(groups)
+        : await pickOneFile(
+            what: 'a file to send to the desktop',
+            acceptedTypeGroups: groups,
+          );
+    if (file == null) return;
+    final name = file.name;
+    final suffix = name.contains('.')
+        ? name.split('.').last.toLowerCase()
+        : '';
+    final mediaType = _extensionsByType.entries
+        .where((e) => e.value == suffix || (e.value == 'jpg' && suffix == 'jpeg'))
+        .map((e) => e.key)
+        .where(support.mediaTypes.contains)
+        .firstOrNull;
+    if (mediaType == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'The desktop takes ${extensions.join(', ')} — not .$suffix.',
+          ),
+        ),
+      );
+      return;
+    }
+    final bytes = await file.readAsBytes();
+    // Checked here so a file too big is refused before a byte leaves the
+    // phone, on the number the host itself named.
+    if (bytes.length > support.maxBytes) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'That file is ${_megabytes(bytes.length)} — the desktop takes up '
+            'to ${_megabytes(support.maxBytes)}.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _attachment = CompanionOutgoingAttachment(
+        name: name,
+        mediaType: mediaType,
+        bytes: bytes,
+      );
+    });
+  }
+
+  static String _megabytes(int bytes) =>
+      '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
   Future<void> _send() async {
     if (_busy || !widget.enabled) return;
     final text = _input.text.trim();
-    if (text.isEmpty) return;
+    final attachment = _attachment;
+    if (text.isEmpty && attachment == null) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      await widget.onSend(text);
+      await widget.onSend(
+        text,
+        attachment: attachment,
+        onProgress: (sent, total) {
+          if (mounted) setState(() => _progress = (sent, total));
+        },
+      );
       if (mounted) {
         _input.clear();
+        setState(() {
+          _attachment = null;
+          _progress = null;
+        });
         // Straight into the next message, the way every other chat box
         // behaves: `TextInputAction.send` took the focus away on its way
         // through, and a keyboard that shuts itself after each turn reads as
@@ -86,11 +204,13 @@ class _CompanionComposerState extends State<CompanionComposer> {
         _focus.requestFocus();
       }
     } catch (e) {
-      // Keep the text so the user can retry once the host is back.
+      // Keep the text and the file so the user can retry once the host is
+      // back — an upload that failed halfway is not a file the desktop has.
       messenger.showSnackBar(
         SnackBar(content: Text(e is GatewayException ? e.message : '$e')),
       );
     } finally {
+      if (mounted) setState(() => _progress = null);
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -100,13 +220,26 @@ class _CompanionComposerState extends State<CompanionComposer> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final canType = widget.enabled && !_busy;
-    final hasContent = _input.text.trim().isNotEmpty;
+    final attachment = _attachment;
+    final hasContent = _input.text.trim().isNotEmpty || attachment != null;
     final density = UiDensity.of(context);
+    final support = widget.attachments;
+    final progress = _progress;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
+        if (attachment != null)
+          _AttachedRow(
+            name: attachment.name,
+            detail: progress == null
+                ? _megabytes(attachment.bytes.length)
+                // Counted slices, not a guessed percentage: this is the number
+                // the host has actually acknowledged.
+                : 'Sending ${progress.$1} of ${progress.$2}…',
+            onRemove: canType ? () => setState(() => _attachment = null) : null,
+          ),
         Padding(
           padding: EdgeInsets.fromLTRB(
             density.padX,
@@ -134,6 +267,18 @@ class _CompanionComposerState extends State<CompanionComposer> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                if (support != null && support.allowsAnything)
+                  IconButton(
+                    tooltip: 'Attach a file',
+                    onPressed: canType && attachment == null
+                        ? () => _attach(support)
+                        : null,
+                    constraints: BoxConstraints(
+                      minWidth: density.minRow,
+                      minHeight: density.minRow,
+                    ),
+                    icon: Icon(AppIcons.image, size: density.icon),
+                  ),
                 Expanded(
                   child: TextField(
                     controller: _input,
@@ -227,6 +372,68 @@ class _CompanionComposerState extends State<CompanionComposer> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The one file waiting to go, above the box, with a way to take it back.
+///
+/// A row rather than a thumbnail: the phone has already shown the user their
+/// own photo in the picker, and decoding it again to draw a preview is work
+/// that buys nothing the name and the size do not already say.
+class _AttachedRow extends StatelessWidget {
+  const _AttachedRow({
+    required this.name,
+    required this.detail,
+    this.onRemove,
+  });
+
+  final String name;
+  final String detail;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(density.padX, density.padY, Insets.xs, 0),
+      child: Row(
+        children: [
+          // The same mark the desktop composer's own attach button carries.
+          Icon(
+            AppIcons.image,
+            size: density.icon,
+            color: scheme.onSurfaceVariant,
+          ),
+          SizedBox(width: Touch.gap),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+          SizedBox(width: Touch.gap),
+          Text(
+            detail,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove',
+            onPressed: onRemove,
+            constraints: BoxConstraints(
+              minWidth: density.minRow,
+              minHeight: density.minRow,
+            ),
+            icon: Icon(AppIcons.x, size: density.icon),
+          ),
+        ],
+      ),
     );
   }
 }

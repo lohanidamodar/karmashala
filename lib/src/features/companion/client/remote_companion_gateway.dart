@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:io';
 
 import '../../remote/client/companion_client.dart';
@@ -1097,10 +1098,53 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   @override
-  Future<void> sendPrompt(String sessionId, String text) async {
+  Future<RemotePromptDelivery> sendPrompt(
+    String sessionId,
+    String text, {
+    CompanionOutgoingAttachment? attachment,
+    void Function(int sent, int total)? onProgress,
+  }) async {
     await _ready;
     final client = _requireClient();
-    await _mapRefusals(() => client.sendPrompt(sessionId, text));
+    if (attachment == null) {
+      return _mapRefusals(() => client.sendPrompt(sessionId, text));
+    }
+    // Declared first, so a refusal costs one small frame rather than the
+    // megabytes of a photo the desktop cannot use.
+    final offer = await _mapRefusals(
+      () => client.beginAttachment(
+        RemoteAttachmentBegin(
+          sessionId: sessionId,
+          name: attachment.name,
+          mediaType: attachment.mediaType,
+          bytes: attachment.bytes.length,
+        ),
+      ),
+    );
+    final total = (attachment.bytes.length / offer.chunkBytes).ceil();
+    onProgress?.call(0, total);
+    var seq = 0;
+    for (var at = 0; at < attachment.bytes.length; at += offer.chunkBytes) {
+      final end = at + offer.chunkBytes < attachment.bytes.length
+          ? at + offer.chunkBytes
+          : attachment.bytes.length;
+      // Awaited one at a time. The outbound queue drops its oldest frame under
+      // pressure, so a slice nobody acknowledged is a slice that is gone.
+      await _mapRefusals(
+        () => client.sendAttachmentChunk(
+          offer.uploadId,
+          seq,
+          Uint8List.sublistView(attachment.bytes, at, end),
+        ),
+      );
+      onProgress?.call(++seq, total);
+    }
+    // The prompt is the commit: the host checks the length here, so a short
+    // upload takes the prompt with it rather than becoming a truncated file an
+    // agent is told to open.
+    return _mapRefusals(
+      () => client.sendPrompt(sessionId, text, attachmentId: offer.uploadId),
+    );
   }
 
   @override
@@ -2417,6 +2461,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       imported: snapshot.imported,
       archived: snapshot.archived,
       folderMissing: snapshot.folderMissing || raw?['folderMissing'] == true,
+      attachments: snapshot.attachments,
     );
   }
 
