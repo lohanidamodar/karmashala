@@ -11,7 +11,7 @@ import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/conversation_presence.dart';
-import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../git/application/git_providers.dart';
@@ -1413,12 +1413,12 @@ class SessionLauncher {
     String? firstMessage,
     String? workingDirectoryNotice,
   ) {
+    // The one resolver: this is the launch that CLAUDE.md 17 is about, and a
+    // wrong environment here is silent for whoever ran it.
     final environment = _ref
-        .read(executionEnvironmentDaoProvider)
-        .getById(workingDirectory.environmentId);
-    if (environment == null) {
-      throw StateError('The repository\'s environment is unavailable.');
-    }
+        .read(environmentResolverProvider)
+        .resolveFor(workingDirectory)
+        .require;
     final mcp = _mcpAccessFor(session, descriptor, environment);
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,
@@ -1504,12 +1504,11 @@ class SessionLauncher {
     String? firstMessage,
     String? workingDirectoryNotice,
   ) async {
+    // The same resolver as the pane path, so the two surfaces cannot drift.
     final environment = _ref
-        .read(executionEnvironmentDaoProvider)
-        .getById(workingDirectory.environmentId);
-    if (environment == null) {
-      throw StateError('The repository\'s environment is unavailable.');
-    }
+        .read(environmentResolverProvider)
+        .resolveFor(workingDirectory)
+        .require;
     final terminal =
         request.externalTerminal ??
         await _ref.read(defaultSystemTerminalProvider.future);

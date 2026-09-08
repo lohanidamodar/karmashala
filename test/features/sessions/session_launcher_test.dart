@@ -984,4 +984,61 @@ void main() {
     expect(launcher.livePaneFor(id), started.paneId);
     expect(SessionDao(h.db).getById(id)!.status, SessionStatus.running);
   });
+
+  group('a working directory whose environment row is gone', () {
+    /// A session recorded in a distribution that has since been removed. Both
+    /// launch surfaces resolve where the agent runs through the one resolver,
+    /// so neither can invent its own sentence for it.
+    const gone = EnvironmentPath(
+      environmentId: 'wsl:Gone',
+      path: '/home/me/app',
+    );
+
+    Matcher saysSoAndNamesTheId() => throwsA(
+      isA<StateError>().having(
+        (e) => e.message,
+        'message',
+        'Unknown environment: ${gone.environmentId}',
+      ),
+    );
+
+    test('refuses a pane launch', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await expectLater(
+        h.container.read(sessionLauncherProvider).launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            workingDirectory: gone,
+            installation: agentInstallation(agentId: 'roverCli'),
+            title: 'Rover run',
+            purpose: SessionPurpose.newSession,
+          ),
+        ),
+        saysSoAndNamesTheId(),
+      );
+    });
+
+    test('refuses an external-terminal launch, in the same words', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await expectLater(
+        h.container.read(sessionLauncherProvider).launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            workingDirectory: gone,
+            installation: agentInstallation(agentId: 'roverCli'),
+            title: 'Rover run',
+            purpose: SessionPurpose.newSession,
+            surface: SessionSurface.external,
+          ),
+        ),
+        saysSoAndNamesTheId(),
+      );
+    });
+  });
 }

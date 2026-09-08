@@ -10,6 +10,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../git/application/changes_providers.dart';
@@ -203,11 +204,10 @@ class ProjectsController extends Notifier<List<Project>> {
     String? gitRepoUrl,
     String? workspaceId,
   }) async {
-    final dao = ref.read(executionEnvironmentDaoProvider);
-    final target = dao.getById(targetEnvironmentId);
-    if (target == null) {
-      throw StateError('Target execution environment not found: $targetEnvironmentId');
-    }
+    final target = ref
+        .read(environmentResolverProvider)
+        .resolve(targetEnvironmentId)
+        .require;
     final result = await ref.read(projectServiceProvider).createProject(
           name: name,
           target: target,

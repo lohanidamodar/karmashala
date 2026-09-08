@@ -18,6 +18,7 @@ import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/detected_session.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -609,15 +610,15 @@ class SessionActions {
   /// The shell family a copied command has to be spelled for: the one belonging
   /// to the directory the command `cd`s into, never the host's. A Windows
   /// session gets PowerShell even when the row was adopted from a WSL store.
-  EnvironmentKind _shellKindOf(String environmentId) {
-    final environment = _ref
-        .read(executionEnvironmentDaoProvider)
-        .getById(environmentId);
-    if (environment == null) {
-      throw StateError('The environment "$environmentId" is not configured.');
-    }
-    return environment.kind;
-  }
+  EnvironmentKind _shellKindOf(String environmentId) =>
+      // `runnable: false`: this spells a line for the user to copy and runs
+      // nothing, so whether this app could dial an SSH host is not the
+      // question. A WSL row with no distribution still is.
+      _ref
+          .read(environmentResolverProvider)
+          .resolve(environmentId, runnable: false)
+          .require
+          .kind;
 
   /// A shell command (cd + resume, with permission flags) for native [sessionId].
   String nativeResumeShellCommand(String sessionId) {
@@ -728,11 +729,9 @@ class SessionActions {
       );
     }
     final env = _ref
-        .read(executionEnvironmentDaoProvider)
-        .getById(repo.path.environmentId);
-    if (env == null) {
-      throw StateError('The session\'s environment is unavailable.');
-    }
+        .read(environmentResolverProvider)
+        .resolveFor(repo.path)
+        .require;
     final installs = _ref
         .read(agentInstallationDaoProvider)
         .getByEnvironment(session.environmentId)
@@ -812,11 +811,9 @@ class SessionActions {
       );
     }
     final env = _ref
-        .read(executionEnvironmentDaoProvider)
-        .getById(repo.path.environmentId);
-    if (env == null) {
-      throw StateError('The session\'s environment is unavailable.');
-    }
+        .read(environmentResolverProvider)
+        .resolveFor(repo.path)
+        .require;
     // Resolved once and used three times: the command line's `cd`, the
     // terminal's own start directory, and the refusal below — which is about
     // the difference between this and where the conversation was written.

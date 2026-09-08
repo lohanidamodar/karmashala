@@ -429,10 +429,37 @@ lands" includes "Confirm delete". There is no undo on the other side of the
 wire, which is why `device_tap`, `device_tap_element`, `device_type` and
 `device_key` are all annotated destructive despite being ordinary input.
 
-Look before you act. `device_ui_dump` and `device_find_elements` read the
-screen and change nothing; `device_screenshot` shows you what a person would
-see. Tapping an element you found beats tapping a coordinate you remembered,
-for the same reason it does in a browser: coordinates go stale silently.
+**Dynamic first, coordinates as a checked fallback.** Reach for
+`device_tap_element` and let it resolve the element against the screen as it is
+at the instant of the tap: it survives a layout change, a different screen size
+and a scale factor — which on iOS is a factor of three — and it tells you what
+it hit. Use `device_tap` only when the dynamic attempt has failed, and only
+with coordinates you verified during exploration with `device_ui_dump` or
+`device_find_elements`, which report them in the space this device actually
+takes. A number measured off a screenshot is not a verified coordinate.
+
+**There is no speed reason to skip the dynamic path.** `device_tap` reads the
+screen once immediately before it acts — the same read `device_tap_element`
+already makes — so the two cost the same. What that read buys is a refusal:
+if the structure has moved since this app last read the device, your
+coordinate is for a screen that is gone and the tap does not go out. The
+refusal says how old the reading was and what changed. Look again and act on
+what is there; `verify: false` is for a surface with nothing in its hierarchy
+— a canvas, a game, a custom-painted view — where there is nothing for the
+check to be about.
+
+`device_tap_element` is never refused for that reason, and the difference is
+the whole policy in one line: a locator resolved now survives a change that
+makes a remembered coordinate wrong.
+
+**One task per device.** A phone is a single physical surface, not a
+repository, so a device is held by the session driving it and a second agent's
+tap, type, key, install, launch, terminate or push is refused by name — you
+are told who has it, since when, and what it last did. Reading is never
+blocked: dump, find, screenshot and logcat all work while somebody else
+drives, which is how you see what is happening to the device. A claim is
+released when its session ends and lapses on its own after a couple of minutes
+of silence, so a block always clears without anybody intervening.
 
 `device_install_app` overwrites whatever build of the same app was there, and
 the previous binary is simply gone. `device_terminate_app` takes anything the

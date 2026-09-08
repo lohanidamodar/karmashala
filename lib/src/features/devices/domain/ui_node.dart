@@ -75,6 +75,16 @@ class UiBounds {
   bool coversMostOf(DeviceScreenSize screen, {double fraction = 0.9}) =>
       width >= screen.width * fraction && height >= screen.height * fraction;
 
+  /// Whether ([x], [y]) is inside this rectangle.
+  ///
+  /// Right and bottom are exclusive, the way the device's own hit test is:
+  /// adjacent nodes share an edge, and an inclusive test would put a point on
+  /// that edge inside both of them.
+  bool holds(int x, int y) => x >= left && x < right && y >= top && y < bottom;
+
+  /// Area, for picking the innermost of several rectangles over one point.
+  int get area => width <= 0 || height <= 0 ? 0 : width * height;
+
   /// The original `[l,t][r,b]` form, so a caller can echo exactly what the
   /// device reported.
   String get raw => '[$left,$top][$right,$bottom]';
@@ -330,6 +340,33 @@ class UiHierarchy {
   UiNode? findFirst(UiElementQuery query) {
     final found = find(query, limit: 1);
     return found.isEmpty ? null : found.first;
+  }
+
+  /// What a tap at ([x], [y]) would land on, or null when nothing covers it.
+  ///
+  /// The smallest rectangle containing the point, which **approximates** the
+  /// platform's own hit test rather than reproducing it — a dump carries no
+  /// z-order, so two overlapping siblings of the same size are a coin toss.
+  /// Smallest-first is the right approximation for the case that matters:
+  /// Android's full-screen `Dismiss` barrier sits behind every dialog, so a
+  /// point on a dialog button resolves to the button and a point beside it
+  /// resolves to the barrier — which is exactly the distinction a caller
+  /// needs to see.
+  ///
+  /// Used to *describe* what is under a coordinate, never to redirect a tap.
+  UiNode? at(int x, int y) {
+    UiNode? best;
+    var bestArea = -1;
+    for (final node in allNodes) {
+      final bounds = node.bounds;
+      if (bounds == null || !bounds.holds(x, y)) continue;
+      final area = bounds.area;
+      if (best == null || area < bestArea) {
+        best = node;
+        bestArea = area;
+      }
+    }
+    return best;
   }
 }
 

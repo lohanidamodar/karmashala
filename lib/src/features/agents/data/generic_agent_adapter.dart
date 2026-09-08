@@ -1,5 +1,6 @@
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../domain/agent_adapter.dart';
@@ -60,13 +61,12 @@ class GenericAgentAdapter implements AgentAdapter {
 
   @override
   AgentSession start(AgentLaunch agentLaunch) {
-    final env = environmentDao.getById(agentLaunch.installation.environmentId);
-    if (env == null) {
-      throw StateError(
-        'Unknown environment ${agentLaunch.installation.environmentId} '
-        'for $agentId.',
-      );
-    }
+    // The one resolver, so an agent that cannot be placed refuses in the same
+    // words as every other launch path.
+    final env = ExecutionEnvironmentResolver(
+      environments: environmentDao,
+      runners: runnerFactory,
+    ).resolve(agentLaunch.installation.environmentId).require;
     final runner = runnerFactory.forEnvironment(env);
     final request = CommandRequest(
       executable: agentLaunch.installation.executable.path,
