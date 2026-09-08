@@ -12,6 +12,7 @@ import '../../agents/domain/agent_usage.dart';
 import '../../agents/domain/usage_failure.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../sessions/domain/session_resume.dart';
+import '../../agents/presentation/usage_chip.dart';
 
 /// What the selected accounts have left, shown where the fan-out is confirmed.
 ///
@@ -169,7 +170,8 @@ class _AccountUsage extends ConsumerWidget {
         : theme.colorScheme.primary;
     final reset = window.resetsAt == null
         ? ''
-        : ' · resets ${_relativeReset(window.resetsAt!)}';
+        : ' · resets ${_relativeReset(window.resetsAt!)}'
+              ' (${formatResetClock(window.resetsAt!, DateTime.now())})';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       child: Column(

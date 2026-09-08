@@ -176,7 +176,8 @@ String _windowLine(UsageWindow window, DateTime now) {
   final reset = window.resetsAt;
   final resets = reset == null
       ? ''
-      : ' · resets in ${formatUsageDuration(reset.difference(now))}';
+      : ' · resets in ${formatUsageDuration(reset.difference(now))}'
+            ' (${formatResetClock(reset, now)})';
   return '${window.label} · ${window.percent.round()}%$resets';
 }
 
@@ -198,6 +199,32 @@ String _ago(Duration since) => since < const Duration(minutes: 1)
     : '${formatUsageDuration(since)} ago';
 
 /// A countdown the width of a status bar: `2h11m`, `45m`, `3d4h`, `now`.
+/// The clock time [when] falls at, for a reader who wants to plan around it.
+///
+/// "resets in 2h 14m" answers *how long*; it does not answer *when*, and a
+/// quota you are waiting on is something people arrange the rest of an
+/// afternoon around. Both are shown, never one instead of the other.
+///
+/// **`toLocal()` is the whole correctness of this function.** The two services
+/// hand back reset times in different zones — an ISO string with a `Z` parses
+/// to UTC, while Codex's epoch seconds parse to local. That difference is
+/// invisible while the only use is `difference(now)`, which compares absolute
+/// instants, and becomes a wrong hour on screen the moment one is formatted.
+///
+/// A weekday is prefixed only when the reset is not today, because "resets
+/// 11:55" three days out is a worse answer than no answer.
+String formatResetClock(DateTime when, DateTime now) {
+  final local = when.toLocal();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final clock =
+      '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+  if (day == today) return clock;
+  const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return '${names[local.weekday - 1]} $clock';
+}
+
 String formatUsageDuration(Duration span) {
   if (span <= Duration.zero) return 'now';
   if (span.inDays >= 1) {
