@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../automations/presentation/automations_page.dart';
 import '../../../app/shell/app_shell.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
@@ -169,6 +170,7 @@ class _SectionContent extends StatelessWidget {
     // Agents are listed under the environment they are installed in: the same
     // CLI on the Windows host and on a build box are two independent
     // installations.
+    SettingsSectionId.automations => const AutomationsPage(),
     SettingsSectionId.worktrees => const WorktreeSetupPage(),
     SettingsSectionId.environments => const EnvironmentsSection(),
     SettingsSectionId.environmentVariables => const EnvSecretsPage(),
