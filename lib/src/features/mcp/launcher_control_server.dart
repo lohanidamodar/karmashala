@@ -27,6 +27,7 @@ import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
 import '../flutter_apps/application/flutter_app_tools.dart';
+import '../flutter_apps/application/flutter_run_tools.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
@@ -1263,6 +1264,14 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // And the half that *starts* one. The caller's session is what the
+      // device claim is taken in the name of, so a second agent's refusal can
+      // name who is holding the phone.
+      case final String name when FlutterRunTools.handles(name):
+        return FlutterRunTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // Verification runs record what the browser and device tools above do,
       // so they share those same services rather than driving anything of their
       // own. The artifact root is resolved here because it is the first thing
@@ -1612,6 +1621,7 @@ class LauncherControlServer implements SessionMcp {
     ...reviewThreadToolSchemas,
     ...browserToolSchemas,
     ...flutterAppToolSchemas,
+    ...flutterRunToolSchemas,
     ...verificationToolSchemas,
   ];
 

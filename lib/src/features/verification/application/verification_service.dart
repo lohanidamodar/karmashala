@@ -247,6 +247,93 @@ class VerificationService {
     _changed();
   }
 
+  /// Records a check **this app ran itself**, start to finish, in one call.
+  ///
+  /// `flutter analyze` and `flutter test` are the two it exists for. They are
+  /// not the same shape as everything else here: a browser or a device run is
+  /// an agent *driving* something over many turns, and the recorder follows
+  /// along; a gate is one command with one exit code, and the verdict is that
+  /// code. There is nothing to drive and nothing to follow.
+  ///
+  /// **It does not take the recording slot.** [start] refuses while a run is
+  /// open, correctly — two recorders on one browser would interleave. A gate
+  /// installs no sink and touches neither service, so an agent that is halfway
+  /// through verifying a screen can run a gate without its own run being
+  /// clobbered or refused.
+  ///
+  /// The target is [VerificationTargetKind.change] for the reason that kind
+  /// gives: a gate drives nothing, and there is no address to store. What it
+  /// was about is in the title and in the step.
+  ///
+  /// **An exit code we never saw is `inconclusive`, never a pass** (§19) — a
+  /// pane the user closed by hand reports no code at all, and calling that
+  /// green would be the confident false statement the whole record exists to
+  /// avoid.
+  Future<VerificationRun> recordCommandCheck({
+    required String title,
+    required List<String> command,
+    required String workingDirectory,
+    required String environmentId,
+    required DateTime startedAt,
+    required int? exitCode,
+    String output = '',
+    String? sessionId,
+    String? producedBySessionId,
+  }) async {
+    final id = _newId();
+    final directory = await _store.createDirectory(id);
+    final finishedAt = _now();
+    final verdict = switch (exitCode) {
+      0 => VerificationVerdict.pass,
+      null => VerificationVerdict.inconclusive,
+      _ => VerificationVerdict.fail,
+    };
+    final line = command.join(' ');
+    final step = VerificationStep(
+      ordinal: 1,
+      kind: VerificationStepKind.other,
+      summary: line,
+      detail: 'in $workingDirectory ($environmentId)',
+      at: finishedAt,
+      ok: exitCode == 0,
+    );
+    final run = VerificationRun(
+      id: id,
+      title: title,
+      target: const VerificationTarget.change(),
+      sessionId: sessionId,
+      producedBySessionId: producedBySessionId,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      verdict: verdict,
+      reason: switch (exitCode) {
+        0 => '$line passed.',
+        null =>
+          '$line stopped without an exit code Karmashala observed, so whether '
+              'it passed is unknown.',
+        final code => '$line exited $code.',
+      },
+      artifactDirectory: directory.path,
+      steps: <VerificationStep>[step],
+    );
+    _dao.insertRun(run);
+    _dao.insertStep(id, step);
+    if (output.trim().isNotEmpty) {
+      final artifact = await _store.writeText(
+        runId: id,
+        name: 'output',
+        kind: VerificationArtifactKind.other,
+        label: line,
+        text: output,
+        stepOrdinal: 1,
+        at: finishedAt,
+      );
+      _dao.insertArtifact(artifact);
+    }
+    _changed();
+    return _dao.getRun(id) ?? run;
+  }
+
   /// Closes the run: collects the trailing evidence, records the verdict, and
   /// writes the report.
   Future<VerificationRun> finish({

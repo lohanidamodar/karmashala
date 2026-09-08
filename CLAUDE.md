@@ -598,7 +598,7 @@ things outside this app.
 
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
-| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `flutter_pty` for the pane tests | there is no WSL, or no `flutter_pty.dll` to spawn a ConPTY with |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart`, `test/terminal/live_wsl_input_boundary_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `python3` in it for the input-boundary read, `flutter_pty` for the pane tests | there is no WSL, no `python3` in it, or no `flutter_pty.dll` to spawn a ConPTY with |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
@@ -670,6 +670,47 @@ follow every resize, and so does a burst of 60 at a drag's cadence — the last
 one is the one the process ends up on, so nothing here debounces badly or lands
 a size behind. That is the evidence that ruled the PTY out of the "resizing
 doesn't work as expected" report.
+
+`live_wsl_input_boundary_test.dart` answers the input-side counterpart: **does
+an escape sequence this app writes reach the process in the pane in one piece?**
+Every navigation key is `ESC` plus a tail, and the byte parser Codex and every
+other crossterm program uses on Linux resolves an `ESC` the moment a `read()`
+ends on it — it emits a lone `Esc` and reads the tail as *text*. So one badly
+placed read boundary turns End into a literal `[F` in the composer, which is
+what the owner reported on 2026-09-08, and nothing above the PTY can see it.
+
+**Measured 2026-09-09 against `archlinux`, and the launch form is the whole
+story.** Through the launch this app builds — `cmd.exe /c wsl.exe -d <distro>`
+— every sequence arrives whole: 40/40 for a single End, 0 fatal boundaries in
+200 back-to-back presses, and 40/40 into a pane repainting at 125 Hz. Through
+the launch it *used* to build — `wsl.exe` spawned directly, whose duplicated
+leading token makes the distro's login shell exec a Windows `wsl.exe` back out
+through interop — the same 40 presses arrive whole only 12 times, split
+`ESC[`+`F` 20 times (harmless, the parser waits) and `ESC`+`[F` 8 times, which
+is the reported bug. Confirmed against real Codex in both shapes the same day:
+this app's launch put the caret where Home belongs; the nested one typed
+`hello[HX`. The nested case is measured here too and **reports rather than
+asserts** — WSL's own relay is not this app's to fail on.
+
+**It is the wrapper, not the `--`.** Crossed both ways over the same 40
+presses: `cmd.exe /c wsl.exe … -e python3 …`, an argv hand-off with no `--` at
+all, is whole 40/40, and `wsl.exe` spawned directly *with* the app's `--`
+payload splits 22 times of 40, five of them after the bare `ESC`. So the
+`cmd.exe /c` of `throughCommandPrompt` is doing the work — it is what keeps the
+distro's login shell from exec'ing a second `wsl.exe` back out through interop
+— and the `--` hand-off `encodedPosixShellCommand` needs costs nothing here.
+
+**There was nothing to tune on the writing side, and that was measured too.**
+`flutter_pty` creates the pseudoconsole with `dwFlags` 0 and sets no console
+mode at all (`packages/flutter_pty/src/flutter_pty_win.c`), and one `pty.write`
+is one `WriteFile` followed by `FlushFileBuffers` — so the app already hands
+each key to ConPTY as a single indivisible write, and
+`ENABLE_VIRTUAL_TERMINAL_INPUT` is the *client's* flag to set, which `wsl.exe`
+does for itself. The only variable that moved the boundaries was the launch
+form. The exploratory harness — SS3 and kitty forms, burst and auto-repeat
+patterns, a repainting pane, and a Windows-native raw reader for the control —
+is kept at `C:\kw\keep\esc-split-probe\` rather than in the repository,
+because the one property worth pinning is the one the test above asserts.
 
 ### A failure is not automatically a bug
 

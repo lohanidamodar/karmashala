@@ -27,6 +27,24 @@
 /// Nothing here is enforcement. What actually keeps a destructive call from
 /// happening by accident is that it is its own tool with its own required
 /// arguments, never a flag on a read.
+///
+/// ## What is never served here at all
+///
+/// **No automation tool.** Scheduled automations have no `automation_*` tool
+/// and never will: create, run, pause and delete would let an agent schedule
+/// an agent, and the invariant the whole feature is built on is that *nothing
+/// starts an agent the user did not authorise*. An automation is that
+/// authorisation, given in advance, **by a person, in the UI, at arming** — a
+/// tool that could arm one would be the same act with the person taken out of
+/// it. `automations_page.dart` is the only place it happens, and
+/// `no_automation_tools_test.dart` fails if any served name so much as begins
+/// with `automation`.
+///
+/// This is a rule about the surface, not a fifth annotation. Reading an
+/// automation's record is not carved out either — a read tool would be the
+/// obvious next step and it is not one taken here, because the argument above
+/// is about the family, and the day a read is wanted it should be argued for
+/// on its own.
 library;
 
 /// The behaviour of one tool, as `tools/list` reports it.
@@ -307,6 +325,14 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // client deciding whether to confirm cannot see which argument was
       // passed. Same rule as `terminal_close`.
       'flutter_reload': McpToolAnnotations(destructive: true, openWorld: true),
+      // Starts and stops builds, apps and gates. Destructive because `stop`
+      // ends a running app and anything it had not saved goes with it, and
+      // because the annotation describes the worst the tool does — a client
+      // deciding whether to confirm cannot see which action was passed. Not
+      // idempotent: two `run`s are two launches, and `pubGet` twice is twice.
+      // Open-world for the same reason the device tools are — a launch puts an
+      // app on a phone, and a gate is a process on somebody's machine.
+      'flutter_run': McpToolAnnotations(destructive: true, openWorld: true),
 
       // Verification runs.
       'verification_list': McpToolAnnotations.read,
@@ -369,8 +395,8 @@ enum McpToolCategory {
     'A real Chrome or Edge — the developer\'s own logged-in window.',
   ),
   flutterApps(
-    'Running Flutter apps',
-    'A Flutter app already running under "flutter run".',
+    'Flutter apps',
+    'Starting a Flutter project, and the app once it is running.',
   ),
   guides(
     'Guides',
@@ -804,7 +830,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     'Run JavaScript in the page. Needs a one-time grant, per project.',
   ),
 
-  // Running Flutter apps.
+  // Flutter: starting a project, and the app once it is running.
   'flutter_apps': McpToolListing(
     McpToolCategory.flutterApps,
     'Every running app this can reach, and how to name each one.',
@@ -824,6 +850,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'flutter_pick_widget': McpToolListing(
     McpToolCategory.flutterApps,
     'Ask the developer to tap a widget; get the file and line it came from.',
+  ),
+  'flutter_run': McpToolListing(
+    McpToolCategory.flutterApps,
+    'Start a project: pub get, launch on a device, and run its gates.',
   ),
 
   // Guides.
