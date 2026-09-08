@@ -4,6 +4,7 @@ import '../../../app/shell/quick_open/repo_file_index.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../projects/application/projects_controller.dart';
@@ -193,8 +194,9 @@ final viewedCheckoutProvider = Provider.autoDispose<EnvironmentPath?>((ref) {
 final checkoutGitPresenceProvider = FutureProvider.autoDispose
     .family<GitPresence, EnvironmentPath>((ref, checkout) async {
       final env = ref
-          .read(executionEnvironmentDaoProvider)
-          .getById(checkout.environmentId);
+          .read(environmentResolverProvider)
+          .resolveFor(checkout)
+          .environment;
       // No environment row is not a statement about the folder; the git path
       // has its own `GitException` for that.
       if (env == null) return GitPresence.unknown;

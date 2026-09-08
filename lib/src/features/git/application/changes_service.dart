@@ -1,4 +1,5 @@
 import '../../../core/process/command_runner_factory.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
@@ -57,10 +58,12 @@ class ChangesService {
   final WorkingTreeChanged? onWorkingTreeChanged;
 
   ExecutionEnvironment _environmentOf(EnvironmentPath repo) {
-    final env = environmentDao.getById(repo.environmentId);
-    if (env == null) {
-      throw GitException('Unknown environment: ${repo.environmentId}');
-    }
+    final resolved = ExecutionEnvironmentResolver(
+      environments: environmentDao,
+      runners: runnerFactory,
+    ).resolveFor(repo);
+    final env = resolved.environment;
+    if (env == null) throw GitException(resolved.reason);
     return env;
   }
 

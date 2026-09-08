@@ -8,6 +8,8 @@ import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -463,6 +465,84 @@ void main() {
         SessionDao(h.db).getById('adopted-1')!.workingDirectory,
         elsewhere,
       );
+    });
+  });
+
+  group('a WSL row whose distribution is gone', () {
+    /// CLAUDE.md 17's failure, at the two surfaces that hand a command to a
+    /// terminal we do not own: a row that says "WSL" and no longer says which
+    /// distribution used to build a `wsl.exe` line naming none. Both go through
+    /// the one resolver now, so both refuse with its words instead.
+    const words = 'WSL environment wsl:Ubuntu has no distribution name';
+
+    /// A repository filed under a WSL environment that has lost its
+    /// distribution name.
+    void broken(Harness h) {
+      ExecutionEnvironmentDao(h.db).upsert(
+        ExecutionEnvironment(
+          id: 'wsl:Ubuntu',
+          kind: EnvironmentKind.wsl,
+          name: 'Ubuntu',
+          createdAt: testTime,
+        ),
+      );
+      RepositoryDao(h.db).insert(
+        repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
+      );
+    }
+
+    Matcher saysSo() => throwsA(
+      isA<StateError>().having((e) => e.message, 'message', words),
+    );
+
+    test('an imported entry refuses rather than spelling a broken line',
+        () async {
+      final h = harness(_sharing);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      broken(h);
+
+      await expectLater(
+        h.container.read(sessionActionsProvider).openInSystemTerminal(
+              ImportedSession(
+                id: 'i2',
+                repositoryId: 'r2',
+                cli: _sharing.id,
+                externalId: 'ext-2',
+                environmentId: 'wsl:Ubuntu',
+                filePath: '/store/rollout-ext-2.jsonl',
+                storeHome: '/store',
+                isSubagent: false,
+                preview: 'earlier work',
+                createdAt: testTime,
+              ),
+              _terminal,
+            ),
+        saysSo(),
+      );
+      expect(h.terminals.launches, isEmpty);
+    });
+
+    test('and one of our own sessions refuses in the same words', () async {
+      final h = harness(_sharing);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      broken(h);
+      SessionDao(h.db).insert(
+        session(
+          id: 'n2',
+          repositoryId: 'r2',
+          title: 'Adopted',
+        ).copyWith(externalSessionId: 'ext-2'),
+      );
+
+      await expectLater(
+        h.container
+            .read(sessionActionsProvider)
+            .openSessionInSystemTerminal('n2', _terminal),
+        saysSo(),
+      );
+      expect(h.terminals.launches, isEmpty);
     });
   });
 }

@@ -306,4 +306,37 @@ void main() {
       );
     });
   });
+
+  test('a copied command refuses an environment the workspace has lost', () {
+    // No process starts here — this only spells a line — but the *shell* it is
+    // spelled for is the environment's, so an environment nobody can name
+    // cannot be guessed at. Same resolver, same words as the launch paths.
+    final h = harness(_conversational);
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+
+    expect(
+      () => h.container.read(sessionActionsProvider).resumeShellCommand(
+            ImportedSession(
+              id: 'i2',
+              repositoryId: 'r1',
+              cli: _conversational.id,
+              externalId: 'ext-1',
+              environmentId: 'wsl:Gone',
+              filePath: '/store/rollout-ext-1.jsonl',
+              storeHome: '/store',
+              isSubagent: false,
+              preview: 'earlier work',
+              createdAt: testTime,
+            ),
+          ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          'Unknown environment: wsl:Gone',
+        ),
+      ),
+    );
+  });
 }

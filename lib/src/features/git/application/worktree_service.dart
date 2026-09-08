@@ -1,6 +1,8 @@
 import '../../../core/process/command_runner_factory.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/execution_environment.dart';
 import '../data/git_service.dart';
 import '../domain/git_worktree.dart';
 import 'worktree_setup_service.dart';
@@ -45,13 +47,21 @@ class WorktreeService {
   /// **no setup at all**, not a silent one.
   final WorktreeSetupService? setup;
 
-  GitService _gitFor(EnvironmentPath repo) {
-    final env = environmentDao.getById(repo.environmentId);
-    if (env == null) {
-      throw GitException('Unknown environment: ${repo.environmentId}');
-    }
-    return GitService(runnerFactory.forEnvironment(env));
+  /// Where [repo]'s git runs, or the resolver's own refusal as a
+  /// [GitException] — the words are its, so this cannot drift from the other
+  /// launch paths.
+  ExecutionEnvironment _environmentOf(EnvironmentPath repo) {
+    final resolved = ExecutionEnvironmentResolver(
+      environments: environmentDao,
+      runners: runnerFactory,
+    ).resolveFor(repo);
+    final env = resolved.environment;
+    if (env == null) throw GitException(resolved.reason);
+    return env;
   }
+
+  GitService _gitFor(EnvironmentPath repo) =>
+      GitService(runnerFactory.forEnvironment(_environmentOf(repo)));
 
   /// Lists the worktrees of [repo].
   Future<List<GitWorktree>> list(EnvironmentPath repo) =>
@@ -75,10 +85,7 @@ class WorktreeService {
     required String branch,
     String? baseRef,
   }) async {
-    final env = environmentDao.getById(repo.environmentId);
-    if (env == null) {
-      throw GitException('Unknown environment: ${repo.environmentId}');
-    }
+    final env = _environmentOf(repo);
     final git = GitService(runnerFactory.forEnvironment(env));
     final path = worktreePathFor(env.kind, repo, worktreeName);
     final worktree = await git.addWorktree(

@@ -24,6 +24,13 @@ class CommandRunnerFactory {
 
   final SshConnectionPool Function()? sshConnections;
 
+  /// Whether an SSH environment can be run in at all from this composition.
+  ///
+  /// `ExecutionEnvironmentResolver` asks before handing out a remote
+  /// environment, so a container composed without a pool refuses in words
+  /// instead of throwing out of [forEnvironment] later.
+  bool get canReachRemote => sshConnections != null;
+
   CommandRunner forEnvironment(ExecutionEnvironment environment) {
     switch (environment.kind) {
       case EnvironmentKind.windowsNative:

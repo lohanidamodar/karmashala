@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
@@ -25,10 +26,12 @@ class GitHubReviewService {
   final ExecutionEnvironmentDao environmentDao;
 
   GitHubService _ghFor(EnvironmentPath repo) {
-    final env = environmentDao.getById(repo.environmentId);
-    if (env == null) {
-      throw GitHubException('Unknown environment: ${repo.environmentId}');
-    }
+    final resolved = ExecutionEnvironmentResolver(
+      environments: environmentDao,
+      runners: runnerFactory,
+    ).resolveFor(repo);
+    final env = resolved.environment;
+    if (env == null) throw GitHubException(resolved.reason);
     return GitHubService(runnerFactory.forEnvironment(env));
   }
 
