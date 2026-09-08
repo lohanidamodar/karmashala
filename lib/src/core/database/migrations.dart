@@ -80,6 +80,10 @@ typedef MigrationStep = void Function(Database db);
 /// * **v41** — the conversation index: FTS5 over every conversation's visible
 ///   turns, plus the per-conversation watermark that keeps a re-index off a
 ///   transcript that has not moved.
+/// * **v42** — what a repository wants done to a worktree the moment git makes
+///   one: a command to run in a visible pane, gitignored paths to copy in, and
+///   the recorded verdict of the last setup so a failure is attached to that
+///   worktree rather than lost.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -122,6 +126,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   39: _migrateToV39,
   40: _migrateToV40,
   41: _migrateToV41,
+  42: _migrateToV42,
 };
 
 /// Was this pane running when its row was written?
@@ -1762,6 +1767,61 @@ void _migrateToV41(Database db) {
       size INTEGER,
       turns INTEGER NOT NULL,
       indexed_at TEXT NOT NULL
+    );
+  ''');
+}
+
+/// Worktree setup: what a repository wants done to a worktree git has just
+/// made, and what happened the last time it was done.
+///
+/// **Two tables because they are two different kinds of fact.** The setting is
+/// the user's intent and belongs to the checkout; the report is a measurement
+/// of one worktree and belongs to that directory. Folding the second into the
+/// first would overwrite one worktree's verdict with the next one's.
+///
+/// **In the database rather than in a checked-in file**, which is the decision
+/// the backlog took for us: *"the file format is the expensive half and the one
+/// we would most likely get wrong first."* A `.karmashala/setup.yaml` would
+/// also have to be versioned, validated and reconciled with a branch that
+/// changed it, none of which buys anything until somebody wants the setting to
+/// travel with the repository.
+///
+/// `command` is a **JSON argv array**, not a command line. That is what
+/// `AgentPaneLaunch` takes and what `wrapForPty` quotes — once — for whichever
+/// shell the pane opens into. Storing a line would put a second parser between
+/// the setting and the shell that finally reads it.
+///
+/// `ON DELETE CASCADE` on both: a setting for a checkout that has been retired
+/// is configuration for a directory nobody can reach, and a verdict about a
+/// worktree of it is history about a place that is gone. Neither is the kind of
+/// record `RepositoryDao.delete`'s own doc argues for keeping — those are
+/// transcripts of work, and this is a build recipe.
+///
+/// `ran_at` is `NOT NULL` and rendered with `describeAge`: a verdict with no
+/// age is a confident statement about a moment nobody can identify (§19). The
+/// per-path sentences and the command's exit code live inside `detail` rather
+/// than in columns of their own, because nothing queries them — `verdict` is
+/// the only field a surface filters on, and it is a column for that reason.
+void _migrateToV42(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS worktree_setup (
+      repository_id TEXT PRIMARY KEY
+        REFERENCES repositories(id) ON DELETE CASCADE,
+      command       TEXT,
+      copy_paths    TEXT NOT NULL DEFAULT '[]',
+      updated_at    TEXT NOT NULL
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS worktree_setup_runs (
+      repository_id  TEXT NOT NULL
+        REFERENCES repositories(id) ON DELETE CASCADE,
+      worktree_path  TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      ran_at         TEXT NOT NULL,
+      verdict        TEXT NOT NULL,
+      detail         TEXT NOT NULL,
+      PRIMARY KEY (repository_id, worktree_path)
     );
   ''');
 }
