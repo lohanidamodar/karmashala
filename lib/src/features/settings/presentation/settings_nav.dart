@@ -83,6 +83,22 @@ enum SettingsSectionId {
     'accept edits',
     'sessions',
   ]),
+  // Beside Permissions, because the mode an automation runs under is the rule
+  // that decides whether it may run at all: a mode that stops to ask is
+  // refused on a trigger with nobody there to answer.
+  automations('Automations', AppIcons.clockCounterClockwise, [
+    'automation',
+    'automations',
+    'schedule',
+    'scheduled',
+    'cron',
+    'nightly',
+    'unattended',
+    'afk',
+    'project check',
+    'checks',
+    'verification',
+  ]),
   // Beside Environments rather than under Agents: what it configures is a
   // *checkout*, and where a setup command runs is decided by that checkout's
   // environment.
