@@ -7,7 +7,6 @@ import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_observer.dart';
-import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_run_tools.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -256,7 +255,7 @@ void main() {
       final answer = await call({'action': 'status', 'paneId': paneId});
       final run = answer['run']! as Map<String, Object?>;
       expect(run['liveness'], 'running');
-      expect('${(run['log']! as List<Object?>).join('\n')}', contains('Gradle'));
+      expect((run['log']! as List<Object?>).join('\n'), contains('Gradle'));
     });
 
     test('a gate that passed comes back as a verdict, not a transcript',
@@ -290,9 +289,9 @@ void main() {
       final answer = await call({'action': 'status', 'paneId': paneId});
       final run = answer['run']! as Map<String, Object?>;
       expect(run['exitCode'], 1);
-      final log = run['log']! as List<Object?>;
-      expect('${log.join('\n')}', contains('Error:'));
-      expect('${log.join('\n')}', contains('kernel_snapshot_program failed'));
+      final log = (run['log']! as List<Object?>).join('\n');
+      expect(log, contains('Error:'));
+      expect(log, contains('kernel_snapshot_program failed'));
     });
 
     test('the log is ROWS, and a row is the pane\'s width — which is why the '
@@ -344,10 +343,12 @@ void main() {
       });
       final answer = await call({'action': 'stop'});
       expect(answer['stopped'], isTrue);
-      expect(
-        '${answer['summary']}',
-        contains('stopped rather than detached'),
-      );
+      expect(answer['summary'], contains('stopped rather than detached'));
+      // A pane we ended on purpose is not a blind spot, and does not read
+      // like one.
+      final run = answer['run']! as Map<String, Object?>;
+      expect('${run['livenessNote']}', contains('not a blind spot'));
+      expect('${run['livenessNote']}', isNot(contains('unknown rather than')));
     });
 
     test('with two running it refuses to guess which', () async {

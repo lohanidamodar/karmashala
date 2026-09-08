@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../../verification/application/verification_providers.dart';
 import '../domain/flutter_command_run.dart';
@@ -47,7 +48,18 @@ class FlutterGateObserver extends Notifier<void> {
       final tail = loop.tailOf(exit.paneId, lines: kFlutterGateRowsRecorded);
       final run = loop.noteExit(exit.paneId, exit.exitCode);
       if (run == null || !run.kind.isGate) return;
-      _queue = _queue.then((_) => _record(run, tail, exit.sessionId));
+      _queue = _queue
+          .then((_) => _record(run, tail, exit.sessionId))
+          // A gate that could not be recorded must not stop the *next* one
+          // being recorded. An errored future poisons every `then` chained
+          // after it, so this observer would go quiet for the rest of the
+          // session over one failed disk write — the silent failure its own
+          // doc says is the worst outcome here.
+          .catchError((Object error) {
+            AppLogger.named('flutter_apps').debug(
+              'recording a gate verdict failed: $error',
+            );
+          });
     });
   }
 

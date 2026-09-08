@@ -260,9 +260,14 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
   /// spell, a `flutter` old enough to ignore the flag. See
   /// `vmServiceUriInPaneRows` for why that is second choice and not first.
   ///
-  /// One run per device, checked twice: against this app's own live runs, which
-  /// never lapse, and against `DeviceClaims`, which names the *session* holding
-  /// it.
+  /// One run per device, checked twice, and the two answer different
+  /// questions. This app's own live runs are the durable half: a pane is
+  /// running or it is not, and that never lapses. `DeviceClaims` is the half
+  /// that speaks to the *other* tools — it names the session holding the phone
+  /// so a `device_tap` is refused by name — and it lapses after a couple of
+  /// minutes of silence by design, which a long `flutter run` will reach.
+  /// That is the right way round: a lapsed claim frees the phone for the
+  /// `device_*` tools while the pane check still refuses a second launch.
   Future<FlutterLoopOutcome> run({
     required EnvironmentPath project,
     required String deviceId,
@@ -411,11 +416,16 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     return null;
   }
 
-  /// Ends the process in [paneId] and releases what it held.
+  /// Ends the process in [paneId].
   ///
   /// `endSession` rather than `closePane`: the default there is to *detach* a
   /// live process and keep it alive, which for a `flutter run` would leave an
   /// app on the device that nothing in this app is holding the handle to.
+  ///
+  /// It does **not** release the device claim, and that is deliberate:
+  /// `DeviceClaims.release` drops everything a session holds, so releasing one
+  /// device here would take away the others that session is driving. The claim
+  /// lapses on its own, which is the mechanism it was built with.
   Future<FlutterCommandRun?> stop(String paneId) async {
     final run = byPane(paneId);
     if (run == null) return null;

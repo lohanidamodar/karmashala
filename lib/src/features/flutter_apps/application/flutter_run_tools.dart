@@ -116,7 +116,7 @@ class FlutterRunTools {
     final stopped = await _loop.stop(run.paneId);
     return <String, Object?>{
       'stopped': true,
-      'run': _describe(stopped ?? run, includeLog: false),
+      'run': _describe(stopped ?? run, includeLog: false, endedByUs: true),
       'summary':
           'Ended flutter ${run.kind.label} in pane ${run.paneId}. The process '
           'was stopped rather than detached, so nothing is left running on the '
@@ -184,9 +184,14 @@ class FlutterRunTools {
   };
 
   /// One run, and its log only when the log is worth reading.
+  ///
+  /// [endedByUs] is the one case where an absent pane is not a blind spot: we
+  /// stopped it a moment ago, so "we no longer have the pane" would read as
+  /// doubt about something we did on purpose.
   Map<String, Object?> _describe(
     FlutterCommandRun run, {
     required bool includeLog,
+    bool endedByUs = false,
   }) {
     final liveness = _loop.livenessOf(run.paneId);
     final failed = run.exitCode != null && run.exitCode != 0;
@@ -202,10 +207,12 @@ class FlutterRunTools {
       ...run.toJson(),
       'liveness': liveness.name,
       if (liveness == FlutterRunLiveness.unknown)
-        'livenessNote':
-            'Karmashala no longer has the pane for this run — it was closed, '
-            'or the app was restarted — so whether the process is still going '
-            'is unknown rather than no.',
+        'livenessNote': endedByUs
+            ? 'Karmashala ended this run, so its pane is gone. That is why '
+                  'there is no liveness to read, not a blind spot.'
+            : 'Karmashala no longer has the pane for this run — it was closed, '
+                  'or the app was restarted — so whether the process is still '
+                  'going is unknown rather than no.',
       if (log.isNotEmpty) 'log': log,
       if (includeLog && !worthReading)
         'logNote':
