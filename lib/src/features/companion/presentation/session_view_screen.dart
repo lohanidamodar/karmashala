@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,16 +45,25 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
   String? _resumeFailure;
   late final String _resumeKey;
 
+  /// Captured in [initState] so [dispose] never reaches for `ref`.
+  late final CompanionGateway _gateway;
+
   @override
   void initState() {
     super.initState();
     _resumeKey = _newRequestId();
+    _gateway = ref.read(companionGatewayProvider);
+    // This screen *is* the phone's focus. Reported so the desktop can still
+    // push news about a session that is not the one on screen — presence
+    // routes a notification and never gates a delivery.
+    unawaited(_gateway.reportFocusedSession(widget.sessionId));
   }
 
   String _newRequestId() => ref.read(idGeneratorProvider).newId();
 
   @override
   void dispose() {
+    unawaited(_gateway.reportFocusedSession(null));
     _composer.dispose();
     super.dispose();
   }

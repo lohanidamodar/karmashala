@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:io';
 
+import '../../remote/domain/companion_presence.dart';
 import '../../remote/client/companion_client.dart';
 import '../../remote/client/companion_pairing_client.dart';
 import '../../remote/client/companion_store.dart' as stored;
@@ -107,6 +108,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   RemoteCompanionGateway({
     required this.store,
     this.deviceName = 'Companion',
+    this.deviceKind = CompanionDeviceKind.unknown,
     RelayTransportFactoryFn? relayFactory,
     this.requestTimeout = const Duration(seconds: 15),
     this.helloTimeout = const Duration(seconds: 8),
@@ -141,6 +143,11 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   /// What the desktop's device list will call this phone.
   final String deviceName;
+
+  /// What kind of thing this companion runs on, as `notifications.register`
+  /// reports it. [CompanionDeviceKind.unknown] by default, because a build
+  /// that has not been told must not guess.
+  final CompanionDeviceKind deviceKind;
 
   final Duration requestTimeout;
   final Duration helloTimeout;
@@ -1637,9 +1644,42 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
   }
 
-  /// `notifications.register`, once per connection — only with the capability
-  /// granted and a token source wired (Loop D's FCM). No source, a null
-  /// token, or a refusal all skip silently: registration is plumbing.
+  /// What this phone last said about itself, resent whenever it changes.
+  ///
+  /// Held rather than derived so a report that arrives while the link is down
+  /// is not lost: the next connection's registration carries it.
+  CompanionPresence _presence = CompanionPresence.unknown;
+
+  @override
+  Future<void> reportVisibility(CompanionVisibility visibility) =>
+      _report(_presence.copyWith(visibility: visibility));
+
+  @override
+  Future<void> reportFocusedSession(String? sessionId) => _report(
+    _presence.copyWith(
+      focusedSessionId: sessionId,
+      clearFocusedSession: sessionId == null,
+    ),
+  );
+
+  /// One frame per change, and **never a tick**: an unchanged presence sends
+  /// nothing at all, so the frame count on the wire follows what actually
+  /// happened on the phone.
+  Future<void> _report(CompanionPresence next) async {
+    final proposed = next.copyWith(deviceKind: deviceKind);
+    if (proposed.saysSameAs(_presence)) return;
+    _presence = proposed;
+    final client = _client;
+    // Nothing is queued for a link that is down: the next connection registers
+    // anyway, and it carries whatever the latest answer is by then.
+    if (client == null || !client.isConnected) return;
+    await _registerPushToken(client);
+  }
+
+  /// `notifications.register`, once per connection and again on every change
+  /// of presence — only with the capability granted and a token source wired
+  /// (Loop D's FCM). No source, a null token, or a refusal all skip silently:
+  /// registration is plumbing.
   Future<void> _registerPushToken(CompanionClient client) async {
     final source = pushTokenSource;
     final record = _record;
@@ -1651,6 +1691,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       await client.registerNotifications(
         token: token.token,
         platform: token.platform,
+        presence: _presence,
       );
     } on Object catch (error) {
       onLog?.call('notifications.register failed: $error');

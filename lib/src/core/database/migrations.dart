@@ -92,6 +92,10 @@ typedef MigrationStep = void Function(Database db);
 ///   occurrence, and the moment the run's checks were looked at, so "nothing
 ///   has re-run this yet" and "this checkout has no check" stay different
 ///   answers.
+/// * **v45** — what a companion says about itself when it registers for
+///   notifications: its kind, whether it is on screen, and the session it is
+///   showing. Read only to route a push, never to decide whether a frame is
+///   carried.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -137,6 +141,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   42: _migrateToV42,
   43: _migrateToV43,
   44: _migrateToV44,
+  45: _migrateToV45,
 };
 
 /// Was this pane running when its row was written?
@@ -1978,4 +1983,29 @@ void _migrateToV44(Database db) {
       .map((row) => row['name'] as String);
   if (columns.contains('checks_observed_at')) return;
   db.execute('ALTER TABLE automation_runs ADD COLUMN checks_observed_at TEXT;');
+}
+
+/// A companion's presence, as it last described itself.
+///
+/// **Four nullable columns and no defaults**, because every one of them has to
+/// be able to say *nothing was said*: an old companion sends none of these
+/// fields, and a row that answered "foreground" for it would be a claim
+/// invented by this schema (§19). `presence_at` is the reading's own age and is
+/// never backfilled from `created_at` — an unknown reading time is not a
+/// reading time.
+///
+/// Written by `notifications.register` beside the push token, and read in
+/// exactly one place: `PushFanout`, which spends presence to decide whether a
+/// phone that can already hear the news needs a push as well. Nothing on the
+/// delivery path reads it, which is the invariant
+/// `presence_is_not_delivery_test.dart` exists to hold.
+void _migrateToV45(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(paired_devices);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('presence_at')) return;
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_kind TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_visibility TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_session TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_at TEXT;');
 }

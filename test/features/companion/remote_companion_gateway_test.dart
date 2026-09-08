@@ -11,6 +11,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/remote_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala/src/features/remote/client/companion_store.dart'
@@ -123,10 +124,12 @@ void main() {
     LanPathScout? lan,
     Future<({String token, String platform})?> Function()? pushTokenSource,
     void Function(String message)? onLog,
+    CompanionDeviceKind deviceKind = CompanionDeviceKind.unknown,
   }) {
     final gateway = RemoteCompanionGateway(
       store: store,
       deviceName: 'Test phone',
+      deviceKind: deviceKind,
       lan: lan,
       pushTokenSource: pushTokenSource,
       onLog: onLog,
@@ -1043,6 +1046,40 @@ void main() {
     );
     expect(fake.pushes.single.token, 'tok-123');
     expect(fake.pushes.single.platform, 'android');
+  });
+
+  test('presence rides the same frame, one per change and never a tick',
+      () async {
+    await startService();
+    final gateway = makeGateway(
+      deviceKind: CompanionDeviceKind.phone,
+      pushTokenSource: () async => (token: 'tok-123', platform: 'android'),
+    );
+    await pairPhone(gateway);
+    await eventually(() async => fake.pushes.isNotEmpty);
+
+    // Three reports, two of which change the answer.
+    await gateway.reportVisibility(CompanionVisibility.background);
+    await gateway.reportVisibility(CompanionVisibility.background);
+    await gateway.reportFocusedSession('s1');
+
+    await eventually(
+      () async => fake.pushes.length == 3,
+      reason: 'the connect registration, then one frame per change',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(
+      fake.pushes,
+      hasLength(3),
+      reason: 'a report that says nothing new sends nothing at all',
+    );
+    final last = fake.pushes.last.presence;
+    expect(last.deviceKind, CompanionDeviceKind.phone);
+    expect(last.visibility, CompanionVisibility.background);
+    expect(last.focusedSessionId, 's1');
+    // The token is on every one of them: presence is additive to the frame
+    // that already existed, not a frame of its own.
+    expect(fake.pushes.map((p) => p.token), everyElement('tok-123'));
   });
 
   test('a withheld notifications grant skips registration without even '

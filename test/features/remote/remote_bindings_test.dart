@@ -29,6 +29,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
@@ -1111,10 +1112,24 @@ void main() {
     dao.insert(fakeDevice());
     final bindings = container.read(remoteHostBindingsProvider);
 
-    await bindings.registerPush(fakeDevice().id, 'tok3n', 'android');
+    await bindings.registerPush(
+      fakeDevice().id,
+      'tok3n',
+      'android',
+      const CompanionPresence(
+        deviceKind: CompanionDeviceKind.phone,
+        visibility: CompanionVisibility.background,
+        focusedSessionId: 's1',
+      ),
+    );
 
     final row = dao.getById(fakeDevice().id)!;
     expect(row.pushToken, 'tok3n');
     expect(row.pushPlatform, 'android');
+    expect(row.presence.deviceKind, CompanionDeviceKind.phone);
+    expect(row.presence.visibility, CompanionVisibility.background);
+    expect(row.presence.focusedSessionId, 's1');
+    // Every reading carries its age (§19); a presence with no time is not one.
+    expect(row.presence.at, isNotNull);
   });
 }
