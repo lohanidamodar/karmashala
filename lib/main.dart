@@ -264,6 +264,17 @@ Future<void> main() async {
   // pays one `existsSync` per local installation and spawns no processes at
   // all, which is why this can afford to run every time.
   unawaited(lifecycle.repairAgentPaths(afterFirstFrame: afterFirstFrame));
+
+  // And what those executables *are*, when the last reading has aged out.
+  //
+  // A path is state whose resolution is a measurement; a version is nothing but
+  // a measurement, and these CLIs self-update — Codex went 0.145.0 to 0.153.4
+  // mid-session. Nothing re-read it: `discoverUnprobed` skips any pair that
+  // already has a row, so the number the first scan wrote stood until somebody
+  // pressed "Detect agents". This runs after the path check and re-reads only
+  // the rows whose recorded reading is older than `kVersionReadingFreshFor`, so
+  // a launch with fresh readings spawns nothing here either.
+  unawaited(lifecycle.refreshAgentVersions(afterFirstFrame: afterFirstFrame));
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps

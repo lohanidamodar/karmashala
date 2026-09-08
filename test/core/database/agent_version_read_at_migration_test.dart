@@ -18,7 +18,7 @@ Database _migratedTo(int upTo) {
 void main() {
   test('v40 dates a version reading and leaves old rows undated', () {
     final db = _migratedTo(39);
-    addTearDown(db.dispose);
+    addTearDown(db.close);
     db.execute(
       "INSERT INTO execution_environments (id, kind, name, created_at) "
       "VALUES ('windows', 'windowsNative', 'Windows', '2026-01-01T00:00:00Z');",
@@ -41,7 +41,7 @@ void main() {
 
   test('v40 is idempotent, the way every step here has to be', () {
     final db = _migratedTo(39);
-    addTearDown(db.dispose);
+    addTearDown(db.close);
 
     schemaMigrations[40]!(db);
     schemaMigrations[40]!(db);

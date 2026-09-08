@@ -444,6 +444,62 @@ class AppLifecycle {
     }
   }
 
+  /// Re-reads the recorded agent versions whose reading has aged out, behind
+  /// [afterFirstFrame] and **after** the path check.
+  ///
+  /// The other half of §20's problem, and the answer to the question §20 left
+  /// open: a stored *path* was being re-measured on every launch while the
+  /// stored *version* beside it was never re-read at all. `discoverUnprobed`
+  /// skips any pair that already has an installation row, so a known agent's
+  /// version was written once by the first scan and only a manual "Detect
+  /// agents" ever wrote it again — the app reported Claude Code 2.1.252 for a
+  /// binary answering 2.1.263, launch after launch.
+  ///
+  /// **The launch is the occasion; the row's recorded age is the gate.** A
+  /// version probe is a subprocess, so re-reading unconditionally would spend
+  /// exactly what makes the path check affordable, and re-reading per session
+  /// start would spend a process per session for a number nobody is looking at.
+  /// A workspace whose readings are all fresh spawns nothing here; one that has
+  /// aged out pays one process per local and WSL installation, once, and not
+  /// again until the reading ages out. What no cadence can fix is a bare
+  /// number, so the reading's age is stored and shown — that is the durable
+  /// half, exactly as the *check* rather than the resolution is the durable
+  /// half of the path repair.
+  ///
+  /// After the path check, deliberately: a row the repair just moved has had
+  /// its version re-read by that sweep already, and a row whose executable is
+  /// gone must not be spawned at. It re-enters [repairAgentPaths], which is
+  /// memoised, so the two share one gate and one run.
+  Future<void> refreshAgentVersions({
+    Future<void> Function()? afterFirstFrame,
+  }) => _versionRefresh ??= _refreshAgentVersions(afterFirstFrame);
+
+  Future<void>? _versionRefresh;
+
+  Future<void> _refreshAgentVersions(Future<void> Function()? gate) async {
+    await repairAgentPaths(afterFirstFrame: gate);
+    // Same rule as [startAgentDiscovery] and the path check: a workspace that
+    // has never discovered anything has its own first-run scan writing these
+    // very rows, and racing it would probe everything twice.
+    if (_container
+            .read(databaseProvider)
+            .readMetadata(MetadataKeys.agentsDiscoveredAt) ==
+        null) {
+      return;
+    }
+    try {
+      final changed = await _container
+          .read(agentInstallationsControllerProvider.notifier)
+          .refreshStaleVersions();
+      if (changed.isEmpty) return;
+      _logger.info('Agent versions: ${changed.join(', ')}.');
+    } on Object catch (error, stack) {
+      // A reading that could not be taken leaves every row exactly as it was,
+      // wearing the age it already had.
+      _logger.warning('Re-reading the agent versions failed.', error, stack);
+    }
+  }
+
   /// Takes ownership of components built elsewhere.
   ///
   /// The app builds almost everything through the methods above, but the two

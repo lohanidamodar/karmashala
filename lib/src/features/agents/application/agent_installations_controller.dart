@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/database_providers.dart';
 import '../../../core/paths/path_probe.dart';
 import '../../../core/paths/path_probe_provider.dart';
+import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -19,6 +20,7 @@ import '../domain/agent_discovery_report.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_path_repair.dart';
 import '../domain/agent_registry.dart';
+import '../domain/agent_version_reading.dart';
 import 'agent_providers.dart';
 
 /// Holds the known agent installations and can (re)discover them across every
@@ -488,6 +490,135 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       unresolved: unresolved,
       scan: scan,
     );
+  }
+
+  /// Re-reads the version of every stored installation whose recorded reading
+  /// has aged out of [kVersionReadingFreshFor], in the row's **own**
+  /// environment, and returns the numbers that actually moved.
+  ///
+  /// **The half §20 left out.** The launch check re-measures whether a stored
+  /// path still resolves and never asks what is at the end of it: a version was
+  /// written by the workspace's first scan and, because `discoverUnprobed`
+  /// skips any pair that already has a row, only a manual "Detect agents" ever
+  /// wrote it again. The app said Claude Code 2.1.252 for a binary answering
+  /// 2.1.263, launch after launch. A path is state and whether it resolves is a
+  /// measurement; a version is *entirely* a measurement, and these CLIs
+  /// self-update — Codex went 0.145.0 to 0.153.4 mid-session.
+  ///
+  /// **Why the occasion is the launch and the gate is the row's age.** A
+  /// version probe is a subprocess, and §19's third rule is that probes cost
+  /// processes and nothing may poll. Re-reading on every launch would trade the
+  /// property that makes the path check affordable; re-reading on every session
+  /// start would spend a process per session for a number nobody is looking at.
+  /// So the launch is *when we are allowed to ask* and the recorded reading
+  /// decides *whether it is worth asking*: a workspace whose readings are all
+  /// fresh spawns nothing at all, and a machine relaunched five times in an
+  /// hour re-reads once. Neither cadence can make a bare number honest, which
+  /// is why the age is stored and rendered — see [describeVersionReading].
+  ///
+  /// The rules are §20's, unchanged:
+  ///
+  /// * **judged in its own environment.** A WSL row is asked through the WSL
+  ///   runner, so nothing local is stat-ed or spawned on its behalf; an **SSH**
+  ///   row is not asked at all, because probing one means dialling somebody's
+  ///   machine and a launch does not do that unasked. Its reading keeps its
+  ///   age, which is the honest thing to show;
+  /// * **no row is deleted on a failed reading.** An unreachable CLI answers
+  ///   `Process.run` exactly like an uninstalled one;
+  /// * **a local row whose executable was just observed missing is not spawned
+  ///   at.** The process could only fail, and §20 already reports the path;
+  /// * **nothing learned, nothing written.** A probe that could not answer
+  ///   leaves the number *and* its timestamp alone, so the label still admits
+  ///   the number may be wrong and the next launch tries again.
+  ///
+  /// Nothing here touches a path. A version reading is not evidence about where
+  /// the executable is, and repairing that is [repairBrokenPaths]' job.
+  Future<List<AgentVersionChange>> refreshStaleVersions() async {
+    final dao = ref.read(agentInstallationDaoProvider);
+    final registry = ref.read(agentRegistryProvider);
+    final clock = ref.read(clockProvider);
+    final factory = ref.read(commandRunnerFactoryProvider);
+    final now = clock.nowUtc();
+
+    final changes = <AgentVersionChange>[];
+    for (final environment in ref
+        .read(executionEnvironmentDaoProvider)
+        .getAll()) {
+      if (environment.kind == EnvironmentKind.ssh) continue;
+
+      final candidates = [
+        for (final row in dao.getByEnvironment(environment.id))
+          if ((registry.byId(row.agentId)?.discovery.probeVersion ?? false) &&
+              versionFreshness(row, now: now) != VersionFreshness.fresh)
+            row,
+      ];
+      // Not even the stats: an environment with nothing to re-read is a
+      // filesystem this method never touches.
+      if (candidates.isEmpty) continue;
+
+      // Empty for anything but this machine, which is what leaves a WSL row
+      // ungated — a path spelled for its disk is not ours to judge.
+      final readings = _readingsFor(environment, dao, ref.read(pathProbeProvider));
+
+      final CommandRunner runner;
+      try {
+        runner = factory.forEnvironment(environment);
+      } on Object {
+        // An environment with no runner to build — a WSL row with no
+        // distribution recorded. Nothing was established about it.
+        continue;
+      }
+
+      for (final row in candidates) {
+        if (readings[row.id]?.isUsable == false) continue;
+        final version = await _readVersion(
+          runner,
+          row,
+          registry.byId(row.agentId)!.discovery.versionArguments,
+        );
+        if (version == null) continue;
+        dao.recordVersion(row.id, version, readAt: clock.nowUtc());
+        if (version != row.version) {
+          changes.add(
+            AgentVersionChange(
+              displayName: registry.displayNameFor(row.agentId),
+              from: row.version,
+              to: version,
+            ),
+          );
+        }
+      }
+    }
+
+    state = dao.getAll();
+    return changes;
+  }
+
+  /// What the CLI at [row] answers, or null when it did not answer.
+  ///
+  /// One process, and only ever the executable already on record — no `where`,
+  /// because the path is not in question here.
+  ///
+  /// Through the environment's [CommandRunner] and never `Process.run`, which
+  /// is what keeps the creation off the isolate that draws: `Process.run` is
+  /// charged to its caller before the future exists, and `ProcessSpawner` is
+  /// the seam that moves it to a worker. See `core/process/process_spawn.dart`.
+  Future<String?> _readVersion(
+    CommandRunner runner,
+    AgentInstallation row,
+    List<String> versionArguments,
+  ) async {
+    try {
+      final result = await runner.run(
+        CommandRequest(
+          executable: row.executable.path,
+          arguments: versionArguments,
+        ),
+      );
+      return result.ok ? parseAgentVersion(result.stdout) : null;
+    } on CommandException {
+      return null;
+    }
   }
 
   /// Points one installation at [path], recording that a human chose it.
