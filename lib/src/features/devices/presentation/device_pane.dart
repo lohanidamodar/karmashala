@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/app_logger.dart';
+import '../../../core/media/video_support_provider.dart';
 import '../application/device_clipboard_bridge.dart';
 import '../application/device_providers.dart';
 import '../application/device_recording_controller.dart';
@@ -497,6 +498,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
         LiveViewRecordingSource(
           target: AndroidTarget(device),
           openTransportStream: session.openTransportStream,
+          openAccessUnits: session.openAccessUnits,
           geometryChanges: session.videoSizeChanges,
         ),
       );
@@ -1615,6 +1617,8 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     // must not be left with a row that can never reach the device.
     final canReach = target != null && ref.watch(adbServiceProvider) != null;
     final recording = ref.watch(deviceRecordingProvider);
+    // What container the recording can be, said on the button before it starts.
+    final mp4Support = ref.watch(videoSupportProvider);
     const idle = 'Start the live view to use the device controls';
     String tooltip(String label) =>
         target == null ? idle : '$label — ${target.displayName}';
@@ -1669,28 +1673,57 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
         ),
         // Gated on the live view rather than on adb, because a recording is
         // written from the frames the picture is made of — there is nothing to
-        // record without one. See
-        // `DeviceRecordingController.startLiveViewRecording` for why the file
-        // is a `.ts`.
+        // record without one.
+        //
+        // Two entries while idle, one while running. The container is the
+        // user's choice because the two are not interchangeable: MP4 is what
+        // every player opens, MPEG-TS is what survives a rotation. See
+        // `DeviceRecordingController.startLiveViewRecording`.
         DeviceControl(
           name: 'Record',
           tooltip: recording is DeviceRecordingActive
               ? 'Stop recording'
-              : widget.recordable
-              ? 'Record the screen to an MPEG-TS (.ts) file'
-              : 'Start the live view to record the screen',
+              : !widget.recordable
+              ? 'Start the live view to record the screen'
+              : mp4Support.available
+              ? 'Record the screen to an MP4 — the file every player opens'
+              : 'Record the screen to an MPEG-TS (.ts) file. '
+                    '${mp4Support.detail}',
           icon: recording is DeviceRecordingActive
               ? AppIcons.stopCircle
               : AppIcons.circle,
           onPressed: recording is DeviceRecordingActive
               ? ref.read(deviceRecordingProvider.notifier).stop
               : widget.recordable
-              ? ref
+              ? () => ref
                     .read(deviceRecordingProvider.notifier)
-                    .startLiveViewRecording
+                    .startLiveViewRecording(
+                      container: mp4Support.available
+                          ? DeviceRecordingContainer.mp4
+                          : DeviceRecordingContainer.transportStream,
+                    )
               : null,
           buttonKey: const Key('android-record'),
         ),
+        // Only where MP4 is the primary: otherwise the button above already is
+        // the transport stream, and two of them would say the same thing.
+        if (recording is! DeviceRecordingActive && mp4Support.available)
+          DeviceControl(
+            name: 'Record .ts',
+            tooltip: widget.recordable
+                ? 'Record to MPEG-TS instead — the only one that survives the '
+                      'device rotating mid-recording'
+                : 'Start the live view to record to MPEG-TS',
+            icon: AppIcons.circle,
+            onPressed: widget.recordable
+                ? () => ref
+                      .read(deviceRecordingProvider.notifier)
+                      .startLiveViewRecording(
+                        container: DeviceRecordingContainer.transportStream,
+                      )
+                : null,
+            buttonKey: const Key('android-record-ts'),
+          ),
         // The clipboard is gated on the *control socket*, not on adb, which is
         // why these two do not use [canReach]: adb can drive every other
         // button on this row and cannot touch a clipboard at all.

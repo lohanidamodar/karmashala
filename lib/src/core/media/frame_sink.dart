@@ -6,6 +6,9 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
+import 'media_foundation.dart';
+import 'video_writer.dart';
+
 /// One rendered frame, as straight RGBA rows.
 ///
 /// The currency of the whole encode side. Anything that can produce these —
@@ -84,6 +87,9 @@ enum RecordingFormat {
   /// Plays anywhere with no tool at all, at the cost of 256 colours.
   gif('Animated GIF', 'gif'),
 
+  /// H.264 in MP4, written by the operating system's own encoder.
+  mp4('MP4 video', 'mp4'),
+
   /// Numbered PNGs plus the `ffmpeg` line that turns them into Full HD MP4.
   pngSequence('PNG frames + ffmpeg command', 'png');
 
@@ -92,12 +98,16 @@ enum RecordingFormat {
   final String label;
   final String extension;
 
+  /// Whether the file this writes is a video, rather than a folder of pictures.
+  bool get isVideo => this != pngSequence;
+
   /// What the user must be told before they pick this.
   ///
   /// [pngSequence] needs a tool this app does not bundle and will not pretend
   /// to have; saying so on the button is the whole point of the field.
   String? get needsToolNote => switch (this) {
     gif => null,
+    mp4 => null,
     pngSequence =>
       'Writes one PNG per frame and an ffmpeg command. '
           'This app does not bundle ffmpeg — you run the command yourself.',
@@ -127,6 +137,7 @@ class IsolateFrameSink implements FrameSink {
   SendPort? _commands;
   final _ready = Completer<void>();
   final _done = Completer<FrameSinkResult>();
+  final _aborted = Completer<void>();
   int _frames = 0;
   bool _closed = false;
 
@@ -152,12 +163,19 @@ class IsolateFrameSink implements FrameSink {
         case FrameSinkResult():
           if (!_done.isCompleted) _done.complete(message);
           receive.close();
+        case _EncodeAborted():
+          if (!_aborted.isCompleted) _aborted.complete();
+          receive.close();
         case _EncodeFailure():
           final error = StateError(message.message);
           if (!_ready.isCompleted) _ready.completeError(error);
           if (!_done.isCompleted) _done.completeError(error);
+          // A worker that failed will never acknowledge an abort.
+          if (!_aborted.isCompleted) _aborted.complete();
           receive.close();
       }
+    }, onDone: () {
+      if (!_aborted.isCompleted) _aborted.complete();
     });
     return _ready.future;
   }
@@ -190,11 +208,30 @@ class IsolateFrameSink implements FrameSink {
     return _done.future;
   }
 
+  /// Asks the worker to give up, and waits for it to say it has.
+  ///
+  /// **Asked, not killed.** The worker holds the container and its file handle,
+  /// so it is the only one that can close and remove a half-written MP4 — a
+  /// killed isolate leaves the handle open on Windows, the delete fails, and
+  /// what is left on disk is a file that looks like a recording and opens in
+  /// nothing. Waiting costs one frame's encode.
   @override
   Future<void> abort() async {
+    if (_closed) return;
     _closed = true;
-    _worker?.kill(priority: Isolate.immediate);
+    final worker = _worker;
     _worker = null;
+    if (worker != null) {
+      try {
+        await _ready.future;
+        _commands?.send(const _EncodeAbort());
+        await _aborted.future;
+      } on Object {
+        // The worker never got as far as answering; there is nothing it can
+        // have left behind either.
+      }
+      worker.kill(priority: Isolate.beforeNextEvent);
+    }
     if (!_done.isCompleted) {
       _done.completeError(StateError('encode aborted'));
       // A caller who does await `close()` still gets the error; this only says
@@ -250,6 +287,14 @@ class _EncodeFinish {
   const _EncodeFinish();
 }
 
+class _EncodeAbort {
+  const _EncodeAbort();
+}
+
+class _EncodeAborted {
+  const _EncodeAborted();
+}
+
 class _EncodeFailure {
   const _EncodeFailure(this.message);
 
@@ -280,6 +325,10 @@ Future<void> _encodeWorker(_EncodeRequest request) async {
         case _EncodeFinish():
           request.reply.send(await encoder.finish());
           commands.close();
+        case _EncodeAbort():
+          encoder.abort();
+          request.reply.send(const _EncodeAborted());
+          commands.close();
       }
     } catch (error) {
       request.reply.send(_EncodeFailure('$error'));
@@ -298,11 +347,18 @@ class FrameEncoder {
     required this.format,
     required this.outputPath,
     this.frameRate = kRecordingFrameRate,
-  });
+    VideoEncoderOpener? openVideoEncoder,
+  }) : _openVideoEncoder = openVideoEncoder ?? openMediaFoundationEncoder;
 
   final RecordingFormat format;
   final String outputPath;
   final int frameRate;
+
+  /// Injected so a test can encode without the operating system's encoder.
+  final VideoEncoderOpener _openVideoEncoder;
+
+  /// Opened on the first frame, because only a frame knows the picture size.
+  VideoEncoder? _video;
 
   /// Octree rather than the package default's neural quantizer, and no dither.
   ///
@@ -325,6 +381,17 @@ class FrameEncoder {
     ..createSync(recursive: true);
 
   void add(RgbaFrame frame) {
+    if (format == RecordingFormat.mp4) {
+      final video = _video ??= _openVideoEncoder(
+        path: outputPath,
+        width: frame.width,
+        height: frame.height,
+        frameRate: frameRate,
+      );
+      video.add(frame);
+      _frames++;
+      return;
+    }
     final image = img.Image.fromBytes(
       width: frame.width,
       height: frame.height,
@@ -342,6 +409,9 @@ class FrameEncoder {
         // skipped outright.
         final hundredths = (frame.hold.inMicroseconds / 10000).round();
         _gif.addFrame(image, duration: hundredths < 1 ? 1 : hundredths);
+      case RecordingFormat.mp4:
+        // Handled above, before the image was built.
+        break;
       case RecordingFormat.pngSequence:
         final name = 'frame_${_frames.toString().padLeft(5, '0')}.png';
         File(
@@ -351,8 +421,22 @@ class FrameEncoder {
     _frames++;
   }
 
+  /// Closes the encoder and removes anything half-written.
+  void abort() {
+    _video?.abort();
+    _video = null;
+  }
+
   Future<FrameSinkResult> finish() async {
     switch (format) {
+      case RecordingFormat.mp4:
+        final video = _video;
+        if (video == null) throw StateError('no frames were encoded');
+        return FrameSinkResult(
+          path: outputPath,
+          frames: _frames,
+          bytes: video.finish(),
+        );
       case RecordingFormat.gif:
         final bytes = _gif.finish();
         if (bytes == null) throw StateError('no frames were encoded');

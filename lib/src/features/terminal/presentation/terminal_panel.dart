@@ -19,6 +19,7 @@ import '../../todos/presentation/todo_edit_dialog.dart';
 import '../application/terminal_capture.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
+import '../../../core/media/video_support_provider.dart';
 import '../application/terminal_recording_controller.dart';
 import '../application/terminal_scroll.dart';
 import '../application/terminal_theme_controller.dart';
@@ -753,6 +754,9 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     final capturable = selected != null && selected.trim().isNotEmpty;
     final notesEnabled = ref.read(notesEnabledProvider);
     final recordingThis = ref.read(terminalRecordingProvider).isRecording(paneId);
+    // What the recording will be able to become, said before it is started
+    // rather than when the export dialog has to refuse.
+    final canWriteMp4 = ref.read(videoSupportProvider).available;
     final choice = await showMenu<String>(
       context: context,
       // The same one-pixel anchor `ContextMenuRegion._show` uses, so a menu
@@ -812,7 +816,11 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         // other one — the same placement rule the split rows below state.
         DesktopMenuItem(
           value: 'record',
-          label: recordingThis ? 'Stop recording' : 'Record this pane',
+          label: recordingThis
+              ? 'Stop recording'
+              : canWriteMp4
+              ? 'Record this pane'
+              : 'Record this pane — GIF only, no MP4 here',
           icon: recordingThis ? AppIcons.stopCircle : AppIcons.circle,
         ),
         const DesktopMenuDivider(),

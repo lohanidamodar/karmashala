@@ -62,6 +62,7 @@ import 'mcp_tool_catalogue.dart';
 import 'session_mcp.dart';
 import 'session_tools.dart';
 import 'snippet_tools.dart';
+import 'recording_tools.dart';
 import 'terminal_tools.dart';
 import 'tmux_orchestration.dart';
 import 'todo_tools.dart';
@@ -1216,6 +1217,12 @@ class LauncherControlServer implements SessionMcp {
       // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
         return TerminalControlTools(_container).call(name, args);
+      // Recording a pane or a device. Beside those two rather than inside
+      // either because it is the same pair of verbs over both, and the format
+      // question — which one this machine can actually write — is one answer
+      // for both surfaces.
+      case final String name when RecordingControlTools.handles(name):
+        return RecordingControlTools(_container).call(name, args);
       // The commands the user keeps. Beside the terminal tools because that is
       // where they land — and separate from them because typing a line for
       // somebody to read is a different act from running one.
@@ -1582,6 +1589,7 @@ class LauncherControlServer implements SessionMcp {
     ...instructionsToolSchemas,
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
+    ...recordingControlToolSchemas,
     ...snippetControlToolSchemas,
     ...workspaceControlToolSchemas,
     ...worktreeControlToolSchemas,

@@ -39,6 +39,22 @@ String formatRecordingLength(Duration length) {
   return '${seconds}s';
 }
 
+/// The container a live-view recording is written in.
+///
+/// Both hold the handset's own H.264 with no re-encode; they differ in what
+/// they can represent. MP4 is the file every player double-clicks and fixes
+/// the picture size in one sample entry, so a rotation part way through leaves
+/// the rest stretched. MPEG-TS carries a size change in the stream and is what
+/// survives one.
+enum DeviceRecordingContainer {
+  mp4('mp4'),
+  transportStream('ts');
+
+  const DeviceRecordingContainer(this.extension);
+
+  final String extension;
+}
+
 /// Which of the three things happened to a recording.
 enum DeviceRecordingResult {
   /// A file was written and can be played.
@@ -78,6 +94,7 @@ class DeviceRecordingOutcome {
     required Duration length,
     int gaps = 0,
     int geometryChanges = 0,
+    DeviceRecordingContainer container = DeviceRecordingContainer.transportStream,
   }) {
     final sentences = <String>[
       'Recording saved to $path — ${formatBytes(bytes)} over '
@@ -86,8 +103,14 @@ class DeviceRecordingOutcome {
         'The live view was off for part of it, so the picture jumps '
             '${gaps == 1 ? 'once' : '$gaps times'}.',
       if (geometryChanges > 0)
-        'The device rotated during it, so the picture changes size partway '
-            'through.',
+        container == DeviceRecordingContainer.mp4
+            // MP4 committed to the first size, so this is not a footnote about
+            // the device — it is what the file now looks like.
+            ? 'The device rotated during it. An MP4 keeps the size it started '
+                  'with, so the picture after the rotation is stretched — '
+                  'record to MPEG-TS if you need to rotate mid-recording.'
+            : 'The device rotated during it, so the picture changes size '
+                  'partway through.',
     ];
     return DeviceRecordingOutcome(
       result: DeviceRecordingResult.saved,

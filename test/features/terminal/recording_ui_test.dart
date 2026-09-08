@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/media/video_support_provider.dart';
+import 'package:karmashala/src/core/media/video_writer.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -27,16 +29,25 @@ void main() {
   late AppDatabase db;
   late Directory temp;
 
-  setUp(() {
+  /// Both surfaces read the same reading, so both cases are testable on any
+  /// host rather than only on the one that happens to have an encoder.
+  void build({required VideoSupport support}) {
     temp = Directory.systemTemp.createTempSync('recording-ui');
     db = AppDatabase.memory();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
         recordingsDirectoryProvider.overrideWith((ref) async => temp),
+        videoSupportProvider.overrideWithValue(support),
       ],
     );
-  });
+  }
+
+  setUp(
+    () => build(
+      support: const VideoSupport.available('the test host writes MP4.'),
+    ),
+  );
   tearDown(() {
     container.dispose();
     db.close();
@@ -158,16 +169,48 @@ void main() {
       expect(find.textContaining('Nothing was removed'), findsOneWidget);
     });
 
-    testWidgets('offers the frame sequence as needing a tool we do not ship', (
+    testWidgets('offers GIF and MP4, and neither asks for a tool', (
       tester,
     ) async {
       final paneId = await mount(tester);
       await open(tester, paneId, 'ok\r\n');
 
-      // GIF is offered as finished; the other one names the tool and says the
-      // app does not have it, before anything is rendered.
       expect(find.text('Render GIF'), findsOneWidget);
       expect(find.textContaining('Plays anywhere as it is'), findsOneWidget);
+      expect(find.text('Render MP4'), findsOneWidget);
+      expect(
+        find.textContaining('nothing to run afterwards'),
+        findsOneWidget,
+      );
+      // The frame sequence is gone where a real video can be written, and with
+      // it the sentence about a tool we do not ship.
+      expect(find.text('Render frames'), findsNothing);
+      expect(
+        find.textContaining('This app does not bundle ffmpeg'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('with no encoder it says why and falls back to frames', (
+      tester,
+    ) async {
+      container.dispose();
+      db.close();
+      build(
+        support: const VideoSupport.unavailable(
+          'MP4 needs an encoder from the operating system, and only the '
+          'Windows one is wired up here.',
+        ),
+      );
+      final paneId = await mount(tester);
+      await open(tester, paneId, 'ok\r\n');
+
+      // §19: which format is missing and why, before anything is rendered.
+      expect(
+        find.textContaining('needs an encoder from the operating system'),
+        findsOneWidget,
+      );
+      expect(find.text('Render MP4'), findsNothing);
       expect(find.text('Render frames'), findsOneWidget);
       expect(
         find.textContaining('This app does not bundle ffmpeg'),

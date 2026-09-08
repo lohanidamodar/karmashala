@@ -7,6 +7,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../core/media/frame_sink.dart';
+import '../../../core/media/video_support_provider.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../application/terminal_recording_controller.dart';
@@ -109,7 +110,7 @@ class _RecordingSavedDialog extends ConsumerWidget {
   }
 }
 
-/// The two outputs, and the honest label on the one that is not finished.
+/// The formats on offer, and why one of them is not.
 class _FormatChoices extends ConsumerWidget {
   const _FormatChoices({required this.saved});
 
@@ -119,59 +120,100 @@ class _FormatChoices extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final terminalTheme = terminalThemeFor(theme, null);
-    final styles = {
-      for (final format in RecordingFormat.values)
-        format: switch (format) {
-          RecordingFormat.gif => CastFrameStyle.gif(
-            theme: terminalTheme,
-            fontFamily: kMonoFamily,
-            title: saved.cast.title,
-          ),
-          RecordingFormat.pngSequence => CastFrameStyle.fullHd(
-            theme: terminalTheme,
-            fontFamily: kMonoFamily,
-            title: saved.cast.title,
-          ),
-        },
-    };
+    final support = ref.watch(videoSupportProvider);
+
+    // Where the OS can write an MP4, the frame sequence has nothing left to
+    // offer: it was only ever the way to reach one.
+    final offered = <RecordingFormat>[
+      RecordingFormat.gif,
+      if (support.available)
+        RecordingFormat.mp4
+      else
+        RecordingFormat.pngSequence,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Make a video of it', style: theme.textTheme.titleSmall),
         const SizedBox(height: Insets.sm),
-        for (final MapEntry(key: format, value: style) in styles.entries) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 150,
-                child: OutlinedButton(
-                  onPressed: () => ref
-                      .read(terminalRecordingProvider.notifier)
-                      .render(saved, format: format, style: style),
-                  child: Text(
-                    format == RecordingFormat.gif ? 'Render GIF' : 'Render frames',
-                  ),
-                ),
-              ),
-              const SizedBox(width: Insets.md),
-              Expanded(
-                child: Text(
-                  format.needsToolNote ??
-                      'Plays anywhere as it is. '
-                          '${style.width}x${style.height}, 256 colours.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: format.needsToolNote == null
-                        ? theme.colorScheme.onSurfaceVariant
-                        : theme.colorScheme.tertiary,
-                  ),
-                ),
-              ),
-            ],
+        if (!support.available) ...[
+          Text(
+            support.detail,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.tertiary,
+            ),
           ),
           const SizedBox(height: Insets.sm),
         ],
+        for (final format in offered) ...[
+          _FormatRow(
+            saved: saved,
+            format: format,
+            style: TerminalRecordingController.styleFor(
+              format: format,
+              cast: saved.cast,
+              theme: terminalTheme,
+            ),
+          ),
+          const SizedBox(height: Insets.sm),
+        ],
+      ],
+    );
+  }
+}
+
+class _FormatRow extends ConsumerWidget {
+  const _FormatRow({
+    required this.saved,
+    required this.format,
+    required this.style,
+  });
+
+  final SavedRecording saved;
+  final RecordingFormat format;
+  final CastFrameStyle style;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final note = format.needsToolNote;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 150,
+          child: OutlinedButton(
+            onPressed: () => ref
+                .read(terminalRecordingProvider.notifier)
+                .render(saved, format: format, style: style),
+            child: Text(switch (format) {
+              RecordingFormat.gif => 'Render GIF',
+              RecordingFormat.mp4 => 'Render MP4',
+              RecordingFormat.pngSequence => 'Render frames',
+            }),
+          ),
+        ),
+        const SizedBox(width: Insets.md),
+        Expanded(
+          child: Text(
+            note ??
+                switch (format) {
+                  RecordingFormat.gif =>
+                    'Plays anywhere as it is. '
+                        '${style.width}x${style.height}, 256 colours.',
+                  RecordingFormat.mp4 =>
+                    'A finished video, nothing to run afterwards. '
+                        '${style.width}x${style.height}, full colour.',
+                  RecordingFormat.pngSequence => '',
+                },
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: note == null
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.colorScheme.tertiary,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -218,6 +260,17 @@ class _ExportProgress extends ConsumerWidget {
               ? '${result.frames} frames'
               : export.format.label,
         ),
+        if (!result.needsExternalTool) ...[
+          const SizedBox(height: Insets.sm),
+          Text(
+            '${result.frames} frames, ${_size(result.bytes)}. '
+            'This is a finished ${export.format.extension.toUpperCase()} — '
+            'open it in any player.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
         if (result.externalCommand case final command?) ...[
           const SizedBox(height: Insets.sm),
           Text(
@@ -304,6 +357,10 @@ class _PathRow extends ConsumerWidget {
     );
   }
 }
+
+String _size(int bytes) => bytes < 1024 * 1024
+    ? '${(bytes / 1024).toStringAsFixed(0)} KB'
+    : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
 String _seconds(Duration duration) {
   final total = duration.inMilliseconds / 1000;
