@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/agents/application/agent_hook_installation_service.dart';
+import '../../features/agents/application/agent_skill_installation_service.dart';
 import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
@@ -339,6 +340,48 @@ class AppLifecycle {
       );
     } on Object catch (error, stack) {
       _logger.warning('Agent hook installation failed.', error, stack);
+    }
+  }
+
+  /// Installs Karmashala's skills into every agent CLI that declares a root,
+  /// behind the same first-frame gate the hooks use.
+  ///
+  /// Beside the hooks because it is the same act — writing files into somebody
+  /// else's agent configuration — and unlike them in every way that made hooks
+  /// hard. There is no address, so no environment is skipped and none has to be
+  /// probed; the bytes are constant, so a re-install writes nothing; and each
+  /// `SKILL.md` is staged and renamed, so a sweep cut off by a quit leaves the
+  /// old file or the new one and never half of either. That is why nothing
+  /// waits for this at shutdown and nothing is retired there.
+  ///
+  /// Not retained and not awaited: a launch must not wait on a
+  /// `\\wsl.localhost` share to answer, and the sweep publishes what it found
+  /// when it lands.
+  void installAgentSkills({Future<void> Function()? afterFirstFrame}) {
+    unawaited(_sweepAgentSkills(afterFirstFrame));
+  }
+
+  Future<void> _sweepAgentSkills(Future<void> Function()? gate) async {
+    if (gate != null) {
+      try {
+        await gate();
+      } on Object catch (error, stack) {
+        // The gate is only about *when*; a gate that throws must not cost the
+        // user their skills.
+        _logger.warning(
+          'Waiting for the first frame before installing agent skills failed; '
+          'installing now.',
+          error,
+          stack,
+        );
+      }
+    }
+    try {
+      await _container.read(agentSkillInstallationServiceProvider).sweep();
+    } on Object catch (error, stack) {
+      // Somebody else's home directory. The app is entirely usable without a
+      // skill in it, and the next launch sweeps again.
+      _logger.warning('Agent skill installation failed.', error, stack);
     }
   }
 
