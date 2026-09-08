@@ -32,4 +32,16 @@ abstract interface class ProcessHandle {
 
   /// Terminates the process.
   Future<void> kill();
+
+  /// Asks the process to stop the way Ctrl-C would, and waits for it to go.
+  ///
+  /// Separate from [kill] because a few tools finish their work on the
+  /// interrupt and lose it on a terminate. `simctl io … recordVideo` is the
+  /// one this app has: it writes the QuickTime container's index when it is
+  /// interrupted, and a terminated recording leaves a file with frames in it
+  /// and no index — which no player opens.
+  ///
+  /// Falls back to [kill] where the transport has no such signal, so a caller
+  /// never has to ask which kind of process it holds.
+  Future<void> interrupt();
 }

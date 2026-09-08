@@ -168,6 +168,22 @@ void main() {
       );
     });
 
+    test('one that stopped on its own never reads as a complete take', () {
+      final outcome = DeviceRecordingOutcome.endedEarly(
+        target: target,
+        path: '/rec/a.mov',
+        bytes: 1048576,
+        length: const Duration(seconds: 8),
+        reason: 'simctl recordVideo exited with 1',
+      );
+      expect(outcome.result, DeviceRecordingResult.saved);
+      expect(
+        outcome.message,
+        'Recording ended early: simctl recordVideo exited with 1. What was '
+        'captured is saved to /rec/a.mov — 1.0 MB over 8s.',
+      );
+    });
+
     test('a recording with no frames says nothing was captured', () {
       final outcome = DeviceRecordingOutcome.empty(
         target: target,

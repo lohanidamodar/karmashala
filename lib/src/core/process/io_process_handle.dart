@@ -31,6 +31,20 @@ class IoProcessHandle implements ProcessHandle {
   Future<int> get exitCode => _process.exitCode;
 
   @override
+  Future<void> interrupt() async {
+    // Windows has no SIGINT to send: `Process.kill` maps every signal but
+    // SIGKILL onto TerminateProcess there. Nothing that needs an interrupt
+    // runs on Windows — simctl is macOS-only — so this is honest rather than
+    // silently different.
+    _process.kill(ProcessSignal.sigint);
+    try {
+      await _process.exitCode.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      await kill();
+    }
+  }
+
+  @override
   Future<void> kill() async {
     _process.kill();
     try {

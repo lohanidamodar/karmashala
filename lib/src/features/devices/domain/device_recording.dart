@@ -97,6 +97,28 @@ class DeviceRecordingOutcome {
     );
   }
 
+  /// A recording that stopped without being asked to, but did capture
+  /// something.
+  ///
+  /// Its own sentence rather than a [saved] with a footnote, because the file
+  /// is **not** what the user asked for: it ends where the device or the
+  /// recorder gave out, and presenting a truncated recording as a complete one
+  /// is the thing this outcome exists to prevent.
+  factory DeviceRecordingOutcome.endedEarly({
+    required DeviceTarget target,
+    required String path,
+    required int bytes,
+    required Duration length,
+    required String reason,
+  }) => DeviceRecordingOutcome(
+    result: DeviceRecordingResult.saved,
+    deviceId: target.id,
+    path: path,
+    message:
+        'Recording ended early: $reason. What was captured is saved to $path — '
+        '${formatBytes(bytes)} over ${formatRecordingLength(length)}.',
+  );
+
   /// A recording that captured no frame at all. The file is removed rather
   /// than left as a few hundred bytes of container header with no picture in
   /// it, which no player opens and which reads as a recording that worked.
