@@ -118,12 +118,10 @@ class _FormatChoices extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    void render(RecordingFormat format) {
-      final terminalTheme = terminalThemeFor(theme, null);
-      ref.read(terminalRecordingProvider.notifier).render(
-        saved,
-        format: format,
-        style: switch (format) {
+    final terminalTheme = terminalThemeFor(theme, null);
+    final styles = {
+      for (final format in RecordingFormat.values)
+        format: switch (format) {
           RecordingFormat.gif => CastFrameStyle.gif(
             theme: terminalTheme,
             fontFamily: kMonoFamily,
@@ -135,22 +133,23 @@ class _FormatChoices extends ConsumerWidget {
             title: saved.cast.title,
           ),
         },
-      );
-    }
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Make a video of it', style: theme.textTheme.titleSmall),
         const SizedBox(height: Insets.sm),
-        for (final format in RecordingFormat.values) ...[
+        for (final MapEntry(key: format, value: style) in styles.entries) ...[
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
                 width: 150,
                 child: OutlinedButton(
-                  onPressed: () => render(format),
+                  onPressed: () => ref
+                      .read(terminalRecordingProvider.notifier)
+                      .render(saved, format: format, style: style),
                   child: Text(
                     format == RecordingFormat.gif ? 'Render GIF' : 'Render frames',
                   ),
@@ -160,7 +159,8 @@ class _FormatChoices extends ConsumerWidget {
               Expanded(
                 child: Text(
                   format.needsToolNote ??
-                      'Plays anywhere as it is. 960x540, 256 colours.',
+                      'Plays anywhere as it is. '
+                          '${style.width}x${style.height}, 256 colours.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: format.needsToolNote == null
                         ? theme.colorScheme.onSurfaceVariant

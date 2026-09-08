@@ -327,7 +327,9 @@ class _WindowLayout {
       text: TextSpan(
         text: title,
         style: TextStyle(
-          color: _blend(theme.foreground, theme.background, 0.35),
+          color:
+              Color.lerp(theme.foreground, theme.background, 0.35) ??
+              theme.foreground,
           fontSize: style.titleBarHeight * 0.45,
           fontFamily: style.fontFamily,
         ),
@@ -354,7 +356,3 @@ Color _shade(Color color, double amount) => Color.from(
   green: color.g * amount,
   blue: color.b * amount,
 );
-
-/// [amount] of the way from [a] to [b].
-Color _blend(Color a, Color b, double amount) =>
-    Color.lerp(a, b, amount) ?? a;

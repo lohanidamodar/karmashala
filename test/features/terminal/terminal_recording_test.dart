@@ -2,12 +2,15 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/media/frame_sink.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
+import 'package:karmashala/src/features/terminal/data/cast_frame_renderer.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_cast.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:path/path.dart' as p;
+import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
 
@@ -15,6 +18,9 @@ import 'fake_instance.dart';
 /// are the two things this file is about: it must not stop when the user looks
 /// somewhere else, and it must not vanish when the pane does.
 void main() {
+  // `Picture.toImage` needs a binding; the render case below paints real frames.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late ProviderContainer container;
   late TerminalSessionsController sessions;
   late TerminalRecordingController recording;
@@ -163,6 +169,42 @@ void main() {
     expect(await recording.stop('nothing-here'), isNull);
     expect(container.read(terminalRecordingProvider).saved, isNull);
   });
+
+  test('renders a saved recording into a GIF beside its cast', () async {
+    final paneId = openPane();
+    recording.start(paneId);
+    pane(paneId).receive('PS> flutter test\r\nAll tests passed!\r\n');
+    final saved = (await recording.stop(paneId))!;
+
+    await recording.render(
+      saved,
+      format: RecordingFormat.gif,
+      style: CastFrameStyle(
+        width: 160,
+        height: 96,
+        theme: TerminalThemes.defaultTheme,
+        fontFamily: 'monospace',
+        title: 'pwsh',
+      ),
+    );
+
+    final export = container.read(terminalRecordingProvider).export!;
+    expect(export.error, isNull);
+    final result = export.result!;
+    expect(result.frames, greaterThan(0));
+    expect(export.rendered, result.frames);
+    expect(
+      export.progress,
+      1.0,
+      reason: 'the bar reaches the end it was given, not a guess at one',
+    );
+
+    // The GIF is beside the cast, is a GIF, and needs no tool to open.
+    expect(result.path, '${p.withoutExtension(saved.file.path)}.gif');
+    expect(result.needsExternalTool, isFalse);
+    final bytes = File(result.path).readAsBytesSync();
+    expect(String.fromCharCodes(bytes.take(6)), 'GIF89a');
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   group('recordingFileName', () {
     test('carries the pane title and when it started', () {

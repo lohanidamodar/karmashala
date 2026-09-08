@@ -197,8 +197,9 @@ class IsolateFrameSink implements FrameSink {
     _worker = null;
     if (!_done.isCompleted) {
       _done.completeError(StateError('encode aborted'));
-      // Nobody may be awaiting it; keep the VM quiet about that.
-      unawaited(_done.future.catchError((_) => throw StateError('aborted')));
+      // A caller who does await `close()` still gets the error; this only says
+      // that nobody *having* to is not itself a fault.
+      _done.future.ignore();
     }
   }
 
@@ -318,6 +319,11 @@ class FrameEncoder {
 
   int _frames = 0;
 
+  /// Created once, on the first frame, rather than per frame — a sequence is
+  /// hundreds of them and each `createSync` is a syscall.
+  late final Directory _sequenceDirectory = Directory(outputPath)
+    ..createSync(recursive: true);
+
   void add(RgbaFrame frame) {
     final image = img.Image.fromBytes(
       width: frame.width,
@@ -337,9 +343,10 @@ class FrameEncoder {
         final hundredths = (frame.hold.inMicroseconds / 10000).round();
         _gif.addFrame(image, duration: hundredths < 1 ? 1 : hundredths);
       case RecordingFormat.pngSequence:
-        final dir = Directory(outputPath)..createSync(recursive: true);
         final name = 'frame_${_frames.toString().padLeft(5, '0')}.png';
-        File(p.join(dir.path, name)).writeAsBytesSync(img.encodePng(image));
+        File(
+          p.join(_sequenceDirectory.path, name),
+        ).writeAsBytesSync(img.encodePng(image));
     }
     _frames++;
   }
