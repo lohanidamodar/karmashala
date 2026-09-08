@@ -264,6 +264,7 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
       format: format,
       outputPath: switch (format) {
         RecordingFormat.gif => '$base.gif',
+        RecordingFormat.mp4 => '$base.mp4',
         RecordingFormat.pngSequence => '$base-frames',
       },
     );

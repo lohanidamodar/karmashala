@@ -6,6 +6,9 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
+import 'media_foundation.dart';
+import 'video_writer.dart';
+
 /// One rendered frame, as straight RGBA rows.
 ///
 /// The currency of the whole encode side. Anything that can produce these —
@@ -84,6 +87,9 @@ enum RecordingFormat {
   /// Plays anywhere with no tool at all, at the cost of 256 colours.
   gif('Animated GIF', 'gif'),
 
+  /// H.264 in MP4, written by the operating system's own encoder.
+  mp4('MP4 video', 'mp4'),
+
   /// Numbered PNGs plus the `ffmpeg` line that turns them into Full HD MP4.
   pngSequence('PNG frames + ffmpeg command', 'png');
 
@@ -92,12 +98,16 @@ enum RecordingFormat {
   final String label;
   final String extension;
 
+  /// Whether the file this writes is a video, rather than a folder of pictures.
+  bool get isVideo => this != pngSequence;
+
   /// What the user must be told before they pick this.
   ///
   /// [pngSequence] needs a tool this app does not bundle and will not pretend
   /// to have; saying so on the button is the whole point of the field.
   String? get needsToolNote => switch (this) {
     gif => null,
+    mp4 => null,
     pngSequence =>
       'Writes one PNG per frame and an ffmpeg command. '
           'This app does not bundle ffmpeg — you run the command yourself.',
@@ -195,6 +205,17 @@ class IsolateFrameSink implements FrameSink {
     _closed = true;
     _worker?.kill(priority: Isolate.immediate);
     _worker = null;
+    // A killed worker cannot close its container, so a half-written MP4 is on
+    // disk and no player will open it. Remove it rather than leave it looking
+    // like a recording.
+    if (format == RecordingFormat.mp4) {
+      try {
+        final file = File(outputPath);
+        if (file.existsSync()) file.deleteSync();
+      } on Object {
+        // Still held open by the encoder we just killed; nothing to do.
+      }
+    }
     if (!_done.isCompleted) {
       _done.completeError(StateError('encode aborted'));
       // A caller who does await `close()` still gets the error; this only says
@@ -298,11 +319,18 @@ class FrameEncoder {
     required this.format,
     required this.outputPath,
     this.frameRate = kRecordingFrameRate,
-  });
+    VideoEncoderOpener? openVideoEncoder,
+  }) : _openVideoEncoder = openVideoEncoder ?? openMediaFoundationEncoder;
 
   final RecordingFormat format;
   final String outputPath;
   final int frameRate;
+
+  /// Injected so a test can encode without the operating system's encoder.
+  final VideoEncoderOpener _openVideoEncoder;
+
+  /// Opened on the first frame, because only a frame knows the picture size.
+  VideoEncoder? _video;
 
   /// Octree rather than the package default's neural quantizer, and no dither.
   ///
@@ -325,6 +353,17 @@ class FrameEncoder {
     ..createSync(recursive: true);
 
   void add(RgbaFrame frame) {
+    if (format == RecordingFormat.mp4) {
+      final video = _video ??= _openVideoEncoder(
+        path: outputPath,
+        width: frame.width,
+        height: frame.height,
+        frameRate: frameRate,
+      );
+      video.add(frame);
+      _frames++;
+      return;
+    }
     final image = img.Image.fromBytes(
       width: frame.width,
       height: frame.height,
@@ -342,6 +381,9 @@ class FrameEncoder {
         // skipped outright.
         final hundredths = (frame.hold.inMicroseconds / 10000).round();
         _gif.addFrame(image, duration: hundredths < 1 ? 1 : hundredths);
+      case RecordingFormat.mp4:
+        // Handled above, before the image was built.
+        break;
       case RecordingFormat.pngSequence:
         final name = 'frame_${_frames.toString().padLeft(5, '0')}.png';
         File(
@@ -353,6 +395,14 @@ class FrameEncoder {
 
   Future<FrameSinkResult> finish() async {
     switch (format) {
+      case RecordingFormat.mp4:
+        final video = _video;
+        if (video == null) throw StateError('no frames were encoded');
+        return FrameSinkResult(
+          path: outputPath,
+          frames: _frames,
+          bytes: video.finish(),
+        );
       case RecordingFormat.gif:
         final bytes = _gif.finish();
         if (bytes == null) throw StateError('no frames were encoded');
