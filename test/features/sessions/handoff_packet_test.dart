@@ -7,6 +7,7 @@ HandoffPacket _packet({
   List<HandoffChange>? changes = const [],
   List<String> unresolvedTasks = const [],
   List<HandoffClaim>? deadEnds = const [],
+  HandoffSourceBrief? sourceBrief,
   List<HandoffDecision>? decisions = const [],
   int omittedDecisions = 0,
   String? branch = 'feature/x',
@@ -31,6 +32,7 @@ HandoffPacket _packet({
   omittedDecisions: omittedDecisions,
   unresolvedTasks: unresolvedTasks,
   deadEnds: deadEnds,
+  sourceBrief: sourceBrief,
   isFork: isFork,
 );
 
@@ -540,6 +542,91 @@ void main() {
       final text = _packet(deadEnds: null).render();
       expect(text, contains('Could not be read'));
       expect(text, contains('before spending a turn re-deriving it'));
+    });
+  });
+
+
+  group("the source agent's own brief", () {
+    test('is absent entirely when nobody asked for one', () {
+      // Declining has to leave the packet exactly as it was.
+      expect(_packet().render(), isNot(contains('own words')));
+    });
+
+    test('is quoted, attributed, and marked as unchecked', () {
+      final text = _packet(
+        sourceBrief: const HandoffSourceBrief.written(
+          'The parser is half done.\nThe Windows build is untested.',
+        ),
+      ).render();
+
+      expect(text, contains("## In Claude Code's own words"));
+      expect(text, contains('> The parser is half done.'));
+      expect(text, contains('> The Windows build is untested.'));
+      // Its words, said to be its words — the packet's one rule.
+      expect(text, contains('Claude Code wrote this when the handoff was'));
+      expect(text, contains('nobody has checked it'));
+      // And the evidence rule reaches it like everything else.
+      expect(text, contains('the evidence rule above applies'));
+      expect(text, contains('the verbatim quotes further down'));
+      // Quoted, so it has no editors.
+      expect(
+        text,
+        contains('_Owner: Claude Code. No editors'),
+      );
+    });
+
+    test('a brief that was asked for and not written says why', () {
+      final text = _packet(
+        sourceBrief: const HandoffSourceBrief.notWritten(
+          'it had not answered when this stopped waiting.',
+        ),
+      ).render();
+
+      expect(text, contains("## In Claude Code's own words"));
+      expect(
+        text,
+        contains(
+          'Claude Code was asked to write this and did not: it had not '
+          'answered when this stopped waiting.',
+        ),
+      );
+      // And nothing else in the packet is weaker for it.
+      expect(text, contains('Nothing else in this packet depends on it'));
+    });
+
+    test('sits above the files and the record, not buried under them', () {
+      final text = _packet(
+        sourceBrief: const HandoffSourceBrief.written('Half done.'),
+      ).render();
+      expect(
+        text.indexOf("## In Claude Code's own words"),
+        lessThan(text.indexOf('## Files changed in the working tree')),
+      );
+    });
+
+    test('the receiving prefix frames the work as inherited, not remembered', () {
+      final text = _packet().render();
+      expect(text, contains('Another model started this and has stopped'));
+      expect(text, contains('Build on what it did rather than repeating it'));
+      // And the half of Codex's framing that would be false here is not
+      // claimed: nothing says the reader has the other model's tool state.
+      expect(text, isNot(contains('tool state')));
+    });
+
+    test('the request is the compaction prompt, not a paraphrase', () {
+      expect(
+        kSourceBriefRequest,
+        startsWith(
+          'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a '
+          'handoff summary for another LLM that will resume the task.',
+        ),
+      );
+      expect(kSourceBriefRequest, contains('- Current progress and key decisions made'));
+      expect(kSourceBriefRequest, contains('- What remains to be done (clear next steps)'));
+      expect(
+        kSourceBriefRequest,
+        endsWith('helping the next LLM seamlessly continue the work.'),
+      );
     });
   });
 

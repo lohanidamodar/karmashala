@@ -20,6 +20,10 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/handoff_packet_files.dart';
+import 'package:karmashala/src/features/sessions/application/session_actions.dart';
+import 'package:karmashala/src/features/sessions/application/session_wait.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/sessions/domain/handoff_packet.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
@@ -180,6 +184,61 @@ class _FakeLocator implements SessionTranscriptLocator {
       path == null ? const {} : {'$agentId/$externalId': path!};
 }
 
+/// A source session that answers, by appending to the transcript the locator
+/// points at — which is how the real thing becomes visible to the service too.
+class _AnsweringActions extends SessionActions {
+  _AnsweringActions(super.ref, {this.transcript, this.answer});
+
+  final String? transcript;
+  final String? answer;
+  final sent = <String>[];
+
+  @override
+  Future<void> continueSession(String sessionId, String text) async {
+    sent.add(text);
+    final path = transcript;
+    final reply = answer;
+    if (path == null || reply == null) return;
+    File(path).writeAsStringSync(
+      '\n${jsonEncode({
+        'type': 'assistant',
+        'message': {
+          'content': [
+            {'type': 'text', 'text': reply},
+          ],
+        },
+      })}',
+      mode: FileMode.append,
+    );
+  }
+}
+
+/// A wait that settles at once with a stated verdict. The real one is
+/// event-driven and would sit on its bound in a container with no live pane;
+/// what these tests are about is what the service does with the answer.
+class _SettledWait extends SessionWaitService {
+  _SettledWait(super.ref, {this.state = SessionWaitState.done, this.block});
+
+  final SessionWaitState state;
+  final SessionBlock? block;
+
+  @override
+  SessionBlock? blockedOn(String sessionId) => block;
+
+  @override
+  Future<SessionWaitOutcome> wait(
+    String sessionId, {
+    Duration? bound,
+    bool? inputSent,
+  }) async => SessionWaitOutcome(
+    state: state,
+    agentStatus: AgentActivityStatus.idle,
+    source: AgentStatusSource.none,
+    changed: state == SessionWaitState.done,
+    inputSent: inputSent,
+  );
+}
+
 const agentId = 'claudeCode';
 const externalId = 'cli-1';
 
@@ -205,6 +264,9 @@ Harness harness({
   String gitStatus = ' M lib/a.dart\nA  lib/b.dart\n?? notes.txt\n',
   Set<String> missingDirectories = const {},
   Directory? packetDirectory,
+  String? sourceAnswer,
+  SessionWaitState waitState = SessionWaitState.done,
+  SessionBlock? blockedOn,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -240,6 +302,16 @@ Harness harness({
         handoffPacketFilesProvider.overrideWith(
           (ref) async => HandoffPacketFiles(packetDirectory),
         ),
+      sessionActionsProvider.overrideWith(
+        (ref) => _AnsweringActions(
+          ref,
+          transcript: transcriptPath,
+          answer: sourceAnswer,
+        ),
+      ),
+      sessionWaitProvider.overrideWith(
+        (ref) => _SettledWait(ref, state: waitState, block: blockedOn),
+      ),
       settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: git),
@@ -1331,6 +1403,105 @@ void main() {
       );
       expect(files.retire('fresh'), isTrue);
       expect(files.retire('fresh'), isFalse);
+    });
+  });
+
+
+  group("the source agent's own brief", () {
+    test('asks with the compaction prompt and quotes what came back', () async {
+      final path = writeTranscript([('user', 'Parse the header.')]);
+      final h = harness(
+        transcriptPath: path,
+        sourceAnswer: 'Progress: the header parses. Next: the body.',
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final brief = await h.container
+          .read(sessionHandoffServiceProvider)
+          .requestSourceBrief(sessionId: 'src');
+
+      expect(brief.wasWritten, isTrue);
+      expect(brief.text, 'Progress: the header parses. Next: the body.');
+      final actions =
+          h.container.read(sessionActionsProvider) as _AnsweringActions;
+      expect(actions.sent.single, kSourceBriefRequest);
+
+      // And it reaches the packet as that agent's own words.
+      final packet = await h.container
+          .read(sessionHandoffServiceProvider)
+          .buildPacket(
+            sessionId: 'src',
+            targetAgentName: 'Mute CLI',
+            instruction: 'Finish it.',
+            sourceBrief: brief,
+          );
+      expect(packet.render(), contains("## In Forker CLI's own words"));
+      expect(packet.render(), contains('> Progress: the header parses.'));
+    });
+
+    test('a source that answers nothing does not block the handoff', () async {
+      final path = writeTranscript([('user', 'Parse the header.')]);
+      // No `sourceAnswer`: the request is delivered and the transcript never
+      // moves, which is exactly a session that ignored it.
+      final h = harness(
+        transcriptPath: path,
+        waitState: SessionWaitState.timeout,
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final brief = await h.container
+          .read(sessionHandoffServiceProvider)
+          .requestSourceBrief(sessionId: 'src');
+
+      expect(brief.wasWritten, isFalse);
+      expect(brief.notWritten, contains('had not answered'));
+      // The bound is the whole of the limit, and the request is still in.
+      expect(brief.notWritten, contains('may still be answered'));
+
+      // The handoff goes ahead, packet and all.
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take it from here.',
+            sourceBrief: brief,
+          );
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments.last, contains('was asked to write this'));
+      expect(launch.arguments.last, contains('Handed off from Forker CLI'));
+    });
+
+    test('a source stopped for a person is not sent to at all', () async {
+      final path = writeTranscript([('user', 'Parse the header.')]);
+      final h = harness(
+        transcriptPath: path,
+        sourceAnswer: 'never reached',
+        blockedOn: const SessionBlock(
+          kind: 'approvalPrompt',
+          text: 'Allow the write?',
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final brief = await h.container
+          .read(sessionHandoffServiceProvider)
+          .requestSourceBrief(sessionId: 'src');
+
+      expect(brief.wasWritten, isFalse);
+      expect(brief.notWritten, contains('stopped waiting for a person'));
+      final actions =
+          h.container.read(sessionActionsProvider) as _AnsweringActions;
+      expect(actions.sent, isEmpty);
     });
   });
 

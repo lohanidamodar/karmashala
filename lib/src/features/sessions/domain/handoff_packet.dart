@@ -29,6 +29,46 @@
 /// out. That honesty is available to the reader; a paraphrase's errors are not.
 library;
 
+/// What the source session is asked for when the user wants the brief in the
+/// agent's own words.
+///
+/// **Codex's own compaction prompt**, and it is quoted rather than reworded
+/// for the reason the packet quotes everything else: it is a prompt somebody
+/// shipped and tuned for exactly this job, and a paraphrase of it is a new
+/// prompt nobody has run. Read verbatim out of the `codex.exe` 0.153.4
+/// binary on 2026-09-09, beside `core\src\compact.rs`.
+const String kSourceBriefRequest =
+    'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff '
+    'summary for another LLM that will resume the task.\n'
+    '- Current progress and key decisions made\n'
+    '- Important context, constraints, or user preferences\n'
+    '- What remains to be done (clear next steps)\n'
+    '- Any critical data, examples, or references needed to continue\n'
+    'Be concise, structured, and focused on helping the next LLM seamlessly '
+    'continue the work.';
+
+/// The brief the source agent wrote, or why there is none.
+///
+/// Two states and no third. A brief that was asked for and not answered is
+/// **not** the same as one nobody asked for: the first is a fact about that
+/// session and gets a section saying so, the second leaves the packet exactly
+/// as it was before any of this existed, which is what declining has to mean.
+/// [HandoffPacket.sourceBrief] is null for the second.
+class HandoffSourceBrief {
+  /// What the agent wrote, in its own words. Quoted, never edited.
+  const HandoffSourceBrief.written(String this.text) : notWritten = null;
+
+  /// Why there is no brief, in words the reader can act on. Never a bare
+  /// "failed": the two that matter — the agent is stopped for a person, and
+  /// the agent had not answered yet — need opposite responses.
+  const HandoffSourceBrief.notWritten(String this.notWritten) : text = null;
+
+  final String? text;
+  final String? notWritten;
+
+  bool get wasWritten => text != null;
+}
+
 /// One changed file, as the packet states it.
 ///
 /// A local shape rather than `git`'s `FileChange` so the packet — the thing with
@@ -243,6 +283,7 @@ class HandoffPacket {
     this.omittedDecisions = 0,
     this.unresolvedTasks = const [],
     this.deadEnds,
+    this.sourceBrief,
     this.isFork = false,
   });
 
@@ -305,6 +346,18 @@ class HandoffPacket {
   /// ruled out", because the record is only written by explicit acts.
   final List<HandoffClaim>? deadEnds;
 
+  /// The source agent's own handoff summary, when the user asked for one, or
+  /// **null when nobody asked** — which leaves this packet exactly as it was
+  /// before the feature existed.
+  ///
+  /// The one part of the document written by a model, and the whole of the
+  /// class comment's argument above still applies to it: a summary can be
+  /// confidently wrong in ways the receiving agent cannot detect. What makes
+  /// it defensible here and not as a replacement for the recap is that it is
+  /// **attributed, optional, and beside the quotes rather than instead of
+  /// them** — the verbatim tail is still there to check it against.
+  final HandoffSourceBrief? sourceBrief;
+
   /// Whether this packet is standing in for a fork the CLI could not perform.
   /// Changes only the framing, never the contents: the receiving agent is told
   /// it is continuing a *branch* of the conversation rather than taking it over.
@@ -332,6 +385,16 @@ class HandoffPacket {
     }
     out.writeln('- **Branch:** ${_branchLine()}');
     out.writeln();
+
+    if (sourceBrief != null) {
+      out.writeln('## In $sourceAgentName\'s own words');
+      out.writeln();
+      // No editors: it is a quotation, and an edited quotation is not one.
+      out.writeln(HandoffSectionOwner(sourceAgentName).line);
+      out.writeln();
+      out.writeln(_sourceBriefSection());
+      out.writeln();
+    }
 
     out.writeln('## Files changed in the working tree');
     out.writeln();
@@ -416,6 +479,31 @@ class HandoffPacket {
       'name rather than rewriting somebody else\'s paragraph — and if you '
       'think a section is wrong, say why beside it.';
 
+  String _sourceBriefSection() {
+    final brief = sourceBrief!;
+    final text = brief.text;
+    if (text == null) {
+      return '$sourceAgentName was asked to write this and did not: '
+          '${brief.notWritten}\n\n'
+          'Nothing else in this packet depends on it — the rest is assembled '
+          'from files and quoted from the transcript, exactly as it would '
+          'have been.';
+    }
+    final out = StringBuffer()
+      ..writeln(
+        '_$sourceAgentName wrote this when the handoff was prepared, in '
+        'answer to a request for a context-checkpoint handoff summary. It is '
+        'that agent\'s account of its own work and nobody has checked it: '
+        'the evidence rule above applies to every line of it, and the '
+        'verbatim quotes further down are what to check it against._',
+      )
+      ..writeln();
+    for (final line in _lines(text)) {
+      out.writeln('> $line');
+    }
+    return out.toString().trimRight();
+  }
+
   String _deadEndsSection() {
     final ruled = deadEnds;
     if (ruled == null) {
@@ -452,7 +540,16 @@ class HandoffPacket {
             'is not your own history and none of it has been rewritten to read '
             'as though you produced it. Treat the code and decisions described '
             'as things you are inheriting and can inspect, not as things you '
-            'remember doing.';
+            'remember doing.'
+            // Codex's own receiving-side framing, in this document's terms.
+            // Its wording — "another language model started to solve this
+            // problem … build on the work that has already been done and
+            // avoid duplicating work" — is the half worth taking; the half
+            // that is not is its claim that the reader also has the other
+            // model's tool state, which here would be false.
+            '\n\nAnother model started this and has stopped. Build on what it '
+            'did rather than repeating it — and where you cannot tell whether '
+            'something was done, look, do not assume either way.';
 
   String _branchLine() {
     if (branch == null) return 'unknown (git could not be asked)';

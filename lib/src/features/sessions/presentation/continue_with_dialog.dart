@@ -8,6 +8,7 @@ import '../../agents/domain/agent_permission_support.dart';
 import '../../agents/domain/permission_carry.dart';
 import '../../agents/presentation/permission_mode_picker.dart';
 import '../application/session_handoff_service.dart';
+import '../domain/handoff_packet.dart';
 import '../domain/session_fork.dart';
 
 /// What offering "Continue with…" promises, wherever it is offered from.
@@ -77,6 +78,17 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   String? _preview;
   String? _error;
 
+  /// Whether to ask the source session to write its own brief first.
+  ///
+  /// **Off by default**, and that is the decision rather than an oversight: it
+  /// spends a turn of the source agent's quota, and running out of that quota
+  /// is one of the reasons people hand off at all.
+  bool _askSource = false;
+
+  /// What the source agent answered, kept so the preview and the launch spend
+  /// one turn between them rather than one each.
+  HandoffSourceBrief? _sourceBrief;
+
   @override
   void dispose() {
     _instruction.dispose();
@@ -89,6 +101,25 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
       if (line.trim().isNotEmpty) line.trim(),
   ];
 
+  /// The source agent's brief, asked for at most once whatever happens next.
+  ///
+  /// Never throws into the caller: a handoff must not be blocked on an agent
+  /// that does not answer, so every failure becomes the sentence the packet
+  /// prints instead.
+  Future<HandoffSourceBrief?> _briefFromSource() async {
+    if (!_askSource) return null;
+    final held = _sourceBrief;
+    if (held != null) return held;
+    try {
+      final brief = await ref
+          .read(sessionHandoffServiceProvider)
+          .requestSourceBrief(sessionId: widget.sessionId);
+      return _sourceBrief = brief;
+    } catch (e) {
+      return _sourceBrief = HandoffSourceBrief.notWritten(_message(e));
+    }
+  }
+
   Future<void> _buildPreview(List<HandoffTarget> targets) async {
     final target = _selected(targets);
     setState(() {
@@ -96,6 +127,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
       _error = null;
     });
     try {
+      final brief = await _briefFromSource();
       final packet = await ref
           .read(sessionHandoffServiceProvider)
           .buildPacket(
@@ -108,6 +140,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                 : _instruction.text,
             unresolvedTasks: _taskLines,
             isFork: _mode == _Mode.fork,
+            sourceBrief: brief,
           );
       if (mounted) setState(() => _preview = packet.render());
     } catch (e) {
@@ -125,6 +158,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
     final navigator = Navigator.of(context);
     try {
       final service = ref.read(sessionHandoffServiceProvider);
+      final brief = await _briefFromSource();
       if (_mode == _Mode.fork) {
         await service.forkSession(
           sessionId: widget.sessionId,
@@ -141,6 +175,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
           unresolvedTasks: _taskLines,
           intoNewWorktree: _newWorktree,
           permissionMode: _chosenMode,
+          sourceBrief: brief,
         );
       }
       navigator.pop();
@@ -192,6 +227,12 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
     final plan = continuation.plan;
     final target = _selected(targets);
     final focus = _agentInFocus(targets);
+    // The agent already running this session, which is the one being asked for
+    // a brief. Named rather than left as "the previous agent": the row spends
+    // that agent's quota, and the user should know whose.
+    final sourceName =
+        targets.where((t) => t.isSameAgent).firstOrNull?.agentName ??
+        'the previous agent';
     final permission = focus == null ? null : _permissionFor(focus);
     final theme = Theme.of(context);
 
@@ -277,6 +318,26 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Still open (one per line, optional)',
                   border: OutlineInputBorder(),
+                ),
+              ),
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _askSource,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() {
+                        _askSource = v ?? false;
+                        _preview = null;
+                      }),
+                title: Text('Ask $sourceName to write the brief first'),
+                subtitle: Text(
+                  _sourceBrief?.notWritten != null
+                      ? 'It did not: ${_sourceBrief!.notWritten}'
+                      : 'Costs $sourceName one turn. The packet is assembled '
+                            'from files either way; this adds that agent\'s '
+                            'own account beside them, marked as its words.',
                 ),
               ),
               CheckboxListTile(
