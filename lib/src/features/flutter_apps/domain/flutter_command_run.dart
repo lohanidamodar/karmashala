@@ -5,6 +5,15 @@ enum FlutterCommandKind {
   analyze,
   test;
 
+  /// Whether this command produces a verdict worth recording.
+  ///
+  /// `analyze` and `test` do: they end, and their exit code *is* the answer.
+  /// `pub get` and `run` do not — one is a prerequisite and the other has no
+  /// end, and filing either as a check would fill the record with rows nobody
+  /// asked a question with.
+  bool get isGate =>
+      this == FlutterCommandKind.analyze || this == FlutterCommandKind.test;
+
   /// The argv after the SDK's own name.
   List<String> get arguments => switch (this) {
     FlutterCommandKind.pubGet => const <String>['pub', 'get'],
@@ -49,6 +58,7 @@ class FlutterCommandRun {
     this.appId,
     this.endedAt,
     this.exitCode,
+    this.verificationRunId,
   });
 
   /// The pane, and the run's identity. One run, one pane.
@@ -85,6 +95,11 @@ class FlutterCommandRun {
   /// Null while running **and** when the exit was never observed.
   final int? exitCode;
 
+  /// The `verification_runs` row a finished gate was recorded as. Null for a
+  /// gate still going, and for `pubGet` and `run`, which have no verdict —
+  /// they are not checks.
+  final String? verificationRunId;
+
   bool get isAttached => appId != null;
 
   FlutterCommandRun copyWith({
@@ -92,6 +107,7 @@ class FlutterCommandRun {
     String? appId,
     DateTime? endedAt,
     int? exitCode,
+    String? verificationRunId,
   }) => FlutterCommandRun(
     paneId: paneId,
     kind: kind,
@@ -105,6 +121,7 @@ class FlutterCommandRun {
     appId: appId ?? this.appId,
     endedAt: endedAt ?? this.endedAt,
     exitCode: exitCode ?? this.exitCode,
+    verificationRunId: verificationRunId ?? this.verificationRunId,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -119,5 +136,6 @@ class FlutterCommandRun {
     if (appId != null) 'appId': appId,
     if (endedAt != null) 'endedAt': endedAt!.toIso8601String(),
     if (exitCode != null) 'exitCode': exitCode,
+    if (verificationRunId != null) 'verificationRunId': verificationRunId,
   };
 }
