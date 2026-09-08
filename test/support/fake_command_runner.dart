@@ -138,6 +138,11 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
   @override
   SshConnectionPool Function()? get sshConnections => null;
 
+  /// But a fake does hand out a runner for an SSH environment, so a resolver
+  /// asking this factory must not refuse one.
+  @override
+  bool get canReachRemote => true;
+
   @override
   CommandRunner forEnvironment(ExecutionEnvironment environment) =>
       _byEnvironmentId[environment.id] ?? _fallback;
