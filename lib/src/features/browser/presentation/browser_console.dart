@@ -8,6 +8,7 @@ import '../../devices/domain/device_claim.dart' show describeDriveAge;
 import '../application/browser_pane_controller.dart';
 import '../application/browser_providers.dart';
 import '../data/page_input.dart' show FindResult;
+import 'browser_viewport_shot.dart';
 
 /// What the console last asked, and what came back.
 class BrowserConsoleAnswer {
@@ -230,6 +231,9 @@ class _BrowserConsoleState extends ConsumerState<BrowserConsole> {
                 ),
                 onPressed: widget.enabled && !_busy ? _ask : null,
               ),
+              // The viewport, not a crop: what the page looks like right now is
+              // the question a person is usually holding.
+              BrowserViewportShotButton(state: widget.state),
             ],
           ),
         ),
