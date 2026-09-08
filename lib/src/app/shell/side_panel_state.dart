@@ -44,6 +44,15 @@ enum SidePanelSurface {
   /// the third says so in words rather than drawing an empty list.
   plan('Plan'),
 
+  /// **The way back from a turn.** One entry per turn an agent finished, plus
+  /// the safety captures taken before a restore.
+  ///
+  /// Directly under Plan because the pair answers the two halves of "what has
+  /// this agent been doing to my checkout" — what it says it intends, and what
+  /// it has already written. It is also the only undo in the app for an
+  /// agent's edits, which is why it is on the rail rather than behind a menu.
+  checkpoints('Checkpoints', drawsOwnHeader: true),
+
   /// The user's own list: a line of text, done or not, filed under a project
   /// or under nothing.
   ///

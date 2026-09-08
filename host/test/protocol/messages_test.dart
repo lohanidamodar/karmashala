@@ -1,0 +1,313 @@
+import 'dart:typed_data';
+
+import 'package:karmashala_host/karmashala_host.dart';
+import 'package:test/test.dart';
+
+T roundTrip<T extends HostMessage>(T message) {
+  final frames = FrameParser().add(message.toFrame().encode());
+  expect(frames, hasLength(1), reason: 'a message must encode to exactly one frame');
+  return decodeMessage(frames.single) as T;
+}
+
+void main() {
+  final t0 = DateTime.utc(2026, 9, 8, 14, 0, 30);
+
+  test('the protocol version is pinned; changing it is a deliberate act', () {
+    expect(kProtocolVersion, 1);
+  });
+
+  group('client to host', () {
+    test('hello carries the version it speaks and who is speaking', () {
+      final decoded = roundTrip(const HelloMessage(requestId: 9, clientId: 'pane-1'));
+      expect(decoded.requestId, 9);
+      expect(decoded.clientId, 'pane-1');
+      expect(decoded.protocolVersion, kProtocolVersion);
+    });
+
+    test('a mismatched version survives decoding so it can be refused', () {
+      final decoded = roundTrip(
+        const HelloMessage(requestId: 1, clientId: 'x', protocolVersion: 99),
+      );
+      expect(decoded.protocolVersion, 99);
+    });
+
+    test('open carries the whole spawn request, cwd and env included', () {
+      final decoded = roundTrip(
+        const OpenMessage(
+          requestId: 4,
+          sessionId: 'pane-a',
+          argv: ['/bin/sh', '-lc', 'echo hi'],
+          workingDirectory: '/srv/app',
+          environment: {'TERM': 'xterm-256color', 'LANG': 'en_US.UTF-8'},
+          columns: 132,
+          rows: 43,
+        ),
+      );
+      expect(decoded.sessionId, 'pane-a');
+      expect(decoded.argv, ['/bin/sh', '-lc', 'echo hi']);
+      expect(decoded.workingDirectory, '/srv/app');
+      expect(decoded.environment['LANG'], 'en_US.UTF-8');
+      expect(decoded.columns, 132);
+      expect(decoded.rows, 43);
+    });
+
+    test('an absent working directory decodes as absent, not as an empty path', () {
+      final decoded = roundTrip(
+        const OpenMessage(
+          requestId: 1,
+          sessionId: 's',
+          argv: ['/bin/sh'],
+          environment: {},
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      expect(decoded.workingDirectory, isNull);
+    });
+
+    test('attach carries the exact offset the pane last rendered', () {
+      final decoded = roundTrip(
+        const AttachMessage(
+          requestId: 2,
+          sessionId: 'pane-a',
+          sinceOffset: 9007199254740000,
+          claimWrite: false,
+        ),
+      );
+      expect(decoded.sinceOffset, 9007199254740000);
+      expect(decoded.claimWrite, isFalse);
+    });
+
+    test('input is raw bytes with no framing tax beyond the header', () {
+      final payload = Uint8List.fromList([0x1b, 0x5b, 0x41, 0x00, 0xff]);
+      final message = InputMessage(3, payload);
+      expect(message.toFrame().encode(), hasLength(Frame.headerBytes + payload.length));
+      expect(roundTrip(message).bytes, payload);
+    });
+
+    test('resize and claim and release ride on the session ref', () {
+      expect(roundTrip(const ResizeMessage(5, 100, 30)).sessionRef, 5);
+      expect(roundTrip(const ResizeMessage(5, 100, 30)).columns, 100);
+      expect(roundTrip(const ClaimMessage(7, 5)).requestId, 7);
+      expect(roundTrip(const ReleaseMessage(7, 5)).sessionRef, 5);
+    });
+
+    test('close names the session and the signal', () {
+      final decoded = roundTrip(const CloseMessage(1, 'pane-a', signal: 9));
+      expect(decoded.sessionId, 'pane-a');
+      expect(decoded.signal, 9);
+    });
+  });
+
+  group('host to client', () {
+    test('welcome reports what the host measured about itself, with an age', () {
+      final decoded = roundTrip(
+        WelcomeMessage(
+          requestId: 1,
+          protocolVersion: kProtocolVersion,
+          hostVersion: '0.1.0',
+          operatingSystem: 'linux',
+          architecture: 'x64',
+          ptyLibrary: 'libc.so.6',
+          pid: 4242,
+          startedAt: t0.subtract(const Duration(hours: 2)),
+          observedAt: t0,
+        ),
+      );
+      expect(decoded.hostVersion, '0.1.0');
+      expect(decoded.ptyLibrary, 'libc.so.6');
+      expect(decoded.architecture, 'x64');
+      expect(decoded.observedAt, t0);
+      expect(decoded.startedAt, t0.subtract(const Duration(hours: 2)));
+    });
+
+    test('output is an offset and then the bytes, untouched', () {
+      final bytes = Uint8List.fromList([0x1b, 0x5d, 0x31, 0x33, 0x33, 0x3b, 0x41, 0x07]);
+      final decoded = roundTrip(OutputMessage(2, 4096, bytes));
+      expect(decoded.offset, 4096);
+      expect(decoded.bytes, bytes, reason: 'OSC 133 must survive byte for byte');
+      expect(decoded.nextOffset, 4096 + bytes.length);
+    });
+
+    test('attached says where the replay really starts and what was lost', () {
+      final decoded = roundTrip(
+        AttachedMessage(
+          requestId: 3,
+          sessionRef: 1,
+          sessionId: 'pane-a',
+          columns: 80,
+          rows: 24,
+          replayFromOffset: 1000,
+          droppedBytes: 400,
+          totalBytes: 5000,
+          holdsWriteToken: false,
+          writeHolder: 'pane-b',
+          observedAt: t0,
+        ),
+      );
+      expect(decoded.replayFromOffset, 1000);
+      expect(decoded.droppedBytes, 400);
+      expect(decoded.writeHolder, 'pane-b');
+      expect(decoded.holdsWriteToken, isFalse);
+    });
+
+    test('an unheld token decodes as no holder, not as an empty name', () {
+      final decoded = roundTrip(
+        AttachedMessage(
+          requestId: 1,
+          sessionRef: 1,
+          sessionId: 's',
+          columns: 80,
+          rows: 24,
+          replayFromOffset: 0,
+          droppedBytes: 0,
+          totalBytes: 0,
+          holdsWriteToken: true,
+          writeHolder: null,
+          observedAt: t0,
+        ),
+      );
+      expect(decoded.writeHolder, isNull);
+    });
+
+    test('an unknown exit code stays unknown across the wire, never zero', () {
+      final decoded = roundTrip(
+        ExitedMessage(
+          sessionRef: 1,
+          sessionId: 'pane-a',
+          exitCode: null,
+          reason: 'ended, exit code unknown (the child could not be reaped)',
+          observedAt: t0,
+        ),
+      );
+      expect(decoded.exitCode, isNull);
+      expect(decoded.reason, contains('unknown'));
+    });
+
+    test('a real exit code survives, including a signalled one', () {
+      expect(
+        roundTrip(
+          ExitedMessage(
+            sessionRef: 1,
+            sessionId: 'a',
+            exitCode: 130,
+            reason: 'exited 130',
+            observedAt: t0,
+          ),
+        ).exitCode,
+        130,
+      );
+      expect(
+        roundTrip(
+          ExitedMessage(
+            sessionRef: 1,
+            sessionId: 'a',
+            exitCode: 0,
+            reason: 'exited 0',
+            observedAt: t0,
+          ),
+        ).exitCode,
+        0,
+      );
+    });
+
+    test('a session list round-trips every lifecycle shape', () {
+      final decoded = roundTrip(
+        SessionsMessage(1, [
+          SessionSummary(
+            id: 'running',
+            argv: ['/bin/sh'],
+            workingDirectory: '/srv',
+            pid: 10,
+            columns: 80,
+            rows: 24,
+            startedAt: t0,
+            observedAt: t0,
+            totalBytes: 12,
+            firstAvailableOffset: 0,
+            lifecycle: const SessionRunning(),
+            writeHolder: 'pane-1',
+          ),
+          SessionSummary(
+            id: 'exited',
+            argv: ['/bin/false'],
+            workingDirectory: null,
+            pid: 11,
+            columns: 80,
+            rows: 24,
+            startedAt: t0,
+            observedAt: t0,
+            totalBytes: 0,
+            firstAvailableOffset: 0,
+            lifecycle: SessionExited(1, t0),
+            writeHolder: null,
+          ),
+          SessionSummary(
+            id: 'unknown',
+            argv: ['/bin/sh'],
+            workingDirectory: null,
+            pid: 12,
+            columns: 80,
+            rows: 24,
+            startedAt: t0,
+            observedAt: t0,
+            totalBytes: 0,
+            firstAvailableOffset: 0,
+            lifecycle: SessionEndedWithoutCode(t0, 'not reaped'),
+            writeHolder: null,
+          ),
+        ]),
+      );
+
+      expect(decoded.summaries.map((s) => s.id), ['running', 'exited', 'unknown']);
+      expect(decoded.summaries[0].lifecycle, isA<SessionRunning>());
+      expect(decoded.summaries[0].workingDirectory, '/srv');
+      expect(decoded.summaries[0].writeHolder, 'pane-1');
+      expect(decoded.summaries[1].lifecycle.exitCode, 1);
+      expect(decoded.summaries[2].lifecycle.exitCode, isNull);
+      expect((decoded.summaries[2].lifecycle as SessionEndedWithoutCode).reason, 'not reaped');
+    });
+
+    test('error carries a code a client can branch on and words a user can read', () {
+      final decoded = roundTrip(
+        const ErrorMessage(3, ProtocolErrorCode.protocolMismatch, 'host speaks 1, client 99'),
+      );
+      expect(decoded.code, ProtocolErrorCode.protocolMismatch);
+      expect(decoded.message, 'host speaks 1, client 99');
+    });
+
+    test('an error code this build has never heard of reads as internal', () {
+      expect(ProtocolErrorCode.fromCode(9999), ProtocolErrorCode.internal);
+    });
+
+    test('closed reports the exit code it managed to collect, or none', () {
+      expect(roundTrip(const ClosedMessage(1, 'a', 3)).exitCode, 3);
+      expect(roundTrip(const ClosedMessage(1, 'a', null)).exitCode, isNull);
+    });
+
+    test('claimed reports who holds it after the attempt', () {
+      final decoded = roundTrip(
+        const ClaimedMessage(requestId: 2, sessionRef: 4, holdsWriteToken: true, writeHolder: 'me'),
+      );
+      expect(decoded.holdsWriteToken, isTrue);
+      expect(decoded.writeHolder, 'me');
+      expect(decoded.sessionRef, 4);
+    });
+  });
+
+  test('a mixed conversation decodes in order from one byte stream', () {
+    final bytes = <int>[
+      ...const HelloMessage(requestId: 1, clientId: 'p').toFrame().encode(),
+      ...OutputMessage(1, 0, Uint8List.fromList([65])).toFrame().encode(),
+      ...InputMessage(1, Uint8List(0)).toFrame().encode(),
+      ...const ListMessage(2).toFrame().encode(),
+    ];
+    final decoded = FrameParser().add(bytes).map(decodeMessage).toList();
+    expect(decoded.map((m) => m.runtimeType.toString()), [
+      'HelloMessage',
+      'OutputMessage',
+      'InputMessage',
+      'ListMessage',
+    ]);
+  });
+}

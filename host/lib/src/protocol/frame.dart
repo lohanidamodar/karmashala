@@ -1,0 +1,148 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+/// Every message on the wire, as one byte.
+///
+/// The numbers are part of the protocol: adding a member is a compatible
+/// change, renumbering one is not.
+enum MessageType {
+  hello(0x01),
+  welcome(0x02),
+  list(0x03),
+  sessions(0x04),
+  open(0x05),
+  attach(0x06),
+  attached(0x07),
+  output(0x08),
+  input(0x09),
+  resize(0x0a),
+  exited(0x0b),
+  close(0x0c),
+  closed(0x0d),
+  claim(0x0e),
+  release(0x0f),
+  claimed(0x10),
+  error(0x11);
+
+  const MessageType(this.code);
+  final int code;
+
+  static MessageType? fromCode(int code) {
+    for (final type in MessageType.values) {
+      if (type.code == code) return type;
+    }
+    return null;
+  }
+}
+
+/// The fixed header: type, flags, session ref, payload length. Eight bytes,
+/// big-endian, aligned, and free of a request id so `output` costs nothing
+/// beyond it.
+///
+/// The session ref is a small per-connection handle rather than the session's
+/// id: ids are strings the app chooses and the hot path must not carry one on
+/// every chunk. Ref 0 means "no particular session".
+class Frame {
+  const Frame(this.type, this.sessionRef, this.payload, {this.flags = 0});
+
+  static const int headerBytes = 8;
+
+  /// Refusing a silly length is the difference between a protocol error and an
+  /// out-of-memory kill. 16 MiB is far above any real frame.
+  static const int maxPayloadBytes = 16 * 1024 * 1024;
+
+  final MessageType type;
+  final int sessionRef;
+  final int flags;
+  final Uint8List payload;
+
+  Uint8List encode() {
+    final out = Uint8List(headerBytes + payload.length);
+    final view = ByteData.view(out.buffer);
+    out[0] = type.code;
+    out[1] = flags;
+    view.setUint16(2, sessionRef, Endian.big);
+    view.setUint32(4, payload.length, Endian.big);
+    out.setRange(headerBytes, out.length, payload);
+    return out;
+  }
+
+  @override
+  String toString() => 'Frame(${type.name}, ref $sessionRef, ${payload.length}B)';
+}
+
+class FrameFormatException implements Exception {
+  const FrameFormatException(this.message);
+  final String message;
+  @override
+  String toString() => 'FrameFormatException: $message';
+}
+
+/// Turns a byte stream into frames.
+///
+/// A byte stream, not a message stream, is the point: the same parser reads an
+/// SSH exec channel in production and a pipe in a test, and neither can be
+/// trusted to deliver a frame per event.
+class FrameParser {
+  final _buffer = BytesBuilder(copy: true);
+
+  /// Feeds bytes and yields whatever frames completed. Throws
+  /// [FrameFormatException] on a header that cannot be true, because carrying
+  /// on after one would resynchronise onto garbage.
+  List<Frame> add(List<int> chunk) {
+    _buffer.add(chunk);
+    final frames = <Frame>[];
+    while (true) {
+      final data = _buffer.toBytes();
+      if (data.length < Frame.headerBytes) {
+        _restore(data);
+        return frames;
+      }
+      final view = ByteData.view(data.buffer, data.offsetInBytes, data.length);
+      final type = MessageType.fromCode(data[0]);
+      final flags = data[1];
+      final ref = view.getUint16(2, Endian.big);
+      final length = view.getUint32(4, Endian.big);
+      if (type == null) {
+        throw FrameFormatException('unknown message type 0x${data[0].toRadixString(16)}');
+      }
+      if (length > Frame.maxPayloadBytes) {
+        throw FrameFormatException('payload of $length bytes exceeds the ${Frame.maxPayloadBytes} limit');
+      }
+      final total = Frame.headerBytes + length;
+      if (data.length < total) {
+        _restore(data);
+        return frames;
+      }
+      frames.add(
+        Frame(type, ref, Uint8List.sublistView(data, Frame.headerBytes, total), flags: flags),
+      );
+      _restore(Uint8List.sublistView(data, total));
+    }
+  }
+
+  void _restore(Uint8List remaining) {
+    _buffer.clear();
+    if (remaining.isNotEmpty) _buffer.add(remaining);
+  }
+}
+
+/// The parser as a stream transformer, for a socket or a stdin.
+Stream<Frame> readFrames(Stream<List<int>> source) {
+  final parser = FrameParser();
+  return source.expand<Frame>(parser.add);
+}
+
+/// Unused today; kept as the one place a future flag would be read.
+extension FrameFlags on Frame {
+  bool get hasUnknownFlags => flags != 0;
+}
+
+/// Never mixed into the codec: what a connection does with a frame is a
+/// separate concern from getting one off the wire.
+typedef FrameSink = void Function(Frame frame);
+
+/// The one asynchronous helper the codec owns, so a caller does not reimplement
+/// "the next frame of this type" three times.
+Future<Frame> firstFrameOfType(Stream<Frame> frames, MessageType type) =>
+    frames.firstWhere((frame) => frame.type == type);
