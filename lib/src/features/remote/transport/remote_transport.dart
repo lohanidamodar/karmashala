@@ -12,6 +12,15 @@ import 'dart:typed_data';
 /// Largest frame a transport will send or accept. Matches the relay's cap.
 const int kMaxTransportFrameBytes = 1024 * 1024 + 4096;
 
+/// The most one peer's outbound queue will hold while that peer is away.
+///
+/// Four megabytes: enough that an ordinary blip costs nothing — a reconnect
+/// inside a few seconds replays everything — and small enough that a phone
+/// which walked out of range is a bounded amount of the desktop's memory
+/// rather than an open-ended one. Roughly four full frames, or several
+/// thousand ordinary ones.
+const int kMaxQueuedBytes = 4 * 1024 * 1024;
+
 /// Bytes of big-endian length prefix on a stream transport.
 const int kFrameHeaderBytes = 4;
 
@@ -74,9 +83,24 @@ class TransportFramingException extends TransportException {
 
 /// Capped exponential backoff with jitter, so a relay coming back up does not
 /// meet every host at once.
+///
+/// **One second, doubling, to a thirty-second ceiling.** The floor used to be
+/// 250 ms, which on an idle phone whose desktop is refusing — a relay that is
+/// up and answering, with no host at the rendezvous — is four dials and four
+/// log lines a second, for as long as the app is open, to learn the same
+/// refusal each time. A retry rate is a claim about how fast the far end can
+/// change, and nothing on the other side of one refusal changes in 250 ms.
+///
+/// The ceiling is what keeps it a *reconnect* rather than a give-up: half a
+/// minute is the longest a desktop that has come back stays unnoticed, and the
+/// three things that mean the wait is now pointless — a link that worked, the
+/// app coming back to the foreground, and the user asking — all reset it, so
+/// the ceiling is never what the user is actually waiting out. A path with a
+/// different physics says so by passing its own: a desktop on the same table
+/// is dialled on the 200 ms schedule `_localBackoff` names.
 class Backoff {
   Backoff({
-    this.initial = const Duration(milliseconds: 250),
+    this.initial = const Duration(seconds: 1),
     this.maximum = const Duration(seconds: 30),
     this.multiplier = 2.0,
     this.jitter = 0.2,
@@ -185,11 +209,22 @@ abstract class ReconnectingTransport implements RemoteTransport {
   ReconnectingTransport({
     Backoff? backoff,
     this.maxQueuedFrames = 256,
+    this.maxQueuedBytes = kMaxQueuedBytes,
     this.onLog,
   }) : backoff = backoff ?? Backoff();
 
   /// Frames the caller sent while disconnected. Oldest is dropped on overflow.
   final int maxQueuedFrames;
+
+  /// And the same queue in bytes, which is the bound that actually holds.
+  ///
+  /// A count is not a size: at [kMaxTransportFrameBytes] each, 256 frames is
+  /// a quarter of a gigabyte a desktop would hold for one phone that walked
+  /// out of range — and the frames most likely to fill it are exactly the
+  /// large ones, a transcript page for a session that is busy. So the queue is
+  /// bounded by both, and a slow reader is dropped rather than paid for
+  /// without limit.
+  final int maxQueuedBytes;
   final Backoff backoff;
 
   /// Lifecycle only. Never called with frame contents.
@@ -205,6 +240,7 @@ abstract class ReconnectingTransport implements RemoteTransport {
   TransportState _state = TransportState.idle;
   bool _closed = false;
   int _dropped = 0;
+  int _queuedBytes = 0;
 
   @override
   Stream<Uint8List> get frames => _frames.stream;
@@ -223,6 +259,9 @@ abstract class ReconnectingTransport implements RemoteTransport {
 
   /// Frames dropped because the queue was full while disconnected.
   int get droppedFrames => _dropped;
+
+  /// What the queue is holding for this peer right now, in bytes.
+  int get queuedBytes => _queuedBytes;
 
   /// Opens one connection and returns when it has ended. Throws to signal a
   /// failed attempt; the loop then waits out the backoff and tries again.
@@ -268,9 +307,11 @@ abstract class ReconnectingTransport implements RemoteTransport {
     _setState(TransportState.connected);
     final queued = List<Uint8List>.of(_queue);
     _queue.clear();
+    _queuedBytes = 0;
     for (final frame in queued) {
       if (!writeFrame(frame)) {
         _queue.add(frame);
+        _queuedBytes += frame.length;
       }
     }
   }
@@ -291,12 +332,30 @@ abstract class ReconnectingTransport implements RemoteTransport {
     }
     final bytes = Uint8List.fromList(frame);
     if (_state == TransportState.connected && writeFrame(bytes)) return;
-    if (_queue.length >= maxQueuedFrames) {
-      _queue.removeAt(0);
-      _dropped++;
-      onLog?.call('outbound queue full, dropped the oldest frame');
-    }
     _queue.add(bytes);
+    _queuedBytes += bytes.length;
+    // Oldest first, until it fits both bounds. The newest frame is never the
+    // one dropped: it is the only one whose news the peer has not already had
+    // a chance at, and a queue that answered overflow by refusing the present
+    // would be a link that goes deaf the moment it falls behind.
+    var dropped = 0;
+    var droppedBytes = 0;
+    while (_queue.length > 1 &&
+        (_queue.length > maxQueuedFrames || _queuedBytes > maxQueuedBytes)) {
+      final oldest = _queue.removeAt(0);
+      _queuedBytes -= oldest.length;
+      droppedBytes += oldest.length;
+      dropped++;
+      _dropped++;
+    }
+    // Said out loud, and counted: a slow reader that is silently paid for is
+    // the failure this bound exists to make visible. Never the contents.
+    if (dropped > 0) {
+      onLog?.call(
+        'outbound queue full at $_queuedBytes bytes; dropped $dropped '
+        'frame(s), $droppedBytes bytes',
+      );
+    }
   }
 
   @override
@@ -304,6 +363,7 @@ abstract class ReconnectingTransport implements RemoteTransport {
     if (_closed) return;
     _closed = true;
     _queue.clear();
+    _queuedBytes = 0;
     await abort();
     _setState(TransportState.closed);
     // Not awaited: a buffered single-subscription controller only completes its

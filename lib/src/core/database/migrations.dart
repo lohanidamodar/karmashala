@@ -84,6 +84,10 @@ typedef MigrationStep = void Function(Database db);
 ///   one: a command to run in a visible pane, gitignored paths to copy in, and
 ///   the recorded verdict of the last setup so a failure is attached to that
 ///   worktree rather than lost.
+/// * **v43** — scheduled automations and the preconditions that gate them: an
+///   agent run a person armed in advance, every occurrence of it (including
+///   the ones nobody was here for), and the per-checkout verification the gate
+///   refuses without.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -127,6 +131,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   40: _migrateToV40,
   41: _migrateToV41,
   42: _migrateToV42,
+  43: _migrateToV43,
 };
 
 /// Was this pane running when its row was written?
@@ -1824,4 +1829,106 @@ void _migrateToV42(Database db) {
       PRIMARY KEY (repository_id, worktree_path)
     );
   ''');
+}
+
+/// Scheduled automations, their occurrences, and the preconditions that gate
+/// them.
+///
+/// **Four tables, one feature: the gate is the feature.** An automation is
+/// authorisation given in advance, and it only holds because the app refuses to
+/// fire when the preconditions for unsupervised work are absent. Two of these
+/// tables are the automation; the other two are what "verification is mandatory
+/// when nobody is watching" reads, and without them that rule would be a
+/// comment.
+///
+/// **`automations` has no `armed_by`, deliberately.** Arming is a human action
+/// in the UI and nowhere else — no MCP tool serves it, and a test asserts that
+/// no served tool name begins with `automation`. A column naming who armed a
+/// row would be a claim the schema cannot keep the day something else can write
+/// it; the absence is the statement.
+///
+/// `cron` and `fires_at` are the two schedule kinds and **exactly one is set**.
+/// Folding a one-shot into a cron expression loses the fact that it is over
+/// once it has fired, which is what lets it be caught up rather than silently
+/// rolled to tomorrow.
+///
+/// `agent_installation_id` is a plain column with **no foreign key**, unlike
+/// `repository_id`. Uninstalling an agent must not delete the automations armed
+/// on it: the row is what the user goes back to, and the gate already refuses a
+/// fire whose installation is gone, in words. A retired *checkout* is the other
+/// case, and cascades for `worktree_setup`'s reason — an automation for a
+/// directory nobody can reach is configuration, not history.
+///
+/// `automation_runs.scheduled_for` is separate from `fired_at` because a
+/// `missed` row is written long after the occurrence it is about; the first is
+/// when it was due, the second when we noticed. `commits_made` is nullable and
+/// **never backfilled to zero** — a count nobody took and a run that committed
+/// nothing are different facts (§19).
+///
+/// `project_verification` holds one row per checkout and **defaults to off by
+/// absence**: no row means verification was never turned on, which is the
+/// refusal the gate wants rather than a permissive silence. `project_checks`
+/// stores argv as JSON, like `worktree_setup.command` and for the same reason
+/// — a line would need a second parser between the setting and the shell.
+void _migrateToV43(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS automations (
+      id                    TEXT PRIMARY KEY,
+      repository_id         TEXT NOT NULL
+        REFERENCES repositories(id) ON DELETE CASCADE,
+      name                  TEXT NOT NULL,
+      cron                  TEXT,
+      fires_at              TEXT,
+      agent_installation_id TEXT NOT NULL,
+      prompt                TEXT NOT NULL,
+      permission_mode       TEXT,
+      enabled               INTEGER NOT NULL DEFAULT 1,
+      armed_at              TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_automations_repository '
+    'ON automations (repository_id);',
+  );
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS automation_runs (
+      id                 TEXT PRIMARY KEY,
+      automation_id      TEXT NOT NULL
+        REFERENCES automations(id) ON DELETE CASCADE,
+      scheduled_for      TEXT NOT NULL,
+      fired_at           TEXT NOT NULL,
+      state              TEXT NOT NULL,
+      reason             TEXT NOT NULL DEFAULT '',
+      base_checkpoint_id TEXT,
+      session_id         TEXT,
+      finished_at        TEXT,
+      commits_made       INTEGER
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_automation_runs_automation '
+    'ON automation_runs (automation_id, scheduled_for);',
+  );
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS project_verification (
+      repository_id TEXT PRIMARY KEY
+        REFERENCES repositories(id) ON DELETE CASCADE,
+      enabled       INTEGER NOT NULL DEFAULT 0,
+      updated_at    TEXT NOT NULL
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS project_checks (
+      id            TEXT PRIMARY KEY,
+      repository_id TEXT NOT NULL
+        REFERENCES repositories(id) ON DELETE CASCADE,
+      name          TEXT NOT NULL,
+      command       TEXT NOT NULL,
+      created_at    TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_project_checks_repository '
+    'ON project_checks (repository_id);',
+  );
 }

@@ -6,6 +6,16 @@
 /// same news as a `session.changed` event, never both. Everything is
 /// best-effort: any failure is logged (without content) and dropped, and
 /// nothing here can crash or block the host.
+///
+/// **This file is where presence is spent, and the only one.** Note the
+/// polarity, because it is the half that keeps the rule safe: presence
+/// SUPPRESSES a push for a phone that can already hear the news. It never
+/// enables a delivery, and nothing on the delivery path may spell it the other
+/// way round — a stale reading here costs a duplicate notification, and the
+/// same reading on the live stream would cost a turn nobody ever sees. Anything
+/// a future heartbeat adds (device type, visibility, a focused session) is more
+/// of this same value, consumed here, and is pinned by
+/// `presence_is_not_delivery_test.dart`.
 library;
 
 import 'dart:convert';
