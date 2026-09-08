@@ -200,8 +200,11 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       final atThisPath = dao.getByIdentity(agentId, environment.id, path);
       if (atThisPath != null) {
         consumed.add(atThisPath.id);
-        if (atThisPath.version != agent.version) {
-          dao.updateVersion(atThisPath.id, agent.version);
+        // Recorded whether or not the number moved: a sweep that confirms
+        // 2.1.263 has taken a reading, and a reading with a stale timestamp
+        // beside it is indistinguishable from one nobody has taken since.
+        dao.recordVersion(atThisPath.id, agent.version, readAt: clock.nowUtc());
+        if (agent.version != null && atThisPath.version != agent.version) {
           updated.add(
             AgentVersionChange(
               displayName: agent.descriptor.displayName,
@@ -210,7 +213,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
             ),
           );
         }
-        present.add(atThisPath.copyWith(version: agent.version));
+        present.add(_asRead(atThisPath, agent.version, clock));
         continue;
       }
 
@@ -249,8 +252,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
             to: path,
           ),
         );
-        if (moved.version != agent.version) {
-          dao.updateVersion(moved.id, agent.version);
+        dao.recordVersion(moved.id, agent.version, readAt: clock.nowUtc());
+        if (agent.version != null && moved.version != agent.version) {
           updated.add(
             AgentVersionChange(
               displayName: agent.descriptor.displayName,
@@ -260,9 +263,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           );
         }
         present.add(
-          moved.copyWith(
+          _asRead(moved, agent.version, clock).copyWith(
             executable: agent.executable,
-            version: agent.version,
             executableByUser: false,
           ),
         );
@@ -274,6 +276,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         agentId: agentId,
         executable: agent.executable,
         version: agent.version,
+        versionReadAt: agent.version == null ? null : clock.nowUtc(),
         createdAt: clock.nowUtc(),
       );
       dao.insert(installation);
@@ -345,6 +348,19 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       pinnedPaths: pinnedPaths,
     );
   }
+
+  /// [row] as [recordVersion] just stored it — so the in-memory state and the
+  /// database say the same thing about both the number and its age.
+  ///
+  /// A null [version] leaves the row untouched, matching the DAO: a probe that
+  /// could not answer is not a reading.
+  AgentInstallation _asRead(
+    AgentInstallation row,
+    String? version,
+    Clock clock,
+  ) => version == null
+      ? row
+      : row.copyWith(version: version, versionReadAt: clock.nowUtc());
 
   /// What the local filesystem says about each stored installation in
   /// [environment], keyed by installation id.

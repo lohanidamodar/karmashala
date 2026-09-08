@@ -14,6 +14,7 @@ class AgentInstallation {
     required this.executable,
     required this.createdAt,
     this.version,
+    this.versionReadAt,
     this.executableByUser = false,
   });
 
@@ -27,6 +28,19 @@ class AgentInstallation {
 
   /// Detected version string, if known.
   final String? version;
+
+  /// When [version] was last read from the binary, or null when nothing
+  /// recorded that.
+  ///
+  /// A version is *state* only in the sense that the last reading is kept; what
+  /// the CLI answers today is a *measurement*, and these CLIs self-update —
+  /// Codex went 0.145.0 → 0.153.4 mid-session. So the number alone cannot say
+  /// whether it is current, and every surface that presents it as a fact has to
+  /// carry this beside it (CLAUDE.md §19).
+  ///
+  /// Null for every row written before the column existed, and never
+  /// backfilled: an unknown reading time is not a reading time of `createdAt`.
+  final DateTime? versionReadAt;
 
   /// Whether a human chose [executable], rather than discovery finding it.
   ///
@@ -51,6 +65,7 @@ class AgentInstallation {
     String? agentId,
     EnvironmentPath? executable,
     String? version,
+    DateTime? versionReadAt,
     DateTime? createdAt,
     bool? executableByUser,
   }) => AgentInstallation(
@@ -58,6 +73,7 @@ class AgentInstallation {
     agentId: agentId ?? this.agentId,
     executable: executable ?? this.executable,
     version: version ?? this.version,
+    versionReadAt: versionReadAt ?? this.versionReadAt,
     createdAt: createdAt ?? this.createdAt,
     executableByUser: executableByUser ?? this.executableByUser,
   );
@@ -69,12 +85,20 @@ class AgentInstallation {
       other.agentId == agentId &&
       other.executable == executable &&
       other.version == version &&
+      other.versionReadAt == versionReadAt &&
       other.createdAt == createdAt &&
       other.executableByUser == executableByUser;
 
   @override
-  int get hashCode =>
-      Object.hash(id, agentId, executable, version, createdAt, executableByUser);
+  int get hashCode => Object.hash(
+    id,
+    agentId,
+    executable,
+    version,
+    versionReadAt,
+    createdAt,
+    executableByUser,
+  );
 
   @override
   String toString() => 'AgentInstallation($id, $agentId, $executable)';

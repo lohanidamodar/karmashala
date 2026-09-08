@@ -74,6 +74,9 @@ typedef MigrationStep = void Function(Database db);
 /// * **v39** — whether a human chose an installation's executable path, so the
 ///   startup path repair can fix a broken one whoever set it and still never
 ///   overwrite a working hand-set one.
+/// * **v40** — *when* an installation's version was last read from the binary,
+///   so a recorded version is a dated reading rather than a bare number that
+///   cannot be told apart from a current one.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -114,6 +117,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   37: _migrateToV37,
   38: _migrateToV38,
   39: _migrateToV39,
+  40: _migrateToV40,
 };
 
 /// Was this pane running when its row was written?
@@ -1638,5 +1642,28 @@ void _migrateToV39(Database db) {
   db.execute(
     'ALTER TABLE agent_installations '
     'ADD COLUMN executable_by_user INTEGER NOT NULL DEFAULT 0;',
+  );
+}
+
+/// When an installation's version was last read from the binary.
+///
+/// The version column was written by discovery and never revisited:
+/// `discoverUnprobed` skips any pair that already has a row, so only a manual
+/// "Detect agents" reached the update. The app reported Claude Code 2.1.252 for
+/// a binary answering 2.1.260 and nothing on screen could say which of the two
+/// it was — a bare number reads exactly like a current one.
+///
+/// **Nullable, and left null for every existing row.** Backfilling it from
+/// `created_at` would invent a reading time for a number whose age nobody
+/// recorded, which is the §19 mistake in a migration: an unknown is never a
+/// zero. A null here means "we have a number and no idea when it was read", and
+/// that is what gets rendered.
+void _migrateToV40(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(agent_installations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('version_read_at')) return;
+  db.execute(
+    'ALTER TABLE agent_installations ADD COLUMN version_read_at TEXT;',
   );
 }
