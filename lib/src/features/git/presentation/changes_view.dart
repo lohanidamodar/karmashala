@@ -19,6 +19,7 @@ import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import 'worktree_browse.dart';
 import '../domain/diff_line.dart';
+import '../domain/review_order.dart';
 import '../domain/review_thread.dart';
 import '../domain/file_change.dart';
 
@@ -351,20 +352,28 @@ class _ChangedFiles extends ConsumerWidget {
                   message: 'No working-tree changes.',
                   icon: AppIcons.gitDiff,
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                  itemCount: files.length,
-                  itemBuilder: (context, index) {
-                    final file = files[index];
-                    return _ChangedFileSection(
-                      file: file,
-                      expanded: expanded.contains(file.path),
-                      onToggle: () => onToggle(file.path),
-                      onFullscreen: () => onFullscreen(file),
-                    );
-                  },
-                ),
+              : _ordered(files),
         );
+  }
+
+  /// The same list, in the order it is read in. **Tiered, never filtered** —
+  /// see `review_order.dart`; git's own order is alphabetical, which opens
+  /// every review on `pubspec.lock`.
+  Widget _ordered(List<FileChange> files) {
+    final ordered = orderedForReview(files, (file) => file.path);
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      itemCount: ordered.length,
+      itemBuilder: (context, index) {
+        final file = ordered[index];
+        return _ChangedFileSection(
+          file: file,
+          expanded: expanded.contains(file.path),
+          onToggle: () => onToggle(file.path),
+          onFullscreen: () => onFullscreen(file),
+        );
+      },
+    );
   }
 }
 
