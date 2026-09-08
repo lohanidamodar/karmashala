@@ -296,6 +296,50 @@ class ConversationIndexDao {
     };
   }
 
+  /// Every conversation `imported_sessions` records a transcript path for.
+  ///
+  /// Read **without** the supersession filter every other read of that table
+  /// carries. A record a native session row has taken over is hidden from lists
+  /// because the live row is the better representation — but it is still the
+  /// only place the path to that conversation's transcript is written down, and
+  /// this index is keyed by the conversation rather than by either row.
+  List<({String sessionId, String cli, String filePath})>
+  recordedTranscripts() {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT external_id, source, file_path FROM imported_sessions;',
+      ))
+        (
+          sessionId: row['external_id'] as String,
+          cli: row['source'] as String,
+          filePath: row['file_path'] as String,
+        ),
+    ];
+  }
+
+  /// Every conversation a live session row names, with the agent running it.
+  ///
+  /// These have no path on file — a launched session was never imported —
+  /// so the backfill has to find them in a store, and the triggers hand them
+  /// to `ConversationIndexer.want` without one.
+  List<({String sessionId, String cli})> liveConversations() {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT s.external_session_id AS session_id, '
+        'a.agent_kind AS cli FROM sessions s '
+        'JOIN agent_installations a ON a.id = s.agent_installation_id '
+        "WHERE s.external_session_id IS NOT NULL "
+        "AND s.external_session_id <> '';",
+      ))
+        (
+          sessionId: row['session_id'] as String,
+          cli: row['cli'] as String,
+        ),
+    ];
+  }
+
   ConversationIndexState _stateFromRow(Map<String, Object?> row) =>
       ConversationIndexState(
         sessionId: row['session_id'] as String,

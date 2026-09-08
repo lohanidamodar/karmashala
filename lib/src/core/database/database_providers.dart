@@ -27,6 +27,12 @@ class MetadataKeys {
   /// startup (see `main.dart`).
   static const agentsDiscoveredAt = 'agents_discovered_at';
   static const environmentHealthOnboarding = 'environment_health_onboarding';
+
+  /// Set once the conversation index has caught up with the conversations the
+  /// workspace already had. Its presence is what makes the backfill a one-off
+  /// rather than a sweep — see `ConversationIndexBackfill`.
+  static const conversationIndexBackfilledAt =
+      'conversation_index_backfilled_at';
 }
 
 /// Records baseline application metadata on startup.

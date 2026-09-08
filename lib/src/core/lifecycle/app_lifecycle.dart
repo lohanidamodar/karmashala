@@ -7,6 +7,7 @@ import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
 import '../../features/agents/domain/agent_hook_endpoint.dart';
+import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
@@ -497,6 +498,46 @@ class AppLifecycle {
       // A reading that could not be taken leaves every row exactly as it was,
       // wearing the age it already had.
       _logger.warning('Re-reading the agent versions failed.', error, stack);
+    }
+  }
+
+  /// The one conversation-index catch-up this database will ever have.
+  ///
+  /// **Once ever, not once a launch.** `ConversationIndexBackfill` records in
+  /// `app_metadata` that it ran, and a workspace already caught up costs one
+  /// metadata read here and stops. Everything after that arrives on the two
+  /// triggers the index is built on — see `ConversationIndexer`.
+  ///
+  /// Sequenced *behind* [importCliSessions] rather than beside it, because both
+  /// want a walk of the CLI stores and those live inside WSL: two of them
+  /// racing is every entry paid for twice over `\\wsl.localhost`. The import
+  /// also writes the `imported_sessions` rows this reads its paths from, so
+  /// running second is what lets a first-ever launch index its history at all.
+  Future<void> backfillConversationIndex({
+    Future<void> Function()? afterFirstFrame,
+  }) => _conversationBackfill ??= _backfillConversationIndex(afterFirstFrame);
+
+  Future<void>? _conversationBackfill;
+
+  Future<void> _backfillConversationIndex(Future<void> Function()? gate) async {
+    await importCliSessions(afterFirstFrame: gate);
+    try {
+      final backfill = _container.read(conversationIndexBackfillProvider);
+      if (backfill.isDone) return;
+      final indexed = await backfill.runOnce();
+      _logger.info(
+        'Conversation index: $indexed conversations caught up '
+        'in ${backfill.walks} store walk(s).',
+      );
+    } on Object catch (error, stack) {
+      // The transcripts are somebody else's files and may be absent, locked or
+      // on an unreachable share. Search answers with fewer conversations; the
+      // workspace is unaffected.
+      _logger.warning(
+        'Could not back-fill the conversation index.',
+        error,
+        stack,
+      );
     }
   }
 

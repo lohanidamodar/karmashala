@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
@@ -138,7 +139,7 @@ void main() {
 
       // ignore: avoid_print
       print(
-        'STORE-SLOT waiting=0 statements=${measured.statements} '
+        'STORE-SLOT waiting=0 statements=${measured.statements.length} '
         'scans=${measured.scans} bytes=${measured.bytes}',
       );
       expect(
@@ -159,7 +160,7 @@ void main() {
 
       // ignore: avoid_print
       print(
-        'STORE-SLOT waiting=1 statements=${measured.statements} '
+        'STORE-SLOT waiting=1 statements=${measured.statements.length} '
         'scans=${measured.scans} bytes=${measured.bytes}',
       );
       expect(
@@ -187,12 +188,13 @@ void main() {
         await busy.run();
 
         final measured = await busy.run();
-        statements[count] = measured.statements;
+        statements[count] = measured.statements.length;
         scans[count] = measured.scans;
         // ignore: avoid_print
         print(
           'STORE-SLOT sessions=$count waiting=1 '
-          'statements=${measured.statements} scans=${measured.scans} '
+          'statements=${measured.statements.length} '
+          'scans=${measured.scans} '
           'bytes=${measured.bytes}',
         );
       }
@@ -208,6 +210,38 @@ void main() {
         reason:
             'a slot reads the session table a fixed number of times; nothing '
             'on it may ask a question per row: $statements',
+      );
+    });
+
+    test('the conversation the CLI just named is indexed, that slot', () async {
+      final busy = slot(named: 2, waiting: 1);
+
+      await busy.run();
+
+      // The rename is the app's existing evidence that the CLI wrote to that
+      // conversation's store, and it is one of the two triggers the index is
+      // built on. The turns land on the same slot, off the scan the rename
+      // already paid for.
+      final dao = ConversationIndexDao(busy.db);
+      expect(
+        dao.search('padding').map((hit) => hit.sessionId),
+        contains(_conversationId(2)),
+      );
+      expect(dao.stateFor(_conversationId(2))!.turns, greaterThan(0));
+    });
+
+    test('and a slot with nothing to index never reads the index', () async {
+      final busy = slot(named: 2, waiting: 1);
+      await busy.run();
+
+      final measured = await busy.run();
+
+      // The second slot: the rename already happened, so nothing is queued and
+      // `drain` returns before it touches the database or the disk.
+      expect(
+        measured.statements.where((sql) => sql.contains('conversation_')),
+        isEmpty,
+        reason: 'an idle indexer must cost no statement: ${measured.writes}',
       );
     });
 
@@ -242,8 +276,18 @@ void _writeConversation(String home, String id, String title) {
   File(p.join(home, 'projects', '-repo', '$id.jsonl')).writeAsStringSync(
     [
       _line({'type': 'user', 'cwd': r'C:\src\demo\app', 'message': 'start'}),
+      // Real assistant turns, not a bare string: the transcript reader only
+      // sees a `message` that is an object, and the conversation index is fed
+      // by that reader.
       for (var i = 0; i < 200; i++)
-        _line({'type': 'assistant', 'message': 'padding line $i ' * 8}),
+        _line({
+          'type': 'assistant',
+          'message': {
+            'content': [
+              {'type': 'text', 'text': 'padding line $i ' * 8},
+            ],
+          },
+        }),
       _line({'type': 'custom-title', 'customTitle': title}),
     ].join(),
   );
@@ -269,7 +313,7 @@ class _Slot {
     await container.read(cliStoreSyncRunnerProvider)();
 
     return _SlotCost(
-      statements: db.count,
+      statements: List.of(db.statements),
       writes: db.writes,
       scans: detection.scans,
       bytes: detection.claudeReader.bytesRead - before,
@@ -285,7 +329,8 @@ class _SlotCost {
     required this.bytes,
   });
 
-  final int statements;
+  /// Every statement the slot ran, in order.
+  final List<String> statements;
   final List<String> writes;
 
   /// Passes over the CLI stores. Two services want one on the slot a session

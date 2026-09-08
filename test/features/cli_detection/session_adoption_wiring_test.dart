@@ -147,6 +147,36 @@ void main() {
     );
   });
 
+  test('adoption queues the conversation for the search index', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    openAgentLookingPane(h);
+    await runStoreSlot(h);
+
+    expect(
+      h.container.read(conversationIndexerProvider).wantedIds,
+      isEmpty,
+      reason: 'nothing has been adopted yet',
+    );
+
+    h.container
+        .read(sessionAdoptionServiceProvider)
+        .onHookPayload(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'cli-abc',
+          body: '{"session_id":"cli-abc","cwd":"$_repoPath"}',
+        );
+
+    // A conversation entering the workspace is the first of the two triggers
+    // the index is built on. Queuing is a map entry — the disk work happens on
+    // the store slot that is already open, and only there.
+    expect(
+      h.container.read(conversationIndexerProvider).wantedIds,
+      contains('cli-abc'),
+    );
+  });
+
   test('an adopted session renames and reattaches like a launched one', () async {
     final h = harness();
     addTearDown(h.db.close);
