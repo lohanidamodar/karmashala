@@ -667,7 +667,9 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'device_stop_emulator': McpToolListing(
     McpToolCategory.devices,
-    'Shut down a running emulator or simulator. Virtual devices only.',
+    // The ninth claiming tool: it takes the device after the already-stopped
+    // early returns, so it is missing from the driver's call sites.
+    'Shut down a running emulator or simulator. One session drives at a time.',
   ),
   // The eight tools below take the device for their caller: a second session's
   // call is refused by name while somebody is driving. Reads are not, which is
