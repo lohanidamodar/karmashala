@@ -22,6 +22,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../git/presentation/worktree_browse.dart';
+import '../../git/presentation/worktree_create_dialog.dart';
 import '../../sessions/application/delivery_providers.dart';
 
 /// The browsable `https://` URL for a git remote, or null when there is not one.
@@ -423,6 +424,11 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
           open: open,
           viewing: browsed?.label,
           onToggle: list.isEmpty ? null : () => setState(() => _open = !open),
+          // A worktree of its own, not only as a side effect of starting a
+          // session — the case the tool exists for.
+          onCreate: home == null
+              ? null
+              : () => showWorktreeCreateDialog(context, ref, home),
         ),
         const WorktreeBrowseNotice(),
         body,
@@ -439,10 +445,14 @@ class _WorktreesHeader extends StatelessWidget {
     required this.open,
     required this.viewing,
     required this.onToggle,
+    required this.onCreate,
   });
 
   final int count;
   final bool open;
+
+  /// Makes one. Null when there is no checkout to make it beside.
+  final VoidCallback? onCreate;
 
   /// The worktree being read, when it is not the checkout itself.
   final String? viewing;
@@ -488,6 +498,25 @@ class _WorktreesHeader extends StatelessWidget {
                 const SizedBox(width: Insets.xs),
                 Text('$count', style: MonoStyles.small.copyWith(color: muted)),
               ],
+              // A bare `IconButton` is 48px tall and this row is a label: it
+              // would double the header's height inside a 240px panel.
+              const SizedBox(width: Insets.xs),
+              Tooltip(
+                message: 'New worktree',
+                child: InkWell(
+                  onTap: onCreate,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      AppIcons.plus,
+                      size: Chrome.iconSmall,
+                      color: onCreate == null
+                          ? theme.disabledColor
+                          : muted,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
