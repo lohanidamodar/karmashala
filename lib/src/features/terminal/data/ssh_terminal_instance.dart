@@ -15,6 +15,7 @@ import '../domain/ingest_tier.dart';
 import '../domain/osc_router.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
+import 'cast_recorder.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'pty_output_coalescer.dart';
@@ -34,7 +35,8 @@ class SshTerminalInstance
         ReapableTerminalInstance,
         TieredTerminalInstance,
         ParkableTerminalInstance,
-        AdoptableTerminalInstance {
+        AdoptableTerminalInstance,
+        RecordableTerminalInstance {
   SshTerminalInstance({
     required this.id,
     required this.title,
@@ -81,6 +83,7 @@ class SshTerminalInstance
 
     terminal.onResize = (width, height, pixelWidth, pixelHeight) {
       if (_disposed) return;
+      _recorder?.addResize(width, height);
       final session = _session;
       if (session != null) {
         try {
@@ -170,9 +173,22 @@ class SshTerminalInstance
   Terminal? get adoptableBuffer =>
       _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
 
+  CastRecorder? _recorder;
+
+  @override
+  CastRecorder? get recorder => _recorder;
+
+  @override
+  void startRecording(CastRecorder recorder) => _recorder = recorder;
+
+  @override
+  void stopRecording() => _recorder = null;
+
   void _onDataBytes(List<int> bytes) {
     if (_disposed) return;
     final uint8 = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+    // Before the tier split — see [RecordableTerminalInstance].
+    _recorder?.addOutput(uint8);
     if (_tier == IngestTier.cold) {
       _cold.add(uint8);
       return;
@@ -196,6 +212,7 @@ class SshTerminalInstance
   }
 
   void _emit(String text) {
+    _recorder?.addText(text);
     if (_tier == IngestTier.cold) {
       _cold.emit(text);
       return;
@@ -273,6 +290,10 @@ class SshTerminalInstance
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    // A pane closed mid-recording hands over what it captured — see
+    // [RecordableTerminalInstance].
+    _recorder?.sourceEnded();
+    _recorder = null;
     _liveness.value = PaneLiveness.exited;
     _liveness.dispose();
     _cwd.dispose();

@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/git/data/git_files.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/cast_recorder.dart';
 import 'package:karmashala/src/features/terminal/data/cold_screen.dart';
 import 'package:karmashala/src/features/terminal/data/command_block_recorder.dart';
 import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
@@ -40,7 +41,8 @@ class FakeTerminalInstance
         TerminalInstance,
         TieredTerminalInstance,
         ParkableTerminalInstance,
-        AdoptableTerminalInstance {
+        AdoptableTerminalInstance,
+        RecordableTerminalInstance {
   FakeTerminalInstance({
     required this.id,
     required this.title,
@@ -186,14 +188,36 @@ class FakeTerminalInstance
   Terminal? get adoptableBuffer =>
       !livenessNotifier.value.isLive && !park.isParked ? terminal : null;
 
+  CastRecorder? _recorder;
+
+  @override
+  CastRecorder? get recorder => _recorder;
+
+  @override
+  void startRecording(CastRecorder recorder) => _recorder = recorder;
+
+  @override
+  void stopRecording() => _recorder = null;
+
   /// Output arriving from the process this pane does not have, through the same
-  /// tiering a real pane's bytes go through.
+  /// tiering a real pane's bytes go through — and past the same recording tap,
+  /// which is upstream of the tier for the reason
+  /// [RecordableTerminalInstance] gives.
   void receive(String text) {
+    final bytes = const Utf8Encoder().convert(text);
+    _recorder?.addOutput(bytes);
     if (ingestTier == IngestTier.cold) {
-      cold.add(const Utf8Encoder().convert(text));
+      cold.add(bytes);
       return;
     }
     terminal.write(text);
+  }
+
+  /// A resize a test performs on the pane, forwarded the way a real pane
+  /// forwards one.
+  void resizeGrid(int columns, int rows) {
+    _recorder?.addResize(columns, rows);
+    terminal.resize(columns, rows);
   }
 
   @override
@@ -213,6 +237,8 @@ class FakeTerminalInstance
   void dispose() {
     if (disposed) return;
     disposed = true;
+    _recorder?.sourceEnded();
+    _recorder = null;
     livenessNotifier.value = PaneLiveness.exited;
     livenessNotifier.dispose();
     _cwd.dispose();

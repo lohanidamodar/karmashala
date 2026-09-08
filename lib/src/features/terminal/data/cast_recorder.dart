@@ -25,6 +25,7 @@ class CastRecorder {
     required this.rows,
     this.title,
     this.maxBytes = kCastMaxBytes,
+    this.onSourceEnded,
     DateTime? startedAt,
     Duration Function()? clock,
   }) : recordedAt = startedAt ?? DateTime.now(),
@@ -47,6 +48,12 @@ class CastRecorder {
   final String? title;
   final int maxBytes;
   final DateTime recordedAt;
+
+  /// Called once when the pane being recorded goes away — closed, or its
+  /// process reaped — so a recording is never left running against nothing.
+  /// Without it, closing a tab mid-recording would leave the button saying
+  /// "Stop recording" over a pane that no longer exists.
+  final void Function()? onSourceEnded;
 
   final Duration Function() _clock;
   final List<CastEvent> _events = [];
@@ -90,6 +97,17 @@ class CastRecorder {
     _add(CastEvent.output(_clock(), text), text.length);
   }
 
+  /// Records text the app itself put on screen — the `[process exited with
+  /// code 1]` line, an SSH connection banner.
+  ///
+  /// In the cast because it was on the screen. It arrives as text rather than
+  /// bytes because that is how the pane emits it, and a round trip through
+  /// UTF-8 to prove a point would only be able to lose information.
+  void addText(String text) {
+    if (_stopped || _truncated || text.isEmpty) return;
+    _add(CastEvent.output(_clock(), text), text.length);
+  }
+
   /// Records the grid changing to [columns]x[rows].
   ///
   /// The bytes a reflow produces arrive through [addOutput] like any other
@@ -120,6 +138,14 @@ class CastRecorder {
   TerminalCast stop() {
     _stopped = true;
     return snapshot();
+  }
+
+  /// The pane this was taping has gone. Stops, then tells whoever is holding
+  /// the recording so they can save what there is.
+  void sourceEnded() {
+    if (_stopped) return;
+    _stopped = true;
+    onSourceEnded?.call();
   }
 
   /// The recording as it stands, without ending it.

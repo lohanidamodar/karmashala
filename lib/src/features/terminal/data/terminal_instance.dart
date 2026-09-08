@@ -17,6 +17,7 @@ import '../domain/scrollback_limits.dart';
 import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
 import '../domain/working_directory_osc.dart';
+import 'cast_recorder.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
@@ -182,6 +183,30 @@ abstract interface class AdoptableTerminalInstance {
   Terminal? get adoptableBuffer;
 }
 
+/// A [TerminalInstance] whose output can be taped for a recording.
+///
+/// A fifth narrow interface for the same reason as the four above: only a pane
+/// with a live pipe behind it has anything to record. An error pane holds one
+/// line that never changes, and a dormant pane *is* history — replaying it into
+/// a recording would produce a video of a file being read.
+///
+/// The tap is on the bytes arriving from the process, upstream of
+/// [TieredTerminalInstance] — which is the whole point. A recording has to keep
+/// running when the user switches tab, and a cold pane's bytes never reach
+/// `terminal.write` at all. Recording downstream of that would produce a video
+/// that stops the moment somebody looks somewhere else.
+abstract interface class RecordableTerminalInstance {
+  /// Starts copying this pane's output into [recorder]. Replaces any recorder
+  /// already attached.
+  void startRecording(CastRecorder recorder);
+
+  /// Stops copying. The recorder keeps what it has.
+  void stopRecording();
+
+  /// The recorder taping this pane, or null.
+  CastRecorder? get recorder;
+}
+
 /// A [ValueListenable] that holds one value and never notifies.
 ///
 /// What [TerminalInstance.directory] is for a pane whose shell can never report
@@ -275,7 +300,8 @@ class PtyTerminalInstance
         ReapableTerminalInstance,
         TieredTerminalInstance,
         ParkableTerminalInstance,
-        AdoptableTerminalInstance {
+        AdoptableTerminalInstance,
+        RecordableTerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
@@ -381,6 +407,7 @@ class PtyTerminalInstance
     };
     terminal.onResize = (width, height, pixelWidth, pixelHeight) {
       if (_disposed) return;
+      _recorder?.addResize(width, height);
       try {
         _pty.resize(height, width);
       } catch (_) {}
@@ -502,6 +529,9 @@ class PtyTerminalInstance
   /// child blocks on a full OS buffer.
   void _onPtyBytes(Uint8List bytes) {
     if (_disposed) return;
+    // Before the tier split, so a recording keeps running while the pane is
+    // cold and its bytes are going to storage rather than to the buffer.
+    _recorder?.addOutput(bytes);
     if (_tier == IngestTier.cold) {
       _cold.add(bytes);
       return;
@@ -533,6 +563,7 @@ class PtyTerminalInstance
   /// Writes text the app generated wherever this pane's output is going — the
   /// buffer while it is visible, and [ColdIngest] while it is not.
   void _emit(String text) {
+    _recorder?.addText(text);
     if (_tier == IngestTier.cold) {
       _cold.emit(text);
       return;
@@ -543,10 +574,25 @@ class PtyTerminalInstance
   @override
   Future<void> get reaped => _reap ?? Future<void>.value();
 
+  CastRecorder? _recorder;
+
+  @override
+  CastRecorder? get recorder => _recorder;
+
+  @override
+  void startRecording(CastRecorder recorder) => _recorder = recorder;
+
+  @override
+  void stopRecording() => _recorder = null;
+
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    // Tell the recording its subject has gone before anything else here can
+    // fail: a pane closed mid-recording has to hand over what it captured.
+    _recorder?.sourceEnded();
+    _recorder = null;
     // Set before disposing: a listener still attached deserves the final state,
     // and a ValueNotifier throws if written to after disposal.
     _liveness.value = PaneLiveness.exited;
