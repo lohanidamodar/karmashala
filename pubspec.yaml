@@ -64,6 +64,13 @@ dependencies:
   sqlite3_flutter_libs: ^0.6.0+eol
   tray_manager: ^0.5.3
   url_launcher: ^6.3.2
+  # The Dart VM service client, for the running Flutter app under development:
+  # hot reload, the debug console and the widget inspector all speak this
+  # protocol. Already in the lock file as a transitive of `flutter_test`, and
+  # the same version `flutter_tools` itself uses — named here because
+  # `features/flutter_apps` depends on it directly. Hand-rolling the JSON-RPC
+  # was the alternative and would have re-derived its typed event model.
+  vm_service: ^15.2.0
   wakelock_plus: ^1.5.2
   # The relay client transport for the mobile companion.
   web_socket_channel: ^3.0.3
