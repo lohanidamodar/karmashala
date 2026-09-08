@@ -309,6 +309,13 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Applies to the *next* pane, never to the ones already open: an instance is
+  /// built once, and a running shell cannot change which process owns it.
+  void setHostBackedLocalPanes(bool value) {
+    state = state.copyWith(hostBackedLocalPanes: value);
+    _save();
+  }
+
   /// Sets, or with `null` clears, the imported terminal colour theme.
   void setTerminalThemeSource(String? id) {
     state = state.copyWith(

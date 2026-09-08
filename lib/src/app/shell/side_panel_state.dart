@@ -53,6 +53,15 @@ enum SidePanelSurface {
   /// agent's edits, which is why it is on the rail rather than behind a menu.
   checkpoints('Checkpoints', drawsOwnHeader: true),
 
+  /// **What the session has settled**, in the words it was settled in.
+  ///
+  /// Third of the trio, because Plan / Checkpoints / Decisions is what the
+  /// agent intends, what it has written, and what is now fixed. It is also the
+  /// only one of the three a handoff carries *ahead* of the transcript, so it
+  /// is the one a person most needs to be able to read before handing work
+  /// over — and the one they could not read at all until it was put here.
+  decisions('Decisions', drawsOwnHeader: true),
+
   /// The user's own list: a line of text, done or not, filed under a project
   /// or under nothing.
   ///

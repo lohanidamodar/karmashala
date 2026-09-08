@@ -91,6 +91,7 @@ class SessionLaunchRequest {
     this.resumeExternalSessionId,
     this.restartSessionId,
     this.firstMessage,
+    this.systemPromptFile,
     this.parentSessionId,
     this.parentLink,
     this.forkExternalSessionId,
@@ -176,6 +177,17 @@ class SessionLaunchRequest {
 
   /// Sent as soon as the session is up. One code path, guarded once.
   final String? firstMessage;
+
+  /// Extra system prompt for this session, as **text** — the handoff packet's
+  /// way in for a CLI that takes a file of one.
+  ///
+  /// The text and not a path, because the file is named by the session it
+  /// belongs to and only [SessionLauncher.launch] knows that id. It writes the
+  /// file, spells the path the way the agent's own environment names it, and
+  /// passes the flag; an agent that takes no such file, an environment with no
+  /// name for the path, and a write that failed all fall back to the opening
+  /// prompt, which is what carried the packet before this existed.
+  final String? systemPromptFile;
 
   /// The session this one came from, when it came from one. Never supplied by
   /// the model directly — see `SessionDepth`.

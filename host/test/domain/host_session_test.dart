@@ -156,6 +156,39 @@ void main() {
       expect(pty.closeCount, 1);
     });
 
+    test('a child that exits on its own gives its handles back, unasked', () async {
+      final env = build();
+      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final pty = env.launcher.handles.single;
+
+      pty.emit(ascii('some work'));
+      await Future<void>.delayed(Duration.zero);
+      expect(pty.closeCount, 0, reason: 'a running session holds its pty');
+
+      pty.finish(0);
+      await session.ended;
+      await Future<void>.delayed(Duration.zero);
+
+      // Nobody called terminate. An ended session is kept so a pane
+      // reconnecting a moment late can read its code; what it does not need to
+      // keep is a file descriptor, a pipe and a job object that nothing would
+      // ever reach again once it is pruned.
+      expect(pty.closeCount, 1);
+      expect(session.backlog.totalBytes, 9, reason: 'and every byte it wrote is still readable');
+    });
+
+    test('a session that has ended is closed once, not twice', () async {
+      final env = build();
+      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final pty = env.launcher.handles.single;
+      pty.finish(3);
+      await session.ended;
+      await Future<void>.delayed(Duration.zero);
+
+      await session.terminate();
+      expect(pty.closeCount, 1);
+    });
+
     test('a child that will not be reaped ends with a stated reason', () async {
       final env = build();
       final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));

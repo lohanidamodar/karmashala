@@ -19,6 +19,10 @@ class PaneAccess implements HostSessionAccess {
 
   /// The machine's sessions, surviving a link the way real ones do.
   final liveSessions = <String>{};
+
+  /// What a *reattach* says the session has produced so far. Zero unless a test
+  /// is about what a pane does with a session that already has history.
+  int resumedTotalBytes = 0;
   var deploymentAsks = 0;
   Object? deploymentError;
 
@@ -39,7 +43,7 @@ class PaneAccess implements HostSessionAccess {
   @override
   Future<RemoteChannel> exec(String command) async {
     execs.add(command);
-    final channel = ScriptedHostChannel(liveSessions);
+    final channel = ScriptedHostChannel(liveSessions, resumedTotalBytes: resumedTotalBytes);
     channels.add(channel);
     return channel;
   }
@@ -54,7 +58,10 @@ class PaneAccess implements HostSessionAccess {
 }
 
 class ScriptedHostChannel implements RemoteChannel {
-  ScriptedHostChannel(this.liveSessions);
+  ScriptedHostChannel(this.liveSessions, {this.resumedTotalBytes = 0});
+
+  /// What a reattach reports as this session's absolute total.
+  final int resumedTotalBytes;
 
   /// Shared with the machine, so a session opened on one link is found by the
   /// next one — which is the behaviour a reattach depends on.
@@ -131,7 +138,7 @@ class ScriptedHostChannel implements RemoteChannel {
     rows: 24,
     replayFromOffset: 0,
     droppedBytes: 0,
-    totalBytes: 0,
+    totalBytes: resumedTotalBytes,
     holdsWriteToken: true,
     writeHolder: 'pane-p1',
     observedAt: DateTime.utc(2026),

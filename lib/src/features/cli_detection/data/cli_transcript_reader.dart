@@ -8,7 +8,39 @@ import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../../sessions/domain/tool_activity.dart';
+import 'antigravity_transcript.dart';
 import 'subagent_transcript.dart';
+
+/// The compaction the CLI ran immediately before the row that carries this.
+///
+/// A real boundary record on this machine is `type: system` with
+/// `subtype: compact_boundary`, `parentUuid: null`, a `logicalParentUuid`
+/// naming the pre-compaction tail, and a `compactMetadata` — the conversation's
+/// DAG is cut there deliberately. Everything before it in the file is history
+/// the CLI dropped from its own context and then restated as the summary that
+/// follows, so a reader walking the file linearly shows the history, then a
+/// summary of it, then the continuation.
+///
+/// **Measured rather than assumed.** `readCliTranscript` over a real compacted
+/// transcript here returns **2,793 rows across two boundaries**: row 1,287 is a
+/// 17,795-character `user` row restating the 1,287 before it, and row 2,556 is
+/// a 21,070-character one restating everything up to there. In the chat view
+/// both are drawn as the *user's* own turn.
+///
+/// This marks **where** the cut is and decides nothing else. The list
+/// `readCliTranscript` returns keeps its length, order, roles and text, so the
+/// conversation index still holds every pre-compaction turn and search still
+/// finds them; only the renderer collapses.
+class CompactionBoundary {
+  const CompactionBoundary({this.trigger});
+
+  /// `auto` when the context filled, `manual` for `/compact`, and null when the
+  /// record did not say. Never inferred from anything else.
+  final String? trigger;
+
+  @override
+  String toString() => 'CompactionBoundary(${trigger ?? 'unrecorded'})';
+}
 
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
@@ -22,6 +54,7 @@ class TranscriptMessage {
     this.pendingToolUseId,
     this.pendingBackgroundAgentId,
     this.thinking,
+    this.compaction,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -79,11 +112,16 @@ class TranscriptMessage {
   /// Null on every other row, and on a launch with no `agentId`: a launch we
   /// cannot name is one we could never retire.
   final String? pendingBackgroundAgentId;
+
+  /// Set on the **first row after a compaction boundary** — which is the
+  /// summary the CLI wrote of everything before it. Null everywhere else. See
+  /// [CompactionBoundary].
+  final CompactionBoundary? compaction;
 }
 
-/// Reads a CLI session's full transcript (Claude Code / Codex JSONL) into a flat
-/// list of [TranscriptMessage]s, oldest first. Best-effort: malformed lines are
-/// skipped and an unreadable file yields an empty list.
+/// Reads a CLI session's full transcript (Claude Code / Codex / Antigravity
+/// JSONL) into a flat list of [TranscriptMessage]s, oldest first. Best-effort:
+/// malformed lines are skipped and an unreadable file yields an empty list.
 ///
 /// A Claude Code `Task` call comes back carrying the [SubagentRef] for the
 /// agent it spawned, when one is on disk — see [readSubagentIndexIn]. The
@@ -99,15 +137,20 @@ Future<List<TranscriptMessage>> readCliTranscript(
   String cli, {
   String? subagentsDirectory,
 }) async {
-  // Antigravity's own file is a SQLite database whose message columns are
-  // protobuf in an unpublished schema, so there is nothing here to parse — see
-  // the design note Refused by name rather than
-  // left to fail: without this the loop below reads a binary file as UTF-8
-  // lines every two seconds behind the imported-session detail pane, and
-  // arrives at the same empty list by throwing.
-  if (cli == AgentIds.antigravity) return const [];
+  // Antigravity's own `conversations/<id>` file is still never read as text:
+  // its message columns are protobuf in an unpublished schema, and without the
+  // redirection below the loop would read a binary file as UTF-8 lines every
+  // two seconds behind the imported-session detail pane and arrive at an empty
+  // list by throwing. What changed is that a **plain JSONL** transcript sits
+  // elsewhere in the same store on some installs — see
+  // [antigravityTranscriptPathFor], which has the measurement and answers null
+  // where the store keeps none, so the old refusal still stands there.
+  final path = cli == AgentIds.antigravity
+      ? antigravityTranscriptPathFor(filePath)
+      : filePath;
+  if (path == null) return const [];
 
-  final file = File(filePath);
+  final file = File(path);
   if (!await file.exists()) return const [];
 
   final messages = <TranscriptMessage>[];
@@ -128,6 +171,11 @@ Future<List<TranscriptMessage>> readCliTranscript(
   // [TranscriptMessage.pendingBackgroundAgentId].
   final background = <String, int>{};
   final acrossBoundary = <String, int>{};
+  // The boundary whose summary has not been reached yet. Held here rather than
+  // returned from `_parseClaudeLine`, because the record that announces a
+  // compaction produces no row of its own — the row it belongs to is the next
+  // one the file yields, and only this loop can see that happen.
+  CompactionBoundary? pendingCompaction;
   try {
     await for (final line
         in file
@@ -149,7 +197,11 @@ Future<List<TranscriptMessage>> readCliTranscript(
       // agent we have no reader for.
       if (cli == AgentIds.codex) {
         _parseCodexLine(decoded, messages, pending, at);
+      } else if (cli == AgentIds.antigravity) {
+        _parseAntigravityLine(decoded, messages, at);
       } else {
+        pendingCompaction = _compactionBoundaryOf(decoded) ?? pendingCompaction;
+        final before = messages.length;
         _parseClaudeLine(
           decoded,
           messages,
@@ -159,6 +211,13 @@ Future<List<TranscriptMessage>> readCliTranscript(
           acrossBoundary,
           at,
         );
+        if (pendingCompaction != null && messages.length > before) {
+          messages[before] = _withCompaction(
+            messages[before],
+            pendingCompaction,
+          );
+          pendingCompaction = null;
+        }
       }
     }
   } catch (_) {
@@ -169,6 +228,36 @@ Future<List<TranscriptMessage>> readCliTranscript(
   _stampBackgroundAgents(messages, background);
   return messages;
 }
+
+/// The compaction [json] announces, or null for every other line.
+///
+/// Gated on `compactMetadata` as well as the subtype: `type: system` is the
+/// CLI's own catch-all — `agents_killed` arrives the same way — and the
+/// metadata is the field only a real boundary carries.
+CompactionBoundary? _compactionBoundaryOf(Map<String, dynamic> json) {
+  if (json['type'] != 'system') return null;
+  if (json['subtype'] != 'compact_boundary') return null;
+  final metadata = json['compactMetadata'];
+  if (metadata is! Map) return null;
+  final trigger = metadata['trigger'];
+  return CompactionBoundary(trigger: trigger is String ? trigger : null);
+}
+
+/// [row] again, carrying the boundary it follows. One row per compaction.
+TranscriptMessage _withCompaction(
+  TranscriptMessage row,
+  CompactionBoundary boundary,
+) => TranscriptMessage(
+  role: row.role,
+  text: row.text,
+  tool: row.tool,
+  subagent: row.subagent,
+  at: row.at,
+  pendingToolUseId: row.pendingToolUseId,
+  pendingBackgroundAgentId: row.pendingBackgroundAgentId,
+  thinking: row.thinking,
+  compaction: boundary,
+);
 
 /// Marks the calls whose background subagents nothing has reported finished.
 ///
@@ -191,6 +280,7 @@ void _stampBackgroundAgents(
       pendingToolUseId: row.pendingToolUseId,
       pendingBackgroundAgentId: agentId,
       thinking: row.thinking,
+      compaction: row.compaction,
     );
   });
 }
@@ -222,16 +312,153 @@ Future<void> _attachSubagents(
       subagent: reference,
       at: row.at,
       pendingToolUseId: row.pendingToolUseId,
+      compaction: row.compaction,
     );
   });
 }
 
+/// One line of an Antigravity `transcript.jsonl`, in the roles the chat view
+/// renders.
+///
+/// **The format, surveyed over the 25 conversations on this machine's WSL
+/// install — 4,846 lines, 2026-09-09.** Every line carries `step_index`,
+/// `source`, `type`, `status` and `created_at`; `content`, `tool_calls`,
+/// `thinking` and `truncated_fields` are optional.
+///
+/// | `type` | `source` | Lines | What it is |
+/// | --- | --- | --- | --- |
+/// | `PLANNER_RESPONSE` | `MODEL` | 2,383 | the model's turn |
+/// | `GENERIC` | `MODEL` | 2,266 | the result of the call above it |
+/// | `SYSTEM_MESSAGE` | `SYSTEM` | 127 | injected context, not a turn |
+/// | `USER_INPUT` | `USER_EXPLICIT` | 52 | what the user typed |
+/// | `CHECKPOINT` | `SYSTEM` | 14 | the CLI's own compaction summary |
+/// | `ERROR_MESSAGE` | `SYSTEM` | 4 | a run that broke |
+///
+/// **A result is joined to the call immediately above it, because the file
+/// offers nothing else.** There is no call id anywhere in it. All 2,310 records
+/// that carry `tool_calls` carry exactly one, and 2,261 are followed straight
+/// away by the `GENERIC` answering it — the other 49 are calls whose result
+/// never landed, which is what an interrupted run leaves behind. Only 5 of the
+/// 2,266 `GENERIC` records have no call above them at all, and those become a
+/// row of their own rather than being attached to whatever happened to be last.
+///
+/// **`SYSTEM`-sourced records render nothing**, the same rule `_parseClaudeLine`
+/// applies to its own `type: system` lines: they are session-level records
+/// rather than turns.
+///
+/// **`thinking` is deliberately left null.** The field is in the file and this
+/// could fill it, but `ConversationIndexer` documents "nothing in
+/// `readCliTranscript` ever fills `TranscriptMessage.thinking`" as one of its
+/// two gates, and a reader that quietly falsified that would be worse than a
+/// reader that shows one thing less.
+void _parseAntigravityLine(
+  Map<String, dynamic> json,
+  List<TranscriptMessage> out,
+  DateTime? at,
+) {
+  final content = json['content'];
+  switch (json['type']) {
+    case 'USER_INPUT':
+      _add(out, 'user', content, at);
+    case 'PLANNER_RESPONSE':
+      _add(out, 'agent', content, at);
+      final calls = json['tool_calls'];
+      if (calls is! List) return;
+      for (final call in calls) {
+        if (call is! Map) continue;
+        final name = call['name'];
+        if (name is! String) continue;
+        final args = call['args'];
+        // The same shape `toolActivityFor` builds, with this CLI's own key for
+        // the identifying line. `kToolSubjectKeys` is Claude's snake_case set
+        // and matches none of Antigravity's, which would leave every row
+        // reading as the bare tool name; `toolSummary` is the CLI's own words
+        // and is on all 2,310 calls in the store here.
+        final plan = agentPlanForToolCall(name, args);
+        final activity = ToolActivity(
+          name: name,
+          subject: plan?.headline ?? _antigravityArg(args, 'toolSummary'),
+          plan: plan,
+        );
+        out.add(
+          TranscriptMessage(
+            role: 'tool',
+            text: activity.summary,
+            tool: activity,
+            at: at,
+            // `status` rather than the absence of a result: a call the file
+            // says is `RUNNING` is the one still in flight, and the 49 calls
+            // whose result never arrived belong to finished runs we cannot
+            // report on — not to work happening now.
+            pendingToolUseId: json['status'] == 'RUNNING'
+                ? '${json['step_index']}'
+                : null,
+          ),
+        );
+      }
+    case 'GENERIC':
+      if (content is! String || content.trim().isEmpty) return;
+      final last = out.isEmpty ? null : out.last;
+      if (last?.tool != null && last!.tool!.output == null) {
+        _attachAntigravityResult(out, content);
+        return;
+      }
+      _add(out, 'tool', content, at);
+  }
+}
+
+/// One `args` value as plain text, or null when it holds none.
+///
+/// The map is protojson and its string values arrive **JSON-encoded**: 8,513 of
+/// the 12,175 values in this machine's store are wrapped in quotes and the
+/// other 3,662 are bare booleans and numbers. Reading one raw prints the quotes
+/// with it.
+String? _antigravityArg(Object? args, String key) {
+  if (args is! Map) return null;
+  final raw = args[key];
+  if (raw is! String) return null;
+  var value = raw;
+  if (raw.length > 1 && raw.startsWith('"') && raw.endsWith('"')) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is String) value = decoded;
+    } on FormatException {
+      // Not encoded after all; the raw text is the best answer there is.
+    }
+  }
+  final text = value.trim();
+  return text.isEmpty ? null : text;
+}
+
+/// Hangs a `GENERIC` result on the call row directly above it.
+///
+/// By position, and only ever the last row — see [_parseAntigravityLine] for
+/// the counts that make that the file's own rule rather than a guess.
+void _attachAntigravityResult(List<TranscriptMessage> out, String output) {
+  final index = out.length - 1;
+  final row = out[index];
+  final (bounded, truncated) = boundedToolOutput(output.trimRight());
+  out[index] = TranscriptMessage(
+    role: row.role,
+    text: row.text,
+    tool: row.tool!.withResult(
+      output: bounded.isEmpty ? null : bounded,
+      outputTruncated: truncated,
+      isError: false,
+    ),
+    at: row.at,
+    compaction: row.compaction,
+  );
+}
+
 /// The instant a transcript line was written, or null when it carried none.
 ///
-/// The same key in both formats. `toUtc()` because a `Z`-suffixed instant
-/// already is one and anything else would compare against a UTC clock wrongly.
+/// One key for Claude Code and Codex, which both write `timestamp`, and
+/// `created_at` for Antigravity, which writes the same ISO-8601 instant under
+/// its own name. `toUtc()` because a `Z`-suffixed instant already is one and
+/// anything else would compare against a UTC clock wrongly.
 DateTime? _lineTimestamp(Map<String, dynamic> json) {
-  final raw = json['timestamp'];
+  final raw = json['timestamp'] ?? json['created_at'];
   if (raw is! String) return null;
   return DateTime.tryParse(raw)?.toUtc();
 }
@@ -555,6 +782,7 @@ void _attachResult(
     // dropping the id here is what keeps the call from looking in-flight
     // forever.
     at: row.at,
+    compaction: row.compaction,
   );
 }
 
