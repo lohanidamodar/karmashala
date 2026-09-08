@@ -985,3 +985,57 @@ will refuse, so the session spawns into it anyway. `readExecutable`'s
 three-way reachability is the shape that closes it; doing so is a change to
 session launch rather than to agent discovery, which is why it is written down
 here instead of folded into this change.
+
+### The version beside the path, and the cadence question it raised
+
+The path was re-measured every launch while the **version** on the same row
+was never re-read at all. `discoverUnprobed` skips any `(agent, environment)`
+pair that already has an installation row, so only a manual "Detect agents"
+reached `updateVersion`: the app reported Claude Code **2.1.252** for a binary
+answering **2.1.263**, launch after launch. Version-sensitive behaviour makes
+that more than cosmetic — the hook subtype map is sourced from a specific
+release — and one row, `claudeCode | windows | 2.1.245`, named a version for a
+binary `where claude` no longer finds at all.
+
+The owner's open question was *"once per the whole app's lifecycle? or what,
+doing it on every session start is not that cheap either?"* Both halves are
+right, and neither is the answer:
+
+| | cost | what it misses |
+| --- | --- | --- |
+| once per app lifecycle | a spawn per row per launch | Codex self-updated **mid-session**, and sessions here are long |
+| every session start | a spawn per session | a number nobody is looking at |
+
+So the occasion is the launch that already checks the paths, and **the gate is
+the row's own recorded age** (`version_read_at`, v40; `kVersionReadingFreshFor`,
+12 h). A workspace whose readings are fresh spawns nothing — not even a stat.
+One that has aged out pays one process per **local and WSL** installation,
+once, and not again until it ages out. A machine relaunched five times in an
+hour re-reads once.
+
+**And the durable half is the age, not the cadence.** A bare number is a
+confident false statement whatever rate writes it, because the reader cannot
+tell which reading they are looking at; "2.1.252 · last read 2d ago, may be out
+of date" is honest even when wrong. That is why `version_read_at` is stored and
+rendered rather than a refresh interval being tuned — and why it is nullable
+and **never backfilled from `created_at`**: an unknown reading time is not a
+reading time (§19).
+
+§20's rules carry over unchanged. A **WSL** row is asked through the WSL
+runner, so nothing local is stat-ed or spawned on its behalf; an **SSH** row is
+not asked by a launch at all — probing it means dialling somebody's machine,
+which is `discoverUnprobed`'s own rule — and shows its reading's age instead. A
+local row whose executable was just observed *missing* is not spawned at, so
+the 2.1.245 row keeps both its number and its id and reads as stale beside
+§20's verdict about its path. A probe that could not answer writes **nothing** —
+not the number, not the timestamp — so a located binary whose `--version` fails
+never erases a number we did know.
+
+**Deferred, deliberately.** The pickers (quick open, the new-session dialog,
+Settings → Environments, the companion) and the MCP `list_agents` payload still
+show a bare number; each is choosing *which* agent rather than reading its
+version, and the reading time is on the row for whenever that changes. No
+refresh when the panel opens (§19's Tools precedent would allow it; the launch
+plus "Detect agents" covers the reported failure), no update check against a
+registry, no "a new version is available", and no setting for the bound — a
+cadence the user has to tune is one nobody tunes.
