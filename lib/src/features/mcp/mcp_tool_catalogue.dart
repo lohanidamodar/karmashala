@@ -301,6 +301,14 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // client deciding whether to confirm cannot see which argument was
       // passed. Same rule as `terminal_close`.
       'flutter_reload': McpToolAnnotations(destructive: true, openWorld: true),
+      // Starts and stops builds, apps and gates. Destructive because `stop`
+      // ends a running app and anything it had not saved goes with it, and
+      // because the annotation describes the worst the tool does — a client
+      // deciding whether to confirm cannot see which action was passed. Not
+      // idempotent: two `run`s are two launches, and `pubGet` twice is twice.
+      // Open-world for the same reason the device tools are — a launch puts an
+      // app on a phone, and a gate is a process on somebody's machine.
+      'flutter_run': McpToolAnnotations(destructive: true, openWorld: true),
 
       // Verification runs.
       'verification_list': McpToolAnnotations.read,

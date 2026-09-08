@@ -474,10 +474,46 @@ All of it is open-world. Nothing here is confined to this machine.
   McpGuide(
     topic: 'flutter-app',
     summary:
-        'What a successful flutter_reload proves, and why an app id dies with '
-        'the run that printed it.',
+        'Closing the edit-build-run-look-fix loop yourself: what starts an '
+        'app, what a successful flutter_reload proves, and why an app id dies '
+        'with the run that printed it.',
     prefixes: <String>['flutter_'],
     body: '''
+**`flutter_run` is the one that starts things, and it attaches for you.**
+
+The other five tools all need an app that is already running, and `flutter_run`
+is what makes one: `pubGet` because a fresh worktree has no `.dart_tool` and
+nothing works until it does, then `run` with a device. A launch points
+`--vmservice-out-file` at the directory Karmashala watches, so the app appears
+in `flutter_apps` **by itself** — you do not call `flutter_attach` after a
+launch you started, and reaching for it means something else went wrong.
+
+Every answer carries a **preflight** line, and it names the fix rather than the
+fault: no SDK in that environment, no `.dart_tool`, a package with no
+entrypoint, a device another session is driving. Read it before anything else;
+a refused call did nothing at all.
+
+**Which environment a command runs in is decided by the checkout, not by you.**
+`flutter_run` takes a `checkoutId` for that reason — the id carries the
+environment, and a bare path would have to be guessed into one. The wrong shell
+here is not a failed command: a POSIX `flutter` reached through a Windows drive
+mount downloads a Linux Dart SDK over the one every terminal on the machine
+shares, and fails silently for whoever ran it. That case is refused by name.
+
+**The log comes back only when something failed or is still going.** A gate
+that passed is a verdict; a run that is over is an exit code. Ask `status` with
+the `paneId` when you want the tail, and expect to be told the log was left out
+because there was nothing wrong with it.
+
+**`analyze` and `test` are recorded.** They run in their own pane, and their
+exit code becomes a `verification_runs` verdict you can read back with
+`verification_get` — a pass, a fail, or **inconclusive** when the process
+stopped without an exit code anybody observed. Nothing here calls an unobserved
+ending green.
+
+**One run per device.** A second launch onto a phone somebody else is driving
+is refused with the holder named, the same rule the `device_*` tools follow.
+
 **A successful `flutter_reload` means the reload reached the VM. Nothing else.**
 
 The recompile comes from the `flutter run` that owns the app, and this tool
@@ -499,11 +535,12 @@ gone. Omit `appId` when exactly one app is attached, and expect a refusal
 rather than a guess when two are.
 
 **`flutter_apps` keeps three answers apart that one list would flatten**: we
-have not looked, nothing is running, and an address nothing answers on.
-Karmashala does not start the app and will never rewrite a command you typed,
-so an empty list comes back with the flag to add — `--vmservice-out-file` — for
-the developer's next run. `flutter_attach` is the other way in, from the
-address `flutter run` already printed.
+have not looked, nothing is running, and an address nothing answers on. It
+covers runs *the developer* started as well as ones `flutter_run` did, and for
+theirs an empty list comes back with the flag to add —
+`--vmservice-out-file` — because Karmashala will never rewrite a command
+somebody typed. `flutter_attach` is the way in from an address `flutter run`
+already printed.
 
 **An empty `flutter_logs` tail means the app has said nothing since the
 attach**, not that it said nothing at all. Lines marked "before attach" were
