@@ -153,17 +153,34 @@ void main() {
       expect(WorktreeCommandResult.couldNotStart.needsAttention, isTrue);
     });
 
-    test('a null exit code stays "running", never "succeeded"', () {
+    test('a process that stopped with no code is not "succeeded"', () {
+      // There is deliberately no route from a null exit code to a healthy
+      // verdict. `PaneExit.exitCode` is nullable for a real reason — "we never
+      // learned" — and reading a missing number as a zero is the §19 mistake.
       const started = WorktreeCommandVerdict(
         result: WorktreeCommandResult.running,
         reason: 'Running in a pane.',
         paneId: 'p1',
       );
-      expect(started.finishedWith(null).result, WorktreeCommandResult.running);
-      expect(started.finishedWith(null).exitCode, isNull);
-      expect(started.finishedWith(0).result, WorktreeCommandResult.succeeded);
-      expect(started.finishedWith(2).result, WorktreeCommandResult.failed);
-      expect(started.finishedWith(2).reason, contains('2'));
+      expect(
+        started.afterExit(null).result,
+        WorktreeCommandResult.stoppedWithoutCode,
+      );
+      expect(started.afterExit(null).exitCode, isNull);
+      expect(started.afterExit(null).result.needsAttention, isTrue);
+      expect(started.afterExit(0).result, WorktreeCommandResult.succeeded);
+      expect(started.afterExit(2).result, WorktreeCommandResult.failed);
+      expect(started.afterExit(2).reason, contains('2'));
+      // The pane it ran in survives the correction — it is where the output is.
+      expect(started.afterExit(2).paneId, 'p1');
+    });
+
+    test('only "running" is pending; a stopped pane is no longer tracked', () {
+      expect(WorktreeCommandResult.running.isPending, isTrue);
+      for (final result in WorktreeCommandResult.values) {
+        if (result == WorktreeCommandResult.running) continue;
+        expect(result.isPending, isFalse, reason: result.name);
+      }
     });
   });
 

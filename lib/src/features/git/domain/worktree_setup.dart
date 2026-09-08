@@ -249,6 +249,12 @@ enum WorktreeCommandResult {
   /// has the number.
   failed,
 
+  /// The process stopped and **we never learned what with**. Not success:
+  /// `PaneExit.exitCode` is nullable for exactly this, and reading a missing
+  /// number as a zero is the mistake §19 exists to prevent. The pane still
+  /// has the output.
+  stoppedWithoutCode,
+
   /// There was nowhere to run it where the user would see it, so it was not
   /// run at all. Running it invisibly is the failure this feature exists to
   /// remove, so it is refused instead.
@@ -263,6 +269,10 @@ enum WorktreeCommandResult {
     WorktreeCommandResult.succeeded => false,
     _ => true,
   };
+
+  /// Whether a process is still expected to be behind the pane. The service
+  /// stops tracking a pane once this is false.
+  bool get isPending => this == WorktreeCommandResult.running;
 }
 
 /// The command half of a setup report.
@@ -288,17 +298,26 @@ class WorktreeCommandVerdict {
   /// different facts and only the last one is success.
   final int? exitCode;
 
-  WorktreeCommandVerdict finishedWith(int? code) => WorktreeCommandVerdict(
-    result: code == null
-        ? WorktreeCommandResult.running
-        : (code == 0
-              ? WorktreeCommandResult.succeeded
-              : WorktreeCommandResult.failed),
-    reason: code == null
-        ? reason
-        : (code == 0
-              ? 'Finished with exit code 0.'
-              : 'Exited with code $code. Its output is in the pane it ran in.'),
+  /// This verdict once the pane's process has **stopped**, with [code] or with
+  /// nothing.
+  ///
+  /// There is no "it stopped and it is fine" path through a null: a process
+  /// whose exit code never arrived is [WorktreeCommandResult.stoppedWithoutCode]
+  /// and needs looking at, because the only thing we know is that it is no
+  /// longer running.
+  WorktreeCommandVerdict afterExit(int? code) => WorktreeCommandVerdict(
+    result: switch (code) {
+      null => WorktreeCommandResult.stoppedWithoutCode,
+      0 => WorktreeCommandResult.succeeded,
+      _ => WorktreeCommandResult.failed,
+    },
+    reason: switch (code) {
+      null =>
+        'The process stopped and its exit code was never reported. Whether '
+            'the setup worked is not recorded; its output is in the pane.',
+      0 => 'Finished with exit code 0.',
+      _ => 'Exited with code $code. Its output is in the pane it ran in.',
+    },
     command: command,
     paneId: paneId,
     exitCode: code,

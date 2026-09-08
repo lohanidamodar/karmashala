@@ -18,6 +18,7 @@ import '../../core/database/database_providers.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
+import '../../features/git/application/worktree_setup_providers.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
@@ -96,6 +97,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     // pane stop. Its value is `void` and never changes, so this costs the shell
     // one build and nothing after it. See [sessionLivenessReconcilerProvider].
     ref.watch(sessionLivenessReconcilerProvider);
+    // Same reason, same cost: a worktree setup command runs in its own pane
+    // and nothing waits for it, so the only way its exit code becomes a
+    // recorded verdict is an observer that is actually listening.
+    ref.watch(worktreeSetupExitObserverProvider);
     // Focus mode: the workbench takes the window. The provider is the old
     // "maximize the dock" flag, which is the same intent now that the dock is
     // gone — everything but the work gets out of the way.
