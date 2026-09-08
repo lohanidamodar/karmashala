@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_hook_installation_service.dart';
+import '../../agents/application/agent_providers.dart';
+import '../../agents/application/agent_skill_installation_service.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import '../../browser/domain/browser_consent.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -78,7 +80,7 @@ class ToolsPage extends StatelessWidget {
           blurb:
               'What it can call once it is in. Static: this is the catalogue '
               'the bridge serves, not a reading.',
-          children: [AgentToolsSection()],
+          children: [AgentToolsSection(), AgentSkillsSection()],
         ),
         ToolsCategory(
           title: 'Consent',
@@ -736,6 +738,115 @@ class BrowserConsentSection extends ConsumerWidget {
                   );
                 },
               ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Settings → Tools → Agent tools: the skills this app has written into the
+/// agent CLIs on this machine.
+///
+/// **Three claims, and each is a different kind of statement.** What is
+/// installed is read off disk by the sweep, not assumed from having written
+/// it. For which agent, because a skill goes into one CLI's own skills root
+/// and a machine has more than one. And the age of the reading, because §19's
+/// rule is that a measurement without its age is a claim — the sweep runs once
+/// a launch and nothing polls, so what is on screen can be hours old and must
+/// say so.
+///
+/// The button is the other half of writing into somebody's home: the code that
+/// wrote the directories is the code that removes them, and it is reachable
+/// from the same place that says they are there.
+class AgentSkillsSection extends ConsumerWidget {
+  const AgentSkillsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final report = ref.watch(agentSkillInstallationReportProvider);
+    final registry = ref.watch(agentRegistryProvider);
+    return SettingsSection(
+      title: 'SKILLS',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The tools above have to be called by an agent that already '
+            'suspects they exist. A skill is found by the CLI without being '
+            'asked for, so Karmashala writes three into each agent it finds: '
+            'one that points at instructions(), and two for asking another '
+            'agent family for a second opinion.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: Insets.sm),
+          if (!report.swept)
+            const _HookNote.unknown(
+              'Not written yet — that sweep runs just after the window opens.',
+            )
+          else ...[
+            for (final row in report.complete)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Insets.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      AppIcons.checkCircle,
+                      size: Chrome.icon,
+                      color: healthColor(context, HealthLevel.healthy),
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Text(
+                        '${row.installed} skills for '
+                        '${registry.displayNameFor(row.agentId)} in '
+                        '${ref.watch(environmentLabelForIdProvider(row.environmentId))}'
+                        '${row.root == null ? '' : ' — ${row.root}'}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            for (final entry in report.unknownByAgent.entries)
+              _HookNote.unknown(
+                'Whether ${registry.displayNameFor(entry.key)} has them could '
+                'not be confirmed — ${entry.value}.',
+              ),
+            for (final entry in report.incompleteByAgent.entries)
+              _HookNote.skipped(
+                'No skills for ${registry.displayNameFor(entry.key)} — '
+                '${entry.value}.',
+              ),
+            if (report.complete.isEmpty &&
+                report.unknownByAgent.isEmpty &&
+                report.incompleteByAgent.isEmpty)
+              Text(
+                'Nothing is installed. No agent on this machine declares a '
+                'place to put one.',
+                style: theme.textTheme.bodySmall,
+              ),
+            if (report.checkedAt case final at?)
+              Text(
+                'Read ${describeAge(ref.read(clockProvider).nowUtc().difference(at))}.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+          ],
+          const SizedBox(height: Insets.xs),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => ref
+                  .read(agentSkillInstallationServiceProvider)
+                  .sweepRemoval(),
+              icon: const Icon(AppIcons.trash, size: Chrome.icon),
+              label: const Text('Remove them'),
+            ),
+          ),
         ],
       ),
     );
