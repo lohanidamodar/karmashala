@@ -148,12 +148,18 @@ class AgentSkillInstaller {
     return changed;
   }
 
+  /// Written to a staged file and renamed over the real one, so a sweep cut
+  /// off mid-flight leaves either the old skill or the new one and never half
+  /// a `SKILL.md` for a CLI to discover. It is also why nothing waits for this
+  /// at shutdown.
   Future<void> _writeIfChanged(File file, String contents) async {
     try {
       if (await file.readAsString() == contents) return;
     } on FileSystemException {
       // Not there yet, which is the first-install case.
     }
-    await file.writeAsString(contents, flush: true);
+    final staged = File('${file.path}.tmp');
+    await staged.writeAsString(contents, flush: true);
+    await staged.rename(file.path);
   }
 }
