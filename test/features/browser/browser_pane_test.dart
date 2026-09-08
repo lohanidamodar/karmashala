@@ -141,7 +141,8 @@ void main() {
     await harness.pump(tester);
     await tester.tap(find.text('Attach · 9222'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'localhost:3000');
+    // `.first`: the console under the picture has a field of its own.
+    await tester.enterText(find.byType(TextField).first, 'localhost:3000');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     final navigations = harness.fake.framesFor('Page.navigate');
@@ -238,7 +239,8 @@ void main() {
     // panel's filter field a tab away.
     final harness = Harness();
     await harness.pump(tester);
-    final field = tester.widget<TextField>(find.byType(TextField));
+    // `.first` — the address bar; the console's field is the other one.
+    final field = tester.widget<TextField>(find.byType(TextField).first);
     expect(field.decoration!.border, isNull);
     expect(field.decoration!.contentPadding, isNull);
     expect(field.decoration!.isDense, isNull);
