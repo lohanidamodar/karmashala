@@ -19,11 +19,11 @@ import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
     show healthColor, healthIcon;
 import '../../mcp/control_server_status.dart';
-import '../../mcp/launcher_control_server.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../projects/application/projects_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../application/settings_controller.dart';
+import 'agent_tools_section.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -50,6 +50,7 @@ class ToolsPage extends StatelessWidget {
   static const List<String> categories = [
     'External apps',
     'Agent access',
+    'Agent tools',
     'Consent',
   ];
 
@@ -71,6 +72,13 @@ class ToolsPage extends StatelessWidget {
               'Whether an agent pointed at Karmashala can actually reach it — '
               'measured, not assumed.',
           children: [McpBridgeSection()],
+        ),
+        ToolsCategory(
+          title: 'Agent tools',
+          blurb:
+              'What it can call once it is in. Static: this is the catalogue '
+              'the bridge serves, not a reading.',
+          children: [AgentToolsSection()],
         ),
         ToolsCategory(
           title: 'Consent',
@@ -384,20 +392,8 @@ class McpBridgeSection extends ConsumerWidget {
         children: [
           Text(
             'An agent pointed at Karmashala\'s MCP bridge can query and act '
-            'on your projects and sessions through these built-in tools:',
+            'on your projects and sessions through the tools listed below.',
             style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: Insets.sm),
-          Wrap(
-            spacing: Insets.xs,
-            runSpacing: Insets.xs,
-            children: [
-              for (final tool in LauncherControlServer.toolSchemas)
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  label: Text(tool['name'] as String, style: MonoStyles.small),
-                ),
-            ],
           ),
           const SizedBox(height: Insets.sm),
           // **This used to read "Tools available — the MCP bridge is
