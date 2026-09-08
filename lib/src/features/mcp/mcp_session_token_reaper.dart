@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/logging/app_logger.dart';
+import '../devices/application/device_claims.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
-import '../sessions/domain/session.dart';
-import '../sessions/domain/session_status.dart';
 import 'launcher_control_server.dart';
 import 'mcp_caller_registry.dart';
 
@@ -65,7 +64,15 @@ class McpSessionTokenReaper {
     _subscription = null;
   }
 
-  /// Forgets the token of every session that is over.
+  /// Forgets the token of every session that is over, and drops the devices it
+  /// was driving.
+  ///
+  /// The device claim is released here rather than in a sweep of its own
+  /// because this is already the one place watching for a session to end, and
+  /// the two answers must not differ: a session that can no longer be spoken
+  /// for cannot be the agent another agent is told is holding a phone.
+  /// `DeviceClaims` re-checks the same predicate lazily anyway, so this is what
+  /// makes the device free *now* rather than after the claim lapses.
   ///
   /// Costs nothing until a token exists, which is what keeps this off the path
   /// of every session-list change in a workspace where no agent was ever
@@ -75,10 +82,12 @@ class McpSessionTokenReaper {
     if (held.isEmpty) return;
     try {
       final dao = _container.read(sessionDaoProvider);
+      final claims = _container.read(deviceClaimsProvider);
       for (final sessionId in held) {
         final session = dao.getById(sessionId);
-        if (session != null && !_isOver(session)) continue;
+        if (session != null && !session.isOver) continue;
         _callers.forget(sessionId);
+        claims.release(sessionId);
         _log.debug('retired the MCP token for session $sessionId');
       }
     } on Object catch (error, stack) {
@@ -91,12 +100,4 @@ class McpSessionTokenReaper {
       );
     }
   }
-
-  /// A row that is gone counts as over too: there is nothing left for a token
-  /// to speak for.
-  bool _isOver(Session session) =>
-      session.isArchived ||
-      session.status == SessionStatus.completed ||
-      session.status == SessionStatus.failed ||
-      session.status == SessionStatus.cancelled;
 }
