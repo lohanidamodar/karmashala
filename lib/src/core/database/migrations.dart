@@ -88,6 +88,10 @@ typedef MigrationStep = void Function(Database db);
 ///   agent run a person armed in advance, every occurrence of it (including
 ///   the ones nobody was here for), and the per-checkout verification the gate
 ///   refuses without.
+/// * **v44** — what those checks actually said: one verdict row per check per
+///   occurrence, and the moment the run's checks were looked at, so "nothing
+///   has re-run this yet" and "this checkout has no check" stay different
+///   answers.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -132,6 +136,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   41: _migrateToV41,
   42: _migrateToV42,
   43: _migrateToV43,
+  44: _migrateToV44,
 };
 
 /// Was this pane running when its row was written?
@@ -1931,4 +1936,46 @@ void _migrateToV43(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_project_checks_repository '
     'ON project_checks (repository_id);',
   );
+}
+
+/// The verdicts an automation's project checks left on one occurrence.
+///
+/// **A row per check, and a timestamp on the run saying the checks were looked
+/// at.** The two are not the same fact and collapsing them would lose the one
+/// that matters: no rows and no timestamp is *"nothing has re-run this yet"*,
+/// while no rows *with* a timestamp is *"this checkout has no check
+/// configured"*. A schema that could only say "no verdicts" would read the
+/// second as the first — an unknown reported as a zero (§19).
+///
+/// `check_id` is a plain column with **no foreign key**: deleting a check must
+/// not rewrite what last night's run found, the same reason
+/// `automations.agent_installation_id` is not one. `name` and `command` are
+/// copied onto the row for that too — a verdict has to still say what it ran
+/// after the check it came from is edited or gone.
+///
+/// `verification_run_id` points at the `verification_runs` row
+/// `VerificationService.recordCommandCheck` wrote, and is **null when nothing
+/// ran** — a check whose environment could not be reached is a verdict with no
+/// command behind it.
+void _migrateToV44(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS automation_run_checks (
+      run_id              TEXT NOT NULL
+        REFERENCES automation_runs(id) ON DELETE CASCADE,
+      ordinal             INTEGER NOT NULL,
+      check_id            TEXT,
+      name                TEXT NOT NULL,
+      command             TEXT NOT NULL,
+      verdict             TEXT NOT NULL,
+      reason              TEXT NOT NULL,
+      verification_run_id TEXT,
+      checked_at          TEXT NOT NULL,
+      PRIMARY KEY (run_id, ordinal)
+    );
+  ''');
+  final columns = db
+      .select('PRAGMA table_info(automation_runs);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('checks_observed_at')) return;
+  db.execute('ALTER TABLE automation_runs ADD COLUMN checks_observed_at TEXT;');
 }

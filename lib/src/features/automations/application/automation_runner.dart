@@ -18,6 +18,7 @@ import '../../sessions/domain/session_status.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
+import 'automation_check_runner.dart';
 import 'automation_providers.dart';
 import 'automation_scheduler.dart';
 import 'unattended_preflight.dart';
@@ -183,6 +184,10 @@ class AutomationRunObserver extends Notifier<int> {
     // settles on it.
     ref.listen(paneExitProvider, (_, exit) {
       if (exit == null) return;
+      // Read first, because a project check's pane is not a session's and the
+      // rows behind it have to be taken in the exit's own moment. This is the
+      // whole of the check sequence's clock: nothing polls.
+      ref.read(automationCheckRunnerProvider).noteExit(exit.paneId, exit.exitCode);
       final sessionId = exit.sessionId;
       if (sessionId == null) return;
       final ending = endingOfPaneExit(exit.exitCode);
@@ -257,19 +262,24 @@ class AutomationRunObserver extends Notifier<int> {
     _finish(run, state, _reasonOf(ending));
   }
 
-  /// Records the verdict, counts what the run left on the branch, and lets the
-  /// next waiting run in this checkout start.
+  /// Records the verdict, counts what the run left on the branch, runs the
+  /// checkout's checks, and lets the next waiting run in this checkout start.
   void _finish(AutomationRun run, AutomationRunState state, String reason) {
     final dao = ref.read(automationDaoProvider);
-    dao.updateRun(
-      run.copyWith(
-        state: state,
-        reason: reason,
-        finishedAt: ref.read(clockProvider).nowUtc(),
-      ),
+    final finished = run.copyWith(
+      state: state,
+      reason: reason,
+      finishedAt: ref.read(clockProvider).nowUtc(),
     );
+    dao.updateRun(finished);
     _revision++;
     ref.read(automationsRevisionProvider.notifier).bump();
+
+    // **The agent stopping is not evidence the work stands**, whichever way it
+    // stopped — which is why a failed ending gets its checks run too. Started
+    // and not awaited: a checkout's test suite takes minutes, and this is a
+    // pane exit rather than a call anybody made.
+    ref.read(automationCheckRunnerProvider).start(finished);
 
     final automation = dao.getById(run.automationId);
     if (automation == null) return;

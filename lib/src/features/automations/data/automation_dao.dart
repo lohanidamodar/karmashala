@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../../agents/domain/agent_permission_support.dart';
+import '../../verification/domain/verification_run.dart';
 import '../domain/automation.dart';
+import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 
 /// Data access for automations and their occurrences. Hand-written SQL.
@@ -126,6 +130,77 @@ class AutomationDao {
     ],
   );
 
+  // --- the checks one occurrence's work was measured with -------------------
+
+  void insertRunCheck(AutomationCheckVerdict verdict) => _db.execute(
+    'INSERT INTO automation_run_checks '
+    '(run_id, ordinal, check_id, name, command, verdict, reason, '
+    'verification_run_id, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    [
+      verdict.runId,
+      verdict.ordinal,
+      verdict.checkId,
+      verdict.name,
+      jsonEncode(verdict.command),
+      verdict.verdict.name,
+      verdict.reason,
+      verdict.verificationRunId,
+      isoFromDate(verdict.checkedAt),
+    ],
+  );
+
+  /// One run's verdicts, in the order the checks ran.
+  List<AutomationCheckVerdict> checksFor(String runId) => _db
+      .query(
+        'SELECT * FROM automation_run_checks WHERE run_id = ? ORDER BY '
+        'ordinal;',
+        [runId],
+      )
+      .map(_checkVerdict)
+      .toList();
+
+  /// Records that this run's checks were looked at, whatever they said — and
+  /// whether or not there were any. The timestamp is the whole point: without
+  /// it "no verdicts" cannot be told from "nobody looked".
+  void noteChecksObserved(String runId, DateTime at) => _db.execute(
+    'UPDATE automation_runs SET checks_observed_at = ? WHERE id = ?;',
+    [isoFromDate(at), runId],
+  );
+
+  AutomationCheckVerdict _checkVerdict(Map<String, Object?> row) =>
+      AutomationCheckVerdict(
+        runId: row['run_id']! as String,
+        ordinal: row['ordinal']! as int,
+        checkId: row['check_id'] as String?,
+        name: row['name']! as String,
+        command: _argv(row['command'] as String?),
+        // A word this build cannot read is not a pass and not a fail; reading
+        // it as inconclusive is the only answer that claims nothing.
+        verdict:
+            VerificationVerdict.parse(row['verdict'] as String?) ??
+            VerificationVerdict.inconclusive,
+        reason: row['reason'] as String? ?? '',
+        verificationRunId: row['verification_run_id'] as String?,
+        checkedAt: dateFromIso(row['checked_at']),
+      );
+
+  /// Forgiving in the same way `ProjectCheckDao._argv` is, and for the same
+  /// reason: one unreadable row must not stop a run's other verdicts being
+  /// read.
+  static List<String> _argv(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return [
+        for (final part in decoded)
+          if (part is String && part.isNotEmpty) part,
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
+
   AutomationRun? runById(String id) {
     final rows = _db.query('SELECT * FROM automation_runs WHERE id = ?;', [id]);
     return rows.isEmpty ? null : _run(rows.first);
@@ -207,5 +282,8 @@ class AutomationDao {
         ? null
         : dateFromIso(row['finished_at']),
     commitsMade: row['commits_made'] as int?,
+    checksObservedAt: row['checks_observed_at'] == null
+        ? null
+        : dateFromIso(row['checks_observed_at']),
   );
 }
