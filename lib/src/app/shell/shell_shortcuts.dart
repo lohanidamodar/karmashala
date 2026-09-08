@@ -15,6 +15,7 @@ import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_state.dart';
 import 'side_panel_state.dart';
+import '../../features/notifications/application/attention_inbox.dart';
 
 /// Intent: move focus to a specific shell pane.
 class FocusPaneIntent extends Intent {
@@ -28,6 +29,11 @@ class ToggleExplorerPaneIntent extends Intent {
 }
 
 /// Intent: show/hide the right-hand side panel.
+/// Reveal the next session waiting on the user.
+class OpenNextWaitingIntent extends Intent {
+  const OpenNextWaitingIntent();
+}
+
 class ToggleSidePanelIntent extends Intent {
   const ToggleSidePanelIntent();
 }
@@ -381,6 +387,19 @@ String _commandLabel(String key, {bool shift = false}) => commandKeyIsMeta
     : 'Ctrl+${shift ? 'Shift+' : ''}$key';
 
 List<ShellChord> _buildChords() => [
+  // Cmd on a Mac and Ctrl elsewhere, through the same two helpers every other
+  // chord here uses, so the label reads `⇧⌘A` on macOS without a second entry.
+  ShellChord(
+    // J for jump. A, B, K and N are the side panel's own surface shortcuts —
+    // Shift+A already opens the inbox — and this is the cycle *through* it.
+    activator: commandActivator(LogicalKeyboardKey.keyJ, shift: true),
+    intent: OpenNextWaitingIntent(),
+    label: _commandLabel('J', shift: true),
+    does: 'Go to the next agent waiting for you',
+    // Flutter sees the key and its modifiers, so taking Shift+A leaves a
+    // shell's own `Ctrl+A` — readline's beginning-of-line — untouched.
+    skipsShell: true,
+  ),
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.digit1),
     intent: FocusPaneIntent(ShellPane.explorer),
@@ -1060,6 +1079,14 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           ToggleExplorerPaneIntent: CallbackAction<ToggleExplorerPaneIntent>(
             onInvoke: (intent) {
               controller.toggleExplorerPane();
+              return null;
+            },
+          ),
+          OpenNextWaitingIntent: CallbackAction<OpenNextWaitingIntent>(
+            onInvoke: (intent) {
+              // Says nothing when nobody is waiting rather than moving the
+              // window somewhere arbitrary: an empty inbox is an answer.
+              ref.read(attentionInboxProvider.notifier).openNext();
               return null;
             },
           ),

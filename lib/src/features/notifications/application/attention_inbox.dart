@@ -79,6 +79,23 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     state = state.viewed({item.session.openId});
   }
 
+  /// Reveals the next session that needs you, and reports whether there was
+  /// one.
+  ///
+  /// Goes through [open] rather than reaching for `focusWatchedSession`
+  /// itself: an item opened by the chord must be marked viewed exactly as one
+  /// clicked in the list is, or walking the cycle would leave every row unread
+  /// behind it.
+  bool openNext() {
+    final next = state.nextAfter(
+      ref.read(selectedSessionIdProvider) ??
+          ref.read(selectedImportedSessionIdProvider),
+    );
+    if (next == null) return false;
+    open(next);
+    return true;
+  }
+
   void _syncViewed() {
     if (!ref.read(windowFocusedProvider)) return;
     // Nothing listed is nothing to retire, and asking what is on screen costs

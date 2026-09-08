@@ -510,4 +510,65 @@ void main() {
       }
     }
   });
+
+  group('walking to the next agent that needs you', () {
+    InboxItem itemFor(String id) => InboxItem(
+      session: WatchedSession(
+        key: AgentSessionKey('claudeCode', id),
+        label: id,
+        openId: id,
+        imported: false,
+      ),
+      kind: InboxItemKind.needsApproval,
+      at: DateTime.utc(2026, 9, 8),
+    );
+
+    test('an empty inbox has nowhere to go, and says so with null', () {
+      expect(AttentionInbox().nextAfter(null), isNull);
+      expect(AttentionInbox().nextAfter('s1'), isNull);
+    });
+
+    test('from nowhere in particular, the first one', () {
+      final inbox = AttentionInbox(items: [itemFor('a'), itemFor('b')]);
+
+      expect(inbox.nextAfter(null)?.session.openId, 'a');
+    });
+
+    test('a pane that is not waiting on anybody starts at the first — which '
+        'is the ordinary case', () {
+      final inbox = AttentionInbox(items: [itemFor('a'), itemFor('b')]);
+
+      expect(inbox.nextAfter('unrelated')?.session.openId, 'a');
+    });
+
+    test('from one, the next', () {
+      final inbox = AttentionInbox(
+        items: [itemFor('a'), itemFor('b'), itemFor('c')],
+      );
+
+      expect(inbox.nextAfter('a')?.session.openId, 'b');
+      expect(inbox.nextAfter('b')?.session.openId, 'c');
+    });
+
+    test('from the last, round to the first', () {
+      final inbox = AttentionInbox(items: [itemFor('a'), itemFor('b')]);
+
+      expect(
+        inbox.nextAfter('b')?.session.openId,
+        'a',
+        reason: 'a list you can walk off the end of is not a cycle',
+      );
+    });
+
+    test('one waiting agent answers itself rather than nothing', () {
+      final inbox = AttentionInbox(items: [itemFor('a')]);
+
+      expect(
+        inbox.nextAfter('a')?.session.openId,
+        'a',
+        reason: 'revealing it again confirms where you are; null would read '
+            'as the chord being broken',
+      );
+    });
+  });
 }

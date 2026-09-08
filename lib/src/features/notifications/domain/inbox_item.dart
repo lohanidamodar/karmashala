@@ -276,6 +276,26 @@ class AttentionInbox {
     this.pending,
   );
 
+  /// The item to jump to next, given the session already on screen.
+  ///
+  /// **One order, not a second one.** This walks [items] — the order the inbox
+  /// itself shows and the status bar counts — rather than ranking by kind, so
+  /// "the next agent that needs you" and "the next row in the inbox" cannot
+  /// come to mean different things.
+  ///
+  /// Wraps, because a list you can walk off the end of stops being a cycle.
+  /// [openId] naming nothing in the inbox — the ordinary case, since most panes
+  /// are not waiting on anybody — starts at the first item rather than
+  /// answering null, which would make the chord do nothing precisely when it
+  /// is most useful.
+  InboxItem? nextAfter(String? openId) {
+    if (items.isEmpty) return null;
+    if (openId == null) return items.first;
+    final at = items.indexWhere((item) => item.session.openId == openId);
+    if (at < 0) return items.first;
+    return items[(at + 1) % items.length];
+  }
+
   /// Indexes one list of items — one pass, and the only place a new inbox is
   /// built, so nothing can construct an inbox over the cap.
   static AttentionInbox _index(List<InboxItem> items) {
