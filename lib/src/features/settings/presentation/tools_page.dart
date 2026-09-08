@@ -29,18 +29,100 @@ import 'settings_section.dart';
 
 /// Settings → Tools: the external apps sessions are handed to, and the MCP
 /// bridge that lets an agent drive Karmashala back.
+///
+/// ## Why the page is banded
+///
+/// Four blocks in a column all looked like one list of unrelated settings, and
+/// the two questions they actually answer are different in kind. "Which
+/// program opens this" is a preference. "Can an agent reach Karmashala at all"
+/// is a measurement (§19), and "may it run JavaScript in my logged-in browser"
+/// is a decision only a person can make. Bands say which is which before the
+/// reader has to work it out from the controls.
+///
+/// The order is a progression: what we hand work to, whether an agent can get
+/// in, what it can call once it is in, and the one thing it cannot do until
+/// you say so.
 class ToolsPage extends StatelessWidget {
   const ToolsPage({super.key});
+
+  /// The band headings, in order — named here so a test can hold the page to
+  /// them without restating the strings and drifting from the page.
+  static const List<String> categories = [
+    'External apps',
+    'Agent access',
+    'Consent',
+  ];
 
   @override
   Widget build(BuildContext context) {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TerminalAppSection(),
-        CodeEditorSection(),
-        McpBridgeSection(),
-        BrowserConsentSection(),
+        ToolsCategory(
+          title: 'External apps',
+          blurb:
+              'The programs Karmashala hands a session or a folder to when you '
+              'open one outside it.',
+          children: [TerminalAppSection(), CodeEditorSection()],
+        ),
+        ToolsCategory(
+          title: 'Agent access',
+          blurb:
+              'Whether an agent pointed at Karmashala can actually reach it — '
+              'measured, not assumed.',
+          children: [McpBridgeSection()],
+        ),
+        ToolsCategory(
+          title: 'Consent',
+          blurb:
+              'What an agent may do only because somebody handed it over, and '
+              'can take back here.',
+          children: [BrowserConsentSection()],
+        ),
+      ],
+    );
+  }
+}
+
+/// One band of the Tools page: a heading, a line saying what the band is
+/// about, and the sections under it.
+///
+/// A heavier heading than [SettingsSection]'s label deliberately — the two are
+/// nested, and a band whose title looked like a section title would read as a
+/// fifth section rather than as the thing three of them sit inside.
+class ToolsCategory extends StatelessWidget {
+  const ToolsCategory({
+    required this.title,
+    required this.blurb,
+    required this.children,
+    super.key,
+  });
+
+  final String title;
+  final String blurb;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(title, style: theme.textTheme.titleSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            blurb,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: SemanticColors.of(context).neutral,
+            ),
+          ),
+        ),
+        const Divider(height: Insets.lg),
+        ...children,
       ],
     );
   }
