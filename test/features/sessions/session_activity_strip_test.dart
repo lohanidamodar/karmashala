@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock.dart';
@@ -19,6 +20,7 @@ import 'package:karmashala/src/features/sessions/domain/session_event_types.dart
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
+import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/activity_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -72,6 +74,7 @@ void main() {
     required Clock clock,
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
+    SessionSurface surface = SessionSurface.pane,
     required AppDatabase db,
   }) {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -87,7 +90,7 @@ void main() {
         useWorktree: false,
         status: rowStatus,
         createdAt: testTime,
-        surface: SessionSurface.pane,
+        surface: surface,
         externalSessionId: 'ext-1',
       ),
     );
@@ -100,7 +103,7 @@ void main() {
             agentId: AgentIds.claudeCode,
             sessionId: id,
             status: status,
-            observedAt: testTime,
+            observedAt: issued,
             source: AgentStatusSource.stateFile,
           ),
         ),
@@ -120,6 +123,7 @@ void main() {
     Clock? clock,
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
+    SessionSurface surface = SessionSurface.pane,
   }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -131,6 +135,7 @@ void main() {
           clock: used,
           status: status,
           rowStatus: rowStatus,
+          surface: surface,
           db: db,
         ),
         child: const MaterialApp(
@@ -206,13 +211,33 @@ void main() {
       ],
     );
 
-    expect(find.text('3 tools running'), findsOneWidget);
+    // Two shell calls and one subagent, counted apart: a collapsed label that
+    // said "3 tools running" hid the one call that is another agent.
+    expect(find.text('2 tools and 1 subagent running'), findsOneWidget);
     // The oldest is the one worth naming — it is what the reader is waiting on.
     expect(find.text('oldest 1m 20s'), findsOneWidget);
     expect(find.text('Bash(flutter test)'), findsNothing);
+    expect(find.byIcon(AppIcons.robot), findsOneWidget);
   });
 
-  testWidgets('a Task call reads as a subagent', (tester) async {
+  testWidgets('several subagents at once say so', (tester) async {
+    await pumpStrip(
+      tester,
+      messages: [
+        call(id: 't1', name: kSubagentToolName, subject: 'review the diff'),
+        call(
+          id: 't2',
+          name: kSubagentToolName,
+          subject: 'survey the API',
+          at: issued.add(const Duration(seconds: 5)),
+        ),
+      ],
+    );
+
+    expect(find.text('2 subagents running'), findsOneWidget);
+  });
+
+  testWidgets('an Agent call reads as a subagent', (tester) async {
     await pumpStrip(
       tester,
       messages: [
@@ -239,17 +264,45 @@ void main() {
     expect(tester.getSize(find.byType(ActivityStrip)), Size.zero);
   });
 
-  // The trap's second half: the session still claims to be working, but the
-  // call is older than anything either CLI can produce.
-  testWidgets('an implausibly old call ages out of the strip', (tester) async {
+  // **The measurement that replaced the thirty-minute ceiling.** The longest
+  // unanswered tool window in the owner's Claude Code store is a `Bash` call at
+  // 514.8 minutes, and the old strip retired it at thirty — while the session's
+  // own badge still said Working. What decides it now is that badge.
+  testWidgets('a call that has run for hours is still shown', (tester) async {
     await pumpStrip(
       tester,
-      clock: FixedClock(issued.add(const Duration(hours: 4, minutes: 12))),
+      clock: FixedClock(issued.add(const Duration(minutes: 514, seconds: 48))),
       messages: [call(id: 't1')],
     );
 
+    expect(find.text('Bash(git status)'), findsOneWidget);
+    expect(find.text('8h 34m'), findsOneWidget);
+  });
+
+  // §19: a reading that could not be taken must never present itself as a
+  // reading of zero. An empty strip beside a badge reading Working is exactly
+  // that, so the one case where we cannot look says so.
+  testWidgets('a working session with no record to read says so', (
+    tester,
+  ) async {
+    await pumpStrip(tester, messages: const [], surface: SessionSurface.external);
+
+    expect(
+      find.text(activityBlindSpotSentence(ActivityBlindSpot.noRecord)),
+      findsOneWidget,
+    );
+    expect(find.byIcon(AppIcons.question), findsOneWidget);
+  });
+
+  testWidgets('...and an idle one with no record stays silent', (tester) async {
+    await pumpStrip(
+      tester,
+      messages: const [],
+      surface: SessionSurface.external,
+      status: AgentActivityStatus.idle,
+    );
+
     expect(tester.getSize(find.byType(ActivityStrip)), Size.zero);
-    expect(find.textContaining('4h'), findsNothing);
   });
 
   testWidgets('the elapsed time advances on its own', (tester) async {
