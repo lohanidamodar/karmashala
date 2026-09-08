@@ -63,12 +63,23 @@ class SessionRegistry {
   SessionRegistry({
     required PtyLauncher launcher,
     this.backlogCapacityBytes = OutputBacklog.defaultCapacityBytes,
+    this.keepEndedSessions = defaultKeepEndedSessions,
     DateTime Function()? clock,
   }) : _launcher = launcher,
        _now = clock ?? DateTime.now;
 
+  /// How many ended sessions are kept around after they finish.
+  ///
+  /// Not zero, because a pane that reconnects a moment after its command ended
+  /// must still be able to read the exit code — dropping it the instant the
+  /// child died would turn a real code into "unknown". Not unbounded either:
+  /// each one holds up to 4 MiB of backlog, and a week of `terminal_run` would
+  /// otherwise accumulate every one of them.
+  static const int defaultKeepEndedSessions = 16;
+
   final PtyLauncher _launcher;
   final int backlogCapacityBytes;
+  final int keepEndedSessions;
   final DateTime Function() _now;
   final _sessions = <String, HostSession>{};
 
@@ -94,8 +105,37 @@ class SessionRegistry {
       backlogCapacityBytes: backlogCapacityBytes,
     );
     _sessions[id] = session;
+    // Pruning happens when a session *ends*, not on a timer and not on a scan:
+    // the end is an event the host already observes.
+    unawaited(session.ended.then((_) => _pruneEnded()));
     return session;
   }
+
+  /// Forgets the oldest ended sessions beyond [keepEndedSessions].
+  ///
+  /// Running sessions are never touched however many there are: the host's job
+  /// is to hold them, and a pane that has not reattached yet is not a session
+  /// nobody wants.
+  void _pruneEnded() {
+    final ended = [
+      for (final session in _sessions.values)
+        if (session.lifecycle.hasEnded) session,
+    ];
+    if (ended.length <= keepEndedSessions) return;
+    ended.sort((a, b) {
+      final left = a.lifecycle.endedAt;
+      final right = b.lifecycle.endedAt;
+      if (left == null || right == null) return 0;
+      return left.compareTo(right);
+    });
+    for (final session in ended.take(ended.length - keepEndedSessions)) {
+      _sessions.remove(session.id);
+    }
+  }
+
+  /// How many sessions have ended and are still readable.
+  int get endedCount =>
+      _sessions.values.where((session) => session.lifecycle.hasEnded).length;
 
   List<SessionSummary> list() {
     final observedAt = _now();

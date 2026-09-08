@@ -206,6 +206,51 @@ void main() {
       expect(env.launcher.handles.single.signals, isEmpty, reason: 'a disconnect kills nothing');
     });
 
+    test('ended sessions are kept, so a late reconnect still reads the code', () async {
+      final launcher = FakePtyLauncher();
+      final registry = SessionRegistry(launcher: launcher, keepEndedSessions: 3);
+      for (var i = 0; i < 3; i++) {
+        registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
+      }
+      for (final handle in launcher.handles) {
+        handle.finish(0);
+      }
+      await Future<void>.delayed(Duration.zero);
+
+      expect(registry.endedCount, 3);
+      expect(registry.find('pane-0')!.lifecycle.exitCode, 0);
+    });
+
+    test('the oldest ended sessions are forgotten beyond the bound', () async {
+      final launcher = FakePtyLauncher();
+      final registry = SessionRegistry(launcher: launcher, keepEndedSessions: 2);
+      for (var i = 0; i < 5; i++) {
+        registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
+      }
+      // Ended in order, so which two survive is decided and not incidental.
+      for (var i = 0; i < 5; i++) {
+        launcher.handles[i].finish(i);
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(registry.endedCount, 2);
+      expect(registry.sessions.map((s) => s.id), ['pane-3', 'pane-4']);
+      expect(registry.find('pane-0'), isNull);
+    });
+
+    test('running sessions are never pruned, however many there are', () async {
+      final launcher = FakePtyLauncher();
+      final registry = SessionRegistry(launcher: launcher, keepEndedSessions: 1);
+      for (var i = 0; i < 6; i++) {
+        registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
+      }
+      launcher.handles.first.finish(0);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(registry.sessions, hasLength(6));
+      expect(registry.endedCount, 1);
+    });
+
     test('close ends the session and drops it', () async {
       final env = build();
       env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));

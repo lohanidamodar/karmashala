@@ -9,6 +9,14 @@ sealed class SessionLifecycle {
 
   bool get hasEnded => this is! SessionRunning;
 
+  /// When the session ended, or null while it is running. The registry sorts
+  /// on this when it decides which ended sessions it can afford to forget.
+  DateTime? get endedAt => switch (this) {
+    SessionExited(:final at) => at,
+    SessionEndedWithoutCode(:final at) => at,
+    _ => null,
+  };
+
   /// Null while running, and null when the code is genuinely unknown.
   int? get exitCode => switch (this) {
     SessionExited(:final code) => code,
