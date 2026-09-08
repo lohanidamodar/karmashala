@@ -89,6 +89,14 @@ void main() {
       expect(text, contains('Nothing starts in it'));
     });
 
+    test('flutter_reload is described as proving only that it landed', () {
+      final text = guide('flutter-app');
+      expect(text, contains('flutter_reload'));
+      expect(text, contains('flutter_logs'));
+      expect(text, contains('lasts only as long as'));
+      expect(text, contains('fullRestart'));
+    });
+
     test('the browser guide states the trust boundary and the gate', () {
       final text = guide('browser');
       expect(text, contains('untrusted-page-content'));

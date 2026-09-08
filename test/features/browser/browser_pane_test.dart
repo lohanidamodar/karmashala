@@ -2,6 +2,7 @@ import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/material.dart';
@@ -104,6 +105,11 @@ void main() {
     expect(find.text('Attach · 9222'), findsOneWidget);
     expect(find.textContaining('--remote-debugging-port=9222'), findsOneWidget);
     expect(find.textContaining('throwaway profile'), findsOneWidget);
+    // Attach-first still works, and since Chrome 136 it takes two switches.
+    // The flag on its own is ignored on the user's normal profile, so a pane
+    // that promises "your window, your logins" for it is promising a session
+    // they will not get.
+    expect(find.textContaining('--user-data-dir'), findsOneWidget);
   });
 
   testWidgets('attaching reports which browser, verbatim', (tester) async {
@@ -307,6 +313,77 @@ void main() {
         );
       },
     );
+
+    group('coming back to Karmashala', () {
+      // The pick sends the user to another window. Landing one has to bring
+      // them back, and a pick that landed nothing must not: a window that
+      // jumps forward on a timeout takes the user off whatever they moved on
+      // to. The seam is `windowRaiseRequestProvider`, the same one a clicked
+      // toast uses — `SystemIntegrationService` listens and calls the injected
+      // `WindowAdapter`, so no test here moves a real window.
+      FakeBrowser picking({Duration? pickTimeout}) =>
+          FakeBrowser(pickTimeout: pickTimeout)
+            ..onEvaluate = (expression) {
+              if (expression.contains('__karmashalaPicker')) return true;
+              if (expression == 'location.href') return 'https://example.com';
+              if (expression == 'document.title') return 'Example';
+              return null;
+            };
+
+      Future<(ProviderContainer, BrowserPaneController, FakeBrowser)> attach({
+        Duration? pickTimeout,
+      }) async {
+        final fake = picking(pickTimeout: pickTimeout);
+        final container = ProviderContainer(
+          overrides: [browserServiceProvider.overrideWithValue(fake.service)],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(
+          browserPaneControllerProvider.notifier,
+        );
+        await controller.connect();
+        expect(container.read(windowRaiseRequestProvider), 0);
+        return (container, controller, fake);
+      }
+
+      test('a pick that lands asks for the window, exactly once', () async {
+        final (container, controller, fake) = await attach();
+        final pending = controller.pickElement();
+        await pumpEventQueue();
+        fake.socket.emitEvent('Runtime.bindingCalled', {
+          'name': '__karmashalaPick',
+          'payload': _pickPayload,
+        });
+        await pending;
+        expect(container.read(browserPaneControllerProvider).capture, isNotNull);
+        expect(container.read(windowRaiseRequestProvider), 1);
+      });
+
+      test('a cancelled pick leaves the window where it was', () async {
+        final (container, controller, _) = await attach();
+        final pending = controller.pickElement();
+        await pumpEventQueue();
+        controller.cancelPick();
+        await pending;
+        expect(
+          container.read(browserPaneControllerProvider).error,
+          contains('cancelled'),
+        );
+        expect(container.read(windowRaiseRequestProvider), 0);
+      });
+
+      test('so does one nobody ever clicked', () async {
+        final (container, controller, _) = await attach(
+          pickTimeout: const Duration(milliseconds: 40),
+        );
+        await controller.pickElement();
+        expect(
+          container.read(browserPaneControllerProvider).error,
+          contains('did not answer in time'),
+        );
+        expect(container.read(windowRaiseRequestProvider), 0);
+      });
+    });
 
     test(
       'a browser that goes away stops being reported as connected',

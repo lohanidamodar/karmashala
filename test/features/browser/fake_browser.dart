@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/browser/data/browser_service.dart';
 import 'package:karmashala/src/features/browser/data/devtools_http_endpoint.dart';
 import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
 import 'package:karmashala/src/features/browser/domain/browser_target.dart';
+import 'package:karmashala/src/features/browser/domain/element_capture.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -65,9 +66,13 @@ Matcher failsWith(BrowserFailure failure) => throwsA(
 /// the real script and not on a stand-in for it: if the wrong script is built,
 /// the fake does not recognise it and the test fails.
 class FakeBrowser {
-  FakeBrowser({this.onEvaluate, List<BrowserTarget>? targets})
-    : endpoint = ScriptedEndpoint(targets: targets ?? [fakeTarget('PAGE-1')]) {
-    service = BrowserService(
+  FakeBrowser({
+    this.onEvaluate,
+    List<BrowserTarget>? targets,
+    Duration? pickTimeout,
+  }) : endpoint = ScriptedEndpoint(targets: targets ?? [fakeTarget('PAGE-1')]) {
+    service = _TimeboxedBrowserService(
+      pickTimeout: pickTimeout,
       runner: FakeCommandRunner(),
       launcher: BrowserLauncher(
         runner: FakeCommandRunner(),
@@ -144,6 +149,25 @@ class FakeBrowser {
     };
     return created;
   }
+}
+
+/// A [BrowserService] whose pick gives up after [pickTimeout] rather than the
+/// two minutes a person gets, so the "nobody clicked" branch is reachable from
+/// a test without a two-minute wait.
+class _TimeboxedBrowserService extends BrowserService {
+  _TimeboxedBrowserService({
+    required this.pickTimeout,
+    required super.runner,
+    super.launcher,
+    super.connectSocket,
+  });
+
+  final Duration? pickTimeout;
+
+  @override
+  Future<ElementCapture> pickElement({
+    Duration timeout = const Duration(minutes: 2),
+  }) => super.pickElement(timeout: pickTimeout ?? timeout);
 }
 
 /// One element in the shape the page's describe() reports.

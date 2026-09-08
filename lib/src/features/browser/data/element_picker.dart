@@ -43,6 +43,18 @@ class ElementPicker {
       );
     }
     await _page.enableDomains();
+    // Raise the tab before arming anything. A pick is a request for a click in
+    // another window, and until now nothing put that window in front of the
+    // user — the pane said "Click an element in the browser…" and then waited
+    // two minutes on a page they might not be looking at.
+    //
+    // `Page.bringToFront` rather than the `/json/activate/<id>` sibling on
+    // `DevToolsHttpEndpoint`: the picker already holds this connection and not
+    // that endpoint, and ordering on one socket is what makes "forward, then
+    // armed" a fact rather than a hope. What it activates is the *target*; how
+    // far its window rises above ours is the platform's decision, not a thing
+    // this client observes.
+    await _page.connection.send('Page.bringToFront');
 
     final completer = Completer<PickOutcome>();
     _pending = completer;

@@ -285,6 +285,23 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
         openWorld: true,
       ),
 
+      // The Flutter app the developer is running. Open-world for the same
+      // reason the device tools are: the app is a process on a desktop, a
+      // phone or a simulator, and not this machine's repositories.
+      'flutter_apps': McpToolAnnotations.read,
+      'flutter_logs': McpToolAnnotations.readOutside,
+      // Reads what the developer points at. It puts the app into Flutter's own
+      // widget-select mode and takes it back out; nothing in the app is
+      // changed by the round trip.
+      'flutter_pick_widget': McpToolAnnotations.readOutside,
+      // Attaching twice to the same app is the same as attaching once.
+      'flutter_attach': McpToolAnnotations(idempotent: true, openWorld: true),
+      // Destructive because `fullRestart` re-runs main() and the app loses the
+      // state it had — no undo — and the annotation describes the worse case: a
+      // client deciding whether to confirm cannot see which argument was
+      // passed. Same rule as `terminal_close`.
+      'flutter_reload': McpToolAnnotations(destructive: true, openWorld: true),
+
       // Verification runs.
       'verification_list': McpToolAnnotations.read,
       'verification_get': McpToolAnnotations.read,

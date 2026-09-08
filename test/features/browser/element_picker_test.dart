@@ -72,6 +72,28 @@ Matcher failsWith(BrowserFailure failure) => throwsA(
 
 void main() {
   group('installing the picker', () {
+    test('brings the page forward before it arms anything', () async {
+      // The pane's own text is "Click an element in the browser…", which is an
+      // instruction to leave the app. A picker that arms a binding and waits
+      // two minutes on a window it never raised is waiting on a click the user
+      // cannot see the target of.
+      final fixture = build();
+      final pending = fixture.picker.pick();
+      await pumpEventQueue();
+
+      final methods = fixture.socket.methods;
+      expect(methods, contains('Page.bringToFront'));
+      expect(
+        methods.indexOf('Page.bringToFront'),
+        lessThan(methods.indexOf('Runtime.addBinding')),
+        reason: 'the window has to be up before the click is waited for',
+      );
+
+      fixture.picker.cancel();
+      await expectLater(pending, failsWith(BrowserFailure.pickCancelled));
+      await fixture.page.close();
+    });
+
     test('adds the binding and injects the script', () async {
       final fixture = build();
       final pending = fixture.picker.pick();

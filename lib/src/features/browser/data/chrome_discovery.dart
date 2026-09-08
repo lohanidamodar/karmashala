@@ -92,11 +92,13 @@ String? locateChromeExecutable({HostKind? host, Map<String, String>? env}) =>
 
 /// The command line used when Karmashala launches its own browser.
 ///
-/// [userDataDir] is **always** a throwaway directory of ours. Two reasons, and
-/// both matter: it keeps us out of the user's real profile, cookies and signed
-/// in sessions; and it stops an already-running Chrome on the default profile
-/// from swallowing the launch and exiting without ever opening the debugging
-/// port.
+/// [userDataDir] is **always** a throwaway directory of ours. Three reasons,
+/// and all matter: it keeps us out of the user's real profile, cookies and
+/// signed in sessions; it stops an already-running Chrome on the default
+/// profile from swallowing the launch and exiting without ever opening the
+/// debugging port; and since Chrome 136 `--remote-debugging-port` is ignored
+/// outright on the default data directory, so without this switch the launch
+/// below would open no port at all.
 List<String> chromeLaunchArguments({
   required int port,
   required String userDataDir,
