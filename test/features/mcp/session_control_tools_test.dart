@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,6 +20,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_wait.dart';
 import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
 import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -63,6 +65,18 @@ void main() {
   /// not how the answer is produced.
   late AgentStatusReport? Function(String sessionId) statusLookup;
 
+  /// The two seams `session_wait` completes on: the status the app already
+  /// publishes, and the caller's bound. Both are events a test fires, so
+  /// nothing here waits on a clock.
+  late StreamController<AgentStatusReport> waitReports;
+  late Completer<void> waitDeadline;
+
+  /// Completes when the tool has actually subscribed. A `tools/call` is an HTTP
+  /// round trip, so a report emitted before the wait is listening is a report
+  /// nobody hears — and waiting on this rather than on a delay is what keeps
+  /// these tests counting work instead of timing it.
+  late Completer<void> waitSubscribed;
+
   AgentStatusReport report(
     String sessionId, {
     required AgentActivityStatus status,
@@ -86,12 +100,21 @@ void main() {
     SessionDao(db).insert(session(id: 's1', title: 'Work'));
 
     statusLookup = (_) => null;
+    waitSubscribed = Completer<void>();
+    waitReports = StreamController<AgentStatusReport>.broadcast(
+      onListen: () {
+        if (!waitSubscribed.isCompleted) waitSubscribed.complete();
+      },
+    );
+    waitDeadline = Completer<void>();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
         sessionStatusLookupProvider.overrideWithValue(
           (sessionId) => statusLookup(sessionId),
         ),
+        sessionStatusStreamProvider.overrideWithValue((_) => waitReports.stream),
+        waitDeadlineProvider.overrideWithValue((_) => waitDeadline.future),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The built-ins plus one agent that declares no way to continue a
         // conversation — the case `open_session` has to refuse rather than
@@ -109,6 +132,7 @@ void main() {
   });
 
   tearDown(() async {
+    await waitReports.close();
     await server.stop();
     container.dispose();
     db.close();
@@ -227,6 +251,181 @@ void main() {
       expect(result.text, contains('nope'));
     });
   });
+
+  /// **The wait, over the endpoint.** These call the tool the way an agent
+  /// does and assert on what it answered, so the states a caller reads are
+  /// pinned here rather than only in the service beneath.
+  group('session_wait', () {
+    test('a session that finished something answers done', () async {
+      attachPane('s1');
+      final pending = callTool('session_wait', {'sessionId': 's1'});
+      await waitSubscribed.future;
+      waitReports.add(_report('s1', status: AgentActivityStatus.working));
+      await pumpEventQueue();
+      waitReports.add(_report('s1', status: AgentActivityStatus.idle));
+
+      final result = await pending;
+      expect(result.isError, isFalse);
+      final body = jsonDecode(result.text) as Map<String, Object?>;
+      expect(body['state'], 'done');
+      expect(body['changed'], isTrue);
+      expect(body['note'], contains('finished something'));
+    });
+
+    test('a session that never moved answers idle, and says so', () async {
+      attachPane('s1');
+      final pending = callTool('session_wait', {'sessionId': 's1'});
+      await waitSubscribed.future;
+      waitReports.add(_report('s1', status: AgentActivityStatus.idle));
+
+      final body =
+          jsonDecode((await pending).text) as Map<String, Object?>;
+      expect(body['state'], 'idle');
+      // The sentence that stops a caller reading "not busy" as "did the work".
+      expect(body['note'], contains('never started'));
+    });
+
+    test('a blocked session names what it is waiting on', () async {
+      attachPane('s1');
+      statusLookup = (_) => _report(
+        's1',
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+        evidence: const ['Allow Bash(git push)?'],
+      );
+      final pending = callTool('session_wait', {'sessionId': 's1'});
+      await waitSubscribed.future;
+      waitReports.add(
+        _report(
+          's1',
+          status: AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.approval,
+          evidence: const ['Allow Bash(git push)?'],
+        ),
+      );
+
+      final body =
+          jsonDecode((await pending).text) as Map<String, Object?>;
+      expect(body['state'], 'blocked');
+      final blockedOn = body['blockedOn']! as Map<String, Object?>;
+      expect(blockedOn['kind'], 'approvalPrompt');
+      expect(blockedOn['text'], 'Allow Bash(git push)?');
+      expect(body['note'], contains('BLOCKED ON A PERSON'));
+    });
+
+    test('a timeout says the session is still running', () async {
+      attachPane('s1');
+      final pending = callTool('session_wait', {'sessionId': 's1'});
+      await waitSubscribed.future;
+      waitReports.add(_report('s1', status: AgentActivityStatus.working));
+      await pumpEventQueue();
+      waitDeadline.complete();
+
+      final body =
+          jsonDecode((await pending).text) as Map<String, Object?>;
+      expect(body['state'], 'timeout');
+      expect(body['note'], contains('STILL RUNNING'));
+      // A bare wait sent nothing, and null says that better than false does.
+      expect(body['inputSent'], isNull);
+      expect(body['note'], contains('This call sent nothing'));
+    });
+
+    test('an ended session never reports a missing code as zero', () async {
+      // No live pane at all: the session is over before the wait begins.
+      final pending = callTool('session_wait', {'sessionId': 's1'});
+      await waitSubscribed.future;
+      waitReports.add(_report('s1', status: AgentActivityStatus.working));
+
+      final body =
+          jsonDecode((await pending).text) as Map<String, Object?>;
+      expect(body['state'], 'ended');
+      expect(body['exitCode'], isNull);
+      expect(body['exitCodeKnown'], isFalse);
+      expect(body['note'], contains('UNKNOWN — not 0'));
+    });
+
+    test('an unknown is never reported as settled', () async {
+      attachPane('s1');
+      final pending = callTool('session_wait', {'sessionId': 's1'});
+      await waitSubscribed.future;
+      waitReports.add(
+        _report(
+          's1',
+          status: AgentActivityStatus.unknown,
+          source: AgentStatusSource.none,
+        ),
+      );
+      await pumpEventQueue();
+      waitDeadline.complete();
+
+      final body =
+          jsonDecode((await pending).text) as Map<String, Object?>;
+      expect(body['state'], 'timeout');
+      expect(body['agentStatus'], 'unknown');
+      expect(body['evidenceSource'], 'none');
+    });
+
+    test('an unknown session id says so rather than waiting', () async {
+      final result = await callTool('session_wait', {'sessionId': 'nope'});
+      expect(result.isError, isTrue);
+      expect(result.text, contains('nope'));
+    });
+  });
+
+  group('session_send with wait', () {
+    test('the blocked check runs before the send, and nothing is sent',
+        () async {
+      final written = attachPane('s1');
+      statusLookup = (_) => _report(
+        's1',
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      );
+
+      final result = await callTool('session_send', {
+        'sessionId': 's1',
+        'text': 'run the tests',
+        'wait': true,
+      });
+
+      expect(result.isError, isTrue);
+      // The whole point of the ordering: the terminal saw nothing.
+      expect(written, isEmpty);
+    });
+
+    test('a timeout after a send says the message went in', () async {
+      attachPane('s1');
+      final pending = callTool('session_send', {
+        'sessionId': 's1',
+        'text': 'run the tests',
+        'wait': true,
+      });
+      await waitSubscribed.future;
+      waitReports.add(_report('s1', status: AgentActivityStatus.working));
+      await pumpEventQueue();
+      waitDeadline.complete();
+
+      final body =
+          jsonDecode((await pending).text) as Map<String, Object?>;
+      expect(body['state'], 'timeout');
+      expect(body['delivered'], isTrue);
+      expect(body['inputSent'], isTrue);
+      // Rule: a timeout does not prove no input was sent.
+      expect(body['note'], contains('ALREADY DELIVERED'));
+    });
+
+    test('without wait the result carries no wait fields', () async {
+      attachPane('s1');
+      final result = await callTool('session_send', {
+        'sessionId': 's1',
+        'text': 'hello',
+      });
+      final body = jsonDecode(result.text) as Map<String, Object?>;
+      expect(body['delivered'], isTrue);
+      expect(body.containsKey('state'), isFalse);
+    });
+  });
+
 
   group('identity', () {
     test('a caller inside a session needs no sessionId', () async {
@@ -913,3 +1112,20 @@ class _DeadRunner implements CommandRunner {
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('no process should be started');
 }
+
+/// A status reading, as the registry would have published one.
+AgentStatusReport _report(
+  String sessionId, {
+  required AgentActivityStatus status,
+  AgentWaitKind waiting = AgentWaitKind.unrecorded,
+  List<String> evidence = const [],
+  AgentStatusSource source = AgentStatusSource.hook,
+}) => AgentStatusReport(
+  agentId: AgentIds.claudeCode,
+  sessionId: sessionId,
+  status: status,
+  observedAt: testTime,
+  source: source,
+  waiting: waiting,
+  evidence: evidence,
+);
