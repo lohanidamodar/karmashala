@@ -196,6 +196,10 @@ class SessionChangedFilesService {
   /// their path and kind are taken: one `Write` record holds the whole file it
   /// wrote, so collecting them all to draw a list would hold the session's
   /// entire output in memory.
+  ///
+  /// **No Claude row is ever `deleted`**, and that is the record's shape: the
+  /// CLI has no delete tool, so a removal goes through `Bash rm` and its
+  /// transcript never names the file. Codex's `apply_patch` does record one.
   Future<(List<SessionChangedFile>?, SessionRecordGap, String)>
   _fromClaudeTranscript(
     Session session,
