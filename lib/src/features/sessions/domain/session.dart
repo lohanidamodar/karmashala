@@ -168,6 +168,24 @@ class Session {
 
   bool get isArchived => archivedAt != null;
 
+  /// Whether this session is **over**: there is nothing left for it to hold or
+  /// to be spoken for.
+  ///
+  /// [SessionStatus.unknown] is deliberately not one of them. It means "we lost
+  /// sight of it", the conversation is still there, and resuming it makes the
+  /// row `running` again — so treating it as an ending would revoke things from
+  /// a session that is very likely still working.
+  ///
+  /// Shared by `McpSessionTokenReaper`, which retires this session's MCP token,
+  /// and by `DeviceClaims`, which drops the devices it was driving. One rule
+  /// read from one place: a session that has stopped being speakable-for has
+  /// also stopped holding phones.
+  bool get isOver =>
+      isArchived ||
+      status == SessionStatus.completed ||
+      status == SessionStatus.failed ||
+      status == SessionStatus.cancelled;
+
   Session copyWith({
     String? id,
     String? repositoryId,

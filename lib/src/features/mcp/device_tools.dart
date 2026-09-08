@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../devices/application/device_claims.dart';
 import '../devices/application/device_fleet.dart';
+import '../devices/domain/device_claim.dart';
 import '../devices/domain/device_driver.dart';
 import '../devices/domain/device_input.dart';
 import '../devices/domain/device_target.dart';
@@ -57,10 +59,22 @@ import '../devices/domain/ui_summary.dart';
 /// workspace and verification tools had each been given a file of their own,
 /// and the device tools' only tie to the server was the container they read
 /// providers from.
+///
+/// ## One task per device
+///
+/// Everything below that changes a device goes through [DeviceClaims] first, so
+/// two agents cannot interleave taps on one phone. Everything that only *reads*
+/// one goes through it too, but only to say the holder is still working — a read
+/// never takes a claim and is never refused. See `device_claim.dart` for why a
+/// device gets a lock when a repository deliberately does not.
 class DeviceControlTools {
-  DeviceControlTools(this._container);
+  DeviceControlTools(this._container, {this.callerSessionId});
 
   final ProviderContainer _container;
+
+  /// Which of our sessions is calling, when one is. Established by the
+  /// transport, never by an argument — see `McpCallerRegistry`.
+  final String? callerSessionId;
 
   static const Set<String> _names = <String>{
     'list_devices',
@@ -167,26 +181,68 @@ class DeviceControlTools {
 
   Future<DeviceFleet> _fleet() => _container.read(deviceFleetProvider)();
 
+  DeviceClaims get _claims => _container.read(deviceClaimsProvider);
+
   /// The driver for this call, or a refusal naming the device.
   Future<DeviceDriver> _driver(String? id, String verb) async =>
       (await _fleet()).driverFor(id, verb: verb);
 
-  /// The driver for this call, having first established that it can do the
-  /// thing about to be asked of it.
+  /// The driver for a call that only **reads** this device.
   ///
-  /// Checked up front rather than left to fail inside the driver, so the
-  /// refusal names the capability that is missing and what still works — the
-  /// driver's own error would name whatever step happened to fall over first.
+  /// The capability is checked up front rather than left to fail inside the
+  /// driver, so the refusal names the capability that is missing and what still
+  /// works — the driver's own error would name whatever step happened to fall
+  /// over first.
+  ///
+  /// A read renews a claim this caller already holds and never takes one, so
+  /// looking at a phone somebody else is driving is always allowed. It has to
+  /// be: an agent that has just been refused needs to be able to see what the
+  /// holder is doing.
   Future<DeviceDriver> _driverThatCan(
     String? id,
     String verb,
     DeviceCapability capability,
   ) async {
     final driver = await _driver(id, verb);
+    _require(driver, verb, capability);
+    _claims.observed(
+      deviceId: driver.target.id,
+      sessionId: callerSessionId,
+    );
+    return driver;
+  }
+
+  /// The driver for a call that will **change** this device, with the device
+  /// taken for this caller — or [DeviceBusy] naming whoever is driving it.
+  ///
+  /// Ordered deliberately. The driver resolves first so the claim is keyed on
+  /// the canonical id: two agents naming one phone two different ways
+  /// (`emulator-5554` and an AVD name, a serial and a udid) must collide rather
+  /// than miss each other. The capability is checked before the claim, so a
+  /// device that cannot do the thing is not held while it is being told so.
+  Future<DeviceDriver> _driverToDrive(
+    String? id,
+    String verb,
+    DeviceCapability capability,
+  ) async {
+    final driver = await _driver(id, verb);
+    _require(driver, verb, capability);
+    _claims.claim(
+      deviceId: driver.target.id,
+      sessionId: callerSessionId,
+      verb: verb,
+    );
+    return driver;
+  }
+
+  void _require(
+    DeviceDriver driver,
+    String verb,
+    DeviceCapability capability,
+  ) {
     if (!driver.can(capability)) {
       throw DeviceRefusal('$verb: ${driver.missingReason(capability)!}');
     }
-    return driver;
   }
 
   // ---------------------------------------------------------------------------
@@ -447,7 +503,7 @@ class DeviceControlTools {
     String? devicePath,
     bool overwrite,
   ) async {
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_file_push',
       DeviceCapability.files,
@@ -540,7 +596,7 @@ class DeviceControlTools {
 
   Future<Object?> _deviceTap(String? id, int? x, int? y) async {
     if (x == null || y == null) throw ArgumentError('x and y are required.');
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_tap',
       DeviceCapability.input,
@@ -560,7 +616,7 @@ class DeviceControlTools {
     bool submit = false,
   }) async {
     if (text == null) throw ArgumentError('text is required.');
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_type',
       DeviceCapability.input,
@@ -603,7 +659,7 @@ class DeviceControlTools {
         '${DeviceKey.values.map((k) => k.name).join(', ')}.',
       );
     }
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_key',
       DeviceCapability.keys,
@@ -680,7 +736,7 @@ class DeviceControlTools {
         'iOS.',
       );
     }
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_install_app',
       DeviceCapability.installApp,
@@ -707,7 +763,7 @@ class DeviceControlTools {
         'iOS bundle id (com.example.App).',
       );
     }
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_launch_app',
       DeviceCapability.appLifecycle,
@@ -732,7 +788,7 @@ class DeviceControlTools {
     if (appId == null || appId.trim().isEmpty) {
       throw ArgumentError('appId is required.');
     }
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_terminate_app',
       DeviceCapability.appLifecycle,
@@ -840,6 +896,15 @@ class DeviceControlTools {
         'note': '${target.label} was already shut down.',
       };
     }
+    // Claimed here rather than at the top of `device_stop_emulator`: an AVD
+    // name is not the id a driver holds, and the two branches above change
+    // nothing — refusing to be told a stopped device is stopped would be a
+    // refusal about somebody else's drive of a device nobody is driving.
+    _claims.claim(
+      deviceId: target.id,
+      sessionId: callerSessionId,
+      verb: 'device_stop_emulator',
+    );
     final outcome = await fleet.powerOff(driver);
     return {
       'serial': target.id,
@@ -1029,16 +1094,12 @@ class DeviceControlTools {
     // Both capabilities, checked before the read: a driver that could describe
     // a screen but not touch it would otherwise dump the tree, pick a target
     // and fail at the last step, having spent the round trip.
-    final driver = await _driverThatCan(
+    final driver = await _driverToDrive(
       id,
       'device_tap_element',
       DeviceCapability.uiTree,
     );
-    if (!driver.can(DeviceCapability.input)) {
-      throw DeviceRefusal(
-        'device_tap_element: ${driver.missingReason(DeviceCapability.input)!}',
-      );
-    }
+    _require(driver, 'device_tap_element', DeviceCapability.input);
     final read = await driver.describeScreen();
     final tree = read.tree;
     final screen = read.screen;

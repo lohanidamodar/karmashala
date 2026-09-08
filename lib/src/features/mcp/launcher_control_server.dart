@@ -1213,7 +1213,10 @@ class LauncherControlServer implements SessionMcp {
       // An attached phone or emulator, through the same AdbService the device
       // pane uses — so an agent and the person beside it drive one device.
       case final String name when DeviceControlTools.handles(name):
-        return DeviceControlTools(_container).call(name, args);
+        return DeviceControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // The terminal layout, through the same controller the tab bar uses,
       // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
