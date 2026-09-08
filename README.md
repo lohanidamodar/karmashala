@@ -67,14 +67,14 @@ comments explain *why* a line is the way it is at the line itself. What is left:
 - [`CLAUDE.md`](CLAUDE.md) — the working contract. Also the reference for the
   Windows-toolchain rule (§17), the opt-in live tests (§18) and system health
   (§19).
-- [`docs/BACKLOG.md`](docs/BACKLOG.md) — the only planning document: what is
-  wanted and what is deliberately refused, open items only, with a ranked index
-  at the top. It also carries the reconciled findings from every competitor
-  survey; the comparison documents below are the evidence behind them, not a
-  second plan.
+- [`docs/BACKLOG.md`](docs/BACKLOG.md) — the only planning document. One list
+  of open items, ordered by what each is worth to somebody building mobile apps
+  with several coding agents running at once. There are no sections by where an
+  idea came from; items cite their own source at a pinned commit, and the
+  comparison documents below are the evidence behind them.
 - [`docs/SETTLED.md`](docs/SETTLED.md) — the closed half: diagnoses worth
-  keeping, what shipped and why it is shaped that way, the two cost
-  measurements, and the limits that are deliberate. Nothing here is wanted; it
+  keeping, what shipped and why it is shaped that way, the cost measurements,
+  the limits that are deliberate, and the refusals. Nothing here is wanted; it
   exists so an answered question is not asked twice.
 - Design notes: [agent status](docs/agent-status-integration.md),
   [inter-agent communication](docs/inter-agent-communication.md),
