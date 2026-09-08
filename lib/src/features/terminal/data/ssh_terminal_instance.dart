@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../../core/logging/app_logger.dart';
-import '../../ssh/data/host_deploy_target.dart';
+import '../../ssh/data/host_session_access.dart';
 import '../../ssh/domain/host_deployment.dart';
 import '../../ssh/domain/ssh_host.dart';
 import '../../ssh/data/ssh_connection.dart';
@@ -61,8 +61,7 @@ class SshTerminalInstance
     this.adoptTerminal,
     String? restoredScrollback,
     TerminalIngestBudget? ingestBudget,
-    this.hostDeployment,
-    this.hostTarget,
+    this.hostAccess,
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('terminal.ssh'),
        _cwd = WorkingDirectoryTracker(workingDirectory, hostname: host.host) {
@@ -129,15 +128,14 @@ class SshTerminalInstance
   final SshHost host;
   final SshConnection connection;
 
-  /// The last reading about this machine's session host. Null means nobody has
-  /// looked, which is not the same as a negative answer, and the pane takes the
-  /// tmux path without claiming the host is unavailable.
-  final HostDeployment? hostDeployment;
-
-  /// How to open the exec channel the host protocol runs on. Injected so the
-  /// pane is testable without SSH, and so the local stage can supply a socket
-  /// instead of a channel without touching this class.
-  final HostDeployTarget? hostTarget;
+  /// This machine's session host: the reading, the channel, and the event that
+  /// says the connection came back. Null means nobody has looked, which is not
+  /// the same as a negative answer — the pane takes the tmux path without
+  /// claiming the host is unavailable.
+  ///
+  /// It is a [HostSessionAccess] rather than an SSH type so the local stage can
+  /// supply a socket-backed one without touching this class.
+  final HostSessionAccess? hostAccess;
 
   final AppLogger _logger;
   final WorkingDirectoryTracker _cwd;
@@ -323,9 +321,19 @@ class SshTerminalInstance
   /// would leave a user wondering why their command blocks stopped working, and
   /// the answer — "this host runs musl" — is one they can act on.
   Future<bool> _startViaHost() async {
-    final deployment = hostDeployment;
-    final target = hostTarget;
-    if (deployment == null || target == null) return false;
+    final access = hostAccess;
+    if (access == null) return false;
+    final HostDeployment deployment;
+    try {
+      deployment = await access.deployment();
+    } on Object catch (e) {
+      _emit(
+        '\x1b[33m[could not ask ${host.address} about its session host ($e). '
+        'Falling back to tmux.]\x1b[0m\r\n',
+      );
+      return false;
+    }
+    if (_disposed) return true;
     if (deployment.fallsBackToTmux) {
       _emit(
         '\x1b[33m[session host unavailable: ${deployment.reason} '
@@ -337,11 +345,42 @@ class SshTerminalInstance
     final remotePath = deployment.remotePath;
     if (remotePath == null) return false;
 
+    // A host we had to start ourselves is a host that was not running: after a
+    // reboot, or after somebody killed it. Its sessions are gone and saying so
+    // is the honest version of having no supervisor.
+    if (deployment.restartedByUs) {
+      _emit(
+        '\x1b[33m[the session host on ${host.address} was not running and has '
+        'been restarted; any sessions it held before are gone]\x1b[0m\r\n',
+      );
+    }
+
+    if (!await _dialHost(access, deployment, remotePath)) return false;
+
+    // Re-dial on the pool re-establishing the connection, not on a timer: the
+    // app already observes that transition and a poll would be a second,
+    // slower, wronger answer to a question already answered.
+    _reconnects ??= access.reconnected.listen((_) => unawaited(_reconnectToHost(access)));
+    return true;
+  }
+
+  StreamSubscription<void>? _reconnects;
+
+  /// Opens a link and attaches this pane's session to it. Returns false when
+  /// the host would not have us, having said why.
+  Future<bool> _dialHost(
+    HostSessionAccess access,
+    HostDeployment deployment,
+    String remotePath,
+  ) async {
     final width = terminal.viewWidth > 0 ? terminal.viewWidth : 80;
     final height = terminal.viewHeight > 0 ? terminal.viewHeight : 24;
+    // Read before the new link exists: a fresh link's own offset is zero, and
+    // asking it where to resume from would replay the session from the start.
+    final resumeFrom = _lastHostOffset;
     try {
       final link = await HostPaneLink.open(
-        await target.exec('$remotePath attach'),
+        await access.exec('$remotePath attach'),
         clientId: 'pane-$id',
       );
       if (_disposed) {
@@ -353,7 +392,7 @@ class SshTerminalInstance
       // The session id is the pane's own, stable across reattach, so the same
       // pane always finds the same session. `attach` first: on a reconnect the
       // session is already there and asking to open it would be refused.
-      final attachment = await _attachOrOpen(link, width, height);
+      final attachment = await _attachOrOpen(link, width, height, resumeFrom);
       _emit(
         '\x1b[90m[session host ${deployment.hostVersion ?? 'unknown'} on '
         '${host.address}: ${attachment.sessionId}, '
@@ -377,12 +416,52 @@ class SshTerminalInstance
     }
   }
 
+  /// The connection came back. Attach from the last offset this pane rendered,
+  /// so the gap is filled exactly once and nothing is shown twice.
+  Future<void> _reconnectToHost(HostSessionAccess access) async {
+    if (_disposed || _exited || _link != null) return;
+    final resumeFrom = _lastHostOffset;
+    _emit(
+      '\x1b[90m[reconnected to ${host.address}; resuming from byte '
+      '$resumeFrom]\x1b[0m\r\n',
+    );
+    final HostDeployment deployment;
+    try {
+      deployment = await access.deployment();
+    } on Object catch (e) {
+      _emit('\r\n\x1b[33m[the session host on ${host.address} is not answering ($e)]\x1b[0m\r\n');
+      return;
+    }
+    final remotePath = deployment.remotePath;
+    if (_disposed || deployment.fallsBackToTmux || remotePath == null) {
+      _emit(
+        '\r\n\x1b[33m[the session host is no longer available: '
+        '${deployment.reason}]\x1b[0m\r\n',
+      );
+      return;
+    }
+    if (deployment.restartedByUs) {
+      _emit(
+        '\r\n\x1b[33m[the session host on ${host.address} was restarted while this '
+        'pane was away; its earlier sessions are gone]\x1b[0m\r\n',
+      );
+    }
+    await _hostOutput?.cancel();
+    await _hostNotices?.cancel();
+    await _dialHost(access, deployment, remotePath);
+  }
+
   /// Reattach from the last offset this pane rendered; open only when there is
   /// no such session yet.
-  Future<HostAttachment> _attachOrOpen(HostPaneLink link, int width, int height) async {
+  Future<HostAttachment> _attachOrOpen(
+    HostPaneLink link,
+    int width,
+    int height,
+    int sinceOffset,
+  ) async {
     final sessionId = _hostSessionId();
     try {
-      return await link.attachSession(sessionId: sessionId, sinceOffset: _hostOffset);
+      return await link.attachSession(sessionId: sessionId, sinceOffset: sinceOffset);
     } on HostLinkException {
       // No such session: this is the pane's first run on this host.
       final launch = agentLaunch;
@@ -409,13 +488,16 @@ class SshTerminalInstance
     return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
   }
 
-  /// What the pane has actually rendered. Survives a link being replaced, so a
-  /// reconnect neither repeats a byte nor drops one.
-  int get _hostOffset => _link?.lastOffset ?? _lastHostOffset;
+  /// What the pane has actually rendered, carried across a link being replaced
+  /// so a reconnect neither repeats a byte nor drops one. Updated from the link
+  /// whenever one goes away.
   int _lastHostOffset = 0;
 
   void _onHostChannelClosed() {
     _lastHostOffset = _link?.lastOffset ?? _lastHostOffset;
+    // Dropped, not closed: the pane keeps the offset and waits for the pool's
+    // reconnect event to dial again.
+    _link = null;
     if (_disposed || _exited) return;
     // The link went away, not the session. Saying so is the difference between
     // this and the pane simply dying.
@@ -467,6 +549,7 @@ class SshTerminalInstance
     _liveness.dispose();
     _cwd.dispose();
 
+    unawaited(_reconnects?.cancel());
     unawaited(_hostOutput?.cancel());
     unawaited(_hostNotices?.cancel());
     unawaited(_stdoutSubscription?.cancel());

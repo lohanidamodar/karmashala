@@ -1,8 +1,6 @@
-import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
+import 'package:karmashala/src/features/ssh/data/host_session_access.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock.dart';
@@ -13,109 +11,9 @@ import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:karmashala/src/features/terminal/data/ssh_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:xterm2/xterm.dart';
+
+import 'fake_host_access.dart';
 import 'package:karmashala_host/protocol.dart';
-
-/// A target whose exec channel is a host that answers. `run` and `upload` are
-/// never reached by the pane — it only ever opens a channel.
-class PaneTarget implements HostDeployTarget {
-  final channels = <ScriptedHostChannel>[];
-  final execs = <String>[];
-
-  @override
-  String get address => 'fake.example';
-
-  @override
-  Future<RemoteRun> run(String command) async => const RemoteRun(0, '', '');
-
-  @override
-  Future<void> upload(String remotePath, Uint8List bytes) async {}
-
-  @override
-  Future<RemoteChannel> exec(String command) async {
-    execs.add(command);
-    final channel = ScriptedHostChannel();
-    channels.add(channel);
-    return channel;
-  }
-}
-
-class ScriptedHostChannel implements RemoteChannel {
-  final _toApp = StreamController<Uint8List>.broadcast();
-  final _parser = FrameParser();
-  final received = <HostMessage>[];
-  var closed = false;
-
-  @override
-  Stream<Uint8List> get stdout => _toApp.stream;
-
-  @override
-  Stream<Uint8List> get stderr => const Stream.empty();
-
-  @override
-  void add(Uint8List bytes) {
-    for (final frame in _parser.add(bytes)) {
-      final message = decodeMessage(frame);
-      received.add(message);
-      switch (message) {
-        case HelloMessage(:final requestId):
-          _push(
-            WelcomeMessage(
-              requestId: requestId,
-              protocolVersion: kProtocolVersion,
-              hostVersion: '0.1.0',
-              operatingSystem: 'linux',
-              architecture: 'x64',
-              ptyLibrary: 'libc.so.6',
-              pid: 11,
-              startedAt: DateTime.utc(2026),
-              observedAt: DateTime.utc(2026),
-            ),
-          );
-        case AttachMessage(:final requestId, :final sessionId):
-          // No such session yet — the pane must fall through to `open`.
-          _push(
-            ErrorMessage(requestId, ProtocolErrorCode.unknownSession, 'no session "$sessionId"'),
-          );
-        case OpenMessage(:final requestId, :final sessionId):
-          _push(
-            AttachedMessage(
-              requestId: requestId,
-              sessionRef: 1,
-              sessionId: sessionId,
-              columns: 80,
-              rows: 24,
-              replayFromOffset: 0,
-              droppedBytes: 0,
-              totalBytes: 0,
-              holdsWriteToken: true,
-              writeHolder: 'pane-p1',
-              observedAt: DateTime.utc(2026),
-            ),
-          );
-        default:
-          break;
-      }
-    }
-  }
-
-  void _push(HostMessage message) {
-    if (!_toApp.isClosed) _toApp.add(message.toFrame().encode());
-  }
-
-  void pushOutput(int offset, String text) =>
-      _push(OutputMessage(1, offset, Uint8List.fromList(text.codeUnits)));
-
-  @override
-  Future<int> get exitCode async => 0;
-
-  @override
-  Future<void> close() async {
-    closed = true;
-    if (!_toApp.isClosed) await _toApp.close();
-  }
-
-  T only<T extends HostMessage>() => received.whereType<T>().single;
-}
 
 final _host = SshHost(
   id: 'h1',
@@ -127,19 +25,20 @@ final _host = SshHost(
   createdAt: DateTime.utc(2026),
 );
 
-HostDeployment ready() => HostDeployment(
-  status: HostDeploymentStatus.ready,
-  observedAt: DateTime.utc(2026, 9, 8, 14, 0),
-  reason: 'answering',
-  remotePath: r'$HOME/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
-  hostVersion: '0.1.0',
-  protocolVersion: kProtocolVersion,
-);
+HostDeployment ready({bool restarted = false}) => readyDeployment(restarted: restarted);
 
-SshTerminalInstance paneWith({
-  HostDeployment? deployment,
-  HostDeployTarget? target,
-}) => SshTerminalInstance(
+/// A pane with a viewport wide enough that a notice is not wrapped by the
+/// terminal — an assertion about a sentence should not depend on where 80
+/// columns happened to fall.
+SshTerminalInstance paneWith({HostSessionAccess? access}) =>
+    _sized(_paneWith(access: access));
+
+SshTerminalInstance _sized(SshTerminalInstance pane) {
+  pane.terminal.resize(200, 60);
+  return pane;
+}
+
+SshTerminalInstance _paneWith({HostSessionAccess? access}) => SshTerminalInstance(
   id: 'p1',
   title: 'box',
   profileId: 'default',
@@ -155,8 +54,7 @@ SshTerminalInstance paneWith({
       clock: const SystemClock(),
     ),
   ),
-  hostDeployment: deployment,
-  hostTarget: target,
+  hostAccess: access,
 );
 
 /// The pane's whole visible buffer as plain text. terminalTailLines reads only
@@ -183,12 +81,12 @@ class _UnusedDatabase implements AppDatabase {
 
 void main() {
   test('a ready host is used, and the pane opens its own session id', () async {
-    final target = PaneTarget();
-    final pane = paneWith(deployment: ready(), target: target);
+    final access = PaneAccess(ready());
+    final pane = paneWith(access: access);
     await settle();
 
-    expect(target.execs.single, contains('karmashala_host-0.1.0-linux-x64 attach'));
-    final channel = target.channels.single;
+    expect(access.execs.single, contains('karmashala_host-0.1.0-linux-x64 attach'));
+    final channel = access.channels.single;
     expect(channel.only<HelloMessage>().clientId, 'pane-p1');
     // Attach before open: on a reconnect the session is already there.
     expect(channel.only<AttachMessage>().sessionId, 'karmashala_h1_p1');
@@ -199,11 +97,11 @@ void main() {
   });
 
   test("the child's bytes reach the terminal, sequences and all", () async {
-    final target = PaneTarget();
-    final pane = paneWith(deployment: ready(), target: target);
+    final access = PaneAccess(ready());
+    final pane = paneWith(access: access);
     await settle();
 
-    target.channels.single.pushOutput(0, 'hello from the host\r\n');
+    access.channels.single.pushOutput(0, 'hello from the host\r\n');
     await settle();
 
     expect(nonBlankLineCount(pane.terminal), greaterThan(0));
@@ -212,31 +110,31 @@ void main() {
   });
 
   test('typing goes out as input, not down the tmux channel', () async {
-    final target = PaneTarget();
-    final pane = paneWith(deployment: ready(), target: target);
+    final access = PaneAccess(ready());
+    final pane = paneWith(access: access);
     await settle();
 
     pane.terminal.onOutput!('ls\n');
     await settle();
 
     expect(
-      String.fromCharCodes(target.channels.single.only<InputMessage>().bytes),
+      String.fromCharCodes(access.channels.single.only<InputMessage>().bytes),
       'ls\n',
     );
     pane.dispose();
   });
 
   test('closing the pane disconnects and never asks the host to close', () async {
-    final target = PaneTarget();
-    final pane = paneWith(deployment: ready(), target: target);
+    final access = PaneAccess(ready());
+    final pane = paneWith(access: access);
     await settle();
 
     pane.dispose();
     await settle();
 
-    expect(target.channels.single.closed, isTrue);
+    expect(access.channels.single.closed, isTrue);
     expect(
-      target.channels.single.received.whereType<CloseMessage>(),
+      access.channels.single.received.whereType<CloseMessage>(),
       isEmpty,
       reason: 'a closed pane must leave the session running',
     );
@@ -244,60 +142,56 @@ void main() {
 
   group('falling back', () {
     test('an unsupported machine says so in the pane, in words', () async {
-      final target = PaneTarget();
-      final pane = paneWith(
-        deployment: HostDeployment(
+      final access = PaneAccess(
+        HostDeployment(
           status: HostDeploymentStatus.unsupportedPlatform,
           observedAt: DateTime.utc(2026),
           reason: 'fake.example runs musl libc.',
         ),
-        target: target,
       );
+      final pane = paneWith(access: access);
       await settle();
 
       final text = screenText(pane.terminal);
       expect(text, contains('session host unavailable'));
       expect(text, contains('musl'));
       expect(text, contains('tmux'));
-      expect(target.execs, isEmpty, reason: 'nothing is attempted on the host');
+      expect(access.execs, isEmpty, reason: 'nothing is attempted on the host');
       pane.dispose();
     });
 
     test('a host that cannot be started says which, and still falls back', () async {
-      final target = PaneTarget();
-      final pane = paneWith(
-        deployment: HostDeployment(
+      final access = PaneAccess(
+        HostDeployment(
           status: HostDeploymentStatus.cannotStart,
           observedAt: DateTime.utc(2026),
           reason: 'the host was installed and started but never answered `hello`.',
         ),
-        target: target,
       );
+      final pane = paneWith(access: access);
       await settle();
 
       expect(screenText(pane.terminal), contains('never answered'));
-      expect(target.execs, isEmpty);
+      expect(access.execs, isEmpty);
       pane.dispose();
     });
 
     test('no reading at all is silent: unknown is not a negative answer', () async {
-      final target = PaneTarget();
-      final pane = paneWith(target: target);
+      final pane = paneWith();
       await settle();
 
       expect(screenText(pane.terminal), isNot(contains('session host unavailable')));
-      expect(target.execs, isEmpty);
       pane.dispose();
     });
   });
 
   group('ending', () {
     test('an exit code is shown as itself', () async {
-      final target = PaneTarget();
-      final pane = paneWith(deployment: ready(), target: target);
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
       await settle();
 
-      target.channels.single._push(
+      access.channels.single.push(
         ExitedMessage(
           sessionRef: 1,
           sessionId: 'karmashala_h1_p1',
@@ -314,11 +208,11 @@ void main() {
     });
 
     test('an unknown exit code is never rendered as a zero', () async {
-      final target = PaneTarget();
-      final pane = paneWith(deployment: ready(), target: target);
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
       await settle();
 
-      target.channels.single._push(
+      access.channels.single.push(
         ExitedMessage(
           sessionRef: 1,
           sessionId: 'karmashala_h1_p1',
@@ -336,14 +230,35 @@ void main() {
       pane.dispose();
     });
 
-    test('a dropped link says the session survives, and where it will resume', () async {
-      final target = PaneTarget();
-      final pane = paneWith(deployment: ready(), target: target);
-      await settle();
-      target.channels.single.pushOutput(0, 'abcdef');
+    test('a host that had to be restarted says its sessions are gone', () async {
+      final access = PaneAccess(ready(restarted: true));
+      final pane = paneWith(access: access);
       await settle();
 
-      await target.channels.single.close();
+      final text = screenText(pane.terminal);
+      expect(text, contains('was not running and has been restarted'));
+      expect(text, contains('sessions it held before are gone'));
+      expect(access.execs, hasLength(1), reason: 'and it still runs the pane');
+      pane.dispose();
+    });
+
+    test('a host that was already running says nothing about restarts', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+
+      expect(screenText(pane.terminal), isNot(contains('restarted')));
+      pane.dispose();
+    });
+
+    test('a dropped link says the session survives, and where it will resume', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+      access.channels.single.pushOutput(0, 'abcdef');
+      await settle();
+
+      await access.channels.single.close();
       await settle();
 
       final text = screenText(pane.terminal);
@@ -351,5 +266,116 @@ void main() {
       expect(text, contains('byte 6'));
       pane.dispose();
     });
+  });
+
+  group('reconnecting', () {
+    test('the pool coming back re-dials and attaches from the last byte seen', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+      access.channels.single.pushOutput(0, 'before the drop');
+      await settle();
+      await access.channels.single.close();
+      await settle();
+
+      access.reconnect();
+      await settle();
+
+      expect(access.channels, hasLength(2), reason: 'a second link, not a second pane');
+      final resumed = access.channels.last;
+      // Attach, never open: the session is already there.
+      expect(resumed.received.whereType<OpenMessage>(), isEmpty);
+      expect(resumed.only<AttachMessage>().sinceOffset, 15);
+      expect(resumed.only<AttachMessage>().sessionId, 'karmashala_h1_p1');
+      expect(screenText(pane.terminal), contains('resuming from byte 15'));
+      pane.dispose();
+    });
+
+    test('nothing re-dials while the link is still up', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+
+      access.reconnect();
+      await settle();
+
+      expect(access.channels, hasLength(1));
+      pane.dispose();
+    });
+
+    test('a host restarted while the pane was away says the sessions are gone', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+      access.channels.single.pushOutput(0, 'abc');
+      await settle();
+      await access.channels.single.close();
+      await settle();
+
+      access.reconnect(nowReporting: ready(restarted: true));
+      await settle();
+
+      expect(
+        screenText(pane.terminal),
+        contains('was restarted while this pane was away'),
+      );
+      pane.dispose();
+    });
+
+    test('a machine that came back without a usable host falls back, in words', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+      await access.channels.single.close();
+      await settle();
+
+      access.reconnect(
+        nowReporting: HostDeployment(
+          status: HostDeploymentStatus.cannotStart,
+          observedAt: DateTime.utc(2026),
+          reason: 'the host would not start after the reboot.',
+        ),
+      );
+      await settle();
+
+      expect(screenText(pane.terminal), contains('no longer available'));
+      expect(screenText(pane.terminal), contains('would not start after the reboot'));
+      expect(access.channels, hasLength(1), reason: 'nothing was dialled');
+      pane.dispose();
+    });
+
+    test('a pane that ended does not re-dial when the connection returns', () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+      access.channels.single.push(
+        ExitedMessage(
+          sessionRef: 1,
+          sessionId: 'karmashala_h1_p1',
+          exitCode: 0,
+          reason: 'exited 0',
+          observedAt: DateTime.utc(2026),
+        ),
+      );
+      await settle();
+
+      access.reconnect();
+      await settle();
+
+      expect(access.channels, hasLength(1));
+      pane.dispose();
+    });
+  });
+
+  test('a reading that cannot be taken falls back rather than claiming anything', () async {
+    final access = PaneAccess(ready())..deploymentError = StateError('the pool is gone');
+    final pane = paneWith(access: access);
+    await settle();
+
+    final text = screenText(pane.terminal);
+    expect(text, contains('could not ask ${_host.address} about its session host'));
+    expect(text, contains('tmux'));
+    expect(access.execs, isEmpty);
+    pane.dispose();
   });
 }
