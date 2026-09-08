@@ -471,3 +471,53 @@ String describeAge(DateTime at, {DateTime? now}) {
   if (elapsed.inHours < 24) return '${elapsed.inHours}h ago';
   return '${elapsed.inDays}d ago';
 }
+
+/// Says that this pane is being recorded, and stops it.
+///
+/// The same shape and slot as [PaneStatusBar] — a strip above the grid — and
+/// for the reason that bar exists: a pane whose state is not what it looks like
+/// says so in words rather than leaving the user to infer it.
+class PaneRecordingBanner extends StatelessWidget {
+  const PaneRecordingBanner({required this.onStop, super.key});
+
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      container: true,
+      label: 'Recording this pane. Stop recording.',
+      child: Material(
+        color: theme.colorScheme.errorContainer,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.xs, 2),
+          child: Row(
+            children: [
+              Icon(
+                AppIcons.circle,
+                size: Chrome.iconAction,
+                color: theme.colorScheme.error,
+              ),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Text(
+                  'Recording — everything on this screen is being captured',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: onStop,
+                child: const Text('Stop recording'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

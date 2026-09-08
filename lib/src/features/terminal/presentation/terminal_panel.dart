@@ -19,6 +19,7 @@ import '../../todos/presentation/todo_edit_dialog.dart';
 import '../application/terminal_capture.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
+import '../application/terminal_recording_controller.dart';
 import '../application/terminal_scroll.dart';
 import '../application/terminal_theme_controller.dart';
 import '../application/terminal_search_controller.dart';
@@ -43,6 +44,7 @@ import 'empty_pane_region.dart';
 import 'pane_group_strip.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
+import 'recording_saved_dialog.dart';
 import 'terminal_pane_view.dart';
 import 'terminal_search_bar.dart';
 import '../application/terminal_profiles.dart';
@@ -625,6 +627,24 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 );
               },
             ),
+            // A recording is a long-lived side effect, so it is on screen for
+            // as long as it runs and can be stopped from where it is said. In
+            // its own `Consumer` watching one bool, which moves when a
+            // recording starts or stops and at no other time — never while
+            // somebody types. It carries no elapsed clock and no byte count on
+            // purpose: one would need a ticker and the other would rebuild per
+            // chunk of output.
+            Consumer(
+              builder: (context, ref, _) {
+                final recording = ref.watch(
+                  terminalRecordingProvider.select((s) => s.isRecording(paneId)),
+                );
+                if (!recording) return const SizedBox.shrink();
+                return PaneRecordingBanner(
+                  onStop: () => _stopRecording(context, paneId),
+                );
+              },
+            ),
             Expanded(
               // In its own `Consumer`, watching *which object* is behind this
               // pane, for the same reason the status bar above has one: the
@@ -706,6 +726,12 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   }
 
 
+  /// Ends the recording on [paneId] and offers what can be made from it.
+  Future<void> _stopRecording(BuildContext context, String paneId) async {
+    await ref.read(terminalRecordingProvider.notifier).stop(paneId);
+    if (context.mounted) await showRecordingSavedDialog(context);
+  }
+
   Future<void> _terminalMenu(
     BuildContext context,
     Offset position,
@@ -726,6 +752,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         : session.terminal.buffer.getText(selection);
     final capturable = selected != null && selected.trim().isNotEmpty;
     final notesEnabled = ref.read(notesEnabledProvider);
+    final recordingThis = ref.read(terminalRecordingProvider).isRecording(paneId);
     final choice = await showMenu<String>(
       context: context,
       // The same one-pixel anchor `ContextMenuRegion._show` uses, so a menu
@@ -781,6 +808,14 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         // split buttons divide the whole workspace group now — a strip, a
         // surface and a status bar of its own — which is a different act, and
         // one row of chrome cannot honestly stand for both.
+        // Recording is a pane's own verb, on the pane's own menu, beside the
+        // other one — the same placement rule the split rows below state.
+        DesktopMenuItem(
+          value: 'record',
+          label: recordingThis ? 'Stop recording' : 'Record this pane',
+          icon: recordingThis ? AppIcons.stopCircle : AppIcons.circle,
+        ),
+        const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'split-pane-right',
           label: 'Split pane right',
@@ -821,6 +856,12 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       ],
     );
     switch (choice) {
+      case 'record':
+        if (recordingThis) {
+          if (context.mounted) await _stopRecording(context, paneId);
+        } else {
+          ref.read(terminalRecordingProvider.notifier).start(paneId);
+        }
       case 'copy':
         if (selected != null) {
           await Clipboard.setData(ClipboardData(text: selected));

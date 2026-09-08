@@ -119,8 +119,8 @@ void main() {
     tester,
   ) async {
     // The route to a pane's verbs in an ordinary split: right-click the
-    // terminal. Copy, Paste, Find…, the two pane splits, then the pane pair,
-    // then End session.
+    // terminal. Copy, Paste, Find…, Record this pane, the two pane splits,
+    // then the pane pair, then End session.
     await pump(tester);
     terminals().openInSlot(
       terminals().splitPane(SplitAxis.horizontal)!,
@@ -131,8 +131,8 @@ void main() {
     await tester.tapAt(const Offset(200, 400), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    expectHouseRows(tester, rows: 8);
-    expect(find.byType(DesktopMenuDivider), findsNWidgets(3));
+    expectHouseRows(tester, rows: 9);
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(4));
     expect(find.text('Move pane to a new tab'), findsOneWidget);
     expect(find.text('Close pane'), findsOneWidget);
   });
@@ -155,9 +155,9 @@ void main() {
     await tester.tapAt(const Offset(400, 400), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    // The six of the no-selection menu, plus Create todo and Create note.
-    expectHouseRows(tester, rows: 8);
-    expect(find.byType(DesktopMenuDivider), findsNWidgets(3));
+    // The seven of the no-selection menu, plus Create todo and Create note.
+    expectHouseRows(tester, rows: 9);
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(4));
   });
 
   testWidgets('the terminal body menu draws house rows, with the chords it '
@@ -167,9 +167,9 @@ void main() {
     await tester.tapAt(const Offset(400, 400), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    // Copy, Paste, Find…, the two pane splits, End session — the split-only
-    // pair is absent because there is no split to collapse.
-    expectHouseRows(tester, rows: 6);
+    // Copy, Paste, Find…, Record this pane, the two pane splits, End session —
+    // the split-only pair is absent because there is no split to collapse.
+    expectHouseRows(tester, rows: 7);
     expect(find.text('Ctrl+Shift+C'), findsOneWidget);
     expect(find.text('Ctrl+Shift+V'), findsOneWidget);
     expect(
