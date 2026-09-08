@@ -29,6 +29,7 @@ import 'device_files_dialog.dart';
 import 'device_section_header.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
+import 'device_logcat_section.dart';
 import 'device_recording_banner.dart';
 import 'device_stream_status.dart';
 import '../application/simulator_live_view.dart';
@@ -989,6 +990,9 @@ class _DevicePaneState extends ConsumerState<DevicePane>
             clipboard: _clipboard,
             recordable: _session != null,
           ),
+          // [paneDevice], not [live]: reading a log is not driving, so it
+          // follows the selection and works with no live view up at all.
+          DeviceLogcatSection(device: paneDevice),
         ],
       ],
     );
