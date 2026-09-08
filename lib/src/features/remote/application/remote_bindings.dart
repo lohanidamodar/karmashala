@@ -321,9 +321,13 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         agentId,
         installation?.executable.environmentId,
       ),
+      // The project's environment, as the Explorer card badges it. A session
+      // has none of its own, and one with no project has nothing to badge.
       environmentBadge: () {
-        final envDao = ref.read(executionEnvironmentDaoProvider);
-        final env = envDao.getById(owner?.environmentId ?? session.environmentId);
+        if (owner == null) return null;
+        final env = ref
+            .read(executionEnvironmentDaoProvider)
+            .getById(owner.environmentId);
         return env == null ? null : environmentBadge(env);
       }(),
     );
