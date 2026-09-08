@@ -15,6 +15,8 @@ import 'status_bar.dart';
 import 'workbench.dart';
 
 import '../../core/database/database_providers.dart';
+import '../../features/automations/application/automation_runner.dart';
+import '../../features/automations/application/automation_scheduler.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
@@ -101,6 +103,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     // and nothing waits for it, so the only way its exit code becomes a
     // recorded verdict is an observer that is actually listening.
     ref.watch(worktreeSetupExitObserverProvider);
+    // And the same again for scheduled automations, twice over: a scheduler
+    // nobody watches arms no timer, and an observer nobody watches never turns
+    // a finished session into the run's verdict — both silently. Neither polls;
+    // the scheduler arms one timer for the next occurrence and re-arms it.
+    ref.watch(automationSchedulerProvider);
+    ref.watch(automationRunObserverProvider);
     // Focus mode: the workbench takes the window. The provider is the old
     // "maximize the dock" flag, which is the same intent now that the dock is
     // gone — everything but the work gets out of the way.

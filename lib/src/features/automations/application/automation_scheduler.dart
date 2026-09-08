@@ -10,6 +10,7 @@ import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
 import '../domain/missed_fires.dart';
 import 'automation_providers.dart';
+import 'automation_runner.dart';
 import 'automation_timer.dart';
 
 /// What happens when an occurrence comes due.
@@ -43,12 +44,9 @@ abstract interface class AutomationFiring {
   });
 }
 
-/// Supplied by `automation_runner.dart`, which lands with the run itself.
-/// Overridden by tests with a recorder.
+/// The real one is [AutomationRunner]. Overridden by tests with a recorder.
 final automationFiringProvider = Provider<AutomationFiring>(
-  (ref) => throw UnimplementedError(
-    'automationFiringProvider is supplied by automation_runner.dart',
-  ),
+  AutomationRunner.new,
 );
 
 /// Longest a single timer is armed for, after which it re-arms.
