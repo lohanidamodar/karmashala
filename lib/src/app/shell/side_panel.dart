@@ -23,6 +23,7 @@ import '../../features/media/presentation/session_media_panel.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/notes/presentation/notes_view.dart';
+import '../../features/sessions/presentation/agent_plan_panel.dart';
 import '../../features/todos/presentation/todos_view.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -57,6 +58,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.flutterApp => AppIcons.play,
     SidePanelSurface.media => AppIcons.image,
     SidePanelSurface.repository => AppIcons.bookBookmark,
+    SidePanelSurface.plan => AppIcons.clipboardText,
     SidePanelSurface.todos => AppIcons.listChecks,
     SidePanelSurface.notes => AppIcons.note,
     SidePanelSurface.logs => AppIcons.article,
@@ -317,6 +319,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.media => const SessionMediaPanel(),
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
+    SidePanelSurface.plan => const AgentPlanPanel(),
     SidePanelSurface.todos => const TodosView(),
     SidePanelSurface.notes => const NotesView(),
     SidePanelSurface.logs => const LogsPanel(),

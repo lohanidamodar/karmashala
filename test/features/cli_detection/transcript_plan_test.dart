@@ -171,7 +171,7 @@ void main() {
 
     final plans = [
       for (final message in await readCliTranscript(path, AgentIds.claudeCode))
-        if (message.tool?.plan case final plan?) plan,
+        ?message.tool?.plan,
     ];
     expect(plans, hasLength(2));
     expect(plans.first.doneCount, 0);
