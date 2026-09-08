@@ -5,6 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
+import '../../git/presentation/worktree_setup_page.dart';
 import '../../notes/presentation/notes_settings_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
 import '../../snippets/presentation/snippets_settings_page.dart';
@@ -168,6 +169,7 @@ class _SectionContent extends StatelessWidget {
     // Agents are listed under the environment they are installed in: the same
     // CLI on the Windows host and on a build box are two independent
     // installations.
+    SettingsSectionId.worktrees => const WorktreeSetupPage(),
     SettingsSectionId.environments => const EnvironmentsSection(),
     SettingsSectionId.environmentVariables => const EnvSecretsPage(),
     SettingsSectionId.ssh => const Column(

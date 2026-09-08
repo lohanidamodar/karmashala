@@ -454,3 +454,63 @@ class WorktreeSetupReport {
     );
   }
 }
+
+/// Splits a typed command line into argv.
+///
+/// **Deliberately the smallest parser that can be described in a sentence**,
+/// because it is the only one between what the user types and the argv that is
+/// stored: whitespace separates, `'…'` and `"…"` group, and *nothing else
+/// happens*. In particular there is no backslash escape — a Windows path is
+/// full of backslashes, and treating them as escapes is the classic way to turn
+/// `C:\src\app` into `C:srcapp` — and no expansion of variables, globs or
+/// substitutions. Those belong to the shell the pane opens, which will see the
+/// argument exactly as it was typed.
+///
+/// It runs **once**, when the setting is saved, and the result is shown back
+/// before it is stored: what is kept is argv, and no second parser ever gets
+/// between the setting and the shell. See [WorktreeSetup.command].
+List<String> splitCommandLine(String line) {
+  final parts = <String>[];
+  final buffer = StringBuffer();
+  var quote = '';
+  var open = false;
+  for (final rune in line.trim().runes) {
+    final char = String.fromCharCode(rune);
+    if (quote.isNotEmpty) {
+      if (char == quote) {
+        quote = '';
+      } else {
+        buffer.write(char);
+      }
+      continue;
+    }
+    if (char == "'" || char == '"') {
+      quote = char;
+      // An empty quoted argument is still an argument: `--flag ""`.
+      open = true;
+      continue;
+    }
+    if (char.trim().isEmpty) {
+      if (buffer.isNotEmpty || open) parts.add(buffer.toString());
+      buffer.clear();
+      open = false;
+      continue;
+    }
+    buffer.write(char);
+  }
+  if (buffer.isNotEmpty || open) parts.add(buffer.toString());
+  return parts;
+}
+
+/// [command] written back as one line, for a field the user edits.
+///
+/// The inverse of [splitCommandLine] for everything [splitCommandLine] can
+/// produce: an argument holding whitespace or a quote is wrapped, so a
+/// round-trip through the editor never silently splits an argument in two.
+String joinCommandLine(List<String> command) => command
+    .map((part) {
+      if (part.isEmpty) return '""';
+      if (!RegExp(r'''[\s'"]''').hasMatch(part)) return part;
+      return part.contains('"') ? "'$part'" : '"$part"';
+    })
+    .join(' ');

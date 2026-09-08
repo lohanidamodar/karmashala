@@ -80,6 +80,20 @@ enum SettingsSectionId {
     'accept edits',
     'sessions',
   ]),
+  // Beside Environments rather than under Agents: what it configures is a
+  // *checkout*, and where a setup command runs is decided by that checkout's
+  // environment.
+  worktrees('Worktrees', AppIcons.gitBranch, [
+    'worktree',
+    'worktrees',
+    'setup',
+    'post create',
+    'pub get',
+    'copy',
+    'gitignored',
+    'dart_tool',
+    'node_modules',
+  ]),
   environments('Environments', AppIcons.terminalWindow, [
     'wsl',
     'windows',

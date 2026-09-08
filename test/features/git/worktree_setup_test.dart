@@ -248,4 +248,64 @@ void main() {
       expect(back.command, isNull);
     });
   });
+
+  group('a typed command line becomes argv, once, visibly', () {
+    test('plain words', () {
+      expect(splitCommandLine('flutter pub get'), ['flutter', 'pub', 'get']);
+      expect(splitCommandLine('  make   setup  '), ['make', 'setup']);
+      expect(splitCommandLine(''), isEmpty);
+      expect(splitCommandLine('   '), isEmpty);
+    });
+
+    test('quotes group, and the quotes themselves are dropped', () {
+      expect(splitCommandLine('pwsh -Command "Write-Host a b"'), [
+        'pwsh',
+        '-Command',
+        'Write-Host a b',
+      ]);
+      expect(splitCommandLine("sh -c 'echo a b'"), ['sh', '-c', 'echo a b']);
+      expect(splitCommandLine('--message="two words"'), [
+        '--message=two words',
+      ]);
+    });
+
+    test('an empty quoted argument is still an argument', () {
+      expect(splitCommandLine('--flag ""'), ['--flag', '']);
+    });
+
+    // The classic bug this parser is written to avoid: a Windows path is full
+    // of backslashes, and treating them as escapes eats them.
+    test('a backslash is a character, never an escape', () {
+      expect(splitCommandLine(r'C:\src\app\tool.exe --out C:\build'), [
+        r'C:\src\app\tool.exe',
+        '--out',
+        r'C:\build',
+      ]);
+    });
+
+    test('nothing is expanded — that belongs to the shell the pane opens', () {
+      expect(splitCommandLine(r'echo $HOME %PATH% *.dart'), [
+        'echo',
+        r'$HOME',
+        '%PATH%',
+        '*.dart',
+      ]);
+    });
+
+    test('a round-trip through the editor never splits an argument', () {
+      for (final argv in [
+        ['flutter', 'pub', 'get'],
+        ['pwsh', '-Command', 'Write-Host two words'],
+        [r'C:\src\app\tool.exe', '--out', r'C:\build'],
+        ['sh', '-c', "echo 'quoted inside'"],
+        ['--flag', ''],
+      ]) {
+        expect(
+          splitCommandLine(joinCommandLine(argv)),
+          argv,
+          reason: joinCommandLine(argv),
+        );
+      }
+    });
+  });
 }

@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../data/worktree_setup_dao.dart';
+import '../domain/worktree_setup.dart';
 import 'git_providers.dart';
 
 final worktreeSetupDaoProvider = Provider<WorktreeSetupDao>(
@@ -61,3 +63,44 @@ final worktreeSetupExitObserverProvider =
     NotifierProvider<WorktreeSetupExitObserver, void>(
       WorktreeSetupExitObserver.new,
     );
+
+/// Every configured checkout, by repository id.
+///
+/// Watches the revision rather than the table: a setup that ran while the page
+/// is open — from a session launch, or from an agent calling `worktree_create`
+/// — has to appear without the page being reopened, and without anything asking
+/// again on a timer.
+final worktreeSetupsProvider = Provider<Map<String, WorktreeSetup>>((ref) {
+  ref.watch(worktreeSetupRevisionProvider);
+  return ref.watch(worktreeSetupDaoProvider).getAll();
+});
+
+/// The recorded verdicts for one checkout's worktrees, newest first.
+final worktreeSetupRunsProvider =
+    Provider.family<List<WorktreeSetupReport>, String>((ref, repositoryId) {
+      ref.watch(worktreeSetupRevisionProvider);
+      return ref.watch(worktreeSetupDaoProvider).runsFor(repositoryId);
+    });
+
+/// Writes the setting, and tells everything reading it.
+class WorktreeSetupController {
+  WorktreeSetupController(this._ref);
+
+  final Ref _ref;
+
+  void save(String repositoryId, WorktreeSetup setup) {
+    _ref
+        .read(worktreeSetupDaoProvider)
+        .save(repositoryId, setup, _ref.read(clockProvider).nowUtc());
+    _ref.read(worktreeSetupRevisionProvider.notifier).bump();
+  }
+
+  void clear(String repositoryId) {
+    _ref.read(worktreeSetupDaoProvider).clear(repositoryId);
+    _ref.read(worktreeSetupRevisionProvider.notifier).bump();
+  }
+}
+
+final worktreeSetupControllerProvider = Provider<WorktreeSetupController>(
+  WorktreeSetupController.new,
+);
