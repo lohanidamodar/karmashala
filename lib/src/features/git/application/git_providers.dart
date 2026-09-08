@@ -5,11 +5,9 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/domain/agent_pane_launch.dart';
+import '../../terminal/application/visible_command_pane.dart';
 import 'worktree_service.dart';
 import 'worktree_setup_providers.dart';
 import 'worktree_setup_service.dart';
@@ -78,29 +76,17 @@ final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
       ref.read(worktreeSetupDaoProvider).record(report);
       ref.read(worktreeSetupRevisionProvider.notifier).bump();
     },
-    openPane: (command) {
-      final environment = command.environment;
-      final opened = ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .openAgentTab(
-            AgentPaneLaunch(
-              agentId: kWorktreeSetupAgentId,
-              executable: command.argv.first,
-              arguments: command.argv.skip(1).toList(),
-              workingDirectory: command.worktree.path,
-              // Both of these are how the pane reaches the *repository's* own
-              // environment rather than this host: the launch carries the
-              // destination, and the terminal picks the transport from it.
-              wslDistribution: environment.kind == EnvironmentKind.wsl
-                  ? environment.wslDistribution
-                  : null,
-              sshHostId: environment.kind == EnvironmentKind.ssh
-                  ? environment.sshHostId
-                  : null,
-              title: command.title,
-            ),
-          );
-      return opened.paneId;
-    },
+    // The pane itself is opened by the one route both this and the Flutter
+    // loop take. See `visibleCommandOpenerProvider` for why it was extracted
+    // rather than copied.
+    openPane: (command) => ref.read(visibleCommandOpenerProvider)(
+      VisibleCommand(
+        agentId: kWorktreeSetupAgentId,
+        argv: command.argv,
+        directory: command.worktree,
+        environment: command.environment,
+        title: command.title,
+      ),
+    ),
   );
 });
