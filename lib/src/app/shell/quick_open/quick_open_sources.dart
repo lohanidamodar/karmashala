@@ -912,6 +912,33 @@ class QuickOpenSources {
           weight: _snippetWeight,
           onSelect: () => dismiss(() => _insert(snippet, target)),
         ),
+      // **Filtering is right; silence about it is not.** The rule above is
+      // deliberate, but a library of shell-tagged snippets in a pane that fits
+      // none of them produced an empty palette and no reason — which reads as
+      // "my snippet is gone". Two sentences, because a pane whose shell is
+      // unknown is a different fact from one that runs a different shell.
+      if (fitting.length < all.length)
+        QuickOpenItem(
+          id: 'snippet/hidden',
+          group: QuickOpenGroup.snippets,
+          title: switch (all.length - fitting.length) {
+            1 => '1 snippet is for another shell',
+            final n => '$n snippets are for another shell',
+          },
+          subtitle: target?.shellId == null
+              ? "This pane's shell is unknown, so only untagged snippets are "
+                    'offered'
+              : 'This pane runs ${target!.shellId}',
+          icon: AppIcons.bookBookmark,
+          keywords: const ['snippet', 'hidden', 'shell', 'other'],
+          weight: _snippetAdminWeight,
+          onSelect: () => dismiss(
+            () => SnippetLibraryDialog.show(
+              context,
+              suggestedShellId: target?.shellId,
+            ),
+          ),
+        ),
       QuickOpenItem(
         id: 'snippet/new',
         group: QuickOpenGroup.snippets,

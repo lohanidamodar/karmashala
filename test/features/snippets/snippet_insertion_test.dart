@@ -115,6 +115,64 @@ void main() {
     });
   });
 
+  /// **An agent pane knows which shell it is in; it just was not asked.**
+  ///
+  /// A pane's shell comes from `terminalProfileFromId`, which resolves
+  /// `powerShell`, `commandPrompt`, `posix:` and `wsl:` — and an agent pane's
+  /// id is `agent:claudeCode`. So the shell read as *unknown*, and an unknown
+  /// shell is offered only the untagged snippets. On the owner's machine that
+  /// meant the palette offered nothing at all from either pane he actually
+  /// works in, while his one snippet — tagged `wsl` — sat in the library.
+  ///
+  /// The fact was already there: `AgentPaneLaunch.wslDistribution` is stored on
+  /// the launch, one field from the null it was producing. Only the WSL case is
+  /// inferred, because it is the only one the launch actually states — an agent
+  /// started natively is not running a shell at all, and guessing one would be
+  /// the confident wrong answer §19 exists to prevent.
+  group('an agent pane in WSL is a WSL pane', () {
+    test('its shell comes from the distribution its launch names', () {
+      final opened = controller().openAgentTab(
+        const AgentPaneLaunch(
+          agentId: 'claudeCode',
+          executable: '/home/me/.local/bin/claude',
+          wslDistribution: 'archlinux',
+        ),
+      );
+
+      final target = snippetTargetFor(
+        controller(),
+        container.read(terminalSessionsControllerProvider),
+        opened.paneId,
+      );
+
+      expect(target, isNotNull);
+      expect(target!.shell, TerminalShell.wsl);
+      expect(
+        snippet(shellId: 'wsl').fitsShell(target.shellId),
+        isTrue,
+        reason: 'the snippet the owner actually had, in the pane he was in',
+      );
+    });
+
+    test('an agent with no distribution still reports an unknown shell', () {
+      final opened = controller().openAgentTab(
+        const AgentPaneLaunch(agentId: 'codex', executable: 'codex.exe'),
+      );
+
+      final target = snippetTargetFor(
+        controller(),
+        container.read(terminalSessionsControllerProvider),
+        opened.paneId,
+      );
+
+      expect(
+        target!.shell,
+        isNull,
+        reason: 'a native agent runs no shell; inventing one would be a guess',
+      );
+    });
+  });
+
   group('an agent pane is somebody\'s live session', () {
     test('a submitting snippet is typed there and NOT submitted', () {
       final opened = controller().openAgentTab(

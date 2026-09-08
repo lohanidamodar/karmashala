@@ -1,6 +1,7 @@
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../domain/command_snippet.dart';
+import '../../terminal/domain/agent_pane_launch.dart';
 
 /// The pane a snippet would go into, and everything that decides what happens
 /// when it gets there.
@@ -80,11 +81,26 @@ SnippetTarget? snippetTargetFor(
   return SnippetTarget(
     paneId: paneId,
     title: instance.title,
-    shell: terminalProfileFromId(instance.profileId)?.shell,
+    // An agent pane's id is `agent:claudeCode`, which resolves to no profile
+    // and so read as an *unknown* shell — and an unknown shell is offered only
+    // the untagged snippets. The launch already says which distribution it is
+    // in, one field away, so ask it rather than answering null.
+    shell:
+        terminalProfileFromId(instance.profileId)?.shell ??
+        _shellOfLaunch(instance.agentLaunch),
     isAgentPane: instance.agentLaunch != null,
     live: state.livenessOf(paneId).isLive,
   );
 }
+
+/// The shell an agent's launch *states*, or null when it states none.
+///
+/// Only the WSL case is inferred, because it is the only one the launch
+/// actually carries. An agent started natively is not running a shell at all,
+/// and an SSH one names a host rather than a shell — guessing either would be
+/// the confident wrong answer, which is worse than an unknown.
+TerminalShell? _shellOfLaunch(AgentPaneLaunch? launch) =>
+    launch?.wslDistribution == null ? null : TerminalShell.wsl;
 
 /// What happened when a snippet was handed to a pane.
 enum SnippetOutcome {

@@ -204,6 +204,41 @@ void main() {
       );
     });
 
+    /// **Filtering is right; being silent about it is not.**
+    ///
+    /// The rule above is deliberate — a WSL one-liner is not a smaller version
+    /// of a PowerShell one — but on the owner's machine it produced a palette
+    /// with nothing in it and no reason given, because his one snippet was
+    /// tagged `wsl` and every pane he works in is an agent pane. "My snippet
+    /// is not there" is what that looks like from outside.
+    ///
+    /// So the omission gets a line. It says which pane you are in when that is
+    /// known, and says the shell is unknown when it is not — two different
+    /// facts, never collapsed into one sentence.
+    testWidgets('a hidden snippet is accounted for, not just absent', (
+      tester,
+    ) async {
+      await open(tester, snippets: const [testsSnippet, wslOnly]);
+
+      await type(tester, r'$');
+
+      expect(find.text('Tail the log'), findsNothing, reason: 'still hidden');
+      expect(
+        find.textContaining('for another shell'),
+        findsOneWidget,
+        reason: 'the palette says one was held back, and why',
+      );
+    });
+
+    testWidgets('and nothing is said when nothing was hidden', (tester) async {
+      await open(tester, snippets: const [testsSnippet]);
+
+      await type(tester, r'$');
+
+      expect(find.text('Run the tests'), findsOneWidget);
+      expect(find.textContaining('for another shell'), findsNothing);
+    });
+
     testWidgets('and a WSL pane on the same machine sees the other two', (
       tester,
     ) async {
