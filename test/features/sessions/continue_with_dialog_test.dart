@@ -494,6 +494,12 @@ void main() {
       find.textContaining('Prompting CLI forks this itself'),
       findsOneWidget,
     );
+    // And which of the two forks it is: a new process, not this session
+    // branching in place.
+    expect(
+      find.textContaining('not this session branching in place'),
+      findsOneWidget,
+    );
     expect(find.text('Fork'), findsOneWidget);
   });
 
