@@ -304,8 +304,10 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
               if (_preview != null) ...[
                 const SizedBox(height: Insets.md),
                 Text(
-                  'This is exactly what the next agent receives, as its first '
-                  'message:',
+                  // Not "as its first message": for an agent that takes a
+                  // system-prompt file the packet arrives as one, and the
+                  // opening message is the instruction alone.
+                  'This is exactly what the next agent is told:',
                   style: theme.textTheme.labelSmall,
                 ),
                 const SizedBox(height: Insets.xs),

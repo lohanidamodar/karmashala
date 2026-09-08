@@ -516,10 +516,17 @@ class SessionHandoffService {
     );
 
     final rendered = packet.render();
+    // Which channel the packet is aimed at, decided by the target's own
+    // declared capability. Whether it *lands* there is the launcher's answer —
+    // it writes the file and logs the outcome — and the two lines together are
+    // what say why a packet was typed at a given CLI.
+    final support = descriptor?.launch.systemPromptFile ??
+        const AgentSystemPromptFileSupport.unchecked();
     _log.info(
       '${isFork ? 'Fork' : 'Handoff'} from $sessionId to '
       '${context.installation.agentId} ($targetName): '
       'packet=${rendered.length} chars '
+      'delivery=${support.isSupported ? support.token : support.wasChecked ? 'typed — $targetName has no system-prompt file option' : 'typed — $targetName has never been checked for one'} '
       'worktree=${intoNewWorktree ? 'new' : 'shared'} '
       'mode=${carried.override?.canonical ?? 'default'}',
     );
@@ -534,7 +541,12 @@ class SessionHandoffService {
                 ? _forkTitle(sessionId, session.title)
                 : '${session.title} · $targetName',
             purpose: SessionPurpose.newSession,
-            firstMessage: rendered,
+            // The whole packet when it has to be typed, and the instruction
+            // alone when the rest of it travels as a file: the packet's own
+            // last section is that instruction, so repeating it would spend
+            // the receiving agent's first turn reading it twice.
+            firstMessage: support.isSupported ? instruction.trim() : rendered,
+            systemPromptFile: support.isSupported ? rendered : null,
             parentSessionId: sessionId,
             parentLink: link,
             useWorktree: intoNewWorktree,

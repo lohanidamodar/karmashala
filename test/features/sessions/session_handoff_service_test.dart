@@ -19,6 +19,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/application/handoff_packet_files.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
@@ -31,6 +32,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
@@ -115,6 +117,11 @@ const _forker = AgentDescriptor(
     interactiveResume: AgentResume.flag('--resume'),
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
     prompt: AgentPromptSupport.positional(),
+    // Checked, and it has none — the sentence the diagnostics must print
+    // instead of typing a packet in silence.
+    systemPromptFile: AgentSystemPromptFileSupport.absent(
+      evidence: 'test fixture — not a real CLI',
+    ),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
       extraArguments: ['--fork-session'],
@@ -123,6 +130,27 @@ const _forker = AgentDescriptor(
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.forker',
+    format: AgentStoreFormat.claudeJsonl,
+  ),
+);
+
+/// Takes a file of extra system prompt — the shape Claude Code has, and the
+/// one that decides whether a packet is handed over or typed.
+const _briefed = AgentDescriptor(
+  id: 'briefed',
+  displayName: 'Briefed CLI',
+  binaries: AgentBinaries(windows: ['briefed'], posix: ['briefed']),
+  launch: AgentLaunchSpec(
+    permission: _forkerModes,
+    sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
+    prompt: AgentPromptSupport.positional(),
+    systemPromptFile: AgentSystemPromptFileSupport.append(
+      '--append-system-prompt-file',
+      evidence: 'test fixture — not a real CLI',
+    ),
+  ),
+  store: AgentStoreSpec(
+    homeDirectoryName: '.briefed',
     format: AgentStoreFormat.claudeJsonl,
   ),
 );
@@ -176,6 +204,7 @@ Harness harness({
   ),
   String gitStatus = ' M lib/a.dart\nA  lib/b.dart\n?? notes.txt\n',
   Set<String> missingDirectories = const {},
+  Directory? packetDirectory,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -184,6 +213,12 @@ Harness harness({
   AgentInstallationDao(db)
     ..insert(agentInstallation(id: 'a1', agentId: 'forker'))
     ..insert(agentInstallation(id: 'a2', agentId: 'mute'));
+  // Only when a test asks: the target list is asserted by name elsewhere.
+  if (packetDirectory != null) {
+    AgentInstallationDao(db).insert(
+      agentInstallation(id: 'a3', agentId: 'briefed'),
+    );
+  }
 
   final git = FakeCommandRunner(
     responder: (request) => CommandResult(
@@ -199,8 +234,12 @@ Harness harness({
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
-        const AgentRegistry([_forker, _mute]),
+        const AgentRegistry([_forker, _mute, _briefed]),
       ),
+      if (packetDirectory != null)
+        handoffPacketFilesProvider.overrideWith(
+          (ref) async => HandoffPacketFiles(packetDirectory),
+        ),
       settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: git),
@@ -1131,4 +1170,151 @@ void main() {
     expect(size, isNotNull);
     expect(int.parse(size!.group(1)!), greaterThan(0));
   });
+
+  group('how the packet is delivered', () {
+    Directory tempDirectory() {
+      final dir = Directory.systemTemp.createTempSync('handoff-packets');
+      addTearDown(() {
+        if (dir.existsSync()) dir.deleteSync(recursive: true);
+      });
+      return dir;
+    }
+
+    test('is handed over as a file when the target takes one', () async {
+      final dir = tempDirectory();
+      final h = harness(
+        transcriptPath: writeTranscript([('user', 'hello')]),
+        packetDirectory: dir,
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a3',
+            instruction: 'Take it from here.',
+          );
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      final flag = launch.arguments.indexOf('--append-system-prompt-file');
+      expect(flag, isNot(-1), reason: 'the flag has to reach the CLI');
+      final packetPath = launch.arguments[flag + 1];
+      // Named by the receiving session, which is the only id that can be swept
+      // against a live row later.
+      expect(
+        packetPath,
+        endsWith(HandoffPacketFiles.fileNameFor(result.session.id)),
+      );
+      expect(
+        File(packetPath).readAsStringSync(),
+        contains('Handed off from Forker CLI'),
+      );
+      // And the id we correlate on is *assigned*, not recovered afterwards:
+      // it is the same id the file is named by.
+      expect(
+        launch.arguments,
+        containsAllInOrder(['--session-id', result.session.id]),
+      );
+
+      // And the opening prompt is the instruction alone. This is the whole
+      // point: a packet typed into the pane is what Claude Code collapses into
+      // `[Pasted text #N]`.
+      expect(launch.arguments.last, endsWith('Take it from here.'));
+      expect(launch.arguments.last, isNot(contains('Handed off from')));
+    });
+
+    test('stays in the opening prompt for a target that takes none', () async {
+      final dir = tempDirectory();
+      final h = harness(
+        transcriptPath: writeTranscript([('user', 'hello')]),
+        packetDirectory: dir,
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take it from here.',
+          );
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, isNot(contains('--append-system-prompt-file')));
+      expect(launch.arguments.last, contains('Handed off from Forker CLI'));
+      expect(dir.listSync(), isEmpty);
+    });
+
+    test('says in the diagnostics which channel each CLI got', () async {
+      final dir = tempDirectory();
+      final h = harness(
+        transcriptPath: writeTranscript([('user', 'hello')]),
+        packetDirectory: dir,
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final previous = Diagnostics.instance;
+      final records = <LogRecord>[];
+      Diagnostics.instance = Diagnostics(echoToConsole: false);
+      AppLogger.initialize(onRecord: records.add);
+      addTearDown(() {
+        Diagnostics.instance = previous;
+        AppLogger.initialize();
+      });
+
+      final service = h.container.read(sessionHandoffServiceProvider);
+      await service.handoffTo(
+        sessionId: 'src',
+        targetInstallationId: 'a1',
+        instruction: 'Take it from here.',
+      );
+      await service.handoffTo(
+        sessionId: 'src',
+        targetInstallationId: 'a3',
+        instruction: 'Take it from here.',
+      );
+
+      final lines = records.map((r) => r.message).join('\n');
+      // The agent that cannot be handed a file says so, with the reason —
+      // never silently typed.
+      expect(lines, contains('typed — Forker CLI has no system-prompt file'));
+      expect(lines, contains('delivery=--append-system-prompt-file'));
+      expect(lines, contains('handed over as --append-system-prompt-file'));
+    });
+
+    test('retires the packet of a session that is no longer running', () async {
+      final dir = tempDirectory();
+      final files = HandoffPacketFiles(dir);
+      files.write(sessionId: 'gone', packet: 'old', liveSessionIds: const {});
+      expect(dir.listSync(), hasLength(1));
+
+      final kept = files.write(
+        sessionId: 'fresh',
+        packet: 'new',
+        liveSessionIds: const {'still-running'},
+      );
+      expect(kept, isNotNull);
+      // `gone` is neither the session being written nor a running one.
+      expect(
+        dir.listSync().map((e) => p.basename(e.path)),
+        [HandoffPacketFiles.fileNameFor('fresh')],
+      );
+      expect(files.retire('fresh'), isTrue);
+      expect(files.retire('fresh'), isFalse);
+    });
+  });
+
 }

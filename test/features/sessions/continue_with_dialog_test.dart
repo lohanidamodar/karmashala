@@ -441,7 +441,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining('This is exactly what the next agent receives'),
+      find.textContaining('This is exactly what the next agent is told'),
       findsOneWidget,
     );
     expect(service!.packetInstruction, 'Finish the parser.');
