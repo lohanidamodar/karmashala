@@ -74,9 +74,24 @@ class TransportFramingException extends TransportException {
 
 /// Capped exponential backoff with jitter, so a relay coming back up does not
 /// meet every host at once.
+///
+/// **One second, doubling, to a thirty-second ceiling.** The floor used to be
+/// 250 ms, which on an idle phone whose desktop is refusing — a relay that is
+/// up and answering, with no host at the rendezvous — is four dials and four
+/// log lines a second, for as long as the app is open, to learn the same
+/// refusal each time. A retry rate is a claim about how fast the far end can
+/// change, and nothing on the other side of one refusal changes in 250 ms.
+///
+/// The ceiling is what keeps it a *reconnect* rather than a give-up: half a
+/// minute is the longest a desktop that has come back stays unnoticed, and the
+/// three things that mean the wait is now pointless — a link that worked, the
+/// app coming back to the foreground, and the user asking — all reset it, so
+/// the ceiling is never what the user is actually waiting out. A path with a
+/// different physics says so by passing its own: a desktop on the same table
+/// is dialled on the 200 ms schedule `_localBackoff` names.
 class Backoff {
   Backoff({
-    this.initial = const Duration(milliseconds: 250),
+    this.initial = const Duration(seconds: 1),
     this.maximum = const Duration(seconds: 30),
     this.multiplier = 2.0,
     this.jitter = 0.2,

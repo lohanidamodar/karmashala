@@ -866,6 +866,13 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<void> reconnect() async {
     await _ready;
     if (_closed || _record == null) return;
+    // **The schedule, not just the wait in front of it.** Every caller of this
+    // is a reason to believe the world changed — the app came back to the
+    // foreground, the user asked, a desktop was picked — and a schedule that
+    // kept its attempt count answered the very next failure with the delay it
+    // had climbed to while nobody was watching. Skipping one wait and then
+    // waiting sixteen seconds is not what "reconnect now" means.
+    _resetBackoff();
     final waiter = _backoffWaiter;
     if (waiter != null && !waiter.isCompleted) {
       // Skip the wait; the loop dials immediately.
@@ -880,7 +887,6 @@ class RemoteCompanionGateway implements CompanionGateway {
     // re-dialled — including one still dialling, which abandons the
     // candidates it has left rather than making the user wait them out.
     if (_link.value != CompanionLinkState.connected) {
-      _resetBackoff();
       _dialOvertaken = true;
       _declareDead();
       return;
