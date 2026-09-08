@@ -11,6 +11,7 @@ import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -18,6 +19,7 @@ import '../../terminal/data/terminal_grid_text.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../data/cli_session_mutator.dart';
 import 'codex_app_server_providers.dart';
+import '../data/conversation_index_dao.dart';
 import '../data/conversation_store_index.dart';
 import '../data/store_scan_worker.dart';
 import '../data/imported_session_dao.dart';
@@ -26,6 +28,8 @@ import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'antigravity_attribution_service.dart';
 import 'cli_detection_service.dart';
+import 'conversation_index_backfill.dart';
+import 'conversation_indexer.dart';
 import 'detected_project_merger.dart';
 import 'launched_session_attribution_service.dart';
 import 'project_import_service.dart';
@@ -39,6 +43,35 @@ final cliDetectionServiceProvider = Provider<CliDetectionService>(
 
 final importedSessionDaoProvider = Provider<ImportedSessionDao>(
   (ref) => ImportedSessionDao(ref.watch(databaseProvider)),
+);
+
+final conversationIndexDaoProvider = Provider<ConversationIndexDao>(
+  (ref) => ConversationIndexDao(ref.watch(databaseProvider)),
+);
+
+/// Keeps the conversation index in step with the transcripts on disk.
+///
+/// Nothing starts it. It is queued by the two triggers the app already fires —
+/// `SessionAdoptionService` adopting a session and `SessionTitleSyncService`
+/// renaming one — and drained by [cliStoreSyncRunnerProvider] on the store slot
+/// that is already open. See the service's own doc for why there is no timer.
+final conversationIndexerProvider = Provider<ConversationIndexer>(
+  (ref) => ConversationIndexer(
+    dao: ref.watch(conversationIndexDaoProvider),
+    clock: ref.watch(clockProvider),
+  ),
+);
+
+/// The one-off catch-up over the conversations the workspace already had.
+final conversationIndexBackfillProvider = Provider<ConversationIndexBackfill>(
+  (ref) => ConversationIndexBackfill(
+    db: ref.watch(databaseProvider),
+    dao: ref.watch(conversationIndexDaoProvider),
+    indexer: ref.watch(conversationIndexerProvider),
+    clock: ref.watch(clockProvider),
+    locateTranscripts: () =>
+        ref.read(sessionTranscriptLocatorProvider).index(),
+  ),
 );
 
 final projectImportServiceProvider = Provider<ProjectImportService>(
@@ -106,10 +139,20 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
       return terminalTailLines(instance.terminal, lines: lines);
     },
     scanStores: () => scanCliStores(ref),
-    // A row appearing in the tree is exactly what the revision counter is for.
-    onAdopted: (session) => ref
-        .read(sessionsRevisionProvider.notifier)
-        .changed(SessionChange.created(session.id)),
+    onAdopted: (session) {
+      // A row appearing in the tree is exactly what the revision counter is
+      // for.
+      ref
+          .read(sessionsRevisionProvider.notifier)
+          .changed(SessionChange.created(session.id));
+      // And a conversation entering the workspace is the first of the two
+      // moments the index is built on. Queuing costs a map entry; the store
+      // slot this adoption is running on drains it a line later.
+      final conversation = session.externalSessionId;
+      if (conversation != null) {
+        ref.read(conversationIndexerProvider).want(conversation);
+      }
+    },
   );
 });
 
@@ -195,6 +238,17 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
       ref
           .read(terminalSessionsControllerProvider.notifier)
           .notifyTitleChanged();
+      // The second moment the index is built on: the CLI wrote a name into its
+      // own store, which is the app's existing evidence that the conversation's
+      // transcript has moved. One row read, on a rename, which is rare — the
+      // sync only reaches here for a row it actually changed.
+      final conversation = ref
+          .read(sessionDaoProvider)
+          .getById(sessionId)
+          ?.externalSessionId;
+      if (conversation != null) {
+        ref.read(conversationIndexerProvider).want(conversation);
+      }
     },
   );
 });
@@ -281,6 +335,11 @@ final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
     try {
       await ref.read(launchedSessionAttributionServiceProvider).attribute();
       await ref.read(sessionTitleSyncServiceProvider).sync();
+      // Last, and only for what the two above have queued. `drain` returns
+      // before touching anything when nothing is wanted, so an idle slot pays
+      // nothing — and when something is wanted it reads the pass rather than
+      // opening a second walk.
+      await ref.read(conversationIndexerProvider).drain(pass.read);
     } finally {
       // Whatever happened, the next slot must see the disk as it is then.
       pass.end();

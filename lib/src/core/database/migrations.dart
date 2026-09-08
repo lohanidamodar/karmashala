@@ -77,6 +77,9 @@ typedef MigrationStep = void Function(Database db);
 /// * **v40** — *when* an installation's version was last read from the binary,
 ///   so a recorded version is a dated reading rather than a bare number that
 ///   cannot be told apart from a current one.
+/// * **v41** — the conversation index: FTS5 over every conversation's visible
+///   turns, plus the per-conversation watermark that keeps a re-index off a
+///   transcript that has not moved.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -118,6 +121,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   38: _migrateToV38,
   39: _migrateToV39,
   40: _migrateToV40,
+  41: _migrateToV41,
 };
 
 /// Was this pane running when its row was written?
@@ -1666,4 +1670,98 @@ void _migrateToV40(Database db) {
   db.execute(
     'ALTER TABLE agent_installations ADD COLUMN version_read_at TEXT;',
   );
+}
+
+/// Full-text search over every conversation's **visible** turns.
+///
+/// Three objects, and the split between them is the whole design.
+///
+/// * `conversation_turns` — an ordinary table holding the content, indexed by
+///   `session_id`. That index is what makes re-indexing one conversation an
+///   indexed delete instead of a walk over every turn in the store; a plain
+///   FTS5 table with the same four columns would have had to scan its own
+///   content for the same delete, which is the per-trigger full-store cost this
+///   feature is refused over.
+/// * `conversation_turns_fts` — external-content FTS5 over `text` alone. The
+///   other columns are deliberately not tokenised: `role` holds `user` and
+///   `agent`, and a search for the word "user" that returned every user turn is
+///   noise rather than a feature.
+/// * `conversation_index_state` — one row per conversation, recording the
+///   transcript it was read from and the mtime and size it had. A trigger whose
+///   watermark still matches costs one SELECT and reads no file.
+///
+/// `session_id` is the **CLI's own conversation id** — `DetectedSession.sessionId`,
+/// `sessions.external_session_id`, `imported_sessions.external_id` — never our
+/// own row id, because one conversation is a live session row today and
+/// read-only history tomorrow and the index has to survive that move. It is
+/// unique only within its CLI's store, which is why `cli` sits beside it, the
+/// same pair `imported_sessions(source, external_id)` is unique on.
+///
+/// FTS5 is a compile-time option. It is present in the library this app loads
+/// (`ENABLE_FTS5`, SQLite 3.53.2, checked by `fts5_availability_test.dart`), and
+/// that test exists so a dependency bump that dropped it fails on the gate
+/// rather than inside this statement on somebody's machine.
+void _migrateToV41(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS conversation_turns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      cli TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      text TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_conversation_turns_session '
+    'ON conversation_turns(session_id);',
+  );
+  db.execute('''
+    CREATE VIRTUAL TABLE IF NOT EXISTS conversation_turns_fts USING fts5(
+      text,
+      content = 'conversation_turns',
+      content_rowid = 'id'
+    );
+  ''');
+  // The three triggers FTS5 documents for external content. The update one is
+  // here even though a re-index is a delete followed by an insert: without it
+  // the first caller that ever writes an UPDATE leaves the index silently
+  // describing the old text, and nothing would fail until a search missed.
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS conversation_turns_ai
+    AFTER INSERT ON conversation_turns BEGIN
+      INSERT INTO conversation_turns_fts (rowid, text)
+      VALUES (new.id, new.text);
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS conversation_turns_ad
+    AFTER DELETE ON conversation_turns BEGIN
+      INSERT INTO conversation_turns_fts (conversation_turns_fts, rowid, text)
+      VALUES ('delete', old.id, old.text);
+    END;
+  ''');
+  db.execute('''
+    CREATE TRIGGER IF NOT EXISTS conversation_turns_au
+    AFTER UPDATE ON conversation_turns BEGIN
+      INSERT INTO conversation_turns_fts (conversation_turns_fts, rowid, text)
+      VALUES ('delete', old.id, old.text);
+      INSERT INTO conversation_turns_fts (rowid, text)
+      VALUES (new.id, new.text);
+    END;
+  ''');
+  // `modified_at` and `size` are nullable together: a transcript we read
+  // without being able to stat it is indexed, and simply has no watermark to
+  // skip on next time. An unknown is not a zero (§19).
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS conversation_index_state (
+      session_id TEXT PRIMARY KEY,
+      cli TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      modified_at TEXT,
+      size INTEGER,
+      turns INTEGER NOT NULL,
+      indexed_at TEXT NOT NULL
+    );
+  ''');
 }

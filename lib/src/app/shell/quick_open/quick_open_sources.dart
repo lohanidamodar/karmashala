@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
 import '../../../features/cli_detection/application/cli_detection_providers.dart';
+import '../../../features/cli_detection/data/conversation_index_dao.dart';
 import '../../../features/editor/application/code_editor_providers.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/fanout/presentation/fanout_dialog.dart';
@@ -21,6 +22,7 @@ import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart
 import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/domain/session.dart';
 import '../../../features/sessions/domain/session_launch.dart';
+import '../../../features/sessions/domain/session_resume.dart' show describeAge;
 import '../../../features/sessions/presentation/new_session_dialog.dart';
 import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
@@ -76,6 +78,14 @@ const _snippetAdminWeight = 0.5;
 /// Below a session, above a project: a shell tab is a place you are already
 /// working, but it is not a piece of work in its own right.
 const _tabWeight = 18.0;
+
+/// Just under a session's own row.
+///
+/// A conversation hit and the session it is in are the same destination, so
+/// when a query matches both the session's title *and* something said inside
+/// it, the titled row should be the one on top — it is the thing the user
+/// named.
+const _conversationWeight = 22.0;
 
 /// How much the most recent session is worth over the oldest.
 const _recencySpread = 12.0;
@@ -692,6 +702,96 @@ class QuickOpenSources {
     return record == null
         ? Future.value(const ExplorerResult(ExplorerOutcome.selected))
         : actions.openImported(record);
+  }
+
+  // --- conversations ------------------------------------------------------
+
+  /// One row per conversation something was *said* in.
+  ///
+  /// The one thing in the palette that reads a transcript's body. Fed by
+  /// `ConversationIndexDao.search`, which the dialog runs as the user types;
+  /// this only turns the hits into rows, so nothing here touches the disk or
+  /// re-runs the query.
+  ///
+  /// Built **apart from [build]** because the query changes on every keystroke
+  /// and the rest of the palette does not: re-running every source per
+  /// character would put a `SELECT * FROM sessions` per repository behind each
+  /// one.
+  ///
+  /// **The hits are collapsed per conversation**, because the question is
+  /// "which conversation was that in", not "which of the eleven times I said
+  /// it". The first hit's excerpt is the subtitle and the rest become a count.
+  ///
+  /// **Nothing here asks the filesystem anything.** A conversation whose
+  /// worktree has been removed, whose repository has moved, or whose transcript
+  /// has been deleted is still a row you can open — §20's rule, and a stated
+  /// requirement: a stored path is state, whether it resolves is a
+  /// measurement, and a measurement is not something a search result may be
+  /// filtered on. Opening it goes through the same `_focusSession` a clicked
+  /// session row uses, which *selects first* and then tries to resume, so a
+  /// conversation that cannot be resumed still lands on screen read-only with
+  /// the placeholder saying why.
+  ///
+  /// A hit whose conversation neither table knows about is dropped: the index
+  /// keeps rows for a session row that has since been deleted, and there is
+  /// nothing left to open. See the DEFERRED note — pruning belongs on the
+  /// delete path.
+  List<QuickOpenItem> conversations(
+    List<ConversationHit> hits,
+    String query, {
+    DateTime? now,
+  }) {
+    if (hits.isEmpty) return const [];
+    final sessionDao = ref.read(sessionDaoProvider);
+    final importedDao = ref.read(importedSessionDaoProvider);
+    final registry = ref.read(agentRegistryProvider);
+    final at = now ?? DateTime.now().toUtc();
+
+    final items = <QuickOpenItem>[];
+    final seen = <String>{};
+    for (final hit in hits) {
+      if (!seen.add(hit.sessionId)) continue;
+      final native = sessionDao.getByExternalSessionId(hit.sessionId);
+      final imported = native == null
+          ? importedDao.getByExternal(hit.cli, hit.sessionId)
+          : null;
+      final openId = native?.id ?? imported?.id;
+      if (openId == null) continue;
+      final title = native?.title ?? imported!.displayTitle;
+      final agent = registry.displayNameFor(hit.cli);
+      final matches = hits.where((h) => h.sessionId == hit.sessionId).length;
+      items.add(
+        QuickOpenItem(
+          id: 'conversation/${hit.sessionId}',
+          group: QuickOpenGroup.conversations,
+          title: title,
+          subtitle: hit.excerpt,
+          // The age of the reading, not of the conversation: the index is only
+          // as current as the trigger that last read that transcript, and §19
+          // says a surface must be able to admit that rather than imply the
+          // answer is live.
+          detail: [
+            if (matches > 1) '$matches matches',
+            agent,
+            if (hit.indexedAt != null)
+              'indexed ${describeAge(at.difference(hit.indexedAt!))}',
+          ].join('  ·  '),
+          icon: AppIcons.chatCircleDots,
+          // **FTS5 has already decided this row matches**, and the palette's
+          // fuzzy scorer must not overrule it: an excerpt built around a
+          // prefix match rarely contains the typed characters in order, so
+          // `scoreItem` would drop half of what the index found. Carrying the
+          // query itself as a keyword is what makes every hit survive ranking,
+          // at the keyword weight — below a title match, which is right.
+          keywords: [query, agent],
+          weight: _conversationWeight,
+          onSelect: () => dismiss(
+            () => _focusSession(openId, imported: native == null),
+          ),
+        ),
+      );
+    }
+    return items;
   }
 
   // --- open terminal tabs --------------------------------------------------

@@ -275,6 +275,17 @@ Future<void> main() async {
   // the rows whose recorded reading is older than `kVersionReadingFreshFor`, so
   // a launch with fresh readings spawns nothing here either.
   unawaited(lifecycle.refreshAgentVersions(afterFirstFrame: afterFirstFrame));
+
+  // And the one catch-up the conversation index will ever have.
+  //
+  // Nothing about search polls: the index is fed by the two triggers the app
+  // already fires — a session being adopted, and a CLI renaming a conversation
+  // — and this is only the history that was already on disk before any of them
+  // could fire. It runs once per database, records that it did, and waits for
+  // the CLI import above so the two do not walk the same WSL stores at once.
+  unawaited(
+    lifecycle.backfillConversationIndex(afterFirstFrame: afterFirstFrame),
+  );
 }
 
 /// Runs the one-time startup agent discovery. On success it stamps
