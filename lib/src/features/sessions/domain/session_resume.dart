@@ -256,3 +256,16 @@ String rejectedValueMessage(RejectedValue rejected) =>
     'modes it has read off the newest build of each CLI, and this one does not '
     'agree — choose one of the modes above and the session will start. Nothing '
     'was lost: the agent exited before it opened anything.';
+
+/// The same refusal in one sentence, for a session's own notice bar and for the
+/// log line beside it.
+///
+/// [rejectedValueMessage] is the tooltip: it has room to explain that the app's
+/// list and the binary disagree. A notice has room for the fact, so this says
+/// only the two things nothing else on screen can tell the reader — which of
+/// their values this build refused, and what it has instead — and names the CLI
+/// so the disagreement reads as a property of *that* installation.
+String rejectedValueNotice(String agentName, RejectedValue rejected) =>
+    "This $agentName does not have '${rejected.value}' for "
+    "'${rejected.flag}'; it has ${rejected.alternativesLabel}. It refused the "
+    'command line and exited before starting.';
