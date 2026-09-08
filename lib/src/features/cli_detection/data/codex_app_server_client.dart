@@ -93,6 +93,29 @@ class CodexThreadList {
   bool get ok => failure == null;
 }
 
+/// Every file change one thread's turns named, or the reason there are none.
+///
+/// `ok` with an empty [changes] and "could not be read" are different answers
+/// and must not collapse: a thread this store does not hold answers `-32600
+/// "thread not loaded"`, which is a [failure] rather than an empty list.
+class CodexFileChanges {
+  const CodexFileChanges.ok(this.changes, {this.turnsRead = 0})
+    : failure = null;
+  const CodexFileChanges.failed(CodexAppServerFailure this.failure)
+    : changes = const [],
+      turnsRead = 0;
+
+  final List<CodexFileChange> changes;
+
+  /// Turns actually walked. A count, so "did it read the whole thread?" is
+  /// answerable without timing anything.
+  final int turnsRead;
+
+  final CodexAppServerFailure? failure;
+
+  bool get ok => failure == null;
+}
+
 /// The answer to one call: a result object, or the reason there is none.
 class CodexAppServerResult {
   const CodexAppServerResult.ok(Map<String, Object?> this.value)
@@ -276,6 +299,77 @@ class CodexAppServerClient {
       cursor = next;
     }
     return CodexThreadList.ok(threads);
+  }
+
+  /// Every file the thread [threadId] changed, as Codex's own record has it.
+  ///
+  /// **`itemsView: 'full'` is not optional.** The default is `summary`, whose
+  /// turns carry only `userMessage` and `agentMessage` items — 19 and 14 across
+  /// one 23-turn thread — so omitting it reports a thread that rewrote 58 files
+  /// as having changed nothing. The server names the three variants
+  /// (`notLoaded`, `summary`, `full`) in the `-32600` it answers an unknown one
+  /// with.
+  ///
+  /// **Paged on purpose.** A single `full` page of that thread is 15.4 MB of
+  /// JSON, almost all of it reasoning and command output; [pageSize] turns at a
+  /// time capped the largest page at 7.5 MB in the same measurement. The peak is
+  /// therefore bounded by the fattest single turn rather than by the thread, and
+  /// only the path and kind of each change survive the page — see
+  /// [CodexFileChange].
+  ///
+  /// `nextCursor` is an **object**, handed straight back as `cursor`; a client
+  /// that reduced it to a string got `invalid cursor` from the real server. A
+  /// cursor that repeats ends the walk with what has been read, as [listThreads]
+  /// does.
+  Future<CodexFileChanges> listFileChanges(
+    String threadId, {
+    int pageSize = 4,
+    int maxPages = 200,
+  }) async {
+    final changes = <CodexFileChange>[];
+    final seenCursors = <String>{};
+    var turnsRead = 0;
+    Object? cursor;
+    for (var page = 0; page < maxPages; page++) {
+      final result = await call('thread/turns/list', {
+        'threadId': threadId,
+        'itemsView': 'full',
+        'limit': pageSize,
+        'cursor': ?cursor,
+      });
+      final failure = result.failure;
+      if (failure != null) return CodexFileChanges.failed(failure);
+      final data = result.value!['data'];
+      if (data is! List) {
+        return const CodexFileChanges.failed(
+          CodexAppServerFailure(
+            CodexAppServerFailureKind.malformed,
+            'thread/turns/list answered without a data array',
+          ),
+        );
+      }
+      for (final turn in data) {
+        turnsRead++;
+        if (turn is! Map) continue;
+        final items = turn['items'];
+        if (items is! List) continue;
+        for (final item in items) {
+          if (item is! Map || item['type'] != 'fileChange') continue;
+          final itemChanges = item['changes'];
+          if (itemChanges is! List) continue;
+          for (final row in itemChanges) {
+            if (CodexFileChange.fromJson(row) case final change?) {
+              changes.add(change);
+            }
+          }
+        }
+      }
+      final next = result.value!['nextCursor'];
+      if (next == null) break;
+      if (!seenCursors.add(jsonEncode(next))) break;
+      cursor = next;
+    }
+    return CodexFileChanges.ok(changes, turnsRead: turnsRead);
   }
 
   /// Sends one JSON-RPC request, connecting and handshaking first if needed.
