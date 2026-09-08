@@ -1259,19 +1259,22 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Shows the **conversation** face of the group holding [paneId] — the exact
   /// mirror of [showTerminalForPane], including its rule about *which* group.
   ///
-  /// It exists because the composer *is* the conversation. `bb4283f0` stopped
+  /// It exists because the composer *is* the conversation: `bb4283f0` stopped
   /// the workbench mounting a session's transcript until it had been asked
-  /// for — rightly, it was a whole-transcript read on every tab switch — but
-  /// offering text to a session's message box was an unnamed asker, so from
-  /// then on a note or a todo sent to a session showing its terminal queued a
-  /// draft into a composer that did not exist. This is how those callers ask.
+  /// for, so text queued for a composer nobody had opened went nowhere
+  /// visible. This is how a caller asks.
+  ///
+  /// **For text arriving from somewhere the user is not** — a picture sent
+  /// from the phone, which is `remote_bindings`' only caller. Notes and todos
+  /// used to call it too and no longer do: the user is right there, so they
+  /// follow the face already showing rather than turning it. See
+  /// `offerToSession`.
   ///
   /// **A pane is required, unlike [showTerminalHere].** "Reveal this session's
   /// conversation" has no sensible answer for a session running in no pane:
   /// falling back to the focused group would open whichever *other* session
-  /// that group holds, so a note offered to A would flip a group showing B
-  /// into B's chat. Callers check for a pane and say the text is waiting
-  /// instead.
+  /// that group holds, so text offered to A would flip a group showing B into
+  /// B's chat. Callers check for a pane first.
   void revealConversationForPane(String paneId) =>
       _showFace(groupOfPane(paneId) ?? _focusedGroupId, terminal: false);
 

@@ -15,7 +15,6 @@ import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
 import '../domain/todo.dart';
 import 'project_menu.dart';
-import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../../core/widgets/linkable_text.dart';
 
 /// The resting height of either text field, in lines. Both start at one, which
@@ -437,7 +436,7 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     }
   }
 
-  /// Puts the line in the session's message box.
+  /// Offers the line to the session, in whichever face it is showing.
   ///
   /// **Offered, not sent** — the contract [ComposerDrafts] already gives a
   /// note, and the reason is the same one twice over: a todo is a deferred
@@ -447,30 +446,18 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
   void _send() {
     final target = _sendTo;
     if (target == null) return;
-    ref.read(composerDraftProvider.notifier).queue(target.id, widget.todo.body);
-    // Bring that session up, so the box the text just landed in is the one on
-    // screen. Selecting is all this does.
+    // Into whichever face that session is showing: its terminal is typed at,
+    // its conversation is queued for. The face is read, never changed.
+    final outcome = offerToSession(
+      ref,
+      sessionId: target.id,
+      text: widget.todo.body,
+    );
+    // Bring that session up, so what the line landed in is the one on screen.
+    // Selecting is all this does.
     ref.read(selectedSessionIdProvider.notifier).select(target.id);
-    // And reveal its conversation, because the composer *is* the conversation:
-    // a group showing its terminal has no box for this line to land in, and a
-    // draft nobody can see is not a line that was sent.
-    final paneId = ref.read(sessionDaoProvider).getById(target.id)?.paneId;
-    if (paneId != null) {
-      ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .revealConversationForPane(paneId);
-    }
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(
-          paneId == null
-              // It really is waiting rather than lost, and it lands when the
-              // session comes back up — but saying "sent" for text nobody can
-              // see is the lie this whole change exists to remove.
-              ? 'Waiting for ${target.title} — no terminal is running it.'
-              : 'Sent to ${target.title}’s message box.',
-        ),
-      ),
+      SnackBar(content: Text(sessionOfferMessage(outcome, target.title))),
     );
   }
 
