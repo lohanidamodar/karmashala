@@ -29,6 +29,46 @@
 /// out. That honesty is available to the reader; a paraphrase's errors are not.
 library;
 
+/// What the source session is asked for when the user wants the brief in the
+/// agent's own words.
+///
+/// **Codex's own compaction prompt**, and it is quoted rather than reworded
+/// for the reason the packet quotes everything else: it is a prompt somebody
+/// shipped and tuned for exactly this job, and a paraphrase of it is a new
+/// prompt nobody has run. Read verbatim out of the `codex.exe` 0.153.4
+/// binary on 2026-09-09, beside `core\src\compact.rs`.
+const String kSourceBriefRequest =
+    'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff '
+    'summary for another LLM that will resume the task.\n'
+    '- Current progress and key decisions made\n'
+    '- Important context, constraints, or user preferences\n'
+    '- What remains to be done (clear next steps)\n'
+    '- Any critical data, examples, or references needed to continue\n'
+    'Be concise, structured, and focused on helping the next LLM seamlessly '
+    'continue the work.';
+
+/// The brief the source agent wrote, or why there is none.
+///
+/// Two states and no third. A brief that was asked for and not answered is
+/// **not** the same as one nobody asked for: the first is a fact about that
+/// session and gets a section saying so, the second leaves the packet exactly
+/// as it was before any of this existed, which is what declining has to mean.
+/// [HandoffPacket.sourceBrief] is null for the second.
+class HandoffSourceBrief {
+  /// What the agent wrote, in its own words. Quoted, never edited.
+  const HandoffSourceBrief.written(String this.text) : notWritten = null;
+
+  /// Why there is no brief, in words the reader can act on. Never a bare
+  /// "failed": the two that matter — the agent is stopped for a person, and
+  /// the agent had not answered yet — need opposite responses.
+  const HandoffSourceBrief.notWritten(String this.notWritten) : text = null;
+
+  final String? text;
+  final String? notWritten;
+
+  bool get wasWritten => text != null;
+}
+
 /// One changed file, as the packet states it.
 ///
 /// A local shape rather than `git`'s `FileChange` so the packet — the thing with
@@ -150,6 +190,74 @@ class HandoffDecision {
   );
 }
 
+/// Who may write one section of the packet, and who may only read it.
+///
+/// A handoff is three models writing into one document — the agent that held
+/// the conversation, the person, and the agent taking it over — and until now
+/// nothing said which of them owned what. An unowned section is one all three
+/// assume is theirs, and the loss is silent: a paragraph is rewritten and the
+/// version that said something inconvenient is simply gone.
+///
+/// Stated per section rather than once at the top, because the answer differs
+/// per section. A quoted recap has **no** editors — it is evidence, and an
+/// edited quotation is not. A dead-end list has one, because adding to it is
+/// exactly what the receiving agent is for.
+class HandoffSectionOwner {
+  const HandoffSectionOwner(this.owner, {this.editors = const []});
+
+  /// Whose section it is. Never empty and never omitted.
+  final String owner;
+
+  /// Who else may write in it. Empty means nobody.
+  final List<String> editors;
+
+  String get line => editors.isEmpty
+      ? '_Owner: $owner. No editors — if you disagree with something here, say '
+            'so; do not rewrite it._'
+      : '_Owner: $owner. May edit: ${editors.join(', ')} — add under your own '
+            'name rather than replacing what is here._';
+}
+
+/// One thing the packet asserts, and what backs it.
+///
+/// The evidence rule in a type: a claim either carries a `path:line`, a command
+/// and what it printed, or the words **"not checked yet"**. Null renders as the
+/// third rather than as an omitted qualifier, because an unqualified claim is
+/// read as a checked one — which is how a guess made forty turns ago becomes a
+/// constraint the next agent works around.
+class HandoffClaim {
+  const HandoffClaim({
+    required this.statement,
+    this.evidence,
+    this.attributedTo,
+  });
+
+  final String statement;
+
+  /// A `path:line`, a command and its output, or null for "not checked yet".
+  final String? evidence;
+
+  /// Who said it. Null renders as "not recorded", never as an omitted
+  /// attribution — the same rule [HandoffDecision.decidedBy] holds.
+  final String? attributedTo;
+
+  /// What the packet prints for [evidence]. Never empty.
+  String get evidenceLine {
+    final given = evidence?.trim();
+    return given == null || given.isEmpty ? 'not checked yet' : given;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is HandoffClaim &&
+      other.statement == statement &&
+      other.evidence == evidence &&
+      other.attributedTo == attributedTo;
+
+  @override
+  int get hashCode => Object.hash(statement, evidence, attributedTo);
+}
+
 /// Everything the receiving agent is told, and the renderer that says it.
 ///
 /// Every field that could be unknown is nullable, and **null renders as a
@@ -174,6 +282,8 @@ class HandoffPacket {
     this.decisions = const [],
     this.omittedDecisions = 0,
     this.unresolvedTasks = const [],
+    this.deadEnds,
+    this.sourceBrief,
     this.isFork = false,
   });
 
@@ -227,6 +337,27 @@ class HandoffPacket {
   /// passed through unedited — Karmashala has no idea which of these are done.
   final List<String> unresolvedTasks;
 
+  /// Approaches already ruled out, or **null for "the record could not be
+  /// read"**.
+  ///
+  /// The knowledge that costs most to re-derive: an agent that does not know an
+  /// approach was tried will try it, spend the turns, and reach the same wall.
+  /// Read the same way [decisions] is — an empty list is *not* "nothing was
+  /// ruled out", because the record is only written by explicit acts.
+  final List<HandoffClaim>? deadEnds;
+
+  /// The source agent's own handoff summary, when the user asked for one, or
+  /// **null when nobody asked** — which leaves this packet exactly as it was
+  /// before the feature existed.
+  ///
+  /// The one part of the document written by a model, and the whole of the
+  /// class comment's argument above still applies to it: a summary can be
+  /// confidently wrong in ways the receiving agent cannot detect. What makes
+  /// it defensible here and not as a replacement for the recap is that it is
+  /// **attributed, optional, and beside the quotes rather than instead of
+  /// them** — the verbatim tail is still there to check it against.
+  final HandoffSourceBrief? sourceBrief;
+
   /// Whether this packet is standing in for a fork the CLI could not perform.
   /// Changes only the framing, never the contents: the receiving agent is told
   /// it is continuing a *branch* of the conversation rather than taking it over.
@@ -241,6 +372,8 @@ class HandoffPacket {
     out.writeln();
     out.writeln(_provenance());
     out.writeln();
+    out.writeln(_howToReadThis());
+    out.writeln();
 
     out.writeln('## Where this came from');
     out.writeln();
@@ -253,9 +386,35 @@ class HandoffPacket {
     out.writeln('- **Branch:** ${_branchLine()}');
     out.writeln();
 
+    if (sourceBrief != null) {
+      out.writeln('## In $sourceAgentName\'s own words');
+      out.writeln();
+      // No editors: it is a quotation, and an edited quotation is not one.
+      out.writeln(HandoffSectionOwner(sourceAgentName).line);
+      out.writeln();
+      out.writeln(_sourceBriefSection());
+      out.writeln();
+    }
+
     out.writeln('## Files changed in the working tree');
     out.writeln();
+    out.writeln(HandoffSectionOwner(_readFrom).line);
+    out.writeln();
     out.writeln(_changesSection());
+    out.writeln();
+
+    // Ahead of everything else that was recorded, because it is the section a
+    // reader most needs before they start work rather than after it.
+    out.writeln('## Don\'t do');
+    out.writeln();
+    out.writeln(
+      HandoffSectionOwner(
+        sourceAgentName,
+        editors: [targetAgentName],
+      ).line,
+    );
+    out.writeln();
+    out.writeln(_deadEndsSection());
     out.writeln();
 
     // Ahead of the recap, and not by taste: the recap is the part that gets
@@ -264,16 +423,29 @@ class HandoffPacket {
     // them again.
     out.writeln('## Decisions on record');
     out.writeln();
+    out.writeln(
+      HandoffSectionOwner(
+        '$sourceAgentName and the user',
+        editors: [targetAgentName],
+      ).line,
+    );
+    out.writeln();
     out.writeln(_decisionsSection());
     out.writeln();
 
     out.writeln('## Conversation so far');
+    out.writeln();
+    // No editors, and this is the section that most needs saying so: it is
+    // quoted evidence, and an edited quotation is not evidence any more.
+    out.writeln(HandoffSectionOwner('$sourceAgentName and the user').line);
     out.writeln();
     out.writeln(_recapSection());
     out.writeln();
 
     if (unresolvedTasks.isNotEmpty) {
       out.writeln('## Still open, per the user');
+      out.writeln();
+      out.writeln(const HandoffSectionOwner('the user').line);
       out.writeln();
       for (final task in unresolvedTasks) {
         out.writeln('- [ ] $task');
@@ -283,7 +455,77 @@ class HandoffPacket {
 
     out.writeln('## What you are being asked to do');
     out.writeln();
+    out.writeln(const HandoffSectionOwner('the user').line);
+    out.writeln();
     out.writeln(instruction.trim());
+    return out.toString().trimRight();
+  }
+
+  /// Who read the working tree. Named rather than left blank, because "the
+  /// files say so" and "an agent said the files say so" are different claims.
+  static const String _readFrom = 'Karmashala, read from git';
+
+  /// The two rules that keep three models from quietly overwriting each other,
+  /// stated once and applied per section below.
+  String _howToReadThis() =>
+      '**Evidence.** Every claim here carries a `path:line`, a command and what '
+      'it printed, or the words "not checked yet". **A previous packet is a '
+      'claim, not evidence** — including this one. Where anything below '
+      'disagrees with the files in front of you, **the files win**, and the '
+      'mismatch is worth reporting rather than quietly correcting: it means '
+      'something changed that nobody wrote down.\n\n'
+      '**Ownership.** Each section names its owner and who may edit it. More '
+      'than one model writes into a document like this, so add under your own '
+      'name rather than rewriting somebody else\'s paragraph — and if you '
+      'think a section is wrong, say why beside it.';
+
+  String _sourceBriefSection() {
+    final brief = sourceBrief!;
+    final text = brief.text;
+    if (text == null) {
+      return '$sourceAgentName was asked to write this and did not: '
+          '${brief.notWritten}\n\n'
+          'Nothing else in this packet depends on it — the rest is assembled '
+          'from files and quoted from the transcript, exactly as it would '
+          'have been.';
+    }
+    final out = StringBuffer()
+      ..writeln(
+        '_$sourceAgentName wrote this when the handoff was prepared, in '
+        'answer to a request for a context-checkpoint handoff summary. It is '
+        'that agent\'s account of its own work and nobody has checked it: '
+        'the evidence rule above applies to every line of it, and the '
+        'verbatim quotes further down are what to check it against._',
+      )
+      ..writeln();
+    for (final line in _lines(text)) {
+      out.writeln('> $line');
+    }
+    return out.toString().trimRight();
+  }
+
+  String _deadEndsSection() {
+    final ruled = deadEnds;
+    if (ruled == null) {
+      return 'Could not be read — this session\'s decision record did not '
+          'answer. Ask the user what has already been tried before spending a '
+          'turn re-deriving it.';
+    }
+    if (ruled.isEmpty) {
+      // Never "nothing was ruled out". The record is written by explicit acts,
+      // so an empty one means nobody wrote anything down — and an agent that
+      // reads it as "the field is open" will re-run the experiment that failed.
+      return 'Nothing was recorded as ruled out. That is not the same as '
+          '"nothing was ruled out": this list is written only when somebody '
+          'records a rejected approach deliberately. Ask before assuming an '
+          'approach is untried.';
+    }
+    final out = StringBuffer();
+    for (final claim in ruled) {
+      out.writeln('- **${claim.statement.trim()}**');
+      out.writeln('  - said by: ${claim.attributedTo ?? 'not recorded'}');
+      out.writeln('  - evidence: ${claim.evidenceLine}');
+    }
     return out.toString().trimRight();
   }
 
@@ -298,7 +540,16 @@ class HandoffPacket {
             'is not your own history and none of it has been rewritten to read '
             'as though you produced it. Treat the code and decisions described '
             'as things you are inheriting and can inspect, not as things you '
-            'remember doing.';
+            'remember doing.'
+            // Codex's own receiving-side framing, in this document's terms.
+            // Its wording — "another language model started to solve this
+            // problem … build on the work that has already been done and
+            // avoid duplicating work" — is the half worth taking; the half
+            // that is not is its claim that the reader also has the other
+            // model's tool state, which here would be false.
+            '\n\nAnother model started this and has stopped. Build on what it '
+            'did rather than repeating it — and where you cannot tell whether '
+            'something was done, look, do not assume either way.';
 
   String _branchLine() {
     if (branch == null) return 'unknown (git could not be asked)';

@@ -72,9 +72,23 @@ class SessionForkPlan {
         }
         return SessionForkPlan._(
           SessionForkKind.native,
+          // The second sentence is the weaker of two paths, named. A CLI's own
+          // in-session branch switches the *running process* into a copy and
+          // takes everything that process is holding with it; this starts a
+          // second process from outside and can only hand it the
+          // conversation. Deliberately says what is true of any CLI by
+          // construction rather than listing one CLI's grants, subagents and
+          // links — that list is a claim about a particular agent, and this
+          // sentence is shown for all of them.
           '$agentName forks this itself. The new session starts with the whole '
           'conversation and then diverges; this one is left exactly as it '
-          'is.',
+          'is.\n\n'
+          'It is a **new process**, not this session branching in place, so '
+          'only the conversation crosses: anything the running session is '
+          'holding in memory — permissions granted for this session, work '
+          'already in flight, any link the CLI opened for it — stays here. '
+          'Use $agentName\'s own in-session branch command instead if you '
+          'need those to come with you.',
           arguments: fork.argumentsFor(id),
         );
       case AgentForkStyle.viaHandoff:
