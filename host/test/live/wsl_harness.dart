@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 /// Shared plumbing for the `live-wsl` tests: they cross-compile the host and
 /// drive the real binary inside a real distribution, because the pty layer is
@@ -62,8 +63,34 @@ cp ${toWslPath(binary.path)} $target
 chmod +x $target
 ''';
 
-  ProcessResult runSync(String script) =>
-      Process.runSync('wsl.exe', ['-d', distribution, '--', 'sh', '-c', script]);
+  /// Scripts travel as a file, never as a `sh -c` argument: Windows rebuilds a
+  /// command line out of Dart's argument list, and a multi-line script with
+  /// quotes in it does not survive that round trip.
+  ///
+  /// The name has to be unique across isolates, not just within one. Test files
+  /// run concurrently in isolates of the *same* process, so a name built from
+  /// the pid and a static counter collides — and the collision is silent: one
+  /// file's setup runs the other file's script and the failure surfaces much
+  /// later as something that makes no sense.
+  ProcessResult runSync(String script) {
+    final tag = '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
+    final file = File('${binary.parent.path}/wsl-script-$tag.sh')
+      ..writeAsStringSync(script.replaceAll('\r\n', '\n'));
+    final result = Process.runSync('wsl.exe', ['-d', distribution, '--', 'sh', toWslPath(file.path)]);
+    file.deleteSync();
+    return result;
+  }
+
+  /// Same, but a non-zero exit is a failed set-up rather than something to
+  /// discover three assertions later.
+  void runOrThrow(String script) {
+    final result = runSync(script);
+    if (result.exitCode != 0) {
+      throw StateError('wsl script failed (${result.exitCode}): ${result.stdout}${result.stderr}');
+    }
+  }
+
+  static final _random = Random();
 
   Future<Process> start(List<String> argv) =>
       Process.start('wsl.exe', ['-d', distribution, '--', ...argv]);
