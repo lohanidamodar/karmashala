@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
@@ -143,7 +144,10 @@ class EnvironmentAwareRepositoryDiscoveryService
     EnvironmentPath root, {
     int maxDepth = 5,
   }) async {
-    final env = environments.getById(root.environmentId);
+    final env = ExecutionEnvironmentResolver(
+      environments: environments,
+      runners: runnerFactory,
+    ).resolveFor(root).environment;
     if (env != null &&
         (env.kind == EnvironmentKind.ssh || env.kind == EnvironmentKind.wsl)) {
       return _discoverPosix(root, env, maxDepth: maxDepth);

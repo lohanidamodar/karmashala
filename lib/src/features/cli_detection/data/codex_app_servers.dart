@@ -4,6 +4,7 @@ import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/path_translator.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../agents/domain/agent_ids.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
@@ -61,8 +62,17 @@ class CodexAppServers {
     final cached = _byEnvironment[environmentId];
     if (cached != null) return cached;
 
-    final environment = environments.getById(environmentId);
-    if (environment == null) return null;
+    // The one resolver, so an SSH environment with no pool composed is a
+    // refusal with words rather than a throw out of the factory below.
+    final resolved = ExecutionEnvironmentResolver(
+      environments: environments,
+      runners: runnerFactory,
+    ).resolve(environmentId);
+    final environment = resolved.environment;
+    if (environment == null) {
+      _log.debug('No environment for $environmentId: ${resolved.reason}');
+      return null;
+    }
     final executable = _codexExecutable(environmentId);
     if (executable == null) return null;
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../domain/agent_adapter.dart';
@@ -95,12 +96,12 @@ class CodexAdapter implements AgentAdapter {
 
   @override
   AgentSession start(AgentLaunch launch) {
-    final env = environmentDao.getById(launch.installation.environmentId);
-    if (env == null) {
-      throw StateError(
-        'Unknown environment ${launch.installation.environmentId} for Codex.',
-      );
-    }
+    // The one resolver, so an agent that cannot be placed refuses in the
+    // same words as every other launch path.
+    final env = ExecutionEnvironmentResolver(
+      environments: environmentDao,
+      runners: runnerFactory,
+    ).resolve(launch.installation.environmentId).require;
     final runner = runnerFactory.forEnvironment(env);
     final request = CommandRequest(
       executable: launch.installation.executable.path,
