@@ -15,6 +15,14 @@ enum SidePanelSurface {
   files('Files', drawsOwnHeader: true, scopedToRepository: true),
   device('Device'),
   browser('Browser'),
+
+  /// The Flutter app the developer is running: its debug console, hot reload
+  /// and a widget picker.
+  ///
+  /// Beside Device and Browser because all three are *something running that
+  /// this app is driving*, and it is the one of the three whose subject is the
+  /// project's own code.
+  flutterApp('Flutter app'),
   verification('Verification'),
 
   /// Every picture the session on screen has produced or been shown, newest
