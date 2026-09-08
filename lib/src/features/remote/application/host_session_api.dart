@@ -253,7 +253,70 @@ class HostSessionApi {
         case FrameType.promptSend:
           final sessionId = _requireSession(envelope);
           final text = _requireString(envelope, 'text');
-          await bindings.sendPrompt(sessionId, text);
+          final attachmentId = _optionalString(envelope, 'attachment');
+          // Belt and braces on the bit. A phone reaches an attachment through
+          // `attachment.begin`, which is already gated, but a prompt naming
+          // one is the frame that would *use* it — and this frame is one an
+          // older pairing holds `send_prompt` for. It is refused here in the
+          // same words, so the two doors cannot disagree.
+          if (attachmentId != null &&
+              !device.capabilities.has(Capability.sendAttachment)) {
+            throw const RemoteApiRefusal(
+              ErrorCode.notPermitted,
+              'this device was not granted send_attachment',
+            );
+          }
+          final delivery = await bindings.sendPrompt(
+            sessionId,
+            text,
+            attachment: attachmentId == null
+                ? null
+                : (deviceId: device.id, uploadId: attachmentId),
+          );
+          await _result(envelope.id, {
+            // Only when it is not what every build before this one meant, so
+            // an ordinary prompt's result keeps its old shape on the wire.
+            if (delivery == RemotePromptDelivery.offered)
+              'delivery': delivery.wire,
+          });
+        case FrameType.attachmentBegin:
+          // The session's own answer is re-read here rather than trusted from
+          // the row the phone last saw: a row can be minutes old, and the
+          // agent behind it can have been swapped since. Refused *before* a
+          // byte crosses, which is the whole reason this frame exists.
+          final sessionId = _requireSession(envelope);
+          final request = RemoteAttachmentBegin.fromJson({
+            ...envelope.payload,
+            'sessionId': sessionId,
+          });
+          _checkAcceptable(sessionId, request);
+          await _result(
+            envelope.id,
+            (await bindings.beginAttachment(device.id, request)).toJson(),
+          );
+        case FrameType.attachmentChunk:
+          final uploadId = _requireString(envelope, 'uploadId');
+          final seq = envelope.payload['seq'];
+          final data = envelope.payload['data'];
+          if (seq is! int || seq < 0 || data is! String) {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'a chunk needs a seq and its data',
+            );
+          }
+          final List<int> bytes;
+          try {
+            bytes = base64Decode(data);
+          } on FormatException {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'a chunk must be base64',
+            );
+          }
+          await bindings.writeAttachmentChunk(device.id, uploadId, seq, bytes);
+          // Answered so the phone knows the slice landed before it sends the
+          // next. The outbound queue drops its oldest frame under pressure, so
+          // an unacknowledged chunk is a chunk that is gone.
           await _result(envelope.id, const {});
         case FrameType.approvalAnswer:
           final sessionId = _requireSession(envelope);
@@ -610,6 +673,34 @@ class HostSessionApi {
       ).toJson(),
     )) {
       _announcedApprovals.remove(sessionId);
+    }
+  }
+
+  /// Refuses a file this session's agent would not be able to look at.
+  ///
+  /// Reads the same [RemoteAttachmentSupport] the phone was shown on the row,
+  /// so the two ends cannot word one session two ways — and matches the media
+  /// type literally rather than by pattern, because a pattern is a thing two
+  /// builds can disagree about.
+  void _checkAcceptable(String sessionId, RemoteAttachmentBegin request) {
+    final support = bindings.sessionById(sessionId)?.attachments;
+    if (support == null || !support.allowsAnything) {
+      throw RemoteApiRefusal(
+        ErrorCode.badRequest,
+        support?.refusal ?? 'this session cannot be sent a file',
+      );
+    }
+    if (!support.mediaTypes.contains(request.mediaType)) {
+      throw RemoteApiRefusal(
+        ErrorCode.badRequest,
+        'this session takes ${support.mediaTypes.join(', ')}',
+      );
+    }
+    if (request.bytes < 1 || request.bytes > support.maxBytes) {
+      throw RemoteApiRefusal(
+        ErrorCode.badRequest,
+        'this session takes up to ${support.maxBytes} bytes',
+      );
     }
   }
 

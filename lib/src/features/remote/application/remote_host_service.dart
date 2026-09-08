@@ -983,6 +983,14 @@ class _DeviceRuntime {
   Future<void> close() async {
     _closed = true;
     peerLive = false;
+    // Staged attachment bytes belong to this link. Nothing outside it can name
+    // the upload, so a `.part` that outlives it is bytes nobody will ever
+    // quote — dropped here rather than waiting for the next host start.
+    try {
+      await service.bindings.discardAttachment(device.id);
+    } on Object {
+      // A temp file that will not delete is not a reason to fail a teardown.
+    }
     await _liveWatch?.cancel();
     _liveWatch = null;
     _watchedTransport = null;

@@ -96,6 +96,13 @@ const Map<FrameType, Map<String, Object?>> kRequests = {
   FrameType.approvalAnswer: {'sessionId': 's1', 'decision': 'approve'},
   FrameType.notificationsRegister: {'token': 't0k', 'platform': 'android'},
   FrameType.sessionActivity: {'sessionId': 's1'},
+  FrameType.attachmentBegin: {
+    'sessionId': 's1',
+    'name': 'shot.png',
+    'type': 'image/png',
+    'bytes': 4,
+  },
+  FrameType.attachmentChunk: {'uploadId': 'up1', 'seq': 0, 'data': 'AAAA'},
 };
 
 void main() {

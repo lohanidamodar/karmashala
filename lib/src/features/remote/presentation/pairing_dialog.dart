@@ -137,6 +137,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     Capability.startSession => 'Start new sessions',
     Capability.addProject => 'Add projects',
     Capability.viewActivity => 'See what is running',
+    Capability.sendAttachment => 'Send files',
   };
 
   /// The local-vs-internet relay tabs. With one endpoint there is nothing to

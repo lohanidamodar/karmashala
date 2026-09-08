@@ -39,6 +39,26 @@ void main() {
       expect(snapshot.lastActivityAt, isNull);
       expect(snapshot.stage, isNull);
       expect(snapshot.imported, isFalse);
+      // Not "nothing may be attached" — *we were never told*, which is why the
+      // phone offers no button rather than showing a refusal it invented.
+      expect(snapshot.attachments, isNull);
+    });
+
+    test('a host that says nothing may be attached says why', () {
+      final snapshot = RemoteSessionSnapshot.fromJson(const {
+        'sessionId': 's1',
+        'title': 'Fix the tests',
+        'status': 'running',
+        'attach': {
+          'types': <String>[],
+          'max': 0,
+          'why': 'Antigravity cannot be handed a file.',
+        },
+      });
+
+      expect(snapshot.attachments, isNotNull);
+      expect(snapshot.attachments!.allowsAnything, isFalse);
+      expect(snapshot.attachments!.refusal, contains('Antigravity'));
     });
 
     test('an old host frame carried through the envelope decodes', () {

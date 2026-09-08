@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
+import '../data/companion_attachment_store.dart';
 import '../data/paired_device_dao.dart';
 import '../domain/paired_device.dart';
 import '../protocol.dart';
@@ -52,3 +55,21 @@ DeviceId hostDeviceIdFor(AppDatabase db) {
 final hostDeviceIdProvider = Provider<DeviceId>(
   (ref) => hostDeviceIdFor(ref.watch(databaseProvider)),
 );
+
+/// Where a file the phone sends lands.
+///
+/// `<temp>/karmashala/attachments` — the same directory the desktop composer
+/// already writes its own attachments to, resolved here rather than stored,
+/// because a stored absolute path is state that rots (§20). One instance for
+/// the app, so "one upload in flight per device" is a fact rather than a hope.
+final companionAttachmentStoreProvider =
+    FutureProvider<CompanionAttachmentStore>((ref) async {
+      final store = CompanionAttachmentStore(
+        Directory('${Directory.systemTemp.path}/karmashala/attachments'),
+      );
+      // The one moment there is provably nothing in flight: no link has been
+      // made yet, so every `.part` in there belongs to a run that is over.
+      // Once, on demand — nothing polls.
+      await store.sweep();
+      return store;
+    });

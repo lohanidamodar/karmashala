@@ -652,6 +652,22 @@ const _claudeCode = AgentDescriptor(
       effect: 'Sends Esc, which cancels the prompt.',
     ),
   ),
+  // Claude Code reads a picture off a path a prompt names — measured in this
+  // repo rather than read off `--help`: `SessionMediaOrigin.read` exists
+  // because real transcripts here carry `Read` tool calls whose input is an
+  // image file, and `TranscriptImagePreview` draws them from that path. That
+  // is the one door open to a *running* session, which is what matters:
+  // Karmashala delivers a message by typing it into the session's PTY, so a
+  // launch flag is not reachable once the session is up.
+  //
+  // The four types are `kMediaTypeExtensions` minus the two the desktop's own
+  // media panel accepts but no phone camera produces.
+  attachments: AgentAttachmentSupport.byPath(
+    ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+    evidence:
+        'Karmashala transcripts, 2026-09: Read tool calls naming .png/.jpg '
+        'files, drawn by TranscriptImagePreview from that path',
+  ),
 );
 
 const _codex = AgentDescriptor(
@@ -1218,6 +1234,19 @@ const _codex = AgentDescriptor(
       label: 'Continue',
       effect: 'Sends Enter, the key this prompt names.',
     ),
+  ),
+  // **Codex has images, and not through this door.** `codex --help` and
+  // `codex exec --help` (codex-cli 0.153.4) both carry `-i, --image <FILE>...
+  // Optional image(s) to attach to the initial prompt` — so pictures are
+  // plainly in its model — but that is a *launch* flag, spent on the opening
+  // prompt of a new process. Karmashala types into a session that is already
+  // running, and nothing was found that makes Codex open an image named in a
+  // typed prompt. Refused rather than guessed at: an attachment that crosses
+  // the link and is never looked at is worse than a button that is not there.
+  attachments: AgentAttachmentSupport.none(
+    refusal:
+        'Codex only takes a picture on the command line that starts it '
+        '(--image), so a running session cannot be handed one.',
   ),
 );
 
@@ -1794,4 +1823,11 @@ const _antigravity = AgentDescriptor(
   // ships no such file, so those keys describe a version nobody is running.
   // Pressing a guessed key into a TUI is the one failure worse than sending the
   // user to the terminal, so nothing is declared.
+  // Nothing is known. `agy` writes protobuf into a store whose schema is not
+  // published and which this app reads none of, so there is no evidence either
+  // way — and §19's rule is that an unknown is never reported as a zero, nor
+  // as a yes.
+  attachments: AgentAttachmentSupport.none(
+    refusal: 'Nobody here has seen Antigravity open a file named in a prompt.',
+  ),
 );
