@@ -17,10 +17,21 @@ import '../domain/flutter_sdk.dart';
 /// distribution's PATH ordinarily finds the Windows Flutter through `/mnt/c`,
 /// and running it to read its version would already have done the damage.
 class FlutterSdkService {
-  FlutterSdkService({required this.runner, required this.environment});
+  FlutterSdkService({
+    required this.runner,
+    required this.environment,
+    this.handSetExecutable,
+  });
 
   final CommandRunner runner;
   final ExecutionEnvironment environment;
+
+  /// The `flutter` a person named for this environment, or null.
+  ///
+  /// Handed in rather than read, so this stays a pure measurer with no opinion
+  /// about where a preference is kept — `FlutterSdkReadings` is the one place
+  /// that knows, and a test can put a path here without standing up settings.
+  final String? handSetExecutable;
 
   EnvironmentKind get _kind => environment.kind;
 
@@ -40,6 +51,17 @@ class FlutterSdkService {
       if (!alive.ok) {
         return _unreachable(now, firstNonEmptyLine(alive.stderr) ?? 'it did not answer');
       }
+    }
+
+    // **The person's own answer comes first, and PATH is never asked.**
+    // §20's third rule: a hand-set path is never overruled by discovery — so
+    // it is not "tried and fallen back from" either, because a fallback that
+    // quietly finds something else is how a user comes to believe their row is
+    // being used when it is not. A hand-set path that will not run is refused
+    // by name, and clearing the row is what restores the PATH probe.
+    final handSet = handSetExecutable?.trim();
+    if (handSet != null && handSet.isNotEmpty) {
+      return _readHandSet(now, handSet);
     }
 
     final name = flutterExecutableFor(_kind);
@@ -90,6 +112,50 @@ class FlutterSdkService {
     // A version we could not read is not a Flutter we refuse to use — the path
     // is still the path. It is recorded as unknown rather than as a number
     // nobody measured (§19).
+    return FlutterSdkReading(
+      environmentId: environment.id,
+      readAt: now,
+      executable: path,
+      version: versioned.ok ? parseAgentVersion(versioned.stdout) : null,
+    );
+  }
+
+  /// The reading for a path a person named for this environment.
+  ///
+  /// The §17 refusal applies here **exactly as it does to a located path, and
+  /// before anything is spawned**: a person can type
+  /// `/mnt/c/Users/…/flutter/bin/flutter` into the field as easily as WSL's
+  /// PATH can resolve to it, and running it is the same disaster either way.
+  /// The harm is in the running, not in the looking. Only the sentence differs
+  /// — see `windowsInstallRefusal`'s `handSet`.
+  Future<FlutterSdkReading> _readHandSet(DateTime now, String path) async {
+    final windows = windowsInstallRefusal(_kind, path, handSet: true);
+    if (windows != null) {
+      return FlutterSdkReading.refused(
+        environmentId: environment.id,
+        readAt: now,
+        refusal: FlutterSdkRefusal.windowsInstallOnPosixPath,
+        reason: windows,
+      );
+    }
+    final CommandResult versioned;
+    try {
+      versioned = await runner.run(
+        CommandRequest(executable: path, arguments: const <String>['--version']),
+      );
+    } on CommandException catch (error) {
+      return FlutterSdkReading.refused(
+        environmentId: environment.id,
+        readAt: now,
+        refusal: FlutterSdkRefusal.handSetUnusable,
+        reason:
+            'The Flutter SDK path set for ${environment.name} is $path, and it '
+            'could not be run: ${error.message}. Correct it in Settings → '
+            'Environments, or clear it to look on PATH again.',
+      );
+    }
+    // A version we could not read is not a path we refuse — the same rule the
+    // PATH branch follows, and for the same reason (§19).
     return FlutterSdkReading(
       environmentId: environment.id,
       readAt: now,

@@ -299,6 +299,18 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Sets the `flutter` executable for [environmentId], or with a blank [path]
+  /// puts that environment back on its own PATH.
+  ///
+  /// Measures nothing, and invalidates nothing from here: a save must not
+  /// block on a process, and the readings drop themselves when this map
+  /// changes — `FlutterSdkReadings.build` watches it, which keeps the rule
+  /// beside the readings rather than in every writer of the setting.
+  void setFlutterSdkPath(String environmentId, String? path) {
+    state = state.withFlutterSdkPath(environmentId, path);
+    _save();
+  }
+
   void setShellIntegrationEnabled(bool value) {
     state = state.copyWith(shellIntegrationEnabled: value);
     _save();
