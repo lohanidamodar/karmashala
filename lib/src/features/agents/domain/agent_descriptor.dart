@@ -1,6 +1,7 @@
 import '../../environments/domain/environment_kind.dart';
 import '../../settings/domain/permission_risk.dart';
 import 'agent_kind.dart';
+import 'agent_plan.dart';
 import 'agent_permission_support.dart';
 import 'agent_status.dart';
 
@@ -843,6 +844,7 @@ class AgentDescriptor {
     this.grid = const AgentGridRules(),
     this.approval = const AgentApprovalRules(),
     this.attachments = const AgentAttachmentSupport.none(),
+    this.plan = const AgentPlanSupport.none(),
   });
 
   final String id;
@@ -878,6 +880,16 @@ class AgentDescriptor {
   /// has is not a door that is open once the session is up. Only a path in the
   /// prompt is.
   final AgentAttachmentSupport attachments;
+
+  /// **Whether this agent keeps a plan for itself, and where to read it.**
+  ///
+  /// Declared data with required evidence, exactly like [attachments], and
+  /// defaulting the same conservative way — the reasoning is at
+  /// [AgentPlanSupport]. The question is narrower than "does this CLI plan":
+  /// all three of them plan somehow. It is *"does it write the plan down
+  /// somewhere this app can read"*, and on 2026-09-08 that had three different
+  /// answers.
+  final AgentPlanSupport plan;
 
   @override
   String toString() => 'AgentDescriptor($id)';

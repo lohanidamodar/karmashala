@@ -36,6 +36,14 @@ enum SidePanelSurface {
   /// the branch and worktree list nobody could find lives in here.
   repository('Repository', scopedToRepository: true),
 
+  /// **The agent's own plan**, read out of the record it writes for itself.
+  ///
+  /// Directly above Todos because the pair is the same shape and different
+  /// authorship — this one is the agent's intent and is read-only, that one is
+  /// the user's list and is written here. Two agents of the three publish one;
+  /// the third says so in words rather than drawing an empty list.
+  plan('Plan'),
+
   /// The user's own list: a line of text, done or not, filed under a project
   /// or under nothing.
   ///
