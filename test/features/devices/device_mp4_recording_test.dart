@@ -14,6 +14,10 @@ import '../../core/media/mp4_reader.dart';
 /// The frames a handset sends are already encoded, so recording one is a
 /// container change. This proves it is only that: the payload the writer put in
 /// the MP4 is the payload it was handed, byte for byte.
+///
+/// **This file can take the tester process down under load.** The crash, what
+/// was measured about it, and how to measure it again are recorded once, in
+/// `test/core/media/video_writer_test.dart`.
 void main() {
   late Directory temp;
   setUp(() => temp = Directory.systemTemp.createTempSync('dev-mp4'));
