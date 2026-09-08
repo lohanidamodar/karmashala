@@ -78,6 +78,7 @@ class HostDeployment {
     this.remotePath,
     this.hostVersion,
     this.protocolVersion,
+    this.restartedByUs = false,
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
@@ -93,6 +94,15 @@ class HostDeployment {
   final String? remotePath;
   final String? hostVersion;
   final int? protocolVersion;
+
+  /// Whether this deploy had to start `serve` itself.
+  ///
+  /// True means the host was not running when we asked — after a reboot, or
+  /// because somebody killed it — and therefore holds none of the sessions it
+  /// held before. Nothing supervises the daemon in stage one, so this is the
+  /// signal a pane needs to say "your sessions are gone" instead of silently
+  /// starting a new one and looking like it lost them.
+  final bool restartedByUs;
 
   bool get isReady => status == HostDeploymentStatus.ready;
 

@@ -288,6 +288,51 @@ void main() {
       expect(start, contains('host.log'));
     }, timeout: const Timeout(Duration(seconds: 40)));
 
+    test('a host that was already running is not reported as restarted', () async {
+      final deployment = await deployerFor(FakeTarget()).deploy();
+      expect(deployment.isReady, isTrue);
+      expect(deployment.restartedByUs, isFalse);
+      expect(deployment.reason, isNot(contains('restarted')));
+    });
+
+    test('a host that had to be started reports that its sessions are gone', () async {
+      final target = FakeTarget();
+      var asked = 0;
+      target.greet = (hello) {
+        asked++;
+        // Exactly the shape of a reboot: nothing is listening until we start it.
+        return asked == 1
+            ? null
+            : WelcomeMessage(
+                requestId: 1,
+                protocolVersion: kProtocolVersion,
+                hostVersion: '0.1.0',
+                operatingSystem: 'linux',
+                architecture: 'x64',
+                ptyLibrary: 'libc.so.6',
+                pid: 5,
+                startedAt: DateTime.utc(2026),
+                observedAt: DateTime.utc(2026),
+              );
+      };
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.isReady, isTrue);
+      expect(deployment.restartedByUs, isTrue);
+      expect(deployment.reason, contains('was not running and has been restarted'));
+      expect(deployment.reason, contains('sessions it held before are gone'));
+      expect(target.commands.any((c) => c.contains('setsid nohup')), isTrue);
+    });
+
+    test('a host that would not start is still reported as one we tried to start', () async {
+      final target = FakeTarget()
+        ..greet = ((_) => null)
+        ..scripted['setsid nohup'] = const RemoteRun(127, '', 'sh: setsid: not found');
+      final deployment = await deployerFor(target).deploy();
+      expect(deployment.restartedByUs, isTrue);
+    });
+
     test('a host that never answers is cannot-start, and falls back', () async {
       final target = FakeTarget()..greet = (_) => null;
       final deployment = await deployerFor(target).deploy();

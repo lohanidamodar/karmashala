@@ -91,7 +91,11 @@ class HostDeployer {
     }
 
     var greeting = await _sayHello(remotePath);
+    // A host that had to be started is a host that was not running, and its
+    // earlier sessions are gone. The caller has to be able to say so.
+    var restarted = false;
     if (greeting == null) {
+      restarted = true;
       final started = await _startServe(remotePath);
       if (!started.ok) {
         return HostDeployment(
@@ -102,6 +106,7 @@ class HostDeployer {
           reason:
               '`$remotePath serve` would not start on ${target.address}: '
               '${started.output.isEmpty ? 'no output, exit ${started.exitCode}' : started.output}',
+          restartedByUs: true,
         );
       }
       greeting = await _sayHello(remotePath);
@@ -114,6 +119,7 @@ class HostDeployer {
         remotePath: remotePath,
         reason:
             'The host on ${target.address} was installed and started but never answered `hello`.',
+        restartedByUs: true,
       );
     }
     if (greeting.protocolVersion != kProtocolVersion) {
@@ -127,6 +133,7 @@ class HostDeployer {
         reason:
             'The host on ${target.address} speaks protocol ${greeting.protocolVersion}; '
             'this app speaks $kProtocolVersion. A stale `serve` is probably still running.',
+        restartedByUs: restarted,
       );
     }
     return HostDeployment(
@@ -136,9 +143,11 @@ class HostDeployer {
       remotePath: remotePath,
       hostVersion: greeting.hostVersion,
       protocolVersion: greeting.protocolVersion,
+      restartedByUs: restarted,
       reason:
           'karmashala_host ${greeting.hostVersion} answering on ${target.address} '
-          '(${platform.targetKey}, ${greeting.ptyLibrary}).',
+          '(${platform.targetKey}, ${greeting.ptyLibrary}).'
+          '${restarted ? ' It was not running and has been restarted, so any sessions it held before are gone.' : ''}',
     );
   }
 
