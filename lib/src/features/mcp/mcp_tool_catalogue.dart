@@ -307,6 +307,14 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // client deciding whether to confirm cannot see which argument was
       // passed. Same rule as `terminal_close`.
       'flutter_reload': McpToolAnnotations(destructive: true, openWorld: true),
+      // Starts and stops builds, apps and gates. Destructive because `stop`
+      // ends a running app and anything it had not saved goes with it, and
+      // because the annotation describes the worst the tool does — a client
+      // deciding whether to confirm cannot see which action was passed. Not
+      // idempotent: two `run`s are two launches, and `pubGet` twice is twice.
+      // Open-world for the same reason the device tools are — a launch puts an
+      // app on a phone, and a gate is a process on somebody's machine.
+      'flutter_run': McpToolAnnotations(destructive: true, openWorld: true),
 
       // Verification runs.
       'verification_list': McpToolAnnotations.read,
@@ -369,8 +377,8 @@ enum McpToolCategory {
     'A real Chrome or Edge — the developer\'s own logged-in window.',
   ),
   flutterApps(
-    'Running Flutter apps',
-    'A Flutter app already running under "flutter run".',
+    'Flutter apps',
+    'Starting a Flutter project, and the app once it is running.',
   ),
   guides(
     'Guides',
@@ -804,7 +812,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     'Run JavaScript in the page. Needs a one-time grant, per project.',
   ),
 
-  // Running Flutter apps.
+  // Flutter: starting a project, and the app once it is running.
   'flutter_apps': McpToolListing(
     McpToolCategory.flutterApps,
     'Every running app this can reach, and how to name each one.',
@@ -824,6 +832,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'flutter_pick_widget': McpToolListing(
     McpToolCategory.flutterApps,
     'Ask the developer to tap a widget; get the file and line it came from.',
+  ),
+  'flutter_run': McpToolListing(
+    McpToolCategory.flutterApps,
+    'Start a project: pub get, launch on a device, and run its gates.',
   ),
 
   // Guides.
