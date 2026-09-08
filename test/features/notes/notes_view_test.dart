@@ -212,7 +212,7 @@ void main() {
         .capture(body: 'compact tab strip, please', sourceSessionId: 's1');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Send to Toolbar rework’s message box'));
+    await tester.tap(find.byTooltip('Send to Toolbar rework'));
     await tester.pumpAndSettle();
 
     expect(
@@ -237,7 +237,7 @@ void main() {
     expect(find.text('Written here'), findsOneWidget);
     // Generic on purpose: the card cannot name a session it never read.
     await tester.tap(
-      find.byTooltip('Send to the active session’s message box'),
+      find.byTooltip('Send to the active session'),
     );
     await tester.pumpAndSettle();
 
@@ -293,7 +293,7 @@ void main() {
     container.read(notesProvider.notifier).capture(body: 'written here');
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byTooltip('Send to the active session’s message box'),
+      find.byTooltip('Send to the active session'),
     );
     await tester.pumpAndSettle();
 
@@ -338,7 +338,7 @@ void main() {
     container.read(notesProvider.notifier).capture(body: 'written here');
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byTooltip('Send to the active session’s message box'),
+      find.byTooltip('Send to the active session'),
     );
     await tester.pumpAndSettle();
 
@@ -362,7 +362,7 @@ void main() {
     container.read(notesProvider.notifier).capture(body: 'someday');
     await tester.pumpAndSettle();
 
-    final send = find.byTooltip('Send to the active session’s message box');
+    final send = find.byTooltip('Send to the active session');
     expect(send, findsOneWidget);
     // Enabled: disabling on state the card refuses to watch is not possible,
     // and "just give the option" is the ask anyway.
@@ -403,7 +403,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byTooltip('Send to Toolbar rework’s message box'),
+        find.byTooltip('Send to Toolbar rework'),
         findsOneWidget,
       );
       expect(find.byTooltip('Actions for “at rest”'), findsNothing);
@@ -486,7 +486,7 @@ void main() {
         // The menu is worded exactly as the button beside it — one verb, one
         // reading, whichever of the four ways in the user took.
         expect(
-          find.text('Send to the active session’s message box'),
+          find.text('Send to the active session'),
           findsOneWidget,
         );
 
@@ -508,7 +508,7 @@ void main() {
       await pickFromRowMenu(
         tester,
         'from the menu',
-        'Send to Toolbar rework’s message box',
+        'Send to Toolbar rework',
       );
 
       expect(

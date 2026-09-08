@@ -401,7 +401,7 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
         value: 'send',
         label: target == null
             ? 'Send to a session — open one first'
-            : 'Send to ${target.title}’s message box',
+            : 'Send to ${target.title}',
         icon: AppIcons.paperPlaneRight,
         enabled: target != null,
       ),

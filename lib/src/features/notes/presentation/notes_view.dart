@@ -139,9 +139,8 @@ class _EmptyNotes extends ConsumerWidget {
             ),
             const SizedBox(height: Insets.sm),
             Text(
-              'When you are ready to work on one, send it back: its text lands '
-              'in that session’s message box for you to check before it '
-              'goes.',
+              'When you are ready to work on one, send it back: its text is '
+              'offered to that session for you to check before it goes.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
@@ -286,9 +285,15 @@ class _NoteCard extends ConsumerWidget {
   /// selection, so at build time it does not know — and it is never disabled,
   /// because refusing to watch the state is also refusing to gate on it. The
   /// click resolves, and says where it went.
+  ///
+  /// It names *who*, never where. Send follows the face the session is already
+  /// showing — typed at the prompt when its terminal is up, queued for the
+  /// composer when its chat is — and a label that cannot watch the state cannot
+  /// name the destination either. The snackbar does, once the click has
+  /// resolved it.
   String _sendLabel(String? sourceTitle) => sourceTitle == null
-      ? 'Send to the active session’s message box'
-      : 'Send to $sourceTitle’s message box';
+      ? 'Send to the active session'
+      : 'Send to $sourceTitle';
 
   /// The card's actions, in the one vocabulary every path to them shares.
   ///

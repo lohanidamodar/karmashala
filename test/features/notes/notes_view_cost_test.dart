@@ -119,7 +119,7 @@ void main() {
     );
     // The source-less card says the same thing before and after, because what
     // it says no longer depends on which session is up.
-    final send = find.byTooltip('Send to the active session’s message box');
+    final send = find.byTooltip('Send to the active session');
     expect(send, findsOneWidget);
 
     // And it followed the switch anyway: resolved on the click, not watched.

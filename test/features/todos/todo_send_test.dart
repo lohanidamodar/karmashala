@@ -129,7 +129,7 @@ void main() {
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
     await tester.pumpAndSettle();
     await openRowMenu(tester, 'Fix the resize');
-    await tester.tap(find.textContaining('message box'));
+    await tester.tap(find.textContaining('Send to '));
     await tester.pumpAndSettle();
 
     expect(written, ['Fix the resize']);
@@ -168,7 +168,7 @@ void main() {
     container.read(todosProvider.notifier).add(body: 'Fix the resize');
     await tester.pumpAndSettle();
     await openRowMenu(tester, 'Fix the resize');
-    await tester.tap(find.textContaining('message box'));
+    await tester.tap(find.textContaining('Send to '));
     await tester.pumpAndSettle();
 
     expect(container.read(composerDraftProvider)['s1'], 'Fix the resize');
@@ -185,7 +185,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openRowMenu(tester, 'Fix the resize');
-    await tester.tap(find.text('Send to Toolbar rework’s message box'));
+    await tester.tap(find.text('Send to Toolbar rework'));
     await tester.pumpAndSettle();
 
     // Offered, never dispatched — whichever face it landed in. That tab shows
@@ -206,7 +206,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openRowMenu(tester, 'Fix the resize');
-    await tester.tap(find.text('Send to Second look’s message box'));
+    await tester.tap(find.text('Send to Second look'));
     await tester.pumpAndSettle();
 
     expect(container.read(composerDraftProvider)['s2'], 'Fix the resize');
@@ -252,10 +252,10 @@ void main() {
     await tester.pumpAndSettle();
 
     await openRowMenu(tester, 'Fix the resize');
-    await tester.tap(find.text('Send to Toolbar rework’s message box'));
+    await tester.tap(find.text('Send to Toolbar rework'));
     await tester.pumpAndSettle();
     await openRowMenu(tester, 'Then the strip');
-    await tester.tap(find.text('Send to Toolbar rework’s message box'));
+    await tester.tap(find.text('Send to Toolbar rework'));
     await tester.pumpAndSettle();
 
     expect(
