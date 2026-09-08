@@ -12,6 +12,7 @@ import 'side_panel_context.dart';
 import 'side_panel_state.dart';
 
 import '../../features/browser/presentation/browser_pane.dart';
+import '../../features/checkpoints/presentation/checkpoints_view.dart';
 import '../../features/flutter_apps/presentation/flutter_app_pane.dart';
 import '../../features/detail/presentation/repository_info_view.dart';
 import '../../features/detail/presentation/verification_view.dart';
@@ -59,6 +60,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.media => AppIcons.image,
     SidePanelSurface.repository => AppIcons.bookBookmark,
     SidePanelSurface.plan => AppIcons.clipboardText,
+    SidePanelSurface.checkpoints => AppIcons.clockCounterClockwise,
     SidePanelSurface.todos => AppIcons.listChecks,
     SidePanelSurface.notes => AppIcons.note,
     SidePanelSurface.logs => AppIcons.article,
@@ -116,24 +118,33 @@ class _SidePanelRail extends ConsumerWidget {
         color: scheme.surfaceContainerLow,
         border: Border(left: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Column(
-        children: [
-          const SizedBox(height: Insets.xs),
-          for (final surface in SidePanelSurface.offered(
-            debugMode: debugMode,
-            notesEnabled: notesEnabled,
-          ))
-            _RailButton(
-              surface: surface,
-              selected: surface == open,
-              // The rail is where a badge belongs: it is always visible, even
-              // when the panel is collapsed to its 34px.
-              badge: surface == SidePanelSurface.inbox
-                  ? ref.watch(attentionCountProvider)
-                  : 0,
-              onTap: () => ref.read(sidePanelProvider.notifier).select(surface),
-            ),
-        ],
+      // The glyphs scroll rather than overflow. Fourteen of them at 32px need
+      // ~450px, and the smallest window the app supports leaves the rail less
+      // than that — a column that simply overflowed would drop the last
+      // surfaces off the bottom of a 720x560 window with a yellow bar over
+      // them. Nothing scrolls while they fit.
+      child: SingleChildScrollView(
+        primary: false,
+        child: Column(
+          children: [
+            const SizedBox(height: Insets.xs),
+            for (final surface in SidePanelSurface.offered(
+              debugMode: debugMode,
+              notesEnabled: notesEnabled,
+            ))
+              _RailButton(
+                surface: surface,
+                selected: surface == open,
+                // The rail is where a badge belongs: it is always visible, even
+                // when the panel is collapsed to its 34px.
+                badge: surface == SidePanelSurface.inbox
+                    ? ref.watch(attentionCountProvider)
+                    : 0,
+                onTap: () =>
+                    ref.read(sidePanelProvider.notifier).select(surface),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -320,6 +331,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
     SidePanelSurface.plan => const AgentPlanPanel(),
+    SidePanelSurface.checkpoints => const CheckpointsView(),
     SidePanelSurface.todos => const TodosView(),
     SidePanelSurface.notes => const NotesView(),
     SidePanelSurface.logs => const LogsPanel(),

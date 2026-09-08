@@ -1,19 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../explorer/application/session_context.dart';
 import '../../git/data/git_diff_parsing.dart';
 import '../../git/domain/diff_line.dart';
+import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../application/checkpoint_providers.dart';
 import '../application/checkpoint_service.dart';
 import '../domain/checkpoint.dart';
 
-/// The checkpoints of a session, and the way back to one.
+/// Which session's checkpoints the panel is describing.
+///
+/// The session **on screen**, not the one last clicked in the Explorer — the
+/// same rule [planPanelSessionIdProvider] and [mediaPanelSessionIdProvider]
+/// follow, and for the same reason: switching terminal tabs changes which
+/// agent has been editing your checkout.
+final checkpointsPanelSessionIdProvider = Provider<String?>(
+  (ref) =>
+      ref.watch(activePaneSessionIdProvider) ??
+      ref.watch(selectedSessionIdProvider),
+);
+
+/// **The checkpoints of a session, and the way back to one.**
 ///
 /// Deliberately plain. The place this belongs is beside the turn it belongs to,
 /// in the transcript — that is the sessions owner's surface, and a follow-up.
 /// Until then this is the honest minimum: a list you can read, a diff you can
 /// check, and a restore that tells you what it will cost before it does it.
+///
+/// Nothing here polls. The list is read when the panel opens and again when a
+/// checkpoint is written, and **every row carries the age of its capture**
+/// (§19) — a chain of turns with no ages on it cannot be used to pick the one
+/// you meant.
 class CheckpointsView extends ConsumerStatefulWidget {
   const CheckpointsView({super.key});
 
@@ -28,22 +51,24 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final checkpoints = ref.watch(sessionCheckpointsProvider);
-
-    if (checkpoints.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.lg),
-          child: Text(
-            'No checkpoints yet. One is recorded each time an agent session '
-            'finishes a turn.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
+    final sessionId = ref.watch(checkpointsPanelSessionIdProvider);
+    if (sessionId == null) {
+      return const PanePlaceholder(
+        message: 'Open a session to see the checkpoints of its turns.',
+        icon: AppIcons.clockCounterClockwise,
       );
     }
 
+    final checkpoints = ref.watch(sessionCheckpointsProvider(sessionId));
+    if (checkpoints.isEmpty) {
+      return const PanePlaceholder(
+        message: 'No checkpoints yet. One is recorded each time this session '
+            'finishes a turn.',
+        icon: AppIcons.clockCounterClockwise,
+      );
+    }
+
+    final now = ref.watch(clockProvider).nowUtc();
     return ListView.separated(
       itemCount: checkpoints.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
@@ -61,10 +86,12 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
                         '#${checkpoint.sequence}',
                 style: theme.textTheme.bodyMedium,
               ),
+              // §19 at the line the reading is on: a turn is only pickable if
+              // you can tell how long ago it was.
               subtitle: Text(
                 '${checkpoint.files.length} file'
                 '${checkpoint.files.length == 1 ? '' : 's'} · '
-                '${checkpoint.createdAt.toLocal()}',
+                '${describeAge(now.difference(checkpoint.createdAt))}',
                 style: theme.textTheme.bodySmall,
               ),
               onTap: () =>
