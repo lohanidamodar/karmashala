@@ -213,7 +213,7 @@ void _parseClaudeLine(
             final id = part['id'];
             if (id is String) {
               pending[id] = out.length;
-              if (name == kSubagentToolName) tasks[id] = out.length;
+              if (isSubagentToolName(name)) tasks[id] = out.length;
             }
             out.add(
               TranscriptMessage(
