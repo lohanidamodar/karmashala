@@ -30,6 +30,9 @@ class PosixPtyLauncher implements PtyLauncher {
   String get ptyLibrary => _libc.ptySymbolLibrary;
   bool get honoursWorkingDirectory => _libc.faAddChdir != null;
 
+  /// Resolvable on this machine, and never called — see the class comment.
+  bool get providesForkpty => _libc.providesForkpty;
+
   @override
   PtyHandle start(PtySpawnRequest request) {
     if (!Platform.isLinux && !Platform.isMacOS) {
@@ -153,6 +156,7 @@ class _PosixPtyHandle implements PtyHandle {
 
   final _output = StreamController<Uint8List>.broadcast();
   final _exit = Completer<int>();
+  Future<SendPort>? _writerReady;
   SendPort? _writerPort;
   Isolate? _writer;
   var _closed = false;
@@ -179,18 +183,22 @@ class _PosixPtyHandle implements PtyHandle {
     await Isolate.spawn(_readerMain, [port.sendPort, _masterFd, pid], debugName: 'pty-read-$pid');
   }
 
-  Future<SendPort> _ensureWriter() async {
-    final existing = _writerPort;
-    if (existing != null) return existing;
-    final ready = ReceivePort();
-    _writer = await Isolate.spawn(_writerMain, [
-      ready.sendPort,
-      _masterFd,
-    ], debugName: 'pty-write-$pid');
-    final port = await ready.first as SendPort;
-    ready.close();
-    return _writerPort = port;
-  }
+  Future<SendPort> _ensureWriter() =>
+      // Memoised on the *future*, not on the result: three writes in one turn
+      // would otherwise each spawn their own isolate before the first finished,
+      // and the pty would receive them in whatever order those isolates
+      // started. Measured on the ConPTY twin of this class, 2026-09-09 — three
+      // typed lines arrived third, first, second.
+      _writerReady ??= () async {
+        final ready = ReceivePort();
+        _writer = await Isolate.spawn(_writerMain, [
+          ready.sendPort,
+          _masterFd,
+        ], debugName: 'pty-write-$pid');
+        final port = await ready.first as SendPort;
+        ready.close();
+        return _writerPort = port;
+      }();
 
   @override
   void write(Uint8List bytes) {

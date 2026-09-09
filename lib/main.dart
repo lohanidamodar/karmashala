@@ -243,6 +243,13 @@ Future<void> main() async {
     lifecycle.installAgentHooks(controlServer, afterFirstFrame: afterFirstFrame);
   }
 
+  // The skills, behind the same gate and beside the hooks because they are the
+  // same act — writing files into somebody else's agent configuration. Not
+  // behind `controlServer`, though: a skill needs no address to be discovered,
+  // and the bytes are constant, so a launch whose control server never bound
+  // still leaves the CLIs able to find them.
+  lifecycle.installAgentSkills(afterFirstFrame: afterFirstFrame);
+
   // The CLI stores, **once**, behind the same gate and for the same reason.
   //
   // This import used to run on every project expand and every project

@@ -93,6 +93,15 @@ enum DecisionOrigin {
   /// An agent calling the `decision_record` tool.
   decisionTool('a `decision_record` call'),
 
+  /// The user writing one down in the app, in the Decisions panel.
+  ///
+  /// Its own origin rather than [decisionTool]'s: who asserted a constraint is
+  /// half of what the packet's reader is weighing, and a line the user typed
+  /// filed as an agent's tool call would misattribute exactly the rows that
+  /// carry the most authority. Carries **no id** — there is no run, no
+  /// checkpoint and no call to name, only the row itself.
+  userEntry('the user, written down in the app'),
+
   /// A row in the session event log, by rowid.
   sessionEvent('session event'),
 

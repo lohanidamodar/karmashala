@@ -93,6 +93,7 @@ class _RecordingService extends SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
     PermissionSelection? permissionMode,
+    HandoffSourceBrief? sourceBrief,
   }) async {
     handoffs.add((
       sessionId: sessionId,
@@ -120,6 +121,7 @@ class _RecordingService extends SessionHandoffService {
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool isFork = false,
+    HandoffSourceBrief? sourceBrief,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
     HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async => HandoffPacket(

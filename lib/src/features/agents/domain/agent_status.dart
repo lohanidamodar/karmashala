@@ -48,6 +48,26 @@ enum AgentWaitKind {
   unrecorded,
 }
 
+/// **What a CLI said about its own session ending**, when it said anything.
+///
+/// The whole point is what is *not* here. A pane's exit code is not one of
+/// these: exit 0 covers a Ctrl-C, a wrapper that fell over before the agent
+/// started and a clean finish alike, so turning it into a word would put an
+/// ending on all three. Only an event the agent itself fires — Claude Code's
+/// `SessionEnd` and `StopFailure`, Codex's `SessionEnd`, Antigravity's `Stop`
+/// with a failing `terminationReason` — reaches this type at all.
+///
+/// Two values, and no `cancelled`: no CLI here distinguishes a run the user
+/// stopped from one that ended by itself in a hook, and the user's own stop is
+/// already written by whoever performed it.
+enum AgentSessionEnding {
+  /// The agent's own run ended, and nothing said it ended badly.
+  completed,
+
+  /// The CLI named a failure — an API error, an exhausted budget.
+  failed,
+}
+
 /// One observation of an agent session's status.
 class AgentStatusReport {
   const AgentStatusReport({
@@ -60,6 +80,7 @@ class AgentStatusReport {
     this.sourceModifiedAt,
     this.evidence = const [],
     this.waiting = AgentWaitKind.unrecorded,
+    this.ending,
   });
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -114,6 +135,14 @@ class AgentStatusReport {
   /// source with positive evidence — a rendered prompt, or a hook message the
   /// agent's descriptor recognises — may claim [AgentWaitKind.approval].
   final AgentWaitKind waiting;
+
+  /// **What the agent said about its session ending**, or null — which is the
+  /// normal answer, because most events are about a turn.
+  ///
+  /// Only a hook carries one. A transcript read and a terminal screen describe
+  /// what a session is *doing*, and neither can witness it stopping; see
+  /// `SessionOutcomeWriter`, the one consumer.
+  final AgentSessionEnding? ending;
 
   /// **Whether a prompt with options is on this session's screen right now.**
   ///
@@ -293,10 +322,20 @@ class AgentHookMeaning {
     this.status, {
     this.waiting = AgentWaitKind.unrecorded,
     this.fallbackMessage,
+    this.ending,
   });
 
   final AgentActivityStatus status;
   final AgentWaitKind waiting;
+
+  /// What this subtype says about the **session**, when it says anything.
+  ///
+  /// Separate from [status] because they are different lifespans: `failed` as a
+  /// status is what the agent is doing this second, and it ages out; an ending
+  /// is written onto the row and outlives the app. Null — the default — means
+  /// this subtype ends a turn and says nothing about the session, which is the
+  /// answer for every subtype but Antigravity's failing ones.
+  final AgentSessionEnding? ending;
 
   /// An explanatory message when the hook payload carries no description of its own.
   final String? fallbackMessage;
@@ -319,6 +358,7 @@ class AgentHookSpec {
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
     this.inFlightPath = const {},
+    this.eventEnding = const {},
     this.trustsCommandByHash = false,
     required this.eventStatus,
   });
@@ -432,6 +472,19 @@ class AgentHookSpec {
   /// distinguish 'session is done' from 'session is paused waiting for
   /// background work to wake it'."*
   final Map<String, List<String>> inFlightPath;
+
+  /// Hook event name → what that event says about the **session's** ending.
+  ///
+  /// Read only when the payload carries no subtype at [eventKindPath]; a
+  /// subtype that is present is answered by [AgentHookMeaning.ending] instead,
+  /// exactly as [eventStatus] and [eventKindMeaning] divide [eventStatus]'s
+  /// question.
+  ///
+  /// Deliberately tiny, and an event missing from it writes nothing rather
+  /// than a default: `Stop` is a **turn** ending on every CLI here, and a row
+  /// that said `completed` after each turn would be wrong for the whole of
+  /// every session but the last turn of it.
+  final Map<String, AgentSessionEnding> eventEnding;
 
   /// Whether this agent gates each hook entry on a hash of the entry itself, so
   /// the installed **command string must not change between launches**.

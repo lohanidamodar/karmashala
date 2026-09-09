@@ -16,6 +16,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/application/host_session_providers.dart';
 import '../../ssh/application/ssh_providers.dart';
+import '../data/host_terminal_instance.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
 import '../data/ssh_terminal_instance.dart';
@@ -32,6 +33,7 @@ import '../domain/persistence_telemetry.dart';
 import '../domain/pane_restart.dart';
 import '../domain/pane_title.dart';
 import '../domain/terminal_profile.dart';
+import 'local_host_providers.dart';
 import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
 
@@ -107,6 +109,26 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
             agentLaunch: agentLaunch,
             restoredScrollback: restoredScrollback,
             adoptTerminal: adoptTerminal,
+          );
+        }
+
+        // Read here, per launch, for the same reason the environment overlay
+        // is: a setting changed now applies to the next pane and not to the
+        // ones already running, because an instance is built once and a running
+        // shell cannot change which process owns it.
+        final hostAccess = ref.read(hostBackedLocalPanesProvider)
+            ? ref.read(localHostSessionAccessProvider)
+            : null;
+        if (hostAccess != null) {
+          return createHostTerminalInstance(
+            id: id,
+            profile: profile,
+            access: hostAccess,
+            workingDirectory: workingDirectory,
+            restoredScrollback: restoredScrollback,
+            agentLaunch: agentLaunch,
+            adoptTerminal: adoptTerminal,
+            environmentOverlay: ref.read(terminalEnvOverlayProvider),
           );
         }
 

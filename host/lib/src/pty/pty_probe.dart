@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'libc.dart';
+import 'conpty.dart';
 import 'posix_pty.dart';
 import 'pty.dart';
+import 'pty_platform.dart';
 
 /// The stage-zero proof, kept as a subcommand rather than a throwaway script so
 /// a deployed host can be asked, on the machine that matters, whether its pty
@@ -13,7 +14,10 @@ import 'pty.dart';
 /// bound, never a poll.
 ///
 /// Prints one `step ok/FAIL` line per check and exits non-zero on the first
-/// failure, so `karmashala_host probe-pty` is quotable evidence.
+/// failure, so `karmashala_host probe-pty` is quotable evidence. The four steps
+/// are the same on both platforms — spawn, echo, resize, exit code — because
+/// they are the four things a pane needs and not four things a pty happens to
+/// do. Only the shell and the sentences it is asked differ.
 Future<int> runPtyProbe({IOSink? out}) async {
   final sink = out ?? stdout;
   var failures = 0;
@@ -22,51 +26,54 @@ Future<int> runPtyProbe({IOSink? out}) async {
     sink.writeln('${ok ? 'ok  ' : 'FAIL'} $name${detail.isEmpty ? '' : '  $detail'}');
   }
 
-  final Libc libc;
+  final PtyPlatform platform;
   try {
-    libc = Libc.open();
-  } on ArgumentError catch (e) {
-    sink.writeln('FAIL libc  $e');
+    platform = resolvePtyPlatform();
+  } on PtyException catch (e) {
+    sink.writeln('FAIL pty layer  ${e.message}');
     return 1;
   }
   sink.writeln('host      ${Platform.operatingSystem} ${_arch()}');
-  sink.writeln('pty-lib   ${libc.ptySymbolLibrary} (${libc.ptySymbolSource.name})');
-  sink.writeln('forkpty   ${libc.providesForkpty ? 'resolvable' : 'absent'} (never called)');
+  sink.writeln('pty-lib   ${platform.library}');
 
-  final launcher = PosixPtyLauncher(libc: libc);
-  sink.writeln('chdir     ${launcher.honoursWorkingDirectory ? 'supported' : 'unsupported'}');
+  final launcher = platform.launcher;
+  if (launcher is PosixPtyLauncher) {
+    sink.writeln('forkpty   ${launcher.providesForkpty ? 'resolvable' : 'absent'} (never called)');
+    sink.writeln('chdir     ${launcher.honoursWorkingDirectory ? 'supported' : 'unsupported'}');
+  }
+  if (launcher is ConPtyLauncher) {
+    // Windows has no signals, so this is the one place the difference is
+    // visible before a session ends: say it here rather than let a caller find
+    // out from an exit code that is not 128 + anything.
+    sink.writeln('signals   none (kill terminates the process tree)');
+  }
 
+  final shell = _probeShell();
   PtyHandle handle;
   try {
-    handle = launcher.start(
-      const PtySpawnRequest(
-        argv: ['/bin/sh'],
-        workingDirectory: '/tmp',
-        environment: {'TERM': 'dumb', 'PATH': '/usr/bin:/bin', 'PS1': r'$ '},
-        columns: 80,
-        rows: 24,
-      ),
-    );
+    handle = launcher.start(shell.request);
   } on PtyException catch (e) {
-    step('spawn /bin/sh', false, '$e');
+    step('spawn ${shell.request.argv.first}', false, '$e');
     return 1;
   }
-  step('spawn /bin/sh', true, 'pid ${handle.pid}');
+  step('spawn ${shell.request.argv.first}', true, 'pid ${handle.pid}');
 
   final reader = _ByteWatcher(handle.output);
   try {
-    // `karma''shala` echoes back with the quotes and prints without them, so a
-    // match proves the child ran the command rather than the tty echoing it.
-    handle.write(_ascii("echo karma''shala\n"));
-    final echoed = await reader.until('karmashala\r\n');
+    handle.write(_ascii(shell.echoCommand));
+    final echoed = await reader.until('karmashala');
     step('echo round-trip', echoed, 'saw ${reader.length} bytes');
 
     handle.resize(100, 30);
-    handle.write(_ascii('stty size\n'));
-    final resized = await reader.until('30 100');
-    step('resize -> stty size', resized, resized ? '30 100' : 'saw ${reader.tail(60)}');
+    handle.write(_ascii(shell.sizeCommand));
+    final resized = await reader.until(shell.expectedSize);
+    step(
+      'resize -> reported size',
+      resized,
+      resized ? shell.expectedSize : 'saw ${reader.tail(60)}',
+    );
 
-    handle.write(_ascii('exit 7\n'));
+    handle.write(_ascii(shell.exitCommand));
     final code = await handle.exitCode.timeout(
       const Duration(seconds: 10),
       onTimeout: () => -1,
@@ -77,6 +84,62 @@ Future<int> runPtyProbe({IOSink? out}) async {
   }
   sink.writeln(failures == 0 ? 'PROBE OK' : 'PROBE FAILED ($failures)');
   return failures == 0 ? 0 : 1;
+}
+
+/// What to start and what to type into it, per platform.
+class _ProbeShell {
+  const _ProbeShell({
+    required this.request,
+    required this.echoCommand,
+    required this.sizeCommand,
+    required this.expectedSize,
+    required this.exitCommand,
+  });
+
+  final PtySpawnRequest request;
+
+  /// Written so the command *line* does not contain the answer: the echo of
+  /// what was typed cannot be mistaken for the child having run it.
+  final String echoCommand;
+  final String sizeCommand;
+  final String expectedSize;
+  final String exitCommand;
+}
+
+_ProbeShell _probeShell() {
+  if (Platform.isWindows) {
+    return _ProbeShell(
+      request: PtySpawnRequest(
+        argv: ['powershell.exe', '-NoLogo', '-NoProfile'],
+        workingDirectory: Directory.systemTemp.path,
+        environment: const {'TERM': 'xterm-256color'},
+        columns: 80,
+        rows: 24,
+      ),
+      echoCommand: "Write-Output ('karma'+'shala')\r\n",
+      // The same question `live_pane_resize_test.dart` asks a real pane: does
+      // the process learn the size it was resized to?
+      sizeCommand: 'Write-Output "\$(\$Host.UI.RawUI.WindowSize.Height) '
+          '\$(\$Host.UI.RawUI.WindowSize.Width)"\r\n',
+      expectedSize: '30 100',
+      exitCommand: 'exit 7\r\n',
+    );
+  }
+  return const _ProbeShell(
+    request: PtySpawnRequest(
+      argv: ['/bin/sh'],
+      workingDirectory: '/tmp',
+      environment: {'TERM': 'dumb', 'PATH': '/usr/bin:/bin', 'PS1': r'$ '},
+      columns: 80,
+      rows: 24,
+    ),
+    // `karma''shala` echoes back with the quotes and prints without them, so a
+    // match proves the child ran the command rather than the tty echoing it.
+    echoCommand: "echo karma''shala\n",
+    sizeCommand: 'stty size\n',
+    expectedSize: '30 100',
+    exitCommand: 'exit 7\n',
+  );
 }
 
 String _arch() {

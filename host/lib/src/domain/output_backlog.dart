@@ -31,6 +31,25 @@ class OutputBacklog {
     : assert(capacityBytes > 0),
       _ring = Uint8List(capacityBytes);
 
+  /// A ring rebuilt from a record on disk: [tail] is the newest bytes that
+  /// survived and [totalBytes] is the absolute count the session had reached.
+  ///
+  /// The two are separate because they are separately true — a session that
+  /// produced 40 MiB and kept the last 4 must answer `attach since 39_000_000`
+  /// with bytes, and `attach since 0` with a count of what it discarded. A
+  /// restarted host that reset the total to `tail.length` would hand every
+  /// client an offset from a different session's numbering.
+  factory OutputBacklog.restored({
+    int capacityBytes = defaultCapacityBytes,
+    required int totalBytes,
+    required Uint8List tail,
+  }) {
+    assert(totalBytes >= tail.length);
+    final backlog = OutputBacklog(capacityBytes: capacityBytes)..add(tail);
+    backlog._total = totalBytes;
+    return backlog;
+  }
+
   /// 4 MiB per session: enough that an ordinary reattach replays everything,
   /// small enough that a hundred idle sessions are not a memory problem.
   static const int defaultCapacityBytes = 4 * 1024 * 1024;

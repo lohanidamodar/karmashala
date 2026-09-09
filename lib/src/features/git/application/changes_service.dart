@@ -255,4 +255,22 @@ class ChangesService {
     if (restored) onWorkingTreeChanged?.call(repo);
     return restored;
   }
+
+  /// Moves [branch] back to [sha], leaving the working tree and index alone.
+  ///
+  /// The fourth write, and the narrowest — one press with one meaning, like
+  /// the merges above. It exists for *"also drop the commits this run made"*
+  /// on an unattended automation, which `undo_run.dart` refuses outright once
+  /// any of those commits is on a remote; that rule is read by the checkbox's
+  /// tooltip and asserted again here by the caller, so the two cannot drift.
+  ///
+  /// `update-ref` rather than `git reset`, deliberately. The files have
+  /// already been put back from the run's base checkpoint, so a `--hard` would
+  /// throw away whatever the user has done since and a `--mixed` would
+  /// silently unstage their index. Nothing but the branch pointer moves.
+  Future<void> moveBranchTo(
+    EnvironmentPath repo, {
+    required String branch,
+    required String sha,
+  }) => _gitFor(repo).updateRef(repo, 'refs/heads/$branch', sha);
 }

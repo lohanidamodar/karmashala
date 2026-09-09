@@ -6,6 +6,7 @@ import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/review_threads.dart';
@@ -18,6 +19,7 @@ import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import 'worktree_browse.dart';
 import '../domain/diff_line.dart';
+import '../domain/review_order.dart';
 import '../domain/review_thread.dart';
 import '../domain/file_change.dart';
 
@@ -68,6 +70,7 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
             // can be dragged down to 240px.
             const Flexible(child: _DeliveryLinks()),
             const _ChangedFileCount(),
+            const _AbortMergeButton(),
             IconButton(
               tooltip: 'Refresh',
               visualDensity: VisualDensity.compact,
@@ -199,6 +202,84 @@ class _ChangedFileCount extends ConsumerWidget {
   }
 }
 
+/// `git merge --abort` on the working tree being read, behind a confirm.
+///
+/// **The only lever in the strip that is ours and undoes rather than does.**
+/// `ChangesService.abortMerge` had exactly one caller — the delivery
+/// pipeline's failure path — so a merge an agent left half-done could be
+/// undone only by asking a model to type the command. Merge and push stay
+/// prompts, because what a merge should say is a decision; aborting one has
+/// nothing in it to decide, which is the test `DeliveryAction` sets for an
+/// action the app owns.
+///
+/// **It does not first ask whether a merge is in progress.** That question
+/// costs a process, would have to be asked on every poll for the button to
+/// appear by itself, and `git merge --abort` already answers it exactly:
+/// [ChangesService.abortMerge] reports whether a tree came back, so the
+/// outcome below states which of the two happened rather than predicting it.
+class _AbortMergeButton extends ConsumerWidget {
+  const _AbortMergeButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final checkout = ref.watch(viewedCheckoutProvider);
+    if (checkout == null) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: 'Abort merge',
+      visualDensity: VisualDensity.compact,
+      icon: const Icon(AppIcons.arrowCounterClockwise, size: Chrome.icon),
+      onPressed: () => _press(context, ref, checkout),
+    );
+  }
+
+  Future<void> _press(
+    BuildContext context,
+    WidgetRef ref,
+    EnvironmentPath checkout,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Abort the merge in progress?'),
+        content: const Text(
+          'git merge --abort puts the working tree back to the commit the '
+          'merge started from. Every conflict resolution made since then is '
+          'discarded.\n\n'
+          'Commits are untouched, and if no merge is in progress nothing '
+          'changes at all.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Abort merge'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final restored = await ref.read(changesServiceProvider).abortMerge(checkout);
+    // Only on the half that rewrote files. An abort that found nothing to undo
+    // changed no file, so re-reading would be a git process spent on a listing
+    // that cannot have moved.
+    if (restored) ref.invalidate(repositoryChangesProvider);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          restored
+              ? 'Merge aborted. The working tree is back to before it started.'
+              : 'There was no merge to abort; nothing changed.',
+        ),
+      ),
+    );
+  }
+}
+
 /// Sends the should-fix review threads to the session on screen.
 ///
 /// The review index and the selected session are read here rather than in the
@@ -271,20 +352,28 @@ class _ChangedFiles extends ConsumerWidget {
                   message: 'No working-tree changes.',
                   icon: AppIcons.gitDiff,
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                  itemCount: files.length,
-                  itemBuilder: (context, index) {
-                    final file = files[index];
-                    return _ChangedFileSection(
-                      file: file,
-                      expanded: expanded.contains(file.path),
-                      onToggle: () => onToggle(file.path),
-                      onFullscreen: () => onFullscreen(file),
-                    );
-                  },
-                ),
+              : _ordered(files),
         );
+  }
+
+  /// The same list, in the order it is read in. **Tiered, never filtered** —
+  /// see `review_order.dart`; git's own order is alphabetical, which opens
+  /// every review on `pubspec.lock`.
+  Widget _ordered(List<FileChange> files) {
+    final ordered = orderedForReview(files, (file) => file.path);
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      itemCount: ordered.length,
+      itemBuilder: (context, index) {
+        final file = ordered[index];
+        return _ChangedFileSection(
+          file: file,
+          expanded: expanded.contains(file.path),
+          onToggle: () => onToggle(file.path),
+          onFullscreen: () => onFullscreen(file),
+        );
+      },
+    );
   }
 }
 

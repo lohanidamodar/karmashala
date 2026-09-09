@@ -73,6 +73,7 @@ class Settings {
     this.defaultAgentInstallationId,
     this.permissions = const {},
     this.defaultModels = const {},
+    this.flutterSdkPaths = const {},
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
     this.keepAwake = false,
@@ -98,6 +99,7 @@ class Settings {
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
+    this.hostBackedLocalPanes = false,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
     this.remoteAccessEnabled = false,
@@ -148,6 +150,25 @@ class Settings {
   /// before this setting existed. Writing a null down instead would make the
   /// shipped default look like a value somebody picked.
   final Map<String, String> defaultModels;
+
+  /// The `flutter` executable a person named for an execution environment,
+  /// keyed by `ExecutionEnvironment.id`.
+  ///
+  /// **The one thing about a Flutter SDK that is stored at all.** Everything
+  /// else — where PATH found it, what version answered — is a *reading*, taken
+  /// again when it has aged out and never persisted (`FlutterSdkReadings`).
+  /// This is the opposite kind of fact: a statement a person made, which no
+  /// measurement may overrule (§20's third rule).
+  ///
+  /// Kept here rather than on the `execution_environments` row on purpose:
+  /// discovery upserts that table on every launch out of objects that carry no
+  /// hand-set path, so a column there would need a conflict clause somebody
+  /// must remember not to widen. A different store makes "never overruled by a
+  /// sweep" structural instead of remembered.
+  ///
+  /// Absence means "look on PATH", which is what every environment did before
+  /// this existed.
+  final Map<String, String> flutterSdkPaths;
 
   /// The app theme preference.
   final AppThemeMode themeMode;
@@ -278,6 +299,20 @@ class Settings {
   /// in `shouldRestartOnLaunch` — in particular it never starts an agent pane.
   final bool restoreLivePanes;
 
+  /// Whether a local pane's process belongs to the **session host** rather than
+  /// to this app.
+  ///
+  /// Off, and the default matters: with it off nothing changes at all — every
+  /// pane is the `flutter_pty` child it has always been. With it on, a pane's
+  /// shell is started by `karmashala_host` and outlives this app, so a crash
+  /// stops taking every agent with it and reopening a pane resumes its session
+  /// from the byte it last rendered.
+  ///
+  /// The cost of that is what keeps it off by default: there is no OSC 133 on
+  /// the host path, so a host-backed pane reports no command boundaries and
+  /// `terminal_run` will not claim an exit code for a command typed into one.
+  final bool hostBackedLocalPanes;
+
   /// The imported terminal colour theme, as `<format>:<path>` (for example
   /// `warp:C:\\Users\\a\\...\\nord.yaml`), or `null` for the built-in theme.
   ///
@@ -379,12 +414,18 @@ class Settings {
   /// choose" — which passes no model flag at all.
   String? defaultModelFor(String agentId) => defaultModels[agentId];
 
+  /// The `flutter` a person named for [environmentId], or null for "look on
+  /// PATH" — which is not the same as "there is none" (§19).
+  String? flutterSdkPathFor(String environmentId) =>
+      flutterSdkPaths[environmentId];
+
   Settings copyWith({
     String? defaultAgent,
     bool clearDefaultAgent = false,
     String? defaultAgentInstallationId,
     Map<String, AgentPermissions>? permissions,
     Map<String, String>? defaultModels,
+    Map<String, String>? flutterSdkPaths,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
     bool? keepAwake,
@@ -410,6 +451,7 @@ class Settings {
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
+    bool? hostBackedLocalPanes,
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
@@ -436,6 +478,7 @@ class Settings {
         : (defaultAgentInstallationId ?? this.defaultAgentInstallationId),
     permissions: permissions ?? this.permissions,
     defaultModels: defaultModels ?? this.defaultModels,
+    flutterSdkPaths: flutterSdkPaths ?? this.flutterSdkPaths,
     themeMode: themeMode ?? this.themeMode,
     defaultTerminalProfileId:
         defaultTerminalProfileId ?? this.defaultTerminalProfileId,
@@ -465,6 +508,7 @@ class Settings {
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
+    hostBackedLocalPanes: hostBackedLocalPanes ?? this.hostBackedLocalPanes,
     terminalChordOverrides:
         terminalChordOverrides ?? this.terminalChordOverrides,
     terminalThemeSource: clearTerminalThemeSource
@@ -503,6 +547,24 @@ class Settings {
     },
   );
 
+  /// Sets [environmentId]'s Flutter executable, or with a blank [path]
+  /// **removes** it, which puts that environment back on PATH.
+  ///
+  /// Removal rather than a stored empty string, for the reason
+  /// [withDefaultModel] gives — and here a stored `' '` would be worse than
+  /// ambiguous: it is a path, so it would be refused for ever with nothing on
+  /// screen to explain why.
+  Settings withFlutterSdkPath(String environmentId, String? path) {
+    final trimmed = path?.trim() ?? '';
+    return copyWith(
+      flutterSdkPaths: {
+        for (final entry in flutterSdkPaths.entries)
+          if (entry.key != environmentId) entry.key: entry.value,
+        if (trimmed.isNotEmpty) environmentId: trimmed,
+      },
+    );
+  }
+
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent,
     if (defaultAgentInstallationId != null)
@@ -534,6 +596,7 @@ class Settings {
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
+    'hostBackedLocalPanes': hostBackedLocalPanes,
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
@@ -554,6 +617,7 @@ class Settings {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
     if (defaultModels.isNotEmpty) 'defaultModels': defaultModels,
+    if (flutterSdkPaths.isNotEmpty) 'flutterSdkPaths': flutterSdkPaths,
   };
 
   static Settings fromJson(Map<String, dynamic> json) {
@@ -591,6 +655,21 @@ class Settings {
         }
       }
     }
+    // Same shape again, keyed by environment id. An environment that has gone
+    // keeps its entry rather than being pruned here: a distribution that is
+    // merely stopped is not a distribution that was removed (§19), and the id
+    // is stable across a reinstall.
+    final flutterSdkPaths = <String, String>{};
+    final sdks = json['flutterSdkPaths'];
+    if (sdks is Map) {
+      for (final entry in sdks.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        if (key is String && value is String && value.isNotEmpty) {
+          flutterSdkPaths[key] = value;
+        }
+      }
+    }
     final terminalId = json['defaultTerminalProfileId'];
     double? toDouble(Object? v) => v is num ? v.toDouble() : null;
     return Settings(
@@ -600,6 +679,7 @@ class Settings {
           : null,
       permissions: permissions,
       defaultModels: defaultModels,
+      flutterSdkPaths: flutterSdkPaths,
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
       keepAwake: json['keepAwake'] == true,
@@ -661,6 +741,9 @@ class Settings {
       // file written before the key existed has to read as on rather than as
       // the absent value's `false`.
       restoreLivePanes: json['restoreLivePanes'] != false,
+      // `== true`, not `!= false`: this defaults **off**, so a settings file
+      // written before the key existed reads as off.
+      hostBackedLocalPanes: json['hostBackedLocalPanes'] == true,
       terminalChordOverrides: {
         if (json['terminalChordOverrides'] is Map)
           for (final entry in (json['terminalChordOverrides'] as Map).entries)
@@ -744,6 +827,7 @@ class Settings {
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
+      other.hostBackedLocalPanes == hostBackedLocalPanes &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
       other.remoteAccessEnabled == remoteAccessEnabled &&
@@ -762,7 +846,8 @@ class Settings {
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions) &&
-      _stringMapEquals(other.defaultModels, defaultModels);
+      _stringMapEquals(other.defaultModels, defaultModels) &&
+      _stringMapEquals(other.flutterSdkPaths, flutterSdkPaths);
 
   @override
   int get hashCode => Object.hash(
@@ -806,6 +891,7 @@ class Settings {
       // Folded in here rather than added to the outer call, which was already
       // at `Object.hash`'s limit of 20 arguments.
       Object.hash(
+        hostBackedLocalPanes,
         androidSlimming,
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
@@ -813,6 +899,9 @@ class Settings {
         androidEmulatorGpu,
         Object.hashAllUnordered(
           defaultModels.entries.map((e) => Object.hash(e.key, e.value)),
+        ),
+        Object.hashAllUnordered(
+          flutterSdkPaths.entries.map((e) => Object.hash(e.key, e.value)),
         ),
       ),
     ),

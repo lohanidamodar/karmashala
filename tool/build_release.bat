@@ -58,12 +58,23 @@ rem They land in the Release directory beside karmashala_mcp.exe, which the
 rem installer copies wholesale, so no installer change is needed. The version
 rem is in the filename because HostDeployer compares it against what the remote
 rem binary reports rather than trusting the name.
-echo === SESSION HOST (linux x64, arm64) === >> "%LOG%"
+echo === SESSION HOST (linux x64, arm64, and this machine) === >> "%LOG%"
 call "%FLUTTER%" pub get --directory host >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 "%DARTEXE%" compile exe host\bin\karmashala_host.dart --target-os=linux --target-arch=x64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 "%DARTEXE%" compile exe host\bin\karmashala_host.dart --target-os=linux --target-arch=arm64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-arm64" >> "%LOG%" 2>&1
+if errorlevel 1 goto :fail
+
+rem And the same host for *this* machine, which is the local stage: the app
+rem starts it when a pane needs one and finds none running.
+rem
+rem Deliberately named without the `-<os>-<arch>` suffix the deployed ones
+rem carry, because DirectoryHostBinaries matches on exactly that pattern and
+rem this binary must never be uploaded to somebody else's machine — it is a
+rem Windows PE. LocalHostExecutable looks for this name beside the app, the way
+rem karmashala_mcp.exe is found, so the installer needs no change.
+"%DARTEXE%" compile exe host\bin\karmashala_host.dart -o "%RELEASE%\karmashala_host.exe" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 echo === INSTALLER === >> "%LOG%"

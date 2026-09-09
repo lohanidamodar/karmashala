@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../automations/presentation/automations_page.dart';
 import '../../../app/shell/app_shell.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
+import '../../flutter_apps/presentation/flutter_sdk_section.dart';
 import '../../git/presentation/worktree_setup_page.dart';
 import '../../notes/presentation/notes_settings_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
@@ -169,8 +171,15 @@ class _SectionContent extends StatelessWidget {
     // Agents are listed under the environment they are installed in: the same
     // CLI on the Windows host and on a build box are two independent
     // installations.
+    SettingsSectionId.automations => const AutomationsPage(),
     SettingsSectionId.worktrees => const WorktreeSetupPage(),
-    SettingsSectionId.environments => const EnvironmentsSection(),
+    // Two blocks, because they answer two questions about the same list: what
+    // was *found* in each environment, and — under it — the one thing a person
+    // may have to say themselves.
+    SettingsSectionId.environments => const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [EnvironmentsSection(), FlutterSdkSection()],
+    ),
     SettingsSectionId.environmentVariables => const EnvSecretsPage(),
     SettingsSectionId.ssh => const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
