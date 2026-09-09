@@ -1550,6 +1550,46 @@ const kTabStripEmptySpace = Key('tab-strip/empty-space');
 /// rect to say which edge of which chip it is on.
 const kTabDropMarker = Key('tab-strip/drop-marker');
 
+/// The chip a pane will join, or a tab will divide the workspace beside.
+///
+/// A whole-chip mark rather than the edge caret [_markedForDrop] draws: neither
+/// drop lands the thing *between* two chips, so an edge would be pointing at a
+/// position that does not exist.
+const kPaneJoinMarker = Key('tab-strip/pane-join-marker');
+const kTabSplitMarker = Key('tab-strip/split-marker');
+
+/// [child] under a tinted, outlined box carrying [icon].
+Widget _markedForJoin(
+  BuildContext context,
+  Widget child, {
+  required Key key,
+  IconData icon = AppIcons.plus,
+}) {
+  final scheme = Theme.of(context).colorScheme;
+  return Stack(
+    fit: StackFit.passthrough,
+    children: [
+      child,
+      Positioned.fill(
+        key: key,
+        // A statement, not a target — the same reason [_markedForDrop] gives.
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.15),
+              border: Border.all(color: scheme.primary, width: 2),
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+            child: Center(
+              child: Icon(icon, size: Chrome.iconSmall, color: scheme.primary),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 /// [child] with [kTabDropMarker] laid down its leading or trailing edge.
 Widget _markedForDrop(
   BuildContext context,
@@ -1799,6 +1839,17 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
   bool _comesFromTheRight(TerminalDrag data) =>
       data is TabDrag && _indexInStrip(data.tabId) > widget.index;
 
+  /// The region of this tab a dropped **pane** joins.
+  ///
+  /// The chip is the only place a *background* tab can be addressed at all: the
+  /// workbench shows one tab's regions at a time, so a pane can be dropped onto
+  /// a region only while its tab is in front. Dropping on the chip says "into
+  /// that tab" and the front region of the tab's focused group is where it
+  /// lands — the same place a new pane would.
+  String get _paneAnchor =>
+      widget.tab.layout.groupOf(widget.tab.focusedPaneId)?.activePaneId ??
+      widget.tab.focusedPaneId;
+
   /// Where [tabId] sits in *this* strip, or -1 when it is in another group's.
   int _indexInStrip(String tabId) {
     final group = widget.groupId;
@@ -1814,11 +1865,18 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
   Widget build(BuildContext context) {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     return DragTarget<TerminalDrag>(
-      onWillAcceptWithDetails: (details) {
-        if (details.data is! TabDrag) return false;
-        final tabId = (details.data as TabDrag).tabId;
-        _updatePosition(details.data, details.offset);
-        return tabId != widget.tab.id;
+      onWillAcceptWithDetails: (details) => switch (details.data) {
+        TabDrag(:final tabId) => () {
+          _updatePosition(details.data, details.offset);
+          return tabId != widget.tab.id;
+        }(),
+        // Which half of the chip the pointer is over means nothing to a pane —
+        // a tab is a destination here, not a place in a list — so the position
+        // is left alone and the whole chip lights up instead.
+        PaneDrag(:final paneId) => sessions.canMovePaneIntoRegion(
+          paneId,
+          _paneAnchor,
+        ),
       },
       onMove: (details) => _updatePosition(details.data, details.offset),
       onLeave: (_) {
@@ -1829,6 +1887,13 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
         }
       },
       onAcceptWithDetails: (details) {
+        // The pane keeps its id, its process and its buffer: the controller
+        // moves it between the two tabs' layouts and never touches
+        // `_instances`, so the terminal is the same object at a new address.
+        if (details.data case PaneDrag(:final paneId)) {
+          sessions.movePaneIntoRegion(paneId, _paneAnchor);
+          return;
+        }
         if (details.data case TabDrag(:final tabId)) {
           final ctrl = HardwareKeyboard.instance.isControlPressed ||
               HardwareKeyboard.instance.isMetaPressed ||
@@ -1864,38 +1929,19 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
       },
       builder: (context, candidate, _) {
         final incoming = candidate.isEmpty ? null : candidate.first;
+        // A pane joins the whole tab, so the whole chip is marked. The caret a
+        // tab drop draws would be a lie: there is no position to land at.
+        if (incoming is PaneDrag) {
+          return _markedForJoin(context, widget.chip, key: kPaneJoinMarker);
+        }
         if (incoming is! TabDrag) return widget.chip;
 
         if (_ctrlPressed) {
-          return Stack(
-            fit: StackFit.passthrough,
-            children: [
-              widget.chip,
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.15),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(Radii.sm),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        AppIcons.squareSplitHorizontal,
-                        size: Chrome.iconSmall,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          return _markedForJoin(
+            context,
+            widget.chip,
+            key: kTabSplitMarker,
+            icon: AppIcons.squareSplitHorizontal,
           );
         }
 
