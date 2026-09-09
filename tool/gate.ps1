@@ -137,7 +137,9 @@ $map = [ordered]@{
     # it. The tool schemas golden is the one golden outside the folder that
     # reaches the package: the six `flutter_*` tools are served over its types.
     app  = @('test/features/flutter_apps',
-             'test/features/mcp/tool_schemas_golden_test.dart')
+             'test/features/mcp/tool_schemas_golden_test.dart',
+             # Reads the package's `readPubspec` from outside the mapped folder.
+             'test/features/app_projects/project_descriptor_test.dart')
     owns = @('lib/src/features/flutter_apps', 'test/features/flutter_apps')
   }
   devices = @{

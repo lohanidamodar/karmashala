@@ -51,6 +51,9 @@ installs claim the same version name.
   tree. A device-layer change is gated in 68 seconds.
 - **The app now uses `karmashala_git`**, with no glue: every git command already
   ran through `agent_cli`'s runner. A git-layer change is gated in 20 seconds.
+- **The app now uses `karmashala_flutter_apps`**, the last cut-over. The split
+  is complete: the app's own gate is 7,627 tests in about seven minutes, and
+  `tool/gate.ps1 -Package <name>` gates a package change in 15 to 68 seconds.
 
 ---
 
