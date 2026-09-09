@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
+import '../domain/companion_presence.dart';
 import '../domain/paired_device.dart';
 import '../protocol.dart';
 
@@ -102,15 +103,33 @@ class PairedDeviceDao {
     );
   }
 
+  /// What `notifications.register` brought: the push token, and what the phone
+  /// said about itself on the same frame.
+  ///
+  /// [now] stamps the presence rather than the token, because presence is the
+  /// half that is only worth anything with its age beside it (§19). An old
+  /// companion sends no presence at all, and the columns then say so in words
+  /// this build reads back as every field's own unknown.
   void updatePush(
     String id, {
     required String token,
     required String platform,
+    CompanionPresence presence = CompanionPresence.unknown,
+    DateTime? now,
   }) {
     _db.execute(
-      'UPDATE paired_devices SET push_token = ?, push_platform = ? '
-      'WHERE id = ?;',
-      [token, platform, id],
+      'UPDATE paired_devices SET push_token = ?, push_platform = ?, '
+      'presence_kind = ?, presence_visibility = ?, presence_session = ?, '
+      'presence_at = ? WHERE id = ?;',
+      [
+        token,
+        platform,
+        presence.deviceKind.wire,
+        presence.visibility.wire,
+        presence.focusedSessionId,
+        isoFromDate(now ?? DateTime.now().toUtc()),
+        id,
+      ],
     );
   }
 
@@ -127,6 +146,12 @@ class PairedDeviceDao {
     revoked: boolFromInt(row['revoked']),
     pushToken: row['push_token'] as String?,
     pushPlatform: row['push_platform'] as String?,
+    presence: CompanionPresence(
+      deviceKind: CompanionDeviceKind.parse(row['presence_kind']),
+      visibility: CompanionVisibility.parse(row['presence_visibility']),
+      focusedSessionId: row['presence_session'] as String?,
+      at: row['presence_at'] == null ? null : dateFromIso(row['presence_at']),
+    ),
     relayUrl: row['relay_url'] as String?,
     createdAt: dateFromIso(row['created_at']),
     lastSeenAt: row['last_seen_at'] == null

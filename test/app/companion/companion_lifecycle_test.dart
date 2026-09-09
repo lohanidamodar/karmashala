@@ -1,6 +1,7 @@
 import 'package:karmashala/src/app/companion/companion_lifecycle.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -71,5 +72,57 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     expect(gateway.reconnectRequests, 1);
+  });
+
+  group('every state says whether the app is on screen', () {
+    test('the mapping — inactive is still in front of somebody', () {
+      const foreground = CompanionVisibility.foreground;
+      const background = CompanionVisibility.background;
+      expect(
+        {
+          for (final state in AppLifecycleState.values)
+            state: CompanionLifecycleReconnector.visibilityOf(state),
+        },
+        {
+          AppLifecycleState.resumed: foreground,
+          AppLifecycleState.inactive: foreground,
+          AppLifecycleState.hidden: background,
+          AppLifecycleState.paused: background,
+          AppLifecycleState.detached: background,
+        },
+      );
+    });
+
+    test('a pause reports, even though it dials nothing', () async {
+      // The whole point: a phone that is connected and out of sight used to
+      // say nothing at all, and the desktop suppressed its push on the strength
+      // of the live link alone.
+      final gateway = FakeCompanionGateway.paired();
+      final reconnector = CompanionLifecycleReconnector(gateway);
+
+      reconnector.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(gateway.reconnectRequests, 0);
+      expect(
+        gateway.presenceReports.single.visibility,
+        CompanionVisibility.background,
+      );
+    });
+
+    test('one report per change, and nothing on a timer', () async {
+      final gateway = FakeCompanionGateway.paired();
+      final reconnector = CompanionLifecycleReconnector(gateway);
+
+      reconnector.didChangeAppLifecycleState(AppLifecycleState.paused);
+      reconnector.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        gateway.presenceReports.map((p) => p.visibility),
+        [CompanionVisibility.background, CompanionVisibility.foreground],
+        reason: 'a lifecycle change is one report; nothing else produces any',
+      );
+    });
   });
 }

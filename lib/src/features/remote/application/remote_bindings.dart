@@ -671,10 +671,16 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       return _answerApproval(ref, resolved.native?.id ?? sessionId, decision);
     },
     approvalEvidenceFor: (sessionId) => _approvalEvidenceFor(ref, sessionId),
-    registerPush: (deviceId, token, platform) async {
+    registerPush: (deviceId, token, platform, presence) async {
       ref
           .read(pairedDeviceDaoProvider)
-          .updatePush(deviceId, token: token, platform: platform);
+          .updatePush(
+            deviceId,
+            token: token,
+            platform: platform,
+            presence: presence,
+            now: ref.read(clockProvider).nowUtc(),
+          );
       ref.read(pairedDevicesRevisionProvider.notifier).bump();
     },
     listWorkspace: listWorkspace,

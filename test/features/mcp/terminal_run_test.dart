@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/mcp/terminal_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../../support/fakes.dart';
@@ -208,12 +209,54 @@ void main() {
 
       final call = run(pane.paneId, 'exit', timeoutSeconds: 30);
       await Future<void>.delayed(const Duration(milliseconds: 20));
-      instance.exitCleanly();
+      // Dead, and nothing ever said with what — a tmux pane, and every pane
+      // before the session host existed.
+      instance.livenessNotifier.value = PaneLiveness.exited;
       final result = await call.timeout(const Duration(seconds: 5));
 
       expect(result['finished'], isFalse);
+      expect(result['exitCode'], isNull);
       expect(result['exitCodeKnown'], isFalse);
       expect(result['note'], contains('exited'));
+      expect(result['note'], contains('UNKNOWN'));
+    });
+
+    test('a pane that DOES know what it died with reports that code, and says '
+        'whose it is', () async {
+      // A host-backed session carries the host's own exit code, so the tool
+      // has one to report even though no `D` marker ever arrived. The note and
+      // `exitCodeKnown` move together: a code beside a sentence denying one
+      // would be worse than either alone.
+      final pane = await shellPane();
+      pane.shell.finishes = false;
+      final instance =
+          controller().instanceFor(pane.paneId)! as FakeTerminalInstance;
+
+      final call = run(pane.paneId, 'make', timeoutSeconds: 30);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      instance.exitWith(7);
+      final result = await call.timeout(const Duration(seconds: 5));
+
+      expect(result['finished'], isFalse, reason: 'the pane ended, not the command');
+      expect(result['exitCode'], 7);
+      expect(result['exitCodeKnown'], isTrue);
+      expect(result['note'], contains('code 7'));
+      expect(result['note'], contains("SESSION's code"));
+      expect(result['note'], isNot(contains('nothing reported an exit code')));
+    });
+
+    test('a command that timed out still has no code, whatever the pane holds',
+        () async {
+      // The pane is alive; there is nothing to take a code from, and the one
+      // the pane happens to be carrying is not this command's.
+      final pane = await shellPane();
+      pane.shell.finishes = false;
+
+      final result = await run(pane.paneId, 'vim', timeoutSeconds: 0.05);
+
+      expect(result['exitCode'], isNull);
+      expect(result['exitCodeKnown'], isFalse);
+      expect(result['note'], contains('still running'));
     });
   });
 

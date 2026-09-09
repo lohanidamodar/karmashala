@@ -66,7 +66,12 @@ class CommandRunOutcome {
   final CommandRunEnd end;
   final CommandOutputText output;
 
-  /// The exit code the shell reported, or `null` when it reported none.
+  /// The exit code, or `null` when nobody reported one.
+  ///
+  /// Two things can report it, and the difference is in [end] rather than
+  /// here: the shell's own OSC 133 `D` marker for a command that
+  /// [CommandRunEnd.finished], and the **pane** for one whose process died
+  /// under it — a host-backed session is told what its session exited with.
   ///
   /// `null` means *unknown*, never *zero*: an interrupted command completes
   /// with no code, and calling that success would be a lie a caller acts on.
@@ -299,6 +304,11 @@ class CommandRunWatch {
               maxLines: _maxOutputLines,
             )
           : CommandOutputText.unscoped,
+      // No `D` marker is coming, but the pane itself may know what its process
+      // died with — a host-backed session carries the host's own code. Only
+      // for [CommandRunEnd.paneExited]: a timed-out command is still running,
+      // and its pane has no code to give. Null stays null.
+      exitCode: end == CommandRunEnd.paneExited ? _instance.exitCode : null,
       markersSeen: _tracker.latest != null,
     );
   }
