@@ -396,6 +396,9 @@ worktrees the app made and a per-checkout install lands in the user's
   `Get-Process -Id` exits 1 whenever any named pid has gone and still prints the
   rest, so the exit code is not the verdict, and `/proc/<pid>/stat` splits at the
   *last* parenthesis.
+- **The usage chip shows both limit windows** — `◑ 12% · 4h   59% · 3d` — each
+  slot chosen by the window's period, never by which resets soonest. A period
+  nothing reported draws nothing rather than `0%`.
 
 ---
 
