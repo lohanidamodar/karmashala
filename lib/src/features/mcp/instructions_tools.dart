@@ -580,11 +580,12 @@ rather than a guess when two are.
 
 **`flutter_apps` keeps three answers apart that one list would flatten**: we
 have not looked, nothing is running, and an address nothing answers on. It
-covers runs *the developer* started as well as ones `flutter_run` did, and for
-theirs an empty list comes back with the flag to add —
-`--vmservice-out-file` — because Karmashala will never rewrite a command
-somebody typed. `flutter_attach` is the way in from an address `flutter run`
-already printed.
+covers runs *the developer* started as well as ones `flutter_run` did: any
+`flutter run` on this machine is found through the tooling daemon it starts,
+and an app on a connected Android device through the line the VM logs. An
+empty list says what was looked at; nobody is asked to add a flag. A run on
+another machine is the one case left for `flutter_attach`, from the address
+that `flutter run` printed.
 
 **An empty `flutter_logs` tail means the app has said nothing since the
 attach**, not that it said nothing at all. Lines marked "before attach" were
