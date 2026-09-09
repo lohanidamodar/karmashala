@@ -1,0 +1,29 @@
+name: karmashala_remote
+description: >-
+  The link between a Karmashala desktop and its phone: the frame protocol, the
+  LAN and relay transports, the sealed channel, pairing, sealed push, the
+  desktop host's session API and the companion's gateway client. Pure Dart, so
+  it runs under `dart test` without a `flutter_tester` or `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # XChaCha20-Poly1305 and HKDF: the key schedule, the sealed channel and the
+  # push envelope. The only third-party code on the wire path.
+  cryptography: ^2.9.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1
+  # The relay server, started in-process so the transport, conformance and
+  # pairing suites dial a real one. One-way and test-only: nothing under `lib/`
+  # imports it, and the relay never imports this package.
+  karmashala_relay:
+    path: ../relay
