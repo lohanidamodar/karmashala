@@ -21,6 +21,7 @@ enum QuickOpenGroup {
   github('GitHub'),
   agents('Agents'),
   snippets('Command snippets'),
+  presets('Terminal presets'),
   commands('Commands');
 
   const QuickOpenGroup(this.label);
@@ -32,13 +33,16 @@ enum QuickOpenGroup {
   /// `$` for snippets because that is what a prompt looks like, and because it
   /// is the one character on the list that a shell user already reads as "a
   /// command follows". `?` for conversations because the question this group
-  /// answers is *"where did I decide this?"*.
+  /// answers is *"where did I decide this?"*. `~` for presets on the same
+  /// reasoning as `$`: it is what a shell writes for the place you go back to,
+  /// and a preset is the workbench you go back to.
   String? get sigil => switch (this) {
     QuickOpenGroup.commands => '>',
     QuickOpenGroup.sessions => '#',
     QuickOpenGroup.conversations => '?',
     QuickOpenGroup.files => '/',
     QuickOpenGroup.snippets => r'$',
+    QuickOpenGroup.presets => '~',
     _ => null,
   };
 }

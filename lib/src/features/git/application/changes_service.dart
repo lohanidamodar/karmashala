@@ -162,6 +162,20 @@ class ChangesService {
     hostPathOf: hostPathMapperFor(_environmentOf(repo)),
   ).read(repo.path);
 
+  /// **Which family of worktrees [repo] belongs to**, or null when the files
+  /// could not say.
+  ///
+  /// Equal for two checkouts of one clone and never equal for two unrelated
+  /// ones. It exists so a caller with a list of checkouts can group them before
+  /// asking git anything — `git worktree list` reports the whole family from
+  /// any member, so one process per *group* is the whole answer and one per row
+  /// is N−1 wasted. See [GitOriginReader.commonDirectory] for what it costs and
+  /// for why null means "ask the way you used to", not "a family of one".
+  Future<String?> familyKey(EnvironmentPath repo) => GitOriginReader(
+    files: files,
+    hostPathOf: hostPathMapperFor(_environmentOf(repo)),
+  ).commonDirectory(repo.path);
+
   /// The current branch of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) =>
       _ask(repo, (git, at) => git.currentBranch(at));

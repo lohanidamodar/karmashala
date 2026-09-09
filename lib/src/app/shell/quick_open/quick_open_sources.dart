@@ -31,8 +31,10 @@ import '../../../features/snippets/application/snippet_insertion.dart';
 import '../../../features/snippets/application/snippet_providers.dart';
 import '../../../features/snippets/domain/command_snippet.dart';
 import '../../../features/snippets/presentation/snippet_dialogs.dart';
+import '../../../features/terminal/application/terminal_presets.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../../features/terminal/domain/pane_layout.dart';
+import '../../../features/terminal/domain/terminal_preset.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../../features/terminal/presentation/pane_group_strip.dart';
 import '../../../features/terminal/presentation/terminal_panel.dart';
@@ -74,6 +76,11 @@ const _snippetWeight = 3.0;
 /// *manage* it last. They live in the snippets group rather than under Commands
 /// precisely so that `$` on an empty library still offers somewhere to go.
 const _snippetAdminWeight = 0.5;
+
+/// Just under an open tab. A preset is a tab you are *about* to have, so on an
+/// empty query the tabs that exist come first and the shapes that could exist
+/// come next — but ahead of a project, for the same reason a tab is.
+const _presetWeight = 16.0;
 
 /// Below a session, above a project: a shell tab is a place you are already
 /// working, but it is not a piece of work in its own right.
@@ -127,6 +134,7 @@ class QuickOpenSources {
     ..._repoFacts(),
     ..._agents(),
     ..._snippets(),
+    ..._presets(),
   ];
 
   // --- commands -----------------------------------------------------------
@@ -807,6 +815,44 @@ class QuickOpenSources {
   ///
   /// This is why the strip's own picker needed no chord of its own: `Ctrl+K`
   /// was already the way to find things by name, and it now finds these too.
+  /// Saved workbench shapes, under `~`.
+  ///
+  /// A preset is a *shape*, so the row says how big it is rather than what is
+  /// running in it — there is nothing running in it. Opening one may leave
+  /// panes out when a profile has gone from this machine, and the message says
+  /// which; see [presetOpenedMessage].
+  List<QuickOpenItem> _presets() {
+    final presets = ref.read(terminalPresetsProvider);
+    final shell = ref.read(shellControllerProvider.notifier);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return [
+      for (final preset in presets.all())
+        QuickOpenItem(
+          id: 'preset/${preset.id}',
+          group: QuickOpenGroup.presets,
+          title: preset.name,
+          subtitle: _describeShape(preset),
+          icon: AppIcons.terminalWindow,
+          keywords: const ['preset', 'layout', 'terminal', 'workspace'],
+          weight: _presetWeight,
+          onSelect: () => dismiss(() {
+            final opening = presets.open(preset);
+            shell.focusPane(ShellPane.detail);
+            final said = presetOpenedMessage(preset, opening);
+            if (said != null) {
+              messenger?.showSnackBar(SnackBar(content: Text(said)));
+            }
+          }),
+        ),
+    ];
+  }
+
+  static String _describeShape(TerminalPreset preset) {
+    final tabs = preset.tabs.length == 1 ? '1 tab' : '${preset.tabs.length} tabs';
+    final panes = preset.paneCount == 1 ? '1 pane' : '${preset.paneCount} panes';
+    return '$tabs · $panes';
+  }
+
   List<QuickOpenItem> _openTabs() {
     final terminals = ref.read(terminalSessionsControllerProvider);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);

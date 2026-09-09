@@ -108,6 +108,50 @@ class GitOriginReader {
     return (url: url, head: await _originHeadIn(common, context));
   }
 
+  /// **The git directory this working tree shares with the rest of its
+  /// family**, or null when the files could not say.
+  ///
+  /// Two worktrees of one clone answer with the same string and two unrelated
+  /// checkouts never do, which is exactly what "same family" means to git — so
+  /// this is the key a caller needs to ask `git worktree list` *once per
+  /// family* rather than once per row. It is [read]'s own first step, extracted:
+  /// the config and the remote refs live in the common directory, and finding
+  /// it is what that method already does before reading either.
+  ///
+  /// **Costs one `typeOf` for a clone and one more read for a worktree**, and
+  /// no process at all — which is the point, since the alternative it saves is
+  /// a `CreateProcessW` per checkout.
+  ///
+  /// **Null is "we could not tell", never "it is its own family".** A path this
+  /// process cannot open (an SSH checkout), a `.git` that is neither a
+  /// directory nor a pointer, a distribution that did not answer — all read as
+  /// unknown, and a caller must fall back to whatever it did before rather than
+  /// treat each unknown row as a family of one. That is §19's rule applied to a
+  /// grouping key: an unknown is not a value.
+  Future<String?> commonDirectory(String checkout) async {
+    final host = hostPathOf(checkout);
+    if (host == null) return null;
+    final context = gitPathContextFor(host);
+    final dotGit = context.join(host, '.git');
+    // The `.git` of a clone is a directory and of a worktree is a file — the
+    // same discriminator `GitPresenceReader` uses, and the one shape question
+    // that cannot be answered by reading.
+    switch (await files.typeOf(dotGit)) {
+      case PathEntry.directory:
+        return dotGit;
+      case PathEntry.file:
+        final resolved = gitDirNamedIn(
+          await files.readString(dotGit),
+          host: host,
+          context: context,
+          hostPathOf: hostPathOf,
+        );
+        return resolved == null ? null : _commonDirOf(resolved, context);
+      case PathEntry.none:
+        return null;
+    }
+  }
+
   /// The git directory two worktrees of one clone **share**.
   ///
   /// A worktree's own git directory is `<common>/worktrees/<name>`; the config

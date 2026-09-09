@@ -9,6 +9,7 @@ class Repository {
     required this.name,
     required this.path,
     required this.createdAt,
+    this.canonicalId,
   });
 
   final String id;
@@ -20,6 +21,17 @@ class Repository {
 
   final DateTime createdAt;
 
+  /// The repository this checkout *is*, derived from `origin` — and null
+  /// whenever that could not be established.
+  ///
+  /// **Nullable by construction, not by accident.** A `git init` with no
+  /// remote, a `file://` URL and a folder that is not a repository all leave it
+  /// null, and so does a checkout the app has not read `origin` for yet. So
+  /// nothing may key on it without falling back to today's path-only
+  /// behaviour; see [canonicalRepositoryId] for the normalisation and
+  /// `recordRepositoryIdentity` for when it is refreshed.
+  final String? canonicalId;
+
   /// Convenience accessor for the environment the repository lives in.
   String get environmentId => path.environmentId;
 
@@ -29,12 +41,14 @@ class Repository {
     String? name,
     EnvironmentPath? path,
     DateTime? createdAt,
+    String? canonicalId,
   }) => Repository(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
     name: name ?? this.name,
     path: path ?? this.path,
     createdAt: createdAt ?? this.createdAt,
+    canonicalId: canonicalId ?? this.canonicalId,
   );
 
   @override
@@ -44,10 +58,12 @@ class Repository {
       other.projectId == projectId &&
       other.name == name &&
       other.path == path &&
-      other.createdAt == createdAt;
+      other.createdAt == createdAt &&
+      other.canonicalId == canonicalId;
 
   @override
-  int get hashCode => Object.hash(id, projectId, name, path, createdAt);
+  int get hashCode =>
+      Object.hash(id, projectId, name, path, createdAt, canonicalId);
 
   @override
   String toString() => 'Repository($id, $name, $path)';

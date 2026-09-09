@@ -2,6 +2,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
@@ -12,6 +13,8 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +29,7 @@ void main() {
   // Both environments report only Claude installed.
   FakeCommandRunner claudeOnlyRunner() => FakeCommandRunner(
     responder: (req) {
+      _calls.add('${req.executable} ${req.arguments.join(' ')}');
       // Windows probes with `where <name>`; WSL probes through a login shell
       // as `bash -lc 'command -v <name>'`.
       final isWindowsLocate = req.executable == 'where';
@@ -92,6 +96,69 @@ void main() {
       isTrue,
     );
     expect(installations.every((i) => i.version == '2.0.0'), isTrue);
+  });
+
+  test('every environment is asked at once, and asked exactly as often',
+      () async {
+    // The loop was sequential and the environments are independent — a WSL
+    // distribution and a Mac over SSH have nothing to say to each other, and
+    // each already parallelises its own agents — so the "rescan agents"
+    // spinner held for the sum of them rather than the longest.
+    //
+    // Two claims, both counted rather than timed: the second environment is
+    // reached while the first is still held, and the number of calls is
+    // exactly what the sequential sweep made.
+    final sequential = <String>[];
+    _calls.clear();
+    await container
+        .read(agentInstallationsControllerProvider.notifier)
+        .discoverAll();
+    sequential.addAll(_calls);
+    _calls.clear();
+
+    final gate = Completer<void>();
+    final held = _HoldingRunner(
+      inner: claudeOnlyRunner(),
+      hold: (req) => req.executable == 'where' ? gate.future : null,
+    );
+    final second = AppDatabase.memory();
+    addTearDown(second.close);
+    ExecutionEnvironmentDao(second)
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv());
+    final concurrent = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(second),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
+        hostEnvironmentProvider.overrideWithValue(const {}),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: held),
+        ),
+      ],
+    );
+    addTearDown(concurrent.dispose);
+
+    final sweep = concurrent
+        .read(agentInstallationsControllerProvider.notifier)
+        .discoverAll();
+    await pumpEventQueue();
+    // Every Windows call is held, so anything from WSL here happened while the
+    // Windows environment was still waiting. Sequentially this list would hold
+    // nothing but `where`.
+    expect(
+      _calls.where((c) => c.startsWith('bash')),
+      isNotEmpty,
+      reason: 'WSL was reached while Windows was still held',
+    );
+    gate.complete();
+
+    final report = await sweep;
+    expect(report.foundCount, 2);
+    // Same calls, in some order: concurrency changed when they happen, not how
+    // many there are or what they ask.
+    expect(_calls.length, sequential.length);
+    expect(_calls.toSet(), sequential.toSet());
   });
 
   test('re-running discovery does not duplicate installations', () async {
@@ -217,4 +284,31 @@ void main() {
       },
     );
   });
+}
+
+/// Every request a sweep made, as `executable + arguments`, for the count that
+/// concurrency must not change.
+final _calls = <String>[];
+
+/// A runner that records what it was asked and can hold some of its answers.
+///
+/// Holding is how "these two ran at once" is *counted* rather than timed: with
+/// every call into one environment held, anything recorded from the other one
+/// happened while the first was still waiting — and a sequential sweep would
+/// deadlock instead of passing.
+class _HoldingRunner extends FakeCommandRunner {
+  _HoldingRunner({required this.inner, required this.hold});
+
+  final FakeCommandRunner inner;
+  final Future<void>? Function(CommandRequest request) hold;
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async {
+    final wait = hold(request);
+    if (wait != null) await wait;
+    return inner.run(request);
+  }
+
+  @override
+  Future<ProcessHandle> start(CommandRequest request) => inner.start(request);
 }

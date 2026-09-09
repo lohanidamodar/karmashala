@@ -539,4 +539,59 @@ void main() {
       expect(content, 1, reason: 'and the card was not redrawn for it');
     });
   });
+
+  group('a row the list keeps above the viewport', () {
+    /// The Explorer's body is one lazy `ListView`, and the rows it keeps laid
+    /// out inside the cache extent *above* the viewport are ordinary Tab stops.
+    /// Forward traversal reveals a stop with
+    /// `ScrollPositionAlignmentPolicy.keepVisibleAtEnd`, which clamps its target
+    /// to the current offset and so refuses to scroll backwards — so tabbing
+    /// round to one of those rows used to put the focus somewhere the user
+    /// cannot see, and leave it there.
+    Widget list() => MaterialApp(
+      theme: AppTheme.light().copyWith(platform: TargetPlatform.windows),
+      builder: (context, inner) => UiDensity.wrap(context, inner!),
+      home: Scaffold(
+        body: ListView.builder(
+          itemCount: 30,
+          itemBuilder: (context, index) => ExplorerRow(
+            kind: ExplorerRowKind.checkout,
+            depth: 0,
+            selected: false,
+            onTap: () {},
+            builder: (context) => Text('Row $index'),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('forward Tab brings it back on screen', (tester) async {
+      tester.view.physicalSize = const Size(720, 560);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(list());
+      await tester.pumpAndSettle();
+
+      // Counted, never timed: enough Tabs to walk past the last row and wrap
+      // round to a row the list has scrolled above the viewport.
+      const window = Rect.fromLTWH(0, 0, 720, 560);
+      final offscreen = <String>[];
+      for (var stop = 0; stop < 40; stop++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        final node = FocusManager.instance.primaryFocus;
+        if (node?.context == null) continue;
+        final rect = node!.rect;
+        if (rect.isEmpty || window.overlaps(rect)) continue;
+        offscreen.add('stop $stop at $rect');
+      }
+
+      expect(
+        offscreen,
+        isEmpty,
+        reason: 'every row Tab lands on is scrolled into view first',
+      );
+    });
+  });
 }

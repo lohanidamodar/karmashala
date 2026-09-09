@@ -1,6 +1,23 @@
 import '../../environments/domain/environment_kind.dart';
 import 'agent_hook_transport.dart';
 
+/// The most one hook payload may be, in bytes — **the same number at both ends
+/// of the wire**.
+///
+/// The receiver has capped a request body at this since it was written
+/// (`LauncherControlServer._readBoundedBody`), and until now that was the only
+/// bound anywhere: the generated scripts handed `curl` the whole of stdin,
+/// however much of it there was. A hook payload is the agent's own event, and a
+/// `PostToolUse` carrying the output of a `Read` is not a theoretical megabyte
+/// — so the producer stops at the same number, and a runaway payload is cut or
+/// dropped where it is made rather than after it has crossed a socket.
+///
+/// **One constant rather than two agreeing numbers**, because two drift
+/// silently: a producer bounded above the receiver's cap sends payloads that
+/// are always refused, and one bounded below it truncates payloads the receiver
+/// would have taken. Neither shows up as an error anywhere.
+const int kAgentHookPayloadLimitBytes = 1024 * 1024;
+
 /// Where an agent's installed hooks report to, and how.
 ///
 /// The endpoint is hosted by `LauncherControlServer`'s `/agent-hook` route;

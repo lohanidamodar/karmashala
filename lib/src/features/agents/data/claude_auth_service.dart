@@ -10,6 +10,7 @@ import '../../../core/util/json_object_splice.dart';
 import '../../cli_detection/application/cli_detection_service.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../domain/agent_installation.dart';
 import '../domain/agent_ids.dart';
 import '../domain/claude_account.dart';
@@ -111,32 +112,56 @@ class ClaudeAuthService {
     required this.ids,
     required this.clock,
     AppLogger? logger,
-    Future<String?> Function()? readKeychainCredentials,
+    Future<ClaudeKeychainRead> Function()? readKeychain,
   }) : _logger = logger ?? AppLogger.named('claude-auth'),
-       _readKeychain = readKeychainCredentials ?? _securityFindGenericPassword;
+       _readKeychain = readKeychain ?? _readLoginKeychain;
 
   final IdGenerator ids;
   final Clock clock;
   final AppLogger _logger;
 
-  /// Reads the raw credentials JSON out of the macOS login Keychain.
+  /// One read of the macOS login Keychain — the secret *or why there is none*.
   ///
-  /// A seam so tests need no Keychain, and so a future host with another
-  /// credential store can be given one without touching the parsing.
-  final Future<String?> Function() _readKeychain;
+  /// The whole [ClaudeKeychainRead] rather than the secret, because the two
+  /// ways of having no secret need two different answers and a `String?` can
+  /// only carry one of them. A seam so tests need no Keychain, and so a future
+  /// host with another credential store can be given one without touching the
+  /// parsing.
+  final Future<ClaudeKeychainRead> Function() _readKeychain;
 
   /// The service name Claude Code files its OAuth blob under.
   static const keychainService = 'Claude Code-credentials';
 
-  static Future<String?> _securityFindGenericPassword() =>
-      readClaudeKeychainCredentials();
+  static Future<ClaudeKeychainRead> _readLoginKeychain() =>
+      claudeKeychain.read();
 
   static const _backupSuffix = '.karmashala.bak';
   static const _tmpSuffix = '.karmashala.tmp';
 
   /// Reads the live logged-in account for the installation at [paths].
+  ///
+  /// A Keychain **refusal** comes back as a signed-out snapshot that says so
+  /// in [ClaudeAuthSnapshot.keychainRefusal], rather than as a thrown error.
+  /// That is deliberate, and measured: `claudeAuthSnapshotProvider` is a
+  /// `FutureProvider`, and Riverpod retries a provider that ends in an error —
+  /// so raising here left the panel on "Reading current account…" for ever and
+  /// asked macOS again on a backoff, which is the Keychain-dialog-per-poll
+  /// that [ClaudeKeychainCache] exists to stop. A reading that carries what it
+  /// could not do travels; an exception does not.
   Future<ClaudeAuthSnapshot> readSnapshot(ClaudeAuthPaths paths) async {
-    final credentials = await _readCredentials(paths);
+    final read = paths.credentialsInKeychain ? await _readKeychain() : null;
+    if (read != null && read.outcome == ClaudeKeychainOutcome.refused) {
+      return ClaudeAuthSnapshot.signedOut(
+        paths.environmentId,
+        keychainRefusal: claudeKeychainRefusalMessage(
+          read,
+          now: clock.nowUtc(),
+        ),
+      );
+    }
+    final credentials = read != null
+        ? _decodeKeychain(read.secret)
+        : await _readJsonFile(paths.credentialsFile);
     final config = await _readJsonFile(paths.configFile);
     return parseClaudeSnapshot(
       environmentId: paths.environmentId,
@@ -145,15 +170,11 @@ class ClaudeAuthService {
     );
   }
 
-  /// The `claudeAiOauth` blob, from wherever this host keeps it.
+  /// The `claudeAiOauth` blob as the Keychain holds it.
   ///
   /// The Keychain holds exactly what the file holds elsewhere — the same
   /// `{"claudeAiOauth": {...}}` object — so everything downstream is unchanged.
-  Future<Map<String, dynamic>?> _readCredentials(ClaudeAuthPaths paths) async {
-    if (!paths.credentialsInKeychain) {
-      return _readJsonFile(paths.credentialsFile);
-    }
-    final raw = await _readKeychain();
+  Map<String, dynamic>? _decodeKeychain(String? raw) {
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -169,13 +190,32 @@ class ClaudeAuthService {
   ///
   /// Throws [ClaudeAuthException] if no usable credentials/identity are present.
   Future<ClaudeAccount> capture(ClaudeAuthPaths paths) async {
-    final credentials = await _readJsonFile(paths.credentialsFile);
+    // Through the Keychain where the Keychain is where they live. Reading the
+    // file on a Mac reported "No Claude credentials found at
+    // ~/.claude/.credentials.json" — a path Claude Code never writes — for
+    // both of the two things that can go wrong, and neither of them is a
+    // missing file.
+    final read = paths.credentialsInKeychain ? await _readKeychain() : null;
+    if (read != null && read.outcome == ClaudeKeychainOutcome.refused) {
+      throw ClaudeAuthException(
+        claudeKeychainRefusalMessage(read, now: clock.nowUtc()),
+      );
+    }
+    final credentials = read != null
+        ? _decodeKeychain(read.secret)
+        : await _readJsonFile(paths.credentialsFile);
     final config = await _readJsonFile(paths.configFile);
 
     final oauth = credentials?['claudeAiOauth'];
     if (oauth is! Map<String, dynamic>) {
       throw ClaudeAuthException(
-        'No Claude credentials found at ${paths.credentialsFile}.',
+        read != null
+            // The store had nothing, which is a signed-out Mac and nothing
+            // worse.
+            ? 'Nothing is stored under "$keychainService" in the login '
+                  'Keychain, so no Claude account is signed in here. Sign in '
+                  'with `claude` once, then capture.'
+            : 'No Claude credentials found at ${paths.credentialsFile}.',
       );
     }
     final account = config?['oauthAccount'];
@@ -334,7 +374,12 @@ enum ClaudeKeychainOutcome {
 /// One read of the Keychain: the secret, or why there isn't one.
 @immutable
 class ClaudeKeychainRead {
-  const ClaudeKeychainRead(this.outcome, {this.secret, this.detail});
+  const ClaudeKeychainRead(
+    this.outcome, {
+    this.secret,
+    this.detail,
+    this.readAt,
+  });
 
   const ClaudeKeychainRead.notFound() : this(ClaudeKeychainOutcome.notFound);
 
@@ -346,6 +391,40 @@ class ClaudeKeychainRead {
   /// `security`'s own words, for a message the user can act on. Only ever set
   /// on [ClaudeKeychainOutcome.refused], where the secret was not produced.
   final String? detail;
+
+  /// When macOS was actually asked, or null when nobody has asked yet.
+  ///
+  /// Stamped once, by [ClaudeKeychainCache], and kept for the life of the
+  /// memo — so a refusal shown ten minutes later says it is ten minutes old
+  /// rather than pretending to be a fresh reading.
+  final DateTime? readAt;
+
+  ClaudeKeychainRead stampedAt(DateTime at) => ClaudeKeychainRead(
+    outcome,
+    secret: secret,
+    detail: detail,
+    readAt: at,
+  );
+}
+
+/// What a refusal says, in one place, because more than one surface shows it:
+/// the usage chip raises it, `capture` puts it in a snackbar, and a snapshot
+/// carries it.
+String claudeKeychainRefusalMessage(
+  ClaudeKeychainRead read, {
+  required DateTime now,
+}) {
+  final detail = read.detail;
+  final at = read.readAt;
+  final age = at == null
+      ? 'at an unknown time'
+      : describeAge(now.difference(at));
+  return 'macOS would not release the Claude credential from the login '
+      'Keychain'
+      '${detail == null ? '' : ' ($detail)'}'
+      ' — asked $age. That is a refusal, not a signed-out account: allow '
+      'Karmashala access to "${ClaudeAuthService.keychainService}" in '
+      'Keychain Access.';
 }
 
 /// The process-wide memo of the Keychain read.
@@ -371,37 +450,40 @@ class ClaudeKeychainCache {
     DateTime Function()? now,
     this.lifetime = const Duration(minutes: 10),
   }) : _read = read ?? _securityRead,
-       _now = now ?? DateTime.now;
+       // UTC, because the stamp is differenced against a [Clock]'s `nowUtc`
+       // when a refusal is worded.
+       _now = now ?? _utcNow;
 
   final Future<ClaudeKeychainRead> Function() _read;
   final DateTime Function() _now;
   final Duration lifetime;
 
   ClaudeKeychainRead? _cached;
-  DateTime? _readAt;
 
   /// Reads through the memo, spawning `security` only when nothing fresh is
   /// held.
+  ///
+  /// The memo's own clock is the stamp on what it holds — one instant, kept
+  /// where a caller can read it, rather than one for the lifetime and another
+  /// for the message.
   Future<ClaudeKeychainRead> read() async {
     final held = _cached;
-    final at = _readAt;
+    final at = held?.readAt;
     if (held != null && at != null && _now().difference(at) < lifetime) {
       return held;
     }
-    final fresh = await _read();
+    final fresh = (await _read()).stampedAt(_now());
     _cached = fresh;
-    _readAt = _now();
     return fresh;
   }
+
+  static DateTime _utcNow() => DateTime.now().toUtc();
 
   /// Drops what is held, so the next [read] asks macOS again.
   ///
   /// Called when the token we handed out was rejected: the copy we are holding
   /// is provably wrong at that point, whatever the clock says.
-  void forget() {
-    _cached = null;
-    _readAt = null;
-  }
+  void forget() => _cached = null;
 
   static Future<ClaudeKeychainRead> _securityRead() async {
     if (!Platform.isMacOS) return const ClaudeKeychainRead.notFound();
@@ -469,15 +551,6 @@ String? _tidySecurityError(Object? stderr) {
 /// The one memo the app reads through. Shared, because both account detection
 /// and the usage endpoint need the same token and macOS keeps one copy of it.
 final claudeKeychain = ClaudeKeychainCache();
-
-/// The raw credentials JSON out of the macOS login Keychain, or null.
-///
-/// `security find-generic-password -w` prints just the secret. Run directly
-/// rather than through a [CommandRunner]: this is always the local Mac's own
-/// Keychain, never an environment the runner could route to, and the value is a
-/// credential that must not travel further than it has to. It is never logged.
-Future<String?> readClaudeKeychainCredentials() async =>
-    (await claudeKeychain.read()).secret;
 
 /// Whether [installation] is a Claude Code installation (the only agent account
 /// switching supports for now).

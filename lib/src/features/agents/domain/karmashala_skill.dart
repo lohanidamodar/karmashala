@@ -75,3 +75,23 @@ class KarmashalaSkill {
     return lines;
   }
 }
+
+/// A sweep somebody has stopped waiting for.
+///
+/// A bounded wait abandons the **wait**, never the work — a Dart future cannot
+/// be cancelled — so without this an install goes on creating directories in
+/// somebody's home after the app stopped waiting for it, and after a quit that
+/// happened while it was still running. `AgentSkillInstaller` checks it before
+/// every filesystem operation, so an abandoned sweep performs zero further
+/// ones.
+///
+/// One-way on purpose: the answer to "may I still write" only ever goes from
+/// yes to no, so no caller has to reason about a sweep resuming.
+class SkillSweepDeadline {
+  bool _abandoned = false;
+
+  /// Whether the sweep may still touch the filesystem.
+  bool get isAbandoned => _abandoned;
+
+  void giveUp() => _abandoned = true;
+}

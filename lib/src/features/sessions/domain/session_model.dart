@@ -27,11 +27,13 @@ class SessionModel {
 /// **The** precedence rule for models: a session's own choice outranks the
 /// per-agent default, which outranks the agent's own default.
 ///
-/// [defaultModelId] has exactly one supplier today —
-/// `SessionLauncher.defaultModelFor`, which answers null because no per-agent
-/// model default is stored yet. It is a parameter rather than a hardcoded null
-/// because the *rule* is what this function states, and a setting added later
-/// has to change one supplier rather than this statement of it.
+/// [defaultModelId] has one supplier: `SessionLauncher.defaultModelFor`, which
+/// reads `Settings.defaultModels`. It was written against a supplier that
+/// answered null, on the argument that a setting added later should change one
+/// supplier rather than this statement of the rule; Settings → Agents → Default
+/// model is that setting, and it arrived without a line here changing. Null is
+/// still an answer and still the shipped one: an agent with no row in that map
+/// is "let the agent choose", and no model flag is passed.
 ///
 /// The same shape as `resolveSessionPermission`, deliberately, so the chip, the
 /// launch path and the next resume read one statement of the rule instead of

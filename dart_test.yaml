@@ -22,3 +22,12 @@ tags:
   # distribution with curl and a WSL virtual switch, and skips itself when it
   # finds none — so a normal run on a machine without WSL is unaffected.
   live-wsl:
+
+  # A wall-clock measurement, not a behaviour: the shutdown envelope case in
+  # test/core/lifecycle/app_lifecycle_test.dart. Every bound in `AppLifecycle`
+  # is a real timeout, so a starved scheduler overshoots all of them at once
+  # and the number becomes a reading of the machine's load rather than of this
+  # app. It skips itself unless KARMASHALA_TIMING is set, exactly the way the
+  # live tests above skip themselves without their prerequisites, so the
+  # ordinary gate is unaffected whether or not it is excluded by name.
+  live-timing:

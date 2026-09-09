@@ -941,7 +941,17 @@ void main() {
     addTearDown(beacon.stop);
 
     final log = <String>[];
-    final gateway = makeGateway(lan: makeScout(), onLog: log.add);
+    final scout = makeScout();
+    // Count the stranger's beacons as the scout sees them. `sightings` is
+    // broadcast and carries every advert — cooldown filtering happens above
+    // it — so this counts what the machine actually delivered, which is the
+    // unit the cooldown window below is measured in.
+    var beaconsSeen = 0;
+    final sightings = scout.sightings.listen((host) {
+      if (host.port == rogue.port) beaconsSeen++;
+    });
+    addTearDown(sightings.cancel);
+    final gateway = makeGateway(lan: scout, onLog: log.add);
     await pairPhone(gateway);
 
     // Wait for the stranger to be sighted, dialled and refused — the event
@@ -965,15 +975,28 @@ void main() {
       reason: 'the stranger is dialled and refused',
     );
 
-    // The stranger keeps beaconing every 100ms throughout this window. One
-    // dial, and only one, is the whole claim: cooldown, not a dial loop.
-    await Future<void>.delayed(const Duration(seconds: 2));
+    // The last wall-clock dependency in this file, and it went the same way
+    // as the `sleep(2s)` above it. The window used to be two real seconds,
+    // which is ~20 beacons on an idle machine and far fewer on a loaded one —
+    // so the assertion got weaker exactly when the suite was busy, which is
+    // when it kept failing (Mac and Windows, main and a branch, never alone).
+    // Count the beacons instead: twenty more of the stranger's adverts have
+    // to be *observed*, and every one of them is an invitation to dial that
+    // the cooldown had to decline.
+    final beaconsAtFirstDial = beaconsSeen;
+    await eventually(
+      () async => beaconsSeen - beaconsAtFirstDial >= 20,
+      // The test's own timeout is the budget; nothing here bounds it.
+      timeout: const Duration(seconds: 60),
+      reason: 'twenty more stranger beacons are observed',
+    );
     expect(
       strangerDials(),
       1,
       reason:
           'the stranger is in cooldown, not in a dial loop; '
           'beacon group $_lanGroup port $lanPort, stranger port ${rogue.port}, '
+          'beacons observed $beaconsSeen (from $beaconsAtFirstDial), '
           'dialled $dialledPorts, log $log',
     );
 

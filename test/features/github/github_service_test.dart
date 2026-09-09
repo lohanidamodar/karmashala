@@ -1,6 +1,7 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/github/data/github_service.dart';
+import 'package:karmashala/src/features/github/domain/branch_protection.dart';
 import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -334,6 +335,96 @@ void main() {
       ).forgePolicyFor(repo, number: 12);
       expect(policy.strategies.squash, isTrue);
       expect(policy.unresolvedReviewThreads, isNull);
+    });
+
+    test('branchProtectionFor asks the base branch, repo-relative', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(
+            exitCode: 0,
+            stdout:
+                '{"url":"u","required_status_checks":{"strict":true,'
+                '"contexts":["ci/build"]},'
+                '"required_pull_request_reviews":'
+                '{"required_approving_review_count":2,'
+                '"require_code_owner_reviews":true},'
+                '"required_signatures":{"enabled":true},'
+                '"required_linear_history":{"enabled":false}}',
+            stderr: '',
+          );
+        },
+      );
+
+      final protection = await GitHubService(
+        runner,
+      ).branchProtectionFor(repo, branch: 'main');
+
+      expect(captured.arguments, [
+        'api',
+        'repos/{owner}/{repo}/branches/main/protection',
+      ]);
+      expect(captured.workingDirectory, repo);
+      expect(protection.status, BranchProtectionRead.read);
+      expect(protection.requiredApprovals, 2);
+      expect(protection.requiresCodeOwnerReview, isTrue);
+      expect(protection.requiredChecks, ['ci/build']);
+      expect(protection.requiresSignatures, isTrue);
+      // A `false` in the body is a fact; a missing key is not.
+      expect(protection.requiresLinearHistory, isFalse);
+      expect(protection.requiresConversationResolution, isFalse);
+    });
+
+    test('a 403 is the reader being refused, not the branch being open',
+        () async {
+      // The ordinary answer for anyone who is not an admin — `/protection` is
+      // an admin-only endpoint — so it must not read as "no rules here".
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 1,
+          stdout:
+              '{"message":"Must have admin rights to Repository.",'
+              '"status":"403"}',
+          stderr: 'gh: Must have admin rights to Repository. (HTTP 403)',
+        ),
+      );
+
+      final protection = await GitHubService(
+        runner,
+      ).branchProtectionFor(repo, branch: 'main');
+
+      expect(protection.status, BranchProtectionRead.forbidden);
+      expect(protection.rules, isEmpty);
+    });
+
+    test('a 404 and a body that will not parse are both "could not tell"',
+        () async {
+      // 404 is what an unprotected branch answers — and also what a branch
+      // guarded by a *ruleset* rather than by classic protection answers, so
+      // it is never evidence that nothing is in the way.
+      final missing = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 1,
+          stdout: '{"message":"Branch not protected","status":"404"}',
+          stderr: 'gh: Branch not protected (HTTP 404)',
+        ),
+      );
+      expect(
+        (await GitHubService(missing).branchProtectionFor(repo, branch: 'x'))
+            .status,
+        BranchProtectionRead.unknown,
+      );
+
+      final garbage = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 0, stdout: 'not json', stderr: ''),
+      );
+      expect(
+        (await GitHubService(garbage).branchProtectionFor(repo, branch: 'x'))
+            .status,
+        BranchProtectionRead.unknown,
+      );
     });
 
     test('markPullRequestReady names the number rather than the branch',

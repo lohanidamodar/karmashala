@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -77,6 +81,24 @@ Future<TestGesture> dragFrom(
   }
   return gesture;
 }
+
+/// What a pane's buffer holds, in bytes, without the grid it is drawn in.
+///
+/// `getText()` pads every row out to the terminal's width, and a pane moved
+/// from one half of a split into a whole tab is legitimately a different width
+/// — measured here as 80 bytes before the move and 78 after, for text that had
+/// not changed at all. Trailing padding and blank rows are the grid's; the
+/// characters are the buffer's.
+int bufferBytes(TerminalInstance instance) => utf8
+    .encode(
+      instance.terminal.buffer
+          .getText()
+          .split('\n')
+          .map((line) => line.trimRight())
+          .where((line) => line.isNotEmpty)
+          .join('\n'),
+    )
+    .length;
 
 Future<void> drop(WidgetTester tester, TestGesture gesture) async {
   await gesture.up();
@@ -320,5 +342,79 @@ void main() {
       hasLength(2),
       reason: 'the drop that makes a pane a tab is still the strip\'s',
     );
+  });
+
+  testWidgets('a pane dropped on a tab chip moves into that tab', (
+    tester,
+  ) async {
+    // The counterpart of the drop above. Tabs already moved between split
+    // regions; a *pane* could only ever leave its region for the strip, where
+    // it became a tab of its own — there was no way to say "put this pane in
+    // that tab", because the workbench shows one tab's regions at a time and a
+    // background tab has nothing on screen to drop onto except its chip.
+    //
+    // Nothing about the pane is rebuilt: the controller moves an id between two
+    // layouts and never touches the instance map, so the assertions below are
+    // the instance's own identity and the bytes already in its buffer.
+    final container = harness();
+    final controller = controllerOf(container);
+    final host = controller.openTab(TerminalProfile.powerShell);
+    final second = controller.openTab(TerminalProfile.commandPrompt);
+    await pumpWorkbench(tester, container);
+
+    // Two panes in the second tab, so moving one leaves a tab behind rather
+    // than testing tab closure by accident.
+    final guest = controller.openInSlot(
+      controller.splitPane(SplitAxis.horizontal)!,
+      TerminalProfile.powerShell,
+    )!;
+    await tester.pump();
+
+    final instance = controller.instanceFor(guest)!;
+    (instance as FakeTerminalInstance).receive('half a command already typed');
+    await tester.pump();
+    final bytesBefore = bufferBytes(instance);
+    expect(bytesBefore, greaterThan(0), reason: 'the buffer holds something');
+
+    final gesture = await dragFrom(
+      tester,
+      tester.getCenter(find.byKey(paneDragHandleKey(guest))),
+      tester.getCenter(find.byType(TerminalTabChip).first),
+    );
+    // The chip says what the drop will do before the button comes up.
+    await tester.pump();
+    expect(find.byKey(kPaneJoinMarker), findsOneWidget);
+    await drop(tester, gesture);
+
+    final state = container.read(terminalSessionsControllerProvider);
+    expect(state.tabs, hasLength(2), reason: 'no tab was made or lost');
+    expect(
+      state.tabs.firstWhere((tab) => tab.id == host).layout.panes,
+      contains(guest),
+      reason: 'the pane is in the tab whose chip took the drop',
+    );
+    expect(
+      state.tabs.firstWhere((tab) => tab.id == second).layout.panes,
+      isNot(contains(guest)),
+      reason: 'and out of the one it came from',
+    );
+    expect(
+      controller.instanceFor(guest),
+      same(instance),
+      reason: 'the same object at a new address — nothing was relaunched',
+    );
+    expect(
+      bufferBytes(instance),
+      bytesBefore,
+      reason: 'and it kept every byte it had already received',
+    );
+
+    // The same persistence a tab move gets: the row is re-parented, not
+    // rewritten, and it is written by the move rather than by a later save.
+    final stored = container.read(terminalLayoutDaoProvider).loadLayout();
+    final row = stored.tabs
+        .expand((tab) => tab.panes)
+        .firstWhere((pane) => pane.id == guest);
+    expect(row.tabId, host);
   });
 }

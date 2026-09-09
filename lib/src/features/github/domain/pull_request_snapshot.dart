@@ -200,6 +200,7 @@ class PullRequestSnapshot {
     this.unresolvedReviewThreads,
     this.checks = ChecksSummary.none,
     this.headRefName,
+    this.baseRefName,
   });
 
   final int number;
@@ -234,6 +235,10 @@ class PullRequestSnapshot {
 
   final ChecksSummary checks;
   final String? headRefName;
+
+  /// The branch this one would merge *into*. What branch protection applies
+  /// to, and so what a `BLOCKED` merge's rule has to be read for.
+  final String? baseRefName;
 
   bool get isOpen => state == PullRequestState.open;
 
@@ -291,6 +296,7 @@ class PullRequestSnapshot {
         unresolvedReviewThreads: count,
         checks: checks,
         headRefName: headRefName,
+        baseRefName: baseRefName,
       );
 
   @override
@@ -306,7 +312,8 @@ class PullRequestSnapshot {
       other.reviewDecision == reviewDecision &&
       other.unresolvedReviewThreads == unresolvedReviewThreads &&
       other.checks == checks &&
-      other.headRefName == headRefName;
+      other.headRefName == headRefName &&
+      other.baseRefName == baseRefName;
 
   @override
   int get hashCode => Object.hash(
@@ -321,6 +328,7 @@ class PullRequestSnapshot {
     unresolvedReviewThreads,
     checks,
     headRefName,
+    baseRefName,
   );
 
   @override

@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/github/domain/branch_protection.dart';
 import 'package:karmashala/src/features/github/domain/merge_strategies.dart';
 import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
 import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
@@ -271,6 +272,103 @@ void main() {
         expect(entry.disabledReason, contains('GitHub is blocking'));
       },
     );
+
+    group('the rule behind a BLOCKED merge', () {
+      // `BLOCKED` is one value covering every branch-protection rule GitHub
+      // has, and every open pull request in a protected repository reports it.
+      // The rule itself comes from a second call; these are what the strip
+      // says with it and without it.
+      PullRequestSnapshot blocked({
+        ReviewDecision decision = ReviewDecision.approved,
+        ChecksSummary checks = const ChecksSummary(passed: 2),
+      }) => PullRequestSnapshot(
+        number: 7,
+        state: PullRequestState.open,
+        url: 'u',
+        mergeable: true,
+        mergeStateStatus: MergeStateStatus.blocked,
+        reviewDecision: decision,
+        baseRefName: 'main',
+        checks: checks,
+      );
+
+      String? reasonWith(
+        BranchProtection protection, {
+        PullRequestSnapshot? pr,
+      }) => entryFor(
+        SessionDelivery(
+          hasRemote: true,
+          dirtyFiles: 0,
+          pullRequest: pr ?? blocked(),
+          branchProtection: protection,
+        ),
+        DeliveryAction.merge,
+      )!.disabledReason;
+
+      test('a required review that is not in is named outright', () {
+        expect(
+          reasonWith(
+            const BranchProtection(
+              status: BranchProtectionRead.read,
+              branch: 'main',
+              requiredApprovals: 2,
+            ),
+            pr: blocked(decision: ReviewDecision.reviewRequired),
+          ),
+          'Branch protection on `main` requires 2 approving reviews; this one '
+          'has none yet.',
+        );
+      });
+
+      test('a required check that has not reported is named outright', () {
+        expect(
+          reasonWith(
+            const BranchProtection(
+              status: BranchProtectionRead.read,
+              branch: 'main',
+              requiredChecks: ['ci/build'],
+            ),
+            pr: blocked(checks: ChecksSummary.none),
+          ),
+          'Branch protection on `main` requires `ci/build`, and nothing has '
+          'reported on this branch.',
+        );
+      });
+
+      test('a rule nothing here can settle is listed, not accused', () {
+        // Signed commits are not something the pull request's own fields can
+        // rule in or out, so the sentence says what the branch requires and
+        // stops there — still strictly more than `BLOCKED` said.
+        expect(
+          reasonWith(
+            const BranchProtection(
+              status: BranchProtectionRead.read,
+              branch: 'main',
+              requiresSignatures: true,
+              requiresLinearHistory: true,
+            ),
+          ),
+          'Branch protection on `main` is blocking this merge; it requires '
+          'signed commits and a linear history.',
+        );
+      });
+
+      test('a 403 says the token cannot read the rule, and does not guess', () {
+        expect(
+          reasonWith(BranchProtection.forbidden),
+          'GitHub is blocking this merge under a branch-protection rule, and '
+          'reading which one needs admin rights on this repository (`gh` '
+          'answered 403). Open the pull request to see why.',
+        );
+      });
+
+      test('an unread status keeps the sentence this strip always had', () {
+        expect(
+          reasonWith(BranchProtection.unknown),
+          'GitHub is blocking this merge; open the pull request to see why.',
+        );
+      });
+    });
 
     test('requested changes disable merge', () {
       expect(

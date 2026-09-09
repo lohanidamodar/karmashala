@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/row_menu.dart';
+import '../../../core/widgets/reveal_on_focus.dart';
 
 /// What a row stands for, and therefore how strongly it is drawn.
 ///
@@ -178,22 +179,27 @@ class ExplorerRow extends StatelessWidget {
       ],
     );
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: Insets.xs + depth * ExplorerRow.indent,
-        right: Insets.xs,
-        bottom: ExplorerRow.gap,
-      ),
-      // Right-click, `Shift+F10`, the Menu key and the screen-reader action all
-      // come from here, along with the hover state the fill and the `⋮` listen
-      // to. The Explorer wrote all of that first; it is shared now so that every
-      // pane answers a row the same way.
-      child: RowContextMenu(
-        menuLabel: kind.menuLabel,
-        itemBuilder: _hasMenu ? menuItemsBuilder : null,
-        onSelected: onMenu ?? (_) {},
-        builder: (context) =>
-            _ExplorerRowFill(kind: kind, selected: selected, child: stack),
+    // The Explorer's body is one lazy `ListView`, so a row Tab reaches may be a
+    // cached one above the viewport that forward traversal will not scroll back
+    // to on its own. See [RevealOnFocus].
+    return RevealOnFocus(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: Insets.xs + depth * ExplorerRow.indent,
+          right: Insets.xs,
+          bottom: ExplorerRow.gap,
+        ),
+        // Right-click, `Shift+F10`, the Menu key and the screen-reader action
+        // all come from here, along with the hover state the fill and the `⋮`
+        // listen to. The Explorer wrote all of that first; it is shared now so
+        // that every pane answers a row the same way.
+        child: RowContextMenu(
+          menuLabel: kind.menuLabel,
+          itemBuilder: _hasMenu ? menuItemsBuilder : null,
+          onSelected: onMenu ?? (_) {},
+          builder: (context) =>
+              _ExplorerRowFill(kind: kind, selected: selected, child: stack),
+        ),
       ),
     );
   }
