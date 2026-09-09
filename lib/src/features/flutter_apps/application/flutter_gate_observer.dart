@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../../verification/application/verification_providers.dart';
-import '../domain/flutter_command_run.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'flutter_loop.dart';
 
 /// Turns a gate running in a pane into a recorded verdict, when its process

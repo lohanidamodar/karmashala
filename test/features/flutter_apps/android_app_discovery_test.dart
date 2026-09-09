@@ -8,10 +8,7 @@ import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/flutter_apps/application/android_app_discovery.dart';
 import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
-import 'package:karmashala/src/features/flutter_apps/data/dtd_pid_files.dart';
-import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
-import 'package:karmashala/src/features/flutter_apps/domain/attached_app.dart';
-import 'package:karmashala/src/features/flutter_apps/domain/flutter_app_registry.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

@@ -3,18 +3,9 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_core/logging.dart';
+import 'package:logging/logging.dart';
 import '../../../core/util/clock_provider.dart';
-import '../data/dtd_link.dart';
-import '../data/flutter_app_link.dart';
-import '../data/vm_service_uri_directory.dart';
-import '../domain/app_log_record.dart';
-import '../domain/attached_app.dart';
-import '../domain/dtd_instance.dart';
-import '../domain/flutter_app_failure.dart';
-import '../domain/flutter_app_registry.dart';
-import '../domain/vm_service_uri.dart';
-import '../domain/widget_selection.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'flutter_app_providers.dart';
 
 /// Every running Flutter app this workspace can reach, and the connections to
@@ -41,10 +32,11 @@ import 'flutter_app_providers.dart';
 /// first look happens when a surface opens or a caller asks — never at
 /// start-up, which nothing here is worth adding to.
 class AttachedApps extends Notifier<FlutterAppRegistry> {
-  AttachedApps({AppLogger? logger})
-    : _logger = logger ?? AppLogger.named('flutter_apps');
+  // `FlutterAppLink` logs through `package:logging` now that it lives in
+  // `karmashala_flutter_apps`; the app's root handler receives the same lines.
+  AttachedApps({Logger? logger}) : _logger = logger ?? Logger('flutter_apps');
 
-  final AppLogger _logger;
+  final Logger _logger;
 
   final Map<String, FlutterAppLink> _links = <String, FlutterAppLink>{};
   StreamSubscription<FileSystemEvent>? _watch;
@@ -223,7 +215,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
         look();
       },
       onError: (Object error) =>
-          _logger.debug('watching ${directory.path} failed: $error'),
+          _logger.fine('watching ${directory.path} failed: $error'),
       cancelOnError: false,
     );
   }
@@ -238,7 +230,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
         .listen(
           (_) => look(),
           onError: (Object error) =>
-              _logger.debug('watching tooling daemons failed: $error'),
+              _logger.fine('watching tooling daemons failed: $error'),
           cancelOnError: false,
         );
   }
@@ -255,7 +247,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       open = ref.read(dtdChannelOpenerProvider);
       instances = ref.read(dtdPidFilesProvider).scan();
     } on Object catch (error) {
-      _logger.debug('reading tooling daemons failed: $error');
+      _logger.fine('reading tooling daemons failed: $error');
       return const <_DaemonApp>[];
     }
 
@@ -268,7 +260,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
         try {
           link = await DtdLink.open(instance.wsUri, open: open);
         } on Object catch (error) {
-          _logger.debug('tooling daemon ${instance.pid}: $error');
+          _logger.fine('tooling daemon ${instance.pid}: $error');
           continue;
         }
         if (!_mounted) {
@@ -283,7 +275,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
           found.add((app: app, daemon: instance));
         }
       } on Object catch (error) {
-        _logger.debug('tooling daemon ${instance.pid}: $error');
+        _logger.fine('tooling daemon ${instance.pid}: $error');
         await _daemons.remove(instance.pid)?.dispose();
       }
     }
@@ -692,7 +684,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       try {
         await link.setWidgetSelectMode(enabled: false);
       } on FlutterAppException catch (error) {
-        _logger.debug('leaving select mode: ${error.message}');
+        _logger.fine('leaving select mode: ${error.message}');
       }
     }
   }

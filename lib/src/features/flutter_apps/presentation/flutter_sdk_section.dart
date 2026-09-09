@@ -11,7 +11,7 @@ import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/flutter_sdk_readings.dart';
-import '../domain/flutter_sdk.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// Settings → Environments: **the Flutter SDK a person names for an
 /// environment**, when PATH there does not mention one.

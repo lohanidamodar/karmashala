@@ -4,7 +4,7 @@ import 'package:karmashala/src/features/app_projects/domain/established.dart';
 import 'package:karmashala/src/features/app_projects/domain/project_descriptor.dart';
 import 'package:karmashala/src/features/app_projects/domain/project_detection.dart';
 import 'package:karmashala/src/features/app_projects/domain/project_kind.dart';
-import 'package:karmashala/src/features/flutter_apps/domain/flutter_project.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// A pubspec that reads as a runnable Flutter app.
 const String _appPubspec = '''

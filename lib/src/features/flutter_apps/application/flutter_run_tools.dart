@@ -4,9 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../domain/flutter_command_run.dart';
-import '../domain/flutter_preflight.dart';
-import '../domain/flutter_app_registry.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 import 'flutter_loop.dart';
 

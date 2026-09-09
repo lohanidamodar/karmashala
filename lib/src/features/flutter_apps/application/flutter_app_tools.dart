@@ -1,8 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/app_log_record.dart';
-import '../domain/attached_app.dart';
-import '../domain/flutter_app_registry.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 
 /// The `flutter_*` tools: what an agent can ask about, and do to, the app the

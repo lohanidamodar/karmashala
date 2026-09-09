@@ -5,9 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
-import 'package:karmashala/src/features/flutter_apps/data/dtd_pid_files.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_tools.dart';
-import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
 

@@ -7,8 +7,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_sdk_readings.dart';
-import 'package:karmashala/src/features/flutter_apps/data/flutter_sdk_service.dart';
-import 'package:karmashala/src/features/flutter_apps/domain/flutter_sdk.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 import '../../support/fake_command_runner.dart';
 
