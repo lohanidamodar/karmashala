@@ -8,7 +8,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/browser_pane_controller.dart';
-import '../domain/element_capture.dart';
+import 'package:karmashala_browser/browser.dart';
 import 'browser_console.dart';
 import 'browser_viewport_shot.dart';
 

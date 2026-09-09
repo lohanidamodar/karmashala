@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:karmashala/src/features/browser/data/cdp_socket.dart';
+import 'package:karmashala_browser/browser.dart';
 
 /// Thrown by a [FakeCdpSocket] responder to make the browser reply with a CDP
 /// protocol error instead of a result.

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../browser/domain/browser_action.dart';
+import 'package:karmashala_browser/browser.dart';
 import '../../devices/domain/device_action.dart';
 import '../data/verification_artifact_store.dart';
 import '../data/verification_dao.dart';

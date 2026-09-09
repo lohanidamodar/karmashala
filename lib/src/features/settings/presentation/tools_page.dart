@@ -9,7 +9,7 @@ import '../../agents/application/agent_hook_installation_service.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_skill_installation_service.dart';
 import '../../browser/application/browser_consent_providers.dart';
-import '../../browser/domain/browser_consent.dart';
+import 'package:karmashala_browser/browser.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';

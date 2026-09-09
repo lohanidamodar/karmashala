@@ -6,7 +6,7 @@ import '../../projects/application/project_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../data/database_consent_journal.dart';
-import '../domain/browser_consent.dart';
+import 'package:karmashala_browser/browser.dart';
 
 /// The recorded browser-consent grants.
 final browserConsentStoreProvider = Provider<BrowserConsentStore>(
