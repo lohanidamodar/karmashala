@@ -55,6 +55,29 @@ class CountingLanTransport extends LanTransport {
   }
 }
 
+/// A LAN transport that answers the hello and then swallows everything.
+///
+/// The socket reads `connected`, the sealed round trip really happened, and
+/// nothing sent after it ever leaves the phone — a half-open path, and the one
+/// shape a promotion could adopt and then be wedged on.
+class DeafAfterHelloTransport extends LanTransport {
+  DeafAfterHelloTransport({
+    required super.host,
+    required super.port,
+    super.connectTimeout,
+    super.backoff,
+  });
+
+  int sent = 0;
+
+  @override
+  void send(List<int> frame) {
+    sent++;
+    if (sent > 1) return;
+    super.send(frame);
+  }
+}
+
 /// The same, for the relay leg — a failed promotion has to leave it carrying.
 class CountingRelayTransport extends RelayTransport {
   CountingRelayTransport({
@@ -218,7 +241,11 @@ void main() {
     return started;
   }
 
-  RemoteCompanionGateway makeGateway({LanPathScout? scout}) {
+  RemoteCompanionGateway makeGateway({
+    LanPathScout? scout,
+    Duration requestTimeout = const Duration(seconds: 5),
+    Duration linkHealGrace = const Duration(milliseconds: 800),
+  }) {
     final gateway = RemoteCompanionGateway(
       store: store,
       deviceName: 'Test phone',
@@ -232,9 +259,9 @@ void main() {
         relayTransports.add(transport);
         return transport;
       },
-      requestTimeout: const Duration(seconds: 5),
+      requestTimeout: requestTimeout,
       helloTimeout: const Duration(milliseconds: 600),
-      linkHealGrace: const Duration(milliseconds: 800),
+      linkHealGrace: linkHealGrace,
       reconnectBackoff: fastBackoff(),
       onLog: logs.add,
     );
@@ -262,8 +289,16 @@ void main() {
     }
   }
 
-  Future<RemoteCompanionGateway> pairedPhone({LanPathScout? scout}) async {
-    final gateway = makeGateway(scout: scout);
+  Future<RemoteCompanionGateway> pairedPhone({
+    LanPathScout? scout,
+    Duration requestTimeout = const Duration(seconds: 5),
+    Duration linkHealGrace = const Duration(milliseconds: 800),
+  }) async {
+    final gateway = makeGateway(
+      scout: scout,
+      requestTimeout: requestTimeout,
+      linkHealGrace: linkHealGrace,
+    );
     final session = await service!.beginPairing(
       capabilities: CapabilitySet.all,
       relay: relayUri,
@@ -440,6 +475,40 @@ void main() {
         greaterThan(sentBefore),
         reason: 'frames kept flowing on it throughout, counted',
       );
+    });
+
+    test('a link that answers the hello and then carries nothing does not get '
+        'the switch', timeout: const Timeout(Duration(minutes: 3)), () async {
+      final started = await startService();
+      final scout = ScriptedScout(
+        attemptTimeout: const Duration(seconds: 2),
+        dialer: (host, port) => DeafAfterHelloTransport(
+          host: '127.0.0.1',
+          port: started.lanPortBound!,
+          connectTimeout: const Duration(seconds: 2),
+          backoff: fastBackoff(),
+        )..start(),
+      );
+      final gateway = await pairedPhone(
+        scout: scout,
+        // Short, so the frame that will never be answered is not what this
+        // test spends its time on.
+        requestTimeout: const Duration(milliseconds: 400),
+        // Long, so the heal cannot answer the question before the assertion
+        // does: what is being pinned here is the switch, not the recovery.
+        linkHealGrace: const Duration(seconds: 5),
+      );
+
+      await beaconOnce(scout, beaconAt(started.lanPortBound!));
+
+      expect(
+        gateway.linkPath,
+        CompanionLinkPath.relay,
+        reason: 'a sealed round trip proves who is there, not that the path '
+            'carries — so the switch is not finished until the new link has '
+            'carried a frame, and this one never did',
+      );
+      expect(scout.dials, 1);
     });
   });
 

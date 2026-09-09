@@ -31,6 +31,18 @@ typedef _StandbyLink = ({
   RemoteHostStatus status,
 });
 
+/// The link a promotion is replacing, held intact until the new one has
+/// carried a frame — and put back when it has not.
+typedef _ReplacedLink = ({
+  CompanionClient? client,
+  StreamSubscription<CompanionEvent>? events,
+  RemoteTransport? dialled,
+  RemoteTransport? owned,
+  Uri? relay,
+  bool wasLocal,
+  List<String> subscribed,
+});
+
 extension _GatewayPromotion on RemoteCompanionGateway {
   /// The beacon's offer, answered without spending the link that works.
   Future<void> _promoteToLan(LanPathScout scout, DiscoveredHost host) async {
@@ -53,9 +65,15 @@ extension _GatewayPromotion on RemoteCompanionGateway {
         onLog?.call('lan promotion: the link moved under the dial; dropped it');
         return;
       }
-      await _adoptStandby(standby);
-      scout.noteSuccess(host);
-      onLog?.call('lan promotion: adopted the LAN link');
+      if (await _adoptStandby(standby)) {
+        scout.noteSuccess(host);
+        onLog?.call('lan promotion: adopted the LAN link');
+        return;
+      }
+      scout.noteFailure(host);
+      _lanUpgradeRefused[scout.keyOf(host)] = _now();
+      _releaseDeferredDrop();
+      onLog?.call('lan promotion: the new link carried nothing; rolled back');
     } finally {
       _promoting = false;
     }
@@ -135,10 +153,16 @@ extension _GatewayPromotion on RemoteCompanionGateway {
   /// listeners on them, the session list, the approvals — belongs to the
   /// *pairing*, not to the socket underneath it, and the pairing did not
   /// change.
-  Future<void> _adoptStandby(_StandbyLink standby) async {
-    final oldClient = _client;
-    final oldEvents = _clientEvents;
-    final oldOwned = _ownedTransport;
+  Future<bool> _adoptStandby(_StandbyLink standby) async {
+    final replaced = (
+      client: _client,
+      events: _clientEvents,
+      dialled: _dialled,
+      owned: _ownedTransport,
+      relay: _activeRelay,
+      wasLocal: _lastPathWasLocal,
+      subscribed: _subscribed.toList(),
+    );
 
     _client = standby.client;
     _clientEvents = standby.client.events.listen(_onEvent);
@@ -151,7 +175,6 @@ extension _GatewayPromotion on RemoteCompanionGateway {
     _lastHostStatus = standby.status;
     // A fresh link owes nothing to what the last one failed to answer.
     _unanswered = 0;
-    _dropDeferred = false;
     // The link state is deliberately untouched. It was connected a moment ago
     // and it is connected now; a phone that flashed "Connecting…" would be
     // reporting an outage that did not happen. `_linkSince` moves only when
@@ -163,11 +186,45 @@ extension _GatewayPromotion on RemoteCompanionGateway {
     // is already going, and its drop must not declare anything dead.
     _bindTransport(standby.transport);
 
-    await oldEvents?.cancel();
-    await _carryOver(standby.client);
-    await oldClient?.close();
-    await oldOwned?.close();
+    // **The relay is held until the new link has carried a frame**, and its
+    // events stay subscribed through the window on purpose: a row that arrives
+    // on it while the switch is in flight is still a row, and `_applyAppended`
+    // drops a repeat by cursor — so listening to both can gain a row and can
+    // never repeat one.
+    if (!await _carryOver(standby.client, replaced.subscribed)) {
+      await _rollBack(replaced, standby);
+      return false;
+    }
+    _dropDeferred = false;
+    await replaced.events?.cancel();
+    await replaced.client?.close();
+    await replaced.owned?.close();
     unawaited(_applyHostStatus(standby.status));
+    return true;
+  }
+
+  /// Gives the relay its link back when the new one would not carry.
+  ///
+  /// It is still open — holding it is the whole reason the old client is not
+  /// closed at the swap — so the phone lands on the link it was using a moment
+  /// ago rather than on one that reports `connected` and answers nothing.
+  /// Whether the relay is still *usable* from here is the ordinary question
+  /// the heal and the connect loop already answer.
+  Future<void> _rollBack(_ReplacedLink replaced, _StandbyLink standby) async {
+    final adopted = _clientEvents;
+    _client = replaced.client;
+    _clientEvents = replaced.events;
+    _dialled = replaced.dialled;
+    _ownedTransport = replaced.owned;
+    _activeRelay = replaced.relay;
+    _lastPathWasLocal = replaced.wasLocal;
+    _linkPath.value = CompanionLinkPath.relay;
+    _subscribed
+      ..clear()
+      ..addAll(replaced.subscribed);
+    await adopted?.cancel();
+    _bindTransport(replaced.dialled);
+    await _dropDial(standby.client, standby.transport);
   }
 
   /// Re-states on the new link what the old one was carrying.
@@ -178,10 +235,36 @@ extension _GatewayPromotion on RemoteCompanionGateway {
   /// would ever append to. Both are re-sent from what this phone already
   /// holds, never from zero: no row crosses twice, and the tail is not
   /// re-read.
-  Future<void> _carryOver(CompanionClient client) async {
-    final sessionIds = _subscribed.toList();
+  Future<bool> _carryOver(
+    CompanionClient client,
+    List<String> sessionIds,
+  ) async {
     _subscribed.clear();
-    for (final sessionId in sessionIds) {
+    // The proof frame: the first thing the new link is asked for, and the one
+    // the switch turns on. A LAN path can be half open — the socket reads
+    // `connected`, the hello round-tripped, and nothing sent after it leaves
+    // the phone — and that is exactly the link the relay must not be closed
+    // for.
+    try {
+      if (sessionIds.isEmpty) {
+        // Nothing was subscribed, so the list is what there is to ask for.
+        await client.listSessionRows();
+      } else {
+        await client.subscribeSession(sessionIds.first);
+        _subscribed.add(sessionIds.first);
+      }
+    } on RemoteApiException catch (error) {
+      // A refusal is an ANSWER: the host read the frame and said no, which is
+      // the strongest evidence this path carries. Only silence is not.
+      if (error.code == null) {
+        onLog?.call('the new link would not carry a frame: ${error.message}');
+        return false;
+      }
+    } on Object catch (error) {
+      onLog?.call('the new link would not carry a frame: $error');
+      return false;
+    }
+    for (final sessionId in sessionIds.skip(1)) {
       await _ensureSubscribed(client, sessionId);
     }
     for (final entry in _transcripts.entries.toList()) {
@@ -198,6 +281,7 @@ extension _GatewayPromotion on RemoteCompanionGateway {
         _startReload(entry.key);
       }
     }
+    return true;
   }
 
   /// Lets go of a dial that will not be adopted. Both halves by hand: a client
