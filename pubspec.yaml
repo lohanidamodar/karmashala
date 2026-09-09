@@ -19,6 +19,7 @@ workspace:
   - packages/karmashala_browser
   - packages/karmashala_core
   - packages/karmashala_devices
+  - packages/karmashala_flutter_apps
   - packages/karmashala_git
   - packages/karmashala_media
   - packages/karmashala_remote
@@ -51,6 +52,12 @@ dependencies:
   # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
   karmashala_devices:
     path: packages/karmashala_devices
+  # Finding, running and driving a Flutter app from outside it: project and
+  # SDK discovery, the four routes to a VM service address, the Dart Tooling
+  # Daemon and the VM service link. Built beside the app in phase A — nothing
+  # under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
+  karmashala_flutter_apps:
+    path: packages/karmashala_flutter_apps
   karmashala_remote:
     path: packages/karmashala_remote
   # Git and GitHub as values plus the readers and parsers that produce them.
