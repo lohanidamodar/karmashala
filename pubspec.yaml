@@ -15,6 +15,7 @@ environment:
 # packages/relay/fly.toml) copies that directory alone and runs `dart pub get`
 # in it, which a member cannot do — "found no workspace root including it".
 workspace:
+  - packages/karmashala_browser
   - packages/karmashala_core
   - packages/local_ipc
 
@@ -25,6 +26,10 @@ dependencies:
   # through dart:ffi and a web build would refuse the whole package for it.
   karmashala_host:
     path: host
+  # The Chrome DevTools Protocol layer and the `browser_*` agent tools over
+  # it. No dependencies of its own; the app hands it the process.
+  karmashala_browser:
+    path: packages/karmashala_browser
   # The Flutter-free core: logging, small utilities, path probing and the
   # frame/video encoders. A workspace member, so this path resolves to the
   # copy in the tree (docs/PACKAGE_SPLIT.md §5).
