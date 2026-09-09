@@ -4,8 +4,8 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../domain/session_launch.dart';
-import 'session_activity_providers.dart';
 import 'session_chat_source.dart';
+import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
@@ -73,8 +73,9 @@ class AgentPlanReading {
       refusal = '';
 
   /// There is nothing to draw, and [absence] says which nothing it is.
-  /// [refusal] is the agent's own recorded sentence, for
-  /// [AgentPlanAbsence.agentPublishesNone].
+  /// [refusal] is the sentence behind it when there is a more specific one —
+  /// the agent's own recorded refusal for [AgentPlanAbsence.agentPublishesNone],
+  /// and `SessionChatView.reason` for [AgentPlanAbsence.noRecord].
   const AgentPlanReading.absent(AgentPlanAbsence this.absence,
       {this.refusal = ''})
     : plan = null,
@@ -195,9 +196,10 @@ final sessionAgentPlanProvider = Provider.autoDispose
       }
 
       // The capability answer comes first and costs nothing: an agent that
-      // keeps no plan must never reach a transcript subscription to find that
-      // out, and Antigravity — the one that does not — is also the one whose
-      // store cannot be read.
+      // keeps no plan must never reach a transcript subscription — nor a
+      // `SessionChatView` probe — to find that out. Antigravity is the one that
+      // publishes none, and whether its *record* can be read is now a separate
+      // per-session question this never has to ask.
       final agentId = ref
           .read(agentInstallationDaoProvider)
           .getById(row.agentInstallationId)
@@ -214,8 +216,26 @@ final sessionAgentPlanProvider = Provider.autoDispose
         );
       }
 
-      if (row.surface != SessionSurface.pane || !hasReadableRecord(ref, row)) {
-        return const AgentPlanReading.absent(AgentPlanAbsence.noRecord);
+      if (row.surface != SessionSurface.pane) {
+        return const AgentPlanReading.absent(
+          AgentPlanAbsence.noRecord,
+          refusal:
+              'This session runs in a terminal we do not own, so there is no '
+              'transcript of it here to read.',
+        );
+      }
+
+      // **Which nothing, in the reading's own words.** The panel used to say
+      // "it is running somewhere this app cannot follow, or it has not said
+      // anything yet" for every shape at once; `SessionChatView.reason` tells
+      // an unreadable store from a session whose transcript file is simply not
+      // there, and this is the sentence the panel draws.
+      final chatView = ref.watch(sessionChatViewProvider(sessionId));
+      if (!chatView.hasChatView) {
+        return AgentPlanReading.absent(
+          AgentPlanAbsence.noRecord,
+          refusal: chatView.reason,
+        );
       }
 
       final messages = ref

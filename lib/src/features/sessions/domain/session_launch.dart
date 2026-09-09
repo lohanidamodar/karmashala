@@ -33,19 +33,28 @@ enum SessionView {
   SessionView get other => this == chat ? terminal : chat;
 }
 
-/// Whether a chat view can be offered for an agent, and why not when it cannot.
+/// **The prior**: whether this agent's store *format* is one we read, before
+/// anybody has looked at a particular session.
 ///
-/// This is a **capability query over the registry**, deliberately not a branch
-/// on whether the agent has a hand-written protocol adapter. The runtime is the
-/// same either way — a PTY — so an agent without a chat view is not a different
-/// kind of session, it is the same session with one of its two renderings
+/// A capability query over the registry, deliberately not a branch on whether
+/// the agent has a hand-written protocol adapter. The runtime is the same
+/// either way — a PTY — so an agent without a chat view is not a different kind
+/// of session, it is the same session with one of its two renderings
 /// unavailable.
 ///
-/// The capability is "can we read this agent's own structured record of the
-/// conversation", which is exactly what an [AgentStoreSpec] with a readable
-/// [AgentStoreFormat] says. It is not "does an `AgentAdapter` subclass exist":
-/// Antigravity has an adapter and no readable store, and correctly gets no chat
-/// view.
+/// **It is no longer the answer, and must not be used as one.** On 2026-09-09
+/// the imported-session path started reading Antigravity's own JSONL
+/// transcripts, which exist for every conversation on the WSL install here and
+/// for none on the Windows one — so a per-format verdict is wrong in one
+/// direction or the other for that agent, whichever way it is set. What a
+/// surface asks is [SessionChatView], the per-session reading, and this is the
+/// prior it carries until something has been looked at. The one place the prior
+/// still stands on its own is a format this list *accepts*: those are readable
+/// for every session, and whether one has written its file yet is measured
+/// downstream by the conversation itself.
+///
+/// [defaultViewFor] is the other honest use: choosing an opening view before a
+/// session exists, where there is nothing per-session to read.
 bool agentSupportsChatView(AgentDescriptor? descriptor) {
   final format = descriptor?.store?.format;
   return format == AgentStoreFormat.claudeJsonl ||

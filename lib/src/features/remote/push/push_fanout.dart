@@ -2,8 +2,10 @@
 /// to the relay for the phones that cannot hear it live.
 ///
 /// The routing rule, per device: `receive_notifications` granted AND a push
-/// token stored AND **no live link right now** — a connected phone gets the
-/// same news as a `session.changed` event, never both. Everything is
+/// token stored AND **the news is not already in front of its owner** — a
+/// connected phone whose app is on screen gets the same news as a
+/// `session.changed` event, never both, while a connected phone in a pocket
+/// gets the push its live link used to swallow. Everything is
 /// best-effort: any failure is logged (without content) and dropped, and
 /// nothing here can crash or block the host.
 ///
@@ -22,6 +24,7 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 
+import '../domain/companion_presence.dart';
 import '../domain/paired_device.dart';
 import '../protocol.dart';
 import 'push_crypto.dart';
@@ -84,7 +87,15 @@ class PushFanout {
     if (!device.capabilities.has(Capability.receiveNotifications)) return;
     final token = device.pushToken;
     if (token == null || token.isEmpty) return;
-    if (_hasLiveLink(device.id)) return;
+    // A live link alone is no longer the answer: it only says the phone can
+    // *hear* the news, and a backgrounded app hears it into a window nobody
+    // can see — the reported failure. What is asked now is whether the news is
+    // in front of its owner, and every silence answers "assume it is", which
+    // is what an old companion did before it could say anything at all.
+    if (_hasLiveLink(device.id) &&
+        presenceSuppressesPush(device.presence, sessionId)) {
+      return;
+    }
     // A device whose relay is switched off has nowhere for a push to land.
     final client = _clientFor(device);
     if (client == null) {

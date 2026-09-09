@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
@@ -571,13 +572,20 @@ class CompanionClient {
     return RemoteSessionStarted.fromJson(payload);
   }
 
+  /// Registers for notifications, and says what this companion is doing.
+  ///
+  /// The presence fields are **additive**: a host that predates them reads
+  /// `token` and `platform` and never looks at the rest, and a companion with
+  /// nothing to say sends exactly the two keys it always sent.
   Future<void> registerNotifications({
     required String token,
     required String platform,
+    CompanionPresence presence = CompanionPresence.unknown,
   }) async {
     await _request(FrameType.notificationsRegister, {
       'token': token,
       'platform': platform,
+      ...presence.toRegisterFields(),
     });
   }
 

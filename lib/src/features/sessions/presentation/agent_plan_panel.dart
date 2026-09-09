@@ -252,9 +252,13 @@ class _Absence extends ConsumerWidget {
             : 'This agent does not publish a plan.\n\n${reading.refusal}',
       AgentPlanAbsence.noneYet =>
         'This agent has not written a plan in this conversation yet.',
+      // Why, in the reading's own words: an agent whose store nothing here
+      // opens is a different sentence from a session whose transcript file is
+      // simply not on this disk, and the hedge used to cover both.
       AgentPlanAbsence.noRecord =>
-        'No record of this session we can read — it is running somewhere '
-            'this app cannot follow, or it has not said anything yet.',
+        reading.refusal.isEmpty
+            ? 'No record of this session we can read.'
+            : 'No record of this session we can read.\n\n${reading.refusal}',
       // The one that has a remedy, and the honest name for the gap: nothing
       // here polls, so the transcript is only re-read while a conversation is
       // the surface in front.

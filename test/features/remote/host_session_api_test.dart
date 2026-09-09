@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/host_session_api.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
@@ -294,9 +295,55 @@ void main() {
         payload: const {'token': 't0k', 'platform': 'android'},
       );
 
-      expect(harness.fake.pushes, [
-        (deviceId: fakeDevice().id, token: 't0k', platform: 'android'),
-      ]);
+      final push = harness.fake.pushes.single;
+      expect(push.deviceId, fakeDevice().id);
+      expect(push.token, 't0k');
+      expect(push.platform, 'android');
+      // A companion that says nothing about itself: every presence field its
+      // own unknown, and nothing invented for it.
+      expect(push.presence.visibility, CompanionVisibility.unknown);
+      expect(push.presence.deviceKind, CompanionDeviceKind.unknown);
+      expect(push.presence.focusedSessionId, isNull);
+    });
+
+    test('notifications.register carries the presence beside the token',
+        () async {
+      final harness = Harness();
+
+      await harness.request(
+        FrameType.notificationsRegister,
+        payload: const {
+          'token': 't0k',
+          'platform': 'android',
+          'deviceKind': 'phone',
+          'visibility': 'background',
+          'focusedSessionId': 's1',
+        },
+      );
+
+      final presence = harness.fake.pushes.single.presence;
+      expect(presence.deviceKind, CompanionDeviceKind.phone);
+      expect(presence.visibility, CompanionVisibility.background);
+      expect(presence.focusedSessionId, 's1');
+    });
+
+    test('a presence word this build has never heard reads as unknown',
+        () async {
+      final harness = Harness();
+
+      await harness.request(
+        FrameType.notificationsRegister,
+        payload: const {
+          'token': 't0k',
+          'platform': 'android',
+          'visibility': 'hibernating',
+          'deviceKind': 7,
+        },
+      );
+
+      final presence = harness.fake.pushes.single.presence;
+      expect(presence.visibility, CompanionVisibility.unknown);
+      expect(presence.deviceKind, CompanionDeviceKind.unknown);
     });
 
     test('transcript.get slices by the after cursor', () async {
