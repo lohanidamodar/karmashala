@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:xterm2/xterm.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
@@ -40,6 +39,7 @@ import 'recording_saved_dialog.dart';
 import 'terminal_pane_view.dart';
 import 'terminal_search_bar.dart';
 import 'terminal_actions.dart';
+import 'terminal_theme_colors.dart';
 
 // The chip shape moved out so a region header could share it; re-exported so
 // this file is still the one import a tab chip needs.
@@ -50,6 +50,7 @@ export '../../../app/shell/workbench_tab_chip.dart';
 // panel's callers need.
 export 'terminal_actions.dart';
 export 'terminal_tab_chip.dart';
+export 'terminal_theme_colors.dart';
 
 part 'terminal_pane_drop_target.dart';
 part 'terminal_pane_handle.dart';
@@ -225,55 +226,6 @@ class _NoTerminalOpen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// The terminal's colours: xterm's own 16-colour palette, with the background,
-/// foreground and cursor aligned to the app surface so the panel reads as one
-/// piece. An imported theme brings its own background and wins.
-TerminalTheme terminalThemeFor(ThemeData theme, TerminalPalette? imported) {
-  final scheme = theme.colorScheme;
-  final base = TerminalThemes.defaultTheme.copyWith(
-    background: scheme.surfaceContainerLowest,
-    foreground: scheme.onSurface,
-    cursor: scheme.primary,
-  );
-  // The user picked those colours deliberately, so they win over the app
-  // surface.
-  return imported?.applyTo(base) ?? base;
-}
-
-extension on TerminalTheme {
-  TerminalTheme copyWith({
-    Color? background,
-    Color? foreground,
-    Color? cursor,
-  }) {
-    return TerminalTheme(
-      cursor: cursor ?? this.cursor,
-      selection: selection,
-      foreground: foreground ?? this.foreground,
-      background: background ?? this.background,
-      black: black,
-      red: red,
-      green: green,
-      yellow: yellow,
-      blue: blue,
-      magenta: magenta,
-      cyan: cyan,
-      white: white,
-      brightBlack: brightBlack,
-      brightRed: brightRed,
-      brightGreen: brightGreen,
-      brightYellow: brightYellow,
-      brightBlue: brightBlue,
-      brightMagenta: brightMagenta,
-      brightCyan: brightCyan,
-      brightWhite: brightWhite,
-      searchHitBackground: searchHitBackground,
-      searchHitBackgroundCurrent: searchHitBackgroundCurrent,
-      searchHitForeground: searchHitForeground,
     );
   }
 }
