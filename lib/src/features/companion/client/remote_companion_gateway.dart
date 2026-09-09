@@ -72,16 +72,20 @@ const Duration kLanUpgradeRefusalTtl = Duration(minutes: 30);
 /// A current value plus its changes. Streams emit the value on listen, then
 /// every set — the seeding the gateway contract asks for.
 class _Watched<T> {
-  _Watched(this._value);
+  _Watched(this._value, {this.onSet});
 
   T _value;
   final _changes = StreamController<T>.broadcast(sync: true);
+
+  /// Run after every set, changed or not — deduping is the caller's job.
+  final void Function()? onSet;
 
   T get value => _value;
 
   set value(T next) {
     _value = next;
     _changes.add(next);
+    onSet?.call();
   }
 
   Stream<T> get stream async* {
@@ -204,8 +208,26 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   final _pairing = _Watched<CompanionPairing?>(null);
   final _connections = _Watched<List<CompanionConnection>>(const []);
-  final _link = _Watched<CompanionLinkState>(CompanionLinkState.disconnected);
+  late final _link = _Watched<CompanionLinkState>(
+    CompanionLinkState.disconnected,
+    onSet: _stampLink,
+  );
   final _linkPath = _Watched<CompanionLinkPath?>(null);
+
+  /// When [_link] last changed, for the age every reading owes (§19).
+  final _linkSince = _Watched<DateTime?>(null);
+
+  /// The state [_linkSince] was written for. A transport reports the state it
+  /// is IN, not the one it moved to, so a redial reports `connecting` over and
+  /// over; a stamp that moved on every report would call an hour-old outage
+  /// fresh.
+  CompanionLinkState? _stampedLink;
+
+  void _stampLink() {
+    if (_link.value == _stampedLink) return;
+    _stampedLink = _link.value;
+    _linkSince.value = _now().toUtc();
+  }
   final _progress = StreamController<CompanionPairingProgress>.broadcast(
     sync: true,
   );
@@ -324,6 +346,12 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
+
+  @override
+  DateTime? get linkSince => _linkSince.value;
+
+  @override
+  Stream<DateTime?> get linkSinceStates => _linkSince.stream;
 
   @override
   Uri? get activeRelay =>

@@ -80,6 +80,13 @@ final companionLinkPathProvider = StreamProvider<CompanionLinkPath?>(
   (ref) => ref.watch(companionGatewayProvider).linkPathStates,
 );
 
+/// When the link last changed state, so a surface can carry the age of what it
+/// claims (CLAUDE.md §19). Null until this phone has observed a change: an
+/// unstamped reading must say so rather than read "just now".
+final companionLinkSinceProvider = StreamProvider<DateTime?>(
+  (ref) => ref.watch(companionGatewayProvider).linkSinceStates,
+);
+
 /// Every session the host holds, live.
 final companionSessionsProvider = StreamProvider<List<CompanionSessionSummary>>(
   (ref) => ref.watch(companionGatewayProvider).watchSessions(),

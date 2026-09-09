@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/build_identity.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../explorer/presentation/session_card.dart' show compactAge;
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
 import 'companion_chrome.dart';
@@ -28,6 +31,21 @@ class CompanionSettingsScreen extends ConsumerWidget {
     // A phone now keeps several relays and picks one per reconnect, so
     // "Relay" alone stopped being an answer — name the one in use.
     final relayHost = ref.read(companionGatewayProvider).activeRelay?.host;
+    final since = ref.watch(companionLinkSinceProvider).asData?.value;
+    final age = since == null
+        ? null
+        : ref.read(clockProvider).nowUtc().difference(since);
+
+    // §19: every reading carries its age. Worded for the state it belongs to —
+    // a link that is up has held for that long, one that is down broke that
+    // long ago — and a state nothing has stamped yet admits it rather than
+    // reading "just now", which is what an unaged sentence looked like.
+    String withAge(String label) {
+      if (age == null) return '$label · age unknown';
+      return link == CompanionLinkState.disconnected
+          ? '$label · since ${describeAge(age)}'
+          : '$label · ${compactAge(age)}';
+    }
 
     if (pairing == null) {
       // The shell shows the pairing flow before the tabs exist, so this is
@@ -53,21 +71,21 @@ class CompanionSettingsScreen extends ConsumerWidget {
       // the relay entirely, and the user deserves to see that it did.
       CompanionLinkState.connected => (
         AppIcons.linkSimple,
-        switch ((path, relayHost)) {
+        withAge(switch ((path, relayHost)) {
           (null, _) => 'Connected',
           (final p?, final host?) => 'Connected · ${p.label} ($host)',
           (final p?, _) => 'Connected · ${p.label}',
-        },
+        }),
         SemanticColors.of(context).idle,
       ),
       CompanionLinkState.connecting => (
         AppIcons.arrowsClockwise,
-        'Connecting…',
+        withAge('Connecting…'),
         SemanticColors.of(context).working,
       ),
       CompanionLinkState.disconnected => (
         AppIcons.linkBreak,
-        'Host unreachable',
+        withAge('Host unreachable'),
         SemanticColors.of(context).failure,
       ),
     };

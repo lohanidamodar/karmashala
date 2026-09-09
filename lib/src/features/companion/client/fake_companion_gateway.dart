@@ -13,16 +13,20 @@ import 'companion_gateway.dart';
 /// A current value plus its changes. Streams emit the value on listen, then
 /// every set — the seeding the gateway contract asks for.
 class _Watched<T> {
-  _Watched(this._value);
+  _Watched(this._value, {this.onSet});
 
   T _value;
   final _changes = StreamController<T>.broadcast(sync: true);
+
+  /// Run after every set, changed or not — deduping is the caller's job.
+  final void Function()? onSet;
 
   T get value => _value;
 
   set value(T next) {
     _value = next;
     _changes.add(next);
+    onSet?.call();
   }
 
   Stream<T> get stream async* {
@@ -75,8 +79,10 @@ class FakeCompanionGateway implements CompanionGateway {
     Map<String, List<CompanionSessionSummary>> sessionsByHost = const {},
     this.switchDelay = Duration.zero,
     this.failSwitchTo,
-  }) : _pairing = _Watched(pairing),
-       _link = _Watched(link),
+    DateTime? linkSince,
+    DateTime Function()? now,
+  }) : _now = now ?? (() => DateTime.now().toUtc()),
+       _pairing = _Watched(pairing),
        _linkPath = _Watched(
          link == CompanionLinkState.connected
              ? (linkPath ?? CompanionLinkPath.relay)
@@ -101,6 +107,11 @@ class FakeCompanionGateway implements CompanionGateway {
                  ],
          ),
        ) {
+    // Seeded, not observed: the fake's starting state is a fixture, so it
+    // stamps only what a test moves it to — unless the test supplies one.
+    _link = _Watched(link, onSet: _stampLink);
+    _stampedLink = link;
+    _linkSince = _Watched(linkSince);
     transcripts.forEach(
       (id, messages) =>
           _transcripts[id] = _Watched(List.unmodifiable(messages)),
@@ -121,6 +132,8 @@ class FakeCompanionGateway implements CompanionGateway {
     Map<String, List<CompanionSessionSummary>> sessionsByHost = const {},
     Duration switchDelay = Duration.zero,
     String? failSwitchTo,
+    DateTime? linkSince,
+    DateTime Function()? now,
   }) => FakeCompanionGateway(
     pairing: CompanionPairing(
       capabilities: capabilities ?? CapabilitySet.all,
@@ -135,6 +148,8 @@ class FakeCompanionGateway implements CompanionGateway {
     sessionsByHost: sessionsByHost,
     switchDelay: switchDelay,
     failSwitchTo: failSwitchTo,
+    linkSince: linkSince,
+    now: now,
   );
 
   /// The one short code [pairWithCode] accepts.
@@ -158,8 +173,20 @@ class FakeCompanionGateway implements CompanionGateway {
   );
   Uri _pairingRelay = Uri.parse(kDefaultCompanionRelayUrl);
   final _Watched<CompanionPairing?> _pairing;
-  final _Watched<CompanionLinkState> _link;
+  late final _Watched<CompanionLinkState> _link;
   final _Watched<CompanionLinkPath?> _linkPath;
+
+  /// When [_link] last changed, and the state that stamp was written for — a
+  /// repeated identical report is not a change (§19).
+  late final _Watched<DateTime?> _linkSince;
+  CompanionLinkState? _stampedLink;
+  final DateTime Function() _now;
+
+  void _stampLink() {
+    if (_link.value == _stampedLink) return;
+    _stampedLink = _link.value;
+    _linkSince.value = _now();
+  }
   final _Watched<List<CompanionSessionSummary>> _sessions;
   final _Watched<List<CompanionConnection>> _connections;
   final Map<String, List<CompanionSessionSummary>> _sessionsByHost;
@@ -221,6 +248,12 @@ class FakeCompanionGateway implements CompanionGateway {
 
   @override
   Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
+
+  @override
+  DateTime? get linkSince => _linkSince.value;
+
+  @override
+  Stream<DateTime?> get linkSinceStates => _linkSince.stream;
 
   /// Settable, so a screen test can drive the banner's honest-reason line —
   /// and watched, because on a real phone the reason arrives on its own, with
