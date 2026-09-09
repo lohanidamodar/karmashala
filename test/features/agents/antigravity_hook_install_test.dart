@@ -295,18 +295,18 @@ void _absentStoreTests() {
 
   test('installing for an agent that is not installed reports false, '
       'rather than throwing', () async {
-    late final bool installed;
-    expect(
-      () async => installed = await installer.install(
+    // The install's own future, not a closure handed to `returnsNormally` and
+    // a `pumpEventQueue()` that under load returned before the I/O finished —
+    // which failed with `LateInitializationError` rather than the real answer.
+    await expectLater(
+      installer.install(
         descriptor: antigravity,
         storeHome: missingStore(),
         endpoint: endpoint,
         environment: EnvironmentKind.localPosix,
       ),
-      returnsNormally,
+      completion(isFalse),
     );
-    await pumpEventQueue();
-    expect(installed, isFalse);
   });
 
   test('and writes nothing into a home the agent does not have', () async {
