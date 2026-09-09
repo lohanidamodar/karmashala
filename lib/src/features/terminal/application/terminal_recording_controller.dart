@@ -7,6 +7,7 @@ import 'package:xterm2/xterm.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/media/frame_sink.dart';
+import '../../../core/media/video_support_provider.dart';
 import '../../../core/paths/app_support_directory.dart';
 import '../data/cast_frame_renderer.dart';
 import '../data/cast_recorder.dart';
@@ -295,6 +296,7 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
         RecordingFormat.mp4 => '$base.mp4',
         RecordingFormat.pngSequence => '$base-frames',
       },
+      hardwareTransforms: ref.read(hardwareTransformsProvider),
     );
     try {
       final result = await CastFrameRenderer(

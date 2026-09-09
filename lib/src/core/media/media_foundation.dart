@@ -196,6 +196,20 @@ final _sinkWriterDisableThrottling = _guid(
   '08b845d8-2b74-4afe-9d53-be16d2d5ae4f',
 );
 final _enableHardwareTransforms = _guid('a634a91c-822b-41b9-a494-4de4643612b0');
+
+/// Whether a sink writer may use the vendor hardware encoder MFTs.
+///
+/// **True in the app**, where the hardware encoder is the point of going
+/// through Media Foundation at all. **False under `flutter test`**: asking for
+/// them loads NVIDIA's `nvEncMFTH264x.dll` and Intel's media stack into
+/// `flutter_tester.exe`, and the tester has died at one fixed offset twenty
+/// times on this machine, every time inside the MP4 probe. The measurement and
+/// how to repeat it are in `test/core/media/video_writer_test.dart`.
+///
+/// Every caller passes it rather than the library reading the environment: one
+/// that quietly behaved differently when observed would make the tests a
+/// report on a different encoder than the app uses.
+const bool appHardwareTransforms = true;
 final _transcodeContainerType = _guid('150ff23f-4abc-478b-ac4f-e81916b8aaa5');
 final _containerMpeg4 = _guid('dc6cd05d-b9d0-40ef-bd35-fa622c1ab28a');
 final _sampleCleanPoint = _guid('9154733f-e1bd-41bf-81d3-fcd918f71332');
@@ -282,9 +296,13 @@ class _Mp4Sink {
   /// Opens the file. [configureOutput] fills in the H.264 type; when
   /// [passthrough] the same type is set as the input, which is what tells MF to
   /// mux without an encoder.
+  ///
+  /// [hardwareTransforms] asks for the vendor encoder MFTs — see
+  /// [appHardwareTransforms].
   void open({
     required void Function(Pointer<Void> mediaType) configureOutput,
     required bool passthrough,
+    required bool hardwareTransforms,
     void Function(Pointer<Void> mediaType)? configureInput,
   }) {
     _mf.ensureStarted();
@@ -293,9 +311,17 @@ class _Mp4Sink {
     final writer = calloc<Pointer<Void>>();
     final url = _wide(path);
     try {
-      _check(_mf.createAttributes(attributes, 3), 'MFCreateAttributes');
+      // The count is a sizing hint; it is short by one when the hardware
+      // attribute is not set.
+      _check(
+        _mf.createAttributes(attributes, hardwareTransforms ? 3 : 2),
+        'MFCreateAttributes',
+      );
       _setU32(attributes.value, _sinkWriterDisableThrottling, 1);
-      _setU32(attributes.value, _enableHardwareTransforms, 1);
+      // Omitted rather than set to 0: an absent attribute is MF's own default.
+      if (hardwareTransforms) {
+        _setU32(attributes.value, _enableHardwareTransforms, 1);
+      }
       _setGuid(attributes.value, _transcodeContainerType, _containerMpeg4);
       _check(
         _mf.createSinkWriter(url, nullptr, attributes.value, writer),
@@ -485,6 +511,7 @@ class MediaFoundationEncoder implements VideoEncoder {
     required int width,
     required int height,
     required this.frameRate,
+    required bool hardwareTransforms,
   }) : // H.264 needs even dimensions; a spare row or column is cropped rather
        // than refused.
        width = width - (width % 2),
@@ -492,6 +519,7 @@ class MediaFoundationEncoder implements VideoEncoder {
        _sink = _Mp4Sink(path) {
     _sink.open(
       passthrough: false,
+      hardwareTransforms: hardwareTransforms,
       configureOutput: (type) {
         _setGuid(type, _mtMajorType, _mediaTypeVideo);
         _setGuid(type, _mtSubtype, _formatH264);
@@ -596,9 +624,11 @@ class MediaFoundationRemuxer implements VideoRemuxer {
     required this.height,
     required this.frameRate,
     required Uint8List sequenceHeader,
+    required bool hardwareTransforms,
   }) : _sink = _Mp4Sink(path) {
     _sink.open(
       passthrough: true,
+      hardwareTransforms: hardwareTransforms,
       configureOutput: (type) {
         _setGuid(type, _mtMajorType, _mediaTypeVideo);
         _setGuid(type, _mtSubtype, _formatH264);
@@ -653,30 +683,37 @@ class MediaFoundationRemuxer implements VideoRemuxer {
   void abort() => _sink.abort();
 }
 
+/// [hardwareTransforms] defaults rather than being required only because
+/// [VideoEncoderOpener] forbids a required parameter; tests pass `false`.
 VideoEncoder openMediaFoundationEncoder({
   required String path,
   required int width,
   required int height,
   required int frameRate,
+  bool hardwareTransforms = appHardwareTransforms,
 }) => MediaFoundationEncoder(
   path: path,
   width: width,
   height: height,
   frameRate: frameRate,
+  hardwareTransforms: hardwareTransforms,
 );
 
+/// Same as [openMediaFoundationEncoder] on [hardwareTransforms].
 VideoRemuxer openMediaFoundationRemuxer({
   required String path,
   required int width,
   required int height,
   required int frameRate,
   required Uint8List sequenceHeader,
+  bool hardwareTransforms = appHardwareTransforms,
 }) => MediaFoundationRemuxer(
   path: path,
   width: width,
   height: height,
   frameRate: frameRate,
   sequenceHeader: sequenceHeader,
+  hardwareTransforms: hardwareTransforms,
 );
 
 /// Roughly 0.1 bits per pixel per frame at 12 fps, which is where a terminal
@@ -693,7 +730,7 @@ int _bitrateFor(int width, int height) {
 /// **not** the question: on the owner's machine it lists 19 video decoders and
 /// **zero** video encoders while the sink writer encodes H.264 happily, so an
 /// enumeration would have reported "no MP4" on a machine that writes them.
-VideoSupport probeVideoSupport() {
+VideoSupport probeVideoSupport({required bool hardwareTransforms}) {
   if (!Platform.isWindows) {
     return VideoSupport.unavailable(
       'MP4 needs an encoder from the operating system, and only the Windows '
@@ -712,6 +749,7 @@ VideoSupport probeVideoSupport() {
     _Mp4Sink(probe.path)
       ..open(
         passthrough: false,
+        hardwareTransforms: hardwareTransforms,
         configureOutput: (type) {
           _setGuid(type, _mtMajorType, _mediaTypeVideo);
           _setGuid(type, _mtSubtype, _formatH264);

@@ -17,10 +17,11 @@ import '../terminal/fake_instance.dart';
 /// Recording as an agent drives it: start, stop, get a file, choose the format
 /// — and be told which formats exist here before asking for one that does not.
 ///
-/// **This file can take the tester process down under load**, because probing
-/// the MP4 encoder loads the GPU vendors' Media Foundation transforms into the
-/// test process. The crash, what was measured about it, and how to measure it
-/// again are recorded once, in `test/core/media/video_writer_test.dart`.
+/// **This file used to take the tester process down under load**, because
+/// probing the MP4 encoder loaded the GPU vendors' Media Foundation transforms
+/// into the test process. Both the probe and the render below now ask for the
+/// software encoder; the crash, the fix and the before/after measurement are
+/// recorded once, in `test/core/media/video_writer_test.dart`.
 void main() {
   // `Picture.toImage` needs a binding; a real render runs below.
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,9 @@ void main() {
         ...fakeTerminalOverrides(),
         recordingsDirectoryProvider.overrideWith((ref) async => temp),
         videoSupportProvider.overrideWithValue(support),
+        // The MP4 case below renders through the app's own path; this is what
+        // keeps the vendor encoder MFTs out of the tester.
+        hardwareTransformsProvider.overrideWithValue(false),
       ],
     );
   }
@@ -187,7 +191,7 @@ void main() {
     test('renders a real MP4 an agent can hand straight over', () async {
       await retire();
       // The host's own reading, not an override: this is the whole claim.
-      build(support: probeVideoSupport());
+      build(support: probeVideoSupport(hardwareTransforms: false));
       final paneId = openPane();
       final started =
           await tools().call('terminal_record_start', {'paneId': paneId})
