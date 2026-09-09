@@ -19,6 +19,7 @@ import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../database/app_database.dart';
 import '../database/database_providers.dart';
 import '../logging/app_logger.dart';
 import '../logging/diagnostics.dart';
@@ -747,6 +748,7 @@ class AppLifecycle {
     //    are idempotent, so starting them here — where the wait is budgeted —
     //    leaves the providers' own hooks as no-ops.
     final pending = _startContainerTeardowns();
+    final database = _databaseOrNull();
     try {
       _container.dispose();
     } on Object catch (error, stack) {
@@ -758,6 +760,20 @@ class AppLifecycle {
       () => Future.wait(pending),
       cap: _kContainerStepBudget,
     );
+
+    // 7. The database handle, after everything that could still write through
+    //    it has stopped. Not a `_step`: `close()` is one synchronous call that
+    //    a deadline could not preempt anyway, and skipping it is what the soak
+    //    was measuring. `exit(0)` releases the file but gives SQLite no chance
+    //    to checkpoint, so every one of 20 quits left `karmashala.sqlite-wal`
+    //    and `-shm` for the next launch to recover from.
+    try {
+      database?.close();
+    } on Object catch (error) {
+      // A handle already closed, or one a teardown is still inside. The next
+      // launch recovers from the journal exactly as it did before.
+      _logger.warning('lifecycle: closing the database failed reason=$error');
+    }
 
     watch.stop();
     lastShutdownDuration = watch.elapsed;
@@ -784,6 +800,20 @@ class AppLifecycle {
     } on Object {
       // A sink that cannot be written must not hold the app open. Nothing is
       // logged about it: there is nowhere left for that line to go.
+    }
+  }
+
+  /// The database this container was given, or null when it has none.
+  ///
+  /// Read *before* `dispose()` for the same reason the teardowns are: a
+  /// disposed container cannot be read from, and this is the one handle whose
+  /// close has to outlast every provider that might still be using it.
+  AppDatabase? _databaseOrNull() {
+    try {
+      return _container.read(databaseProvider);
+    } on Object {
+      // Companion mode and a few tools build a container with no database.
+      return null;
     }
   }
 

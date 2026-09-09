@@ -179,6 +179,24 @@ void main() {
     });
   });
 
+  group('the database it closes', () {
+    test('a graceful quit closes the handle, not just the process', () async {
+      // `exit(0)` releases the file and gives SQLite no chance to checkpoint,
+      // so all 20 of the soak's cycles left `karmashala.sqlite-wal` and `-shm`
+      // for the next launch to recover from. A `close()` writes them back and
+      // removes them.
+      final lifecycle = AppLifecycle(container);
+
+      await lifecycle.shutdown();
+
+      expect(
+        () => db.readMetadata(MetadataKeys.firstRunAt),
+        throwsA(anything),
+        reason: 'the handle outlived the shutdown that owns it',
+      );
+    });
+  });
+
   group('ordering', () {
     test('runs outermost first and disposes the container last', () async {
       final order = <String>[];

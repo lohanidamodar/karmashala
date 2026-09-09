@@ -318,6 +318,33 @@ void main() {
       expect(asked.single.$2, EnvironmentKind.localPosix);
     });
 
+    test('a staging file a killed quit left is swept, not inherited', () async {
+      // `_writeAtomically` cleans up in a `finally`, and a process that ends
+      // between the write and the rename never runs it — which is what a quit
+      // that cuts the sweep off at its 150 ms cap does. The soak found those
+      // accumulating in the store homes, one per interrupted launch. Two
+      // chances to be rid of one: the next install, and the next retirement.
+      final claude = agents.firstWhere((a) => a.id == 'claudeCode');
+      final home = storeHomeOf(claude);
+      final staged = File('${endpointOf(claude).path}.karmashala-tmp');
+      staged.writeAsStringSync('half of a token file');
+
+      await installer.retireEndpoint(descriptor: claude, storeHome: home);
+
+      expect(staged.existsSync(), isFalse);
+
+      staged.writeAsStringSync('and again, from the launch after that');
+      await installer.install(
+        descriptor: claude,
+        storeHome: home,
+        endpoint: first,
+        environment: EnvironmentKind.localPosix,
+      );
+
+      expect(staged.existsSync(), isFalse);
+      expect(endpointOf(claude).existsSync(), isTrue);
+    });
+
     test('the script and the config are not asked about', () async {
       // They carry nothing secret, and an ACL on a file the agent's own CLI
       // has to read is a way to break the hook rather than to protect it.
