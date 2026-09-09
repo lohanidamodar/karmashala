@@ -1163,6 +1163,7 @@ class TerminalTabChip extends StatelessWidget {
     required this.onClose,
     required this.onEnd,
     required this.onBulkClose,
+    this.onSavePreset,
     this.agentStatus,
     this.accented = true,
     super.key,
@@ -1189,6 +1190,10 @@ class TerminalTabChip extends StatelessWidget {
   /// [WorkbenchTabChip.accented] for the three states. Every workspace group
   /// shows which tab it holds; only one of them shows where typing goes.
   final bool accented;
+
+  /// Names and stores the whole workbench's shape. Null where a chip has no
+  /// workspace behind it to capture — a preview, or a test.
+  final VoidCallback? onSavePreset;
 
   /// Where this tab sits in the strip, and how many there are.
   ///
@@ -1272,6 +1277,17 @@ class TerminalTabChip extends StatelessWidget {
             icon: scope.icon,
             enabled: scope.closesAnything(index, tabCount),
           ),
+        // Not about *this* tab, and here anyway. The strip's own verbs moved to
+        // the title bar, and this is the menu a person opens when they are
+        // thinking about the shape of their tabs — which is what a preset is.
+        if (onSavePreset != null) ...[
+          const DesktopMenuDivider(),
+          DesktopMenuItem(
+            value: 'save-preset',
+            label: 'Save this layout as a preset…',
+            icon: AppIcons.terminalWindow,
+          ),
+        ],
         const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'end',
@@ -1287,6 +1303,8 @@ class TerminalTabChip extends StatelessWidget {
         onClose();
       case 'end':
         onEnd();
+      case 'save-preset':
+        onSavePreset?.call();
       default:
         onBulkClose(TabCloseScope.values.byName(choice));
     }

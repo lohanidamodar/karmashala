@@ -584,7 +584,7 @@ class _Footer extends StatelessWidget {
             const Flexible(
               child: Text(
                 r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
-                r'/  files   ·   $  snippets',
+                r'/  files   ·   $  snippets   ·   ~  presets',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

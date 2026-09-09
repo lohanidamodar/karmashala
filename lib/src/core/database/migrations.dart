@@ -88,6 +88,10 @@ typedef MigrationStep = void Function(Database db);
 ///   agent run a person armed in advance, every occurrence of it (including
 ///   the ones nobody was here for), and the per-checkout verification the gate
 ///   refuses without.
+/// * **v45** — named terminal presets: the *shape* of a workbench — its tabs,
+///   their regions and splits, and each pane's profile and directory — with
+///   nothing running in it, so opening one starts fresh panes rather than
+///   resurrecting old ones.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -133,6 +137,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   42: _migrateToV42,
   43: _migrateToV43,
   44: _migrateToV44,
+  45: _migrateToV45,
 };
 
 /// Was this pane running when its row was written?
@@ -1967,4 +1972,27 @@ void _migrateToV44(Database db) {
       .toSet();
   if (columns.contains('canonical_id')) return;
   db.execute('ALTER TABLE repositories ADD COLUMN canonical_id TEXT;');
+}
+
+/// A named workbench shape the user can reopen.
+///
+/// One `shape` column holding the whole document rather than a row per tab and
+/// a row per pane, for the reason `kTerminalWorkspaceKey` gives about the split
+/// tree beside it: the shape *is* a document, and half of one written across N
+/// rows is a shape that cannot be read back. A table rather than a metadata key
+/// because presets are a list the user names, adds to and deletes from.
+///
+/// **v45, renumbered on the merge**, for the reason the note above gives one
+/// number earlier: it was written as v44 and the canonical repository id
+/// landed that number first.
+void _migrateToV45(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_presets (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      shape      TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  ''');
 }

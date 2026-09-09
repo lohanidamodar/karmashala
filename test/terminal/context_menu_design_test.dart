@@ -86,9 +86,11 @@ void main() {
     await tester.tap(find.byType(TerminalTabChip), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    // Close tab, the four bulk closes, End session.
-    expectHouseRows(tester, rows: 6);
-    expect(find.byType(DesktopMenuDivider), findsOneWidget);
+    // Close tab, the four bulk closes, saving the layout, End session — and a
+    // divider before each of the last two, which are the rows that are not
+    // about closing this tab.
+    expectHouseRows(tester, rows: 7);
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(2));
     final label = tester.widget<Text>(find.text('End session'));
     expect(
       label.style?.color,
