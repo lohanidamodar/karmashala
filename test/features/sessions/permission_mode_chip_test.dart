@@ -159,10 +159,39 @@ void main() {
 
     // The row says acceptEdits; the agent default says bypass. The chip must
     // show what this session will actually run under.
-    expect(find.text('Accept edits'), findsOneWidget);
+    expect(find.text('Build · Accept edits'), findsOneWidget);
     expect(find.text('Bypass'), findsNothing);
     // Claude Code expresses it exactly, so no fidelity qualifier is drawn.
-    expect(find.textContaining('· '), findsNothing);
+    // The '· ' the face does carry is the rung's borrowed name, which is part
+    // of the mode's own label and not a qualifier.
+    expect(find.textContaining('· default'), findsNothing);
+    expect(find.textContaining('· unrecognised'), findsNothing);
+    expect(find.textContaining('approximate'), findsNothing);
+  });
+
+  testWidgets('the chip names the rung beside the CLI own word', (
+    tester,
+  ) async {
+    // The face is the one surface with a third of a window to live in, and it
+    // is still both halves: the borrowed name earns its place by being the
+    // word that is the same across three CLIs, and the CLI's own word is what
+    // a person configuring that CLI needs.
+    final h = harness(agentId: AgentIds.claudeCode, mode: _acceptEdits);
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    expect(find.text('Build · Accept edits'), findsOneWidget);
+  });
+
+  testWidgets('and says it once where the CLI already says it', (
+    tester,
+  ) async {
+    final h = harness(agentId: AgentIds.claudeCode, mode: 'mode=plan');
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    // "Plan · Plan" is not clearer than "Plan".
+    expect(find.text('Plan'), findsOneWidget);
   });
 
   testWidgets('draws both of Codex\'s axes on the chip', (tester) async {
@@ -177,7 +206,9 @@ void main() {
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
-    expect(find.text('Workspace · On request'), findsOneWidget);
+    // Two axes, so the CLI's own words are bracketed behind the one borrowed
+    // name — the reader can tell which word came from where.
+    expect(find.text('Build (Workspace · On request)'), findsOneWidget);
     expect(find.textContaining('approximate'), findsNothing);
   });
 
@@ -309,7 +340,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept edits'));
+    await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
 
     expect(
@@ -319,7 +350,7 @@ void main() {
     // Never claims the running agent changed: it was started with the old
     // flags and no CLI here can be re-governed mid-session.
     expect(find.textContaining('applies'), findsOneWidget);
-    expect(find.text('Accept edits'), findsOneWidget);
+    expect(find.text('Build · Accept edits'), findsOneWidget);
   });
 
   testWidgets('an inherited mode is labelled as inherited in the tooltip', (
@@ -337,7 +368,7 @@ void main() {
 
     // Null column: the row predates v11 or was never overridden, so the agent
     // default is the answer — and the tooltip says that is where it came from.
-    expect(find.text('Accept edits'), findsOneWidget);
+    expect(find.text('Build · Accept edits'), findsOneWidget);
     // PopupMenuButton contributes a Tooltip of its own; the chip's is the one
     // carrying a message.
     final tooltip = tester
@@ -363,7 +394,7 @@ void main() {
     // Honest on the face of the control, not only on hover: this session never
     // chose acceptEdits, it is tracking a setting that can move under it, and
     // drawing the resolved value bare would read as a decision it made.
-    expect(find.text('Accept edits'), findsOneWidget);
+    expect(find.text('Build · Accept edits'), findsOneWidget);
     expect(find.text('· default'), findsOneWidget);
   });
 
@@ -530,7 +561,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept edits'));
+    await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
 
     // Nothing was ended. Accept-edits is not dangerous, so it earns no dialog
@@ -562,7 +593,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept edits'));
+    await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();
@@ -592,7 +623,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept edits'));
+    await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
 
     // "Applies when this session next runs" is already the whole truth here,
@@ -611,7 +642,7 @@ void main() {
 
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept edits'));
+    await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();

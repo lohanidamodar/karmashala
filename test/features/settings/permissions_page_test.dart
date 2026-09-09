@@ -34,4 +34,34 @@ void main() {
     );
     expect(find.textContaining('even after this changes').first, findsOneWidget);
   });
+
+  testWidgets('each row names its rung beside the CLI own word', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          settingsControllerProvider.overrideWith(_StaticSettings.new),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: PermissionsPage()),
+          ),
+        ),
+      ),
+    );
+
+    // The first card is Claude Code's, and its first dropdown is what a new
+    // session starts under.
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+
+    // This page is where somebody configures an agent, so the CLI's own word
+    // is the half that must never leave — the borrowed name is only ever in
+    // front of it, and only where the CLI does not already say it.
+    expect(find.text('Build · Accept edits'), findsWidgets);
+    expect(find.text('Build · Automatic'), findsWidgets);
+    expect(find.text('Plan mode'), findsWidgets);
+    expect(find.text('Bypass (full autonomy)'), findsWidgets);
+  });
 }

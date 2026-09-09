@@ -11,11 +11,29 @@ class CommandRequest {
     this.arguments = const [],
     this.workingDirectory,
     this.runInShell = false,
+    this.stdinText,
   });
 
   final String executable;
   final List<String> arguments;
   final EnvironmentPath? workingDirectory;
+
+  /// Text to hand the process on **stdin**, which is then closed.
+  ///
+  /// Null — the default, and what every existing caller passes — is the
+  /// behaviour `Process.run` has always had: stdin is closed immediately and
+  /// the child reads nothing.
+  ///
+  /// It exists because a command line is not a place to put a document. Windows
+  /// caps one at 32,767 characters, so anything the size of a transcript has to
+  /// arrive some other way, and the CLIs that take one say so themselves —
+  /// `codex exec`'s `--help` names the pipe, and `claude -p` is documented as
+  /// being for them.
+  ///
+  /// Encoded as UTF-8 rather than [systemEncoding]: this is a payload this app
+  /// composed and knows the encoding of, and the code page a Windows console
+  /// happens to be on is not it.
+  final String? stdinText;
 
   /// Run via the system shell. Needed to launch Windows **app-execution
   /// aliases** (e.g. `wt.exe`, Windows Terminal), which `Process.start` cannot
@@ -25,7 +43,8 @@ class CommandRequest {
   @override
   String toString() =>
       'CommandRequest($executable ${arguments.join(' ')}'
-      '${workingDirectory == null ? '' : ' @${workingDirectory!.path}'})';
+      '${workingDirectory == null ? '' : ' @${workingDirectory!.path}'}'
+      '${stdinText == null ? '' : ' <${stdinText!.length} chars'})';
 }
 
 /// The result of running a [CommandRequest] to completion.

@@ -537,10 +537,13 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
           for (final selection in support.selections())
             RemotePermissionOption(
               mode: selection.canonical,
-              label: describeSelection(support, selection),
+              // Minted here, so the phone shows the same pairing the desktop
+              // does without knowing the rungs exist — the wire has always
+              // carried an opaque mode id with the host's words beside it.
+              label: describeSelectionFamiliar(support, selection),
               summary:
                   describeSelectionDetail(support, selection) ??
-                  describeSelection(support, selection),
+                  describeSelectionFamiliar(support, selection),
               selectable: true,
               dangerous: support.isDangerous(selection),
             ),

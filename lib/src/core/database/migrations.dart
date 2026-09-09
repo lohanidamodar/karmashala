@@ -102,6 +102,9 @@ typedef MigrationStep = void Function(Database db);
 ///   notifications: its kind, whether it is on screen, and the session it is
 ///   showing. Read only to route a push, never to decide whether a frame is
 ///   carried.
+/// * **v48** — the recap one session was asked for: what the CLI wrote, which
+///   CLI and model wrote it, and how many turns it had read. One row per
+///   session, replaced whenever a person asks again.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -150,6 +153,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   45: _migrateToV45,
   46: _migrateToV46,
   47: _migrateToV47,
+  48: _migrateToV48,
 };
 
 /// Was this pane running when its row was written?
@@ -2081,4 +2085,44 @@ void _migrateToV47(Database db) {
   db.execute('ALTER TABLE paired_devices ADD COLUMN presence_visibility TEXT;');
   db.execute('ALTER TABLE paired_devices ADD COLUMN presence_session TEXT;');
   db.execute('ALTER TABLE paired_devices ADD COLUMN presence_at TEXT;');
+}
+
+/// The recap a person asked a session's own CLI to write.
+///
+/// **One row per session, replaced on each request.** A recap is a reading of a
+/// conversation at a moment, and two of them are not a history worth keeping:
+/// the older one describes a session that no longer exists, and offering it
+/// beside the newer would be two answers to one question. Asking again costs a
+/// turn of the owner's quota, so the row that survives is the one they paid
+/// for most recently.
+///
+/// Every column is what makes the stored text readable later rather than
+/// merely present:
+///
+/// * `written_at` is the reading's own age (§19). The card renders it, and a
+///   recap with no time on it would be a claim about a session with nothing
+///   saying how stale it is.
+/// * `agent_id` and `model` are **who wrote it**. The same conversation
+///   recapped by Codex and by Claude Code are two different readings, and a
+///   model is the other half of that. `model` is nullable and never
+///   backfilled: a CLI that was not told which model to use ran its own
+///   default, and naming a model we did not ask for would be invented.
+/// * `turn_count` is what it had read. It is the whole of "the session has
+///   moved since", counted rather than timed — a session can sit for a day
+///   without moving, and a minute is enough to make a recap wrong.
+///
+/// `ON DELETE CASCADE`: the recap is about this session and is meaningless
+/// without it.
+void _migrateToV48(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_recaps (
+      session_id TEXT PRIMARY KEY,
+      text       TEXT NOT NULL,
+      agent_id   TEXT NOT NULL,
+      model      TEXT,
+      turn_count INTEGER NOT NULL,
+      written_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+    );
+  ''');
 }
