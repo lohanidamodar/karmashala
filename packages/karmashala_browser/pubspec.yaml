@@ -1,0 +1,24 @@
+name: karmashala_browser
+description: >-
+  Driving a real browser over the Chrome DevTools Protocol: discovery, the
+  DevTools HTTP endpoint, the CDP socket and page, element finding, picking and
+  input, plus the `browser_*` agent tools over them. Pure Dart with no package
+  dependencies at all, so it runs under `dart test` without a `flutter_tester`
+  or a `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+# No dependencies, and that is the point: the browser layer speaks CDP over a
+# `dart:io` WebSocket and takes its process from a callback, so nothing here
+# reaches the app, `karmashala_core`, or a third party.
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1
