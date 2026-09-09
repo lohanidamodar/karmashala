@@ -30,6 +30,9 @@ installs claim the same version name.
   no dependencies; the app still runs its own copy until the cut-over.
 - **`karmashala_remote` is built beside the app** — the wire and both ends of
   it, 440 tests in three seconds, one runtime dependency.
+- **`agent_cli` is built beside the app**, on top of the public repo's own
+  history — discovery, launch, stream, one-shot ask, store reading and usage
+  over one descriptor table; 500 tests in two seconds; no local dependency.
 
 ---
 
