@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
