@@ -1,0 +1,29 @@
+diff --git a/shifty.txt b/shifty.txt
+index bab081f..2e492e0 100644
+--- a/shifty.txt
++++ b/shifty.txt
+@@ -1,6 +1,8 @@
+ line 1
+ line 2
+ line 3
++inserted A
++inserted B
+ line 4
+ line 5
+ line 6
+@@ -17,7 +19,7 @@ line 16
+ line 17
+ line 18
+ line 19
+-line 20
++line 20 CHANGED
+ line 21
+ line 22
+ line 23
+@@ -35,6 +37,5 @@ line 34
+ line 35
+ line 36
+ line 37
+-line 38
+ line 39
+ line 40
