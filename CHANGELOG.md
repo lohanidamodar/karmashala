@@ -43,8 +43,9 @@ installs claim the same version name.
   to the wire or the companion client is gated in under a minute.
 - **The app now uses `agent_cli`** for discovery, launch arguments, streaming,
   store reading and usage; 1,758 import lines rewritten, and a change to the
-  coding-agent interface is gated in 52 seconds. Gemini CLI appears as a fourth
-  descriptor, launch-only and unverified on this machine.
+  coding-agent interface is gated in 52 seconds. Gemini CLI, which the public
+  repo carried, is removed: Google retired it on 2026-06-18 in favour of
+  Antigravity CLI, which Karmashala already runs.
 - **The app now uses `karmashala_devices`**; the device pane converts to the
   package's plain geometry and key records at five sites and draws the same
   tree. A device-layer change is gated in 68 seconds.
