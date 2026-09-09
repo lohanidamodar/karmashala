@@ -21,12 +21,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/core/process/local_command_runner.dart';
-import 'package:karmashala/src/features/browser/application/browser_tool_schemas.dart';
-import 'package:karmashala/src/features/browser/application/browser_tools.dart';
-import 'package:karmashala/src/features/browser/data/browser_service.dart';
-import 'package:karmashala/src/features/browser/data/cdp_page.dart';
+import 'package:karmashala_browser/tools.dart';
+import 'package:karmashala_browser/browser.dart';
+import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 
 import 'png_reader.dart';
 
@@ -44,9 +42,11 @@ void check(String label, bool ok, [String? detail]) {
 
 Future<void> main(List<String> args) async {
   final pageFile = await _writeTestPage();
-  final service = BrowserService(runner: const LocalCommandRunner());
+  final service = BrowserService(
+    startProcess: browserProcessStarter(const LocalCommandRunner()),
+  );
   final tools = BrowserTools(service);
-  ProcessHandle? chrome;
+  BrowserProcess? chrome;
   String? profileDir;
 
   try {

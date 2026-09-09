@@ -1,11 +1,7 @@
 import 'dart:async';
 
-import 'package:karmashala/src/features/browser/data/browser_launcher.dart';
-import 'package:karmashala/src/features/browser/data/browser_service.dart';
-import 'package:karmashala/src/features/browser/data/devtools_http_endpoint.dart';
-import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
-import 'package:karmashala/src/features/browser/domain/browser_target.dart';
-import 'package:karmashala/src/features/browser/domain/element_capture.dart';
+import 'package:karmashala/src/features/browser/application/browser_providers.dart';
+import 'package:karmashala_browser/browser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -73,9 +69,9 @@ class FakeBrowser {
   }) : endpoint = ScriptedEndpoint(targets: targets ?? [fakeTarget('PAGE-1')]) {
     service = _TimeboxedBrowserService(
       pickTimeout: pickTimeout,
-      runner: FakeCommandRunner(),
+      startProcess: browserProcessStarter(FakeCommandRunner()),
       launcher: BrowserLauncher(
-        runner: FakeCommandRunner(),
+        startProcess: browserProcessStarter(FakeCommandRunner()),
         locateExecutable: () => r'C:\chrome.exe',
         endpointFactory: (_) => endpoint,
         createUserDataDir: () async => r'C:\Temp\profile',
@@ -157,7 +153,7 @@ class FakeBrowser {
 class _TimeboxedBrowserService extends BrowserService {
   _TimeboxedBrowserService({
     required this.pickTimeout,
-    required super.runner,
+    required super.startProcess,
     super.launcher,
     super.connectSocket,
   });
