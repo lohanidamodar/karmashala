@@ -13,6 +13,7 @@ import 'project_kind.dart';
 /// else, which is the honest outcome for a framework nobody here has built.
 const List<ProjectDescriptor> builtInProjectDescriptors = <ProjectDescriptor>[
   _flutter,
+  _reactNative,
   _nativeAndroid,
   _nativeIos,
 ];
@@ -152,6 +153,79 @@ const _nativeAndroid = ProjectDescriptor(
   ],
 );
 
+
+
+/// React Native and Expo: **detected, and nothing more, because there is
+/// nothing here to measure against.**
+///
+/// The backlog item's own rule — do not build it until there is a React Native
+/// project on this machine — and it was checked rather than assumed. On
+/// 2026-09-09 the projects folder held six `package.json` files, every one of
+/// them a SvelteKit landing site; none named `react-native` or `expo`, and
+/// there is no `metro.config.js` or Expo `app.json` anywhere under it. So
+/// every field below says unchecked, and the sketch is what it would be rather
+/// than what anybody ran.
+///
+/// Detection still earns its keep, and it earns it *before* native Android: a
+/// React Native project carries an `android/` whose module applies
+/// `com.android.application`, so without this row it would be built as a bare
+/// Gradle project and the JavaScript bundle would be missing from the APK.
+const _reactNative = ProjectDescriptor(
+  kind: ProjectKind.reactNative,
+  summary:
+      'A package.json declaring react-native or expo. Detected only — there '
+      'is no React Native project on this machine to have measured against.',
+  liveChannel: Established<String>.unchecked(
+    'React Native has Metro and the Hermes inspector, and nobody here has run '
+    'either. That is a separate piece of work, not a missing line: speaking '
+    'the inspector protocol is the size of the VM service client this app '
+    'already has, and it would be written against a real project.',
+  ),
+  builds: <ProjectBuildSpec>[
+    ProjectBuildSpec(
+      target: ProjectTarget.android,
+      tool: ProjectBuildTool.packageScript,
+      command: Established<List<String>>.unchecked(
+        _noReactNativeHere,
+        sketch:
+            'npx react-native build-android --mode=debug for a bare project, '
+            'or npx expo run:android for a managed one — which is why the two '
+            'are separate evidence in ReactNativeEvidence rather than one '
+            'boolean. Both end in the same Gradle assemble, so the artifact '
+            'and the id would be read exactly as they are for native Android.',
+      ),
+      artifact: Established<ProjectArtifact>.unchecked(
+        _noReactNativeHere,
+        sketch:
+            'android/app/build/outputs/apk/debug/app-debug.apk, the same place '
+            'AGP puts it for a native project.',
+      ),
+      applicationId: Established<ApplicationIdSource>.unchecked(
+        _noReactNativeHere,
+        sketch:
+            'output-metadata.json beside the artifact, the same source the '
+            'native Android row measured.',
+      ),
+    ),
+    ProjectBuildSpec(
+      target: ProjectTarget.ios,
+      tool: ProjectBuildTool.packageScript,
+      command: Established<List<String>>.unchecked(_noReactNativeHere),
+      artifact: Established<ProjectArtifact>.unchecked(_noReactNativeHere),
+      applicationId: Established<ApplicationIdSource>.unchecked(
+        _noReactNativeHere,
+      ),
+    ),
+  ],
+);
+
+/// The one sentence every React Native field carries.
+const String _noReactNativeHere =
+    'Unchecked: there is no React Native or Expo project on this machine to '
+    'measure against — six package.json files across the projects folder on '
+    '2026-09-09, none naming react-native or expo, and no metro.config.js '
+    'anywhere — so nobody has run this. Detection works; the build is refused '
+    'rather than offered as a button nobody ran.';
 
 /// Native iOS: an Xcode project with a shared scheme, and **every field
 /// unchecked on purpose**.

@@ -50,6 +50,19 @@ void main() {
     expect(find.textContaining('no live debug channel'), findsWidgets);
     // The shape is readable, and marked as a shape rather than as a reading.
     expect(find.textContaining('Would be: xcodebuild -scheme'), findsOneWidget);
+    // And React Native refuses with the count that was actually taken.
+    expect(
+      find.textContaining('no React Native or Expo project on this machine'),
+      findsWidgets,
+    );
+    expect(find.textContaining('six package.json files'), findsWidgets);
+  });
+
+  testWidgets('a kind that cannot build says so beside its name',
+      (tester) async {
+    await tester.pumpWidget(_page());
+    // iOS and React Native, and nothing else: the two nobody has run.
+    expect(find.text('detection only'), findsNWidgets(2));
   });
 
   testWidgets('survives the window matrix', (tester) async {

@@ -1,6 +1,7 @@
 import '../../flutter_apps/domain/flutter_project.dart';
 import 'built_in_projects.dart';
 import 'gradle_project.dart';
+import 'package_json.dart';
 import 'project_descriptor.dart';
 import 'project_kind.dart';
 
@@ -87,6 +88,8 @@ ProjectReading? detectProject({
 }) {
   final flutter = _readFlutter(directoryName: directoryName, read: read);
   if (flutter != null) return flutter;
+  final native = _readReactNative(directoryName: directoryName, read: read);
+  if (native != null) return native;
   final android = _readNativeAndroid(directoryName: directoryName, read: read);
   if (android != null) return android;
   return _readNativeIos(directoryName: directoryName, read: read, list: list);
@@ -188,6 +191,30 @@ ProjectReading? _readNativeAndroid({
     );
   }
   return null;
+}
+
+/// React Native or Expo, read out of the `package.json` dependencies.
+///
+/// Asked **before** native Android, because a React Native project carries an
+/// `android/` whose module applies `com.android.application` and would answer
+/// to every one of those markers — and building it as a bare Gradle project
+/// would leave the JavaScript bundle out of the APK.
+ProjectReading? _readReactNative({
+  required String directoryName,
+  required ProjectFileReader read,
+}) {
+  final contents = read('package.json');
+  if (contents == null) return null;
+  final reading = readPackageJson(contents);
+  if (!reading.isReactNative) return null;
+  return ProjectReading(
+    kind: ProjectKind.reactNative,
+    name: reading.name ?? directoryName,
+    evidence: <String>[
+      'package.json declares '
+          '${<String>[for (final item in reading.evidence) item.name].join(', ')}',
+    ],
+  );
 }
 
 /// Native iOS: an Xcode project with, where there is one, a shared scheme.
