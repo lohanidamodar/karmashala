@@ -1,8 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../data/device_gesture_sink.dart';
-import '../domain/device_geometry.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// The touch target laid over the live view.
 ///
@@ -83,8 +82,14 @@ class _DeviceTouchSurfaceState extends State<DeviceTouchSurface> {
     return -1;
   }
 
+  // `WidgetPoint`/`WidgetBox` are `Offset`/`Size` as plain records: the mapping
+  // is arithmetic on four doubles, so it lives in the package and Flutter's
+  // types stop here.
   ({double x, double y}) _fraction(Offset local, Size box) =>
-      widgetPointToFraction(local: local, box: box);
+      widgetPointToFraction(
+        local: (dx: local.dx, dy: local.dy),
+        box: (width: box.width, height: box.height),
+      );
 
   @override
   void dispose() {

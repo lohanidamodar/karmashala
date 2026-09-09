@@ -1,6 +1,5 @@
 import 'package:karmashala_core/logging.dart';
-import '../../devices/domain/android_slimming.dart';
-import '../../devices/domain/simulator_slimming.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
 import 'relay_mode.dart';

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../devices/domain/device_driver.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
 /// Files on a device: which places it can reach, what is in one, and a copy in

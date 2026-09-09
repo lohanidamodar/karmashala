@@ -2,11 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
-import 'package:karmashala/src/features/devices/data/simctl_service.dart';
-import 'package:karmashala/src/features/devices/data/simulator_slimming_service.dart';
-import 'package:karmashala/src/features/devices/data/wda_backend.dart';
-import 'package:karmashala/src/features/devices/domain/simulator_slimming.dart';
-import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
+import 'package:karmashala_devices/devices.dart';
 
 import '../../support/fake_command_runner.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';

@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../domain/device_driver.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_claims.dart';
 import 'device_fleet.dart';
 

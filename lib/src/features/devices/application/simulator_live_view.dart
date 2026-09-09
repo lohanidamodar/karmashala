@@ -1,8 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../data/mjpeg_stream.dart';
-import '../domain/simulator_backend.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_providers.dart';
 import 'ios_device_providers.dart';
 import 'simulator_frames.dart';

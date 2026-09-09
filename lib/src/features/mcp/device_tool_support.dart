@@ -3,11 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../devices/application/device_claims.dart';
 import '../devices/application/device_fleet.dart';
 import '../devices/application/device_screen_memory.dart';
-import '../devices/domain/device_driver.dart';
-import '../devices/domain/device_input.dart';
-import '../devices/domain/screen_observation.dart';
-import '../devices/domain/ui_node.dart';
-import '../devices/domain/ui_summary.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// What reaching a device costs, written once for every `device_*` family.
 ///

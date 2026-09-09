@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/ios_device_providers.dart';
-import '../domain/simulator_slimming.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// What an iOS simulator starts with, and what gets switched off inside it.
 ///

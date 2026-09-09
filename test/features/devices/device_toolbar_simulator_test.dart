@@ -8,10 +8,7 @@ import 'package:karmashala/src/features/devices/application/device_providers.dar
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
 import 'package:karmashala/src/features/devices/application/simulator_frames.dart';
 import 'package:karmashala/src/features/devices/application/simulator_live_view.dart';
-import 'package:karmashala/src/features/devices/data/wda_backend.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
-import 'package:karmashala/src/features/devices/domain/simulator_backend.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
 import 'package:agent_cli/process.dart';
 

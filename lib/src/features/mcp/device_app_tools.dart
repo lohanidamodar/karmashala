@@ -1,4 +1,4 @@
-import '../devices/domain/device_driver.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
 /// An app on a device: put it there, start it, stop it.

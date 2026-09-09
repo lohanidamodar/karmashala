@@ -2,8 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
-import '../domain/screen_observation.dart';
-import '../domain/ui_node.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// The last screen this app read on each device — one record per device, kept
 /// only in memory.

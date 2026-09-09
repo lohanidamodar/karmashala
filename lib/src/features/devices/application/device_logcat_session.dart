@@ -7,10 +7,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
-import '../data/adb_output_parsing.dart';
-import '../data/adb_service.dart';
-import '../domain/logcat_entry.dart';
-import '../domain/logcat_tail.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_providers.dart';
 
 /// **A live `logcat` for one device**, over the same `AdbService` the

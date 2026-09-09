@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/device_providers.dart';
-import '../data/android_slimming_service.dart';
-import '../domain/android_device.dart';
-import '../domain/android_slimming.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// What an Android emulator starts with, and what gets switched off inside it.
 ///

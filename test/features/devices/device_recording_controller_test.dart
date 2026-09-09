@@ -13,14 +13,7 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
-import 'package:karmashala/src/features/devices/data/recording_sink.dart';
-import 'package:karmashala/src/features/devices/data/simctl_service.dart';
-import 'package:karmashala/src/features/devices/data/ts_muxer.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/devices/domain/device_input.dart';
-import 'package:karmashala/src/features/devices/domain/device_recording.dart';
-import 'package:karmashala/src/features/devices/domain/device_target.dart';
-import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';

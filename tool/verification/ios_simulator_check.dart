@@ -13,12 +13,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/devices/data/mjpeg_stream.dart';
-import 'package:karmashala/src/features/devices/data/wda_backend.dart';
-import 'package:karmashala/src/features/devices/data/wda_locator.dart';
-import 'package:karmashala/src/features/devices/data/simctl_service.dart';
-import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
-import 'package:karmashala/src/features/devices/domain/simulator_backend.dart';
+import 'package:karmashala_devices/devices.dart';
 
 const String _tick = '  ok ';
 const String _cross = '  -- ';

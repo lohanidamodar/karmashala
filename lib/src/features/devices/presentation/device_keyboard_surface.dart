@@ -4,8 +4,9 @@ import 'package:flutter/services.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/widgets/keyboard_capture.dart';
-import '../data/device_keyboard_sink.dart';
-import '../domain/device_keyboard.dart';
+import 'package:karmashala_devices/devices.dart';
+
+import 'desktop_key_bridge.dart';
 
 /// What the bar says the keyboard is doing. Public so a test asserts the same
 /// words the user reads.
@@ -138,11 +139,12 @@ class _DeviceKeyboardSurfaceState extends State<DeviceKeyboardSurface> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    final modifiers = DesktopModifiers.live();
+    final modifiers = liveDesktopModifiers();
+    final desktopEvent = event.asDesktopKeyEvent;
 
     // First, always, and from either state: this is the way back out, and it
     // must never be reachable by a path that could send it to the device.
-    if (DeviceKeyTranslator.isEscapeChord(event, modifiers)) {
+    if (DeviceKeyTranslator.isEscapeChord(desktopEvent, modifiers)) {
       if (event is KeyDownEvent && widget.sink != null) {
         _setSuspended(!_suspended);
       }
@@ -158,7 +160,7 @@ class _DeviceKeyboardSurfaceState extends State<DeviceKeyboardSurface> {
       return KeyEventResult.ignored;
     }
 
-    final intent = _translator.translate(event, modifiers);
+    final intent = _translator.translate(desktopEvent, modifiers);
     if (intent == null) {
       // Nothing to send — a lone modifier, or a key with no equivalent on the
       // device. Still consumed: while armed, the app's shortcuts must not fire
