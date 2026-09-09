@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.19.0 (2026-09-08)**, and what
+This file records **1.1.0 (2026-08-31) through 1.20.0 (2026-09-09)**, and what
 is on `main` past it. Anything before 1.1.0 is not recorded — no release notes
 were written for those versions and this file does not invent them.
 
@@ -16,11 +16,11 @@ installs claim the same version name.
 
 ---
 
-## Unreleased
+## 1.20.0 — 2026-09-09 (build 36)
 
-**Two days, 2026-09-08 and -09, 137 commits, and almost all of it new capability
-rather than repair.** Schema head is **v48**: a database written by a build from
-this range cannot be read by 1.19.0. Nothing here has a build number yet.
+**Two days, 2026-09-08 and -09, 409 commits, and almost all of it new capability
+rather than repair.** Schema head is **v48**: a database written by this build
+cannot be read by 1.19.0.
 
 ### Our own session host, remote first and then local
 
