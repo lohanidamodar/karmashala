@@ -136,7 +136,6 @@ extension _GatewayDial on RemoteCompanionGateway {
         // The sealed hello round-tripped: this host holds the paired key. The
         // beacon's cleartext was never trusted beyond "try dialling here".
         scout.noteSuccess(host);
-        _lanUpgradeRefused.clear();
         _lastPathWasLocal = true;
         _linkPath.value = CompanionLinkPath.lan;
         onLog?.call('connected over the LAN');
@@ -156,7 +155,6 @@ extension _GatewayDial on RemoteCompanionGateway {
     }
     // Cool it down and let the relay carry on.
     scout.noteFailure(host);
-    _lanUpgradeRefused[scout.keyOf(host)] = _now();
     return null;
   }
 

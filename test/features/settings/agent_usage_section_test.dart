@@ -73,6 +73,27 @@ void main() {
   Color? colourOf(WidgetTester tester, IconData icon) =>
       tester.widget<Icon>(find.byIcon(icon)).color;
 
+  testWidgets('a tier the endpoint reports no quota for says so, and draws no '
+      'bar', (tester) async {
+    // Antigravity's `loadCodeAssist` names the account's tiers and measures
+    // nothing. The card used to draw a bar sitting at 0% for each of them,
+    // which is a quantity — and the most reassuring one there is.
+    service.answer = antigravitySnapshot();
+    await pump(tester);
+    await check(tester);
+
+    expect(find.text('Gemini Code Assist'), findsOneWidget);
+    expect(find.text('no quota reported'), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing);
+    expect(
+      find.byType(LinearProgressIndicator),
+      findsNothing,
+      reason: 'an empty bar reads as an empty quota',
+    );
+    // And the one time the reply does carry, said as itself.
+    expect(find.text('Sign-in expires in 3h'), findsOneWidget);
+  });
+
   testWidgets('a 429 is a wait, and is not drawn as a fault', (tester) async {
     service.failure = UsageException(
       'Rate limited by the usage service.',

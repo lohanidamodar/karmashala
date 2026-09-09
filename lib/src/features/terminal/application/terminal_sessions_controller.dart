@@ -230,7 +230,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _autosave.stop();
       if (_processesShutDown) return;
       persistLayout();
-      _disposeAll();
+      // `forExit` here too. This provider is not auto-disposed, so the only
+      // thing that reaches this line is the container going away — and the
+      // container goes away exactly once, in the shutdown that is about to end
+      // the process. It matters because [shutdownProcesses] can be *skipped*
+      // when the budget is already spent, and that is the case where a
+      // pseudoconsole release would still be reached.
+      _disposeAll(forExit: true);
     });
     // A rename happens in the sessions feature and never touches a terminal, so
     // nothing here would republish and the tab strip would keep the old name.
@@ -263,7 +269,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _processesShutDown = true;
     _autosave.stop();
     persistLayout();
-    await Future.wait(_disposeAll());
+    // Counted at both ends, because this is the step that spends most of the
+    // shutdown budget and the log had nothing to say about why. `N` is what
+    // makes the cap readable: one pane reaching 1500 ms and eleven panes
+    // reaching it are different findings, and neither is visible from the
+    // `did not finish` line alone.
+    final reaping = _disposeAll(forExit: true);
+    _log.info('terminal: reaping ${reaping.length} pane process tree(s).');
+    await Future.wait(reaping);
+    _log.info('terminal: ${reaping.length} pane process tree(s) reaped.');
   }
 
   /// A projection of the controller's fields, and **nothing else**. Called from
@@ -405,10 +419,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// Disposes every pane, returning the reaps still in flight — one per pane
   /// that owns a process. Callers that can wait should; `ref.onDispose` cannot.
-  List<Future<void>> _disposeAll() {
+  /// [forExit] is the process ending rather than a pane closing, and the one
+  /// thing it changes is that a pane keeps its pseudoconsole — releasing it is
+  /// a synchronous Windows call that has been measured never returning, which
+  /// on a quit is an app that will not close. See [PseudoConsoleOwner].
+  List<Future<void>> _disposeAll({bool forExit = false}) {
     final reaping = <Future<void>>[];
     for (final entry in _instances.entries) {
       _unlisten(entry.key, entry.value);
+      if (forExit && entry.value is PseudoConsoleOwner) {
+        (entry.value as PseudoConsoleOwner).keepPseudoConsoleOnDispose();
+      }
       entry.value.dispose();
       if (entry.value case final ReapableTerminalInstance reapable) {
         reaping.add(reapable.reaped);

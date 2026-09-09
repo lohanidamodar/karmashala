@@ -740,7 +740,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'get_usage': McpToolListing(
     McpToolCategory.sessions,
-    'An agent\'s usage against its limit, as percentages.',
+    'An agent\'s usage against its limit, where the agent reports one.',
   ),
 
   // Terminals.

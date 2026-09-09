@@ -19,7 +19,7 @@ installs claim the same version name.
 ## Unreleased
 
 **Two days, 2026-09-08 and -09, 137 commits, and almost all of it new capability
-rather than repair.** Schema head is **v43**: a database written by a build from
+rather than repair.** Schema head is **v48**: a database written by a build from
 this range cannot be read by 1.19.0. Nothing here has a build number yet.
 
 ### Our own session host, remote first and then local
@@ -143,6 +143,17 @@ different store.
 
 **Deferred:** `deviceId` is taken as the caller's word, and a long run outliving
 its two-minute device claim is by design, the pane check refusing a second launch.
+
+**A running app is found, not pointed at.** The empty Flutter pane used to hand
+over a `--vmservice-out-file` flag to paste into someone else's command, aimed
+at another program's folder. Now three readers run on their own: the out-file
+for runs Karmashala started, **the Dart Tooling Daemon's pid file** for any
+`flutter run` on this machine (its socket answers the VM service address with
+its token, no secret needed), and the VM's own `listening on` line out of
+`adb logcat` for an app on a device, forwarded to a free host port. Each row
+says where it came from and how old the reading is. A run on another machine is
+the one case left for *Attach by address*; the Copy button and the suggested
+flag are gone.
 
 ### One agent hands work to another and waits
 
@@ -295,6 +306,24 @@ treated as "nothing new" rather than as an empty plan, because it cannot be told
 from a misread shape. **Known gap:** a plan is read only while its conversation
 is on screen.
 
+### Relay to LAN without a drop
+
+The LAN candidate is dialled on a second transport while the relay stays up,
+adopted only when its first sealed frame round-trips, and the relay is held
+until the new link has carried a frame. The link sentence goes from
+`Connected · Relay (127.0.0.1) · 4m` to `Connected · Direct (LAN) · 4m` with the
+age still counting. Three frames per promotion, no duplicate rows, no gap.
+Re-probing backs off in beacons (1, 2, 4 … 64) instead of a 30-minute refusal.
+
+### A quit that finishes, and leaves nothing behind
+
+Measured by a 20-cycle launch-and-close soak (`tool/app_soak.ps1`): before,
+18 of 20 quits left the MCP handshake and socket on disk, 2 of 20 hung, and the
+log lost its own last line. After: 20 of 20 exit clean, nothing left but the
+database and the log, every quit writes its own account. The hangs were the
+pseudoconsole close waiting on a console host that outlives the pane; the
+stale handshake was a close landing inside the control server's own start.
+
 ### The companion's delivery model — presence is not delivery
 
 **What was actually wrong:** a reconnecting phone re-fetched the *tail* and hoped.
@@ -385,6 +414,15 @@ worktrees the app made and a per-checkout install lands in the user's
   `Get-Process -Id` exits 1 whenever any named pid has gone and still prints the
   rest, so the exit code is not the verdict, and `/proc/<pid>/stat` splits at the
   *last* parenthesis.
+- `device_tools.dart` is five device-family files behind one composition; the
+  served tool schemas are byte-identical.
+- **The usage chip shows both limit windows** — `◑ 12% · 4h   59% · 3d` — each
+  slot chosen by the window's period, never by which resets soonest. A period
+  nothing reported draws nothing rather than `0%`.
+- **Antigravity's chip no longer says `0%`.** Its API reports tiers and no
+  quota, so the chip says so (`usage —`, "No quota reported for this account")
+  and shows when the sign-in expires instead of calling it a reset. `get_usage`
+  omits the percent for such a window.
 
 ---
 

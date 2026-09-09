@@ -99,6 +99,28 @@ AgentUsage usageSnapshot({
   );
 }
 
+/// **What Antigravity's `loadCodeAssist` produces**: the tiers the account is
+/// allowed, and no reading against any of them.
+///
+/// The shape every surface has to answer "unknown" about. It carries the
+/// sign-in's expiry, which is an account fact and the only time in the reading
+/// — deliberately *not* a window's `resetsAt`, which is what it used to be
+/// written into.
+AgentUsage antigravitySnapshot({
+  DateTime? fetchedAt,
+  Duration expiresIn = const Duration(hours: 3),
+  String? email = 'dev@google.com',
+  List<String> tiers = const ['Gemini Code Assist'],
+}) {
+  final at = fetchedAt ?? testTime;
+  return AgentUsage(
+    windows: [for (final tier in tiers) UsageWindow(label: tier)],
+    fetchedAt: at,
+    email: email,
+    tokenExpiresAt: at.add(expiresIn),
+  );
+}
+
 /// The floor [usageSnapshot] implies: one hundredth of its shortest window.
 const usageFixtureFloor = Duration(minutes: 3);
 

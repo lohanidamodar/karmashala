@@ -394,16 +394,25 @@ class SessionLaunchTools {
     final usage = await _container
         .read(agentUsageServiceProvider)
         .fetch(install, environments);
+    // **A window with no reading omits `percent` entirely.** Antigravity's
+    // `loadCodeAssist` names the account's tiers and measures nothing, and this
+    // used to answer `"percent": 0` for each of them — a number a caller would
+    // reasonably act on, about a quota nobody had read. Omitted rather than
+    // null so the field means one thing when it is there, and so the shape
+    // stays the one `resetsAt` already had.
     return {
       'environmentId': install.environmentId,
       'windows': [
         for (final w in usage.windows)
           {
             'label': w.label,
-            'percent': w.percent,
+            if (w.percent != null) 'percent': w.percent,
             if (w.resetsAt != null) 'resetsAt': w.resetsAt!.toIso8601String(),
           },
       ],
+      if (usage.tokenExpiresAt != null)
+        'tokenExpiresAt': usage.tokenExpiresAt!.toIso8601String(),
+      'fetchedAt': usage.fetchedAt.toIso8601String(),
     };
   }
 
@@ -596,9 +605,14 @@ const List<Map<String, dynamic>> sessionLaunchToolSchemas = [
   {
     'name': 'get_usage',
     'description':
-        'Get current usage/limit percentages for an agent. cli is "claude" '
-        'or "codex"; environmentId is optional (defaults to the first '
-        'matching installation).',
+        'An agent account\'s usage against its limits, read live. cli is '
+        '"claude", "codex" or "antigravity"; environmentId is optional '
+        '(defaults to the first matching installation). Each window carries a '
+        'label and, when the agent reported one, a "percent" used and a '
+        '"resetsAt". A window with no "percent" was not measured — '
+        'Antigravity names the account\'s tiers and reports no quota against '
+        'them — and that absence means unknown, never zero. "fetchedAt" is '
+        'when the reading was taken.',
     'inputSchema': {
       'type': 'object',
       'properties': {

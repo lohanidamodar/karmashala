@@ -724,6 +724,22 @@ AgentUsage parseCodexUsage(
 }
 
 /// Parses Antigravity / Gemini Code Assist's `loadCodeAssist` response.
+///
+/// **The reply carries no quota.** What it is read for is `allowedTiers`, a
+/// list whose entries name the tiers the account is allowed — `id`, `name`,
+/// `description`. Nothing in it counts anything: no used/limit pair, no
+/// remaining, no reset. So each tier becomes a window with a label and no
+/// [UsageWindow.percent], and every surface says so in words. It used to become
+/// `percent: 0.0`, which is how a pane on Antigravity came to draw a confident
+/// `0%` for something nothing had measured. Should the endpoint ever start
+/// reporting a count, read it here — an absent percent is what "we have not
+/// seen one" looks like, and it is meant to be replaced by a real reading
+/// rather than by a zero.
+///
+/// [tokenExpiry] is the OAuth token's own `expiry`, read from the store beside
+/// the access token. It is the account's, not a window's, and is reported as
+/// itself — writing it into `resetsAt` had the app claiming a quota it had
+/// never read would reset when the user's sign-in lapsed.
 AgentUsage parseAntigravityUsage(
   Map<String, dynamic> json,
   DateTime now, {
@@ -735,31 +751,23 @@ AgentUsage parseAntigravityUsage(
   if (tiers is List && tiers.isNotEmpty) {
     for (final tier in tiers) {
       if (tier is Map<String, dynamic>) {
-        final name = tier['name'] as String? ?? 'Gemini Code Assist';
         windows.add(
-          UsageWindow(
-            label: name,
-            percent: 0.0,
-            resetsAt: tokenExpiry,
-          ),
+          UsageWindow(label: tier['name'] as String? ?? _antigravityTier),
         );
       }
     }
-  } else {
-    windows.add(
-      UsageWindow(
-        label: 'Gemini Code Assist',
-        percent: 0.0,
-        resetsAt: tokenExpiry,
-      ),
-    );
   }
+  if (windows.isEmpty) windows.add(const UsageWindow(label: _antigravityTier));
   return AgentUsage(
     windows: windows,
     fetchedAt: now,
     email: email,
+    tokenExpiresAt: tokenExpiry,
   );
 }
+
+/// What a tier is called when the reply names none.
+const String _antigravityTier = 'Gemini Code Assist';
 
 DateTime? _parseIsoDate(Object? value) {
   if (value is! String || value.isEmpty) return null;

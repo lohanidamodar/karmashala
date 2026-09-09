@@ -57,12 +57,22 @@ class UsageChipView {
     required this.label,
     required this.tooltip,
     required this.tone,
+    this.longLabel,
     this.mark = UsageMark.live,
   });
 
   /// The words on the chip. **Always spells out the number** when one is known:
   /// the colour is a second signal, never the only one.
+  ///
+  /// The **shorter** period when two are known — see [longLabel].
   final String label;
+
+  /// The longer period, drawn after [label] as a second fact.
+  ///
+  /// Null when the reading names only one, and the chip then reads exactly as
+  /// it always did. Never a placeholder: a period nothing was read for says
+  /// nothing at all, the way `HealthLevel.unknown` does one panel over.
+  final String? longLabel;
 
   final String tooltip;
   final UsageTone tone;
@@ -80,12 +90,16 @@ class UsageChipView {
 ///
 /// Four states, and the last two are the ones that matter:
 ///
-/// * **live** — a number and how long until that window resets;
+/// * **live** — each period's number and how long until it resets;
 /// * **checking** — muted, before the first answer arrives;
-/// * **unknown** — the lookup failed and no number has ever been read. It
-///   claims nothing: a dash, the neutral colour, the question glyph, and the
-///   service's own sentence in the tooltip (an expired token tells the user to
-///   run the agent once; a rate limit says how long it is waiting);
+/// * **unknown** — no number has been read. Either the lookup failed, or it
+///   succeeded and measured nothing: Antigravity's `loadCodeAssist` names the
+///   account's tiers and reports no quota against any of them, and a reply with
+///   no windows at all says as little. All three claim nothing: a dash, the
+///   neutral colour, the question glyph, and everything that *is* known in the
+///   tooltip — the service's own sentence for a failure (an expired token tells
+///   the user to run the agent once; a rate limit says how long it is waiting),
+///   the tier names and the sign-in's expiry for a reply that carried no quota;
 /// * **stale** — a refresh failed but a number is known. It keeps being shown,
 ///   with a different glyph and its age in the tooltip. Losing a number you had
 ///   is worse than showing an old one that admits it is old.
@@ -120,47 +134,129 @@ UsageChipView usageChipViewFor(
   final mark = error != null || live == null
       ? UsageMark.stale
       : UsageMark.live;
-  final window = _tightest(value.windows);
+  final worst = _tightest(value.windows);
   final age = _ago(now.difference(value.fetchedAt));
+  final expiry = value.tokenExpiresAt;
   final detail = [
     for (final w in value.windows) _windowLine(w, now),
     if (value.email != null) value.email!,
+    if (expiry != null) _expiryLine(expiry, now),
     if (mark == UsageMark.stale) 'Last checked $age' else 'Checked $age',
     if (error != null) _failureLine(error),
   ].join('\n');
 
-  if (window == null) {
-    // A successful fetch that reported no windows at all: honest, and not an
-    // error, so it is muted rather than coloured.
+  if (worst == null) {
+    // A reply that measured nothing: no windows at all, or windows the endpoint
+    // named and reported no quota against — Antigravity's tiers. Honest, and
+    // not an error, so it is muted rather than coloured, and the glyph is the
+    // question mark rather than a gauge, because there is no number here for a
+    // gauge to be about. The tooltip still carries everything that *is* known:
+    // the tier names, the account, when the sign-in lapses, and the age of the
+    // look that found all this out.
+    final headline = value.isEmpty
+        ? 'No usage windows reported.'
+        : 'No quota reported for this account.';
     return UsageChipView(
       label: 'usage —',
-      tooltip: 'No usage windows reported.\n$detail',
+      tooltip: '$headline\n$detail',
       tone: UsageTone.muted,
-      mark: mark,
+      mark: UsageMark.unknown,
     );
   }
 
-  final reset = window.resetsAt;
+  final (short, long) = _bothPeriods(value.windows, worst);
   return UsageChipView(
-    label: reset == null
-        ? '${window.percent.round()}%'
-        : '${window.percent.round()}% · ${formatUsageDuration(reset.difference(now))}',
+    label: _fact(short, now),
+    longLabel: long == null ? null : _fact(long, now),
     tooltip: detail,
-    tone: _toneFor(window.percent),
+    // The worst number the account has, and by the rule below it is always one
+    // of the numbers on screen — the chip never colours a fact it does not
+    // spell out.
+    tone: _toneFor(worst.percent),
     mark: mark,
   );
 }
 
-/// The window nearest its limit — the one that will actually stop you.
+/// **The two periods the chip draws**: the shortest the reading names, then the
+/// longest. Owner: *"we have enough space here, so let's show both the daily
+/// limit and weekly limit together."*
 ///
-/// Not the first: a 5-hour window at 4% says nothing useful while the weekly
-/// cap sits at 97%, and the chip has room for exactly one number. Every window
-/// is still listed in the tooltip.
-UsageWindow? _tightest(List<UsageWindow> windows) {
-  UsageWindow? tightest;
+/// It used to draw one — [_tightest] — and one is not enough either way round:
+/// a five-hour window at 4% says nothing while the weekly cap sits at 97%, and
+/// the weekly cap alone says nothing about the hour you are in. The two answer
+/// different questions and neither substitutes.
+///
+/// **Chosen by [UsageWindow.span], the period the endpoint's own key names**,
+/// never by which resets soonest — a weekly window twenty minutes from
+/// resetting is still the longer period, and ordering by the countdown would
+/// swap the pair at the end of every week. Several windows can share a period
+/// (Claude reports `seven_day`, `seven_day_opus` and `seven_day_sonnet`, plus
+/// model-scoped weekly caps); the slot goes to the tightest of them.
+///
+/// Two things fall back to the single number, and both are the old behaviour
+/// exactly:
+///
+/// * **no second period.** A payload that names one — or names none, as
+///   Antigravity's tiers and paid overage do — has nothing to put in the second
+///   slot, and an unread period is left unsaid rather than drawn as a zero.
+/// * **something worse than both.** A period-less window cannot be placed on
+///   this scale, so it can never take a slot; when it is nonetheless the worst
+///   number the account has, it is what the chip shows. The colour is the worst
+///   window's, and it must never describe a number that is not on screen.
+(_Reading, _Reading?) _bothPeriods(List<UsageWindow> windows, _Reading worst) {
+  Duration? shortest;
+  Duration? longest;
   for (final window in windows) {
-    if (tightest == null || window.percent > tightest.percent) {
-      tightest = window;
+    final span = window.span;
+    // A window nothing measured cannot fill a slot: a slot is a number, and
+    // this one has none. It is still named in the tooltip.
+    if (span == null || window.percent == null) continue;
+    if (shortest == null || span < shortest) shortest = span;
+    if (longest == null || span > longest) longest = span;
+  }
+  if (shortest == null || shortest == longest) return (worst, null);
+  final short = _tightest(windows.where((w) => w.span == shortest));
+  final long = _tightest(windows.where((w) => w.span == longest));
+  if (short == null || long == null) return (worst, null);
+  if (worst.percent > short.percent && worst.percent > long.percent) {
+    return (worst, null);
+  }
+  return (short, long);
+}
+
+/// One window as the chip says it: the number, and how long until it resets.
+String _fact(_Reading reading, DateTime now) {
+  final reset = reading.window.resetsAt;
+  return reset == null
+      ? '${reading.percent.round()}%'
+      : '${reading.percent.round()}% · '
+            '${formatUsageDuration(reset.difference(now))}';
+}
+
+/// A window **and the reading it carries**.
+///
+/// A record rather than a bare [UsageWindow] because [UsageWindow.percent] is
+/// nullable: a window the endpoint named and measured nothing for — every
+/// Antigravity tier — has no number, and everything downstream of here (the
+/// colour, the two slots, the words on the chip) is about a number. Carrying
+/// the `double` makes "there is a reading" something the type states once
+/// instead of something each of them re-checks or, worse, assumes.
+typedef _Reading = ({UsageWindow window, double percent});
+
+/// The window nearest its limit **among those that carry a reading** — the one
+/// that will actually stop you.
+///
+/// It carries the chip's colour, and is what the chip draws on its own when
+/// [_bothPeriods] has no pair to draw. Null when nothing was measured at all,
+/// which is a different answer from zero and is drawn as one. Every window is
+/// listed in the tooltip regardless.
+_Reading? _tightest(Iterable<UsageWindow> windows) {
+  _Reading? tightest;
+  for (final window in windows) {
+    final percent = window.percent;
+    if (percent == null) continue;
+    if (tightest == null || percent > tightest.percent) {
+      tightest = (window: window, percent: percent);
     }
   }
   return tightest;
@@ -173,12 +269,30 @@ UsageTone _toneFor(double percent) => switch (percent) {
 };
 
 String _windowLine(UsageWindow window, DateTime now) {
+  final percent = window.percent;
+  // A window the endpoint named and measured nothing for. Said in words, so the
+  // one row of the tooltip that would otherwise be a number is plainly not one.
+  if (percent == null) return '${window.label} · $kUsageNoQuotaReported';
   final reset = window.resetsAt;
   final resets = reset == null
       ? ''
       : ' · resets in ${formatUsageDuration(reset.difference(now))}'
             ' (${formatResetClock(reset, now)})';
-  return '${window.label} · ${window.percent.round()}%$resets';
+  return '${window.label} · ${percent.round()}%$resets';
+}
+
+/// **When the sign-in behind this reading lapses**, in the same shape a window's
+/// reset is given: how long, and the clock time it falls at.
+///
+/// Worth a line of its own because for an account that reports no quota it is
+/// most of what is known — and because it is emphatically not a quota reset,
+/// which is what it was being drawn as.
+String _expiryLine(DateTime when, DateTime now) {
+  final left = when.difference(now);
+  return left <= Duration.zero
+      ? 'Sign-in expired — run the agent once to refresh it'
+      : 'Sign-in expires in ${formatUsageDuration(left)}'
+            ' (${formatResetClock(when, now)})';
 }
 
 String _messageOf(Object error) =>
@@ -296,6 +410,16 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     super.dispose();
   }
 
+  /// One period's words. Both slots are drawn the same way and in one colour —
+  /// the worst window's — because two colours in a 12px row read as two chips,
+  /// and the glyph beside them could only agree with one of them.
+  Widget _words(String fact, Color colour) => Text(
+    fact,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(color: colour),
+  );
+
   @override
   Widget build(BuildContext context) {
     UsageChip.debugBuildCount++;
@@ -358,15 +482,19 @@ class _UsageChipState extends ConsumerState<UsageChip> {
               // Flexible, so the chip can be given a bounded box and give up
               // its tail rather than overflow: a workspace group's bar is a
               // fraction of the window, and `51% · 28m` is wider than some of
-              // them. The glyph and the tooltip survive the trim.
-              Flexible(
-                child: Text(
-                  view.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: colour),
-                ),
-              ),
+              // them. The glyph and the tooltip survive the trim, and each
+              // period gives up its own tail rather than one crowding out the
+              // other.
+              Flexible(child: _words(view.label, colour)),
+              if (view.longLabel case final longer?) ...[
+                // A gap, which is how the facts line beside this one separates
+                // its facts (`Wrap(spacing: Insets.sm)`), and not another `·`:
+                // the dot already separates the halves *inside* a fact, so
+                // `12% · 4h · 59% · 3d` reads as four things rather than two.
+                // It also costs no height, which a divider would.
+                const SizedBox(width: Insets.sm),
+                Flexible(child: _words(longer, colour)),
+              ],
             ],
           ),
         ),
