@@ -274,6 +274,22 @@ void main() {
     expectLaunchStillOffered(tester);
   });
 
+  testWidgets('an account that names tiers and no quota is not recorded '
+      'either', (tester) async {
+    // Antigravity. A reply arrived, it named what the account is allowed, and
+    // it measured nothing — which at the point of spending several sessions at
+    // once must read as "unknown" and never as an untouched 0%.
+    await pumpSetup(tester, usageFor: (_) => antigravitySnapshot());
+
+    expect(find.text('not recorded'), findsNWidgets(2));
+    expect(
+      find.text('No quota reported for this account.'),
+      findsNWidgets(2),
+    );
+    expect(find.textContaining('%'), findsNothing);
+    expectLaunchStillOffered(tester);
+  });
+
   testWidgets('a slow lookup never holds the dialog up', (tester) async {
     final pending = Completer<AgentUsage>();
     addTearDown(() {

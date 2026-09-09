@@ -92,10 +92,14 @@ class UsageChipView {
 ///
 /// * **live** — each period's number and how long until it resets;
 /// * **checking** — muted, before the first answer arrives;
-/// * **unknown** — the lookup failed and no number has ever been read. It
-///   claims nothing: a dash, the neutral colour, the question glyph, and the
-///   service's own sentence in the tooltip (an expired token tells the user to
-///   run the agent once; a rate limit says how long it is waiting);
+/// * **unknown** — no number has been read. Either the lookup failed, or it
+///   succeeded and measured nothing: Antigravity's `loadCodeAssist` names the
+///   account's tiers and reports no quota against any of them, and a reply with
+///   no windows at all says as little. All three claim nothing: a dash, the
+///   neutral colour, the question glyph, and everything that *is* known in the
+///   tooltip — the service's own sentence for a failure (an expired token tells
+///   the user to run the agent once; a rate limit says how long it is waiting),
+///   the tier names and the sign-in's expiry for a reply that carried no quota;
 /// * **stale** — a refresh failed but a number is known. It keeps being shown,
 ///   with a different glyph and its age in the tooltip. Losing a number you had
 ///   is worse than showing an old one that admits it is old.
@@ -132,21 +136,31 @@ UsageChipView usageChipViewFor(
       : UsageMark.live;
   final worst = _tightest(value.windows);
   final age = _ago(now.difference(value.fetchedAt));
+  final expiry = value.tokenExpiresAt;
   final detail = [
     for (final w in value.windows) _windowLine(w, now),
     if (value.email != null) value.email!,
+    if (expiry != null) _expiryLine(expiry, now),
     if (mark == UsageMark.stale) 'Last checked $age' else 'Checked $age',
     if (error != null) _failureLine(error),
   ].join('\n');
 
   if (worst == null) {
-    // A successful fetch that reported no windows at all: honest, and not an
-    // error, so it is muted rather than coloured.
+    // A reply that measured nothing: no windows at all, or windows the endpoint
+    // named and reported no quota against — Antigravity's tiers. Honest, and
+    // not an error, so it is muted rather than coloured, and the glyph is the
+    // question mark rather than a gauge, because there is no number here for a
+    // gauge to be about. The tooltip still carries everything that *is* known:
+    // the tier names, the account, when the sign-in lapses, and the age of the
+    // look that found all this out.
+    final headline = value.isEmpty
+        ? 'No usage windows reported.'
+        : 'No quota reported for this account.';
     return UsageChipView(
       label: 'usage —',
-      tooltip: 'No usage windows reported.\n$detail',
+      tooltip: '$headline\n$detail',
       tone: UsageTone.muted,
-      mark: mark,
+      mark: UsageMark.unknown,
     );
   }
 
@@ -189,21 +203,21 @@ UsageChipView usageChipViewFor(
 ///   this scale, so it can never take a slot; when it is nonetheless the worst
 ///   number the account has, it is what the chip shows. The colour is the worst
 ///   window's, and it must never describe a number that is not on screen.
-(UsageWindow, UsageWindow?) _bothPeriods(
-  List<UsageWindow> windows,
-  UsageWindow worst,
-) {
+(_Reading, _Reading?) _bothPeriods(List<UsageWindow> windows, _Reading worst) {
   Duration? shortest;
   Duration? longest;
   for (final window in windows) {
     final span = window.span;
-    if (span == null) continue;
+    // A window nothing measured cannot fill a slot: a slot is a number, and
+    // this one has none. It is still named in the tooltip.
+    if (span == null || window.percent == null) continue;
     if (shortest == null || span < shortest) shortest = span;
     if (longest == null || span > longest) longest = span;
   }
   if (shortest == null || shortest == longest) return (worst, null);
-  final short = _tightest(windows.where((w) => w.span == shortest))!;
-  final long = _tightest(windows.where((w) => w.span == longest))!;
+  final short = _tightest(windows.where((w) => w.span == shortest));
+  final long = _tightest(windows.where((w) => w.span == longest));
+  if (short == null || long == null) return (worst, null);
   if (worst.percent > short.percent && worst.percent > long.percent) {
     return (worst, null);
   }
@@ -211,24 +225,38 @@ UsageChipView usageChipViewFor(
 }
 
 /// One window as the chip says it: the number, and how long until it resets.
-String _fact(UsageWindow window, DateTime now) {
-  final reset = window.resetsAt;
+String _fact(_Reading reading, DateTime now) {
+  final reset = reading.window.resetsAt;
   return reset == null
-      ? '${window.percent.round()}%'
-      : '${window.percent.round()}% · '
+      ? '${reading.percent.round()}%'
+      : '${reading.percent.round()}% · '
             '${formatUsageDuration(reset.difference(now))}';
 }
 
-/// The window nearest its limit — the one that will actually stop you.
+/// A window **and the reading it carries**.
+///
+/// A record rather than a bare [UsageWindow] because [UsageWindow.percent] is
+/// nullable: a window the endpoint named and measured nothing for — every
+/// Antigravity tier — has no number, and everything downstream of here (the
+/// colour, the two slots, the words on the chip) is about a number. Carrying
+/// the `double` makes "there is a reading" something the type states once
+/// instead of something each of them re-checks or, worse, assumes.
+typedef _Reading = ({UsageWindow window, double percent});
+
+/// The window nearest its limit **among those that carry a reading** — the one
+/// that will actually stop you.
 ///
 /// It carries the chip's colour, and is what the chip draws on its own when
-/// [_bothPeriods] has no pair to draw. Every window is listed in the tooltip
-/// regardless.
-UsageWindow? _tightest(Iterable<UsageWindow> windows) {
-  UsageWindow? tightest;
+/// [_bothPeriods] has no pair to draw. Null when nothing was measured at all,
+/// which is a different answer from zero and is drawn as one. Every window is
+/// listed in the tooltip regardless.
+_Reading? _tightest(Iterable<UsageWindow> windows) {
+  _Reading? tightest;
   for (final window in windows) {
-    if (tightest == null || window.percent > tightest.percent) {
-      tightest = window;
+    final percent = window.percent;
+    if (percent == null) continue;
+    if (tightest == null || percent > tightest.percent) {
+      tightest = (window: window, percent: percent);
     }
   }
   return tightest;
@@ -241,12 +269,30 @@ UsageTone _toneFor(double percent) => switch (percent) {
 };
 
 String _windowLine(UsageWindow window, DateTime now) {
+  final percent = window.percent;
+  // A window the endpoint named and measured nothing for. Said in words, so the
+  // one row of the tooltip that would otherwise be a number is plainly not one.
+  if (percent == null) return '${window.label} · $kUsageNoQuotaReported';
   final reset = window.resetsAt;
   final resets = reset == null
       ? ''
       : ' · resets in ${formatUsageDuration(reset.difference(now))}'
             ' (${formatResetClock(reset, now)})';
-  return '${window.label} · ${window.percent.round()}%$resets';
+  return '${window.label} · ${percent.round()}%$resets';
+}
+
+/// **When the sign-in behind this reading lapses**, in the same shape a window's
+/// reset is given: how long, and the clock time it falls at.
+///
+/// Worth a line of its own because for an account that reports no quota it is
+/// most of what is known — and because it is emphatically not a quota reset,
+/// which is what it was being drawn as.
+String _expiryLine(DateTime when, DateTime now) {
+  final left = when.difference(now);
+  return left <= Duration.zero
+      ? 'Sign-in expired — run the agent once to refresh it'
+      : 'Sign-in expires in ${formatUsageDuration(left)}'
+            ' (${formatResetClock(when, now)})';
 }
 
 String _messageOf(Object error) =>
