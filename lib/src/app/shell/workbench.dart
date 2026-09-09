@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
+import '../widgets/desktop_dialog.dart';
 
 import '../../features/agents/domain/agent_status.dart';
 import '../../features/agents/presentation/usage_chip.dart';
@@ -24,6 +25,7 @@ import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
+import '../../features/terminal/application/terminal_presets.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/domain/pane_liveness.dart';
@@ -1666,6 +1668,7 @@ class _TabChip extends ConsumerWidget {
       onClose: () => sessions.closeTab(tab.id),
       onEnd: () => sessions.closeTab(tab.id, detach: false),
       onBulkClose: (scope) => _bulkClose(context, ref, scope),
+      onSavePreset: () => _savePreset(context, ref),
     );
 
     // Dropping a tab on a region of a split moves it there — VS Code's gesture,
@@ -1690,6 +1693,64 @@ class _TabChip extends ConsumerWidget {
         chip: chip,
       ),
     );
+  }
+
+  /// Names the workbench's shape and stores it.
+  ///
+  /// The name is asked for rather than generated: a preset nobody named is one
+  /// nobody will recognise in the palette, and this is the one moment the user
+  /// knows what the shape is *for*.
+  Future<void> _savePreset(BuildContext context, WidgetRef ref) async {
+    final name = await _promptPresetName(context);
+    if (name == null || !context.mounted) return;
+    final preset = ref.read(terminalPresetsProvider).save(name);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(
+          preset == null
+              // Not "saved": a workbench of empty regions declares nothing, and
+              // a preset that opens to nothing is worse than no preset.
+              ? 'Nothing to save — no pane here is running anything.'
+              : 'Saved "${preset.name}" — ${preset.paneCount} pane'
+                    '${preset.paneCount == 1 ? '' : 's'}. '
+                    'Open it from quick open with ~.',
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _promptPresetName(BuildContext context) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const DesktopDialogTitle(
+          icon: AppIcons.terminalWindow,
+          title: 'Save this layout as a preset',
+          subtitle: 'The shape only — which panes, split how, running what and '
+              'where. Opening it later starts fresh terminals.',
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onSubmitted: (value) =>
+              Navigator.of(context).pop(value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ).then((value) => (value == null || value.isEmpty) ? null : value);
   }
 
   /// Runs [scope], asking first when it would take a running session with it.

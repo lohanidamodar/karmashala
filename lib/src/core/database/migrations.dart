@@ -88,6 +88,10 @@ typedef MigrationStep = void Function(Database db);
 ///   agent run a person armed in advance, every occurrence of it (including
 ///   the ones nobody was here for), and the per-checkout verification the gate
 ///   refuses without.
+/// * **v44** — named terminal presets: the *shape* of a workbench — its tabs,
+///   their regions and splits, and each pane's profile and directory — with
+///   nothing running in it, so opening one starts fresh panes rather than
+///   resurrecting old ones.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -132,6 +136,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   41: _migrateToV41,
   42: _migrateToV42,
   43: _migrateToV43,
+  44: _migrateToV44,
 };
 
 /// Was this pane running when its row was written?
@@ -1931,4 +1936,23 @@ void _migrateToV43(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_project_checks_repository '
     'ON project_checks (repository_id);',
   );
+}
+
+/// A named workbench shape the user can reopen.
+///
+/// One `shape` column holding the whole document rather than a row per tab and
+/// a row per pane, for the reason `kTerminalWorkspaceKey` gives about the split
+/// tree beside it: the shape *is* a document, and half of one written across N
+/// rows is a shape that cannot be read back. A table rather than a metadata key
+/// because presets are a list the user names, adds to and deletes from.
+void _migrateToV44(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_presets (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      shape      TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  ''');
 }
