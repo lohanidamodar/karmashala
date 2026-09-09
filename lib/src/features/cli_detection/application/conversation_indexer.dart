@@ -12,9 +12,23 @@ import '../domain/detected_session.dart';
 /// indexing them would make a filename search return every run that *touched*
 /// the file instead of the messages that *discussed* it — which is grep, and
 /// grep already exists. Thinking blocks are out for the same reason: they are
-/// the model working, not anybody's decision. `readCliTranscript` already drops
-/// them (nothing in it ever fills `TranscriptMessage.thinking`), so this is the
-/// second of two gates rather than the only one.
+/// the model working, not anybody's decision.
+///
+/// **The gate is what is read, not what is parsed: the index takes `text` off
+/// the rows in this set, and never `TranscriptMessage.thinking`.** That is the
+/// whole rule, and it holds for every CLI whatever shape its reasoning arrives
+/// in — a Claude Code `thinking` content block, a Codex `reasoning` payload and
+/// an Antigravity `thinking` field are all outside `text` and so outside the
+/// index. `thinking_is_not_indexed_test.dart` pins all three.
+///
+/// It used to claim more: that *nothing in `readCliTranscript` ever fills*
+/// `TranscriptMessage.thinking`. That was true of the reader on the day it was
+/// written and was never what the index needed, and it stopped a reader from
+/// showing what is already on disk — Antigravity carries the field on 435 of
+/// the 4,846 transcript lines here, and the chat view now renders it. So the
+/// stronger half is gone and the one gate that was always doing the work is
+/// stated on its own. Filling `thinking` changes neither the rows the index
+/// holds nor their ordinals, because no row is created to carry it.
 const Set<String> kIndexedTranscriptRoles = {'user', 'agent'};
 
 /// A transcript's mtime and length, or nulls when it could not be measured.
