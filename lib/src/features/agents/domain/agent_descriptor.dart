@@ -529,6 +529,91 @@ class AgentPromptSupport {
   }
 }
 
+/// How one CLI is asked for a recap of a conversation, non-interactively.
+///
+/// Every CLI here has a print mode; what they do **not** share is how the
+/// conversation gets in. Two read it off stdin, one takes only text on the
+/// command line, and that difference decides where the turns ride — so it is
+/// declared per agent with the `--help` it was read off, exactly as every other
+/// capability in this file is.
+///
+/// [prefix] is what goes before the prompt, and the prompt is always the last
+/// argument: `['-p']` becomes `claude -p <prompt>`, `['exec']` becomes
+/// `codex exec <prompt>`. One shape for all three, so the only thing that
+/// varies is [readsTurnsFromStdin].
+class AgentRecapSupport {
+  /// The CLI reads the conversation from **stdin**; [prefix] plus the fixed
+  /// request is the whole command line.
+  const AgentRecapSupport.overStdin(this.prefix, {required this.evidence})
+    : readsTurnsFromStdin = true,
+      isSupported = true,
+      wasChecked = true;
+
+  /// The CLI's print mode takes the text itself and reads no conversation from
+  /// anywhere, so the turns ride **inside the prompt argument**.
+  ///
+  /// This is the weaker of the two and is declared as such rather than papered
+  /// over: an argument is a command line, and a command line has a length the
+  /// operating system enforces — on Windows 32,767 characters, well under the
+  /// 64 KiB a transcript is bounded to. A conversation that overruns it fails
+  /// loudly at the spawn instead of arriving silently truncated, which is the
+  /// right way round.
+  const AgentRecapSupport.inPrompt(this.prefix, {required this.evidence})
+    : readsTurnsFromStdin = false,
+      isSupported = true,
+      wasChecked = true;
+
+  /// Checked, and this CLI has no non-interactive mode to ask. [evidence] is
+  /// the `--help` that says so.
+  const AgentRecapSupport.absent({required this.evidence})
+    : prefix = const [],
+      readsTurnsFromStdin = false,
+      isSupported = false,
+      wasChecked = true;
+
+  /// Nobody looked. **The default**, and never reported as an absence.
+  const AgentRecapSupport.unchecked()
+    : prefix = const [],
+      evidence = '',
+      readsTurnsFromStdin = false,
+      isSupported = false,
+      wasChecked = false;
+
+  /// The arguments before the prompt, e.g. `['-p']` or `['exec']`.
+  final List<String> prefix;
+
+  /// Where this was verified. Empty exactly when nobody looked.
+  final String evidence;
+
+  /// Whether the conversation is handed over on stdin rather than in the
+  /// prompt argument.
+  final bool readsTurnsFromStdin;
+
+  final bool isSupported;
+
+  /// Whether this answer was measured. False is the unchecked default, which
+  /// must not be read as "this agent has none".
+  final bool wasChecked;
+
+  /// The full argument list for a recap of [turns] using [request].
+  ///
+  /// [modelArguments] are the descriptor's own `--model` pair, or empty when
+  /// the CLI takes none — the recap is written by the model the session runs
+  /// on wherever that can be asked for, so the row can name it truthfully.
+  List<String> argumentsFor({
+    required String request,
+    required String turns,
+    List<String> modelArguments = const [],
+  }) => [
+    ...prefix,
+    ...modelArguments,
+    readsTurnsFromStdin ? request : '$request\n\n$turns',
+  ];
+
+  /// What to write to the process's stdin, or null when it reads none.
+  String? stdinFor(String turns) => readsTurnsFromStdin ? turns : null;
+}
+
 /// Whether an agent takes an extra system prompt as a **file**, and how.
 ///
 /// The question a handoff turns on. A packet is large by design, and every
@@ -735,9 +820,19 @@ class AgentLaunchSpec {
     this.fork = const AgentForkSupport.unsupported(),
     this.mcp = const AgentMcpSupport.unsupported(),
     this.model = const AgentModelSupport.unsupported(),
+    this.recap = const AgentRecapSupport.unchecked(),
   });
 
   final List<String> baseArguments;
+
+  /// How this CLI is asked, non-interactively, to recap a conversation.
+  ///
+  /// Separate from [prompt] and [baseArguments] because it describes a
+  /// *different process*: a recap never types into the running session, it
+  /// starts the same binary in print mode and lets it exit. Defaults to
+  /// unchecked, so an agent nobody has run this way offers no Recap action
+  /// rather than a guessed command line.
+  final AgentRecapSupport recap;
 
   /// This agent's own permission vocabulary, in its own words.
   ///
