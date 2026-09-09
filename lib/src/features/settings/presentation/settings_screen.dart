@@ -31,6 +31,14 @@ import 'tools_page.dart';
 /// becomes a drill-down list: pick a section, get its page, back out with the
 /// app bar. The selected section lives on this state, so resizing across the
 /// breakpoint keeps your place.
+///
+/// **Mounted, never pushed.** The desktop draws it as a workbench tab
+/// ([SettingsTabView]); the window-matrix tests mount it directly. It used to
+/// carry a `show` that pushed it as a full-screen `MaterialPageRoute`, which
+/// covered the menu bar, the tab strip and the very panes half of these
+/// settings are about — the backlog item this page's shape now answers.
+/// Nothing needed that route kept: there is no first-run flow, and the phone
+/// has its own `CompanionSettingsScreen`.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({this.initialSection, this.onSectionChanged, super.key});
 
@@ -45,13 +53,6 @@ class SettingsScreen extends StatefulWidget {
   /// outside a `State` it drops every time another tab is on screen — see
   /// [SettingsTabView].
   final ValueChanged<SettingsSectionId?>? onSectionChanged;
-
-  static Future<void> show(
-    BuildContext context, {
-    SettingsSectionId? section,
-  }) => Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => SettingsScreen(initialSection: section)),
-  );
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -101,9 +102,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // shell's 30px strip and a back button plus a title does not sit
             // in it.
             toolbarHeight: 44,
+            // **The only way back is a step inside the page.** There used to
+            // be a second `BackButton` here that popped the route this page
+            // was pushed as; the page is a workbench tab now, so there is no
+            // route to pop and an implied one would pop the app's own. The
+            // way *out* of Settings is the way out of any tab — close it, or
+            // pick another.
+            automaticallyImplyLeading: false,
             leading: compact && _openOnCompact
                 ? BackButton(onPressed: _backToList)
-                : const BackButton(),
+                : null,
             title: Row(
               children: [
                 Icon(AppIcons.gearSix, color: theme.colorScheme.tertiary),
