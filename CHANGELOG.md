@@ -420,6 +420,8 @@ worktrees the app made and a per-checkout install lands in the user's
   golden did not move.
 - `session_launcher.dart` is five parts and two libraries behind a 9 KB class;
   a golden of 266 launch shapes did not move.
+- `workbench.dart` is seven parts behind a 20 KB composition; an eleven-state
+  tree golden did not move.
 - **The usage chip shows both limit windows** — `◑ 12% · 4h   59% · 3d` — each
   slot chosen by the window's period, never by which resets soonest. A period
   nothing reported draws nothing rather than `0%`.
