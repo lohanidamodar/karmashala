@@ -48,9 +48,17 @@ class SessionActions {
   SessionActions(this._ref);
   final Ref _ref;
 
-  /// Only the destructive path writes here. Renames and resumes are frequent,
-  /// reversible and already visible in the UI; a delete that also removed the
-  /// agent's own transcript is none of those things.
+  /// **One line per action, saying what it decided** — the discipline
+  /// `sessions.launch` and `sessions.handoff` already keep, and which this file
+  /// did not.
+  ///
+  /// It used to write only on the destructive path, on the argument that
+  /// renames and resumes are reversible and visible on screen. Half of each of
+  /// those is neither: a rename's *store* half happens in somebody else's
+  /// files, a resume chooses between reattaching and launching a second
+  /// process, and continuing a session picks one of three delivery paths. None
+  /// of those choices leaves a mark on screen, and every one of them is a place
+  /// a bug would be silent.
   static final _log = AppLogger.named('sessions.actions');
 
   /// Renames a native row, and tells the CLI that owns the conversation.
@@ -76,7 +84,11 @@ class SessionActions {
     _ref
         .read(terminalSessionsControllerProvider.notifier)
         .notifyTitleChanged();
-    await _propagateNativeRename(id, title);
+    // What the CLI store did with it, which is the half of this action nothing
+    // on screen can show: the workspace title is already applied and published
+    // whatever happens next.
+    final store = await _propagateNativeRename(id, title);
+    _log.info('Renamed $id: byUser=true store=$store');
   }
 
   /// Carries a native row's new title out to the CLI store behind it.
@@ -88,14 +100,18 @@ class SessionActions {
   /// one pass over the stores [deleteNative] pays.
   ///
   /// Never throws. The workspace title is already applied and published.
-  Future<void> _propagateNativeRename(String id, String title) async {
+  ///
+  /// Answers **which route the rename took**, for [renameNative]'s one line —
+  /// the four outcomes are otherwise indistinguishable from outside, and three
+  /// of them leave the CLI still calling the conversation by its old name.
+  Future<String> _propagateNativeRename(String id, String title) async {
     final session = _ref.read(sessionDaoProvider).getById(id);
     final externalId = session?.externalSessionId;
-    if (session == null || externalId == null) return;
+    if (session == null || externalId == null) return 'no-conversation';
     final installation = _ref
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
-    if (installation == null) return;
+    if (installation == null) return 'no-installation';
     final mutator = _ref.read(cliSessionMutatorProvider);
     try {
       if (installation.agentId == AgentIds.codex) {
@@ -114,15 +130,18 @@ class SessionActions {
           title,
           codex: _ref.read(codexAppServersProvider),
         );
-        return;
+        return 'app-server';
       }
       final detected = await _detectedSessionById(
         installation.agentId,
         externalId,
       );
-      if (detected != null) await mutator.rename(detected, title);
+      if (detected == null) return 'not-in-store';
+      await mutator.rename(detected, title);
+      return 'transcript';
     } catch (error) {
       _log.warning('Could not rename $id in the ${installation.agentId} store', error);
+      return 'failed';
     }
   }
 
@@ -375,6 +394,10 @@ class SessionActions {
       // Same replacement the launch path does: the imported row was only ever a
       // second record of a session we own, and we are now showing that one.
       _dropImported(session);
+      _log.info(
+        'Resumed imported ${session.id} (${session.cli}): '
+        'reattached to ${running.id} conversation=${session.externalId}',
+      );
       return running.id;
     }
 
@@ -411,6 +434,11 @@ class SessionActions {
           ),
         );
     final started = launched.session;
+    _log.info(
+      'Resumed imported ${session.id} (${session.cli}) as ${started.id}: '
+      'agent=${installs.first.id} conversation=${session.externalId} '
+      'environment=${session.environmentId}',
+    );
     await _seedHistory(started.id, session);
     // Replace the imported entry with the now-live session (drop only our row,
     // keeping the CLI store file intact).
@@ -454,10 +482,14 @@ class SessionActions {
     // A PTY-hosted session is typed into, not messaged: chat and terminal are
     // two views of one session, so there is exactly one write path into the
     // agent and the two views cannot get out of step.
-    if (_ref.read(sessionLauncherProvider).sendTo(sessionId, trimmed)) return;
+    if (_ref.read(sessionLauncherProvider).sendTo(sessionId, trimmed)) {
+      _log.info('Continued $sessionId: typed into its pane');
+      return;
+    }
 
     final engine = _ref.read(sessionEngineProvider);
 
+    var resumed = false;
     if (!engine.isActive(sessionId)) {
       final session = _ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) {
@@ -504,8 +536,12 @@ class SessionActions {
         resumeSessionId: session.externalSessionId,
       );
       _bump();
+      resumed = true;
     }
 
+    // Which of the three delivery paths this took, and whether a second process
+    // was started to take it.
+    _log.info('Continued $sessionId through the engine: resumed=$resumed');
     await engine.sendMessage(sessionId, trimmed);
   }
 

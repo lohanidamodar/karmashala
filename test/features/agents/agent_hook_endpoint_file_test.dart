@@ -420,7 +420,11 @@ void _runForReal(
 
     /// Installs Claude Code's hooks into [scratch] for [port] and runs the
     /// generated script for a `Stop` event, with a payload on stdin.
-    Future<int> fire({int? port, void Function(File endpoint)? tamper}) async {
+    Future<int> fire({
+      int? port,
+      void Function(File endpoint)? tamper,
+      String payload = '{"session_id":"abc","cwd":"/tmp"}',
+    }) async {
       final claude = agents.firstWhere((a) => a.id == 'claudeCode');
       await installer.install(
         descriptor: claude,
@@ -439,7 +443,7 @@ void _runForReal(
         p.join(scratch.path, '$agentHookMarker.${shell.extension}'),
         'Stop',
       ]);
-      process.stdin.write('{"session_id":"abc","cwd":"/tmp"}');
+      process.stdin.add(utf8.encode(payload));
       await process.stdin.close();
       await process.stdout.drain<void>();
       await process.stderr.drain<void>();
@@ -461,6 +465,31 @@ void _runForReal(
       expect(received.last.authorization, 'Bearer secret-token-value');
       expect(received.last.body, '{"session_id":"abc","cwd":"/tmp"}');
       expect(received.last.query, contains('event=Stop'));
+    }, skip: skip);
+
+    test('nothing over the payload bound crosses the wire', () async {
+      // The two shells stop differently and both stop: `sh` cuts with
+      // `head -c`, `cmd` measures the spilled body and drops it. What has to
+      // be true of either is the same sentence — the far end never sees more
+      // than the bound — so that is what is asserted rather than a shell's
+      // particular way of arriving at it.
+      final exitCode = await fire(
+        payload: 'x' * (kAgentHookPayloadLimitBytes + 4096),
+      );
+
+      expect(exitCode, 0, reason: 'and it still costs the agent nothing');
+      final callbacks = received
+          .where((r) => r.authorization != null)
+          .toList();
+      for (final callback in callbacks) {
+        expect(
+          callback.body.length,
+          lessThanOrEqualTo(kAgentHookPayloadLimitBytes),
+        );
+      }
+      // The probe went out either way: the bound is about the payload, not
+      // about whether the port is still ours.
+      expect(received.first.authorization, isNull);
     }, skip: skip);
 
     test('hands nothing to a stranger that took the port', () async {

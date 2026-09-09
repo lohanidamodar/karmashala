@@ -145,3 +145,28 @@ bool paneShowsResumeConflict(Ref ref, String paneId) {
     ),
   );
 }
+
+/// The command-line value the pane [paneId] shows its agent refusing, or null.
+///
+/// The pane-level twin of [paneShowsResumeConflict], and it carries the same
+/// two guards for the same reasons: a live pane has printed no post-mortem yet,
+/// and a restored one's buffer is the *previous* run's.
+///
+/// Read by [reportRefusedLaunches] the moment a pane stops, which is the only
+/// occasion this is asked — one tail per pane that actually died, and none for
+/// an agent whose refusal nobody has read ([AgentRejectedValueRules.isEmpty]).
+RejectedValue? paneRejectedValue(Ref ref, String paneId) {
+  final instance = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .instanceFor(paneId);
+  final agentId = instance?.agentLaunch?.agentId;
+  if (instance == null || agentId == null) return null;
+  if (instance.liveness.value.isLive) return null;
+  if (instance.liveness.value == PaneLiveness.restored) return null;
+  final rules = ref.read(agentRegistryProvider).byId(agentId)?.launch
+      .rejectedValue;
+  if (rules == null || rules.isEmpty) return null;
+  return rules.matchedBy(
+    terminalTailLines(instance.terminal, lines: rules.scanLines),
+  );
+}
