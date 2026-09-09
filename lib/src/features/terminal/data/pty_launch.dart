@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../domain/agent_pane_launch.dart';
 import '../domain/launch_context.dart';
 import '../domain/shell_integration.dart';
+import '../domain/wsl_shell_integration.dart';
 import '../domain/terminal_profile.dart';
 
 /// A concrete process launch for a host ConPTY: which executable, its arguments,
@@ -179,6 +180,21 @@ PtyLaunch ptyLaunchFor(
       // shell directly, with no Linux round-trip and nothing for interop to be
       // needed for.
       final distro = target.wslDistribution ?? '';
+      // Integrated, the pane's first command is the bootstrap, carried by the
+      // same `cmd.exe /c wsl.exe … -- eval $(…|base64 -d)` payload every agent
+      // launch already crosses on. The shape of the line does not change; only
+      // what it carries, and the bootstrap execs the login shell either way.
+      if (integrate) {
+        return wrapForPty(
+          ShellCommand(
+            executable: '/bin/sh',
+            arguments: ['-c', wslIntegrationBootstrap()],
+            workingDirectory: workingDirectory,
+            environment: environment,
+          ),
+          target,
+        );
+      }
       // No host working directory: `wsl.exe` sets the child's own with `--cd`,
       // so `cmd.exe` is left wherever the app is rather than pointed at a Linux
       // path Windows cannot resolve.

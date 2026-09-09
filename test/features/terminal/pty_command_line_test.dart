@@ -75,13 +75,21 @@ void main() {
       );
     });
 
-    test('shell integration does not reach a WSL pane', () {
-      // OSC 133 markers come from a shell's prompt hooks and this app only
-      // knows how to install PowerShell's, so the line must be identical.
-      expect(
-        conPtyCommandLine(ptyLaunchFor(_ubuntu, shellIntegration: true)),
-        conPtyCommandLine(ptyLaunchFor(_ubuntu)),
+    test('shell integration keeps the shape and changes the payload', () {
+      // The markers come from the distribution's own prompt hooks, installed by
+      // a bootstrap carried on the `--` payload this line already had a form
+      // for. Nothing about `cmd.exe /c wsl.exe -d …` moves.
+      final line = conPtyCommandLine(
+        ptyLaunchFor(_ubuntu, shellIntegration: true),
       );
+      expect(
+        line,
+        startsWith('cmd.exe cmd.exe /c wsl.exe -d Ubuntu -- eval '),
+      );
+      // And it fits, with room to spare, in the 8191 characters `cmd.exe`
+      // allows: base64 is four bytes for three, and a working directory has to
+      // go on the same line.
+      expect(line.length, lessThan(5000));
     });
   });
 

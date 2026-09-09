@@ -20,8 +20,8 @@ library;
 /// buffer counts as history worth keeping.
 ///
 /// This is the fallback, and — because shell integration is **off by default**,
-/// and because `shellSupportsIntegration` covers only PowerShell, so a WSL pane
-/// can never have it at all — it is also the common path. So it is deliberately
+/// and because a `cmd.exe` pane can never have it at all — it is also the
+/// common path. So it is deliberately
 /// conservative, and errs towards *keeping*: being wrong that way leaves a
 /// session running, and being wrong the other way ends one somebody wanted.
 ///

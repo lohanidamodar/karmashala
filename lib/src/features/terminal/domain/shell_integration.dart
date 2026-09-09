@@ -12,19 +12,35 @@ import 'terminal_profile.dart';
 
 /// Whether this app can emit OSC 133 markers from [shell] safely.
 ///
-/// Only PowerShell today.
+/// PowerShell and WSL. A WSL pane is instrumented by the payload its launch
+/// already carries ([wslIntegrationBootstrap]); the probe that kept it parked
+/// is gone, because the payload writes the rc file it then reads and every
+/// failing path falls back to the plain login shell.
 ///
-/// * `cmd.exe` is skipped permanently — it has no prompt hook capable of
-///   emitting an escape sequence per command.
-/// * WSL bash is deferred: the rcfile itself is written and verified (see
-///   the design note §1.4), but
-///   delivering it into a distribution safely needs a probe that confirms both
-///   that the file is readable from inside the distribution and that the login
-///   shell really is bash. `bash --rcfile` pointed at an unreadable file starts
-///   a shell with *no user configuration at all*, which is far worse than
-///   having no feature.
+/// **`cmd.exe` is skipped permanently, and this is the measurement.** Windows
+/// 10.0.26200, 2026-09-09:
+///
+/// * `prompt $E]133;A$E\` works — `ESC ] 1 3 3 ; A ESC \` is on the wire
+///   before every prompt, so `A` (and a fixed `B`) are within reach;
+/// * `C` is not. `cmd` has no hook between reading a command and running it —
+///   no `PS0`, no `preexec`, no `DEBUG` trap — and `AutoRun` fires once per
+///   shell, not once per command. Without `C` a block is discarded by
+///   [CommandBlockTracker], so `A` alone buys nothing;
+/// * `D;<code>` is not either. `PROMPT` expands `$`-codes only: `%ERRORLEVEL%`
+///   is substituted once when `prompt` is *set* and then frozen — measured as
+///   `[D=0]` in front of a failing command and the one after it — and
+///   `!ERRORLEVEL!` with delayed expansion on is frozen the same way.
+///
+/// So a `cmd.exe` pane's exit code is genuinely unknown, and `terminal_run`
+/// says so rather than reporting a zero it did not receive.
+///
+/// A distribution whose login shell is neither bash nor zsh (fish, a bare `sh`)
+/// launches exactly as it did before and simply emits nothing. The pane still
+/// carries a recorder, and `markersSeen` is what reports the truth about it —
+/// the alternative is a probe on the launch path answering a question only the
+/// far side can answer.
 bool shellSupportsIntegration(TerminalShell shell) =>
-    shell == TerminalShell.powerShell;
+    shell == TerminalShell.powerShell || shell == TerminalShell.wsl;
 
 /// Encodes [script] the way `powershell.exe -EncodedCommand` expects: base64 of
 /// UTF-16LE.
