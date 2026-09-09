@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import '../../git/domain/git_worktree.dart';
@@ -245,12 +246,36 @@ class CheckoutLabel {
 /// One `git worktree list` per repository *family*, not per row — the command
 /// reports the whole family wherever it is run. `autoDispose`, and read only
 /// from the open picker, so nothing runs while the panel merely sits there.
+///
+/// ## Grouped first, then asked concurrently
+///
+/// The calls are independent and were awaited one at a time, and a plain
+/// `.wait` over the rows would have been the wrong fix: the dedup that made
+/// this cheap was the loop noticing that a row was already covered by an answer
+/// it had, which only works because the answers arrive in order. Sixty-nine
+/// checkouts of one repository would have become sixty-nine processes to learn
+/// sixty-eight times what the first one said.
+///
+/// So the grouping happens **before** git is asked. Two worktrees of one clone
+/// share a git directory — that is what makes them a family — and
+/// `ChangesService.familyKey` reads it off `.git` for the price of a `typeOf`
+/// per row and no process at all. One representative per key is then asked, all
+/// at once.
+///
+/// **A row whose key is unknown falls back to the old sequential pass**, and
+/// this is the half that must not be lost: an SSH checkout has no path this
+/// process can open, so every one of them would answer "unknown", and treating
+/// each as a family of its own would turn the one saving here into N processes.
+/// They are walked afterwards, in order, skipping whatever the concurrent
+/// answers already covered — exactly today's behaviour, for exactly the rows
+/// that used to be the only behaviour.
 final checkoutLabelsProvider = FutureProvider.autoDispose
     .family<Map<String, CheckoutLabel>, String>((ref, projectId) async {
       final repositories = ref
           .read(repositoryDaoProvider)
           .getByProject(projectId);
       final worktrees = ref.read(worktreeServiceProvider);
+      final changes = ref.read(changesServiceProvider);
 
       // Keyed by [Checkout]: git reports forward slashes where the table holds
       // backslashes, and both spell one directory.
@@ -260,16 +285,11 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
       };
       final family =
           <Checkout, ({String? branch, bool isMain, String? owner})>{};
-      for (final repository in repositories) {
-        if (family.containsKey(Checkout(repository.path))) continue;
-        final List<GitWorktree> listed;
-        try {
-          listed = await worktrees.list(repository.path);
-        } catch (_) {
-          // Git could not answer: this row keeps its plain name.
-          continue;
-        }
-        if (listed.isEmpty) continue;
+
+      /// Files a listing into [family], or does nothing when git could not
+      /// answer — that row keeps its plain name.
+      void record(List<GitWorktree>? listed) {
+        if (listed == null || listed.isEmpty) return;
         // `git worktree list` prints the main worktree first, always.
         final owner = byPath[Checkout(listed.first.path)];
         for (var i = 0; i < listed.length; i++) {
@@ -282,6 +302,46 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
             ),
           );
         }
+      }
+
+      Future<List<GitWorktree>?> listOrNull(EnvironmentPath path) async {
+        try {
+          return await worktrees.list(path);
+        } catch (_) {
+          return null;
+        }
+      }
+
+      // No process yet: this is a `typeOf` per row, and for a worktree one
+      // further read of the pointer file beside it.
+      final keys = await Future.wait([
+        for (final repository in repositories)
+          changes.familyKey(repository.path).catchError((_) => null),
+      ]);
+
+      final representatives = <String, EnvironmentPath>{};
+      final unkeyed = <Repository>[];
+      for (var i = 0; i < repositories.length; i++) {
+        final key = keys[i];
+        if (key == null) {
+          unkeyed.add(repositories[i]);
+          continue;
+        }
+        representatives.putIfAbsent(key, () => repositories[i].path);
+      }
+
+      // One process per family, all at once.
+      for (final listed in await Future.wait([
+        for (final path in representatives.values) listOrNull(path),
+      ])) {
+        record(listed);
+      }
+
+      // And the rows nothing could be read about, the way they have always been
+      // walked: in order, skipping whatever is already covered.
+      for (final repository in unkeyed) {
+        if (family.containsKey(Checkout(repository.path))) continue;
+        record(await listOrNull(repository.path));
       }
 
       return {
