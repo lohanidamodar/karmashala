@@ -15,6 +15,7 @@ environment:
 # packages/relay/fly.toml) copies that directory alone and runs `dart pub get`
 # in it, which a member cannot do — "found no workspace root including it".
 workspace:
+  - packages/agent_cli
   - packages/karmashala_browser
   - packages/karmashala_core
   - packages/karmashala_remote
@@ -38,6 +39,11 @@ dependencies:
     path: packages/karmashala_core
   karmashala_remote:
     path: packages/karmashala_remote
+  # The coding-agent interface: discovery, launch, stream, ask, store reading
+  # and usage, over one descriptor table. Built beside the app in phase A —
+  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §3).
+  agent_cli:
+    path: packages/agent_cli
   karmashala_local_ipc:
     path: packages/local_ipc
   # The relay server itself, embedded in the desktop app so "This computer
