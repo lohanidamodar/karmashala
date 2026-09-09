@@ -2105,6 +2105,10 @@ WorkbenchView
                                                                                     Flexible
                                                                                       Text text="62% · 2h11m"
                                                                                         RichText
+                                                                                    SizedBox
+                                                                                    Flexible
+                                                                                      Text text="1% · 3d"
+                                                                                        RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
@@ -4116,6 +4120,10 @@ WorkbenchView
                                                                                     Flexible
                                                                                       Text text="62% · 2h11m"
                                                                                         RichText
+                                                                                    SizedBox
+                                                                                    Flexible
+                                                                                      Text text="1% · 3d"
+                                                                                        RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
@@ -4880,6 +4888,10 @@ WorkbenchView
                                                                                     SizedBox
                                                                                     Flexible
                                                                                       Text text="62% · 2h11m"
+                                                                                        RichText
+                                                                                    SizedBox
+                                                                                    Flexible
+                                                                                      Text text="1% · 3d"
                                                                                         RichText
                           SessionNoticeLine
                             SizedBox
