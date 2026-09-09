@@ -26,9 +26,9 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below — today `core`, `media`, `agent_cli`, `browser`,
-  `devices`, `remote` and `git` are cut over; `flutter_apps` is built beside
-  the app and still has its copies in it.
+  A key of the map below. Every one of the eight — `core`, `media`,
+  `agent_cli`, `browser`, `devices`, `remote`, `git` and `flutter_apps` — is
+  extracted and cut over: the app holds no copy of any of them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -69,9 +69,8 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# `core`, `media`, `agent_cli`, `browser`, `devices`, `remote` and `git` are
-# extracted and cut over; `flutter_apps` is built but the app still holds its
-# copies, so a run against it tests both halves of a duplicate.
+# All eight are extracted and cut over, so every mapping here is a real seam:
+# no key names a folder the app still keeps a second copy of.
 $map = [ordered]@{
   core = @{
     pkg  = 'packages/karmashala_core'
@@ -132,8 +131,14 @@ $map = [ordered]@{
   }
   flutter_apps = @{
     pkg  = 'packages/karmashala_flutter_apps'
-    app  = @('test/features/flutter_apps')
-    owns = @('lib/src/features/flutter_apps')
+    # `test/features/flutter_apps` whole: what is left in it is the app's half
+    # — the providers, `AttachedApps`, the loop and its gate observer, the SDK
+    # readings and the two panes — plus the two fakes the package cannot lend
+    # it. The tool schemas golden is the one golden outside the folder that
+    # reaches the package: the six `flutter_*` tools are served over its types.
+    app  = @('test/features/flutter_apps',
+             'test/features/mcp/tool_schemas_golden_test.dart')
+    owns = @('lib/src/features/flutter_apps', 'test/features/flutter_apps')
   }
   devices = @{
     pkg  = 'packages/karmashala_devices'
@@ -270,20 +275,23 @@ if ($Full) {
 } elseif ($Package) {
   Invoke-PackageGate -Key $Package
 } elseif ($Changed) {
-  $changed = Get-ChangedPackages
-  if ($changed.files.Count -eq 0) {
+  # Not `$changed`: PowerShell variable names are case-insensitive, so that
+  # name is the `[switch]` parameter above and assigning a hashtable to it
+  # throws before the first suite runs.
+  $selection = Get-ChangedPackages
+  if ($selection.files.Count -eq 0) {
     Write-Host 'nothing changed against main; no gate to run.'
     exit 0
   }
-  if ($changed.full) {
+  if ($selection.full) {
     Write-Host 'a change reaches the app shell, a pubspec or the test harness: running the full gate.'
     Invoke-Gate -Label 'full' -Exe $flutter -GateArgs @(
       'test', '--exclude-tags=live-ssh,live-wsl', '--reporter', 'expanded'
     ) | Out-Null
-  } elseif ($changed.packages.Count -eq 0) {
+  } elseif ($selection.packages.Count -eq 0) {
     # App-only folders map to their own mirror: lib/src/features/<f> -> test/features/<f>.
     $mirrors = @()
-    foreach ($f in $changed.files) {
+    foreach ($f in $selection.files) {
       if ($f -match '^(?:lib/src|test)/features/([^/]+)/') {
         $m = "test/features/$($Matches[1])"
         if ((Test-Path (Join-Path $root ($m -replace '/', '\'))) -and ($mirrors -notcontains $m)) { $mirrors += $m }
@@ -301,8 +309,8 @@ if ($Full) {
       ) | Out-Null
     }
   } else {
-    Write-Host "changed packages: $($changed.packages -join ', ')"
-    foreach ($key in $changed.packages) { Invoke-PackageGate -Key $key }
+    Write-Host "changed packages: $($selection.packages -join ', ')"
+    foreach ($key in $selection.packages) { Invoke-PackageGate -Key $key }
   }
 } else {
   Write-Host 'usage: gate.ps1 -Package <name> | -Changed | -Full'
