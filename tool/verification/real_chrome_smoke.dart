@@ -14,13 +14,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/core/process/local_command_runner.dart';
-import 'package:karmashala/src/features/browser/data/browser_launcher.dart';
-import 'package:karmashala/src/features/browser/data/browser_service.dart';
-import 'package:karmashala/src/features/browser/data/cdp_page.dart';
-import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
-import 'package:karmashala/src/features/browser/domain/element_capture.dart';
+import 'package:karmashala_browser/browser.dart';
+import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 
 import 'png_reader.dart';
 
@@ -39,8 +35,10 @@ void check(String label, bool ok, [String? detail]) {
 
 Future<void> main() async {
   final page = await _writeTestPage();
-  final service = BrowserService(runner: const LocalCommandRunner());
-  ProcessHandle? chrome;
+  final service = BrowserService(
+    startProcess: browserProcessStarter(const LocalCommandRunner()),
+  );
+  BrowserProcess? chrome;
 
   try {
     stdout.writeln('\n== connect ==');
@@ -213,7 +211,9 @@ Future<void> main() async {
     );
     await hang.close(force: true);
 
-    final idle = BrowserService(runner: const LocalCommandRunner());
+    final idle = BrowserService(
+      startProcess: browserProcessStarter(const LocalCommandRunner()),
+    );
     check(
       'nothing listening + no spawn reports notRunning',
       await _failsWith(

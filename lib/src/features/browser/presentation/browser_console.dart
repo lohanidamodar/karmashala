@@ -7,7 +7,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../devices/domain/device_claim.dart' show describeDriveAge;
 import '../application/browser_pane_controller.dart';
 import '../application/browser_providers.dart';
-import '../data/page_input.dart' show FindResult;
+import 'package:karmashala_browser/browser.dart' show FindResult;
 import 'browser_viewport_shot.dart';
 
 /// What the console last asked, and what came back.

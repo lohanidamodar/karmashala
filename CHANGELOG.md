@@ -33,6 +33,8 @@ installs claim the same version name.
 - **`agent_cli` is built beside the app**, on top of the public repo's own
   history — discovery, launch, stream, one-shot ask, store reading and usage
   over one descriptor table; 500 tests in two seconds; no local dependency.
+- **The app now uses `karmashala_browser`** — its own copies are gone; a
+  change to the browser layer is gated in 24 seconds.
 
 ---
 
