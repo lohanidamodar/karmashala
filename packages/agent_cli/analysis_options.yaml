@@ -1,1 +1,10 @@
+# The package's own rules, not the host application's — it is published on its
+# own and analysed on its own.
 include: package:lints/recommended.yaml
+
+analyzer:
+  errors:
+    # Doc comments in the folded-in files reference symbols that live in the
+    # host application (a DAO, a provider); the reference is documentation of
+    # where a thing came from, not a broken link this package can fix.
+    comment_references: ignore

@@ -1,13 +1,27 @@
 name: agent_cli
 description: >-
-  Find and drive already-installed AI coding CLIs — Claude Code, Codex, Gemini
-  CLI — across the host and its WSL distributions.
-version: 0.1.0
+  Find and drive already-installed AI coding CLIs — Claude Code, Codex,
+  Antigravity, Gemini CLI — across the host and its WSL distributions. Five
+  modes over one descriptor table: launch, stream, ask, read and usage.
+version: 0.2.0
 repository: https://github.com/lohanidamodar/agent_cli
 
+# Karmashala resolves this package as a pub workspace member, which is what
+# lets `dart test` run inside it with no `pub get` of its own. It changes
+# nothing for anyone depending on the published package.
+resolution: workspace
+
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.8.0
+
+# pub.dev only, on purpose. Nothing here reaches into the application that
+# happens to host it, and nothing binds a native library — that is what keeps
+# `dart test` in this package free of a `sqlite3.dll` or a `flutter_tester`.
+dependencies:
+  logging: ^1.3.0
+  meta: ^1.16.0
+  path: ^1.9.1
 
 dev_dependencies:
-  lints: ^5.0.0
+  lints: ^6.0.0
   test: ^1.25.0
