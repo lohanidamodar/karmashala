@@ -251,6 +251,44 @@ final repositoryChangesProvider = FutureProvider.autoDispose<List<FileChange>>((
   return changes.changes(path);
 }, retry: _retryOnlyRealFailures);
 
+/// **Whether there is a merge to abort in the checkout being viewed.**
+///
+/// Derived from the listing the panel is already showing, and only where that
+/// listing cannot answer: a conflicted row *is* an unfinished merge, so the
+/// common case costs nothing at all. The second half is for the state the
+/// listing genuinely cannot see — every conflict resolved and `git add`-ed,
+/// nothing committed — where `.git/MERGE_HEAD` is still on disk and the button
+/// is still the thing to press. One `stat`, no process, and no poll: this
+/// recomputes exactly when [repositoryChangesProvider] does, because that is
+/// what it watches.
+///
+/// **A `.git` that could not be read leaves the listing's answer standing**
+/// rather than turning into a `false` — an unreadable share is not evidence
+/// that no merge is in progress.
+final mergeInProgressProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final listing = ref.watch(repositoryChangesProvider.future);
+  final List<FileChange> changes;
+  try {
+    changes = await listing;
+  } on Object {
+    // A listing git could not produce says nothing about a merge, and the pane
+    // beside this is already showing git's own words for it. Swallowed rather
+    // than rethrown so this does not inherit the retry the listing owns — the
+    // backoff timer would outlive the pane, which is what
+    // [_retryOnlyRealFailures] exists to stop.
+    return false;
+  }
+  // **A clean tree is not a merge**, and that is an answer rather than a
+  // shortcut: a merge that stopped left its own work in the index, resolving a
+  // conflict with `git add` leaves it staged, and neither state has an empty
+  // listing. So the overwhelmingly common case reads nothing at all.
+  if (changes.isEmpty) return false;
+  if (changes.any((c) => c.type == FileChangeType.conflicted)) return true;
+  final path = ref.read(viewedCheckoutProvider);
+  if (path == null) return false;
+  return await ref.read(changesServiceProvider).mergeInProgress(path) ?? false;
+});
+
 /// The current branch of the selected repository.
 final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
   final id = ref.watch(selectedRepositoryIdProvider);

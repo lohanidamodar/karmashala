@@ -9,6 +9,13 @@ import '../domain/working_tree_status.dart';
 /// Each line is `XY <path>` where `X` is the index (staged) status and `Y` the
 /// work-tree (unstaged) status. `??` marks untracked; `R`/`C` lines carry
 /// `old -> new`. Pure and testable.
+///
+/// **The seven conflict pairs are read as a pair, not letter by letter**, which
+/// is the one place this differs from reading `X` and falling back to `Y`. v1
+/// has no separate record for an unmerged path — v2's `u` — so `AA` came out
+/// *added* and `DD` came out *deleted*, each a confident wrong verb about a
+/// file the merge has not finished with. Only [MergeConflict.ofCode] can tell
+/// them apart, because the pair is the whole word.
 List<FileChange> parseGitStatus(String porcelain) {
   final changes = <FileChange>[];
   for (final raw in porcelain.split(RegExp(r'[\r\n]'))) {
@@ -23,6 +30,21 @@ List<FileChange> parseGitStatus(String porcelain) {
       final parts = rest.split(' -> ');
       originalPath = parts.first;
       path = parts.last;
+    }
+
+    final conflict = MergeConflict.ofCode('$x$y');
+    if (conflict != MergeConflict.unrecorded) {
+      changes.add(
+        FileChange(
+          path: path,
+          originalPath: originalPath,
+          type: FileChangeType.conflicted,
+          conflict: conflict,
+          staged: true,
+          unstaged: true,
+        ),
+      );
+      continue;
     }
 
     final untracked = x == '?' && y == '?';
@@ -263,10 +285,12 @@ AheadBehind? parseAheadBehind(String output) {
 ///
 /// The status letters themselves are v1's, with one substitution: v2 writes `.`
 /// where v1 wrote a space. So `1 .M` is modified-but-unstaged and `1 M.` is
-/// staged, and an unmerged `u UU` still reads as "staged and unstaged with an
-/// unrecognised code", exactly as `UU` did — which is what the two callers that
-/// render [FileChangeType.unknown] as *"changed (unrecognised git status)"*
-/// have always shown for a conflict.
+/// staged. A `u` record is the exception: its `<XY>` is not a pair of index and
+/// work-tree letters at all but one of the seven **conflict pairs**, which is
+/// why it reads through [MergeConflict.ofCode] rather than [_typeOf] — put
+/// through the latter a `u UU` came out [FileChangeType.unknown] and rendered
+/// as *"changed (unrecognised git status)"*, which is what a conflict looked
+/// like here until [FileChangeType.conflicted] existed.
 WorkingTreeStatus parseGitStatusV2(String porcelain) {
   String? branch;
   String? upstream;
@@ -337,9 +361,27 @@ FileChange? _v2Record(String line) {
         originalPath: tab < 0 ? null : fields[9].substring(tab + 1),
       );
     // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+    //
+    // **One path, always.** The three stage modes and their object names say
+    // which sides of the merge still hold the file, and `<XY>` says the same
+    // thing in two letters — so the kind is taken from there and the modes are
+    // read past. Nothing draws a file mode, and a second path to pair with it
+    // does not exist in this record: a rename is a `2`, and git writes the
+    // conflicted path once.
     case 'u':
       final fields = _v2Fields(line, 11);
-      return fields == null ? null : _v2Change(fields[1], fields[10]);
+      if (fields == null) return null;
+      return FileChange(
+        path: fields[10],
+        type: FileChangeType.conflicted,
+        conflict: MergeConflict.ofCode(fields[1]),
+        // Both, and not because a letter said so: an unmerged path has entries
+        // in the index *and* a file in the working tree that differs from all
+        // of them. That is what `UU` already reported through [_typeOf], and it
+        // is what the two flags have always meant.
+        staged: true,
+        unstaged: true,
+      );
     // ? <path>
     case '?':
       if (line.length < 3) return null;

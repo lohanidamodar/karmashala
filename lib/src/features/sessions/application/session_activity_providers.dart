@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../domain/session.dart';
@@ -9,6 +8,7 @@ import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_status.dart';
 import 'session_chat_source.dart';
+import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 import 'session_status_providers.dart';
@@ -319,22 +319,18 @@ final sessionOutstandingCallsProvider = Provider.autoDispose
 
 /// Whether there is a record of this session's turns we could read at all.
 ///
-/// The same three facts `sessionHasChatView` asks of the view and
-/// `_agentRecordMessages` asks for the wire, so all three agree: a CLI session
-/// id we have been told, an installation that still exists, and an agent whose
-/// store this app can open (`agentSupportsChatView` — Antigravity's is protobuf
-/// in an unpublished schema). Answered from DAOs the provider has already
-/// opened; nothing here touches the disk.
-bool hasReadableRecord(Ref ref, Session session) {
-  final externalId = session.externalSessionId;
-  if (externalId == null || externalId.isEmpty) return false;
-  final agentId = ref
-      .read(agentInstallationDaoProvider)
-      .getById(session.agentInstallationId)
-      ?.agentId;
-  if (agentId == null) return false;
-  return agentSupportsChatView(ref.read(agentRegistryProvider).byId(agentId));
-}
+/// The same reading the conversation and the companion snapshot use —
+/// [sessionChatViewProvider] — so all three agree, and none of them can say
+/// "this agent keeps no transcript" about a session whose transcript is on
+/// disk. It used to be three facts asked here by hand, the last of them the
+/// `agentSupportsChatView` allowlist; that allowlist is now only the prior the
+/// reading carries until something has been looked at.
+///
+/// Watched, not read: for a session whose refusal has to be earned the reading
+/// starts at the prior and settles once the probe answers, and this gate has to
+/// move with it.
+bool hasReadableRecord(Ref ref, Session session) =>
+    ref.watch(sessionChatViewProvider(session.id)).hasChatView;
 
 /// Whether the row itself says this session has finished, one way or another.
 ///

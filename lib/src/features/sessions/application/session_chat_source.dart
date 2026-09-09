@@ -7,7 +7,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../domain/session_launch.dart';
+import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 
 /// How often a live session's transcript file is re-read.
@@ -142,9 +142,9 @@ final sessionTranscriptLocatorProvider = Provider<SessionTranscriptLocator>(
 /// polled while the session is on screen.
 ///
 /// Yields an empty list — never an error — for a session whose agent has no
-/// readable store, or whose file has not appeared yet. "No chat for this agent"
-/// is a capability answer (see [agentSupportsChatView]); the terminal view is
-/// always there.
+/// readable store, or whose file has not appeared yet. "No chat for this
+/// session" is a reading ([sessionChatViewProvider]) rather than the allowlist
+/// it used to be; the terminal view is always there either way.
 final sessionChatTranscriptProvider = StreamProvider.autoDispose
     .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
       // Both loops below sleep and then read a provider, and a `Ref` disposed
@@ -166,10 +166,16 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
           .read(agentInstallationDaoProvider)
           .getById(session.agentInstallationId)
           ?.agentId;
-      final descriptor = agentId == null
-          ? null
-          : ref.read(agentRegistryProvider).byId(agentId);
-      if (agentId == null || !agentSupportsChatView(descriptor)) {
+      // Taken before the first `await`, because `ref` may not be watched after
+      // one. Free for a store format the allowlist reads — the probe answers
+      // out of its own screen and touches no disk — and one scan plus one
+      // `exists()` for a session whose refusal has to be earned.
+      final reading = ref.watch(sessionChatViewProbeProvider(sessionId).future);
+      if (agentId == null) {
+        yield const [];
+        return;
+      }
+      if (!(await reading).hasChatView) {
         yield const [];
         return;
       }
