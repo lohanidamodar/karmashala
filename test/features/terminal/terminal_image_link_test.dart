@@ -19,6 +19,7 @@ import 'package:xterm2/xterm.dart';
 
 import '../media/session_media_fixture.dart';
 import 'fake_instance.dart';
+import '../../support/temp_directory.dart';
 
 /// Ctrl+clicking the `[Image #6]` an agent CLI prints into a pane.
 ///
@@ -55,7 +56,7 @@ void main() {
   });
   tearDown(() {
     db.close();
-    dir.deleteSync(recursive: true);
+    removeTempDirectory(dir);
   });
 
   /// A container whose one pane belongs to [session] — null for a plain shell,

@@ -11,6 +11,8 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// Antigravity's own hook configuration, which the descriptor used to say did
 /// not exist.
 ///
@@ -33,7 +35,7 @@ void main() {
       recursive: true,
     );
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   String storeHome() => p.join(home.path, '.gemini', 'antigravity-cli');
   File hooksFile() => File(p.join(home.path, '.gemini', 'config', 'hooks.json'));
@@ -287,7 +289,7 @@ void _absentStoreTests() {
     home = Directory.systemTemp.createTempSync('karmashala_agyabsent_');
     // Deliberately NOT created: this is a machine without the CLI installed.
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   String missingStore() => p.join(home.path, '.gemini', 'antigravity-cli');
 

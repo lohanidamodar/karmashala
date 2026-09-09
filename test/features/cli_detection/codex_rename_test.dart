@@ -16,6 +16,7 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// **Where a Codex rename actually has to land.**
 ///
@@ -45,7 +46,7 @@ void main() {
   });
   tearDown(() {
     db.close();
-    tmp.deleteSync(recursive: true);
+    removeTempDirectory(tmp);
   });
 
   /// A store with one already-named entry in its mirror, and the session for it.

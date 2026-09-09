@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/media/domain/session_image_reference.dar
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 
 import 'session_media_fixture.dart';
+import '../../support/temp_directory.dart';
 
 /// What `[Image #6]` in a terminal pane actually names.
 ///
@@ -76,7 +77,7 @@ void main() {
       dir = Directory.systemTemp.createTempSync('session_image_ref');
       store = SessionMediaStore(Directory('${dir.path}/cache')..createSync());
     });
-    tearDown(() => dir.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(dir));
 
     Future<List<SessionMediaItem>> scan(File transcript) async =>
         (await store.refresh(

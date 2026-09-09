@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/cli_detection/data/codex_store_reader.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// What a Codex store scan costs, counted in bytes read off the disk.
 ///
 /// The scan re-decoded up to 400 lines of every rollout every time it ran.
@@ -25,7 +27,7 @@ void main() {
     Directory(p.join(home, 'sessions')).createSync(recursive: true);
   });
 
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   File rollout(String id) =>
       File(p.join(home, 'sessions', 'rollout-$id.jsonl'));

@@ -7,6 +7,8 @@ import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/karmashala_skill.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// What the installer writes into somebody's home, held to the four claims
 /// that make writing there defensible at all: exactly these files, a
 /// re-install that touches nothing, an uninstall that takes back exactly what
@@ -33,7 +35,7 @@ void main() {
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_skills_');
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   /// The store home the sweep would hand us for [descriptor] under [home].
   String storeHomeFor(AgentDescriptor descriptor) => p.joinAll([

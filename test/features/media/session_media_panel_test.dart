@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/media/presentation/session_media_list.da
 import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
 
 import '../../support/window_matrix.dart';
+import '../../support/temp_directory.dart';
 
 /// The panel the owner asked for: *"a media sidebar that shows all the media
 /// from current session in descending order"*.
@@ -25,7 +26,7 @@ void main() {
   );
 
   setUp(() => dir = Directory.systemTemp.createTempSync('media_panel'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(dir));
 
   File writePng(String name) =>
       File('${dir.path}/$name')..writeAsBytesSync(pngBytes);

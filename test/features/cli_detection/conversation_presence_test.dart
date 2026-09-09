@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// "Does this conversation exist" has three answers, and the third one is why
 /// this file is long.
@@ -42,7 +43,7 @@ const _storeless = AgentDescriptor(
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_presence_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String home(String name) => p.join(tmp.path, name);
 

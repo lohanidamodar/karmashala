@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   final now = DateTime.utc(2026, 8, 29, 12);
@@ -26,7 +27,7 @@ void main() {
       clock: FixedClock(now),
     );
   });
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   /// A Claude transcript whose last record says the agent finished its turn.
   String idleTranscript() {

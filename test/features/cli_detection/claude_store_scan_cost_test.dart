@@ -5,6 +5,8 @@ import 'package:karmashala/src/features/cli_detection/data/claude_store_reader.d
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// What a store scan costs, counted in bytes read off the disk.
 ///
 /// The scan runs on the status registry's slow slot whenever a session row is
@@ -22,7 +24,7 @@ void main() {
     Directory(p.join(home, 'projects', '-repo')).createSync(recursive: true);
   });
 
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   File sessionFile(String id) =>
       File(p.join(home, 'projects', '-repo', '$id.jsonl'));

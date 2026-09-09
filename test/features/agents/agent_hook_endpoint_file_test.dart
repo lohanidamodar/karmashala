@@ -10,6 +10,8 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// The endpoint-file indirection, for **all three** shipped agents.
 ///
 /// The per-agent files beside this one cover each CLI's own config shape. This
@@ -36,7 +38,7 @@ void main() {
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_endpointfile_');
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   /// The store home the locator would hand the installer:
   /// `<home>/<store.homeDirectoryName>` and nothing else — see
@@ -447,7 +449,7 @@ void _runForReal(
 
     tearDown(() async {
       await server.close(force: true);
-      scratch.deleteSync(recursive: true);
+      removeTempDirectory(scratch);
     });
 
     /// Installs Claude Code's hooks into [scratch] for [port] and runs the

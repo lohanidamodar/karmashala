@@ -8,6 +8,8 @@ import 'package:karmashala/src/core/process/wsl_command_runner.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/temp_directory.dart';
+
 /// **Which isolate a process is created on**, which is the whole of the fix.
 ///
 /// The owner's report was *"the moment i expanded a project it lags"*, and the
@@ -163,7 +165,7 @@ void main() {
   test('the working directory survives the crossing', () async {
     final runner = LocalCommandRunner(spawner: spawner);
     final dir = Directory.systemTemp.createTempSync('karmashala_cwd');
-    addTearDown(() => dir.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(dir));
 
     final result = await runner.run(
       CommandRequest(

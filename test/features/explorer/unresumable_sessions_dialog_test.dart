@@ -34,6 +34,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/temp_directory.dart';
 
 /// **What the user sees before anything is removed.**
 ///
@@ -73,7 +74,7 @@ const _phoneWindow = WindowCell('390x844 (phone)', Size(390, 844));
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_udlg_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String storeHome() => p.join(tmp.path, '.claude');
 

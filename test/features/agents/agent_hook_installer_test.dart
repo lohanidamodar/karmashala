@@ -10,6 +10,8 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 void main() {
   const installer = AgentHookInstaller();
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
@@ -19,7 +21,7 @@ void main() {
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_hookcfg_');
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   File configFile() => File(p.join(home.path, 'settings.json'));
   File endpointFile() => File(p.join(home.path, '$agentHookMarker.endpoint'));

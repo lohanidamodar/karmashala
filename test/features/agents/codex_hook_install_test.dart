@@ -11,6 +11,8 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// Codex's hook configuration — the one agent that trusts a hook by hashing the
 /// entry that declares it.
 ///
@@ -37,7 +39,7 @@ void main() {
     home = Directory.systemTemp.createTempSync('karmashala_codexhook_');
     Directory(storeHome()).createSync(recursive: true);
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   Map<String, Object?> hooks() {
     final root = jsonDecode(hooksFile().readAsStringSync()) as Map;

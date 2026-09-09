@@ -6,6 +6,8 @@ import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// What Karmashala can read off a Codex rollout.
 ///
 /// Every record below is the shape the owner's own store writes
@@ -27,7 +29,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_codex_');
     next = 0;
   });
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String write(List<String> lines) {
     final file = File(p.join(tmp.path, 'rollout-${next++}.jsonl'))

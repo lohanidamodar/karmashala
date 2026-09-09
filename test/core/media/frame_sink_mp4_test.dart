@@ -6,6 +6,8 @@ import 'package:karmashala/src/core/media/frame_sink.dart';
 import 'package:karmashala/src/core/media/video_writer.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// Stands in for the operating system's encoder so no test needs a real one.
 class _FakeVideoEncoder implements VideoEncoder {
   _FakeVideoEncoder({required this.path, required this.width, required this.height});
@@ -63,7 +65,7 @@ void main() {
   group('FrameEncoder, MP4', () {
     late Directory temp;
     setUp(() => temp = Directory.systemTemp.createTempSync('fs-mp4'));
-    tearDown(() => temp.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(temp));
 
     test('hands every frame to the encoder and reports its bytes', () async {
       _FakeVideoEncoder? made;

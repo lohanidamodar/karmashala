@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// The handshake file publishes the two bearer tokens that are the *entire*
 /// access-control boundary for the launcher control server — loopback TCP lets
 /// any local process connect and attempt auth, so the file's permissions are
@@ -57,7 +59,7 @@ void main() {
     late Directory tmp;
 
     setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_acl_'));
-    tearDown(() => tmp.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(tmp));
 
     test('locks a file to the current user and stops inheriting', () async {
       final file = File(p.join(tmp.path, 'mcp_bridge.json'))
@@ -122,7 +124,7 @@ void main() {
     tearDown(() async {
       await server.stop();
       container.dispose();
-      tmp.deleteSync(recursive: true);
+      removeTempDirectory(tmp);
     });
 
     test('is readable by nobody but this user', () async {

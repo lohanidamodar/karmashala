@@ -22,6 +22,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// What installing the agents' status hooks costs the **isolate**, and what it
 /// costs a store home that does not answer.
@@ -60,7 +61,7 @@ void main() {
     setUp(() {
       home = Directory.systemTemp.createTempSync('karmashala_hookcost_');
     });
-    tearDown(() => home.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(home));
 
     // The real `restrict` shells out to `icacls`/`chmod`. Refused here so the
     // count is about file operations and nothing else; `localPosix` on Windows
@@ -171,7 +172,7 @@ void main() {
     });
     tearDown(() {
       db.close();
-      root.deleteSync(recursive: true);
+      removeTempDirectory(root);
     });
 
     /// Four store homes across two environments, and a service that installs

@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// **How the app-server reaches the worker isolate.**
 ///
@@ -28,7 +29,7 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_wiring_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   /// A `.codex` store with one rollout the walk can find.
   String codexStore(String id) {

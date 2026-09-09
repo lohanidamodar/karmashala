@@ -29,6 +29,7 @@ import '../../support/fake_codex_app_server.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// A transcript locator that answers from a variable, so nothing here walks the
 /// owner's real `~/.claude`.
@@ -150,7 +151,7 @@ void main() {
 
   tearDown(() {
     db.close();
-    tmp.deleteSync(recursive: true);
+    removeTempDirectory(tmp);
   });
 
   /// A Codex session on [environmentId], with the thread id its record is

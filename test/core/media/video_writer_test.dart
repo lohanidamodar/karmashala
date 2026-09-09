@@ -76,6 +76,7 @@ import 'package:karmashala/src/core/media/frame_sink.dart';
 import 'package:karmashala/src/core/media/media_foundation.dart';
 
 import 'mp4_reader.dart';
+import '../../support/temp_directory.dart';
 
 /// A 4x4 frame of one flat colour.
 RgbaFrame _frame(int r, int g, int b, {int size = 64}) {
@@ -144,7 +145,7 @@ void main() {
   group('Media Foundation encoder', () {
     late Directory dir;
     setUp(() => dir = Directory.systemTemp.createTempSync('mf-encode'));
-    tearDown(() => dir.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(dir));
 
     test('writes an MP4 that starts with an ftyp box', () {
       final path = '${dir.path}${Platform.pathSeparator}out.mp4';

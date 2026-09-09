@@ -23,6 +23,7 @@ import 'package:sqlite3/sqlite3.dart' hide Session;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// **What deleting a project costs, counted.**
 ///
@@ -52,7 +53,7 @@ void main() {
 
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_del_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String claudeHome() => p.join(tmp.path, '.claude');
   String codexHome() => p.join(tmp.path, '.codex');

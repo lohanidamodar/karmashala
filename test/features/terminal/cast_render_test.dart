@@ -10,6 +10,8 @@ import 'package:karmashala/src/features/terminal/domain/terminal_cast.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 
+import '../../support/temp_directory.dart';
+
 TerminalCast _cast(List<CastEvent> events, {int columns = 40, int rows = 8}) =>
     TerminalCast(
       columns: columns,
@@ -213,7 +215,7 @@ void main() {
     late Directory temp;
 
     setUp(() => temp = Directory.systemTemp.createTempSync('castrec'));
-    tearDown(() => temp.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(temp));
 
     RgbaFrame solid(int value) => RgbaFrame(
       rgba: Uint8List.fromList(
@@ -285,7 +287,7 @@ void main() {
   group('IsolateFrameSink', () {
     test('encodes off this isolate and hands back the finished file', () async {
       final temp = Directory.systemTemp.createTempSync('castrec-iso');
-      addTearDown(() => temp.deleteSync(recursive: true));
+      addTearDown(() => removeTempDirectory(temp));
       final path = p.join(temp.path, 'out.gif');
       final sink = IsolateFrameSink(
         format: RecordingFormat.gif,

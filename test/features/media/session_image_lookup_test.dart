@@ -16,6 +16,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 
 import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';
+import '../../support/temp_directory.dart';
 
 /// Turning a `[Image #6]` printed in a pane into the picture it names — or into
 /// a sentence saying why it cannot.
@@ -44,7 +45,7 @@ void main() {
   });
   tearDown(() {
     db.close();
-    dir.deleteSync(recursive: true);
+    removeTempDirectory(dir);
   });
 
   void register(String filePath) => ImportedSessionDao(db).insertIfAbsent(

@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// The `/agent-hook` route on the launcher control server.
 ///
@@ -51,7 +52,7 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    tmp.deleteSync(recursive: true);
+    removeTempDirectory(tmp);
   });
 
   Future<HttpClientResponse> post(

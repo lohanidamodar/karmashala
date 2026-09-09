@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   late Directory tmp;
@@ -17,7 +18,7 @@ void main() {
   final ssh = sshEnvFixture();
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_presence_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   Future<CheckoutPresence> ask(
     EnvironmentPath directory, {

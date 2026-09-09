@@ -57,6 +57,7 @@ import 'package:path/path.dart' as ph;
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
 import '../../support/fakes.dart';
+import '../../support/temp_directory.dart';
 
 /// The store scan, answered from a map, so nothing here walks the owner's own
 /// `~/.claude` — and so an Antigravity session can be given a store that keeps
@@ -637,7 +638,7 @@ void main() {
       // sending `noChatView` for one of those was the wrong half of a
       // per-format answer.
       final store = Directory.systemTemp.createTempSync('karmashala_agy_rb_');
-      addTearDown(() => store.deleteSync(recursive: true));
+      addTearDown(() => removeTempDirectory(store));
       final transcript = File(
         ph.join(
           store.path,

@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// **One reading of every store, and it must agree with the single-row probe.**
 ///
@@ -60,7 +61,7 @@ const _storeless = AgentDescriptor(
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_sweep_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String home(String name) => p.join(tmp.path, name);
 

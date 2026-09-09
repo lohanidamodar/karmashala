@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// The whole WSL hook path, end to end, against a **real** distribution.
 ///
@@ -93,7 +94,7 @@ void main() {
   tearDown(() async {
     await server.stop();
     container.dispose();
-    tmp.deleteSync(recursive: true);
+    removeTempDirectory(tmp);
     await _wsl(['rm', '-rf', wslHome]);
   });
 

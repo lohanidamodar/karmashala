@@ -33,6 +33,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_cli_store_locator.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// **Deleting a ticked set of sessions.**
 ///
@@ -51,7 +52,7 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_bulk_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String claudeHome() => p.join(tmp.path, '.claude');
 

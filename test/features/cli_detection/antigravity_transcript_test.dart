@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// Antigravity's messages, where the store keeps a readable copy of them.
 ///
@@ -26,7 +27,7 @@ void main() {
   late Directory tmp;
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_agy_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String storeHome() => p.join(tmp.path, '.gemini', 'antigravity-cli');
   String conversationFile(String id) =>

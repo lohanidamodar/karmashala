@@ -43,6 +43,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/temp_directory.dart';
 
 /// **What selecting and bulk-deleting cost, counted.**
 ///
@@ -223,7 +224,7 @@ void main() {
 
     late Directory tmp;
     setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_bulkc_'));
-    tearDown(() => tmp.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(tmp));
 
     String claudeHome() => p.join(tmp.path, '.claude');
     String codexHome() => p.join(tmp.path, '.codex');

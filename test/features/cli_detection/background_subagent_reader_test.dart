@@ -4,6 +4,8 @@ import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/temp_directory.dart';
+
 /// **A subagent Claude Code ran in the background, read out of the parent's own
 /// transcript.**
 ///
@@ -31,7 +33,7 @@ void main() {
   late Directory root;
 
   setUp(() => root = Directory.systemTemp.createTempSync('bg_subagent'));
-  tearDown(() => root.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(root));
 
   String parentPath() => '${root.path}/s1.jsonl';
   void writeParent(List<String> lines) =>
