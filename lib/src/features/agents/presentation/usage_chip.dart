@@ -57,12 +57,22 @@ class UsageChipView {
     required this.label,
     required this.tooltip,
     required this.tone,
+    this.longLabel,
     this.mark = UsageMark.live,
   });
 
   /// The words on the chip. **Always spells out the number** when one is known:
   /// the colour is a second signal, never the only one.
+  ///
+  /// The **shorter** period when two are known — see [longLabel].
   final String label;
+
+  /// The longer period, drawn after [label] as a second fact.
+  ///
+  /// Null when the reading names only one, and the chip then reads exactly as
+  /// it always did. Never a placeholder: a period nothing was read for says
+  /// nothing at all, the way `HealthLevel.unknown` does one panel over.
+  final String? longLabel;
 
   final String tooltip;
   final UsageTone tone;
@@ -80,7 +90,7 @@ class UsageChipView {
 ///
 /// Four states, and the last two are the ones that matter:
 ///
-/// * **live** — a number and how long until that window resets;
+/// * **live** — each period's number and how long until it resets;
 /// * **checking** — muted, before the first answer arrives;
 /// * **unknown** — the lookup failed and no number has ever been read. It
 ///   claims nothing: a dash, the neutral colour, the question glyph, and the
@@ -120,7 +130,7 @@ UsageChipView usageChipViewFor(
   final mark = error != null || live == null
       ? UsageMark.stale
       : UsageMark.live;
-  final window = _tightest(value.windows);
+  final worst = _tightest(value.windows);
   final age = _ago(now.difference(value.fetchedAt));
   final detail = [
     for (final w in value.windows) _windowLine(w, now),
@@ -129,7 +139,7 @@ UsageChipView usageChipViewFor(
     if (error != null) _failureLine(error),
   ].join('\n');
 
-  if (window == null) {
+  if (worst == null) {
     // A successful fetch that reported no windows at all: honest, and not an
     // error, so it is muted rather than coloured.
     return UsageChipView(
@@ -140,23 +150,81 @@ UsageChipView usageChipViewFor(
     );
   }
 
-  final reset = window.resetsAt;
+  final (short, long) = _bothPeriods(value.windows, worst);
   return UsageChipView(
-    label: reset == null
-        ? '${window.percent.round()}%'
-        : '${window.percent.round()}% · ${formatUsageDuration(reset.difference(now))}',
+    label: _fact(short, now),
+    longLabel: long == null ? null : _fact(long, now),
     tooltip: detail,
-    tone: _toneFor(window.percent),
+    // The worst number the account has, and by the rule below it is always one
+    // of the numbers on screen — the chip never colours a fact it does not
+    // spell out.
+    tone: _toneFor(worst.percent),
     mark: mark,
   );
 }
 
+/// **The two periods the chip draws**: the shortest the reading names, then the
+/// longest. Owner: *"we have enough space here, so let's show both the daily
+/// limit and weekly limit together."*
+///
+/// It used to draw one — [_tightest] — and one is not enough either way round:
+/// a five-hour window at 4% says nothing while the weekly cap sits at 97%, and
+/// the weekly cap alone says nothing about the hour you are in. The two answer
+/// different questions and neither substitutes.
+///
+/// **Chosen by [UsageWindow.span], the period the endpoint's own key names**,
+/// never by which resets soonest — a weekly window twenty minutes from
+/// resetting is still the longer period, and ordering by the countdown would
+/// swap the pair at the end of every week. Several windows can share a period
+/// (Claude reports `seven_day`, `seven_day_opus` and `seven_day_sonnet`, plus
+/// model-scoped weekly caps); the slot goes to the tightest of them.
+///
+/// Two things fall back to the single number, and both are the old behaviour
+/// exactly:
+///
+/// * **no second period.** A payload that names one — or names none, as
+///   Antigravity's tiers and paid overage do — has nothing to put in the second
+///   slot, and an unread period is left unsaid rather than drawn as a zero.
+/// * **something worse than both.** A period-less window cannot be placed on
+///   this scale, so it can never take a slot; when it is nonetheless the worst
+///   number the account has, it is what the chip shows. The colour is the worst
+///   window's, and it must never describe a number that is not on screen.
+(UsageWindow, UsageWindow?) _bothPeriods(
+  List<UsageWindow> windows,
+  UsageWindow worst,
+) {
+  Duration? shortest;
+  Duration? longest;
+  for (final window in windows) {
+    final span = window.span;
+    if (span == null) continue;
+    if (shortest == null || span < shortest) shortest = span;
+    if (longest == null || span > longest) longest = span;
+  }
+  if (shortest == null || shortest == longest) return (worst, null);
+  final short = _tightest(windows.where((w) => w.span == shortest))!;
+  final long = _tightest(windows.where((w) => w.span == longest))!;
+  if (worst.percent > short.percent && worst.percent > long.percent) {
+    return (worst, null);
+  }
+  return (short, long);
+}
+
+/// One window as the chip says it: the number, and how long until it resets.
+String _fact(UsageWindow window, DateTime now) {
+  final reset = window.resetsAt;
+  return reset == null
+      ? '${window.percent.round()}%'
+      : '${window.percent.round()}% · '
+            '${formatUsageDuration(reset.difference(now))}';
+}
+
 /// The window nearest its limit — the one that will actually stop you.
 ///
-/// Not the first: a 5-hour window at 4% says nothing useful while the weekly
-/// cap sits at 97%, and the chip has room for exactly one number. Every window
-/// is still listed in the tooltip.
-UsageWindow? _tightest(List<UsageWindow> windows) {
+/// It carries the chip's colour, and is what the chip draws on its own when
+/// [_bothPeriods] has no pair to draw. Every window is listed in the tooltip
+/// regardless.
+UsageWindow? _tightest(Iterable<UsageWindow> windows) {
   UsageWindow? tightest;
   for (final window in windows) {
     if (tightest == null || window.percent > tightest.percent) {
@@ -296,6 +364,16 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     super.dispose();
   }
 
+  /// One period's words. Both slots are drawn the same way and in one colour —
+  /// the worst window's — because two colours in a 12px row read as two chips,
+  /// and the glyph beside them could only agree with one of them.
+  Widget _words(String fact, Color colour) => Text(
+    fact,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(color: colour),
+  );
+
   @override
   Widget build(BuildContext context) {
     UsageChip.debugBuildCount++;
@@ -358,15 +436,19 @@ class _UsageChipState extends ConsumerState<UsageChip> {
               // Flexible, so the chip can be given a bounded box and give up
               // its tail rather than overflow: a workspace group's bar is a
               // fraction of the window, and `51% · 28m` is wider than some of
-              // them. The glyph and the tooltip survive the trim.
-              Flexible(
-                child: Text(
-                  view.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: colour),
-                ),
-              ),
+              // them. The glyph and the tooltip survive the trim, and each
+              // period gives up its own tail rather than one crowding out the
+              // other.
+              Flexible(child: _words(view.label, colour)),
+              if (view.longLabel case final longer?) ...[
+                // A gap, which is how the facts line beside this one separates
+                // its facts (`Wrap(spacing: Insets.sm)`), and not another `·`:
+                // the dot already separates the halves *inside* a fact, so
+                // `12% · 4h · 59% · 3d` reads as four things rather than two.
+                // It also costs no height, which a divider would.
+                const SizedBox(width: Insets.sm),
+                Flexible(child: _words(longer, colour)),
+              ],
             ],
           ),
         ),

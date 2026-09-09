@@ -35,6 +35,24 @@ class _Movable implements Clock {
   DateTime nowUtc() => now.toUtc();
 }
 
+/// **Every provider the chip's tree caused to exist**, by name — the bill
+/// `session_switch_cost_test.dart` counts the same way.
+///
+/// A second window drawn from the reading the chip already watches must cost
+/// nothing: no provider per period, no second subscription, and above all no
+/// second request. The set is compared rather than a magic number, so the test
+/// says what it means without pinning the tree's unrelated furniture.
+final class _Subscriptions extends ProviderObserver {
+  final Set<String> names = {};
+
+  @override
+  void didAddProvider(ProviderObserverContext context, Object? value) {
+    final provider = context.provider;
+    final argument = provider.from == null ? '' : '(${provider.argument})';
+    names.add('${provider.runtimeType}$argument');
+  }
+}
+
 /// The account key the seeded workspace files its quota under, and therefore
 /// the key of the refresh policy behind its chip: `claudeCode@windows`.
 final _claudeAccount = usageAccountKey(agentInstallation());
@@ -76,10 +94,14 @@ void main() {
     service = FakeAgentUsageService(clock: clock);
   });
 
-  ProviderContainer containerFor({String agentId = AgentIds.claudeCode}) {
+  ProviderContainer containerFor({
+    String agentId = AgentIds.claudeCode,
+    _Subscriptions? observer,
+  }) {
     final db = seedUsageDatabase(agentId: agentId);
     addTearDown(db.close);
     final container = ProviderContainer(
+      observers: [?observer],
       overrides: [
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(clock),
@@ -134,14 +156,16 @@ void main() {
   Color? colourOf(WidgetTester tester, String label) =>
       tester.widget<Text>(find.text(label)).style?.color;
 
-  testWidgets('draws the tightest window as a percent and a countdown', (
+  testWidgets('draws each period as a percent and a countdown', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
 
     expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('1% · 3d'), findsOneWidget);
     expect(colourOf(tester, '62% · 2h11m'), light.idle);
+    expect(colourOf(tester, '1% · 3d'), light.idle);
     expect(
       tester.widget<Icon>(find.byIcon(AppIcons.circleHalf)).color,
       light.idle,
@@ -156,30 +180,186 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('shows the window nearest its limit, not the first one', (
-    tester,
-  ) async {
-    // A fresh 5-hour window and a nearly-spent weekly cap: the weekly one is
-    // what will actually stop you, and the chip has room for one number.
+  testWidgets('draws both periods, the shorter one first', (tester) async {
+    // A fresh 5-hour window and a nearly-spent weekly cap. Neither answers for
+    // the other — one says what stops you this afternoon, the other what stops
+    // you this week — and the owner's reading of the row settled it: *"we have
+    // enough space here, so let's show both the daily limit and weekly limit
+    // together."*
     service.answer = AgentUsage(
       windows: [
-        UsageWindow(
-          label: '5-hour',
-          percent: 4,
-          resetsAt: testTime.add(const Duration(hours: 1)),
-        ),
+        // Listed longest-first on purpose: the order on screen is the period's,
+        // never the payload's.
         UsageWindow(
           label: '7-day',
           percent: 97,
           resetsAt: testTime.add(const Duration(days: 2)),
+          span: kUsageSevenDayWindow,
+        ),
+        UsageWindow(
+          label: '5-hour',
+          percent: 4,
+          resetsAt: testTime.add(const Duration(hours: 1)),
+          span: kUsageFiveHourWindow,
         ),
       ],
       fetchedAt: testTime,
     );
     final container = await pumpChip(tester);
 
+    expect(find.text('4% · 1h'), findsOneWidget);
     expect(find.text('97% · 2d'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('4% · 1h')).dx,
+      lessThan(tester.getTopLeft(find.text('97% · 2d')).dx),
+      reason: 'the shorter period is read first',
+    );
+    // One tone for the chip, and it is the worse of the two: a 4% that will not
+    // stop anybody must not paint the row calm while the week is spent.
+    expect(colourOf(tester, '4% · 1h'), light.failure);
     expect(colourOf(tester, '97% · 2d'), light.failure);
+    expect(
+      tester.widget<Icon>(find.byIcon(AppIcons.circleHalf)).color,
+      light.failure,
+    );
+
+    final tip = tooltipOf(tester);
+    expect(tip, contains('5-hour · 4% · resets in 1h'));
+    expect(tip, contains('7-day · 97% · resets in 2d'));
+    expect(
+      tip,
+      contains(formatResetClock(testTime.add(const Duration(days: 2)), testTime)),
+      reason: 'each window keeps its own reset clock',
+    );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('says nothing at all for a period it has no reading for', (
+    tester,
+  ) async {
+    // One window and one only. The missing period is not a zero, not a dash and
+    // not a second slot standing empty — `HealthLevel.unknown` is the same
+    // answer to the same question one panel over.
+    service.answer = AgentUsage(
+      windows: [
+        UsageWindow(
+          label: '5-hour',
+          percent: 62,
+          resetsAt: testTime.add(const Duration(hours: 2, minutes: 11)),
+          span: kUsageFiveHourWindow,
+        ),
+      ],
+      fetchedAt: testTime,
+    );
+    final container = await pumpChip(tester);
+
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(
+      find.textContaining('%'),
+      findsOneWidget,
+      reason: 'one period known draws one fact, exactly as it always did',
+    );
+    expect(find.textContaining('0%'), findsNothing);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('falls back to the window nearest its limit when no period is '
+      'named', (tester) async {
+    // Paid overage and a model-scoped cap name no period the payload can place
+    // on a scale, so neither can take a slot in the pair. When they are all
+    // there is, the tightest of them answers alone — the rule the chip has
+    // always had.
+    service.answer = AgentUsage(
+      windows: const [
+        UsageWindow(label: 'Extra usage', percent: 12),
+        UsageWindow(label: 'Opus', percent: 88),
+      ],
+      fetchedAt: testTime,
+    );
+    final container = await pumpChip(tester);
+
+    expect(find.text('88%'), findsOneWidget);
+    expect(find.textContaining('%'), findsOneWidget);
+    expect(colourOf(tester, '88%'), light.attention);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('a window worse than both periods is what the chip shows', (
+    tester,
+  ) async {
+    // The colour is the worst number the account has, and the chip must never
+    // colour a number it does not show. A paid-overage window beating both
+    // periods is the one case where the pair is not the whole story, and the
+    // chip then says what it used to say.
+    service.answer = AgentUsage(
+      windows: [
+        UsageWindow(
+          label: '5-hour',
+          percent: 4,
+          resetsAt: testTime.add(const Duration(hours: 1)),
+          span: kUsageFiveHourWindow,
+        ),
+        UsageWindow(
+          label: '7-day',
+          percent: 20,
+          resetsAt: testTime.add(const Duration(days: 2)),
+          span: kUsageSevenDayWindow,
+        ),
+        const UsageWindow(label: 'Extra usage', percent: 99),
+      ],
+      fetchedAt: testTime,
+    );
+    final container = await pumpChip(tester);
+
+    expect(find.text('99%'), findsOneWidget);
+    expect(find.textContaining('%'), findsOneWidget);
+    expect(colourOf(tester, '99%'), light.failure);
+    await quiesce(tester, container);
+  });
+
+  testWidgets('the second period costs nothing the first did not', (
+    tester,
+  ) async {
+    // One period, then two, under one tree that never moves: the second window
+    // arrives inside the reading the chip already watches, so it must not add a
+    // provider, a subscription or a request.
+    service.answer = AgentUsage(
+      windows: [
+        UsageWindow(
+          label: '5-hour',
+          percent: 62,
+          resetsAt: testTime.add(const Duration(hours: 2, minutes: 11)),
+          span: kUsageFiveHourWindow,
+        ),
+      ],
+      fetchedAt: testTime,
+    );
+    final watched = _Subscriptions();
+    final container = containerFor(observer: watched);
+    await tester.pumpWidget(chipIn(container));
+    await tester.pump();
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+    final one = {...watched.names};
+    final requests = service.calls.length;
+
+    pastTheFloor();
+    service.answer = usageSnapshot(percent: 62, fetchedAt: clock.nowUtc());
+    container.read(usageRefreshProvider(_claudeAccount).notifier).refresh();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('62% · 2h11m'), findsOneWidget);
+    expect(find.text('1% · 3d'), findsOneWidget, reason: 'two facts now');
+    expect(
+      watched.names,
+      one,
+      reason: 'the second period is drawn from what was already watched',
+    );
+    expect(
+      service.calls.length,
+      requests + 1,
+      reason: 'one refresh, one request — a period is not a lookup',
+    );
     await quiesce(tester, container);
   });
 
@@ -494,6 +674,95 @@ void main() {
       );
       expect(view.tone, UsageTone.muted);
       expect(view.tooltip, contains('No usage windows reported.'));
+    });
+
+    test('orders the pair by period, not by the payload or by which resets '
+        'soonest', () {
+      // A weekly window resetting in twenty minutes is still the longer period.
+      // Ordering by what resets soonest would swap the two at the end of every
+      // week, which is when the row is read most carefully.
+      final view = usageChipViewFor(
+        AsyncData(
+          AgentUsage(
+            windows: [
+              UsageWindow(
+                label: '7-day',
+                percent: 59,
+                resetsAt: testTime.add(const Duration(minutes: 20)),
+                span: kUsageSevenDayWindow,
+              ),
+              UsageWindow(
+                label: '5-hour',
+                percent: 12,
+                resetsAt: testTime.add(const Duration(hours: 4)),
+                span: kUsageFiveHourWindow,
+              ),
+            ],
+            fetchedAt: testTime,
+          ),
+        ),
+        testTime,
+      );
+      expect(view.label, '12% · 4h');
+      expect(view.longLabel, '59% · 20m');
+    });
+
+    test('keeps the worst of several windows sharing a period', () {
+      // Claude reports `seven_day`, `seven_day_opus` and `seven_day_sonnet`,
+      // and a model-scoped weekly cap on top. One slot, so the one that will
+      // actually stop you takes it.
+      final view = usageChipViewFor(
+        AsyncData(
+          AgentUsage(
+            windows: const [
+              UsageWindow(
+                label: '5-hour',
+                percent: 12,
+                span: kUsageFiveHourWindow,
+              ),
+              UsageWindow(
+                label: '7-day',
+                percent: 40,
+                span: kUsageSevenDayWindow,
+              ),
+              UsageWindow(
+                label: 'Opus · 7-day',
+                percent: 91,
+                span: kUsageSevenDayWindow,
+              ),
+            ],
+            fetchedAt: testTime,
+          ),
+        ),
+        testTime,
+      );
+      expect(view.label, '12%');
+      expect(view.longLabel, '91%');
+      expect(view.tone, UsageTone.warning);
+    });
+
+    test('offers no second fact when the reading names one period', () {
+      final view = usageChipViewFor(
+        AsyncData(
+          AgentUsage(
+            windows: const [
+              UsageWindow(
+                label: '5-hour',
+                percent: 12,
+                span: kUsageFiveHourWindow,
+              ),
+            ],
+            fetchedAt: testTime,
+          ),
+        ),
+        testTime,
+      );
+      expect(view.label, '12%');
+      expect(
+        view.longLabel,
+        isNull,
+        reason: 'an unread period says nothing rather than nothing-shaped',
+      );
     });
 
     test('reports a window with no reset time as a bare percent', () {
