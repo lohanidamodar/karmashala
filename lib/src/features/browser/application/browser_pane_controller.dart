@@ -4,10 +4,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../notifications/application/notification_providers.dart';
-import '../data/browser_service.dart';
-import '../domain/browser_failure.dart';
-import '../domain/browser_target.dart';
-import '../domain/element_capture.dart';
+import 'package:karmashala_browser/browser.dart';
 import 'browser_providers.dart';
 
 /// What the pane is doing, so it can say so instead of guessing.

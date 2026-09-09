@@ -14,11 +14,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
-import 'package:karmashala/src/features/browser/data/browser_service.dart';
+import 'package:karmashala_browser/browser.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,7 +34,9 @@ void main() {
       final file = File('${directory.path}${Platform.pathSeparator}pane.html');
       await file.writeAsString(_testPage);
 
-      final service = BrowserService(runner: const LocalCommandRunner());
+      final service = BrowserService(
+        startProcess: browserProcessStarter(const LocalCommandRunner()),
+      );
       final container = ProviderContainer(
         overrides: [
           hostCommandRunnerProvider.overrideWithValue(
@@ -47,7 +48,7 @@ void main() {
       );
       final controller = container.read(browserPaneControllerProvider.notifier);
       BrowserPaneState state() => container.read(browserPaneControllerProvider);
-      ProcessHandle? chrome;
+      BrowserProcess? chrome;
       String? profile;
 
       try {

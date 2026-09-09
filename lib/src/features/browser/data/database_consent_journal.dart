@@ -1,5 +1,5 @@
 import '../../../core/database/app_database.dart';
-import '../domain/browser_consent.dart';
+import 'package:karmashala_browser/browser.dart';
 
 /// Browser consent grants, kept in the `app_metadata` key/value table.
 ///
