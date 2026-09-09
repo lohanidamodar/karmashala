@@ -39,6 +39,11 @@ import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
 import 'terminal_profiles.dart';
 
+// The controller's own body, split into one file per family. They are `part`s
+// rather than libraries of their own because privacy in Dart is per library:
+// every verb below writes the fields declared in this file, so anywhere else
+// would mean handing the state around. What stays here is the notifier —
+// the fields, `build`, the publish path and the projections it invalidates.
 part 'terminal_sessions_state.dart';
 part 'terminal_instance_factory.dart';
 part 'terminal_sessions_providers.dart';
@@ -59,6 +64,11 @@ part 'terminal_sessions_restore.dart';
 /// [state] published from them. Riverpod forbids reading `state` inside `build`
 /// and `onDispose`, and both restore (which runs during build) and the final
 /// snapshot (which runs during dispose) need the tabs.
+///
+/// **Only the notifier is here.** Each family of verbs is an extension in a
+/// `part` of this library, listed above the class: tabs, workspace groups,
+/// regions inside a tab, presets, pane lifetime, titles, session lifetime,
+/// and the two halves of persistence.
 class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   final List<TerminalTab> _tabs = [];
   String? _activeTabId;
@@ -424,8 +434,6 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// The live terminal behind [paneId], or `null` once it has been closed.
   TerminalInstance? instanceFor(String paneId) => _instances[paneId];
-
-  // --- internals -------------------------------------------------------------
 
   String _newId() => ref.read(idGeneratorProvider).newId();
 
