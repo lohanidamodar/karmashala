@@ -27,8 +27,8 @@
 
 .PARAMETER Package
   A key of the map below — today `core`, `media`, `agent_cli`, `browser`,
-  `devices` and `remote` are cut over; `git` and `flutter_apps` are built
-  beside the app and still have their copies in it.
+  `devices`, `remote` and `git` are cut over; `flutter_apps` is built beside
+  the app and still has its copies in it.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -69,9 +69,9 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# `core`, `media`, `agent_cli`, `browser`, `devices` and `remote` are extracted
-# and cut over; `git` and `flutter_apps` are built but the app still holds its
-# copies, so a run against one of those tests both halves of a duplicate.
+# `core`, `media`, `agent_cli`, `browser`, `devices`, `remote` and `git` are
+# extracted and cut over; `flutter_apps` is built but the app still holds its
+# copies, so a run against it tests both halves of a duplicate.
 $map = [ordered]@{
   core = @{
     pkg  = 'packages/karmashala_core'
@@ -108,9 +108,20 @@ $map = [ordered]@{
   }
   git = @{
     pkg  = 'packages/karmashala_git'
-    app  = @('test/features/git', 'test/features/repositories')
+    # The three folders whole: what is left in them is the app's half — the
+    # review-thread, worktree-setup and repository DAOs, the discovery service,
+    # the `gh`-driven GitHub service, the providers and the views — and every
+    # suite in them now runs against the package's types. One golden outside
+    # them reaches it: the tool schemas, because `review_thread_*`,
+    # `worktree_create`/`worktree_remove`, `checkpoint_diff` and
+    # `list_checkouts` are served over the package's values.
+    app  = @('test/features/git', 'test/features/github',
+             'test/features/repositories',
+             'test/features/mcp/tool_schemas_golden_test.dart')
     owns = @('lib/src/features/git', 'lib/src/features/github',
-             'lib/src/features/repositories')
+             'lib/src/features/repositories',
+             'test/features/git', 'test/features/github',
+             'test/features/repositories')
   }
   browser = @{
     pkg  = 'packages/karmashala_browser'
