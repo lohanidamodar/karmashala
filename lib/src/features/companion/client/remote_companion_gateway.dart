@@ -38,6 +38,7 @@ part 'remote_companion_gateway_notifications.dart';
 part 'remote_companion_gateway_sessions.dart';
 part 'remote_companion_gateway_transcript.dart';
 part 'remote_companion_gateway_host_events.dart';
+part 'remote_companion_gateway_approvals.dart';
 
 /// The real gateway: [CompanionClient] + [CompanionPairingClient] over an
 /// injected [stored.CompanionStore] (`SecureCompanionStore` on a phone).
@@ -806,43 +807,6 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   // ------------------------------------------------------------ host events
 
-  void _applyApproval(RemoteApprovalRequest request) {
-    final approval = CompanionApproval(
-      id: 'approval-${_nextApprovalId++}',
-      sessionId: request.sessionId,
-      // The wire carries no agent name, and the phone invents no claim.
-      agentName: 'The agent',
-      evidence: request.evidence,
-      waiting: request.waiting,
-      approveLabel: request.approveLabel,
-      denyLabel: request.denyLabel,
-    );
-    _approvalOf(request.sessionId).value = approval;
-    final summary = _currentSummary(request.sessionId);
-    _noteAttention(
-      request.sessionId,
-      'needs_approval',
-      summary?.title ?? request.sessionId,
-    );
-    _stampAttention(request.sessionId, CompanionAttentionKind.needsYou);
-  }
-
-  /// Takes a card off the screen and says why.
-  ///
-  /// The nothing-to-do case is deliberately silent: a `session.changed` for a
-  /// session that was never asking must not announce a resolution the reader
-  /// never saw a request for.
-  void _retireApproval(String sessionId, CompanionApprovalOutcome outcome) {
-    final pending = _approvalOf(sessionId);
-    if (pending.value == null) return;
-    pending.value = null;
-    if (!_approvalResolutions.isClosed) {
-      _approvalResolutions.add(
-        CompanionApprovalResolution(sessionId: sessionId, outcome: outcome),
-      );
-    }
-  }
-
   // ------------------------------------------------------------- transcripts
 
   /// Sessions with a gap recovery in flight, so two never race each other.
@@ -856,7 +820,4 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Set when the host says the pairing is gone. Never cleared: the device key
   /// went with it, so this link cannot come back — only a fresh pairing can.
   bool _revoked = false;
-
-  _Watched<CompanionApproval?> _approvalOf(String sessionId) =>
-      _approvals[sessionId] ??= _Watched(null);
 }
