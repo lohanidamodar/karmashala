@@ -1,8 +1,8 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.18.2 (2026-09-07)**. Anything
-before 1.1.0 is not recorded — no release notes were written for those versions
-and this file does not invent them.
+This file records **1.1.0 (2026-08-31) through 1.19.0 (2026-09-08)**, and what
+is on `main` past it. Anything before 1.1.0 is not recorded — no release notes
+were written for those versions and this file does not invent them.
 
 Entries are derived from the repository's own history: the `chore: release`
 commit bodies where they exist, and the commits in each version's range where
@@ -13,6 +13,674 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## Unreleased
+
+**Two days, 2026-09-08 and -09, 137 commits, and almost all of it new capability
+rather than repair.** Schema head is **v43**: a database written by a build from
+this range cannot be read by 1.19.0. Nothing here has a build number yet.
+
+### Our own session host, remote first and then local
+
+`host/` — `karmashala_host`, pure Dart, cross-compiled from Windows for linux
+x64 and arm64 in `build_release.bat` — deployed over the existing `dartssh2`
+connection and used by SSH panes, with tmux kept as the fallback that says so in
+the pane. The refusal that had stood against writing a termio was overturned by
+two measurements: tmux's rendering path is lossy where its control mode is not,
+and the Windows Dart SDK cross-compiles to Linux.
+
+**Decisions the proof forced.** `forkpty` is resolved and never called — after
+`fork` in a multithreaded VM only async-signal-safe code is legal, and forkpty's
+child returns into Dart — so the pair comes from `openpty` and the child from
+`posix_spawn` with `POSIX_SPAWN_SETSID`; on glibc ≥ 2.34 `forkpty` lives in
+`libc.so.6` and older in `libutil`, resolved in that order. Output is a blocking
+`read` in its own isolate and the exit code is the `waitpid` after EOF, so
+nothing polls. A 4 MiB ring per session with absolute offsets; a reattach sends
+`since` and gets exactly the missing bytes — a test caught the resume offset
+being read from the *new* link, which would have replayed every session from
+zero on each reconnect. Ended sessions are kept to the 16 most recent, so a pane
+reconnecting a moment late can still read the exit code.
+
+**The local stage, behind a setting that defaults off.** `AF_UNIX` binds from
+Dart on Windows — measured on build 26200: bind, round-trip, unlink on close, as
+on Linux — so the unix-socket listener already *was* the Windows listener, and
+the "only genuinely new code" premise the item was written on was false. A named
+pipe was refused for the defect the old `local_ipc` had, a blocking
+`ConnectNamedPipe` that `Isolate.kill` cannot interrupt, measured as the app
+failing to quit at all; loopback TCP was refused for the control server's own
+reason, no peer credentials. The socket directory is restricted to the current
+user and `serve` refuses to bind if that fails.
+
+**ConPTY fit behind `Pty` call for call** — `CreatePseudoConsole` for `openpty`,
+`CreateProcessW` with the pseudoconsole attribute for `posix_spawn` — with four
+traps recorded at the line: the attribute takes the HPCON itself rather than its
+address (the wrong one "succeeds" and attaches the child to the host's own
+console); `STARTF_USESTDHANDLES` with three nulls is required or the child
+inherits the host's stdout; a pseudoconsole pipe never reaches EOF while conhost
+is attached, so the exit code is its own wait rather than following EOF; and
+`ProcessSignal.sigterm.watch()` throws from `onListen`'s microtask on Windows,
+which no try/catch around `listen` sees. A job object per session
+(`KILL_ON_JOB_CLOSE`) takes the children when the host dies.
+
+**A bug in the shipped POSIX launcher was found on the way:** the writer memoised
+on the result, so three writes in one turn spawned three isolates and the PTY
+received them third, first, second.
+
+Settings → Terminal shows the host's version, whether this app started it, and
+the age of that reading; reading Settings with the switch off launches nothing.
+
+**Untested:** the real SSH deploy (there is no sshd in the WSL stand-in), arm64
+execution, and macOS, which the Windows SDK cannot build at all. The `live-wsl`
+suite drives the real binary inside WSL end to end and is the proof to re-run.
+
+### Scheduled automations, behind an unattended gate (v43)
+
+`features/automations/`, Settings → Automations, cron and one-shot only, and
+**never an MCP tool** — a test fails if any served tool name starts with
+`automation`. **One function owns every refusal:** `unattendedRefusal()` is what
+the arm form shows, what the fire path throws with, and what the `failed` row
+stores; seven refusals, with the environment resolver's own sentence carried
+verbatim for the two environment ones.
+
+The permission rule reads `PermissionRisk`, the half with evidence behind it:
+`ask` and `acceptEdits` are refused, `bypass` is not — it is already
+`isDangerous` and the arming human confirms it, so a second refusal would be the
+gate re-deciding that. A null rung is refused, never read as "does not prompt".
+
+**Reconcile:** the floor is `max(newest recorded occurrence, armedAt)`; one
+catch-up inside a 15-minute grace; beyond it one `missed` row; several misses
+run the newest once and fold the rest into one row, which is stricter than
+openrun. A punctual fire is a catch-up nought minutes late, so a machine that
+slept through 03:00 lands in the miss rules at 09:00. One unattended owner per
+checkout, and a fire during a run queues with the row naming who is running.
+
+**Limits kept:** cron in local time with `cron(8)`'s DST behaviour, no `@daily`,
+`L`, `#` or seconds (refused, not half-parsed), and a run uses the checkout
+itself rather than a fresh worktree — the queue is what makes that safe.
+`undoCommitsRefusal(RunCommits)` is both the checkbox tooltip and the message
+`dropCommits` throws with; a reading git could not take is `published: null` and
+refuses separately.
+
+**Not done, and its own item:** the per-project checks gate arming and firing but
+are never executed, so a night's run can finish with nobody knowing whether the
+work still stands. `project_verification` (off by absence) and `project_checks`
+(name + argv) exist as configuration because verification had been
+agent-recorded evidence with no per-project switch at all.
+
+### First-class Flutter, end to end
+
+`pubGet` → `run` → attached → reload/logs → `analyze`/`test` → a recorded
+verdict, with no user step, and an agent can close that loop itself through
+`flutter_run`.
+
+**Decisions worth not re-deriving.** Detection keeps two signals apart — a
+top-level `flutter:` section and `flutter: {sdk: flutter}` under dependencies —
+because a plugin has only the second and cannot be `flutter run`; depth outside
+the root is null, never zero. The SDK reading per environment reuses the agent
+discovery request shapes, and **refuses a WSL `flutter` under `/mnt/<letter>/`
+before the version probe**, because the probe is the run that does the damage; a
+test asserts the third call is absent.
+
+**The VM service URI comes from `--vmservice-out-file`, not `--machine` and not
+the printed line.** `--machine` would take away the visible pane and its keys,
+and the printed line wraps at the pane's width on the space before the address
+(reproduced at 40 columns), while DevTools sits on the same host and port — so
+"first URL after *available at*" would attach a VM client to a web server. For
+WSL the out-file is spelled under `/mnt/c/` so it lands on the disk the watcher
+watches, since `Directory.watch` over `\\wsl.localhost` never fires. SSH gets no
+auto-attach and says so.
+
+Gates record through `VerificationService.recordCommandCheck` without taking the
+recording slot, so an agent mid-review can still run one; **no exit code observed
+is inconclusive, never a pass**. The run tool returns the log only when something
+failed or is still going. No migration: the SDK reading is not persisted, and
+verdicts reuse `verification_runs`. A hand-set SDK path per environment went into
+`Settings.flutterSdkPaths` rather than a migration, which makes the rule
+structural — discovery writes `execution_environments` and cannot sweep a
+different store.
+
+**Deferred:** `deviceId` is taken as the caller's word, and a long run outliving
+its two-minute device claim is by design, the pane check refusing a second launch.
+
+### One agent hands work to another and waits
+
+`session_wait`, and `session_send` gained `wait: true`. The engine is the status
+registry's broadcast, which publishes only when evidence moves, so nothing polls.
+
+**What each CLI can and cannot say, measured:** Codex can report `blocked` only
+from the screen grid — no hook can say it — and can never report `failed`,
+because its stop hooks run only on success and errors are dropped from the
+rollout; Codex hooks do not fire at all until the user grants trust in the CLI's
+own review. Antigravity has hooks and nothing else — no state file, no grid, no
+approval — so where hooks are unreachable it is permanently `unknown`, and
+**`unknown` never settles**: the wait runs to its bound.
+
+**The timeout wall** is `kLocalRpcTimeout` (60 s, applied as an idle timeout on
+the response stream), and Claude Code abandons a call at ~60 s *and re-sends
+it*, so the bound is 30 s by default and capped at 45, clamped rather than
+refused. A blocked session is refused before anything is sent; a timeout answer
+says `inputSent: true` so the caller does not send twice; `transcriptChanged` is
+null, not false, when nothing could see the conversation. The DAG and a
+wait-for-any stay refused until the single wait has been used.
+
+### The handoff packet: a file, in the source agent's words, with owners
+
+**Per CLI, measured.** Claude Code takes `--append-system-prompt-file` — named
+only inside `--bare`'s help text, proven by the "file not found" error — so the
+packet is written to a file named by the receiving session's id and handed over
+rather than typed, which is what stops it collapsing into `[Pasted text #N]`.
+Codex has no such flag; its `model_instructions_file` **replaces** the base
+instructions rather than appending, so it was deliberately not used and Codex
+keeps a typed packet, said so in the launch diagnostics. Antigravity has none.
+The support is a three-way value — append, absent with evidence, unchecked — and
+an unchecked agent is never reported as lacking one.
+
+Packet files outlive their launch on purpose: a restored pane replays its
+arguments, and deleting at shutdown would turn a restart into "file not found";
+the directory is swept only when it is written to.
+
+The source agent's own brief is asked for through `session_send` and
+`session_wait`, bounded at 45 s, rendered under *"In &lt;agent&gt;'s own words"*
+with the evidence rule applied to every line of it; not answering is said, and
+declining leaves the packet byte-identical. Quoted recaps have an owner and no
+editors, because an edited quotation is not evidence; the decision record and
+`## Don't do` may be added to under one's own name. The fork dialog says the fork
+is a new process and only the conversation crosses — agent-neutral, because a
+list of grants read off Claude Code would be a claim about Claude Code.
+
+### Checkpoints have a reachable UI, and the restore sentence is said
+
+`CheckpointsView` compiled but its wiring had rotted: it read a selection
+notifier nothing ever wrote, so mounted as-is it would have shown every
+session's checkpoints at once. It is now a side-panel surface scoped to the
+active pane's session the way the Plan surface is, with a Capture now and a
+per-path restore beside the whole-tree one; a closed panel costs **0** DAO reads
+and an open one **1**, re-read only on the revision the recorder and the tools
+already bump.
+
+**The dialog and the service share one function for their words**,
+`checkpointRestoreRefusal`, and the sentence a person needed is in it: *files
+only — the agent's conversation is not rewound; it still believes it made these
+edits, so tell it what you rolled back.* A test asserts identity between the
+thrown message and the on-screen text, not similarity. Found on the way and
+fixed: `RestoreOutcome.files` reported the whole tree for a per-path restore, to
+the panel and to the tool.
+
+**Deferred:** a label prompt on manual capture, per-hunk restore, and the view's
+own note that a checkpoint belongs beside the turn it came from.
+
+### One resolver for where a checkout's commands run
+
+The survey was the finding: **47 places** resolved an `ExecutionEnvironment`
+from an id, **17 of them in order to run a command**, with six different
+phrasings of one failure and none at all for the WSL and SSH cases, which threw
+out of `CommandRunnerFactory` after the site had committed to running. Those 17
+now go through `ExecutionEnvironmentResolver`, which answers with the
+environment or one of four worded refusals — `noCheckout`, `environmentUnknown`,
+`wslDistributionUnknown`, `sshUnavailable` — the last being exactly "this app
+cannot reach where the agent would run", which is what the unattended gate
+needs. The other 30 sites resolve for labels, path spelling or display and were
+left alone on purpose.
+
+### Devices: one task at a time, and a tap that looks first
+
+**The lock.** A claim ends two ways, both evaluated on the next request and never
+by a timer: the holder's session is over (`Session.isOver`, the same predicate
+that retires its MCP token), or the holder went quiet for `kDeviceClaimLapse`
+(2 min). `unknown` is not "over" — a blind spot is not a death. Acting claims;
+reading never does and is never blocked, so a refused agent can still look. The
+refusal names the holder, the session, the age of the claim and its last call.
+
+**The safety net.** `device_tap` reads the screen once before it acts — the same
+read `device_tap_element` already pays, so a vetted tap and an element tap both
+cost **6** adb calls and `verify: false` costs 2 — and refuses when the screen's
+*structure* moved since this app last read that device. The fingerprint is
+`resourceId`/`className`/`bounds`/rotation/foreground app and **excludes text**,
+because a clock or a streaming reply changes text on a screen that has not
+moved, while a scroll leaves every label identical and moves every rectangle.
+Two rules worth not re-deriving: **a match never weakens with age, a mismatch
+does** — beyond `kDeviceLookWindow` (5 min) a differing reading is a note rather
+than a refusal, because it says nothing about where these particular numbers
+came from; and **a refusal does not file the screen it just read**, or the
+identical retry would pass against a screen the caller never looked at. No prior
+read is a warning, never a refusal: an unknown is not evidence.
+
+**Untested on real hardware:** whether an OEM `uiautomator` dump is stable enough
+between idle reads. If not, fingerprint `interestingNodes` instead of `allNodes`.
+
+### Six tool-only capabilities gained surfaces
+
+Each over the *same* service its tool calls, never a second path: a Decisions
+side-panel surface, where a person can read what the handoff prompt will say and
+record one by hand under their own name (an empty record reads "Not recorded" in
+the packet's own words, never "nothing was decided"); a logcat strip under the
+device pane's live view, bounded at 2,000 lines with drops counted, where "not
+running", "attached and quiet" and "not started" are three sentences;
+install/launch/force-stop in the device pane through the device claim, where the
+window respects a claim and takes none; a browser console with evaluate,
+selector and text as three modes rather than one field and a guess, deliberately
+outside `BrowserCapability.evaluate` because that gate is about an agent acting
+invisibly; a viewport screenshot in the same strip; and a standalone New
+worktree on the Explorer heading, running the post-create setup.
+
+`side_panel_close_test` is the layout tripwire this found: a third labelled
+button in the browser pane's action row overflowed a 304 px panel by 108 px.
+
+### Run something when a worktree is created (v42)
+
+**The hook runs in the repository's own environment for all four kinds** —
+`CommandRunnerFactory.forEnvironment` maps every one, and a wiring test proves a
+WSL checkout's setup reaches a pane carrying its distribution and an SSH
+checkout's carries its host. The copy is intra-environment (`cp -a` through the
+runner; `dart:io` only where the host *is* that filesystem), because a worktree
+is created beside its checkout and a remote repository's files are reachable only
+as commands, never stat-ed. The worktree is created whether or not the setup
+succeeds; the copy is awaited, the command is not; **a missing exit code is never
+a healthy verdict**; and no pane available is a refusal rather than a background
+run. Nothing in the setting can ask for a symlink. Settings → Worktrees writes
+the setup and reads the verdict of its last run.
+
+### An agent's own plan, beside its pane
+
+Read from the transcript the app already parses. **Per CLI, measured:** Claude
+Code publishes `TodoWrite` as a full snapshot (`todos[].content/status`, 164
+calls in one session, sizes 1–15); Codex publishes `update_plan` as a full
+snapshot with **different keys — `plan[].step/status`, and `arguments` is a JSON
+string** — so Claude's shape reads Codex as nothing, silently, and a test pins
+that; Antigravity publishes **none** (4,451 steps across 21 conversations, no
+plan tool; `manage_task` describes background shell commands). An empty list is
+treated as "nothing new" rather than as an empty plan, because it cannot be told
+from a misread shape. **Known gap:** a plan is read only while its conversation
+is on screen.
+
+### The companion's delivery model — presence is not delivery
+
+**What was actually wrong:** a reconnecting phone re-fetched the *tail* and hoped.
+`transcript.get` with `after: 0` answered the last 300 messages, so any gap
+larger than one page was replaced by its end behind an "earlier messages are not
+loaded" notice; `after > 0` answered the whole remainder unbounded, which the
+transport dropped over `kMaxEnvelopeBytes`; and `transcript.appended` had the
+same hole with teeth — an oversized delta was rebuilt and refused on every poll,
+forever, silently, because the cursor moves only on a delivered frame. Now every
+page is bounded at both ends and carries `hasNewer`, and the phone walks until it
+reads false; with the walk stubbed, the reconnect test times out at 301 of 615
+turns.
+
+**Presence gated nothing**, because no presence frame exists on the wire. The one
+focus-shaped gate is the phone's own explicit `transcript.get`, which cannot go
+stale, and the invariant is now pinned rather than accidental.
+
+Tool output was bounded on **none** of the three paths except rehydration; one
+function, `boundedText`, 64 KiB in bytes walked back to a code point, serves all
+three. The reconnect floor was 250 ms — four dials a second on an idle phone —
+and `reconnect()` never reset the schedule, so a resume from the pocket was
+answered with sixteen seconds; now 1, 2, 4, 8, 16, 30 s, reset on success,
+visibility and explicit reconnect. The transport's backlog was bounded by frame
+count (256) and not bytes; now 4 MiB too, newest never dropped, drops logged by
+count.
+
+**Compatible both ways:** an old phone never sends `after > 0` and ignores
+`hasNewer`; a new phone reads an absent `hasNewer` as false, which is what an old
+host meant. Single writer / many readers was **deliberately not built** — every
+prompt is typed into one PTY, so last-writer-wins is already the physical truth,
+and a token would refuse a keystroke with no failure behind it.
+
+### Settings › Tools, and the three shipped skills
+
+The agent's tools *were* in Settings already — 94 bare chips under the bridge
+verdict, complete and unreadable. Now four bands by the kind of statement each
+makes (preferences, a measurement, a catalogue, a consent), every served tool
+listed by family with a summary compressed from its own schema description, and
+a gate that fails on a served tool with no line, a line with no tool, a summary
+over 80 characters, or a family with nothing under it. **Two hints are shown and
+two are not, on purpose:** read-only and no-undo are facts a person acts on;
+idempotent answers "is a retry safe", which a client decides with nobody
+watching and is true of 50 of 94 tools; open-world marks exactly the device,
+browser and Flutter families, so as a tag it would repeat the heading above it.
+
+`karmashala-instructions`, `-advisor` and `-committee` ship as skills — hyphens
+because `:` is the alternate-data-stream separator on Windows. **Where each CLI
+discovers a skill, read off the binaries:** Claude Code
+`~/.claude/skills/<name>/SKILL.md`; Codex `~/.codex/skills/<name>/SKILL.md`;
+Antigravity `~/.gemini/config/skills/<name>/SKILL.md` — **not under its store
+home** `.gemini/antigravity-cli`, so `AgentSkillSupport` is home-relative rather
+than store-relative. Fixed path, constant bytes, per agent that is actually
+there, removed only by the code that wrote it and by marker, and **nothing
+retired at shutdown**, because a skill has no volatile half and taking constant
+bytes out on quit to put identical ones back is the race that made hook entries
+constants. User level rather than project level, because most checkouts are
+worktrees the app made and a per-checkout install lands in the user's
+`git status`. **Unobserved:** Antigravity actually picking one up.
+
+### Also
+
+- **A session's row ends only when the agent says it did** — `SessionEnd` →
+  `completed` for Claude Code and Codex, `StopFailure` and Antigravity's
+  `ERROR`/`MAX_*` → `failed` — never from a pane exit. Codex can never say
+  `failed` (asserted), a terminal word is never overwritten, and where no CLI
+  can say, the Explorer reads "no ending was reported" instead of `running`.
+- **A Claude Code compaction summary is written as a `user` message.** On a real
+  2,793-row transcript, row 1,287 is a 17,795-character `user` row summarising
+  everything above it, and row 2,556 another — so the chat view drew both as
+  something the person typed. The boundary is recognised on `compactMetadata`
+  (since `agents_killed` is also a `type: system` line), everything before the
+  *last* boundary is replaced by one notice naming the count and the trigger, and
+  the index sees exactly what it saw before: length, order, roles and text
+  unchanged at 2,793 rows.
+- **Antigravity's Windows install holds no transcript** — one empty brain
+  directory beside a 177 KB protobuf — so the refusal stands on the primary
+  target, while WSL's 25 conversations read as evidence-carrying JSONL: one tool
+  call per record, answered by the very next line in 2,261 of 2,310.
+- A stopped merge can be aborted from the Changes pane, behind a confirm. The
+  button does not probe for a merge in progress — that would cost a process on a
+  poll — and `abortMerge` already answers exactly.
+- A diff is ordered by what a reviewer reads first, and the order **tiers and
+  never filters**: an unclassified path is first, then generated, then lockfiles,
+  then `build/`.
+- `inbox_list` returns the prompt an agent is blocked on.
+- The benchmark `tool/benchmark/agent_process_cost_bench.dart` refuses without a
+  root pid and never matches on a process name. Measured on the way:
+  `Get-Process -Id` exits 1 whenever any named pid has gone and still prints the
+  rest, so the exit code is not the verdict, and `/proc/<pid>/stat` splits at the
+  *last* parenthesis.
+
+---
+
+## 1.19.0 — 2026-09-08 (build 35)
+
+**A minor bump rather than a patch, because it carries a schema migration to v41
+and the conversation index behind it.** The release was cut with a version bump
+alone and no entry at the time; this is written from the release commit body and
+the 71 commits in the range.
+
+The build number moves with it, and that is the whole reason the version is
+passed in as `--dart-define=KARMASHALA_VERSION` rather than guessed: the
+installed build reports its version through `buildIdentity()`, and a build that
+shares a number with the one already on the machine makes that reading useless.
+
+### Search every conversation, not one (v41)
+
+Quick Open gained an eighth source — **what was said, not only what a thing is
+called** — over an FTS5 index fed by the triggers that already fire.
+
+**FTS5's availability had to be proved against the loaded library, not the
+build.** `sqlite3_flutter_libs` ships a **pre-compiled download** rather than
+building from its own defines, so the `SQLITE_ENABLE_FTS5` in
+`hook/description.dart` is not evidence about what the app opens. Measured
+instead: SQLite 3.53.2, `COMPILER=msvc-1944`, `ENABLE_FTS5` present, and a
+virtual table actually created, inserted into and `MATCH`ed. Both kept as
+`test/core/database/fts5_availability_test.dart`, so a dependency bump that
+dropped the module fails on the gate rather than inside a migration on a user's
+machine. **No `LIKE` fallback exists**, deliberately: a search that quietly
+degrades to a full-store scan is the cost the item was nearly refused over.
+
+**The shape that made it cheap.** `conversation_turns` as an ordinary table
+indexed by `session_id`, an *external-content* FTS5 index over `text` alone, and
+a per-conversation watermark in `conversation_index_state`. That split is the
+whole trick: re-indexing one conversation becomes an indexed delete — asserted
+with `EXPLAIN QUERY PLAN`, not assumed — where a plain FTS5 table would have
+needed a full-store scan. An idle app costs **zero**: `drain` returns before
+touching disk or the database. A trigger on an unchanged transcript costs 1
+SELECT and 1 stat with no file read; on a moved one, 1 parse and 5 statements
+for 300 turns. The one-off backfill against the owner's real store: 108
+conversations and 394 MB of transcripts became 4,919 turns, 447 statements and
+5.83 MB in 7.5 s, nearly all of it parsing; re-triggering all 108 with nothing
+changed costs 0 parses and 85 ms.
+
+**Visible turns only, and the exclusion is the feature.** Of 17,050 parsed rows
+on the real store, **12,131 — 71% — are tool rows and are not indexed**. Tool
+calls, tool output and thinking blocks are unsearchable so that searching a
+filename returns the messages that *discussed* it rather than every run that
+touched it, held by a gate that fails if `tool` is ever added to the set.
+
+**Query syntax is refused rather than escaped.** Every token is wrapped as an
+FTS5 string literal with internal quotes doubled, and only the last is a prefix,
+so `NEAR(`, `^start`, `((()))`, `-`, `:` and an unclosed quote are all just
+characters. There is no escaping scheme that makes user input safe as an
+*operator expression*, and a palette answering `fts5: syntax error near "("` to
+a half-typed query is worse than one that cannot express a boolean.
+
+**Deliberate limits, all of them open rather than hidden.** A live conversation's
+newest turns are not searchable until its next trigger. Index rows for a deleted
+session are never pruned; a hit no table can name is dropped at read time. 50
+results, unranked — `ORDER BY rank` is one clause away. The stored ordinal is
+unused, so there is no jump to the matching turn: a best-effort parse shifts it,
+which makes it a hint rather than a key. And **Antigravity is not searchable at
+all** — protobuf with an unpublished schema, which `readCliTranscript` already
+refuses by name.
+
+### A recording is a file a player opens, not a command you are told to run
+
+**The terminal side.** The tap sits on the bytes arriving from the process,
+upstream of the ingest tier on purpose: a cold pane's output never reaches
+`terminal.write` at all, so recording downstream of that would have produced a
+video that stopped the moment the user looked at another tab. The recording
+lives in a `NotifierProvider` rather than a `State` field — the `_liveSerial`
+lesson from 1.17.2, which a terminal pane has in its own form, since a tab or
+group change unmounts the pane. It is visible for as long as it runs and
+stoppable from where it is said, in a per-pane banner; deliberately no elapsed
+clock and no byte count, because one needs a ticker and the other rebuilds per
+chunk.
+
+**The render and the encode are different seams, and the seconds are in the
+second one.** A cast is cut into fixed-rate frames with any gap longer than two
+seconds collapsed to it, because a recording of real work is mostly waiting for
+a build. The render is `dart:ui` and has to run on the isolate that owns the
+engine, because `Picture.toImage` rasterises nowhere else. Measured on this
+machine, 80x24 over 74 frames: render 5.3 ms/frame at 960x540 and 13.5 ms at
+1920x1080; GIF encode 49.5 ms and 252 ms for the same frames, PNG 31.6 ms and
+161 ms — four to nineteen times the render. On the UI isolate a thirty-second
+Full HD export would freeze the app for a minute and a half, so
+`IsolateFrameSink` puts it on a worker and moves the frames as
+`TransferableTypedData`.
+
+**The OS writes the MP4.** `libmpv-2.dll` was the first candidate — 29.7 MB of it
+already ships for the device live view, and libmpv is built on FFmpeg — and it
+cannot: its FFmpeg is configured `--disable-encoders --disable-muxers` with
+nothing re-enabled, it re-exports only `mpv_*`, `FT_*` and `archive_*`, and it
+says so in its own voice. So Media Foundation, straight from Dart FFI:
+`mfplat.dll` and `mfreadwrite.dll` ship with Windows and the encoder is an OS
+transform, so this costs **zero added bytes**. FFI rather than a shim in the
+runner because a method channel only answers on the platform thread, and the
+encode has to stay behind the `FrameSink` seam on a worker isolate — verified
+across 40 frames, which is where COM would have minded the thread. Verified by
+opening the output: FFmpeg 6.0 reads it as h264 in mov/mp4, 1920x1080, 12 fps.
+
+**The device side needed no second capture.** This app does not run the scrcpy
+client — it pushes `scrcpy-server`, speaks the protocol itself, and therefore
+already holds the encoded H.264 elementary stream the live picture is made of.
+What it needed was a container, and `TsMuxer` was already here, written so
+libmpv could open the live view at all: pure Dart, already carrying scrcpy's
+per-frame timestamps and already restarting its own clock across a
+discontinuity. So a recording is the bytes the picture is already made of,
+written to a file — no re-encode and nothing extra on the handset.
+
+The banner sits above the picture and outside both platform branches, so it
+survives a pane switch, and it shows the destination path selectably, because
+the point of it is something to paste into a player. A pane switched away from
+and a device that has gone wear the same missing frame stream and get different
+sentences, so it never invites the user to wait for nothing.
+
+Four MCP tools — `terminal_record_start`/`stop` and `device_record_start`/`stop`
+— over the two controllers the menus already call, so an agent's recording is one
+the person beside it can see and stop. The format is per call and is resolved by
+*start*, so an impossible ask cannot leave the cast written and the caller with
+nothing. `device_record_start` with no live view says there are no frames to
+record instead of reporting a recording that is not running.
+
+**Named rather than fixed:** a remux leaves a one-frame offset. A sample's
+duration is the gap it closes, because the gap it opens is not known until the
+next frame arrives; MP4 accumulates durations, so the track sits one frame late —
+a fixed offset, not a growing drift — and the length is short by the last frame.
+Exactness would mean holding a frame of the live recording in memory for nothing
+anyone can see.
+
+### One connection to every running Flutter app
+
+Karmashala could pick an element in a web page and knew nothing about a running
+Flutter app — its own primary domain. It is a *registry*, because a desktop
+build, an Android build on the mirrored phone and a simulator build are all
+normal at once: each is its own row with its own connection, console and answer
+to "can this be hot reloaded".
+
+Verified against Flutter 3.47.2 / Dart 3.13.2 with a real `flutter run` rather
+than reasoned about, and three findings changed the design. **The reload service
+is `s1.reloadSources` on *our* connection, not `s0.`** — DDS numbers the
+registering client per connection, and guessing the prefix produced a request
+that was accepted and never answered, a hang rather than an error; the name is
+read off the `ServiceRegistered` event, which DDS replays to a new subscriber.
+`--vmservice-out-file` writes exactly `ws://host:port/token=/ws` while
+`flutter run` *prints* `http://host:port/token=/`; both are accepted and neither
+is stored. And `streamListen('ToolEvent')` is accepted, with the framework
+pushing a `navigate` event there on every inspector selection change.
+
+Five tools go with it, because the agent is the one holding the change and the
+intent, and the two questions it cannot answer from the repository are "did that
+compile into the running app" and "what did the app say when it did". Making it
+read a panel over the developer's shoulder is the version of this that does not
+work. `flutter_apps` is the registry, and an empty answer carries the exact
+`--vmservice-out-file` path rather than just the news; `flutter_attach` takes the
+address `flutter run` printed, for a run that had no flag, and is idempotent;
+`flutter_reload`'s reply says what a success does *not* prove, since the reload
+reached the VM and a widget that then failed to rebuild is on `flutter_logs`;
+`flutter_logs` is the debug console — stdout, stderr, `dart:developer` records and
+every caught exception, as prose rather than JSON, so nobody has to paste a stack
+trace; and `flutter_pick_widget` returns the widget plus its file, line and column.
+
+### The activity strip stopped hiding long calls, and background subagents
+
+`kOutstandingCallMaxAge` was thirty minutes, chosen against what the shipped CLIs
+were believed to produce, and **the belief was wrong on the owner's own machine**.
+Measured across that Claude Code store on 2026-09-08, the longest unanswered tool
+window is a `Bash` call at **514.8 minutes — seventeen times the ceiling** — with
+476.0, 298.9 and 273.7 minutes behind it. A ceiling above every real call cannot
+be chosen, because the age of a call is not evidence about whether it is running.
+The evidence that *is* evidence already exists and is already taken every 1.2 s:
+the `AgentActivityStatus` the badge, the tray and the notifications read.
+
+**Claude Code runs the `Agent` tool as background work**, so the parent's call is
+answered at once with `{"isAsync":true,"status":"async_launched"}` — 0.2 minutes
+typically, longest 1.5 across the owner's 518 calls — and the outcome arrives much
+later in a `<task-notification>`. The two runs on 2026-09-07 that took 76 and 80
+minutes were therefore never outstanding calls, and no rule about a call's age
+could have found either. Every record used to rebuild the ledger is one the CLI
+writes for its own reasons, and **the `system/compact_boundary` is the
+load-bearing one**: 95 of 311 background subagents in the owner's largest session
+never reported back at all, so "launched and unreported" alone would have drawn
+95 running agents on a session that had four. Measured against that store on
+2026-09-08 the ledger holds exactly the four that were really running, and
+nothing at all in four finished sessions. It costs no file — everything is in the
+one transcript the chat view already reads.
+
+The strip and the phone both show it now. Neither kind is marked as which:
+whether the CLI held the parent's tool call open or answered it with a stub is a
+fact about the CLI — a detail that already changed once — and not about the
+user's work. The distinction a reader needs is subagent versus tool, which the
+robot glyph and the collapsed count already draw.
+
+**Fixed while there: the subagent tool is called `Agent`, not `Task`.**
+`kSubagentToolName` had been `Task` since it was written, and counted over the
+owner's whole Claude Code store on 2026-09-08 there are 650 `Agent` calls and
+zero `Task` calls. Two things were silently dead as a result: a subagent never
+read as one in the activity strip, and a delegate's turns were never hung under
+the row that spawned it. Both names are kept, because an older CLI still writes
+`Task` and a store is read long after the binary that wrote it was replaced.
+
+### A recorded version becomes a dated reading (v40)
+
+`agent_installations.version` was a bare number: written once by the first scan,
+refreshable only by a manual "Detect agents". The app reported Claude Code
+2.1.252 for a binary answering 2.1.263, and nothing on screen could tell a
+current reading from a year-old one. **No refresh rate fixes that** — a bare
+number reads exactly like a fresh one however often it is written.
+
+So v40 records *when* the version was read. `version_read_at` is nullable and
+never backfilled from `created_at`, because an unknown reading time is not a
+reading time, so every pre-v40 row reads as "a number, read at an unknown time".
+`recordVersion` replaces `updateVersion` and stamps the time on **every**
+reading, including one that merely confirms the stored number. A stale version is
+re-read on the launch that already checks paths, rather than on a cadence.
+
+Settings renders the number through `describeVersionReading`: *"0.153.4 · read 5m
+ago"* when recent, *"2.1.252 · last read 2d ago, may be out of date"* past the
+freshness bound, and *"2.1.245 · read at an unknown time"* where there is no
+record — never "just now".
+
+### What a session changed
+
+Codex answers out of its own turns, Claude Code out of its own transcript, and
+Antigravity out of git, because its conversation payloads are protobuf in an
+unpublished schema and there is nothing else to read. The git fallback is the
+checkpoint chain, which is the only per-session baseline this app records —
+sessions are not isolated in worktrees, so a bare `git diff` can attribute
+nothing — and it costs no process and no git invocation, because it is already in
+the database. Its limit is the first link, measured against the commit the
+repository was on, and the caveat says so. There are **six outcomes rather than
+an empty list**, because "changed no files", "could not be read" and "keeps no
+record, so only git can answer" are three different sentences. A Files changed
+dialog hangs off the session row, and the companion learns what a session is
+running.
+
+### Fixed
+
+- **A message sent from chat reached the terminal and was not sent.** The
+  carriage return was already being written, so something downstream was eating
+  it. Measured 2026-09-08 against real ConPTYs, driving the app's own `Terminal`
+  into `flutter_pty`: Claude Code 2.1.263 and Antigravity `agy` submit on body +
+  CR, PowerShell and bash run it — and **Codex 0.153.4 leaves it in the composer
+  on both Windows and WSL**, submitting only on body + `0x05` + CR.
+- **Send follows the face that is already showing.** The owner: *"from todo and
+  notes it's going to chat window, but it should go to terminal if terminal is
+  active and chat if chat is active"*. 1.18.2's fix had made Send *reveal* the
+  conversation, which landed the text somewhere visible and took the user out of
+  the pane they were working in to do it. The group's face is now **read, never
+  written**: terminal showing, typed at the prompt and left there; chat showing,
+  queued for the composer with the face untouched; no live pane, queued, and the
+  report says it is waiting.
+- **The Send label names who, never where.** It is drawn without watching the
+  selection, deliberately, and `notes_view_cost_test.dart` guards exactly that —
+  a label that refuses to observe the state cannot name a destination that
+  depends on it. So it names the recipient and stops; the snackbar, which
+  resolves after the click, says where the text went.
+- **A quota says when it resets, not only how long.** The chip said "97% · 2h14m"
+  and the tooltip "resets in 2h14m", which answers how long and not when.
+  `toLocal()` is the whole correctness of the new formatter: the two services
+  hand back reset times in different zones — `DateTime.tryParse` on an ISO string
+  with a `Z` gives UTC, Codex's `reset_at` epoch seconds give local — and nothing
+  had noticed, because the only use was `difference(now)`, which compares
+  absolute instants either way. A weekday is prefixed when the reset is not
+  today, because a bare "11:55" three days out is a worse answer than none.
+- **The snippets palette offered nothing in an agent pane.** The owner has one
+  snippet, tagged `wsl`, and both panes he works in carry a `profile_id` of
+  `agent:claudeCode` and `agent:codex`; `terminalProfileFromId` resolves
+  `powerShell`, `commandPrompt`, `posix:` and `wsl:` — not `agent:` — so the
+  shell read as unknown, and an unknown shell is offered only untagged snippets.
+  His Claude Code pane *is* WSL, one field from the null it was producing, so the
+  launch is asked. Only the WSL case is inferred, because it is the only one the
+  launch states.
+- The browser stopped telling users to pass a flag Chrome now ignores, and raises
+  the page before a pick and the app when one lands.
+- A URL in a note's or a todo's body is clickable, and Ctrl+Shift+J walks to the
+  next agent waiting for you — `J` for jump, since `A`, `B`, `K` and `N` are the
+  side panel's own surface shortcuts, and Flutter sees the modifiers, so taking
+  Shift+J leaves a shell's `Ctrl+J` untouched.
+
+### Also
+
+The phone can attach a picture to a prompt, and **it knows what the desktop would
+take before anybody opens the picker**: the paperclip is simply absent for a
+session whose agent cannot be handed a file, for a host that was never asked, and
+for a pairing that was never granted the bit, so nobody picks a 4 MB photo over
+mobile data and learns afterwards. Progress is reported as slices the host has
+actually acknowledged — a 4 MB photo is thirty-two of them. A prompt carrying a
+file answers `offered` and the phone says *"Waiting in the desktop's message box
+— send it from there"*, not "sent", because a person at the desktop still has to
+press Enter.
+
+The five `flutter_*` tools an agent could not reach are served, and `BACKLOG.md`
+was split, with the closed half moved verbatim into `SETTLED.md`.
 
 ---
 

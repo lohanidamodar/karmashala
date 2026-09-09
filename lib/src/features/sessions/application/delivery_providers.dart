@@ -15,6 +15,7 @@ import '../../github/domain/pull_request_snapshot.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../repositories/application/repository_identity_recorder.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/delivery_action.dart';
 import '../domain/session_delivery.dart';
@@ -136,9 +137,15 @@ final repositoryOriginProvider = FutureProvider.autoDispose
     .family<RepositoryOrigin, Checkout>((ref, repository) async {
       // Read before the first await, like every other seam in this file.
       final changes = ref.read(changesServiceProvider);
+      final repositories = ref.read(repositoryDaoProvider);
       final probe = _probeOn(ref);
-      return await probe(() => changes.originFacts(repository.path)) ??
+      final facts =
+          await probe(() => changes.originFacts(repository.path)) ??
           RepositoryOrigin.none;
+      // The one place a repository's `origin` is learned, so the one place its
+      // canonical identity can be refreshed without a sweep of its own.
+      recordRepositoryIdentity(repositories, repository.path, facts);
+      return facts;
     });
 
 /// The **local** half of a checkout's delivery state: branch, upstream, dirty

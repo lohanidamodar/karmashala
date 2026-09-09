@@ -5,6 +5,7 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/paths/path_probe.dart';
 import '../../../core/paths/path_probe_provider.dart';
 import '../../../core/process/command_runner.dart';
+import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -79,41 +80,57 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final hostEnvironment = ref.read(hostEnvironmentProvider);
     final pathProbe = ref.read(pathProbeProvider);
 
+    // **Every environment is asked at once; every environment is written in
+    // order.** The probes are genuinely independent — a WSL distribution and a
+    // Mac over SSH have nothing to say to each other, and each already
+    // parallelises its own agents — but they were awaited one at a time, so the
+    // New Session dialog's "rescan agents" spinner held for the sum of them
+    // rather than the longest.
+    //
+    // The split is what makes it safe rather than merely faster. The *writes*
+    // stay sequential and in the environments' own order: `_reconcile` mints
+    // ids from one generator, `_readingsFor` re-reads the table each
+    // environment's own reconcile has just written, and the probe log is a
+    // database. Only the reaching-out is concurrent, so nothing about the
+    // recorded outcome depends on which environment answered first.
+    //
+    // The number of probes is unchanged — one per environment the sweep is
+    // scoped to, exactly as before; `agent_installations_controller_test.dart`
+    // counts them.
+    final asked = [
+      for (final environment in environments)
+        if (only == null ||
+            (only[environment.id]?.isNotEmpty ?? false))
+          (environment: environment, wanted: only?[environment.id]),
+    ];
+    final probes = await Future.wait([
+      for (final one in asked) _probe(
+        environment: one.environment,
+        wanted: one.wanted,
+        factory: factory,
+        ids: ids,
+        clock: clock,
+        registry: registry,
+        pathProbe: pathProbe,
+        hostEnvironment: hostEnvironment,
+      ),
+    ]);
+
     final reports = <EnvironmentScanReport>[];
-    for (final environment in environments) {
-      final wanted = only?[environment.id];
-      if (only != null && (wanted == null || wanted.isEmpty)) continue;
+    for (var i = 0; i < asked.length; i++) {
+      final environment = asked[i].environment;
+      final wanted = asked[i].wanted;
+      final probe = probes[i];
 
-      final EnvironmentProbe probe;
-      try {
-        probe = await AgentDiscoveryService(
-          runner: factory.forEnvironment(environment),
-          environment: environment,
-          ids: ids,
-          clock: clock,
-          registry: registry,
-          pathProbe: pathProbe,
-          hostEnvironment: hostEnvironment,
-        ).probeEnvironment(agentIds: wanted);
-      } on Object catch (e) {
-        // A runner that could not even be built — an SSH environment with no
-        // configured connection, say. Reported, never silently skipped.
+      if (probe == null || !probe.reachable) {
         reports.add(
           EnvironmentScanReport.unreachable(
             environmentId: environment.id,
             environmentName: environment.name,
-            error: '$e',
-          ),
-        );
-        continue;
-      }
-
-      if (!probe.reachable) {
-        reports.add(
-          EnvironmentScanReport.unreachable(
-            environmentId: environment.id,
-            environmentName: environment.name,
-            error: probe.error ?? 'Environment did not respond.',
+            error:
+                probe?.error ??
+                _failures.remove(environment.id) ??
+                'Environment did not respond.',
           ),
         );
         continue;
@@ -144,9 +161,48 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         }
       }
     }
+    _failures.clear();
 
     state = dao.getAll();
     return AgentDiscoveryReport(reports);
+  }
+
+  /// Why one environment could not even be asked, kept between [_sweep]'s two
+  /// halves.
+  ///
+  /// A runner that cannot be *built* — an SSH environment with no configured
+  /// connection — is a refusal with words on it, and those words are what the
+  /// row shows. Carried here rather than raised, because a `Future.wait` fails
+  /// on the first error and would throw away the answers of every environment
+  /// that was perfectly reachable.
+  final _failures = <String, String>{};
+
+  /// One environment, asked. `null` when the runner could not be built at all;
+  /// [_failures] then holds the reason.
+  Future<EnvironmentProbe?> _probe({
+    required ExecutionEnvironment environment,
+    required Set<String>? wanted,
+    required CommandRunnerFactory factory,
+    required IdGenerator ids,
+    required Clock clock,
+    required AgentRegistry registry,
+    required PathProbe pathProbe,
+    required Map<String, String> hostEnvironment,
+  }) async {
+    try {
+      return await AgentDiscoveryService(
+        runner: factory.forEnvironment(environment),
+        environment: environment,
+        ids: ids,
+        clock: clock,
+        registry: registry,
+        pathProbe: pathProbe,
+        hostEnvironment: hostEnvironment,
+      ).probeEnvironment(agentIds: wanted);
+    } on Object catch (e) {
+      _failures[environment.id] = '$e';
+      return null;
+    }
   }
 
   /// Brings the stored installations for one environment into line with what

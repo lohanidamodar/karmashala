@@ -1,6 +1,7 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../explorer/application/checkout.dart';
 import '../domain/repository.dart';
 
 /// Data-access for [Repository] rows. Hand-written SQL, no codegen.
@@ -12,8 +13,8 @@ class RepositoryDao {
   void insert(Repository repository) {
     _db.execute(
       'INSERT INTO repositories '
-      '(id, project_id, name, environment_id, path, created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?);',
+      '(id, project_id, name, environment_id, path, created_at, canonical_id) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?);',
       [
         repository.id,
         repository.projectId,
@@ -21,6 +22,7 @@ class RepositoryDao {
         repository.path.environmentId,
         repository.path.path,
         isoFromDate(repository.createdAt),
+        repository.canonicalId,
       ],
     );
   }
@@ -36,6 +38,40 @@ class RepositoryDao {
         repository.id,
       ],
     );
+  }
+
+  /// Records what repository the row [id] is a checkout of, or clears it.
+  ///
+  /// Its own statement rather than a field of [update], which is the rescan's
+  /// write and knows only about names and paths. This one is written from a
+  /// reading of `origin` and must not be undone by a sweep that never looked at
+  /// one — the same separation `AgentInstallationDao.updatePath` keeps for the
+  /// same reason.
+  void updateCanonicalId(String id, String? canonicalId) {
+    _db.execute('UPDATE repositories SET canonical_id = ? WHERE id = ?;', [
+      canonicalId,
+      id,
+    ]);
+  }
+
+  /// Every row whose working tree is [path], compared the way the filesystem
+  /// does rather than the way a string does.
+  ///
+  /// Plural because it can be: the table has no uniqueness on a location, and
+  /// two rows recorded from two spellings of one directory are exactly what
+  /// [samePath] exists to reconcile. Filtered in Dart after an indexed read of
+  /// the environment, because case folding and separator folding are decisions
+  /// SQL cannot make — `/home/A` and `/home/a` are two directories on POSIX and
+  /// one on Windows.
+  List<Repository> getByLocation(EnvironmentPath path) {
+    final rows = _db.query(
+      'SELECT * FROM repositories WHERE environment_id = ?;',
+      [path.environmentId],
+    );
+    return [
+      for (final row in rows.map(_fromRow))
+        if (samePath(row.path.path, path.path)) row,
+    ];
   }
 
   Repository? getById(String id) {
@@ -101,5 +137,6 @@ class RepositoryDao {
       path: row['path']! as String,
     ),
     createdAt: dateFromIso(row['created_at']),
+    canonicalId: row['canonical_id'] as String?,
   );
 }

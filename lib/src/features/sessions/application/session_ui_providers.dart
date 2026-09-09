@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/domain/agent_ids.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/data/antigravity_transcript.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../git/application/changes_providers.dart';
@@ -71,11 +72,23 @@ final selectedSessionIdProvider =
 final importedTranscriptProvider = StreamProvider.autoDispose
     .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
       final session = ref.read(importedSessionDaoProvider).getById(sessionId);
-      if (session == null || session.cli == AgentIds.antigravity) {
+      if (session == null) {
         yield const [];
         return;
       }
-      final file = File(session.filePath);
+      // Antigravity's session file is a database this app cannot read, and it
+      // used to be refused here by name. A plain JSONL transcript sits
+      // elsewhere in the same store on some installs; resolve it **once**, so
+      // the poll below stats the file it is actually going to read, and where
+      // the store keeps none the refusal stands exactly as it did.
+      final path = session.cli == AgentIds.antigravity
+          ? antigravityTranscriptPathFor(session.filePath)
+          : session.filePath;
+      if (path == null) {
+        yield const [];
+        return;
+      }
+      final file = File(path);
       DateTime? lastModified;
       var firstRead = true;
       while (true) {
@@ -97,7 +110,7 @@ final importedTranscriptProvider = StreamProvider.autoDispose
         if (firstRead || modified != lastModified) {
           firstRead = false;
           lastModified = modified;
-          yield await readCliTranscript(session.filePath, session.cli);
+          yield await readCliTranscript(path, session.cli);
         }
         await Future<void>.delayed(const Duration(seconds: 2));
       }

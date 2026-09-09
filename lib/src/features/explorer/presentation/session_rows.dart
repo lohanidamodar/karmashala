@@ -160,7 +160,9 @@ class NativeSessionRow extends ConsumerWidget {
         agentId == null
             ? 'Agent'
             : AgentRegistry.builtIn.displayNameFor(agentId),
-        session.status.name,
+        // Not `status.name`. A row claiming to be live with nothing of ours
+        // running it says so in words instead — see `SessionStatus.labelWhen`.
+        session.status.labelWhen(hostedLive: whereabouts.hostedLive),
       ].join('  ·  '),
       // Two different things, deliberately both shown: the badge is what the
       // agent is doing *now* (from a hook, its transcript, or its screen) and

@@ -598,6 +598,63 @@ void main() {
     });
   });
 
+  group('the payload bound', () {
+    File posixScript() => File(p.join(home.path, '$agentHookMarker.sh'));
+
+    Future<void> installFor(EnvironmentKind environment) => installer.install(
+      descriptor: claude,
+      storeHome: home.path,
+      endpoint: endpoint,
+      environment: environment,
+    );
+
+    test('both shells stop at the number the receiver stops at', () async {
+      await installFor(EnvironmentKind.localPosix);
+      final posix = posixScript().readAsStringSync();
+      // The spool branch, where `cat` used to hand over the whole of stdin,
+      // and the HTTP branch, where curl did.
+      expect(
+        'head -c $kAgentHookPayloadLimitBytes'.allMatches(posix).length,
+        2,
+      );
+
+      await installFor(EnvironmentKind.windowsNative);
+      final windows = windowsScript().readAsStringSync();
+      // `cmd` has no `head -c`, so it measures the spilled body instead — but
+      // against the same number.
+      expect(windows, contains('LEQ $kAgentHookPayloadLimitBytes'));
+      expect(windows, contains('curl -s -T - "file:///!KS_BODYURL!"'));
+      expect(windows, isNot(contains('--data-binary @- ')));
+    });
+
+    test('a script from an older build is replaced, and an identical one is '
+        'left alone', () async {
+      // The scripts are constants, so "is this already installed?" is a byte
+      // comparison — which is what makes a change to them a re-install rather
+      // than a version number somebody has to remember to bump. The bound
+      // above is the first change to them since they were written, and this is
+      // the property it depends on.
+      windowsScript().writeAsStringSync(
+        '@echo off\r\nrem an older build, with no bound\r\nexit /b 0\r\n',
+      );
+
+      await installFor(EnvironmentKind.windowsNative);
+      final installed = windowsScript().readAsStringSync();
+      expect(installed, isNot(contains('an older build')));
+      expect(installed, contains('LEQ $kAgentHookPayloadLimitBytes'));
+
+      // And the second install writes nothing at all: same bytes, and the
+      // file's own timestamp is untouched.
+      windowsScript().setLastModifiedSync(DateTime.utc(2020, 1, 2, 3, 4, 5));
+      // Read back rather than asserted against what was set: the filesystem
+      // answers in local time and the point is only that nothing moved it.
+      final untouched = windowsScript().lastModifiedSync();
+      await installFor(EnvironmentKind.windowsNative);
+      expect(windowsScript().readAsStringSync(), installed);
+      expect(windowsScript().lastModifiedSync(), untouched);
+    });
+  });
+
   test('a hook that cannot deliver costs the agent nothing', () async {
     // The owner watched `curl: (52) Empty reply from server` print into a live
     // Claude session, and the shell exit non-zero, because the app happened
