@@ -598,6 +598,68 @@ name a line, and says so instead of showing nothing.
 ''',
   ),
   McpGuide(
+    topic: 'app-projects',
+    summary:
+        'What a checkout is, what its own toolchain builds, and why building '
+        'stops at a path and an id rather than reaching the phone itself.',
+    extraTools: <String>['project_build'],
+    body: '''
+**`project_build` answers what a checkout *is* before it builds anything.**
+
+`detect` reads a handful of files in the checkout's own environment and names
+the kind — Flutter, native Android, native iOS, React Native — with the lines
+that said so. It costs a few reads and no process, and it runs when you ask.
+A kind Karmashala can only *spot* says exactly that: there is no build command
+for it here because nobody has run its toolchain from this app, and a guess
+would be worse than the admission.
+
+**It builds and it stops.** The reply carries the artifact's path and the
+application id, and the two next calls are `device_install_app` with that path
+and `device_launch_app` with that id. There is no install or launch in this
+tool. That is not an omission — the fourteen `device_*` tools are `adb`,
+`simctl` and WebDriverAgent and work the same for every kind, so a second route
+onto a phone would be a worse copy of one that already exists. See
+`instructions(topic: "devices")` for what those take, and for the claim that
+stops two sessions driving one phone.
+
+**The application id comes from the build's own record, not from our parse.**
+The Android Gradle Plugin writes `output-metadata.json` beside the APK it just
+produced, carrying both the `applicationId` and the real `outputFile` — AGP
+names an APK after the module's archives base name, so the file is *read*
+rather than assumed. Before there is a build there is no such file, and the id
+read out of the module's build script is a literal only: a computed
+`applicationId` reads as unknown rather than as a guess.
+
+**A build overwrites the artifact that was there.** There is no undo for the
+previous binary, and if you install before checking `status` you may install
+the old one — `status` says whether the file is there and how the id was read.
+Building the same tree twice is safe, and so is retrying a build that failed.
+
+**Native Android builds with the wrapper in the project, never a gradle on
+PATH.** The wrapper is how a project pins the Gradle it was written for;
+building with another one builds something else. A project with no `gradlew`
+is refused in words rather than falling back.
+
+**An `android/` directory inside a Flutter checkout is not a native Android
+project.** It carries every native marker there is — `com.android.application`,
+an `applicationId`, no pubspec of its own — and it is the Android half of the
+app one directory up. Karmashala refuses it by name and points at the Flutter
+project instead; building it directly would build somebody else's app behind
+their back.
+
+**iOS and React Native are detected and nothing more, on purpose.** Building
+for iOS needs a Mac and nothing in this repository's CI has one, so the whole
+spec is written down and every field of it says unchecked; there is no button
+nobody ran. React Native waits on there being a React Native project to
+measure against. Both refuse in one sentence naming why.
+
+**A Flutter checkout goes through this tool too.** `project_build` produces its
+APK; `flutter_run` is the *lifecycle* — `pubGet`, launching on a device with
+the VM service attached, `analyze` and `test`. They are different questions and
+neither is a wrapper around the other.
+''',
+  ),
+  McpGuide(
     topic: 'records',
     summary:
         'Todos, notes, the inbox and the decision record: what is written, '

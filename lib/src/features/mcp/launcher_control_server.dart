@@ -27,6 +27,7 @@ import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
 import '../flutter_apps/application/flutter_app_tools.dart';
+import '../app_projects/application/project_build_tools.dart';
 import '../flutter_apps/application/flutter_run_tools.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
@@ -1314,6 +1315,12 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // What a checkout *is*, and the artifact its own toolchain builds — for
+      // every kind, Flutter included. It stops at the artifact path and the
+      // application id on purpose: installing and launching them is the
+      // `device_*` family above, which is framework-agnostic already.
+      case final String name when ProjectBuildTools.handles(name):
+        return ProjectBuildTools(_container).call(name, args);
       // Verification runs record what the browser and device tools above do,
       // so they share those same services rather than driving anything of their
       // own. The artifact root is resolved here because it is the first thing
@@ -1664,6 +1671,7 @@ class LauncherControlServer implements SessionMcp {
     ...browserToolSchemas,
     ...flutterAppToolSchemas,
     ...flutterRunToolSchemas,
+    ...projectBuildToolSchemas,
     ...verificationToolSchemas,
   ];
 
