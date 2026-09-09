@@ -64,6 +64,10 @@ const _kTerminalStepBudget = Duration(milliseconds: 1500);
 /// close per pooled connection, and one agent child process stop per active run.
 const _kContainerStepBudget = Duration(milliseconds: 250);
 
+/// What writing the queued log lines to disk gets, and it is deliberately
+/// **not** part of [kShutdownBudget] — see [AppLifecycle.flushLog].
+const kLogFlushBudget = Duration(seconds: 1);
+
 /// Every step's slice, in order — the arithmetic behind [kShutdownBudget],
 /// written down so a change to one of them cannot silently widen the deadline.
 const kShutdownStepBudgets = <String, Duration>{
@@ -758,14 +762,29 @@ class AppLifecycle {
     watch.stop();
     lastShutdownDuration = watch.elapsed;
     _logger.info('lifecycle: shutdown in ${watch.elapsedMilliseconds} ms.');
-    // Last, so the line above makes the file: the log sink batches, and a quit
-    // that loses its own last 400 ms is a quit whose failures are invisible.
-    await _step(
-      'log flush',
-      watch,
-      () => Diagnostics.instance.file?.flush() ?? Future<void>.value(),
-      cap: const Duration(seconds: 1),
-    );
+    await flushLog();
+  }
+
+  /// Puts what has been logged on disk, **outside [kShutdownBudget]**.
+  ///
+  /// It used to be a step like any other, and that was the bug: `_step` bounds
+  /// every action by what is left of the shared deadline, so a shutdown that
+  /// spent its budget skipped exactly the flush that would have recorded it.
+  /// The soak counted the result — 20 quits, 8 `shutdown in N ms` lines — and
+  /// the twelve missing ones are the twelve worth reading. A quit whose own
+  /// account is the first casualty of the quit going wrong is a quit nobody
+  /// can debug.
+  ///
+  /// Called again by `SystemIntegrationService._quit` immediately before the
+  /// process ends, because the window destroy logs after this returns. Two
+  /// flushes cost one empty queue check; a missing one costs the evidence.
+  Future<void> flushLog() async {
+    try {
+      await Diagnostics.instance.flushFile().timeout(kLogFlushBudget);
+    } on Object {
+      // A sink that cannot be written must not hold the app open. Nothing is
+      // logged about it: there is nowhere left for that line to go.
+    }
   }
 
   /// Starts the teardowns that container disposal would otherwise fire and
