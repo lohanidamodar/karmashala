@@ -155,6 +155,67 @@ void main() {
       expect(treeKills, 0);
     });
 
+    test('a tree kill that never returns does not hold the quit open', () async {
+      // The app soak's other hang shape, and the reason the wait is bounded at
+      // all. `AppLifecycle._step` bounds the *step*, not the work, so a reap
+      // still waiting on `taskkill` after its step was abandoned is work
+      // outliving the shutdown that owns it — and `_quit` only reaches
+      // `exit(0)` once every teardown it started has come back.
+      //
+      // Counted, not timed: what is asserted is that this completes at all and
+      // that the direct kill still happened, on a tree kill that never will.
+      final signals = <ProcessSignal>[];
+
+      await shutdownProcess(
+        kill: (signal) {
+          signals.add(signal);
+          return true;
+        },
+        exitCode: Completer<int>().future,
+        pid: 11,
+        supportsGracefulSignal: false,
+        killTree: (_) => Completer<void>().future,
+        treeKillBound: _fast,
+      );
+
+      expect(signals, [ProcessSignal.sigterm]);
+    });
+
+    test('the wait ends when the pane does, not when taskkill exits', () async {
+      // The pane's own exit is the tree kill having worked, and it arrives
+      // well before `taskkill.exe` finishes starting up, enumerating and
+      // leaving: 1039-1778 ms measured for the whole call against 196-214 ms
+      // for `taskkill /?`. Waiting for the binary rather than for the event put
+      // most of a quit on it.
+      final exit = Completer<int>();
+      final signals = <ProcessSignal>[];
+
+      final done = shutdownProcess(
+        kill: (signal) {
+          signals.add(signal);
+          return true;
+        },
+        exitCode: exit.future,
+        pid: 12,
+        supportsGracefulSignal: false,
+        // Still running, as it is for most of its life.
+        killTree: (_) => Completer<void>().future,
+        treeKillBound: const Duration(days: 1),
+      );
+
+      exit.complete(0);
+      await done;
+
+      expect(signals, [ProcessSignal.sigterm]);
+    });
+
+    test('the bound is the shutdown step that owns the reap', () {
+      // Pinned here rather than in the lifecycle's own budget test as well,
+      // because this is the file that decides it: a bound above the step's
+      // slice would put the reap back outside the shutdown it belongs to.
+      expect(kProcessTreeKillBound, const Duration(milliseconds: 2500));
+    });
+
     test('a tree kill that fails does not stop the direct kill', () async {
       final signals = <ProcessSignal>[];
       await shutdownProcess(

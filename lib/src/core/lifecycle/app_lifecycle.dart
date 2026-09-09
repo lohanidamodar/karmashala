@@ -40,7 +40,7 @@ import '../logging/diagnostics.dart';
 /// took the handshake deletion with it — the single step this owner exists for.
 /// Each step gets its own slice instead, so a hang costs that step and nothing
 /// else. [kShutdownStepBudgets] is that sum, itemised.
-const kShutdownBudget = Duration(milliseconds: 2550);
+const kShutdownBudget = Duration(milliseconds: 3550);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -57,9 +57,21 @@ const _kHookStepBudget = Duration(milliseconds: 150);
 /// `killWindowsProcessTree`) — an external process each, run concurrently — and
 /// the cost of cutting it short is the thing it exists to prevent: a dev server
 /// still holding a port, or a build still holding a file lock, after the app
-/// has gone. It is a ceiling, not a wait: the reaps normally land in tens of
-/// milliseconds.
-const _kTerminalStepBudget = Duration(milliseconds: 1500);
+/// has gone.
+///
+/// **1500 ms was below the measurement, which is why it was abandoned on
+/// nearly every quit.** It was written as "a ceiling, not a wait — the reaps
+/// normally land in tens of milliseconds", and the 2026-09-09 soak said
+/// otherwise: with a *single* pane to reap the step hit its cap on 18 of 20
+/// cycles, and a probe around the call put 1284-1934 ms of it on `taskkill.exe`
+/// alone. On the same machine `taskkill /PID 999999`, killing nothing, took
+/// 812-983 ms. So the number is the cost of starting one Windows binary, the
+/// reap cannot be made cheaper from Dart, and a cap under it meant the kill
+/// this step exists for was abandoned rather than waited for — the orphaned
+/// dev server, every quit. 2500 ms covers the measured range with headroom, and
+/// `killWindowsProcessTree` carries the same bound so nothing outlives the step
+/// that owns it.
+const _kTerminalStepBudget = Duration(milliseconds: 2500);
 
 /// What the teardowns that disposing the container *starts* get: one SSH socket
 /// close per pooled connection, and one agent child process stop per active run.

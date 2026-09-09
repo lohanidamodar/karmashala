@@ -647,8 +647,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
       // will not close.
       _logger.warning('system: shutdown before quit failed.', error, stack);
     }
+    // Bracketed, and the two lines are the whole diagnosis for a quit that
+    // never finishes: on stdout they are unbuffered, so `destroying the
+    // window` with no `window destroyed` after it says the isolate stopped
+    // *here*, and neither line says it stopped earlier.
+    _logger.info('system: shutdown done; destroying the window.');
     try {
       await _native.window.setPreventCloseAndDestroy();
+      _logger.info('system: window destroyed.');
     } on Object catch (error) {
       _logger.warning('system: window destroy failed reason=$error');
     }

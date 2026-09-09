@@ -60,7 +60,47 @@
 # line the lifecycle logs itself (`lifecycle: shutdown in N ms.`) rather than
 # measured from outside, so it is the app's own accounting.
 #
-# ## Last recorded run — 2026-09-09, 1.19.0+35 at 1384fdce
+# ## What a cycle keeps
+#
+# Each cycle's stdout and stderr go to `build\app-soak\cycles\cycle-NN.*.log`.
+# Two things live there and nowhere else. The first is the Dart VM service URI
+# a debug build prints on its first line, which `Save-Stack` needs. The second
+# is the app's own log **unbuffered** — `Diagnostics` echoes every record to
+# stdout as it happens, while the file sink batches on a 400 ms timer — so a
+# cycle whose app stopped mid-quit still has its last line on disk. That is how
+# the 2026-09-09 hangs were read: the stack said only that the main isolate
+# would not answer, and the stdout said which line it had reached.
+#
+# ## Last recorded run — 2026-09-09, 1.19.0+35 at 6bbe0f9b, after the fixes
+#
+# 20 cycles from the `fix/quit-path` worktree, with the installed app and five
+# sibling agents live on the same machine. **Green, and the numbers below are
+# the same measurements the run before them failed on.**
+#
+#   cycles                 20 launched, 20 came up, 20 quit on the close message
+#   launch to handshake    6641-9291 ms, mean 7749 — a debug build, JIT, under
+#                          five agents' test runs
+#   quit, wall clock       2521-4629 ms
+#   quit, as logged        1610-3747 ms, median 2207 — and it is now *nearly all
+#                          one `taskkill.exe`*: 1467 ms of the fastest cycle's
+#                          1610 was the pane reap, with 82 ms before it and
+#                          73 ms after
+#   files left in `data`   0 besides `karmashala.sqlite` and the log — no
+#                          handshake, no socket node, no `mcp` directory, and no
+#                          `-wal`/`-shm`, which a `close()` now removes
+#   processes left behind  0 of 20
+#   scratch data           0.67 -> 0.71 MB over 20 cycles
+#
+# The quit is 155 ms above the run before it *because it now does the work that
+# run abandoned*: 19 of 20 cycles complete the pane reap, against 0 of 20
+# before. `Process.run('taskkill.exe', ['/PID', …, '/T', '/F'])` was measured
+# through the app's own API at 1039-1778 ms on this machine, against 196-214 ms
+# for `taskkill /?` and 134-160 ms for `cmd /c exit` — so ~1 s of every quit is
+# `taskkill` walking the process table, and nothing above the OS can make that
+# cheaper. The step's slice is 2500 ms because that is the measurement; 1500 ms
+# was under it, which is why the kill was abandoned rather than waited for.
+#
+# ## The run this exists for — 2026-09-09, 1.19.0+35 at 1384fdce
 #
 # 20 cycles from a worktree, with the installed app and five sibling agents live
 # on the same machine. **It is not green, and the numbers are why it exists.**
@@ -97,7 +137,24 @@
 # `karmashala.sqlite-wal` and `-shm` are left by all 20 and are counted here,
 # but they are not in the list above: the database is closed by `exit(0)` rather
 # than by a `close()`, so SQLite has no chance to remove them and the next
-# launch recovers from them. Worth knowing, not worth fixing here.
+# launch recovers from them.
+#
+# **What each of them turned out to be**, all five fixed in the run above. The
+# handshake: `AppLifecycle.startControlServer` retained the server only once
+# `start()` returned, and the handshake is published part-way through it, so a
+# quit in that window found step 3 with nothing to stop — no skip, no timeout,
+# no failure to log. The missing `shutdown in N ms` lines: the flush was a
+# shutdown step, bounded by the same budget it was reporting on, so the quits
+# that overran lost their own record. The terminal cap: one `taskkill.exe`,
+# measured at 1039-1778 ms against 196-214 ms for `taskkill /?`, under a
+# 1500 ms slice. And the two hangs: releasing a pseudoconsole is a synchronous
+# `ClosePseudoConsole`, and on 1 cycle in 10 it never returns — which takes the
+# isolate's timers with it, so no bound in Dart could ever have fired. Three
+# hangs were caught with a probe in, and all three end the same way:
+#
+#   PROBE taskkill done          15:10:58.953
+#   PROBE killed, releasing pty  15:10:58.957
+#   (nothing, for the remaining 60 s)
 #
 # The isolation held, and was measured rather than assumed. Every cycle logged
 # `wsl.exe --list exited 1; no WSL distributions added.` and
@@ -130,6 +187,9 @@ if (-not $DataDir) { $DataDir = Join-Path $scratch 'data' }
 $data = Get-FullPath $DataDir
 $fakeHome = Get-FullPath (Join-Path $scratch 'home')
 $stubBin = Get-FullPath (Join-Path $scratch 'bin')
+# Per-cycle stdout, stderr and any stack taken from a cycle that would not quit.
+$capture = Get-FullPath (Join-Path $scratch 'cycles')
+$dart = Join-Path $env:USERPROFILE 'flutter\bin\cache\dart-sdk\bin\dart.exe'
 $installedData = Get-FullPath (Join-Path $env:APPDATA 'com.popupbits\karmashala')
 
 # The one refusal that is not about tidiness. Everything this soak does to a
@@ -154,7 +214,7 @@ if (-not $SkipBuild) {
 }
 if (-not (Test-Path $exe)) { throw "No debug binary at $exe. Run without -SkipBuild." }
 
-New-Item -ItemType Directory -Force -Path $data, $fakeHome, $stubBin | Out-Null
+New-Item -ItemType Directory -Force -Path $data, $fakeHome, $stubBin, $capture | Out-Null
 foreach ($storeHome in @('.claude', '.codex', '.gemini\antigravity-cli', '.gemini\config')) {
   New-Item -ItemType Directory -Force -Path (Join-Path $fakeHome $storeHome) | Out-Null
 }
@@ -177,6 +237,31 @@ function Get-SoakProcess {
   Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -and $_.CommandLine -match $mine }
 }
+# The Dart stack of an app that ignored the close message, before it is stopped.
+#
+# 2 of 20 cycles did that on 2026-09-09 and nothing in the log told them from
+# the 18 that quit, so there was nothing to fix. A debug build hosts the VM
+# service and prints its URI on stdout; `getStack` walks the mutator even when
+# it is blocked in a native call, which is exactly the case a Dart timeout
+# cannot fire on. Never fatal: a hang with no stack is still a failed cycle,
+# and this must not turn one into a broken run.
+function Save-Stack([int]$Cycle, [string]$StdoutFile) {
+  try {
+    $line = Select-String -Path $StdoutFile -Pattern 'listening on (http://\S+)' `
+      -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $line) {
+      Write-Host "  cycle $Cycle hung, and its stdout carries no VM service URI."
+      return
+    }
+    $ws = ($line.Matches[0].Groups[1].Value -replace '^http', 'ws') + 'ws'
+    $to = Join-Path $capture ('cycle-{0:d2}.stack.txt' -f $Cycle)
+    & $dart (Join-Path $root 'tool\vm_stack.dart') $ws $to
+    Write-Host "  cycle $Cycle hung; stack in $to"
+  } catch {
+    Write-Host "  cycle $Cycle hung, and the stack could not be taken: $_"
+  }
+}
+
 function Measure-Shutdowns {
   if (-not (Test-Path $logFile)) { return @() }
   return @(Select-String -Path $logFile -Pattern 'shutdown in (\d+) ms' -ErrorAction SilentlyContinue)
@@ -206,7 +291,18 @@ try {
     $shutdownsBefore = (Measure-Shutdowns).Count
 
     $launched = Get-Date
-    $proc = Start-Process -FilePath $exe -WorkingDirectory $stubBin -PassThru
+    # Redirected so the cycle keeps the Dart VM service URI the debug build
+    # prints on its first line. It is the only way into an app that has stopped
+    # answering, and a hang is over by the time anyone reads the summary.
+    $cycleOut = Join-Path $capture ('cycle-{0:d2}.out.log' -f $i)
+    $cycleErr = Join-Path $capture ('cycle-{0:d2}.err.log' -f $i)
+    $proc = Start-Process -FilePath $exe -WorkingDirectory $stubBin -PassThru `
+      -RedirectStandardOutput $cycleOut -RedirectStandardError $cycleErr
+    # Touching `Handle` caches it, and that is the only thing that keeps
+    # `ExitCode` readable: PowerShell 5.1 returns a process object whose exit
+    # code is unavailable whenever the launch redirected a stream. Measured
+    # here — plain launch `[3]`, redirected `[]`, redirected with this `[3]`.
+    $null = $proc.Handle
     $ready = $false
     $readyBy = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
     while ((Get-Date) -lt $readyBy) {
@@ -237,8 +333,10 @@ try {
     $quitMs = [int]((Get-Date) - $quitAsked).TotalMilliseconds
 
     # Only ever this build's own executable, only after it refused a close it
-    # was asked for, and the cycle is a failure either way.
+    # was asked for, and the cycle is a failure either way. The stack comes
+    # first: stopping the process is what makes the question unanswerable.
     if (-not $proc.HasExited) {
+      Save-Stack -Cycle $i -StdoutFile $cycleOut
       if ($proc.Path -eq $exe) { Stop-Process -Id $proc.Id -Force }
       $exited = $false
     }
