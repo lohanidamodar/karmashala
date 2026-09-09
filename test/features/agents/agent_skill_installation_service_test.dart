@@ -233,8 +233,49 @@ void main() {
       AgentSkillInstallationReport(results).unknownByAgent.keys,
       ['claudeCode'],
     );
+
+    // **And the work stopped with the wait.** The bound ends the wait; a Dart
+    // future cannot be cancelled, so without `SkillSweepDeadline` the install
+    // would go on creating directories under a home this row has already
+    // reported as unknown — in a test, one whose `tearDown` is about to walk
+    // it. Counted across two drained event queues, never waited out.
+    final settled = _filesUnder(home);
+    await pumpEventQueue();
+    await pumpEventQueue();
+    expect(
+      _filesUnder(home),
+      settled,
+      reason: 'an abandoned sweep wrote after it was given up on',
+    );
+  });
+
+  test('shutdown gives up on a sweep in flight', () async {
+    Directory(claudeStore()).createSync(recursive: true);
+    final container = containerWith(localStore());
+    final service = serviceIn(container);
+
+    // Nothing has been swept, so there is nothing to give up on and this must
+    // still be safe to call — shutdown runs it unconditionally.
+    service.abandon();
+
+    await service.sweep();
+    final settled = _filesUnder(home);
+    service.abandon();
+    await pumpEventQueue();
+
+    expect(_filesUnder(home), settled);
   });
 }
 
 /// A `Ref` from inside the container, which is what the service takes.
 final _refProvider = Provider<Ref>((ref) => ref);
+
+/// Every file under [root], relative and sorted — a count of what a sweep put
+/// on disk, so "it wrote nothing more" is a comparison rather than a wait.
+List<String> _filesUnder(Directory root) =>
+    root
+        .listSync(recursive: true, followLinks: false)
+        .whereType<File>()
+        .map((f) => p.relative(f.path, from: root.path).replaceAll(r'\', '/'))
+        .toList()
+      ..sort();

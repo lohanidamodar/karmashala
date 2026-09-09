@@ -64,10 +64,15 @@ class AgentSkillInstaller {
     required AgentDescriptor descriptor,
     required String storeHome,
     required List<KarmashalaSkill> skills,
+    SkillSweepDeadline? deadline,
   }) async {
     final root = rootFor(descriptor, storeHome);
     if (root == null || skills.isEmpty) return false;
     for (final skill in skills) {
+      // Checked before each one rather than once at the top: a sweep is given
+      // up on *while* it runs, and the skill after the slow one is the one
+      // that would land in a directory nobody owns any more.
+      if (deadline?.isAbandoned ?? false) break;
       final file = File(p.join(root, skill.name, fileName));
       try {
         await file.parent.create(recursive: true);
@@ -77,6 +82,7 @@ class AgentSkillInstaller {
         // read-back below reports it as an install that did not land.
       }
     }
+    if (deadline?.isAbandoned ?? false) return false;
     final present = await installedSkills(
       descriptor: descriptor,
       storeHome: storeHome,
@@ -119,6 +125,7 @@ class AgentSkillInstaller {
   Future<bool> uninstall({
     required AgentDescriptor descriptor,
     required String storeHome,
+    SkillSweepDeadline? deadline,
   }) async {
     final root = rootFor(descriptor, storeHome);
     if (root == null) return false;
@@ -126,6 +133,7 @@ class AgentSkillInstaller {
     if (!await directory.exists()) return false;
     var changed = false;
     await for (final entry in directory.list(followLinks: false)) {
+      if (deadline?.isAbandoned ?? false) break;
       if (entry is! Directory) continue;
       final file = File(p.join(entry.path, fileName));
       try {

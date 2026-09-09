@@ -627,6 +627,15 @@ class AppLifecycle {
   Future<void> _runShutdown() async {
     final watch = (_stopwatch ?? Stopwatch())..start();
 
+    // 0. Give up on any skill sweep still running. **Not a step**: it sets a
+    //    flag and returns, so it needs no slice of the budget and cannot be
+    //    abandoned itself. A sweep is bounded work whose *wait* something else
+    //    already owns; what it must not do is go on writing into somebody's
+    //    home after the app has gone, and telling it so is free.
+    if (_container.exists(agentSkillInstallationServiceProvider)) {
+      _container.read(agentSkillInstallationServiceProvider).abandon();
+    }
+
     // 1. A hook rewrite in flight gets a short grace period; it writes another
     //    application's config file, and half of one is worse than none.
     await _step(
