@@ -70,8 +70,10 @@ class PermissionModePicker extends StatelessWidget {
     final foreground = dangerous || !known
         ? scheme.error
         : scheme.onSurfaceVariant;
+    // Paired with the rung's familiar name, exactly as the composer chip is:
+    // two controls drawing one selection must not name it two ways.
     final label = known
-        ? describeSelectionShort(support, selection)
+        ? describeSelectionFamiliarShort(support, selection)
         : 'Not established';
 
     return PopupMenuButton<PermissionAxisChoice>(
@@ -101,7 +103,7 @@ class PermissionModePicker extends StatelessWidget {
                 value: PermissionAxisChoice(axis.id, option.id),
                 enabled: option.isSelectable,
                 selected: option.id == axis.selectedId,
-                label: option.label,
+                label: option.pairedLabel,
                 detail: option.summary,
               ),
             if (axis != axes.last) const DesktopMenuDivider(),

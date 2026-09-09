@@ -96,8 +96,10 @@ class PermissionModeChip extends ConsumerWidget {
     final foreground = !known || dangerous
         ? scheme.error
         : scheme.onSurfaceVariant;
+    // The familiar name for the rung, ahead of this CLI's own word for it —
+    // never instead of it. See `pairedWithFamiliarName`.
     final label = known
-        ? describeSelectionShort(support, effective.selection)
+        ? describeSelectionFamiliarShort(support, effective.selection)
         : 'Not established';
 
     return PopupMenuButton<PermissionChoice>(
@@ -148,7 +150,7 @@ class PermissionModeChip extends ConsumerWidget {
                 value: PermissionChoice(axis.id, option.id),
                 enabled: option.isSelectable,
                 selected: !effective.inherited && option.id == axis.selectedId,
-                label: option.label,
+                label: option.pairedLabel,
                 detail: option.summary,
               ),
             if (axis != axes.last) const DesktopMenuDivider(),

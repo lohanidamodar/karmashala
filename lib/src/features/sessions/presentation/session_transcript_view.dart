@@ -39,6 +39,7 @@ import 'activity_strip.dart';
 import 'agent_status_badge.dart';
 import 'approval_request_card.dart';
 import 'chat_transcript.dart';
+import 'session_recap_card.dart';
 import 'delivery_strip.dart';
 import 'message_composer.dart';
 import 'permission_mode_chip.dart';
@@ -324,6 +325,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               const SizedBox(width: Insets.md),
               AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
               const Spacer(),
+              // On the header rather than in the composer's chip row: a recap
+              // is asked for by somebody who has just opened this session and
+              // has not typed anything, and it costs a turn — so it sits with
+              // the other deliberate acts, not beside the message box.
+              _RecapButton(sessionId: widget.sessionId),
               _OpenInTerminalButton(sessionId: widget.sessionId),
               if (active)
                 IconButton(
@@ -337,6 +343,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         ),
         SessionRepositoriesBar(sessionId: widget.sessionId),
         const Divider(height: 1),
+        // Above the messages and outside their scroll: a digest you have to
+        // scroll back to is a digest of a conversation you have already
+        // re-read. Draws nothing until somebody asks for one.
+        SessionRecapCard(sessionId: widget.sessionId),
         Expanded(
           child: transcript.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -546,6 +556,37 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       // not JSON
     }
     return '';
+  }
+}
+
+/// The header's Recap action: asks this session's own CLI what it concluded.
+///
+/// A button and not a menu entry, because the answer appears directly above it
+/// and the pairing is the affordance. It spins while the CLI is answering and
+/// is inert until it does — a second press would spend a second turn on the
+/// question already in flight.
+class _RecapButton extends ConsumerWidget {
+  const _RecapButton({required this.sessionId});
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final running = ref.watch(sessionRecapRunningProvider(sessionId));
+    return IconButton(
+      tooltip: running
+          ? 'Writing a recap…'
+          : 'Recap — ask this session\'s CLI what it concluded',
+      icon: running
+          ? const SizedBox(
+              width: Chrome.iconSmall,
+              height: Chrome.iconSmall,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(AppIcons.article),
+      onPressed: running
+          ? null
+          : () => requestSessionRecap(context, ref, sessionId),
+    );
   }
 }
 
