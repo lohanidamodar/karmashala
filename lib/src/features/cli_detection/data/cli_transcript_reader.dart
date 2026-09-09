@@ -356,11 +356,20 @@ Future<void> _attachSubagents(
 /// applies to its own `type: system` lines: they are session-level records
 /// rather than turns.
 ///
-/// **`thinking` is deliberately left null.** The field is in the file and this
-/// could fill it, but `ConversationIndexer` documents "nothing in
-/// `readCliTranscript` ever fills `TranscriptMessage.thinking`" as one of its
-/// two gates, and a reader that quietly falsified that would be worse than a
-/// reader that shows one thing less.
+/// **`thinking` is filled, and it rides on the first row the record produces.**
+/// 435 of the same 4,846 lines carry the field, every one a `PLANNER_RESPONSE`
+/// with `status: DONE`, mean 1,043 characters and longest 4,121. Only **9** of
+/// them also carry `content`, so hanging it on the text row alone would show 9
+/// of 435; **425** carry `tool_calls` and no text, which is the model reasoning
+/// its way to a call, and the last **1** carries neither and is the one block
+/// dropped. 26 arrive already cut by the CLI, which says so in
+/// `truncated_fields`.
+///
+/// **Nothing here creates a row to carry it**, which is what leaves the
+/// conversation index where it was: `ConversationIndexer` reads `text` off the
+/// `kIndexedTranscriptRoles` rows and never `thinking`, so a filled block moves
+/// neither the rows the index holds nor their ordinals. That file states the
+/// invariant; `thinking_is_not_indexed_test.dart` measures it.
 void _parseAntigravityLine(
   Map<String, dynamic> json,
   List<TranscriptMessage> out,
@@ -371,7 +380,11 @@ void _parseAntigravityLine(
     case 'USER_INPUT':
       _add(out, 'user', content, at);
     case 'PLANNER_RESPONSE':
-      _add(out, 'agent', content, at);
+      // Held across the rows this record makes and spent on the first of them.
+      var thinking = _antigravityThinking(json['thinking']);
+      final before = out.length;
+      _add(out, 'agent', content, at, thinking: thinking);
+      if (out.length > before) thinking = null;
       final calls = json['tool_calls'];
       if (calls is! List) return;
       for (final call in calls) {
@@ -396,6 +409,7 @@ void _parseAntigravityLine(
             text: activity.summary,
             tool: activity,
             at: at,
+            thinking: thinking,
             // `status` rather than the absence of a result: a call the file
             // says is `RUNNING` is the one still in flight, and the 49 calls
             // whose result never arrived belong to finished runs we cannot
@@ -405,6 +419,7 @@ void _parseAntigravityLine(
                 : null,
           ),
         );
+        thinking = null;
       }
     case 'GENERIC':
       if (content is! String || content.trim().isEmpty) return;
@@ -415,6 +430,18 @@ void _parseAntigravityLine(
       }
       _add(out, 'tool', content, at);
   }
+}
+
+/// The reasoning a record carried, or null when it carried none.
+///
+/// Plain text, not the protojson [_antigravityArg] has to unwrap — the field
+/// sits beside `content` on the record itself rather than inside a call's
+/// `args`. Bounded like a turn: the CLI truncates its own long blocks and says
+/// so, but nothing promises it always will.
+String? _antigravityThinking(Object? raw) {
+  if (raw is! String) return null;
+  final text = raw.trim();
+  return text.isEmpty ? null : boundedText(text).$1;
 }
 
 /// One `args` value as plain text, or null when it holds none.
@@ -457,6 +484,9 @@ void _attachAntigravityResult(List<TranscriptMessage> out, String output) {
       isError: false,
     ),
     at: row.at,
+    // Carried through: 2,261 of the 2,310 calls here are answered by the very
+    // next line, so dropping it would lose the reasoning on almost every one.
+    thinking: row.thinking,
     compaction: row.compaction,
   );
 }
@@ -796,7 +826,13 @@ void _attachResult(
   );
 }
 
-void _add(List<TranscriptMessage> out, String role, Object? text, DateTime? at) {
+void _add(
+  List<TranscriptMessage> out,
+  String role,
+  Object? text,
+  DateTime? at, {
+  String? thinking,
+}) {
   if (text is! String) return;
   final trimmed = text.trim();
   if (trimmed.isEmpty) return;
@@ -805,6 +841,11 @@ void _add(List<TranscriptMessage> out, String role, Object? text, DateTime? at) 
   // actually crosses, and leaving it whole meant rehydration could restore
   // text the live stream had already trimmed.
   out.add(
-    TranscriptMessage(role: role, text: boundedText(trimmed).$1, at: at),
+    TranscriptMessage(
+      role: role,
+      text: boundedText(trimmed).$1,
+      at: at,
+      thinking: thinking,
+    ),
   );
 }

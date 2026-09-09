@@ -218,6 +218,183 @@ void main() {
     });
   });
 
+  /// **The reasoning the CLI writes, and where it lands.**
+  ///
+  /// Surveyed over the same 4,846 lines as the shapes above: 435 carry a
+  /// `thinking` field, every one of them a `PLANNER_RESPONSE` with
+  /// `status: DONE`. Only **9** also carry `content`, **425** carry
+  /// `tool_calls` and no text at all, and **1** carries neither — so a rule
+  /// that only hung it on the text row would show 9 of 435. It rides on the
+  /// first row the record produces, and no row is created to hold it.
+  group('thinking', () {
+    test('a record that only calls a tool puts it on the call', () async {
+      const id = 'think-1';
+      writeTranscript(id, [
+        {
+          'step_index': 4,
+          'source': 'MODEL',
+          'type': 'PLANNER_RESPONSE',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:01Z',
+          'thinking': 'the folder first, then the diff',
+          'tool_calls': [
+            {
+              'name': 'run_command',
+              'args': {'CommandLine': '"ls -1"'},
+            },
+          ],
+        },
+      ]);
+
+      final rows = await readCliTranscript(
+        conversationFile(id),
+        AgentIds.antigravity,
+      );
+
+      expect(rows.single.role, 'tool');
+      expect(rows.single.thinking, 'the folder first, then the diff');
+    });
+
+    test('and it survives the result landing on that call', () async {
+      // 2,261 of the 2,310 calls here are answered by the very next line, and
+      // answering rebuilds the row — so this is the case, not the corner.
+      const id = 'think-2';
+      writeTranscript(id, [
+        {
+          'step_index': 4,
+          'source': 'MODEL',
+          'type': 'PLANNER_RESPONSE',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:01Z',
+          'thinking': 'the folder first, then the diff',
+          'tool_calls': [
+            {
+              'name': 'run_command',
+              'args': {'CommandLine': '"ls -1"'},
+            },
+          ],
+        },
+        {
+          'step_index': 5,
+          'source': 'MODEL',
+          'type': 'GENERIC',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:02Z',
+          'content': 'a.txt',
+        },
+      ]);
+
+      final rows = await readCliTranscript(
+        conversationFile(id),
+        AgentIds.antigravity,
+      );
+
+      expect(rows.single.tool?.output, contains('a.txt'));
+      expect(rows.single.thinking, 'the folder first, then the diff');
+    });
+
+    test('a record with text puts it on the text row', () async {
+      const id = 'think-3';
+      writeTranscript(id, [
+        {
+          'step_index': 6,
+          'source': 'MODEL',
+          'type': 'PLANNER_RESPONSE',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:03Z',
+          'thinking': 'nothing left to check',
+          'content': 'Done.',
+        },
+      ]);
+
+      final rows = await readCliTranscript(
+        conversationFile(id),
+        AgentIds.antigravity,
+      );
+
+      expect(rows.single.role, 'agent');
+      expect(rows.single.thinking, 'nothing left to check');
+    });
+
+    test('a record with both puts it on the text, not on the call', () async {
+      // None of the 435 is shaped this way, so the rule is stated rather than
+      // measured: the reasoning belongs to the turn, and the turn is the text.
+      const id = 'think-4';
+      writeTranscript(id, [
+        {
+          'step_index': 7,
+          'source': 'MODEL',
+          'type': 'PLANNER_RESPONSE',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:04Z',
+          'thinking': 'read it before editing it',
+          'content': 'Reading the file.',
+          'tool_calls': [
+            {
+              'name': 'view_file',
+              'args': {'AbsolutePath': '"/tmp/a.txt"'},
+            },
+          ],
+        },
+      ]);
+
+      final rows = await readCliTranscript(
+        conversationFile(id),
+        AgentIds.antigravity,
+      );
+
+      expect(rows.map((r) => r.role), ['agent', 'tool']);
+      expect(rows[0].thinking, 'read it before editing it');
+      expect(rows[1].thinking, isNull, reason: 'one record, one reasoning');
+    });
+
+    test('a record with nothing to hang it on yields no row', () async {
+      // The one line of 435. A row invented to carry reasoning would be a row
+      // the conversation index never saw before -- see
+      // `thinking_is_not_indexed_test.dart`.
+      const id = 'think-5';
+      writeTranscript(id, [
+        {
+          'step_index': 8,
+          'source': 'MODEL',
+          'type': 'PLANNER_RESPONSE',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:05Z',
+          'thinking': 'unfinished, and unattached',
+        },
+      ]);
+
+      final rows = await readCliTranscript(
+        conversationFile(id),
+        AgentIds.antigravity,
+      );
+
+      expect(rows, isEmpty);
+    });
+
+    test('an empty field is no reasoning at all', () async {
+      const id = 'think-6';
+      writeTranscript(id, [
+        {
+          'step_index': 9,
+          'source': 'MODEL',
+          'type': 'PLANNER_RESPONSE',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:06Z',
+          'thinking': '   ',
+          'content': 'Done.',
+        },
+      ]);
+
+      final rows = await readCliTranscript(
+        conversationFile(id),
+        AgentIds.antigravity,
+      );
+
+      expect(rows.single.thinking, isNull);
+    });
+  });
+
   group('importedTranscriptProvider', () {
     /// One imported Antigravity conversation, filed at [filePath].
     ProviderContainer containerFor(String filePath) {

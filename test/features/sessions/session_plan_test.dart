@@ -355,4 +355,58 @@ void main() {
       expect(subscribed, 1);
     });
   });
+
+  group('the reasoning beside a plan is not part of it', () {
+    // Antigravity's reader fills `TranscriptMessage.thinking`, and 425 of the
+    // 435 blocks on this machine sit on the record that made a tool call — so
+    // the field now arrives on exactly the rows this walk looks at. It reads
+    // `tool.plan` and nothing else, and these say so rather than leaving it to
+    // be rediscovered the next time a reader learns a new field.
+    TranscriptMessage thinkingOn(TranscriptMessage row, String thinking) =>
+        TranscriptMessage(
+          role: row.role,
+          text: row.text,
+          tool: row.tool,
+          at: row.at,
+          thinking: thinking,
+        );
+
+    test('a plan row that also carries reasoning reads identically', () {
+      final plain = planRow([('One', 'in_progress'), ('Two', 'pending')]);
+      final withThinking = thinkingOn(plain, 'do Two first, maybe');
+
+      final reading = agentPlanIn([withThinking]);
+
+      expect(reading.plan, agentPlanIn([plain]).plan);
+      expect(reading.writtenAt, wroteAt);
+    });
+
+    test('a row that carries only reasoning publishes no plan', () {
+      // Antigravity publishes no plan tool at all — 4,451 steps, none — so its
+      // rows reaching this walk must leave it saying there is nothing yet.
+      final reading = agentPlanIn([
+        thinkingOn(chatter('Looking into it.'), 'the failing test first'),
+        TranscriptMessage(
+          role: 'tool',
+          text: 'run_command',
+          tool: const ToolActivity(name: 'run_command', subject: 'ls -1'),
+          at: wroteAt,
+          thinking: 'and then the diff',
+        ),
+      ]);
+
+      expect(reading.plan, isNull);
+      expect(reading.absence, AgentPlanAbsence.noneYet);
+    });
+
+    test('reasoning on a later row does not overtake the plan', () {
+      final reading = agentPlanIn([
+        planRow([('One', 'completed')]),
+        thinkingOn(chatter('Nearly there.'), 'nothing left to plan'),
+      ]);
+
+      expect(reading.plan?.items.single.text, 'One');
+      expect(reading.writtenAt, wroteAt);
+    });
+  });
 }

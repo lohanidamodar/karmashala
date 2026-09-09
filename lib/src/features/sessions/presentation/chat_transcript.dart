@@ -526,9 +526,14 @@ class _ChatMessageTile extends StatelessWidget {
     final isAgent = message.role == 'agent';
     final isError = message.role == 'error';
 
+    // A tool row's reasoning is only ever the field, never a scan of its text:
+    // 425 of Antigravity's 435 thinking blocks sit on a record whose only other
+    // payload is the call, and a tool row's text is a command that means
+    // `<thinking>` literally when it contains one.
     final (thinking, cleanText) = isAgent
         ? _resolveThinking(message.text, message.thinking)
-        : (null, message.text);
+        : (message.role == 'tool' ? message.thinking?.trim() : null,
+          message.text);
 
     if (isUser) {
       return Padding(
@@ -770,6 +775,10 @@ class _ChatMessageTile extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: Insets.xs),
+                if (thinking != null && thinking.isNotEmpty) ...[
+                  ThinkingAccordion(thinking: thinking),
+                  const SizedBox(height: Insets.xs),
+                ],
                 if (activity != null)
                   ToolActivityBody(
                     activity: activity,
