@@ -8,7 +8,6 @@ import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/logging/app_logger.dart';
-import '../../core/process/command_runner_providers.dart';
 import '../../core/util/clock_provider.dart';
 import '../agents/application/agent_hook_intake.dart';
 import '../agents/application/agent_providers.dart';
@@ -18,10 +17,7 @@ import '../browser/application/browser_providers.dart';
 import '../browser/application/browser_tool_schemas.dart';
 import '../browser/application/browser_tools.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
-import '../environments/application/environment_providers.dart';
-import '../fanout/application/comparison_providers.dart';
 import '../environments/domain/environment_kind.dart';
-import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
 import '../flutter_apps/application/flutter_app_tools.dart';
 import '../app_projects/application/project_build_tools.dart';
@@ -30,8 +26,6 @@ import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../sessions/application/session_providers.dart';
-import '../terminal/application/system_terminal_providers.dart';
-import '../terminal/data/system_terminal_service.dart';
 import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
@@ -42,6 +36,7 @@ import 'decision_tools.dart';
 import 'review_thread_tools.dart';
 import 'control_server_status.dart';
 import 'device_tools.dart';
+import 'fanout_tools.dart';
 import 'handshake_file_permissions.dart';
 import 'instructions_tools.dart';
 import 'launch_dedupe.dart';
@@ -57,7 +52,7 @@ import 'session_tools.dart';
 import 'snippet_tools.dart';
 import 'recording_tools.dart';
 import 'terminal_tools.dart';
-import 'tmux_orchestration.dart';
+import 'tmux_tools.dart';
 import 'todo_tools.dart';
 import 'workspace_tools.dart';
 import 'worktree_tools.dart';
@@ -1145,20 +1140,13 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      case 'fanout_list':
-        return _fanOutList(
-          repositoryId: args['repositoryId'] as String?,
-          includeArchived: args['includeArchived'] == true,
-          limit: (args['limit'] as num?)?.round(),
-        );
-      case 'fanout_get':
-        return _fanOutGet(args['id'] as String?);
-      case 'open_sessions_in_tmux':
-        return _openSessionsInTmux(
-          (args['ids'] as List?)?.whereType<String>().toList() ??
-              const <String>[],
-          name: args['name'] as String?,
-        );
+      // The fan-out comparisons: one prompt run on several agents in parallel
+      // worktrees, and what each of them produced.
+      case final String name when FanOutTools.handles(name):
+        return FanOutTools(_container).call(name, args);
+      // Several sessions opened together as tmux windows in one terminal tab.
+      case final String name when TmuxControlTools.handles(name):
+        return TmuxControlTools(_container).call(name, args);
       // The per-turn record of a working tree. Like the session tools below,
       // these default to the session that called them.
       case final String name when CheckpointControlTools.handles(name):
@@ -1353,82 +1341,9 @@ class LauncherControlServer implements SessionMcp {
       'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
     },
     ...sessionLaunchToolSchemas,
-    {
-      'name': 'fanout_list',
-      'description':
-          'List the fan-out comparisons — one prompt run on several agents in '
-          'parallel worktrees. Each row gives the prompt, when it ran, the '
-          'outcome (pending/merged/discarded) and every candidate with its '
-          'agent and diff stat. Comparisons persist: a merged one whose losing '
-          'worktrees were deleted is still listed. Use fanout_get for the full '
-          'record of one.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'repositoryId': {
-            'type': 'string',
-            'description': 'Only comparisons for this repository.',
-          },
-          'includeArchived': {
-            'type': 'boolean',
-            'description': 'Include comparisons the user archived.',
-          },
-          'limit': {
-            'type': 'number',
-            'description': 'Most recent N (default 20).',
-          },
-        },
-      },
-    },
-    {
-      'name': 'fanout_get',
-      'description':
-          'The full record of one fan-out comparison: the prompt, the winner, '
-          'the merge commit, and every candidate with its session, branch, '
-          'worktree (and whether that worktree has been removed), diff stat, '
-          'verification verdict and failure reason. Each verdict says who '
-          'produced it: attribution is "author" when the candidate graded '
-          'itself, "independent" when another session did, and "notRecorded" '
-          'when nobody recorded a verifier — a self-graded pass is not '
-          'evidence, so say which one it was when you report on a '
-          'comparison the user ran.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'id': {
-            'type': 'string',
-            'description': 'Comparison id, from fanout_list.',
-          },
-        },
-        'required': ['id'],
-      },
-    },
+    ...fanOutToolSchemas,
     ...sessionHandoffToolSchemas,
-    {
-      'name': 'open_sessions_in_tmux',
-      'description':
-          'Open several sessions together as windows in a single tmux session '
-          '(WSL), in one new terminal tab. All sessions must live in the same '
-          'WSL distribution. Pass the session ids from list_sessions. '
-          'Non-destructive: if a tmux session with the given name already '
-          'exists it is NOT killed — the sessions are appended as new windows '
-          'without switching the focused window of any running tab.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'ids': {
-            'type': 'array',
-            'items': {'type': 'string'},
-            'description': 'Session ids to open together.',
-          },
-          'name': {
-            'type': 'string',
-            'description': 'Optional tmux session name.',
-          },
-        },
-        'required': ['ids'],
-      },
-    },
+    ...tmuxToolSchemas,
     ...instructionsToolSchemas,
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
@@ -1459,106 +1374,6 @@ class LauncherControlServer implements SessionMcp {
           'path': project.root.path,
         },
     ];
-  }
-
-  /// Fan-out comparisons, newest first. Compact by design: an agent asking
-  /// "what did we try?" wants the shape, not every diff.
-  List<Map<String, dynamic>> _fanOutList({
-    String? repositoryId,
-    bool includeArchived = false,
-    int? limit,
-  }) {
-    final repositories = _container.read(repositoryDaoProvider);
-    final comparisons = _container
-        .read(comparisonDaoProvider)
-        .getAll(repositoryId: repositoryId, includeArchived: includeArchived);
-    final capped = comparisons.take(limit == null || limit <= 0 ? 20 : limit);
-    return [
-      for (final comparison in capped)
-        {
-          'id': comparison.id,
-          'prompt': comparison.title,
-          'repository': repositories.getById(comparison.repositoryId)?.name,
-          'createdAt': comparison.createdAt.toIso8601String(),
-          'outcome': comparison.outcome.name,
-          'winner': comparison.winner?.agentId,
-          'archived': comparison.archived,
-          'candidates': [
-            for (final candidate in comparison.candidates)
-              {
-                'agentId': candidate.agentId,
-                'state': candidate.launch.name,
-                'diff': candidate.diff?.summary,
-              },
-          ],
-        },
-    ];
-  }
-
-  /// One comparison in full — still without diff text, which is what
-  /// `git diff` in the worktree is for while the worktree exists.
-  Map<String, dynamic> _fanOutGet(String? id) {
-    if (id == null || id.isEmpty) {
-      throw ArgumentError('id is required.');
-    }
-    final comparison = _container.read(comparisonDaoProvider).getById(id);
-    if (comparison == null) {
-      throw ArgumentError('No comparison with id $id.');
-    }
-    final repository = _container
-        .read(repositoryDaoProvider)
-        .getById(comparison.repositoryId);
-    return {
-      'id': comparison.id,
-      'prompt': comparison.prompt,
-      'repository': repository?.name,
-      'repositoryId': comparison.repositoryId,
-      'createdAt': comparison.createdAt.toIso8601String(),
-      'finishedAt': comparison.finishedAt?.toIso8601String(),
-      'outcome': comparison.outcome.name,
-      'mergedCommit': comparison.mergedCommit,
-      'winnerAgentId': comparison.winner?.agentId,
-      'archived': comparison.archived,
-      'candidates': [
-        for (final candidate in comparison.candidates)
-          {
-            'id': candidate.id,
-            'agentId': candidate.agentId,
-            'sessionId': candidate.sessionId,
-            'state': candidate.launch.name,
-            'isWinner': comparison.winnerCandidateId == candidate.id,
-            'branch': candidate.branch,
-            'worktree': candidate.worktree?.path,
-            'worktreeRemoved': candidate.worktreeRemoved,
-            if (candidate.diff case final diff?)
-              'diff': {
-                'summary': diff.summary,
-                'filesChanged': diff.filesChanged,
-                'insertions': diff.insertions,
-                'deletions': diff.deletions,
-                'commits': diff.commits,
-                'capturedAt': diff.capturedAt.toIso8601String(),
-              },
-            if (candidate.evidence case final evidence?)
-              'verdict': {
-                'verdict': evidence.verdict.name,
-                'label': evidence.label,
-                'runId': evidence.runId,
-                // Present even when null, unlike every optional field above.
-                // An omitted producer reads as a gap in the tool rather than a
-                // gap in the record, which is exactly how a self-graded pass
-                // comes to be read as a checked one — the thing G3 exists to
-                // stop. Every human-facing surface already says this; an agent
-                // reading a comparison was the last one that could not.
-                'producedBySessionId': evidence.producerSessionId,
-                'attribution': candidate.evidenceAttribution.name,
-                'attributionLabel': candidate.evidenceAttribution.label,
-              },
-            'failure': candidate.failure,
-            'notes': candidate.notes,
-          },
-      ],
-    };
   }
 
   List<Map<String, dynamic>> _listSessions({String? query, String? cli}) {
@@ -1656,118 +1471,6 @@ class LauncherControlServer implements SessionMcp {
           'path': install.executable.path,
         },
     ];
-  }
-
-  Future<Object?> _openSessionsInTmux(List<String> ids, {String? name}) async {
-    if (ids.isEmpty) throw ArgumentError('No session ids given.');
-    final importedDao = _container.read(importedSessionDaoProvider);
-    final repositoryDao = _container.read(repositoryDaoProvider);
-    final envDao = _container.read(executionEnvironmentDaoProvider);
-
-    final windows = <TmuxWindow>[];
-    ExecutionEnvironment? distroEnv;
-    for (final id in ids) {
-      final session = importedDao.getById(id);
-      if (session == null) throw StateError('Session not found: $id');
-      final env = envDao.getById(session.environmentId);
-      if (env == null || env.wslDistribution == null) {
-        throw StateError(
-          'Session "${session.displayTitle}" is not in a WSL environment; '
-          'tmux grouping requires WSL sessions.',
-        );
-      }
-      distroEnv ??= env;
-      if (env.id != distroEnv.id) {
-        throw StateError(
-          'All sessions must be in the same WSL distribution '
-          '(${distroEnv.wslDistribution}).',
-        );
-      }
-      final repo = repositoryDao.getById(session.repositoryId);
-      final install = installFor(_container, session.cli, session.environmentId);
-      if (repo == null || install == null) {
-        throw StateError('Repository or agent missing for "$id".');
-      }
-      // The same registry read as every other resume surface. This switch was
-      // the worst of the family: its `_` arm handed `--resume <id>` to *any*
-      // agent, so an agent that spells it differently was given a flag it does
-      // not have and the tmux window died on an unknown option — or, worse,
-      // took `--resume` as something else entirely.
-      final registry = _container.read(agentRegistryProvider);
-      final refusal = resumeRefusalFor(
-        registry,
-        session.cli,
-        session.externalId,
-      );
-      if (refusal != null) {
-        throw StateError('Session "${session.displayTitle}": $refusal');
-      }
-      final parts = [
-        install.executable.path,
-        ...permissionArgsFor(
-          session.cli,
-          resumePermissionFor(_container, session.cli),
-          registry: registry,
-        ),
-        ...resumeArgsFor(session.cli, session.externalId, registry: registry),
-      ];
-      windows.add(
-        TmuxWindow(
-          label: tmuxSafeName(session.displayTitle, fallback: 'session'),
-          cwd: repo.path.path,
-          command: parts.join(' '),
-        ),
-      );
-    }
-
-    final env = distroEnv!;
-    final sessionName = tmuxSafeName(name ?? 'karmashala', fallback: 'cg');
-    final script = buildTmuxScript(sessionName, windows);
-
-    // Write the script into the distro's /tmp via its UNC path, so nothing has
-    // to survive quoting through the terminal → wsl → bash chain.
-    final scriptWslPath =
-        '/tmp/karmashala-tmux-${Random().nextInt(1 << 32)}.sh';
-    final windowsEnv = _windowsEnv();
-    if (windowsEnv == null) throw StateError('No Windows host environment.');
-    final uncPath = _container
-        .read(pathTranslatorProvider)
-        .translate(
-          EnvironmentPath(environmentId: env.id, path: scriptWslPath),
-          from: env,
-          to: windowsEnv,
-        )
-        .path;
-    await File(uncPath).writeAsString(script, flush: true);
-
-    final terminal = await _container.read(
-      defaultSystemTerminalProvider.future,
-    );
-    if (terminal == null) {
-      throw StateError('No external terminal is configured.');
-    }
-    await _container
-        .read(systemTerminalServiceProvider)
-        .launch(
-          terminal,
-          command: [
-            'wsl.exe',
-            '-d',
-            env.wslDistribution!,
-            '--',
-            'bash',
-            scriptWslPath,
-          ],
-        );
-    return {'opened': windows.length, 'tmuxSession': sessionName};
-  }
-
-  ExecutionEnvironment? _windowsEnv() {
-    for (final env
-        in _container.read(executionEnvironmentDaoProvider).getAll()) {
-      if (env.kind == EnvironmentKind.windowsNative) return env;
-    }
-    return null;
   }
 }
 
