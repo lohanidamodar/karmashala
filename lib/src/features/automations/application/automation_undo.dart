@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../checkpoints/application/checkpoint_providers.dart';
 import '../../checkpoints/application/checkpoint_service.dart';

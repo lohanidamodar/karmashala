@@ -6,7 +6,7 @@
 /// copies of that rule could disagree.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_status.dart';

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';

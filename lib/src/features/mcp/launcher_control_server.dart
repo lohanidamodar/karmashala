@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:path/path.dart' as p;
 

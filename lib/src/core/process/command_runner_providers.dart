@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../features/ssh/application/ssh_providers.dart';
 import 'command_runner.dart';

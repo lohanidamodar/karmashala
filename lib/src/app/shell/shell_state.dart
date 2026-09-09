@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 /// The two logical panes of the desktop shell: the Explorer tree (projects and
 /// their sessions) and the Detail view.

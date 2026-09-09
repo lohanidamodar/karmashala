@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/domain/host_deployment.dart';

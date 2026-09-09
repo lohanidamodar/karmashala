@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../sessions/application/decision_recorder.dart';
 import '../sessions/domain/decision_record.dart';

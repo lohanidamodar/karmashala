@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 /// How often live panes are re-snapshotted when everything is up to date.
 ///

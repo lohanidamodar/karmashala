@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../git/application/review_threads.dart';
 import '../git/domain/review_thread.dart';

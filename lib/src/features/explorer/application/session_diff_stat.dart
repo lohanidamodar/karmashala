@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';

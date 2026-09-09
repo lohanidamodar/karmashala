@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/quick_open/repo_file_index.dart';
 import '../../../core/process/command_runner_providers.dart';

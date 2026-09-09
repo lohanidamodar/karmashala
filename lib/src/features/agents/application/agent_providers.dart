@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../data/agent_installation_dao.dart';

@@ -8,7 +8,7 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../agents/application/agent_providers.dart';

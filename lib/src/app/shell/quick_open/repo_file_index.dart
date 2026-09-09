@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/directory_change_watcher.dart';
 import '../../../features/checkpoints/application/checkpoint_providers.dart';

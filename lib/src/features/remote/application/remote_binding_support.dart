@@ -5,7 +5,7 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';

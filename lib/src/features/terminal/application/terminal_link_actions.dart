@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../editor/application/code_editor_providers.dart';

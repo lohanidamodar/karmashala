@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../data/theme_discovery.dart';
