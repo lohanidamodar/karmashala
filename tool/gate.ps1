@@ -26,8 +26,9 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below — today `core`, `browser` and `remote` are extracted;
-  the rest are listed so the mapping is ready when they are.
+  A key of the map below — today `core`, `media`, `agent_cli`, `browser`,
+  `devices` and `remote` are cut over; `git` and `flutter_apps` are built
+  beside the app and still have their copies in it.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -68,9 +69,9 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# Only `core`, `browser` and `remote` are extracted today — the rest are the
-# plan (PACKAGE_SPLIT §2), and a run against one of them says so and falls
-# back to the app half alone.
+# `core`, `media`, `agent_cli`, `browser`, `devices` and `remote` are extracted
+# and cut over; `git` and `flutter_apps` are built but the app still holds its
+# copies, so a run against one of those tests both halves of a duplicate.
 $map = [ordered]@{
   core = @{
     pkg  = 'packages/karmashala_core'
@@ -125,9 +126,17 @@ $map = [ordered]@{
   }
   devices = @{
     pkg  = 'packages/karmashala_devices'
+    # `test/features/devices` whole: what is left in it is the app's half —
+    # the providers and controllers, the pane and its widgets, the pane tree
+    # golden, and the three suites over the MCP device-tool family
+    # (`device_tools_cross_platform`, `device_ui_tools`,
+    # `device_locating_policy`), which live beside the devices they drive
+    # rather than under `test/features/mcp`. The tool schemas golden is the
+    # one golden outside the folder that reaches the package: the device tools
+    # are served over its types.
     app  = @('test/features/devices',
              'test/features/mcp/tool_schemas_golden_test.dart')
-    owns = @('lib/src/features/devices')
+    owns = @('lib/src/features/devices', 'test/features/devices')
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
