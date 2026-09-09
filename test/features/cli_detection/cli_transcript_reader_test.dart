@@ -5,11 +5,13 @@ import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader
 import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/temp_directory.dart';
+
 void main() {
   late Directory dir;
 
   setUp(() => dir = Directory.systemTemp.createTempSync('transcript_test'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(dir));
 
   File write(String name, List<String> lines) {
     final file = File('${dir.path}/$name');

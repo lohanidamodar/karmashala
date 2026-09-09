@@ -10,13 +10,14 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   late Directory tmp;
   const service = LocalRepositoryDiscoveryService();
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_disc_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   EnvironmentPath rootAt(String path) =>
       EnvironmentPath(environmentId: 'windows', path: path);

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/media/frame_sink.dart';
 import 'package:karmashala/src/core/media/media_foundation.dart';
+import 'package:karmashala/src/core/media/video_writer.dart';
 import 'package:karmashala/src/features/devices/data/recording_sink.dart';
 import 'package:path/path.dart' as p;
 
@@ -15,9 +16,26 @@ import '../../core/media/mp4_reader.dart';
 /// container change. This proves it is only that: the payload the writer put in
 /// the MP4 is the payload it was handed, byte for byte.
 ///
-/// **This file can take the tester process down under load.** The crash, what
-/// was measured about it, and how to measure it again are recorded once, in
+/// **This file used to take the tester process down under load**, until every
+/// open here stopped asking for the hardware encoder. The crash, the fix and
+/// the before/after measurement are recorded once, in
 /// `test/core/media/video_writer_test.dart`.
+/// The real remuxer, without the vendor MFTs that take the tester down.
+VideoRemuxer _softwareRemuxer({
+  required String path,
+  required int width,
+  required int height,
+  required int frameRate,
+  required Uint8List sequenceHeader,
+}) => openMediaFoundationRemuxer(
+  path: path,
+  width: width,
+  height: height,
+  frameRate: frameRate,
+  sequenceHeader: sequenceHeader,
+  hardwareTransforms: false,
+);
+
 void main() {
   late Directory temp;
   setUp(() => temp = Directory.systemTemp.createTempSync('dev-mp4'));
@@ -37,6 +55,7 @@ void main() {
       width: 320,
       height: 240,
       frameRate: 30,
+      hardwareTransforms: false,
     );
     for (var i = 0; i < 20; i++) {
       final rgba = Uint8List(320 * 240 * 4);
@@ -62,7 +81,7 @@ void main() {
   test('a recording is a container change and nothing else', () async {
     final source = sourceTrack();
     final path = p.join(temp.path, 'recording.mp4');
-    final writer = Mp4RecordingWriter.open(path);
+    final writer = Mp4RecordingWriter.open(path, openRemuxer: _softwareRemuxer);
     for (var i = 0; i < source.frames.length; i++) {
       final frame = source.frames[i];
       writer.add(
@@ -98,7 +117,7 @@ void main() {
 
   test('nothing recorded writes no file at all', () async {
     final path = p.join(temp.path, 'empty.mp4');
-    final writer = Mp4RecordingWriter.open(path);
+    final writer = Mp4RecordingWriter.open(path, openRemuxer: _softwareRemuxer);
     expect(await writer.close(), 0);
     expect(File(path).existsSync(), isFalse);
   }, skip: !Platform.isWindows);

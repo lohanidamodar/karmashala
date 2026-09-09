@@ -6,10 +6,12 @@ import 'package:karmashala/src/features/cli_detection/data/codex_store_reader.da
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_cli_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   void write(String path, List<String> lines) {
     final f = File(p.join(tmp.path, path))..createSync(recursive: true);

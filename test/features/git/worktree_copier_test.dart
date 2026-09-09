@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   group('the copier is chosen by the environment, never by the platform', () {
@@ -57,7 +58,7 @@ void main() {
       Directory(source).createSync();
       Directory(destination).createSync();
     });
-    tearDown(() => root.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(root));
 
     Future<WorktreeCopyVerdict> copy(String path) =>
         const HostWorktreeCopier().copy(

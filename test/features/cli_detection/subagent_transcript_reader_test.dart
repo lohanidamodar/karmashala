@@ -5,6 +5,8 @@ import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader
 import 'package:karmashala/src/features/cli_detection/data/subagent_transcript.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/temp_directory.dart';
+
 /// The subagent side of a Claude Code session, which the reader used to walk
 /// straight past.
 ///
@@ -21,7 +23,7 @@ void main() {
   late Directory root;
 
   setUp(() => root = Directory.systemTemp.createTempSync('subagent_test'));
-  tearDown(() => root.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(root));
 
   /// The parent transcript's path.
   String parentPath() => '${root.path}/s1.jsonl';

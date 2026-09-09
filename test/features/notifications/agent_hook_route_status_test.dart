@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// The wire between `/agent-hook` and the status registry.
 ///
@@ -81,7 +82,7 @@ void main() {
     await server.stop();
     registry.dispose();
     container.dispose();
-    tmp.deleteSync(recursive: true);
+    removeTempDirectory(tmp);
   });
 
   Future<void> fire(String event, {String body = '{"session_id":"s1"}'}) async {

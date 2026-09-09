@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/mcp/mcp_bridge_probe.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/temp_directory.dart';
 
 /// Whether an agent can actually get tools out of this app, asked properly.
 ///
@@ -20,7 +21,7 @@ void main() {
     temp = Directory.systemTemp.createTempSync('bridge_probe');
     bridge = File('${temp.path}/karmashala_mcp')..writeAsStringSync('');
   });
-  tearDown(() => temp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(temp));
 
   McpBridgeProbe probeWith(
     FakeCommandRunner runner, {

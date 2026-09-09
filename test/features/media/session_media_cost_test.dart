@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader
 import 'package:karmashala/src/features/media/data/session_media_store.dart';
 
 import 'session_media_fixture.dart';
+import '../../support/temp_directory.dart';
 
 /// What the media panel costs, and — the part that matters — what it does
 /// **not** cost the transcript poll.
@@ -31,7 +32,7 @@ void main() {
     dir = Directory.systemTemp.createTempSync('session_media_cost');
     cache = Directory('${dir.path}/cache')..createSync();
   });
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(dir));
 
   /// A conversation of [turns] plain turns, with [images] pasted pictures of
   /// [kb] KB each folded in. The shape of the transcript the owner was looking

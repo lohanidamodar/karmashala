@@ -19,6 +19,8 @@ import 'package:karmashala/src/features/remote/application/host_session_api.dart
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
 
+import '../../support/temp_directory.dart';
+
 void main() {
   group('boundedText', () {
     test('leaves anything under the bound exactly as it was', () {
@@ -75,7 +77,7 @@ void main() {
       // dropped on the way to the wire — so bounding only the result left the
       // one payload that crosses unbounded.
       final dir = Directory.systemTemp.createTempSync('bounded_text_test');
-      addTearDown(() => dir.deleteSync(recursive: true));
+      addTearDown(() => removeTempDirectory(dir));
       final file = File('${dir.path}/claude.jsonl')
         ..writeAsStringSync(
           jsonEncode({

@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/environments/domain/execution_environmen
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_codex_app_server.dart';
+import '../../support/temp_directory.dart';
 
 /// **Codex sessions read from `thread/list` rather than from the rollouts.**
 ///
@@ -26,7 +27,7 @@ import '../../support/fake_codex_app_server.dart';
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_codex_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   final windows = ExecutionEnvironment(
     id: 'windows',

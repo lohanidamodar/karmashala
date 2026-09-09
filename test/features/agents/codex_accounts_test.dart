@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/agents/domain/codex_account.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   String token(Map<String, Object?> claims) {
@@ -19,7 +20,7 @@ void main() {
 
   test('reads the active identity without a network request', () async {
     final directory = Directory.systemTemp.createTempSync('codex-auth-');
-    addTearDown(() => directory.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(directory));
     final auth = File('${directory.path}${Platform.pathSeparator}auth.json');
     auth.writeAsStringSync(
       jsonEncode({
@@ -53,7 +54,7 @@ void main() {
     addTearDown(db.close);
     final dao = CodexAccountDao(db);
     final directory = Directory.systemTemp.createTempSync('codex-auth-');
-    addTearDown(() => directory.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(directory));
     final auth = File('${directory.path}${Platform.pathSeparator}auth.json');
     auth.writeAsStringSync(
       jsonEncode({
@@ -86,7 +87,7 @@ void main() {
 
   test('switch replaces only tokens, atomically, with one backup', () async {
     final directory = Directory.systemTemp.createTempSync('codex-switch-');
-    addTearDown(() => directory.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(directory));
     final auth = File('${directory.path}${Platform.pathSeparator}auth.json');
     final original = {
       'OPENAI_API_KEY': 'keep-me',
@@ -129,7 +130,7 @@ void main() {
 
   test('switch refuses malformed live auth without touching it', () async {
     final directory = Directory.systemTemp.createTempSync('codex-switch-');
-    addTearDown(() => directory.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(directory));
     final auth = File('${directory.path}${Platform.pathSeparator}auth.json')
       ..writeAsStringSync('{broken');
     final service = CodexAuthService(

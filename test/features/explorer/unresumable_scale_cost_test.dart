@@ -33,6 +33,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/temp_directory.dart';
 
 /// **What the review costs, counted — never timed.**
 ///
@@ -173,7 +174,7 @@ class _CountingIndex extends ConversationStoreIndex {
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_ucost_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   /// A store that exists and reads to the end, holding nothing — so every row
   /// below is genuinely `absent` and the reading has the most work to do.

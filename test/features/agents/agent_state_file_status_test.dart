@@ -7,6 +7,8 @@ import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 void main() {
   const source = AgentStateFileStatusSource();
   final claude = AgentRegistry.builtIn.byId('claudeCode')!;
@@ -15,7 +17,7 @@ void main() {
 
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_status_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   /// Writes [lines] and returns the file's path.
   String write(String name, List<String> lines) {

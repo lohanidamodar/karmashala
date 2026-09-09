@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// The verdicts the health panel is allowed to state, and the evidence behind
 /// each one.
@@ -36,7 +37,7 @@ void main() {
   });
   tearDown(() {
     db.close();
-    temp.deleteSync(recursive: true);
+    removeTempDirectory(temp);
   });
 
   const initializeResult =

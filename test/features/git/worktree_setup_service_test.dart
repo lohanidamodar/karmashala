@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// A [Clock] pinned to [testTime].
 class _FixedClock implements Clock {
@@ -175,7 +176,7 @@ void main() {
       // Windows means backslashes. A real disk is the only thing that can say
       // whether the joining was right.
       final root = Directory.systemTemp.createTempSync('wt-setup');
-      addTearDown(() => root.deleteSync(recursive: true));
+      addTearDown(() => removeTempDirectory(root));
       final checkout = p.join(root.path, 'app');
       final made = p.join(root.path, 'app-s1');
       Directory(p.join(checkout, 'macos', 'Vendor')).createSync(

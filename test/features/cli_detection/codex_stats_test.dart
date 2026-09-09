@@ -6,6 +6,8 @@ import 'package:karmashala/src/features/cli_detection/data/codex_stats_reader.da
 import 'package:karmashala/src/features/cli_detection/domain/session_stats.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// Session stats read out of a Codex rollout.
 ///
 /// Codex's `token_count` records are **cumulative**, which is what makes both
@@ -24,7 +26,7 @@ void main() {
   setUp(
     () => tmp = Directory.systemTemp.createTempSync('karmashala_codex_stats'),
   );
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String rollout(String id) => p.join(tmp.path, 'rollout-$id.jsonl');
 

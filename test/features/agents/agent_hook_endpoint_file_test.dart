@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +9,8 @@ import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+import '../../support/temp_directory.dart';
 
 /// The endpoint-file indirection, for **all three** shipped agents.
 ///
@@ -35,7 +38,7 @@ void main() {
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_endpointfile_');
   });
-  tearDown(() => home.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(home));
 
   /// The store home the locator would hand the installer:
   /// `<home>/<store.homeDirectoryName>` and nothing else — see
@@ -350,6 +353,9 @@ const _shells = [
     prefix: <String>[],
     environment: EnvironmentKind.localPosix,
     extension: 'sh',
+    // `head -c` cuts an oversized payload and posts what is left, so the probe
+    // is followed by a callback.
+    oversizedRequests: 2,
   ),
   (
     name: 'cmd.exe',
@@ -357,6 +363,9 @@ const _shells = [
     prefix: <String>['/c'],
     environment: EnvironmentKind.windowsNative,
     extension: 'cmd',
+    // `cmd` has no `head -c`: it spills stdin, measures it, and posts nothing
+    // when it is over the bound. The probe is the only request.
+    oversizedRequests: 1,
   ),
 ];
 
@@ -366,6 +375,10 @@ typedef _Shell = ({
   List<String> prefix,
   EnvironmentKind environment,
   String extension,
+
+  /// How many requests an over-bound payload puts on the wire here — the two
+  /// shells stop differently, and the count is what each case waits for.
+  int oversizedRequests,
 });
 
 void _runForReal(
@@ -380,6 +393,13 @@ void _runForReal(
     // the one it wrote beside it, and the listener is a real socket. Skipped
     // where the machine has no such interpreter, because the alternative is
     // asserting the text of a shell script and calling that evidence.
+    //
+    // **The one thing here that is wall clock is the product's own**: the
+    // installed script dials with `curl -m 2`, so on a machine loaded enough
+    // that a loopback round trip does not finish inside two seconds the script
+    // gives up — correctly. That bound cannot be counted away from this side.
+    // What can be, and now is, is the test's own wait: `fire` returns when the
+    // requests this case is about have been *recorded*, not when `curl` exited.
     final skip = _whyShellCannotRun(shell);
 
     late Directory scratch;
@@ -387,13 +407,27 @@ void _runForReal(
     late List<_Received> received;
     late int status;
 
+    /// How many requests the case in flight is waiting for, and the completer
+    /// that says they arrived. `curl` exits as soon as the response is written,
+    /// while the handler recording it is still awaiting the body on this side —
+    /// so the child's exit code is not the event the assertions are about.
+    late int wanted;
+    late Completer<void> quota;
+
+    void record(_Received request) {
+      received.add(request);
+      if (received.length >= wanted && !quota.isCompleted) quota.complete();
+    }
+
     setUp(() async {
       scratch = Directory.systemTemp.createTempSync('karmashala_hookrun_');
       received = [];
+      wanted = 0;
+      quota = Completer<void>();
       status = HttpStatus.unauthorized;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
-        received.add(
+        record(
           _Received(
             authorization: request.headers.value(
               HttpHeaders.authorizationHeader,
@@ -415,16 +449,28 @@ void _runForReal(
 
     tearDown(() async {
       await server.close(force: true);
-      scratch.deleteSync(recursive: true);
+      removeTempDirectory(scratch);
     });
 
     /// Installs Claude Code's hooks into [scratch] for [port] and runs the
     /// generated script for a `Stop` event, with a payload on stdin.
+    ///
+    /// Returns once the script has exited **and** [expectRequests] of them have
+    /// been recorded. A case that expects none is bounded by the exit alone,
+    /// because there is no event to wait for; one that expects some and never
+    /// gets them hangs until the suite's timeout rather than failing on a
+    /// count that was merely early, which is the trade a counted wait makes.
     Future<int> fire({
       int? port,
+      int expectRequests = 0,
       void Function(File endpoint)? tamper,
       String payload = '{"session_id":"abc","cwd":"/tmp"}',
     }) async {
+      wanted = expectRequests;
+      quota = Completer<void>();
+      if (expectRequests > 0 && received.length >= expectRequests) {
+        quota.complete();
+      }
       final claude = agents.firstWhere((a) => a.id == 'claudeCode');
       await installer.install(
         descriptor: claude,
@@ -447,11 +493,15 @@ void _runForReal(
       await process.stdin.close();
       await process.stdout.drain<void>();
       await process.stderr.drain<void>();
-      return process.exitCode;
+      final code = await process.exitCode;
+      if (expectRequests > 0) await quota.future;
+      return code;
     }
 
     test('posts the payload once the port answers 401', () async {
-      final exitCode = await fire();
+      // Counted: the probe and the callback, both recorded, before anything is
+      // asserted about them.
+      final exitCode = await fire(expectRequests: 2);
 
       expect(exitCode, 0);
       expect(received, hasLength(2));
@@ -472,8 +522,11 @@ void _runForReal(
       // `head -c`, `cmd` measures the spilled body and drops it. What has to
       // be true of either is the same sentence — the far end never sees more
       // than the bound — so that is what is asserted rather than a shell's
-      // particular way of arriving at it.
+      // particular way of arriving at it. Only the *count* is per shell, and
+      // it is named on the shell so the wait ends on the last request that is
+      // going to arrive rather than on a guess.
       final exitCode = await fire(
+        expectRequests: shell.oversizedRequests,
         payload: 'x' * (kAgentHookPayloadLimitBytes + 4096),
       );
 
@@ -499,7 +552,9 @@ void _runForReal(
       // credential-less GET, which ours never does.
       status = HttpStatus.notFound;
 
-      final exitCode = await fire();
+      // One request — the probe — and the assertion below is that nothing
+      // followed it, so it is waited for rather than assumed.
+      final exitCode = await fire(expectRequests: 1);
 
       expect(exitCode, 0, reason: 'and it still costs the agent nothing');
       expect(received, hasLength(1), reason: 'the probe, and then silence');

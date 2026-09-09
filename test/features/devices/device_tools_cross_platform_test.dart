@@ -16,6 +16,7 @@ import 'package:karmashala/src/features/environments/domain/environment_path.dar
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/temp_directory.dart';
 
 /// The `device_*` tools driven the way the bridge drives them — a real
 /// `POST /rpc` against a real [LauncherControlServer] — with **both** an
@@ -1026,7 +1027,7 @@ void _loopTests() {
     final bundle = await Directory.systemTemp.createTemp('Probe');
     final appPath = '${bundle.path}${Platform.pathSeparator}Probe.app';
     Directory(appPath).createSync();
-    addTearDown(() => bundle.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(bundle));
 
     final result = _ok(await rpc.call('device_install_app', {'path': appPath}));
     // Without this the next step is "now tell me the bundle id", which the

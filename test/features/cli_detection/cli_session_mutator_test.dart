@@ -8,6 +8,8 @@ import 'package:karmashala/src/features/environments/domain/environment_path.dar
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 void main() {
   late Directory tmp;
   // Fresh per test: it carries the cost counters the batch tests assert on.
@@ -16,7 +18,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('karmashala_mut_');
     mutator = CliSessionMutator();
   });
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   test('Claude rename appends a custom-title line', () async {
     final file = File(p.join(tmp.path, '.claude/projects/-x/abc.jsonl'))

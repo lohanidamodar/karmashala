@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// A compacted session, rendered once.
 ///
 /// The shape below is a real boundary record's: `type: system` with
@@ -19,7 +21,7 @@ void main() {
   late Directory tmp;
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_compact_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String write(List<Map<String, Object?>> lines) {
     final file = File(p.join(tmp.path, 'session.jsonl'));

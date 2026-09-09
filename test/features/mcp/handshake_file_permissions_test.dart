@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// The handshake file publishes the two bearer tokens that are the *entire*
 /// access-control boundary for the launcher control server — loopback TCP lets
 /// any local process connect and attempt auth, so the file's permissions are
@@ -15,6 +17,15 @@ import 'package:path/path.dart' as p;
 /// These assertions read the real ACL that the real code path produced, via the
 /// SDDL, which names principals by SID and so does not care about the machine's
 /// display language.
+///
+/// **Every case here spawns real processes** — two `icacls` per restriction,
+/// one more to read the SDDL back, and the second group binds a real socket —
+/// so under load this file is slow. It is not, however, *timed*: no case
+/// asserts a duration, so there is nothing here to tag `live-timing` the way
+/// `app_lifecycle_test`'s shutdown envelope is. What load used to cost was
+/// legibility, not a verdict: the teardown deleted its temp directory
+/// unguarded, so a case that failed reported a `PathNotFoundException` from
+/// the sweep instead of its own reason.
 void main() {
   /// Well-known SIDs in SDDL shorthand that must never appear in the file's
   /// DACL: Everyone, BUILTIN\Users, Authenticated Users, INTERACTIVE.
@@ -48,7 +59,7 @@ void main() {
     late Directory tmp;
 
     setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_acl_'));
-    tearDown(() => tmp.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(tmp));
 
     test('locks a file to the current user and stops inheriting', () async {
       final file = File(p.join(tmp.path, 'mcp_bridge.json'))
@@ -113,7 +124,7 @@ void main() {
     tearDown(() async {
       await server.stop();
       container.dispose();
-      tmp.deleteSync(recursive: true);
+      removeTempDirectory(tmp);
     });
 
     test('is readable by nobody but this user', () async {

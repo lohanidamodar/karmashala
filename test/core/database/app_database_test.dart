@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../support/temp_directory.dart';
+
 void main() {
   late AppDatabase db;
 
@@ -46,7 +48,7 @@ void main() {
     });
     tearDown(() {
       file.close();
-      dir.deleteSync(recursive: true);
+      removeTempDirectory(dir);
     });
 
     test('takes the write-ahead log', () {

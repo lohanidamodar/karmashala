@@ -30,9 +30,28 @@
 // `libmfx64-gen.dll`, `igc64.dll`, `igd10iumd64.dll` and eight more UMD
 // libraries — loaded into every test process that touches an MP4.
 //
-// **Nothing was changed in `media_foundation.dart` on this evidence.** The
-// faulting module is the engine, not `mfplat`, `mfreadwrite` or `mf.dll`, and
-// turning hardware transforms off would trade a real feature against a guess.
+// ## The fix: the tester does not ask for the hardware encoder
+//
+// `appHardwareTransforms` is true in the app, where the hardware encoder is
+// the point, and every open in these three files passes `false`. The attribute
+// is then omitted rather than set to zero, so MF uses its own default and the
+// vendor MFTs are never loaded — which `an encode here loads no vendor
+// hardware encoder` below checks by asking `GetModuleHandleW` for them.
+//
+// **Measured 2026-09-09, five runs each way**, the three files together at
+// `--concurrency=8` beside a full suite in a second worktree:
+//
+//   before   2 of 5 killed the tester, +2 event 1000 (0x80000001, the same
+//            0x35aaf0), both WER records attaching a probe MP4; runs 5-39 s
+//   after    5 of 5 green, no new event of either id; runs 2-9 s
+//
+// The speed is the same finding from the other side: loading NVIDIA's and
+// Intel's stacks cost more than the encode did.
+//
+// It is a mitigation and not a diagnosis. The faulting module is still the
+// engine rather than `mfplat`, so what the crash *is* would still need a
+// symbolised stack from the minidump WER keeps beside the report; what is
+// established is which attribute has to be set for it to happen at all.
 //
 // ### Repeating the measurement
 //
@@ -41,26 +60,23 @@
 // 2. Run the three files together in this worktree, repeatedly:
 //    `flutter test test/core/media/video_writer_test.dart
 //     test/features/devices/device_mp4_recording_test.dart
-//     test/features/mcp/recording_tools_test.dart`
+//     test/features/mcp/recording_tools_test.dart --concurrency=8`
 // 3. Read the log, in PowerShell — the crash leaves nothing in the test
 //    output but "did not complete":
 //    `Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000}`
 //    for the faulting module and exception code, and `Id=1001` for the
 //    attached files and the loaded-module list.
-//
-// Attempted 2026-09-09 in eight runs at `--concurrency=4` and `8`, alongside a
-// full suite in a second worktree and nineteen other `flutter_tester`
-// processes live: green every time, no new event. So the sixteen above remain
-// the whole of the evidence, and a fix needs a symbolised stack from the
-// minidump WER keeps beside the report, not another guess.
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/media/frame_sink.dart';
 import 'package:karmashala/src/core/media/media_foundation.dart';
 
 import 'mp4_reader.dart';
+import '../../support/temp_directory.dart';
 
 /// A 4x4 frame of one flat colour.
 RgbaFrame _frame(int r, int g, int b, {int size = 64}) {
@@ -79,10 +95,38 @@ RgbaFrame _frame(int r, int g, int b, {int size = 64}) {
   );
 }
 
+/// Whether a DLL of that name is loaded into this process right now.
+///
+/// `GetModuleHandleW` rather than an enumeration: the question is about three
+/// named libraries, and a handle either exists or it does not.
+bool _isLoaded(String dll) {
+  final name = calloc<Uint16>(dll.length + 1);
+  try {
+    for (var i = 0; i < dll.length; i++) {
+      (name + i).value = dll.codeUnitAt(i);
+    }
+    return DynamicLibrary.open('kernel32.dll').lookupFunction<
+          IntPtr Function(Pointer<Uint16>),
+          int Function(Pointer<Uint16>)
+        >('GetModuleHandleW')(name) !=
+        0;
+  } finally {
+    calloc.free(name);
+  }
+}
+
+/// The vendor encoder MFTs the WER report listed, and the ones this machine
+/// has. A hardware open loads them; a software one must not.
+const _vendorEncoderMfts = [
+  'nvEncMFTH264x.dll',
+  'mfx_mft_h264ve_64.dll',
+  'libmfx64-gen.dll',
+];
+
 void main() {
   group('video support', () {
     test('says which platform it is speaking for either way', () {
-      final support = probeVideoSupport();
+      final support = probeVideoSupport(hardwareTransforms: false);
       expect(support.detail, isNotEmpty);
       if (!Platform.isWindows) {
         expect(support.available, isFalse);
@@ -92,7 +136,7 @@ void main() {
     });
 
     test('on Windows it names the encoder it found', () {
-      final support = probeVideoSupport();
+      final support = probeVideoSupport(hardwareTransforms: false);
       expect(support.available, isTrue, reason: support.detail);
       expect(support.detail.toLowerCase(), contains('h.264'));
     }, skip: !Platform.isWindows);
@@ -101,7 +145,7 @@ void main() {
   group('Media Foundation encoder', () {
     late Directory dir;
     setUp(() => dir = Directory.systemTemp.createTempSync('mf-encode'));
-    tearDown(() => dir.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(dir));
 
     test('writes an MP4 that starts with an ftyp box', () {
       final path = '${dir.path}${Platform.pathSeparator}out.mp4';
@@ -110,6 +154,7 @@ void main() {
         width: 64,
         height: 64,
         frameRate: 12,
+        hardwareTransforms: false,
       );
       for (var i = 0; i < 12; i++) {
         encoder.add(_frame(i * 20, 255 - i * 20, 128));
@@ -128,10 +173,39 @@ void main() {
         width: 64,
         height: 64,
         frameRate: 12,
+        hardwareTransforms: false,
       );
       encoder.add(_frame(10, 20, 30));
       encoder.abort();
       expect(File(path).existsSync(), isFalse);
+    }, skip: !Platform.isWindows);
+
+    // The guard for the fix, and it reads the evidence rather than the flag:
+    // every open in this file passes `hardwareTransforms: false`, and a module
+    // stays loaded for the life of the process, so one vendor MFT anywhere in
+    // the file fails this. It fails on the old code, where the attribute was
+    // unconditional.
+    test('an encode here loads no vendor hardware encoder', () {
+      final path = '${dir.path}${Platform.pathSeparator}soft.mp4';
+      final encoder = openMediaFoundationEncoder(
+        path: path,
+        width: 64,
+        height: 64,
+        frameRate: 12,
+        hardwareTransforms: false,
+      );
+      for (var i = 0; i < 12; i++) {
+        encoder.add(_frame(i * 20, 255 - i * 20, 128));
+      }
+      expect(encoder.finish(), greaterThan(0));
+
+      for (final mft in _vendorEncoderMfts) {
+        expect(
+          _isLoaded(mft),
+          isFalse,
+          reason: '$mft is loaded here; see this file\'s doc comment',
+        );
+      }
     }, skip: !Platform.isWindows);
 
     test('a remux of its own output is byte-identical in the payload', () {
@@ -141,6 +215,7 @@ void main() {
         width: 64,
         height: 64,
         frameRate: 12,
+        hardwareTransforms: false,
       );
       for (var i = 0; i < 12; i++) {
         encoder.add(_frame(i * 20, 255 - i * 20, 128));
@@ -155,6 +230,7 @@ void main() {
         height: 64,
         frameRate: 12,
         sequenceHeader: track.sequenceHeader,
+        hardwareTransforms: false,
       );
       for (final frame in track.frames) {
         remuxer.add(frame);

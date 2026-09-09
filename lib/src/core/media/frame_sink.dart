@@ -125,6 +125,7 @@ class IsolateFrameSink implements FrameSink {
     required this.format,
     required this.outputPath,
     this.frameRate = kRecordingFrameRate,
+    this.hardwareTransforms = appHardwareTransforms,
   });
 
   final RecordingFormat format;
@@ -132,6 +133,9 @@ class IsolateFrameSink implements FrameSink {
   /// The `.gif` file, or the directory the PNG sequence goes in.
   final String outputPath;
   final int frameRate;
+
+  /// Carried across to the worker, because a spawned isolate inherits nothing.
+  final bool hardwareTransforms;
 
   Isolate? _worker;
   SendPort? _commands;
@@ -151,6 +155,7 @@ class IsolateFrameSink implements FrameSink {
         format: format,
         outputPath: outputPath,
         frameRate: frameRate,
+        hardwareTransforms: hardwareTransforms,
       ),
       debugName: kFrameEncoderIsolateName,
       errorsAreFatal: true,
@@ -261,12 +266,14 @@ class _EncodeRequest {
     required this.format,
     required this.outputPath,
     required this.frameRate,
+    required this.hardwareTransforms,
   });
 
   final SendPort reply;
   final RecordingFormat format;
   final String outputPath;
   final int frameRate;
+  final bool hardwareTransforms;
 }
 
 class _EncodeFrame {
@@ -309,6 +316,7 @@ Future<void> _encodeWorker(_EncodeRequest request) async {
     format: request.format,
     outputPath: request.outputPath,
     frameRate: request.frameRate,
+    hardwareTransforms: request.hardwareTransforms,
   );
   await for (final message in commands) {
     try {
@@ -347,8 +355,22 @@ class FrameEncoder {
     required this.format,
     required this.outputPath,
     this.frameRate = kRecordingFrameRate,
+    bool hardwareTransforms = appHardwareTransforms,
     VideoEncoderOpener? openVideoEncoder,
-  }) : _openVideoEncoder = openVideoEncoder ?? openMediaFoundationEncoder;
+  }) : _openVideoEncoder =
+           openVideoEncoder ??
+           (({
+             required String path,
+             required int width,
+             required int height,
+             required int frameRate,
+           }) => openMediaFoundationEncoder(
+             path: path,
+             width: width,
+             height: height,
+             frameRate: frameRate,
+             hardwareTransforms: hardwareTransforms,
+           ));
 
   final RecordingFormat format;
   final String outputPath;

@@ -35,6 +35,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/temp_directory.dart';
 
 /// Does resuming a conversation depend on the directory you resume it from?
 ///
@@ -74,7 +75,7 @@ void main() {
   group('the store layout each agent actually has', () {
     late Directory tmp;
     setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_cwd_'));
-    tearDown(() => tmp.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(tmp));
 
     /// `<home>/projects/<encoded cwd>/<id>.jsonl`, the shape of every bucket in
     /// the owner's own `~/.claude/projects`.

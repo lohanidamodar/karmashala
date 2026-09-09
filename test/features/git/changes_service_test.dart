@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   late AppDatabase db;
@@ -103,7 +104,7 @@ void main() {
     // known before the merge for this to prove anything. An empty temp folder,
     // because a walk of anything real is a slow non-hermetic dependency.
     final root = Directory.systemTemp.createTempSync('karmashala-merge').path;
-    addTearDown(() => Directory(root).deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(Directory(root)));
     await index.index(root);
     await pumpEventQueue();
     touched.clear();

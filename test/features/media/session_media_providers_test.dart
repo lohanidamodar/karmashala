@@ -18,6 +18,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 
 import '../../support/fixtures.dart';
 import 'session_media_fixture.dart';
+import '../../support/temp_directory.dart';
 
 /// The panel end to end: a session row, the record it points at, and the list
 /// the panel draws from.
@@ -41,7 +42,7 @@ void main() {
   });
   tearDown(() {
     db.close();
-    dir.deleteSync(recursive: true);
+    removeTempDirectory(dir);
   });
 
   ImportedSession imported({

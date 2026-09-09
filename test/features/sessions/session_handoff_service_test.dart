@@ -46,6 +46,7 @@ import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// Forker's own vocabulary. Deliberately **has no accept-edits**: the carry
 /// rule's downwards-only clause is only visible against an agent that cannot
@@ -339,7 +340,7 @@ Harness harness({
 /// A Claude-shaped transcript on disk, so the real reader parses it.
 String writeTranscript(List<(String, String)> turns) {
   final dir = Directory.systemTemp.createTempSync('handoff-test');
-  addTearDown(() => dir.deleteSync(recursive: true));
+  addTearDown(() => removeTempDirectory(dir));
   final file = File('${dir.path}/session.jsonl');
   file.writeAsStringSync(
     turns

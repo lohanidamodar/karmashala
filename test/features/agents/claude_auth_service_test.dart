@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/agents/domain/claude_account.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
+import '../../support/temp_directory.dart';
 
 void main() {
   group('on macOS', _macOsCredentialsTests);
@@ -72,7 +73,7 @@ void main() {
       );
     });
 
-    tearDown(() => dir.deleteSync(recursive: true));
+    tearDown(() => removeTempDirectory(dir));
 
     void writeCreds(Map<String, dynamic> m) =>
         File(paths.credentialsFile).writeAsStringSync(jsonEncode(m));

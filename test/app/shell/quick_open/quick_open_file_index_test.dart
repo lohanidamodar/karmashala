@@ -94,16 +94,18 @@ void main() {
     return container;
   }
 
-  /// A walk is real filesystem work with real latency, and it yields through a
-  /// timer the test binding fakes. Neither `pumpAndSettle` nor `runAsync` alone
-  /// drives both, so alternate: real time for the I/O, fake time for the yield.
-  Future<void> settleWalk(WidgetTester tester) async {
-    for (var i = 0; i < 8; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 40)),
-      );
-      await tester.pumpAndSettle();
-    }
+  /// Walks the tree once, awaited, before the palette opens.
+  ///
+  /// **Counted, not timed.** A walk is real filesystem work — `directory.list`
+  /// behind a binding whose clock is fake — and the old helper spent eight
+  /// 40 ms slices hoping it had landed, which under load it had not. `runAsync`
+  /// is where that I/O can actually complete, so the walk is done there and
+  /// awaited; the palette then finds a fresh root and answers it from cache.
+  /// Nothing after this waits on wall clock for I/O that had not arrived.
+  Future<void> walkFirst(WidgetTester tester, RepoFileIndex index) async {
+    final files = await tester.runAsync(() => index.index(root.path));
+    expect(files, isNotNull, reason: 'the walk never landed');
+    expect(index.isIndexed(root.path), isTrue);
   }
 
   group('drawing what the index knows', () {
@@ -127,11 +129,12 @@ void main() {
 
     testWidgets('typing finds the repository\'s files', (tester) async {
       write('lib/alpha_widget.dart');
-      await open(tester, container());
+      final scope = container();
+      await walkFirst(tester, index);
+      await open(tester, scope);
 
       await tester.enterText(find.byType(TextField), 'alpha');
       await tester.pumpAndSettle();
-      await settleWalk(tester);
 
       expect(find.text('alpha_widget.dart'), findsOneWidget);
       expect(find.text('FILES'), findsOneWidget);
@@ -202,11 +205,12 @@ void main() {
       tester,
     ) async {
       write('lib/unrelated.dart');
-      await open(tester, container());
+      final scope = container();
+      await walkFirst(tester, index);
+      await open(tester, scope);
 
       await tester.enterText(find.byType(TextField), 'zzzqqq');
       await tester.pumpAndSettle();
-      await settleWalk(tester);
 
       expect(find.text('Nothing matches.'), findsOneWidget);
     });

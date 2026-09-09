@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/media/data/session_media_store.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 
 import 'session_media_fixture.dart';
+import '../../support/temp_directory.dart';
 
 /// What the media panel can find in a session, and what it costs to find it.
 ///
@@ -26,7 +27,7 @@ void main() {
     cache = Directory('${dir.path}/cache')..createSync();
     store = SessionMediaStore(cache);
   });
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(dir));
 
   Future<List<SessionMediaItem>> scan(File transcript) async {
     final result = await store.refresh(transcript.path, AgentIds.claudeCode);

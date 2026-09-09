@@ -22,6 +22,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// Every store the locator would have found, without touching a real home.
 class _StubLocator implements CliStoreLocator {
@@ -58,7 +59,7 @@ void main() {
   });
   tearDown(() {
     db.close();
-    claudeHome.deleteSync(recursive: true);
+    removeTempDirectory(claudeHome);
   });
 
   File settings() => File(p.join(claudeHome.path, 'settings.json'));
@@ -775,7 +776,7 @@ void main() {
     final broken = Directory.systemTemp.createTempSync(
       'karmashala_hooksvc_bad_',
     );
-    addTearDown(() => broken.deleteSync(recursive: true));
+    addTearDown(() => removeTempDirectory(broken));
     final brokenConfig = File(p.join(broken.path, 'settings.json'));
     brokenConfig.writeAsStringSync('{ not json');
     final wsl = wslEnv();

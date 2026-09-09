@@ -6,6 +6,8 @@ import 'package:karmashala/src/features/cli_detection/data/claude_store_reader.d
 import 'package:karmashala/src/features/cli_detection/domain/session_stats.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// Session stats read out of Claude Code's own JSONL store.
 ///
 /// Two claims are under test here. The counts have to be right — Claude Code
@@ -24,7 +26,7 @@ void main() {
     home = p.join(tmp.path, '.claude');
   });
 
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String pathFor(String id) =>
       p.join(home, 'projects', '-repo', '$id.jsonl');

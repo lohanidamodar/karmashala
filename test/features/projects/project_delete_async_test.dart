@@ -28,6 +28,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/temp_directory.dart';
 
 /// **Deleting a project does not hold the UI, and does not fail in silence.**
 ///
@@ -45,7 +46,7 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_delx_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String claudeHome() => p.join(tmp.path, '.claude');
 

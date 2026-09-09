@@ -7,6 +7,8 @@ import 'package:karmashala/src/features/sessions/presentation/transcript_image_p
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/temp_directory.dart';
+
 /// The owner's first ask: "when the agent reads an image the transcript shows
 /// only a file name" — Claude Code records the read as
 /// `tool_use{name:'Read', input:{file_path:'…/shot.png'}}`, so the path is
@@ -28,7 +30,7 @@ void main() {
   );
 
   setUp(() => dir = Directory.systemTemp.createTempSync('transcript_image'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(dir));
 
   File writePng(String name) =>
       File('${dir.path}/$name')..writeAsBytesSync(pngBytes);

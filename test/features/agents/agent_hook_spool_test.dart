@@ -4,6 +4,8 @@ import 'package:karmashala/src/features/agents/data/agent_hook_spool.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/temp_directory.dart';
+
 /// Reading back what a WSL agent's hook script wrote.
 ///
 /// The writer is four lines of `sh` in `AgentHookInstaller._posixScript` and
@@ -16,7 +18,7 @@ void main() {
   late Directory dir;
 
   setUp(() => dir = Directory.systemTemp.createTempSync('karmashala_spool_'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(dir));
 
   /// One payload, in the envelope the script writes: two headers, a blank
   /// line, then the agent's own JSON verbatim.

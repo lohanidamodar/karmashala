@@ -34,6 +34,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
+import '../../support/temp_directory.dart';
 
 /// The owner's report: *"when resuming last active tabs after restarting the
 /// app instead it seems to have created new sessions"*, with
@@ -87,7 +88,7 @@ AppDatabase seededDatabase() {
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_phantom_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() => removeTempDirectory(tmp));
 
   String storeHome() => p.join(tmp.path, '.claude');
 
