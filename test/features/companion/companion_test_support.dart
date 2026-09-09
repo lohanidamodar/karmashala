@@ -4,6 +4,7 @@ import 'package:karmashala/src/features/companion/client/companion_gateway.dart'
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 /// The companion app as tests host it: the app theme, the touch density the
@@ -14,8 +15,13 @@ Widget buildPhoneApp({
   required Widget home,
   Brightness brightness = Brightness.light,
   double textScale = 1.0,
+  List<Override> overrides = const [],
 }) => ProviderScope(
-  overrides: [companionGatewayProvider.overrideWithValue(gateway)],
+  overrides: [
+    companionGatewayProvider.overrideWithValue(gateway),
+    // Last wins, so a test can pin the clock an age is measured against.
+    ...overrides,
+  ],
   // The Material ancestor the shell's Scaffold provides in the real app.
   child: MaterialApp(
     theme: brightness == Brightness.dark ? AppTheme.dark() : AppTheme.light(),
@@ -46,6 +52,7 @@ Future<void> pumpPhone(
   Brightness brightness = Brightness.light,
   double textScale = 1.0,
   Size size = kPhoneSize,
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -57,6 +64,7 @@ Future<void> pumpPhone(
       home: home,
       brightness: brightness,
       textScale: textScale,
+      overrides: overrides,
     ),
   );
   await tester.pump();
@@ -70,12 +78,14 @@ Future<void> pumpTablet(
   required CompanionGateway gateway,
   required Widget home,
   double textScale = 1.0,
+  List<Override> overrides = const [],
 }) => pumpPhone(
   tester,
   gateway: gateway,
   home: home,
   textScale: textScale,
   size: kTabletSize,
+  overrides: overrides,
 );
 
 /// A session summary with test-friendly defaults.

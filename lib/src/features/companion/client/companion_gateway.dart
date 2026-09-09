@@ -594,6 +594,15 @@ abstract interface class CompanionGateway {
   CompanionLinkPath? get linkPath;
   Stream<CompanionLinkPath?> get linkPathStates;
 
+  /// When [link] last **changed** — not when it was last reported.
+  ///
+  /// Null until this phone has seen a change, so a surface admits it does not
+  /// know rather than claiming "just now" (CLAUDE.md §19). The path is
+  /// deliberately not part of it: a link that heals from the LAN onto the
+  /// relay never went down, and how long it has been up is the reading.
+  DateTime? get linkSince;
+  Stream<DateTime?> get linkSinceStates;
+
   /// The relay the link is running through right now, or null on the LAN path
   /// and while nothing is connected. A phone may hold several saved relays, so
   /// "Relay" alone no longer says which one — this names it.

@@ -152,15 +152,20 @@ void main() {
 
     // Everything from here is what the phone claims AFTER the desktop is gone.
     final claimed = <CompanionLinkState>[];
+    final stamps = <DateTime?>[];
     final watching = gateway.linkStates.listen(claimed.add);
+    final stamping = gateway.linkSinceStates.listen(stamps.add);
     addTearDown(watching.cancel);
+    addTearDown(stamping.cancel);
     await service!.stop();
     service = null;
 
     // The relay kicks the lonely socket, the transport redials it, and the
     // relay takes it again — the exact moment the old code said "connected".
     await settle(const Duration(seconds: 4));
-    await watching.cancel();
+    // Both at once: an await between them would let one more report land on
+    // the survivor and make the counts below disagree for nothing.
+    await Future.wait([watching.cancel(), stamping.cancel()]);
 
     // The first entry is the connected state it was in when we subscribed.
     expect(claimed.first, CompanionLinkState.connected);
@@ -172,6 +177,21 @@ void main() {
     expect(gateway.link, isNot(CompanionLinkState.connected));
     // And it says something true about why, rather than blaming the network.
     expect(gateway.linkTrouble, contains('relay'));
+
+    // The link's age is stamped per CHANGE, not per report: the redial above
+    // reports a state the phone is already in, and a stamp that followed every
+    // report would read "just now" for an outage of any age (CLAUDE.md §19).
+    // The first frame is the stamp already held when we subscribed.
+    var changes = 0;
+    for (var i = 1; i < claimed.length; i++) {
+      if (claimed[i] != claimed[i - 1]) changes++;
+    }
+    expect(
+      stamps.length - 1,
+      changes,
+      reason: '${claimed.length} reports carried $changes changes',
+    );
+    expect(gateway.linkSince, isNotNull);
   });
 
   test('when the desktop comes back the phone reconnects on its own, and the '
