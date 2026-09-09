@@ -71,34 +71,32 @@
 # the 2026-09-09 hangs were read: the stack said only that the main isolate
 # would not answer, and the stdout said which line it had reached.
 #
-# ## Last recorded run — 2026-09-09, 1.19.0+35 at 6bbe0f9b, after the fixes
+# ## Last recorded run — 2026-09-09, 1.19.0+35 at 5d085306, after the fixes
 #
-# 20 cycles from the `fix/quit-path` worktree, with the installed app and five
-# sibling agents live on the same machine. **Green, and the numbers below are
-# the same measurements the run before them failed on.**
+# 20 cycles from the `fix/quit-path` worktree, with the installed app live on
+# the same machine. **Green on every count the run below failed on.**
 #
 #   cycles                 20 launched, 20 came up, 20 quit on the close message
-#   launch to handshake    6641-9291 ms, mean 7749 — a debug build, JIT, under
-#                          five agents' test runs
-#   quit, wall clock       2521-4629 ms
-#   quit, as logged        1610-3747 ms, median 2207 — and it is now *nearly all
-#                          one `taskkill.exe`*: 1467 ms of the fastest cycle's
-#                          1610 was the pane reap, with 82 ms before it and
-#                          73 ms after
+#   launch to handshake    3920-5180 ms, mean 4595
+#   quit, wall clock       1299-3025 ms
+#   quit, as logged        833-2149 ms, median 1149
 #   files left in `data`   0 besides `karmashala.sqlite` and the log — no
 #                          handshake, no socket node, no `mcp` directory, and no
 #                          `-wal`/`-shm`, which a `close()` now removes
 #   processes left behind  0 of 20
-#   scratch data           0.67 -> 0.71 MB over 20 cycles
+#   scratch data           0.71 -> 0.75 MB over 20 cycles
 #
-# The quit is 155 ms above the run before it *because it now does the work that
-# run abandoned*: 19 of 20 cycles complete the pane reap, against 0 of 20
-# before. `Process.run('taskkill.exe', ['/PID', …, '/T', '/F'])` was measured
-# through the app's own API at 1039-1778 ms on this machine, against 196-214 ms
-# for `taskkill /?` and 134-160 ms for `cmd /c exit` — so ~1 s of every quit is
-# `taskkill` walking the process table, and nothing above the OS can make that
-# cheaper. The step's slice is 2500 ms because that is the measurement; 1500 ms
-# was under it, which is why the kill was abandoned rather than waited for.
+# **The quit is one `taskkill.exe` and a little else**, which the same 20 cycles
+# under five sibling agents' test runs say more loudly: 20 of 20 there too, but
+# 1610-3747 ms with a median of 2207, and 1467 ms of the fastest cycle's 1610
+# was the pane reap with 82 ms before it and 73 ms after. Measured through the
+# app's own API on that machine: `Process.run('taskkill.exe', ['/PID', …, '/T',
+# '/F'])` 1039-1778 ms, `taskkill /?` — the binary starting up and doing nothing
+# — 196-214 ms, `cmd /c exit` 134-160 ms. So ~1 s of a loaded machine's quit is
+# `taskkill` walking the process table and nothing above the OS can make it
+# cheaper. The terminal step's slice is 2500 ms because that is the reading;
+# 1500 ms was *under* it, which is why the kill was abandoned rather than
+# waited for on 18 of 20 cycles.
 #
 # ## The run this exists for — 2026-09-09, 1.19.0+35 at 1384fdce
 #
