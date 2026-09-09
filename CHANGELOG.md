@@ -41,6 +41,10 @@ installs claim the same version name.
   only.
 - **The app now uses `karmashala_remote`** — its own copies are gone; a change
   to the wire or the companion client is gated in under a minute.
+- **The app now uses `agent_cli`** for discovery, launch arguments, streaming,
+  store reading and usage; 1,758 import lines rewritten, and a change to the
+  coding-agent interface is gated in 52 seconds. Gemini CLI appears as a fourth
+  descriptor, launch-only and unverified on this machine.
 
 ---
 
