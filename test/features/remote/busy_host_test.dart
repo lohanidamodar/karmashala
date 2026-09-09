@@ -14,6 +14,7 @@
 /// queue grew faster than it drained — for ever. The phone's frames went to
 /// the back of it: its `session.subscribe` timed out, and so did the
 /// `LinkHello` that would have proved the link at all.
+@Tags(['cost'])
 library;
 
 import 'dart:async';
