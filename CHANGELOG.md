@@ -26,6 +26,8 @@ installs claim the same version name.
   utilities, path probing and the media layer, a pub-workspace member with 95
   tests that run in two seconds. `tool/gate.ps1 -Package core` gates a change to
   it in 36 seconds. Nothing changes in the app.
+- **`karmashala_browser` is built beside the app** — 326 tests in four seconds,
+  no dependencies; the app still runs its own copy until the cut-over.
 
 ---
 
