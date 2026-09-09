@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'command_runner.dart';
@@ -47,6 +49,7 @@ int _spawnsHere = 0;
 /// business knowing.
 Future<CommandResult> spawnToCompletion(CommandRequest request) async {
   _spawnsHere++;
+  if (request.stdinText case final input?) return _spawnWithInput(request, input);
   final result = await Process.run(
     request.executable,
     request.arguments,
@@ -67,6 +70,44 @@ Future<CommandResult> spawnToCompletion(CommandRequest request) async {
     exitCode: result.exitCode,
     stdout: result.stdout as String,
     stderr: result.stderr as String,
+  );
+}
+
+/// [spawnToCompletion] for a request that hands the process something on stdin.
+///
+/// `Process.run` cannot do this: it closes stdin before the child has read a
+/// byte. So the process is started, and the three pipes are attended to in the
+/// order that cannot deadlock — **the output futures are subscribed before the
+/// input is written**. A child that fills its stdout pipe while we are still
+/// filling its stdin blocks forever otherwise, and a transcript is exactly the
+/// size that makes it happen.
+///
+/// The close is deliberately not awaited. A CLI that answers before reading all
+/// of its input leaves a pipe nobody will drain, and awaiting that close would
+/// hang on a process that has already done the work; the exit code is the
+/// thing worth waiting for. `stdin.done` is caught for the same reason — the
+/// broken-pipe error it raises then is the normal end of that story, not a
+/// failure to report.
+Future<CommandResult> _spawnWithInput(
+  CommandRequest request,
+  String input,
+) async {
+  final process = await Process.start(
+    request.executable,
+    request.arguments,
+    workingDirectory: request.workingDirectory?.path,
+    runInShell: request.runInShell,
+  );
+  final out = process.stdout.transform(utf8.decoder).join();
+  final err = process.stderr.transform(utf8.decoder).join();
+  process.stdin.done.catchError((Object _) => process.stdin);
+  process.stdin.add(utf8.encode(input));
+  unawaited(process.stdin.close().catchError((Object _) {}));
+  final exitCode = await process.exitCode;
+  return CommandResult(
+    exitCode: exitCode,
+    stdout: await out,
+    stderr: await err,
   );
 }
 

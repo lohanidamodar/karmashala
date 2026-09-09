@@ -299,6 +299,22 @@ const _claudeCode = AgentDescriptor(
     // latest build of that family, so an alias cannot go stale the way
     // `claude-opus-4-1` does — and a stale id is a session that comes up on a
     // model the chip is not naming.
+    // A recap is written by a **second process**, not by the running session:
+    // print mode starts the same binary, reads the conversation and exits, so
+    // nothing is typed into the pane the user left open. See
+    // [AgentRecapSupport].
+    recap: AgentRecapSupport.overStdin(
+      ['-p'],
+      evidence:
+          'claude 2.1.266 --help: "Claude Code - starts an interactive session '
+          'by default, use -p/--print for non-interactive output" / '
+          '"-p, --print  Print response and exit (useful for pipes)". stdin is '
+          'what print mode reads: "--input-format <format>  Input format (only '
+          'works with --print): \'text\' (default), or \'stream-json\'". '
+          'Measured 2026-09-09 against a throwaway two-turn transcript: '
+          '`claude -p` with the conversation piped answered out of the piped '
+          'text and nothing else.',
+    ),
     model: AgentModelSupport.liveAndAtLaunch(
       flag: '--model',
       slashCommand: '/model',
@@ -1046,6 +1062,19 @@ const _codex = AgentDescriptor(
     // refresh instruction as much as the source: another account's list will
     // differ, and an id this list does not carry is still passed to the CLI
     // rather than dropped — see [AgentModelSupport.argumentsFor].
+    // The only one of the three whose `--help` states the stdin contract in
+    // full, including what a prompt *and* a pipe together do — which is the
+    // shape a recap uses: the fixed request as the argument, the conversation
+    // on stdin.
+    recap: AgentRecapSupport.overStdin(
+      ['exec'],
+      evidence:
+          'codex exec --help (codex-cli 0.153.4): "Run Codex '
+          'non-interactively" / "[PROMPT]  Initial instructions for the agent. '
+          'If not provided as an argument (or if `-` is used), instructions are '
+          'read from stdin. If stdin is piped and a prompt is also provided, '
+          'stdin is appended as a `<stdin>` block". Read 2026-09-09.',
+    ),
     model: AgentModelSupport.atLaunchOnly(
       flag: '--model',
       models: [
@@ -1662,6 +1691,21 @@ const _antigravity = AgentDescriptor(
     // one shipped agent with a first-party listing command, and the way to
     // refresh this list. They are account-specific, so an id this list does not
     // carry is still passed through rather than dropped.
+    // **The one that takes no conversation from anywhere.** `--print` carries
+    // the text itself, so the turns ride in the argument — declared as
+    // [AgentRecapSupport.inPrompt] rather than pretended into a stdin it does
+    // not read.
+    recap: AgentRecapSupport.inPrompt(
+      ['--print'],
+      evidence:
+          'agy 1.1.28 --help: "--print  Run a single prompt non-interactively '
+          'and print the response"; `agy --print` with no value exits on "flag '
+          'needs an argument: -print", which is what proves it carries one. '
+          'Its one stdin door is "--input-format ... stream-json reads one '
+          'NDJSON message per line from stdin and runs a turn for each; it '
+          'requires --output-format stream-json" — a protocol nothing here has '
+          'run. Read 2026-09-09.',
+    ),
     model: AgentModelSupport.liveAndAtLaunch(
       flag: '--model',
       slashCommand: '/model',

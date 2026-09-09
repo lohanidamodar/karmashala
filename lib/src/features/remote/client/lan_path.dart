@@ -110,6 +110,9 @@ class LanPathScout {
       final discovery = await LanDiscovery.start(
         group: group,
         beaconPort: beaconPort,
+        // One clock for the whole scout: the same [_now] that decides a
+        // cooldown decides whether a host has gone quiet.
+        now: _now,
       );
       _discovery = discovery;
       _adverts = discovery.adverts.listen((host) {

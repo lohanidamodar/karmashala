@@ -69,6 +69,9 @@ extension TerminalPaneTitles on TerminalSessionsController {
   ///    is for, and far more use than five tabs all called "PowerShell".
   /// 4. **Otherwise the profile label**, as before.
   String _titleForPane(String paneId) {
+    // A document names itself: there is no shell to have named its window and
+    // no directory it is in.
+    if (isSettingsPane(paneId)) return 'Settings';
     final instance = _instances[paneId];
     if (instance == null) return 'Terminal';
 

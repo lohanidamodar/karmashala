@@ -25,6 +25,7 @@ import '../data/terminal_instance.dart';
 import '../data/terminal_layout_dao.dart';
 import '../domain/agent_pane_launch.dart';
 import '../domain/detach_policy.dart';
+import '../domain/document_pane.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/workspace_layout.dart';

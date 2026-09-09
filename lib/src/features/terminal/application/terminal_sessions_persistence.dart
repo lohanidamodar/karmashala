@@ -340,6 +340,13 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
   /// region is room the user cleared for something, and a reboot has already
   /// taken away everything that could have gone in it. The layout comes back
   /// holding what actually exists.
+  ///
+  /// A **document** has no instance either and is stored anyway, because it
+  /// still exists after a reboot: it is a surface, not a process, and the row
+  /// is what keeps `withoutMissing` from dropping its leaf. Its `profile_id`
+  /// says [kDocumentProfileId] rather than a shell's — the column already
+  /// names how a pane is rebuilt, so nothing had to be added to the schema to
+  /// say what this pane holds.
   StoredTerminalTab _storedTab(TerminalTab tab, {required bool refresh}) {
     return StoredTerminalTab(
       id: tab.id,
@@ -347,7 +354,16 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
       focusedPaneId: tab.focusedPaneId,
       panes: [
         for (final paneId in tab.layout.panes)
-          if (_instances[paneId] case final instance?)
+          if (isDocumentPane(paneId))
+            StoredTerminalPane(
+              id: paneId,
+              tabId: tab.id,
+              profileId: kDocumentProfileId,
+              title: _titleForPane(paneId),
+              workingDirectory: null,
+              scrollback: '',
+            )
+          else if (_instances[paneId] case final instance?)
             StoredTerminalPane(
               id: paneId,
               tabId: tab.id,

@@ -14,6 +14,7 @@ import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/note_edit_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/presentation/settings_tab_view.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../todos/presentation/todo_edit_dialog.dart';
 import '../application/terminal_capture.dart';
@@ -28,6 +29,7 @@ import '../application/terminal_sessions_controller.dart';
 import '../data/terminal_instance.dart';
 import '../data/theme_discovery.dart';
 import '../domain/command_blocks.dart';
+import '../domain/document_pane.dart';
 import '../domain/mounted_tabs.dart';
 import '../domain/terminal_drag.dart';
 import '../domain/terminal_palette.dart';
@@ -507,6 +509,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                             group,
                             tab,
                             widget.groupFocused && tab.id == activeTabId,
+                            // Focused is where typing goes; showing is which
+                            // of the mounted tabs the stack is painting. Only
+                            // a document reads the second — see [_buildPane].
+                            showing: tab.id == activeTabId,
                           ),
                         ),
                     ],
@@ -530,13 +536,19 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   /// one pane is already named by the workbench strip, and an empty region
   /// draws its own invitation with its own close button — 30px of chrome
   /// repeating either would be 30px taken from the terminal for nothing.
-  Widget _buildRegion(PaneGroup group, TerminalTab tab, bool tabActive) {
+  Widget _buildRegion(
+    PaneGroup group,
+    TerminalTab tab,
+    bool tabActive, {
+    required bool showing,
+  }) {
     final split = tab.layout.groups.length > 1;
     final empty =
         group.panes.length == 1 &&
         _sessions.instanceFor(group.activePaneId) == null;
     final pane = _buildPane(
       group.activePaneId,
+      showing: showing,
       focused: tabActive && group.activePaneId == tab.focusedPaneId,
       showFocusRing: split,
     );
@@ -556,8 +568,20 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     String paneId, {
     required bool focused,
     required bool showFocusRing,
+    required bool showing,
   }) {
     final theme = Theme.of(context);
+    // A document is one of the app's own surfaces in a tab, and it is built
+    // **only while its tab is the one on screen**. [MountedTabs] keeps a
+    // handful of tabs mounted so a switch is instant, which is right for a
+    // terminal — its widgets are cheap and its buffer is not theirs — and
+    // wrong for a settings page, which would sit behind another tab holding a
+    // subscription to everything its section reads. Which page it is on lives
+    // in `settingsTabSectionProvider`, so coming back is a rebuild rather than
+    // a reset. Measured in `settings_tab_test.dart`.
+    if (isSettingsPane(paneId)) {
+      return showing ? const SettingsTabView() : const SizedBox.shrink();
+    }
     final instance = _sessions.instanceFor(paneId);
     // A pane a layout holds and the controller has no instance for is an empty
     // region of a split — the invariant `isEmptySlot` states. It is the only
@@ -1165,6 +1189,7 @@ class TerminalTabChip extends StatelessWidget {
     required this.onBulkClose,
     this.onSavePreset,
     this.agentStatus,
+    this.icon,
     this.accented = true,
     super.key,
   });
@@ -1183,6 +1208,11 @@ class TerminalTabChip extends StatelessWidget {
   /// Handed in rather than watched, exactly as [liveness] is: the chip is a
   /// dumb view of one tab and `_TabChip` is what subscribes.
   final AgentActivityStatus? agentStatus;
+
+  /// A glyph in place of the status dot, for a tab whose content is not a
+  /// process. A document has no liveness to report and `exited` — the honest
+  /// answer for a pane with no instance — would read as a session that died.
+  final IconData? icon;
 
   final bool selected;
 
@@ -1231,8 +1261,11 @@ class TerminalTabChip extends StatelessWidget {
       // running, exactly as that button's tooltip promises.
       onClose: onClose,
       // One slot, never two glyphs: a tab running an agent says what the agent
-      // is doing, and one that is not says whether anything is running at all.
-      leading: status == null
+      // is doing, one that is not says whether anything is running at all, and
+      // a document says what it is.
+      leading: icon != null
+          ? Icon(icon, size: Chrome.iconSmall)
+          : status == null
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: status),
       label: title,

@@ -59,7 +59,12 @@ extension TerminalPaneRegions on TerminalSessionsController {
 
   /// [isEmptySlot] without the tab lookup, for callers that already hold the
   /// tab.
-  bool _isEmptyRegion(String paneId) => !_instances.containsKey(paneId);
+  ///
+  /// A **document** is the one other pane a layout holds and [_instances] does
+  /// not, and it is the opposite of empty — it is a surface the workbench
+  /// draws itself. See [isDocumentPane].
+  bool _isEmptyRegion(String paneId) =>
+      !_instances.containsKey(paneId) && !isDocumentPane(paneId);
 
   /// The first empty region of the active tab, if it has one.
   ///

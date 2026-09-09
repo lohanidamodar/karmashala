@@ -32,6 +32,39 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
+  /// Opens the Settings tab, or brings the one already open forward. Returns
+  /// its id.
+  ///
+  /// **One tab, however many times it is asked for.** Settings is one
+  /// document over one store, so a second tab would be the same page twice
+  /// disagreeing with itself — and the route this replaced pushed exactly that
+  /// second copy, over the first, over the window.
+  ///
+  /// An ordinary tab in every other respect: it is closed, reordered, dragged
+  /// between groups, listed in the picker and restored by the same code as a
+  /// shell. The only thing that differs is what its pane holds, which is a
+  /// property of the **pane id** — see [kSettingsPaneId].
+  String openSettingsTab() {
+    final open = _tabContaining(kSettingsPaneId);
+    if (open != null) {
+      activateTab(open.id);
+      return open.id;
+    }
+    final tabId = _newId();
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(kSettingsPaneId),
+        focusedPaneId: kSettingsPaneId,
+      ),
+    );
+    _tabsMutated();
+    _activeTabId = tabId;
+    _publish();
+    persistStructure();
+    return tabId;
+  }
+
   /// Opens a new tab running an agent CLI in a PTY and makes it active.
   ///
   /// This is what makes any registry agent usable without a protocol adapter:

@@ -31,19 +31,28 @@ import 'tools_page.dart';
 /// becomes a drill-down list: pick a section, get its page, back out with the
 /// app bar. The selected section lives on this state, so resizing across the
 /// breakpoint keeps your place.
+///
+/// **Mounted, never pushed.** The desktop draws it as a workbench tab
+/// ([SettingsTabView]); the window-matrix tests mount it directly. It used to
+/// carry a `show` that pushed it as a full-screen `MaterialPageRoute`, which
+/// covered the menu bar, the tab strip and the very panes half of these
+/// settings are about — the backlog item this page's shape now answers.
+/// Nothing needed that route kept: there is no first-run flow, and the phone
+/// has its own `CompanionSettingsScreen`.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({this.initialSection, super.key});
+  const SettingsScreen({this.initialSection, this.onSectionChanged, super.key});
 
   /// The section to land on — how menu items and quick open deep-link
-  /// ("agents" from an agent entry, and so on).
+  /// ("agents" from an agent entry, and so on). Changing it moves the page,
+  /// so a deep link into a Settings tab that is already open lands on its
+  /// section rather than leaving the user where they were.
   final SettingsSectionId? initialSection;
 
-  static Future<void> show(
-    BuildContext context, {
-    SettingsSectionId? section,
-  }) => Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => SettingsScreen(initialSection: section)),
-  );
+  /// Told which section the user moved to, and told `null` when a compact
+  /// window backs out to the list. How the workbench tab keeps the page
+  /// outside a `State` it drops every time another tab is on screen — see
+  /// [SettingsTabView].
+  final ValueChanged<SettingsSectionId?>? onSectionChanged;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -57,10 +66,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Deep links open straight into their section.
   late bool _openOnCompact = widget.initialSection != null;
 
-  void _select(SettingsSectionId section) => setState(() {
-    _selected = section;
-    _openOnCompact = true;
-  });
+  @override
+  void didUpdateWidget(SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSection == oldWidget.initialSection) return;
+    // A deep link arriving at a screen that is already up. Null is the compact
+    // list rather than a section, which is what backing out writes.
+    _selected = widget.initialSection ?? _selected;
+    _openOnCompact = widget.initialSection != null;
+  }
+
+  void _select(SettingsSectionId section) {
+    setState(() {
+      _selected = section;
+      _openOnCompact = true;
+    });
+    widget.onSectionChanged?.call(section);
+  }
+
+  void _backToList() {
+    setState(() => _openOnCompact = false);
+    widget.onSectionChanged?.call(null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,11 +102,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // shell's 30px strip and a back button plus a title does not sit
             // in it.
             toolbarHeight: 44,
+            // **The only way back is a step inside the page.** There used to
+            // be a second `BackButton` here that popped the route this page
+            // was pushed as; the page is a workbench tab now, so there is no
+            // route to pop and an implied one would pop the app's own. The
+            // way *out* of Settings is the way out of any tab — close it, or
+            // pick another.
+            automaticallyImplyLeading: false,
             leading: compact && _openOnCompact
-                ? BackButton(
-                    onPressed: () => setState(() => _openOnCompact = false),
-                  )
-                : const BackButton(),
+                ? BackButton(onPressed: _backToList)
+                : null,
             title: Row(
               children: [
                 Icon(AppIcons.gearSix, color: theme.colorScheme.tertiary),

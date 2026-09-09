@@ -136,6 +136,10 @@ extension TerminalLayoutRestore on TerminalSessionsController {
   /// Returns false when the pane's profile no longer resolves — a WSL distro
   /// that has been removed, say — since there would be nothing to start it with.
   bool _adoptRestored(StoredTerminalPane pane, {required bool inActiveTab}) {
+    // A document is rebuilt by being drawn, so there is nothing to adopt and
+    // nothing that could fail to resolve — but it is still here, which is what
+    // the true says and what keeps `withoutMissing` from dropping its leaf.
+    if (isDocumentPane(pane.id)) return true;
     // An agent pane carries its own command, so it does not need — and never
     // had — a resolvable shell profile.
     final profile = terminalProfileFromId(pane.profileId);

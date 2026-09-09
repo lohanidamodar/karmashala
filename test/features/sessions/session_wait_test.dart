@@ -411,6 +411,36 @@ void main() {
       expect(outcome.state, SessionWaitState.done);
       expect(outcome.transcriptChanged, isTrue);
     });
+
+    test('a transcript that stood still reports false, whatever it says', () async {
+      // **The reading is a watermark, not a parse.** Nothing in the wait opens
+      // a transcript or looks at a row, so what a CLI writes *inside* one — a
+      // thinking block among them — cannot reach this answer: the mtime is the
+      // whole evidence, and an unmoved mtime is `false` however much the file
+      // would have to say.
+      attachPane('s1');
+      final pending = waitService().wait('s1');
+      final written = testTime.subtract(const Duration(minutes: 1));
+      reports.add(
+        report(
+          status: AgentActivityStatus.working,
+          source: AgentStatusSource.stateFile,
+          modifiedAt: written,
+        ),
+      );
+      await pumpEventQueue();
+      reports.add(
+        report(
+          status: AgentActivityStatus.idle,
+          source: AgentStatusSource.stateFile,
+          modifiedAt: written,
+        ),
+      );
+
+      final outcome = await pending;
+      expect(outcome.state, SessionWaitState.done);
+      expect(outcome.transcriptChanged, isFalse);
+    });
   });
 
   group('the bound', () {
