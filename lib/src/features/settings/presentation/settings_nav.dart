@@ -7,7 +7,7 @@ import '../../../app/theme/design_tokens.dart';
 
 /// The sections of the settings screen — the master list of the master-detail.
 ///
-/// An enum so a caller can deep-link (`SettingsScreen.show(context,
+/// An enum so a caller can deep-link (`openSettingsTab(ref,
 /// section: SettingsSectionId.agents)`) without knowing how the page lays
 /// itself out. Keywords feed the nav's filter box, so "font" finds Terminal
 /// and "zoom" finds Appearance.

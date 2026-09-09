@@ -27,7 +27,6 @@ import '../../features/notes/application/notes_providers.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
-import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/sessions/application/session_liveness_reconciler.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
@@ -357,7 +356,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
             _ChromeToggle(
               icon: AppIcons.gearSix,
               label: 'Settings',
-              onPressed: () => SettingsScreen.show(context),
+              onPressed: () => openSettingsTab(ref),
             ),
           ],
         ),
@@ -729,7 +728,7 @@ class _DesktopMenuBar extends ConsumerWidget {
               // `commandActivator`'s comment on why Ctrl+C and Ctrl+V had to
               // change shape instead of swapping a modifier.
               shortcut: commandActivator(LogicalKeyboardKey.comma),
-              onPressed: () => SettingsScreen.show(context),
+              onPressed: () => openSettingsTab(ref),
               child: const Text('Settings'),
             ),
             const Divider(height: 1),
