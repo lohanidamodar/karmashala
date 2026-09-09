@@ -41,6 +41,7 @@ part 'remote_companion_gateway_pairing.dart';
 part 'remote_companion_gateway_connections.dart';
 part 'remote_companion_gateway_connect_loop.dart';
 part 'remote_companion_gateway_dial.dart';
+part 'remote_companion_gateway_promotion.dart';
 part 'remote_companion_gateway_liveness.dart';
 part 'remote_companion_gateway_notifications.dart';
 part 'remote_companion_gateway_sessions.dart';
@@ -262,6 +263,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// trying again on a schedule, and paying for it with the link that works,
   /// is not.
   final _lanUpgradeRefused = <String, DateTime>{};
+
+  /// True while a second link is being dialled and adopted.
+  ///
+  /// Guards against two promotions at once, and tells the liveness watch that
+  /// a drop on the link being replaced is this promotion's own doing.
+  bool _promoting = false;
+
+  /// A drop on the link being replaced, held while a promotion decides. See
+  /// `_releaseDeferredDrop`.
+  bool _dropDeferred = false;
 
   /// What this phone last said about itself, resent whenever it changes.
   ///

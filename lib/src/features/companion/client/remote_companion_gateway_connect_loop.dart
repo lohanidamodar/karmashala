@@ -2,8 +2,8 @@ part of 'remote_companion_gateway.dart';
 
 // The loop that keeps a link: dial, park until something says the link died,
 // then wait out a backoff and dial again. The beacon's offer to upgrade a
-// working relay link to the LAN is answered here too, because it is the one
-// thing that ends a healthy link on purpose.
+// working relay link to the LAN is heard here and handed to the promotion
+// beside it, which no longer ends anything to take it up.
 
 /// How long a beacon host that refused a direct dial is left alone by the LAN
 /// *upgrade* — the one that spends a working link on the attempt.
@@ -34,8 +34,9 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     _lanSightings = scout.sightings.listen(_onLanSighting);
   }
 
-  /// A beacon while the relay carries the link: re-dial, LAN first. Gateway
-  /// state survives — subscriptions rebuild, held transcripts re-read.
+  /// A beacon while the relay carries the link: dial the LAN *alongside* it.
+  /// Nothing is torn down — the promotion adopts the second link only once it
+  /// has answered, and hands the relay's own frames over with it.
   void _onLanSighting(DiscoveredHost host) {
     final scout = lan;
     if (scout == null || _closed || _record == null) return;
@@ -51,8 +52,7 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     }
     if (scout.inCooldown(host)) return;
     if (_lanUpgradeIsRefused(scout.keyOf(host))) return;
-    onLog?.call('beacon sighted; switching the link to the LAN');
-    _declareDead();
+    unawaited(_promoteToLan(scout, host));
   }
 
   /// Whether the beacon's offer to upgrade to [key] is still refused.

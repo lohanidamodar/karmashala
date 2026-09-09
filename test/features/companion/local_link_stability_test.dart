@@ -327,11 +327,13 @@ void main() {
     }
     await watch.cancel();
 
-    expect(scout.dials, greaterThan(0), reason: 'worth trying — once');
+    expect(scout.dials, 1, reason: 'worth trying — once');
     expect(
-      states.where((s) => s == CompanionLinkState.connecting),
-      hasLength(1),
-      reason: 'a path already proved unusable must not keep costing the link',
+      states.where((s) => s != CompanionLinkState.connected),
+      isEmpty,
+      reason: 'and it costs the link nothing at all: the candidate is dialled '
+          'on a second transport, so a path that turns out to be unusable is '
+          'a dial nobody paid for — make-before-break',
     );
     expect(gateway.link, CompanionLinkState.connected);
     expect(
@@ -375,8 +377,8 @@ void main() {
 
     await beaconRepeatedly();
     expect(
-      states.where((s) => s == CompanionLinkState.connecting),
-      hasLength(1),
+      scout.dials,
+      1,
       reason: 'six sightings, one attempt — the refusal holds while it is '
           'fresh',
     );
@@ -390,10 +392,15 @@ void main() {
     await watch.cancel();
 
     expect(
-      states.where((s) => s == CompanionLinkState.connecting),
-      hasLength(2),
+      scout.dials,
+      2,
       reason: 'the refusal expires: one blip must not pin this phone to the '
           'relay for as long as the app happens to stay alive',
+    );
+    expect(
+      states.where((s) => s != CompanionLinkState.connected),
+      isEmpty,
+      reason: 'and neither attempt was paid for with the link that works',
     );
     await until(
       () => gateway.link == CompanionLinkState.connected,
