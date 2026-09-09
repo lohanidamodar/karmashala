@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/companion_providers.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// The strip that says the host cannot be reached, drawn above every tab.
 ///

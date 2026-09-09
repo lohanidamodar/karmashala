@@ -13,8 +13,7 @@
 /// phone must be exactly as wide as it always was.
 library;
 
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_chrome.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_composer.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_log_screen.dart';
@@ -28,7 +27,7 @@ import 'package:karmashala/src/features/companion/presentation/session_view_scre
 import 'package:karmashala/src/features/companion/presentation/start_session_screen.dart';
 import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
 import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

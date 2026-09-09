@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../remote/domain/remote_payloads.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// The pending approval for one session, on the phone.
 ///

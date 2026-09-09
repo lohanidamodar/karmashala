@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/design_tokens.dart';
-import '../../client/companion_gateway.dart';
-import '../../client/pairing_input.dart';
+import 'package:karmashala_remote/companion.dart';
+import '../../application/companion_providers.dart';
 import '../companion_chrome.dart';
 import 'pairing_progress_screen.dart';
 

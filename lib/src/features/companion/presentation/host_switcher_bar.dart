@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/companion_providers.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'pairing/pairing_screen.dart';
 

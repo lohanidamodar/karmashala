@@ -6,8 +6,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
 import '../data/companion_attachment_store.dart';
 import '../data/paired_device_dao.dart';
-import '../domain/paired_device.dart';
-import '../protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 
 /// Data access for the paired-device store.
 final pairedDeviceDaoProvider = Provider<PairedDeviceDao>(

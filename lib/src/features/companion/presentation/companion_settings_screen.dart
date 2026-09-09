@@ -8,7 +8,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart' show compactAge;
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../application/companion_providers.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_log_screen.dart';
 import 'connections_section.dart';

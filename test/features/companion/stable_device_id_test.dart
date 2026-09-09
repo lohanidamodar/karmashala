@@ -13,16 +13,14 @@
 library;
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/remote_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala/src/features/remote/client/companion_store.dart'
+import 'package:karmashala_remote/client.dart'
     as stored;
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
-import 'package:karmashala/src/features/remote/pairing/pairing_payload.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
-import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala_remote/pairing.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -8,7 +8,7 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/relay_prefs.dart';
 import '../application/remote_access_controller.dart';
 import '../application/remote_providers.dart';
-import '../domain/paired_device.dart';
+import 'package:karmashala_remote/remote.dart';
 import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';

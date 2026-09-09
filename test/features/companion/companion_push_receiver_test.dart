@@ -8,9 +8,9 @@ import 'dart:typed_data';
 import 'package:karmashala/src/app/companion/companion_push_entry.dart';
 import 'package:karmashala/src/features/companion/notifications/attention_notification.dart';
 import 'package:karmashala/src/features/companion/push/companion_push_receiver.dart';
-import 'package:karmashala/src/features/remote/client/companion_store.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
-import 'package:karmashala/src/features/remote/push/push_crypto.dart';
+import 'package:karmashala_remote/client.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/push.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 

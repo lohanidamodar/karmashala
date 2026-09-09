@@ -1,7 +1,6 @@
 import 'package:karmashala/src/app/companion/companion_lifecycle.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
+import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 

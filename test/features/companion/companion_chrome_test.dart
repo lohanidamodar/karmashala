@@ -12,8 +12,7 @@
 library;
 
 import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_chrome.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_log_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/host_switcher_bar.dart';

@@ -5,8 +5,7 @@ library;
 
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

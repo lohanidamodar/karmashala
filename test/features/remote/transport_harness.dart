@@ -4,7 +4,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala/src/features/remote/transport/remote_transport.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A backoff short enough that a reconnect test finishes, long enough that it

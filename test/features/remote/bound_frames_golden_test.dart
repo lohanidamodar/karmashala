@@ -51,11 +51,11 @@ import 'package:karmashala/src/features/environments/domain/environment_path.dar
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
-import 'package:karmashala/src/features/remote/application/host_session_api.dart';
+import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_providers.dart';
 import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/domain/repository.dart';

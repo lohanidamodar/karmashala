@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/pairing_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/scan_qr_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/short_code_screen.dart';

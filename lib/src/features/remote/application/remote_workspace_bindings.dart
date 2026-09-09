@@ -19,9 +19,8 @@ import '../../explorer/application/checkout.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../domain/remote_payloads.dart';
-import '../protocol.dart';
-import 'host_bindings.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';
 import 'remote_session_start_bindings.dart';
 

@@ -12,7 +12,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_status_badge.dart';

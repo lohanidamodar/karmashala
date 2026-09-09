@@ -17,10 +17,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/features/remote/protocol.dart';
-import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
-import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
-import 'package:karmashala/src/features/remote/transport/sealed_channel.dart';
+import 'package:karmashala_remote/remote.dart';
 
 /// Sent in every payload so a capture can be grepped for it.
 const String kSoakMarker = 'PLAINTEXT-MUST-NOT-CROSS-THE-WIRE';

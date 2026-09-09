@@ -4,7 +4,7 @@
 /// `flutter_local_notifications`.
 library;
 
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// One notification, in plugin-neutral terms.
 class AttentionNotification {

@@ -18,9 +18,8 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/domain/session_launch.dart';
-import '../domain/remote_payloads.dart';
-import '../protocol.dart';
-import 'host_bindings.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/host.dart';
 
 /// One installed agent, with everything the phone needs to offer it as a
 /// real choice: its name, whether its command line can carry an opening

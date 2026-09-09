@@ -10,8 +10,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _device = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';

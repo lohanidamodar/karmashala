@@ -3,10 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../explorer/presentation/project_card.dart';
-import '../../remote/domain/remote_payloads.dart';
-import '../../remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_session_list.dart';

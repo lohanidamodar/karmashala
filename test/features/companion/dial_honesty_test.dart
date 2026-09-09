@@ -15,10 +15,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
-import 'package:karmashala/src/features/remote/client/companion_client.dart';
-import 'package:karmashala/src/features/remote/client/companion_store.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
-import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala_remote/client.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 

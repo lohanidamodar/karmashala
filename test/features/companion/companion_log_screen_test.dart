@@ -7,7 +7,7 @@
 library;
 
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_log_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_settings_screen.dart';
 import 'package:flutter/material.dart';

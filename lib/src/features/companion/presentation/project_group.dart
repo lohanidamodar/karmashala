@@ -8,8 +8,8 @@
 library;
 
 import '../../explorer/application/session_diff_stat.dart';
-import '../../remote/domain/remote_payloads.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// One project, with the host's rows for it in the host's own order.
 class CompanionProjectGroup {

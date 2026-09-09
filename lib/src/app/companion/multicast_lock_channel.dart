@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/services.dart';
 
-import '../../features/remote/client/lan_path.dart';
+import 'package:karmashala_remote/client.dart';
 
 class ChannelMulticastLock implements MulticastLockHolder {
   ChannelMulticastLock({this.onLog});

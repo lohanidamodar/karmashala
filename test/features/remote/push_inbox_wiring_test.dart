@@ -13,10 +13,8 @@ import 'package:karmashala/src/features/notifications/domain/watched_session.dar
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
-import 'package:karmashala/src/features/remote/domain/paired_device.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
-import 'package:karmashala/src/features/remote/push/push_crypto.dart';
-import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/push.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:cryptography/cryptography.dart';

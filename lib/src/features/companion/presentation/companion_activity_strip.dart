@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../remote/domain/remote_payloads.dart';
+import 'package:karmashala_remote/remote.dart';
 import '../../sessions/presentation/activity_strip.dart';
 import '../application/companion_providers.dart';
 

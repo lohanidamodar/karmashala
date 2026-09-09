@@ -15,10 +15,9 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/remote/application/host_session_api.dart';
+import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';

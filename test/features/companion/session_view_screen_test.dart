@@ -1,11 +1,9 @@
 import 'dart:async';
 
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_activity_strip.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

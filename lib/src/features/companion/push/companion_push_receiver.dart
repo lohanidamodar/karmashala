@@ -10,9 +10,9 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 
-import '../../remote/client/companion_store.dart' as stored;
-import '../../remote/push/push_crypto.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/client.dart' as stored;
+import 'package:karmashala_remote/push.dart';
+import 'package:karmashala_remote/companion.dart';
 import '../notifications/attention_notification.dart';
 
 class CompanionPushReceiver {
