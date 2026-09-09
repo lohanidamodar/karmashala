@@ -4,12 +4,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('the built-in ids name real descriptors, in registry order', () {
-    expect(AgentIds.builtIn, [
-      'claudeCode',
-      'codex',
-      'antigravity',
-      'geminiCli',
-    ]);
+    expect(AgentIds.builtIn, ['claudeCode', 'codex', 'antigravity']);
     expect(
       AgentRegistry.builtIn.descriptors.map((d) => d.id),
       AgentIds.builtIn,

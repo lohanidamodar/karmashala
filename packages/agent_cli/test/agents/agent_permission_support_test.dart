@@ -16,7 +16,7 @@ void main() {
       registry.byId(id)!.launch.permission;
 
   group('every declared agent', () {
-    // *Declared* is the word: Gemini CLI is in the registry with an unknown
+    // *Declared* is the word: a registry-only agent may carry an unknown
     // permission vocabulary, because nobody has read its modes off the binary.
     // A golden over what nobody has looked at would be the fabrication this
     // file exists to catch.

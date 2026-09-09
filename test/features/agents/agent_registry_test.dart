@@ -200,23 +200,6 @@ const List<_AgentGolden> _goldens = [
     resumeArguments: ['--conversation', 'sid'],
     interactiveResumeArguments: ['--conversation', 'sid'],
   ),
-  _AgentGolden(
-    id: 'geminiCli',
-    displayName: 'Gemini CLI',
-    // No protocol adapter, so the generic one drives it — and everything below
-    // is empty for the reason the descriptor is thin. `agent_cli` states `-p`
-    // and `-m` and nothing else because nobody here has run this CLI, so an
-    // empty golden is the claim that nothing is claimed.
-    kind: null,
-    executable: 'gemini',
-    baseArguments: [],
-    // `PermissionSelection.empty.canonical`: no mode is offered, so a session
-    // that chose nothing enforces nothing and passes no flags.
-    defaultSelection: 'none',
-    permissionArguments: {},
-    resumeArguments: [],
-    interactiveResumeArguments: [],
-  ),
 ];
 
 void main() {
@@ -236,9 +219,9 @@ void main() {
       _goldens.map((g) => g.kind),
     );
     // Every agent with a protocol adapter is shipped: the enum has no orphans.
-    // The nulls are the agents driven by the generic adapter, which is what
-    // `AgentKind` means now — "this one has an adapter" — rather than "this one
-    // is shipped".
+    // A null kind would be an agent driven by the generic adapter, which is
+    // what `AgentKind` means now — "this one has an adapter" — rather than
+    // "this one is shipped".
     expect(_goldens.map((g) => g.kind).nonNulls, AgentKind.values);
     // Rows written before the id migration hold `AgentKind.name`, so the id and
     // the kind must still agree for the built-ins that have one to load.

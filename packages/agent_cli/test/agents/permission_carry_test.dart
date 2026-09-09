@@ -171,9 +171,9 @@ void main() {
     });
 
     test('a bypass carries onto every agent that has one as its own', () {
-      // Gemini CLI declares no permission vocabulary at all, so there is no
-      // rung to carry onto and `carryPermission` says so rather than inventing
-      // one — which the "no descriptor enforces nothing" case below asserts.
+      // An agent that declares no permission vocabulary has no rung to carry
+      // onto, and `carryPermission` says so rather than inventing one — which
+      // the "no descriptor enforces nothing" case below asserts.
       for (final agentId in AgentRegistry.builtIn.descriptors
           .where((d) => d.launch.permission.isKnown)
           .map((d) => d.id)) {

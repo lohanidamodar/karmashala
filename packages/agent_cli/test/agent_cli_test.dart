@@ -223,23 +223,9 @@ void main() {
         containsAllInOrder(['--model', 'sonnet']),
       );
       expect(
-        oneShotInvocation(
-          AgentIds.geminiCli,
-          'x',
-          model: 'flash',
-          descriptor: AgentRegistry.builtIn.byId(AgentIds.geminiCli),
-        ).arguments,
-        containsAllInOrder(['-m', 'flash']),
+        oneShotInvocation(AgentIds.codex, 'x', model: 'gpt-5.1-codex').arguments,
+        containsAllInOrder(['--model', 'gpt-5.1-codex']),
       );
-    });
-
-    test('gemini is asked with the flag its descriptor declares', () {
-      final call = oneShotInvocation(
-        AgentIds.geminiCli,
-        'hi',
-        descriptor: AgentRegistry.builtIn.byId(AgentIds.geminiCli),
-      );
-      expect(call.arguments, containsAllInOrder(['-p', 'hi']));
     });
 
     test('an agent nobody has a descriptor for is still asked', () {
@@ -285,31 +271,6 @@ void main() {
       final wsl = installed(AgentIds.codex, 'wsl:Ubuntu');
       expect(native.environmentId, isNot(wsl.environmentId));
       expect(native, isNot(wsl));
-    });
-  });
-
-  group('the registry', () {
-    test('Gemini CLI is the fourth descriptor', () {
-      expect(
-        AgentRegistry.builtIn.descriptors.map((d) => d.id),
-        containsAllInOrder([
-          AgentIds.claudeCode,
-          AgentIds.codex,
-          AgentIds.antigravity,
-          AgentIds.geminiCli,
-        ]),
-      );
-      expect(AgentRegistry.builtIn.byId(AgentIds.geminiCli)!.binaries.posix, [
-        'gemini',
-      ]);
-    });
-
-    test('it has no adapter, and says so rather than pretending', () {
-      expect(
-        AgentRegistry.builtIn.byId(AgentIds.geminiCli)!.kind,
-        isNull,
-        reason: 'no AgentKind means the generic adapter, which is honest',
-      );
     });
   });
 }

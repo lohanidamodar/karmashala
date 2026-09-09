@@ -1,6 +1,5 @@
-/// Discovers and drives already-installed AI coding CLIs — Claude Code, Codex,
-/// Antigravity and Gemini CLI — on this machine and inside its WSL
-/// distributions.
+/// Discovers and drives already-installed AI coding CLIs — Claude Code, Codex
+/// and Antigravity — on this machine and inside its WSL distributions.
 ///
 /// **Five modes over one descriptor table** (`descriptors.dart`):
 ///

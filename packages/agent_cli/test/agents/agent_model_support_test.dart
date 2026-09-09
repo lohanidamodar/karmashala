@@ -18,10 +18,9 @@ void main() {
 
   /// The agents whose model lists were read off a real binary.
   ///
-  /// Gemini CLI is in the registry and deliberately not in here: its descriptor
-  /// says only what the `agent_cli` package knew — the model rides on `-m` —
-  /// and nobody has read which ids that flag accepts. CLAUDE.md §19's rule is
-  /// that an unknown is reported as unknown, so no models are listed.
+  /// A registry-only agent — a descriptor with no adapter — is deliberately not
+  /// in here: nobody has read which model ids its flag accepts, and CLAUDE.md
+  /// §19's rule is that an unknown is reported as unknown.
   final established = registry.descriptors
       .where((d) => d.kind != null)
       .map((d) => d.id);
@@ -36,18 +35,6 @@ void main() {
       // about a model is one a CLI version can invalidate silently.
       expect(support.evidence, isNotEmpty, reason: id);
     }
-  });
-
-  test('Gemini CLI takes one on -m, and lists none', () {
-    final support = supportOf(AgentIds.geminiCli);
-    expect(support.isSupported, isTrue);
-    expect(support.flag, '-m');
-    expect(
-      support.models,
-      isEmpty,
-      reason: 'nobody has read which model ids it accepts',
-    );
-    expect(support.evidence, isNotEmpty);
   });
 
   test('only the agents whose /model takes an argument switch live', () {

@@ -1,8 +1,8 @@
 # agent_cli
 
 Find and drive the AI coding CLIs already installed on a machine — **Claude
-Code**, **Codex**, **Antigravity**, **Gemini CLI** — on the host and inside its
-WSL distributions.
+Code**, **Codex**, **Antigravity** — on the host and inside its WSL
+distributions.
 
 **Five modes over one descriptor table.** The table (`descriptors.dart`) is one
 `AgentDescriptor` per CLI, and it is data: which binaries to look for, how a
@@ -133,8 +133,7 @@ made.
 
 A descriptor in `built_in_agents.dart`, and — only if it speaks a stream
 protocol worth reading — an adapter. A descriptor on its own is discovered,
-listed, launchable and askable through the generic adapter, which is what
-Gemini CLI is.
+listed, launchable and askable through the generic adapter.
 
 Every claim in a descriptor carries the evidence it was read off, and an
 unknown is declared as unknown rather than guessed: an agent whose permission
@@ -153,9 +152,10 @@ history it believes it has. When a conversation *is* what you want, use
 ## Status
 
 Claude Code, Codex and Antigravity are verified end to end — their descriptors
-name the binary version each claim was read off. Gemini CLI is a descriptor
-built from 0.1.0's one-shot invocation and has not been run; it declares
-nothing beyond `-p` and `-m`. Treat it as untested.
+name the binary version each claim was read off. **Gemini CLI was removed in
+0.2.0**: Google retired it on 2026-06-18 for individual accounts in favour of
+Antigravity CLI, which this package already drives
+([announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)).
 
 ## Licence
 

@@ -1,8 +1,8 @@
 name: agent_cli
 description: >-
-  Find and drive already-installed AI coding CLIs — Claude Code, Codex,
-  Antigravity, Gemini CLI — across the host and its WSL distributions. Five
-  modes over one descriptor table: launch, stream, ask, read and usage.
+  Find and drive already-installed AI coding CLIs — Claude Code, Codex and
+  Antigravity — across the host and its WSL distributions. Five modes over one
+  descriptor table: launch, stream, ask, read and usage.
 version: 0.2.0
 repository: https://github.com/lohanidamodar/agent_cli
 
