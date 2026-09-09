@@ -1,21 +1,40 @@
 import 'dart:async';
 
-import 'cli_agent.dart';
-import 'cli_discovery.dart';
-import 'command_runner.dart';
+import '../agents/domain/agent_descriptor.dart';
+import '../agents/domain/agent_installation.dart';
+import '../agents/domain/agent_registry.dart';
+import '../environments/environment_path.dart';
+import '../process/command_runner.dart';
+import '../process/process_handle.dart';
+import 'one_shot.dart';
 
 /// Asks a coding CLI one question and streams back what it says.
 ///
 /// Stateless by design: each call is a fresh process. The CLIs do have resume
 /// modes, but relying on them would put the conversation's memory inside the
 /// CLI's session store, where this code cannot trim it, inspect it, or keep it
-/// consistent with what the caller thinks the history is.
+/// consistent with what the caller thinks the history is. Use `stream` — the
+/// adapters and `StreamingAgentSession` — when a conversation is what you want.
+///
+/// The runner is passed in rather than resolved here: which environment an
+/// installation lives in is the caller's knowledge, and a class that went
+/// looking for it would need the environment table this package deliberately
+/// does not own.
 class CliSession {
-  CliSession(this.agent, {CommandRunner? runner})
-    : _runner = runner ?? runnerFor(agent);
+  CliSession({
+    required this.installation,
+    required CommandRunner runner,
+    this.registry = AgentRegistry.builtIn,
+  }) : _runner = runner;
 
-  final CliAgent agent;
+  final AgentInstallation installation;
   final CommandRunner _runner;
+  final AgentRegistry registry;
+
+  AgentDescriptor? get descriptor => registry.byId(installation.agentId);
+
+  /// The name to put in a message about this agent.
+  String get label => registry.displayNameFor(installation.agentId);
 
   ProcessHandle? _active;
 
@@ -31,19 +50,22 @@ class CliSession {
     String prompt, {
     String? systemPrompt,
     String? model,
+    EnvironmentPath? workingDirectory,
     Duration timeout = const Duration(minutes: 3),
   }) async* {
-    final invocation = cliInvocation(
-      agent.kind,
+    final invocation = oneShotInvocation(
+      installation.agentId,
       prompt,
       systemPrompt: systemPrompt,
       model: model,
+      descriptor: descriptor,
     );
 
     final handle = await _runner.start(
       CommandRequest(
-        executable: agent.kind.executable,
+        executable: installation.executable.path,
         arguments: invocation.arguments,
+        workingDirectory: workingDirectory,
       ),
     );
     _active = handle;
@@ -68,15 +90,14 @@ class CliSession {
       final code = await handle.exitCode;
       if (code != 0 && !sawAnything) {
         throw CliSessionException(
-          '${agent.kind.label} exited with code $code',
+          '$label exited with code $code',
           detail: errors.isEmpty ? null : errors.take(6).join('\n'),
         );
       }
     } on TimeoutException {
       await handle.kill();
       throw CliSessionException(
-        '${agent.kind.label} did not answer within '
-        '${timeout.inSeconds}s',
+        '$label did not answer within ${timeout.inSeconds}s',
       );
     } finally {
       await errorSub.cancel();

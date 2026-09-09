@@ -1,14 +1,27 @@
-/// Discovers and drives already-installed AI coding CLIs.
+/// Discovers and drives already-installed AI coding CLIs — Claude Code, Codex,
+/// Antigravity and Gemini CLI — on this machine and inside its WSL
+/// distributions.
 ///
-/// One `CommandRunner` abstraction with a native and a WSL implementation, so
-/// the same code finds and runs a CLI on Linux, on Windows, and from a Windows
-/// process reaching into a WSL distribution. Lookups go through a login shell,
-/// which is what makes CLIs installed in `~/.local/bin` visible at all.
+/// **Five modes over one descriptor table** (`descriptors.dart`):
+///
+/// * `launch.dart` — the argv for an interactive session in a terminal pane;
+/// * `stream.dart` — a conversation over the CLI's own stream protocol;
+/// * `ask.dart` — one question, one answer, tools off;
+/// * `read.dart` — the conversations the CLIs already wrote, read off disk;
+/// * `usage.dart` — tokens, rate limits and which account is signed in.
+///
+/// Plus `discovery.dart` (which environments exist, and what is installed in
+/// each) and `process.dart` (the runners everything above executes through).
+///
+/// Import this library for all of it, or one of the above for the part you
+/// want.
 library;
 
-export 'src/cli_agent.dart';
-export 'src/cli_discovery.dart';
-export 'src/cli_session.dart';
-export 'src/command_runner.dart';
-export 'src/io_process_handle.dart';
-export 'src/runners.dart';
+export 'ask.dart';
+export 'descriptors.dart';
+export 'discovery.dart';
+export 'launch.dart';
+export 'process.dart';
+export 'read.dart';
+export 'stream.dart';
+export 'usage.dart';
