@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../../app/shell/workbench_tabs.dart';
 import '../../settings/presentation/settings_nav.dart';
-import '../../settings/presentation/settings_screen.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
 import '../data/agent_usage_service.dart';
@@ -333,7 +333,7 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     return InkWell(
       onTap: () {
         policy.refresh();
-        SettingsScreen.show(context, section: SettingsSectionId.agents);
+        openSettingsTab(ref, section: SettingsSectionId.agents);
       },
       child: Tooltip(
         message: view.tooltip,

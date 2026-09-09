@@ -25,6 +25,7 @@ import '../data/terminal_instance.dart';
 import '../data/terminal_layout_dao.dart';
 import '../domain/agent_pane_launch.dart';
 import '../domain/detach_policy.dart';
+import '../domain/document_pane.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/workspace_layout.dart';
@@ -681,6 +682,39 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return tabId;
   }
 
+  /// Opens the Settings tab, or brings the one already open forward. Returns
+  /// its id.
+  ///
+  /// **One tab, however many times it is asked for.** Settings is one
+  /// document over one store, so a second tab would be the same page twice
+  /// disagreeing with itself — and the route this replaced pushed exactly that
+  /// second copy, over the first, over the window.
+  ///
+  /// An ordinary tab in every other respect: it is closed, reordered, dragged
+  /// between groups, listed in the picker and restored by the same code as a
+  /// shell. The only thing that differs is what its pane holds, which is a
+  /// property of the **pane id** — see [kSettingsPaneId].
+  String openSettingsTab() {
+    final open = _tabContaining(kSettingsPaneId);
+    if (open != null) {
+      activateTab(open.id);
+      return open.id;
+    }
+    final tabId = _newId();
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(kSettingsPaneId),
+        focusedPaneId: kSettingsPaneId,
+      ),
+    );
+    _tabsMutated();
+    _activeTabId = tabId;
+    _publish();
+    persistStructure();
+    return tabId;
+  }
+
   /// Opens a new tab running an agent CLI in a PTY and makes it active.
   ///
   /// This is what makes any registry agent usable without a protocol adapter:
@@ -1242,7 +1276,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// [isEmptySlot] without the tab lookup, for callers that already hold the
   /// tab.
-  bool _isEmptyRegion(String paneId) => !_instances.containsKey(paneId);
+  ///
+  /// A **document** is the one other pane a layout holds and [_instances] does
+  /// not, and it is the opposite of empty — it is a surface the workbench
+  /// draws itself. See [isDocumentPane].
+  bool _isEmptyRegion(String paneId) =>
+      !_instances.containsKey(paneId) && !isDocumentPane(paneId);
 
   /// The first empty region of the active tab, if it has one.
   ///
@@ -1903,6 +1942,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///    is for, and far more use than five tabs all called "PowerShell".
   /// 4. **Otherwise the profile label**, as before.
   String _titleForPane(String paneId) {
+    // A document names itself: there is no shell to have named its window and
+    // no directory it is in.
+    if (isSettingsPane(paneId)) return 'Settings';
     final instance = _instances[paneId];
     if (instance == null) return 'Terminal';
 
@@ -2535,6 +2577,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// region is room the user cleared for something, and a reboot has already
   /// taken away everything that could have gone in it. The layout comes back
   /// holding what actually exists.
+  ///
+  /// A **document** has no instance either and is stored anyway, because it
+  /// still exists after a reboot: it is a surface, not a process, and the row
+  /// is what keeps `withoutMissing` from dropping its leaf. Its `profile_id`
+  /// says [kDocumentProfileId] rather than a shell's — the column already
+  /// names how a pane is rebuilt, so nothing had to be added to the schema to
+  /// say what this pane holds.
   StoredTerminalTab _storedTab(TerminalTab tab, {required bool refresh}) {
     return StoredTerminalTab(
       id: tab.id,
@@ -2542,7 +2591,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       focusedPaneId: tab.focusedPaneId,
       panes: [
         for (final paneId in tab.layout.panes)
-          if (_instances[paneId] case final instance?)
+          if (isDocumentPane(paneId))
+            StoredTerminalPane(
+              id: paneId,
+              tabId: tab.id,
+              profileId: kDocumentProfileId,
+              title: _titleForPane(paneId),
+              workingDirectory: null,
+              scrollback: '',
+            )
+          else if (_instances[paneId] case final instance?)
             StoredTerminalPane(
               id: paneId,
               tabId: tab.id,
@@ -2710,6 +2768,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Returns false when the pane's profile no longer resolves — a WSL distro
   /// that has been removed, say — since there would be nothing to start it with.
   bool _adoptRestored(StoredTerminalPane pane, {required bool inActiveTab}) {
+    // A document is rebuilt by being drawn, so there is nothing to adopt and
+    // nothing that could fail to resolve — but it is still here, which is what
+    // the true says and what keeps `withoutMissing` from dropping its leaf.
+    if (isDocumentPane(pane.id)) return true;
     // An agent pane carries its own command, so it does not need — and never
     // had — a resolvable shell profile.
     final profile = terminalProfileFromId(pane.profileId);
