@@ -114,7 +114,9 @@ void main() {
 
       for (final sent in post.posts) {
         expect(sent.raw, isNot(contains('Fix the tests')));
-        expect(sent.raw, isNot(contains('s1"')));
+        // Quoted on both sides: a sealed payload's base64 can itself end in
+        // `s1` right before the closing quote, which is not a leak.
+        expect(sent.raw, isNot(contains('"s1"')));
         expect(sent.raw, isNot(contains('needs_approval')));
         expect(sent.raw, isNot(contains(_deviceId)));
       }
