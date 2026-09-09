@@ -139,7 +139,12 @@ extension _GatewayPromotion on RemoteCompanionGateway {
         );
         return (client: client, transport: transport, status: status);
       } on Object catch (error) {
-        onLog?.call('lan standby attempt failed: $error');
+        // The same words the ordinary dial path uses, because it is the same
+        // event: this phone tried a LAN candidate and it did not seal. Which
+        // path spent the dial is said by the `lan promotion:` line beside it —
+        // and a fixture counting LAN dials must see both, or it counts half of
+        // them and calls a phone that never stops trying well behaved.
+        onLog?.call('lan attempt failed: $error');
         await _dropDial(client, transport);
         if (!hungUp) break;
       } finally {
