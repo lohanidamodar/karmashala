@@ -125,8 +125,24 @@ void main() {
       expect(descriptor.plan.isSupported, isFalse);
       expect(descriptor.plan.style, AgentPlanStyle.none);
       expect(descriptor.plan.refusal, isNotEmpty);
-      // Nothing to have verified, so nothing is claimed to have been.
+      // `AgentPlanSupport.none` carries no `evidence` field, so the refusal is
+      // where this agent's evidence has to live.
       expect(descriptor.plan.evidence, isEmpty);
+    });
+
+    test('the refusal names both files, because the answer needed both', () {
+      // Two stores, two findings: the conversation file is protobuf, and the
+      // JSONL transcript beside it — readable on the WSL install — carries no
+      // plan tool either. Naming only the protobuf would read as a guess about
+      // the file we can actually open.
+      final refusal = AgentRegistry.builtIn
+          .byId(AgentIds.antigravity)!
+          .plan
+          .refusal;
+      expect(refusal, contains('protobuf'));
+      expect(refusal, contains('transcript'));
+      expect(refusal, contains('manage_task'));
+      expect(refusal, contains('136'));
     });
 
     test('an unsupported agent reads no plan out of anything', () {

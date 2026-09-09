@@ -427,6 +427,26 @@ void main() {
     expect(messages.single.text, contains('still reach it'));
   });
 
+  test('a session whose store kept no transcript gets the other sentence',
+      () async {
+    // Same shape of refusal, different fact: this is about the conversation,
+    // not the agent. The WSL Antigravity install keeps a transcript for all 25
+    // of its conversations, so "this agent keeps none" is the wrong half of
+    // the answer for a session that simply has no file beside its record.
+    fake.transcripts['s1'] = const [];
+    fake.absences['s1'] = RemoteTranscriptAbsence.noTranscriptFile;
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final messages = await gateway.transcript('s1').first;
+    expect(messages.single.role, kCompanionAbsenceRole);
+    expect(messages.single.text, contains('kept the conversation'));
+    expect(messages.single.text, contains('no chat view'));
+    expect(messages.single.text, contains('still reach it'));
+    expect(messages.single.text, isNot(contains('This agent keeps')));
+  });
+
   // **The whole point of the new bit, end to end.** The phone asks, the host
   // answers from the read it already made, and the elapsed time is a duration
   // both ends agree on because both instants came off the desktop's clock.

@@ -496,18 +496,43 @@ class RemoteTranscriptMessage {
 /// phone words it, so the wording stays a client decision and an older phone
 /// that has never heard of a value falls back to the hedge rather than
 /// rendering a word it cannot place.
+///
+/// ## Two keys, because falling back to the hedge is not good enough here
+///
+/// Since 2026-09-09 the desktop reads this per session, and the two answers it
+/// can reach are different facts. Adding a word for the second one would send
+/// an older phone straight back to the hedge — the welcome screen this field
+/// exists to replace — for a session that has a perfectly good sentence
+/// already. So `absence` keeps carrying the coarse word every build that has
+/// ever read this field understands, and `absenceKind` refines it beside.
 enum RemoteTranscriptAbsence {
   /// The agent keeps no record this app can read, so there is no chat view for
   /// this session at all — not now, and not after it answers.
-  noChatView('no_chat_view');
+  noChatView('no_chat_view'),
 
-  const RemoteTranscriptAbsence(this.wire);
+  /// This session's store kept the conversation and no readable transcript
+  /// beside it. Structural like [noChatView], and about the **conversation**
+  /// rather than the agent: the WSL Antigravity install keeps a transcript for
+  /// all 25 of its conversations, the Windows one for none of its 1.
+  noTranscriptFile('no_transcript_file', olderWire: 'no_chat_view');
+
+  const RemoteTranscriptAbsence(this.wire, {this.olderWire});
 
   final String wire;
 
-  /// An absent or unrecognised word reads as null — *we were not told why* —
+  /// The word a build that predates this value reads it as, or null when this
+  /// value *is* that word.
+  final String? olderWire;
+
+  /// What goes in `absence`: the coarsest true word for this fact.
+  String get coarseWire => olderWire ?? wire;
+
+  /// The refinement first, then the word beside it. A refinement this build has
+  /// never heard of reads as the coarse word rather than as nothing; an absent
+  /// or unrecognised coarse word reads as null — *we were not told why* —
   /// which is exactly the hedge that existed before this field.
-  static RemoteTranscriptAbsence? parse(Object? wire) => _byWire[wire];
+  static RemoteTranscriptAbsence? parse(Object? wire, {Object? refinement}) =>
+      _byWire[refinement] ?? _byWire[wire];
 
   static final Map<Object?, RemoteTranscriptAbsence> _byWire = {
     for (final value in RemoteTranscriptAbsence.values) value.wire: value,
@@ -568,7 +593,11 @@ class RemoteTranscriptPage {
     'cursor': cursor,
     if (omitted > 0) 'omitted': omitted,
     if (hasNewer) 'hasNewer': true,
-    if (absence != null) 'absence': absence!.wire,
+    // The coarse word first and always, so a phone that has never heard of the
+    // refinement gets a sentence rather than the hedge.
+    if (absence != null) 'absence': absence!.coarseWire,
+    if (absence != null && absence!.olderWire != null)
+      'absenceKind': absence!.wire,
   };
 
   static RemoteTranscriptPage fromJson(Map<String, Object?> json) {
@@ -582,7 +611,10 @@ class RemoteTranscriptPage {
     return RemoteTranscriptPage(
       omitted: omitted is int && omitted > 0 ? omitted : 0,
       hasNewer: json['hasNewer'] == true,
-      absence: RemoteTranscriptAbsence.parse(json['absence']),
+      absence: RemoteTranscriptAbsence.parse(
+        json['absence'],
+        refinement: json['absenceKind'],
+      ),
       sessionId: sessionId,
       messages: [
         for (final m in messages)
