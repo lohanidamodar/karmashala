@@ -42,6 +42,7 @@ import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'decision_recorder.dart';
 import 'handoff_packet_files.dart';
+import 'session_launch_arguments.dart';
 import 'session_launch_exceptions.dart';
 import 'session_mcp_arguments.dart';
 import 'session_providers.dart';
@@ -54,12 +55,23 @@ import 'session_working_directory.dart';
 // them through the launcher.
 export 'session_launch_exceptions.dart';
 
+// And `agentPaneArguments`, for the same reason: a pure function of a
+// descriptor and a set of choices, reached through the launcher by the pane,
+// the external terminal and the terminal layer's own tests.
+export 'session_launch_arguments.dart';
+
 // The launcher's own body, split into one file per concern. They are `part`s
 // rather than libraries of their own because privacy in Dart is per library:
 // every verb below reads `_ref`, logs through `_log`, and calls the private
 // starters that put a process on a surface. What stays here is the class — its
 // one field, the shared lookups, the publish path — and the result it hands
 // back.
+//
+//   start         the row: what a launch reuses, writes and publishes
+//   resume_guards is it running, may a second process have it, was it written
+//   policy        permission mode and model, resolved here and nowhere else
+//   surfaces      the pane and the external terminal, and what they are handed
+//   input         text and keystrokes going into a session already running
 part 'session_launcher_start.dart';
 part 'session_launcher_resume_guards.dart';
 part 'session_launcher_policy.dart';
@@ -175,69 +187,6 @@ class SessionLauncher {
 
   void _publish(SessionChange change) =>
       _ref.read(sessionsRevisionProvider.notifier).changed(change);
-}
-
-/// The interactive command-line arguments for one agent launch.
-///
-/// Shared by the pane and external-terminal surfaces so the two cannot drift:
-/// "open this in Windows Terminal instead" must produce the same agent, in the
-/// same mode, on the same conversation.
-///
-/// Order matters and is the order the shipped agents want: the MCP flag, then
-/// global flags, then the session-id flag, then the resume convention (which
-/// for Codex is a *subcommand* and must follow the globals), then the prompt in
-/// whichever shape the descriptor's [AgentPromptSupport] names — a trailing
-/// positional for Claude and Codex, a flag and its value for Antigravity.
-///
-/// [systemPromptFilePath] rides with the globals for the same reason the model
-/// flag does, and is the handoff packet's way in for an agent that takes one.
-///
-/// [forkSessionId] **replaces** the resume convention rather than adding to it:
-/// Codex forks with a `fork` subcommand *instead of* `resume`, and emitting
-/// both would put two subcommands on one command line. Claude's fork is its own
-/// resume plus `--fork-session`, which its [AgentForkSupport] states, so both
-/// shapes come out of one call.
-List<String> agentPaneArguments(
-  AgentDescriptor? descriptor,
-  PermissionSelection permissionMode, {
-  String? modelId,
-  String? sessionId,
-  String? resumeSessionId,
-  String? forkSessionId,
-  String? prompt,
-  String? systemPromptFilePath,
-  String? mcpUrl,
-  String? mcpConfigPath,
-}) {
-  final launch = descriptor?.launch;
-  final trimmedPrompt = prompt?.trim();
-  final forking = forkSessionId != null && forkSessionId.isNotEmpty;
-  return [
-    // First, because Codex's `-c` is a global option and its resume is a
-    // *subcommand*: everything global has to be on the left of it. Nothing
-    // here is variadic — Claude's config flag is deliberately one
-    // `--flag=value` token — so nothing downstream can be swallowed.
-    ...agentMcpArguments(descriptor, url: mcpUrl, configPath: mcpConfigPath),
-    ...?launch?.permission.argumentsFor(permissionMode),
-    // Beside the permission flags and for the same reason: a global option, so
-    // it has to be left of Codex's `resume`/`fork` subcommand. Nothing is
-    // emitted for a null model or an agent that takes none.
-    ...?launch?.model.argumentsFor(modelId),
-    // A global too, and it belongs beside them: the file is context for the
-    // whole session rather than something the resume or the prompt carries.
-    // Nothing is emitted for an agent that takes none, so a packet aimed at one
-    // stays where it was — in the opening prompt.
-    ...?launch?.systemPromptFile.argumentsFor(systemPromptFilePath),
-    if (sessionId != null && resumeSessionId == null && !forking)
-      ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
-    if (forking) ...?launch?.fork.argumentsFor(forkSessionId),
-    if (!forking && resumeSessionId != null && resumeSessionId.isNotEmpty)
-      ...?launch?.interactiveResume.argumentsFor(resumeSessionId),
-    // Last, and spread rather than appended: the prompt is a positional for
-    // Claude and Codex but two argv entries for Antigravity, and which of those
-    // it is belongs to the descriptor rather than to this call site.
-    if (trimmedPrompt != null) ...?launch?.prompt.argumentsFor(trimmedPrompt),
-  ];
 }
 
 final sessionLauncherProvider = Provider<SessionLauncher>(
