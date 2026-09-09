@@ -9,9 +9,7 @@ import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/devices/domain/device_recording.dart';
-import 'package:karmashala/src/features/devices/domain/device_target.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_recording_banner.dart';
 
 import '../../support/fake_command_runner.dart';

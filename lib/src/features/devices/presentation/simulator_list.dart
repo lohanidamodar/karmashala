@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../application/ios_device_providers.dart';
-import '../domain/simulator_slimming.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_section_header.dart';
 import 'simulator_slimming_dialog.dart';
 

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../devices/domain/device_claim.dart' show describeDriveAge;
+import 'package:karmashala_devices/devices.dart' show describeDriveAge;
 import '../application/browser_pane_controller.dart';
 import '../application/browser_providers.dart';
 import 'package:karmashala_browser/browser.dart' show FindResult;

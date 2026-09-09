@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../data/adb_service.dart';
-import '../data/adb_wireless_parsing.dart';
-import '../domain/wireless_pairing.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_providers.dart';
 
 /// Which handshake is running, for the one line the dialog shows while it does.

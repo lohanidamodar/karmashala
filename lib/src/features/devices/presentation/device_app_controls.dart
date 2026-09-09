@@ -6,9 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../application/device_app_actions.dart';
-import '../domain/android_device.dart';
-import '../domain/device_claim.dart' show describeDriveAge;
-import '../domain/device_driver.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// **Put a build on the device, start it, stop it** — beside the live view.
 ///

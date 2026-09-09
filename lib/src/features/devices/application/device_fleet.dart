@@ -1,14 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../data/adb_device_driver.dart';
-import '../data/adb_service.dart';
-import '../data/simctl_service.dart';
-import '../data/simulator_device_driver.dart';
-import '../domain/android_device.dart';
-import '../domain/device_driver.dart';
-import '../domain/device_target.dart';
-import '../domain/ios_simulator.dart';
-import '../domain/simulator_backend.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_providers.dart';
 import 'ios_device_providers.dart';
 

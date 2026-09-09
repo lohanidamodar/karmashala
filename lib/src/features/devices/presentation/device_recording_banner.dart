@@ -7,8 +7,7 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/process.dart';
 import '../application/device_providers.dart';
 import '../application/device_recording_controller.dart';
-import '../domain/device_recording.dart';
-import '../domain/device_target.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// The one thing on screen that says a recording is running.
 ///

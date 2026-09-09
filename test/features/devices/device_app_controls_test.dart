@@ -8,8 +8,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/file_picking.dart';
 import 'package:karmashala/src/features/devices/application/device_claims.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/data/adb_service.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_app_controls.dart';
 
 import '../../support/fake_command_runner.dart';

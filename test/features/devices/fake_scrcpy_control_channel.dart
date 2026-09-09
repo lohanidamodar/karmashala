@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/core/clipboard/host_clipboard.dart';
-import 'package:karmashala/src/features/devices/data/scrcpy_control.dart';
-import 'package:karmashala/src/features/devices/data/scrcpy_device_message.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// A scrcpy control socket with no socket in it.
 ///

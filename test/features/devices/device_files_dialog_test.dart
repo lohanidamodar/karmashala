@@ -5,8 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/application/device_fleet.dart';
-import 'package:karmashala/src/features/devices/data/adb_service.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_files_dialog.dart';
 
 import '../../support/fake_command_runner.dart';

@@ -63,9 +63,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import '../../../core/clipboard/host_clipboard.dart';
-import '../data/scrcpy_control.dart';
-import '../data/scrcpy_device_message.dart';
-import '../domain/device_clipboard.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// How long to wait for the device to answer before saying it did not.
 ///

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
-import '../data/device_gesture_sink.dart';
-import '../data/device_stream.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_touch_surface.dart';
 
 /// Covers a frozen live view, says what happened, and offers the way out.

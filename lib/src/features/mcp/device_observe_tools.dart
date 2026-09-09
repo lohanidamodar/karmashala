@@ -3,10 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../devices/domain/device_driver.dart';
-import '../devices/domain/device_input.dart';
-import '../devices/domain/ui_node.dart';
-import '../devices/domain/ui_summary.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_drive_tools.dart';
 import 'device_tool_support.dart';
 

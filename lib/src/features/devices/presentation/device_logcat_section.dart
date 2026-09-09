@@ -5,9 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/device_logcat_session.dart';
-import '../domain/android_device.dart';
-import '../domain/device_claim.dart' show describeDriveAge;
-import '../domain/logcat_entry.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// Whether the logcat view under the picture is open.
 ///

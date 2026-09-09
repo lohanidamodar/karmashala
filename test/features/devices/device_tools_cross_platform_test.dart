@@ -8,10 +8,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/devices/data/wda_backend.dart';
-import 'package:karmashala/src/features/devices/domain/simulator_backend.dart';
-import 'package:karmashala/src/features/devices/domain/ui_node.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 
 import '../../support/fake_command_runner.dart';

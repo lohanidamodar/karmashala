@@ -8,11 +8,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/paths/app_support_directory.dart';
 import 'package:agent_cli/process.dart';
 import '../../../core/util/clock_provider.dart';
-import '../data/loopback_media_server.dart' show MediaStreamFactory;
-import '../data/recording_sink.dart';
-import '../domain/device_input.dart';
-import '../domain/device_recording.dart';
-import '../domain/device_target.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'ios_device_providers.dart';
 
 /// The folder recordings are written to, under the app's support directory.

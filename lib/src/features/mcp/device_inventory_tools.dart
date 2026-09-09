@@ -1,8 +1,5 @@
 import '../devices/application/device_fleet.dart';
-import '../devices/domain/device_driver.dart';
-import '../devices/domain/device_input.dart';
-import '../devices/domain/device_target.dart';
-import '../devices/domain/ios_simulator.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
 /// What exists, and whether it is running: the listing, and the two ends of a

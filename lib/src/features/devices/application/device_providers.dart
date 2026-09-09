@@ -5,13 +5,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../settings/application/settings_controller.dart';
-import '../data/adb_service.dart';
-import '../data/android_sdk_discovery.dart';
-import '../data/android_slimming_service.dart';
-import '../data/device_stream.dart';
-import '../domain/android_device.dart';
-import '../domain/android_slimming.dart';
-import '../domain/device_input.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// The environment whose Android SDK the pane uses.
 ///

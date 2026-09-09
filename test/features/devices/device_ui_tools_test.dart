@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

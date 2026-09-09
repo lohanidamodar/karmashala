@@ -8,7 +8,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../devices/application/device_claims.dart';
-import '../../devices/domain/device_claim.dart';
+import 'package:karmashala_devices/devices.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';

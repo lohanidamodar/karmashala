@@ -11,11 +11,7 @@ import '../../../core/clipboard/host_clipboard.dart';
 import '../../../core/util/file_picking.dart';
 import '../application/device_file_actions.dart';
 import '../application/device_fleet.dart';
-import '../domain/android_device.dart';
-import '../domain/device_driver.dart';
-import '../domain/device_file_clipboard.dart';
-import '../domain/device_files.dart';
-import '../domain/device_target.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// Browsing a device's storage, and moving files across.
 ///

@@ -5,8 +5,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'package:karmashala_browser/browser.dart';
-import '../../devices/data/adb_service.dart';
-import '../../devices/domain/logcat_entry.dart';
+import 'package:karmashala_devices/devices.dart';
 import '../data/verification_artifact_store.dart';
 import '../data/verification_dao.dart';
 import '../domain/verification_artifact.dart';

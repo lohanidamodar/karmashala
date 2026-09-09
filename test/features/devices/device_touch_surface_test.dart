@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/devices/data/device_gesture_sink.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_touch_surface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

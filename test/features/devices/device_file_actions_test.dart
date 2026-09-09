@@ -3,12 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/application/device_file_actions.dart';
-import 'package:karmashala/src/features/devices/data/adb_device_driver.dart';
-import 'package:karmashala/src/features/devices/data/adb_service.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/devices/domain/device_file_clipboard.dart';
-import 'package:karmashala/src/features/devices/domain/device_files.dart';
-import 'package:karmashala/src/features/devices/domain/device_target.dart';
+import 'package:karmashala_devices/devices.dart';
 
 import '../../support/fake_command_runner.dart';
 import 'fake_scrcpy_control_channel.dart';

@@ -1,9 +1,4 @@
-import '../devices/domain/device_claim.dart';
-import '../devices/domain/device_driver.dart';
-import '../devices/domain/device_input.dart';
-import '../devices/domain/screen_observation.dart';
-import '../devices/domain/ui_node.dart';
-import '../devices/domain/ui_summary.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
 /// Touching a device: a tap by name, a tap by coordinate, text and keys.

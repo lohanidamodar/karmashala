@@ -7,12 +7,7 @@ import '../../../core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../settings/application/settings_controller.dart';
 import 'device_providers.dart';
-import '../data/simctl_service.dart';
-import '../data/simulator_slimming_service.dart';
-import '../data/wda_backend.dart';
-import '../data/wda_locator.dart';
-import '../domain/ios_simulator.dart';
-import '../domain/simulator_slimming.dart';
+import 'package:karmashala_devices/devices.dart';
 
 /// Whether this machine can have iOS Simulators at all.
 ///
