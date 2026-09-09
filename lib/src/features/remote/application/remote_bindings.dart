@@ -29,7 +29,6 @@ import '../../environments/domain/local_environment.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/project_tree.dart';
-import '../../explorer/application/session_diff_stat.dart';
 import '../../explorer/application/session_forest.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/session_attention.dart';
@@ -59,7 +58,13 @@ import '../data/companion_attachment_store.dart';
 import '../domain/remote_payloads.dart';
 import '../protocol.dart';
 import 'host_bindings.dart';
+import 'remote_binding_support.dart';
 import 'remote_providers.dart';
+
+// The seams a test stubs are reached through this library, as they always
+// were; moving them into their families must not move anybody's import.
+export 'remote_binding_support.dart'
+    show remoteCheckoutBranchProvider, remoteFolderMissingProvider;
 
 /// The delivery-stage lookup, split out so tests can stub the one binding
 /// whose production path costs a git/gh probe (`sessionDeliveryProvider` —
@@ -106,62 +111,6 @@ final remoteSessionPresenceProvider =
           return (note: whereabouts.note, lastSeen: whereabouts.lastSeen);
         } on Object {
           return (note: null, lastSeen: null);
-        }
-      };
-    });
-
-/// Whether a session's working folder is gone from disk — the Explorer's own
-/// "missing" mark, answered synchronously here because `sessions.list` is.
-///
-/// A seam like the two probe-shaped lookups above: production touches the
-/// filesystem, tests stub it. **False also means "could not tell"** — a
-/// non-Windows path with no translation available is never flagged, which is
-/// the same fail-safe direction `projectPathMissingProvider` takes.
-final remoteFolderMissingProvider =
-    Provider<bool Function(EnvironmentPath path)>((ref) {
-      return (path) {
-        try {
-          final environments = ref.read(executionEnvironmentDaoProvider);
-          final env = environments.getById(path.environmentId);
-          if (env == null) return false;
-          var resolved = path.path;
-          if (env.kind != EnvironmentKind.windowsNative) {
-            ExecutionEnvironment? windows;
-            for (final candidate in environments.getAll()) {
-              if (candidate.kind == EnvironmentKind.windowsNative) {
-                windows = candidate;
-                break;
-              }
-            }
-            if (windows == null) return false;
-            resolved = ref
-                .read(pathTranslatorProvider)
-                .translate(path, from: env, to: windows)
-                .path;
-          }
-          return !Directory(resolved).existsSync();
-        } on Object {
-          return false;
-        }
-      };
-    });
-
-/// The branch checked out at a directory, **only if the desktop has already
-/// measured it**. Reads the cached `checkoutStatProvider` answer and starts
-/// no git of its own — the same rule the Explorer's project headers follow, so
-/// listing sessions on a phone never sets off a wave of processes. Null means
-/// "not measured yet", never "no branch".
-final remoteCheckoutBranchProvider =
-    Provider<String? Function(EnvironmentPath path)>((ref) {
-      return (path) {
-        try {
-          return ref
-              .read(checkoutStatProvider(Checkout(path)))
-              .asData
-              ?.value
-              .branch;
-        } on Object {
-          return null;
         }
       };
     });
@@ -325,13 +274,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       ),
       // The project's environment, as the Explorer card badges it. A session
       // has none of its own, and one with no project has nothing to badge.
-      environmentBadge: () {
-        if (owner == null) return null;
-        final env = ref
-            .read(executionEnvironmentDaoProvider)
-            .getById(owner.environmentId);
-        return env == null ? null : environmentBadge(env);
-      }(),
+      environmentBadge: environmentBadgeFor(ref, owner?.environmentId),
     );
   }
 
@@ -379,12 +322,10 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         'This is imported history, read-only here — continue it in its own '
         'terminal to attach anything.',
       ),
-      environmentBadge: () {
-        final envDao = ref.read(executionEnvironmentDaoProvider);
-        final envId = owner?.environmentId ?? repository?.path.environmentId;
-        final env = envId == null ? null : envDao.getById(envId);
-        return env == null ? null : environmentBadge(env);
-      }(),
+      environmentBadge: environmentBadgeFor(
+        ref,
+        owner?.environmentId ?? repository?.path.environmentId,
+      ),
     );
   }
 
@@ -687,21 +628,14 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     },
     listWorkspace: listWorkspace,
     listProjects: () {
-      final envDao = ref.read(executionEnvironmentDaoProvider);
       return [
         for (final project in ref.read(projectDaoProvider).getAll())
           RemoteWorkspaceProject(
             projectId: project.id,
             name: project.name,
             path: project.root.path,
-            environmentName: () {
-              final env = envDao.getById(project.environmentId);
-              return env == null ? null : environmentLabel(env);
-            }(),
-            environmentBadge: () {
-              final env = envDao.getById(project.environmentId);
-              return env == null ? null : environmentBadge(env);
-            }(),
+            environmentName: environmentNameFor(ref, project.environmentId),
+            environmentBadge: environmentBadgeFor(ref, project.environmentId),
           ),
       ];
     },
@@ -920,45 +854,6 @@ String? _attentionFor(Ref ref, String sessionId, {bool imported = false}) {
   }
   return null;
 }
-
-/// Which record represents [sessionId] **right now**: the live session row, or
-/// read-only CLI history, or neither.
-///
-/// One conversation can have a record in both tables, and `ImportedSessionDao`
-/// resolves the tie: a conversation with a native row is *superseded*, and
-/// every list read there hides the imported record. Hiding a row from a list
-/// does not stop anyone asking for it by id, though, and a phone holds ids: it
-/// lists once and opens later. A Codex conversation id is *discovered* rather
-/// than assigned — `LaunchedSessionAttributionService` writes it on a store
-/// sweep — so there is a real window after launch in which the imported record
-/// is still listed, and a phone that fetched its list inside that window is
-/// holding an id that has since been superseded.
-///
-/// Opening it gave the owner "a session that's not running": the CLI's own
-/// history for a conversation live in a pane on the desktop, with a composer
-/// that refused every prompt as read-only. So the rule is applied on the way
-/// *in* as well: an imported id a native row has taken over resolves to that
-/// row, and the phone reaches the running session with the id it happens to
-/// hold. The supersede test itself is not repeated here — it is asked of
-/// [ImportedSessionDao.supersedingSessionId], the same place the list filter
-/// is written.
-ResolvedRemoteSession resolveRemoteSession(Ref ref, String sessionId) {
-  final sessions = ref.read(sessionDaoProvider);
-  final native = sessions.getById(sessionId);
-  if (native != null) return (native: native, imported: null);
-  final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
-  if (imported == null) return (native: null, imported: null);
-  final liveId = ref
-      .read(importedSessionDaoProvider)
-      .supersedingSessionId(imported.externalId);
-  final live = liveId == null ? null : sessions.getById(liveId);
-  // Nothing took it over — genuine history, opened read-only as before.
-  if (live == null) return (native: null, imported: imported);
-  return (native: live, imported: null);
-}
-
-/// What [resolveRemoteSession] answers with. Exactly one field is ever set.
-typedef ResolvedRemoteSession = ({Session? native, ImportedSession? imported});
 
 /// The same source selection as `SessionTranscriptView`: a PTY-hosted
 /// session renders from the agent's own record; anything else renders from
