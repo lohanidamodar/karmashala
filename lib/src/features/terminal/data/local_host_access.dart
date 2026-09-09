@@ -31,6 +31,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
     this.executable = const LocalHostExecutable(),
     AppLogger? logger,
     this.startServe,
+    this.helloBound = const Duration(seconds: 5),
   }) : _paths = paths ?? HostPaths.resolve(),
        _logger = logger ?? AppLogger.named('host.local');
 
@@ -44,6 +45,9 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// test that starts a real daemon on the developer's own socket would take
   /// their sessions with it.
   final Future<Process> Function(String path)? startServe;
+
+  /// How long the handshake is given before the answer is called missing.
+  final Duration helloBound;
 
   final AppLogger _logger;
 
@@ -74,6 +78,9 @@ class LocalHostSessionAccess implements HostSessionAccess {
       // same lock.
       _reading ??= _measure().then((reading) {
         _logger.debug('local host: ${reading.status.name} — ${reading.reason}');
+        // A reading nobody could take is a moment, not a fact (§19): the next
+        // pane asks again rather than inheriting a busy one.
+        if (reading.status == HostDeploymentStatus.unknown) _reading = null;
         return _last = reading;
       });
 
@@ -105,6 +112,12 @@ class LocalHostSessionAccess implements HostSessionAccess {
         status: HostDeploymentStatus.protocolMismatch,
         observedAt: now,
         reason: reason,
+        remotePath: binary?.path,
+      ),
+      _NoAnswer(:final reason) => HostDeployment(
+        status: HostDeploymentStatus.unknown,
+        observedAt: now,
+        reason: 'Could not finish the handshake on ${_paths.socketPath}: $reason',
         remotePath: binary?.path,
       ),
       _Silent() when binary == null => HostDeployment(
@@ -162,6 +175,23 @@ class LocalHostSessionAccess implements HostSessionAccess {
         status: HostDeploymentStatus.protocolMismatch,
         observedAt: DateTime.now(),
         reason: answered.reason,
+        platform: _platform(now),
+        remotePath: binary.path,
+      );
+    }
+
+    if (answered is _NoAnswer) {
+      // The one thing this must not do. A refused connection is an EVENT —
+      // nobody is there, so start one. A handshake that ran out of bound is a
+      // reading of a loaded machine, and acting on it starts a second daemon
+      // over a live one: on 2026-09-09 that sent a test at a real
+      // `Process.start`, the only await on this path with no bound at all.
+      return HostDeployment(
+        status: HostDeploymentStatus.unknown,
+        observedAt: DateTime.now(),
+        reason:
+            'Could not finish the handshake on ${_paths.socketPath}: '
+            '${answered.reason} Nothing was started over it.',
         platform: _platform(now),
         remotePath: binary.path,
       );
@@ -233,24 +263,29 @@ class LocalHostSessionAccess implements HostSessionAccess {
     final Socket socket;
     try {
       socket = await _connect();
-    } on SocketException {
-      return const _Silent();
+    } on SocketException catch (e) {
+      // Refused, or no node at all, is an event: nobody is there. A connect
+      // that ran out of time is not — dart:io leaves `osError` null for that
+      // one alone — and it says the machine was busy, not the socket empty.
+      return e.osError == null ? _NoAnswer(e.message) : const _Silent();
     }
     final channel = SocketRemoteChannel(socket);
     try {
       final link = await HostPaneLink.open(
         channel,
         clientId: 'karmashala-probe',
-        bound: const Duration(seconds: 5),
+        bound: helloBound,
       );
       final welcome = link.welcome;
       await link.close();
       return welcome == null ? const _Silent() : _Welcomed(welcome);
     } on HostLinkException catch (e) {
       await channel.close();
-      // A host that answered and speaks another protocol is a different problem
-      // from one that is not there: this app must not start a second one over
-      // it, and the row has to say which it was.
+      // Three different answers, and only one of them means the socket is
+      // empty. A host that answered and speaks another protocol, and one that
+      // took the connection and said nothing inside the bound, both mean a
+      // host IS there — this app must not start a second one over either.
+      if (e.timedOut) return _NoAnswer(e.message);
       return e.message.contains('protocol') ? _Mismatched(e.message) : const _Silent();
     }
   }
@@ -397,8 +432,18 @@ class _Welcomed extends _HelloOutcome {
   final WelcomeMessage welcome;
 }
 
+/// Nothing was listening: the connection was refused, or the peer hung up.
 class _Silent extends _HelloOutcome {
   const _Silent();
+}
+
+/// Something took the connection and did not finish the handshake in time.
+///
+/// A *reading*, not an event, which is the whole distinction: it says how busy
+/// the machine was and nothing whatever about whether a host is running.
+class _NoAnswer extends _HelloOutcome {
+  const _NoAnswer(this.reason);
+  final String reason;
 }
 
 class _Mismatched extends _HelloOutcome {
