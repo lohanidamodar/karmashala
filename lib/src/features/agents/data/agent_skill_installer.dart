@@ -76,7 +76,7 @@ class AgentSkillInstaller {
       final file = File(p.join(root, skill.name, fileName));
       try {
         await file.parent.create(recursive: true);
-        await _writeIfChanged(file, skill.render());
+        await _writeIfChanged(file, skill.render(), deadline);
       } on FileSystemException {
         // Someone else's directory, or a share that went away mid-sweep. The
         // read-back below reports it as an install that did not land.
@@ -160,12 +160,25 @@ class AgentSkillInstaller {
   /// off mid-flight leaves either the old skill or the new one and never half
   /// a `SKILL.md` for a CLI to discover. It is also why nothing waits for this
   /// at shutdown.
-  Future<void> _writeIfChanged(File file, String contents) async {
+  ///
+  /// **The staged write and the rename are one operation.** [deadline] is
+  /// checked before the pair and never between them: a future cannot be
+  /// cancelled, so the honest guarantee is that an abandoned sweep finishes at
+  /// most what was already in flight and starts nothing new. Giving up
+  /// *between* the two would leave a `.tmp` beside the skill — litter no CLI
+  /// reads, and in a test a file landing in a directory `tearDown` is already
+  /// walking, which is the failure this whole gate exists to remove.
+  Future<void> _writeIfChanged(
+    File file,
+    String contents,
+    SkillSweepDeadline? deadline,
+  ) async {
     try {
       if (await file.readAsString() == contents) return;
     } on FileSystemException {
       // Not there yet, which is the first-install case.
     }
+    if (deadline?.isAbandoned ?? false) return;
     final staged = File('${file.path}.tmp');
     await staged.writeAsString(contents, flush: true);
     await staged.rename(file.path);

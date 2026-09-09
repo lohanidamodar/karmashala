@@ -238,14 +238,28 @@ void main() {
     // future cannot be cancelled, so without `SkillSweepDeadline` the install
     // would go on creating directories under a home this row has already
     // reported as unknown — in a test, one whose `tearDown` is about to walk
-    // it. Counted across two drained event queues, never waited out.
+    // it.
+    //
+    // The first drain lets whatever was already in flight finish, because that
+    // is the honest guarantee: an abandoned sweep completes at most the
+    // operation it had started and begins no new one. The snapshot is taken
+    // after it, and the two drains that follow are what prove nothing else follows.
+    // Counted, never waited out.
+    await pumpEventQueue();
     final settled = _filesUnder(home);
     await pumpEventQueue();
     await pumpEventQueue();
     expect(
       _filesUnder(home),
       settled,
-      reason: 'an abandoned sweep wrote after it was given up on',
+      reason: 'an abandoned sweep started new work after it was given up on',
+    );
+    // And it never leaves a staged file behind: the write and its rename are
+    // one operation, so what survives is a skill or nothing.
+    expect(
+      settled.where((f) => f.endsWith('.tmp')),
+      isEmpty,
+      reason: 'a staged write outlived the sweep that started it',
     );
   });
 
