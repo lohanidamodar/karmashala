@@ -4,6 +4,7 @@ import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/domain/execution_environment.dart';
+import '../../settings/application/settings_controller.dart';
 import '../data/flutter_sdk_service.dart';
 import '../domain/flutter_sdk.dart';
 
@@ -20,9 +21,27 @@ import '../domain/flutter_sdk.dart';
 /// **Nothing polls.** A reading happens when a preflight, a launch or a gate
 /// asks for one. An environment nobody has run anything in has no row and
 /// costs no process.
+///
+/// The one path that *is* stored is the one a person typed —
+/// `Settings.flutterSdkPaths` — and it is read here and handed to the service,
+/// which is what makes it beat the PATH probe rather than compete with it.
+///
+/// **A reading is only as good as the path it was taken against**, so [build]
+/// watches that map: changing or clearing a hand-set path empties every held
+/// reading, and the next ask measures. Kept here rather than in
+/// `SettingsController` so the rule sits beside the readings instead of in
+/// every writer of the setting, and selected on the map alone so an unrelated
+/// setting — a theme, a window size — costs nothing.
 class FlutterSdkReadings extends Notifier<Map<String, FlutterSdkReading>> {
   @override
-  Map<String, FlutterSdkReading> build() => const <String, FlutterSdkReading>{};
+  Map<String, FlutterSdkReading> build() {
+    _handSet = ref.watch(
+      settingsControllerProvider.select((settings) => settings.flutterSdkPaths),
+    );
+    return const <String, FlutterSdkReading>{};
+  }
+
+  Map<String, String> _handSet = const {};
 
   /// What was last read for [environmentId], however old — or null when
   /// nothing has ever looked.
@@ -44,6 +63,7 @@ class FlutterSdkReadings extends Notifier<Map<String, FlutterSdkReading>> {
     final reading = await FlutterSdkService(
       runner: factory.forEnvironment(environment),
       environment: environment,
+      handSetExecutable: _handSet[environment.id],
     ).read(now);
     state = <String, FlutterSdkReading>{...state, environment.id: reading};
     return reading;

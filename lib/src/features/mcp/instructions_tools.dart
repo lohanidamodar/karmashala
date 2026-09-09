@@ -87,7 +87,8 @@ class McpGuide {
   /// The roster carries each tool's annotations because "which of these can I
   /// not undo" is the question the prose above it is answering, and repeating
   /// the answer next to the names is cheaper than making the reader hold the
-  /// two apart.
+  /// two apart. `moves-attention` rides along for the reader who is deciding
+  /// whether to run one of these over a list.
   String render() {
     final roster = <String>[
       for (final name in tools)
@@ -105,7 +106,10 @@ class McpGuide {
       'read-only = changes nothing anywhere. destructive = there is no undo '
           'for what it removes, overwrites or ends. idempotent = the same call '
           'twice leaves the same state. open-world = it reaches past this '
-          'machine (the web, or an attached phone).',
+          'machine (the web, or an attached phone). moves-attention = it '
+          'changes what the person is looking at — a window, the tab or '
+          'selection on screen, or it stops and asks them to point at '
+          'something.',
     ].join('\n');
   }
 
@@ -115,6 +119,7 @@ class McpGuide {
       if (annotations.destructive) 'destructive',
       if (annotations.idempotent) 'idempotent',
       if (annotations.openWorld) 'open-world',
+      if (annotations.movesAttention) 'moves-attention',
     ];
     return marks.isEmpty ? '' : '  — ${marks.join(', ')}';
   }

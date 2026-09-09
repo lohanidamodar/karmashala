@@ -104,15 +104,43 @@ void main() {
     }
   });
 
-  testWidgets('the two facts a person acts on are marked', (tester) async {
+  testWidgets('the three facts a person acts on are marked', (tester) async {
     await pump(tester);
     await expandEverything(tester);
     // Counted against the table rather than a literal, so a tool that changes
     // its mind about being destructive fails here too.
     final destructive = kMcpToolAnnotations.values.where((a) => a.destructive);
     final readOnly = kMcpToolAnnotations.values.where((a) => a.readOnly);
+    final moving = kMcpToolAnnotations.values.where((a) => a.movesAttention);
     expect(find.text('no undo'), findsNWidgets(destructive.length));
     expect(find.text('read-only'), findsNWidgets(readOnly.length));
+    expect(find.text('moves attention'), findsNWidgets(moving.length));
+  });
+
+  testWidgets('a tool can change nothing and still take the screen', (
+    tester,
+  ) async {
+    // The pair that makes the third mark worth drawing: `browser_pick` wears
+    // read-only and moves-attention at once, which no combination of the other
+    // two marks could have said.
+    await pump(tester);
+    final heading = find.text(McpToolCategory.browser.label);
+    await tester.ensureVisible(heading);
+    await tester.pumpAndSettle();
+    await tester.tap(heading);
+    await tester.pumpAndSettle();
+    final row = find.ancestor(
+      of: find.text('browser_pick'),
+      matching: find.byType(MergeSemantics),
+    );
+    expect(
+      find.descendant(of: row, matching: find.text('read-only')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.text('moves attention')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the two facts only a client acts on are not', (tester) async {

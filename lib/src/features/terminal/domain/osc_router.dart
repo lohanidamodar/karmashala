@@ -13,6 +13,20 @@
 ///
 /// Pure Dart on purpose — no Flutter, no xterm — so the fan-out is testable
 /// without a terminal.
+///
+/// ## "Private" means what the parser did not already claim
+///
+/// A sequence reaches here only when the vendored parser falls through to its
+/// `unknownOSC` handler, and a `case` on the OSC number never does. **777 is
+/// one of those numbers:** a `notify` payload goes to
+/// `Terminal.showNotification` and every other shape of 777 is dropped, so
+/// neither reaches this router. This app sets no `onNotification` either,
+/// which means a 777 is currently parsed and thrown away.
+///
+/// Written down because a backlog item proposed reading typed agent events
+/// (`warp://cli-agent`) out of the PTY on the assumption that they would arrive
+/// here. `osc_777_notify_test.dart` measures it instead, and records what the
+/// sequence actually is and who emits it.
 library;
 
 /// What xterm hands to `onPrivateOSC`: the OSC number, and everything after it

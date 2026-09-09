@@ -530,6 +530,15 @@ const _claudeCode = AgentDescriptor(
       // know the event simply never fires it.
       'StopFailure': AgentActivityStatus.failed,
     },
+    // **The two events that speak for the session rather than the turn.**
+    // `SessionEnd` is the CLI on its way out, and `StopFailure` is the CLI
+    // naming an API error as the reason a turn stopped — the only failure word
+    // Claude Code ever gives us that we did not infer. `Stop` is deliberately
+    // absent: it fires once per turn, many times a session.
+    eventEnding: {
+      'SessionEnd': AgentSessionEnding.completed,
+      'StopFailure': AgentSessionEnding.failed,
+    },
     // **What is left out, and why — checked against 2.1.260's own hook-event
     // table, which lists 33 events.** Each installed event is a process the
     // user's agent spawns on every firing, so the bar is a question this app
@@ -1194,6 +1203,11 @@ const _codex = AgentDescriptor(
       // the cost of losing this race is one missed `idle`, not a stalled exit.
       'SessionEnd': AgentActivityStatus.idle,
     },
+    // One entry, and the gap above it is the measured fact: Codex fires no hook
+    // at all for a turn that ended in an API error or an abort, so `failed` has
+    // no spelling here to declare. A Codex session that broke keeps whatever
+    // its row last said rather than being given a word nobody sent.
+    eventEnding: {'SessionEnd': AgentSessionEnding.completed},
   ),
   // The rollout stays as the fallback the hooks above do not
   // cover, and as the only source for a session started before the
@@ -1846,14 +1860,17 @@ const _antigravity = AgentDescriptor(
     // `idle` is what tells a user their work is done.
     eventKindMeaning: {
       // The captured one: the model answered without calling a tool, which is
-      // how an ordinary turn ends.
+      // how an ordinary turn ends. No `ending`: `agy` fires this on every turn
+      // and the conversation is still open afterwards.
       'NO_TOOL_CALL': AgentHookMeaning(AgentActivityStatus.idle),
       // The user stopped it themselves. Not a failure — they are already
-      // looking at the session.
+      // looking at the session — and not an ending either: whoever stopped it
+      // wrote the row's word already.
       'USER_CANCELED': AgentHookMeaning(AgentActivityStatus.idle),
       'ERROR': AgentHookMeaning(
         AgentActivityStatus.failed,
         fallbackMessage: 'Execution failed',
+        ending: AgentSessionEnding.failed,
       ),
       // The run hit a ceiling with work outstanding. The CLI's own shipped
       // hooks doc calls this family "stopped due to error" and puts an `error`
@@ -1861,14 +1878,17 @@ const _antigravity = AgentDescriptor(
       'MAX_INVOCATIONS': AgentHookMeaning(
         AgentActivityStatus.failed,
         fallbackMessage: 'Maximum invocations reached',
+        ending: AgentSessionEnding.failed,
       ),
       'MAX_FORCED_INVOCATIONS': AgentHookMeaning(
         AgentActivityStatus.failed,
         fallbackMessage: 'Maximum forced invocations reached',
+        ending: AgentSessionEnding.failed,
       ),
       'MAX_TOKEN_BUDGET_EXCEEDED': AgentHookMeaning(
         AgentActivityStatus.failed,
         fallbackMessage: 'Maximum token budget exceeded',
+        ending: AgentSessionEnding.failed,
       ),
     },
     // `PreInvocation` and `PostInvocation` payloads carry no
