@@ -171,6 +171,20 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                   color: SemanticColors.of(context).neutral,
                 ),
               ),
+              // The sign-in's own lifetime, when the store names one. Said as
+              // itself and never as a window's reset: for an account that
+              // reports no quota it is most of what this card knows, and it is
+              // the thing the user can act on when the reading stops arriving.
+              if (usage.tokenExpiresAt case final expiry?)
+                Text(
+                  _signInLine(
+                    expiry,
+                    ref.read(clockProvider).nowUtc(),
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: SemanticColors.of(context).neutral,
+                  ),
+                ),
               const SizedBox(height: Insets.sm),
               if (usage.isEmpty)
                 Text(
@@ -253,11 +267,34 @@ class _UsageBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fraction = (window.percent / 100).clamp(0.0, 1.0);
     final semantic = SemanticColors.of(context);
-    final color = window.percent >= 95
+    final percent = window.percent;
+    // A window the endpoint named and measured nothing for — every Antigravity
+    // tier. **No bar**, because a bar is a quantity and an empty one reads as
+    // an empty quota; the words go where the percentage would, in the neutral
+    // colour the health panel gives an unknown.
+    if (percent == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(window.label, style: theme.textTheme.bodySmall),
+            ),
+            Text(
+              kUsageNoQuotaReported,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: semantic.neutral,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final fraction = (percent / 100).clamp(0.0, 1.0);
+    final color = percent >= 95
         ? semantic.failure
-        : window.percent >= 80
+        : percent >= 80
         ? semantic.attention
         : theme.colorScheme.primary;
     final reset = window.resetsAt == null
@@ -274,7 +311,7 @@ class _UsageBar extends StatelessWidget {
                 child: Text(window.label, style: theme.textTheme.bodySmall),
               ),
               Text(
-                '${window.percent.toStringAsFixed(0)}%$reset',
+                '${percent.toStringAsFixed(0)}%$reset',
                 style: theme.textTheme.bodySmall,
               ),
             ],
@@ -302,4 +339,19 @@ String _relativeReset(DateTime when) {
   if (diff.inDays >= 1) return 'in ${diff.inDays}d';
   if (diff.inHours >= 1) return 'in ${diff.inHours}h';
   return 'in ${diff.inMinutes}m';
+}
+
+/// **When the sign-in behind a reading lapses**, in this card's words.
+///
+/// Read against the app's clock rather than [DateTime.now], because it is the
+/// one line here a test can pin — and because an expiry that has already passed
+/// is not "soon", it is the thing the user has to go and fix.
+String _signInLine(DateTime expiry, DateTime now) {
+  final left = expiry.difference(now);
+  if (left <= Duration.zero) {
+    return 'Sign-in expired — run the agent once to refresh it';
+  }
+  if (left.inDays >= 1) return 'Sign-in expires in ${left.inDays}d';
+  if (left.inHours >= 1) return 'Sign-in expires in ${left.inHours}h';
+  return 'Sign-in expires in ${left.inMinutes}m';
 }
