@@ -361,6 +361,10 @@ class AgentHookInstaller {
         // hole.
       }
     }
+    // And the staging file beside it, which is what a *previous* quit left when
+    // it cut this sweep's counterpart off mid-write. The soak found those
+    // accumulating in the agents' store homes, one per interrupted launch.
+    if (file != null) await _removeStaged(File('${file.path}.karmashala-tmp'));
     // The spool goes with it, and for the same reason: what it holds is this
     // launch's undelivered payloads, and there is no launch any more. Leaving
     // it would also leave the script a directory to keep writing into if the
@@ -1129,6 +1133,11 @@ class AgentHookInstaller {
     Future<void> Function(File staged)? harden,
   }) async {
     final staged = File('${file.path}.karmashala-tmp');
+    // A previous run's litter, if the `finally` below never got to run because
+    // the process ended between the write and the rename — which a quit that
+    // cuts a sweep off at its 150 ms cap can do. Removed rather than written
+    // over, so `harden` still applies its ACL to a file this run created.
+    await _removeStaged(staged);
     if (harden != null) {
       // The permission goes on the **empty** file, before the token is in it —
       // the same order `LauncherControlServer` uses for its handshake file, and
@@ -1143,13 +1152,21 @@ class AgentHookInstaller {
     } finally {
       // Never left behind, whichever way the move went: a stray file in
       // somebody's `.claude` directory is litter we would have to explain.
-      if (await staged.exists()) {
-        try {
-          await staged.delete();
-        } on FileSystemException {
-          // Nothing more to try, and it must not mask the real failure.
-        }
-      }
+      await _removeStaged(staged);
+    }
+  }
+
+  /// Removes a staging file. Never throws: it is somebody else's directory, and
+  /// both callers have something better to fail on.
+  ///
+  /// One call rather than exists-then-delete, which is one file operation
+  /// instead of two on a path that may be a `\\wsl.localhost` share — and not
+  /// a TOCTOU, which the same shape was here before.
+  Future<void> _removeStaged(File staged) async {
+    try {
+      await staged.delete();
+    } on FileSystemException {
+      // Not there, or held by something; the next sweep tries again.
     }
   }
 

@@ -125,6 +125,44 @@ abstract interface class ReapableTerminalInstance {
   Future<void> get reaped;
 }
 
+/// A [TerminalInstance] holding a pseudoconsole of its own.
+///
+/// A third narrow interface, for one property: whether tearing this pane down
+/// also releases the console behind it.
+///
+/// On Windows that release is `ClosePseudoConsole`, and it is **synchronous and
+/// unbounded** — it does not return until the console host behind the pane has
+/// gone, and that host is a child of *this* process rather than of the shell,
+/// so killing the pane's process tree does not settle it. The 2026-09-09 app
+/// soak measured it at 1-22 ms on a good quit and, on 1 cycle in 10, never:
+///
+/// ```txt
+///   PROBE taskkill done       15:10:58.953
+///   PROBE killed, releasing pty  15:10:58.957
+///   (nothing, for the remaining 60 s)
+/// ```
+///
+/// A synchronous call that never returns takes the isolate with it, so no
+/// shutdown step's `timeout` can fire — a `Duration` is a task for the isolate
+/// that is stuck — and `_quit` never reaches `windowManager.destroy()` or
+/// `exit(0)`. That is both of the two cycles in twenty that ignored `WM_CLOSE`,
+/// and no bound in Dart could have rescued either.
+///
+/// The release is worth doing while the app keeps running: a long session
+/// otherwise accumulates a descriptor and a reader thread per closed pane, and
+/// profiling on 2026-09-03 measured 10 stranded descriptors after 6 closed
+/// panes against a macOS soft limit of 256. It is worth nothing at all when the
+/// process is ending, which is when the OS reclaims every handle for free — so
+/// the quit path says so, and the pane skips it.
+abstract interface class PseudoConsoleOwner {
+  /// Leave the pseudoconsole to the OS when this pane is disposed.
+  ///
+  /// One-way, and per pane rather than global: it is set by the shutdown that
+  /// is about to end the process, and a pane closed in a running app is
+  /// untouched by it.
+  void keepPseudoConsoleOnDispose();
+}
+
 /// A [TerminalInstance] whose output ingestion answers to how visible it is.
 ///
 /// Deliberately a second, narrower interface, for the same reason
@@ -298,6 +336,7 @@ class PtyTerminalInstance
     implements
         TerminalInstance,
         ReapableTerminalInstance,
+        PseudoConsoleOwner,
         TieredTerminalInstance,
         ParkableTerminalInstance,
         AdoptableTerminalInstance,
@@ -624,9 +663,20 @@ class PtyTerminalInstance
     // soft limit of 256.
     //
     // After the reap rather than before, so `shutdownProcess` still has a live
-    // pty to ask for `exitCode` while it waits for the child to go quietly.
-    ).whenComplete(_pty.destroy);
+    // pty to ask for `exitCode` while it waits for the child to go quietly. And
+    // not at all when the process is ending: see [PseudoConsoleOwner].
+    ).whenComplete(() {
+      if (_keepPseudoConsole) return;
+      _pty.destroy();
+    });
   }
+
+  /// Set by the shutdown that is about to end this process. See
+  /// [PseudoConsoleOwner].
+  bool _keepPseudoConsole = false;
+
+  @override
+  void keepPseudoConsoleOnDispose() => _keepPseudoConsole = true;
 }
 
 /// Writes [scrollback] into [terminal] followed by a dim marker, so the user can

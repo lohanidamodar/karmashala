@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
@@ -11,11 +12,13 @@ import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -101,6 +104,67 @@ void main() {
       expect(File(p.join(tmp.path, 'ipc', 'rpc.sock')).existsSync(), isFalse);
     });
 
+    test('it is retained before it is started, not after', () async {
+      // **What the app soak found.** `start()` publishes the handshake
+      // part-way through — the socket node is already bound, the WSL listener
+      // and the session configs are still to come — and this field used to be
+      // assigned only once `start()` returned. So from the moment
+      // `mcp_bridge.json` appeared there were several hundred milliseconds in
+      // which a quit found step 3 with nothing to stop, and it said nothing
+      // about it: no skip, no timeout, no failure. 18 of 20 quits left the
+      // handshake, the socket node and `data\mcp` behind that way.
+      final lifecycle = AppLifecycle(container);
+      final server = LauncherControlServer(container);
+
+      final starting = lifecycle.startControlServer(server: server);
+
+      expect(
+        lifecycle.controlServer,
+        same(server),
+        reason: 'a quit that lands mid-start must find something to stop',
+      );
+      await starting;
+      await server.stop();
+    });
+
+    test('a stop that lands mid-start leaves nothing published', () async {
+      // The other half. Retaining the instance is no use if the rest of the
+      // start then publishes over what `stop()` has just removed — and it did:
+      // the handshake is *written* several awaits after the empty file that
+      // carries its ACL is created, so a stop in between removed a file the
+      // start then put back, in full, on its way out.
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final sessionConfigs = Directory(p.join(tmp.path, 'mcp'));
+      // The ACL call is the synchronisation point rather than a delay: it sits
+      // exactly where the soak's close message arrived, with the socket node
+      // already bound and the handshake not yet written.
+      final atRestrict = Completer<void>();
+      final release = Completer<bool>();
+      final server = LauncherControlServer(
+        container,
+        permissions: _GatedPermissions(atRestrict, release),
+      );
+
+      final starting = server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+        sessionConfigDirectory: sessionConfigs.path,
+      );
+      await atRestrict.future;
+
+      await server.stop();
+      release.complete(true);
+      await starting;
+
+      expect(
+        File(bridge).existsSync(),
+        isFalse,
+        reason: 'the rest of the start published on its way out',
+      );
+      expect(File(p.join(tmp.path, 'ipc', 'rpc.sock')).existsSync(), isFalse);
+      expect(sessionConfigs.existsSync(), isFalse);
+    });
+
     test('the pid stays in the handshake for the crash case', () async {
       // Graceful quit removes the file; a crash cannot, which is why the pid it
       // publishes has to stay there for a reader to validate.
@@ -113,6 +177,24 @@ void main() {
       addTearDown(server.stop);
 
       expect(File(bridge).readAsStringSync(), contains('"pid":$pid'));
+    });
+  });
+
+  group('the database it closes', () {
+    test('a graceful quit closes the handle, not just the process', () async {
+      // `exit(0)` releases the file and gives SQLite no chance to checkpoint,
+      // so all 20 of the soak's cycles left `karmashala.sqlite-wal` and `-shm`
+      // for the next launch to recover from. A `close()` writes them back and
+      // removes them.
+      final lifecycle = AppLifecycle(container);
+
+      await lifecycle.shutdown();
+
+      expect(
+        () => db.readMetadata(MetadataKeys.firstRunAt),
+        throwsA(anything),
+        reason: 'the handle outlived the shutdown that owns it',
+      );
     });
   });
 
@@ -322,6 +404,47 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       );
     });
 
+    test('a pane keeps its pseudoconsole when the process is ending', () async {
+      // The second of the two cycles in twenty that ignored `WM_CLOSE`, and the
+      // only one of the findings that no Dart bound could have covered:
+      // releasing a pseudoconsole is a synchronous Windows call, and a
+      // synchronous call that does not return takes the isolate's timers with
+      // it. See [PseudoConsoleOwner].
+      final (container, panes) = reapingContainer(Future<void>.value());
+      final lifecycle = AppLifecycle(container);
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+
+      await lifecycle.shutdown();
+
+      expect(panes.single.keptPseudoConsole, isTrue);
+      expect(
+        panes.single.keptWhileUndisposed,
+        isTrue,
+        reason: 'dispose builds the chain that releases it; too late after',
+      );
+    });
+
+    test('a pane closed in a running app still releases it', () async {
+      // The other half, and the reason this is per pane rather than a flag on
+      // the process: a long session that never released a console would strand
+      // a descriptor and a reader thread per closed pane, which is the leak
+      // 2026-09-03 measured and fixed.
+      final (container, panes) = reapingContainer(Future<void>.value());
+      addTearDown(container.dispose);
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.openTab(TerminalProfile.powerShell);
+
+      terminals.closeTab(container.read(terminalSessionsControllerProvider).tabs.first.id);
+
+      expect(panes.first.disposed, isTrue, reason: 'the pane was closed');
+      expect(panes.first.keptPseudoConsole, isFalse);
+    });
+
     test('a kill that never lands does not hold the app open', () async {
       final (container, panes) = reapingContainer(Completer<void>().future);
       // Injected: the property is that the step is abandoned, and proving it
@@ -378,7 +501,7 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       // Pinned to literals on purpose. The two bounds this replaces were
       // written against `kShutdownBudget` itself, so widening the constant —
       // the exact regression they existed to catch — kept them green.
-      expect(kShutdownBudget, const Duration(milliseconds: 2550));
+      expect(kShutdownBudget, const Duration(milliseconds: 3550));
       expect(
         kShutdownStepBudgets.values.reduce((a, b) => a + b),
         kShutdownBudget,
@@ -386,7 +509,14 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       );
       expect(
         kShutdownStepBudgets['terminal processes'],
-        const Duration(milliseconds: 1500),
+        const Duration(milliseconds: 2500),
+        reason: '1500 was under the measured cost of one taskkill.exe',
+      );
+      expect(
+        kShutdownStepBudgets['terminal processes'],
+        kProcessTreeKillBound,
+        reason: 'a kill still being waited on after its step was abandoned is '
+            'work outliving the shutdown that owns it',
       );
       expect(kShutdownStepBudgets, hasLength(9));
     });
@@ -775,7 +905,7 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 /// A pane whose process teardown outlives `dispose()`, the way a real one's
 /// `taskkill /T` does — with the test holding the future.
 class _ReapingInstance extends FakeTerminalInstance
-    implements ReapableTerminalInstance {
+    implements ReapableTerminalInstance, PseudoConsoleOwner {
   _ReapingInstance({
     required super.id,
     required super.title,
@@ -785,6 +915,19 @@ class _ReapingInstance extends FakeTerminalInstance
 
   @override
   final Future<void> reaped;
+
+  /// Whether the quit told this pane to leave its console to the OS, and
+  /// whether it did so while the pane was still there to be told. Recorded
+  /// rather than counted at the end, because "before `dispose`" is the whole
+  /// property: after it the chain that releases the console is already built.
+  bool keptPseudoConsole = false;
+  bool keptWhileUndisposed = false;
+
+  @override
+  void keepPseudoConsoleOnDispose() {
+    keptPseudoConsole = true;
+    keptWhileUndisposed = !disposed;
+  }
 }
 
 /// A [Stopwatch] that always reports the same elapsed time, so the shutdown
@@ -850,4 +993,24 @@ class _RecordingControlServer extends LauncherControlServer {
     _order.add('control server');
     await super.stop();
   }
+}
+
+/// Suspends the handshake file's ACL call, which is where a quit lands: the
+/// socket node is bound, `mcp_bridge.json` exists and is still empty, and the
+/// tokens have not been written into it yet.
+class _GatedPermissions extends HandshakePermissions {
+  _GatedPermissions(this._reached, this._release);
+
+  final Completer<void> _reached;
+  final Completer<bool> _release;
+
+  @override
+  Future<bool> restrictFile(File file, {AppLogger? logger}) {
+    if (!_reached.isCompleted) _reached.complete();
+    return _release.future;
+  }
+
+  @override
+  Future<bool> restrictDirectory(Directory dir, {AppLogger? logger}) async =>
+      true;
 }

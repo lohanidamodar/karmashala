@@ -19,6 +19,7 @@ import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../database/app_database.dart';
 import '../database/database_providers.dart';
 import '../logging/app_logger.dart';
 import '../logging/diagnostics.dart';
@@ -39,7 +40,7 @@ import '../logging/diagnostics.dart';
 /// took the handshake deletion with it — the single step this owner exists for.
 /// Each step gets its own slice instead, so a hang costs that step and nothing
 /// else. [kShutdownStepBudgets] is that sum, itemised.
-const kShutdownBudget = Duration(milliseconds: 2550);
+const kShutdownBudget = Duration(milliseconds: 3550);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -56,13 +57,29 @@ const _kHookStepBudget = Duration(milliseconds: 150);
 /// `killWindowsProcessTree`) — an external process each, run concurrently — and
 /// the cost of cutting it short is the thing it exists to prevent: a dev server
 /// still holding a port, or a build still holding a file lock, after the app
-/// has gone. It is a ceiling, not a wait: the reaps normally land in tens of
-/// milliseconds.
-const _kTerminalStepBudget = Duration(milliseconds: 1500);
+/// has gone.
+///
+/// **1500 ms was below the measurement, which is why it was abandoned on
+/// nearly every quit.** It was written as "a ceiling, not a wait — the reaps
+/// normally land in tens of milliseconds", and the 2026-09-09 soak said
+/// otherwise: with a *single* pane to reap the step hit its cap on 18 of 20
+/// cycles, and a probe around the call put 1284-1934 ms of it on `taskkill.exe`
+/// alone. On the same machine `taskkill /PID 999999`, killing nothing, took
+/// 812-983 ms. So the number is the cost of starting one Windows binary, the
+/// reap cannot be made cheaper from Dart, and a cap under it meant the kill
+/// this step exists for was abandoned rather than waited for — the orphaned
+/// dev server, every quit. 2500 ms covers the measured range with headroom, and
+/// `killWindowsProcessTree` carries the same bound so nothing outlives the step
+/// that owns it.
+const _kTerminalStepBudget = Duration(milliseconds: 2500);
 
 /// What the teardowns that disposing the container *starts* get: one SSH socket
 /// close per pooled connection, and one agent child process stop per active run.
 const _kContainerStepBudget = Duration(milliseconds: 250);
+
+/// What writing the queued log lines to disk gets, and it is deliberately
+/// **not** part of [kShutdownBudget] — see [AppLifecycle.flushLog].
+const kLogFlushBudget = Duration(seconds: 1);
 
 /// Every step's slice, in order — the arithmetic behind [kShutdownBudget],
 /// written down so a change to one of them cannot silently widen the deadline.
@@ -188,6 +205,19 @@ class AppLifecycle {
 
   /// Starts the local control server and retains it, so `stop()` has a caller.
   ///
+  /// **Retained before it is started, not after.** `start()` publishes the
+  /// handshake part-way through — the socket node is already bound, and the WSL
+  /// listener and the session-config directory come *after* it — so from the
+  /// moment `mcp_bridge.json` appears there is a server with files on disk and
+  /// several hundred milliseconds of starting left to do. Assigning this field
+  /// only once `start()` returned left that whole window with nothing for step
+  /// 3 to stop: it took the `?? Future<void>.value()` branch and logged no
+  /// skip, no timeout and no failure, because from its point of view there was
+  /// no server. The 2026-09-09 soak measured that as the *usual* outcome of a
+  /// quit — 18 of 20 — and this line is half the fix; the other half is
+  /// `LauncherControlServer.stop` making an in-flight `start` unwind instead of
+  /// republishing what it just removed.
+  ///
   /// Returns `null` when the server could not be started at all — distinct from
   /// a server that started and withheld privileged RPC, which is a running
   /// server with a [LauncherControlServer.status] to show.
@@ -196,15 +226,14 @@ class AppLifecycle {
   }) async {
     final instance =
         server ?? LauncherControlServer(_container, logger: _logger);
+    // Before the await: a partially started server may hold a port and files,
+    // and `stop()` is safe on one that never bound.
+    _controlServer = instance;
     try {
       await instance.start();
-      _controlServer = instance;
       return instance;
     } on Object catch (error, stack) {
       _logger.warning('Launcher control server failed to start.', error, stack);
-      // Retained anyway: a partially started server may still hold a port, and
-      // `stop()` is safe on one that never bound.
-      _controlServer = instance;
       return null;
     }
   }
@@ -731,6 +760,7 @@ class AppLifecycle {
     //    are idempotent, so starting them here — where the wait is budgeted —
     //    leaves the providers' own hooks as no-ops.
     final pending = _startContainerTeardowns();
+    final database = _databaseOrNull();
     try {
       _container.dispose();
     } on Object catch (error, stack) {
@@ -743,17 +773,60 @@ class AppLifecycle {
       cap: _kContainerStepBudget,
     );
 
+    // 7. The database handle, after everything that could still write through
+    //    it has stopped. Not a `_step`: `close()` is one synchronous call that
+    //    a deadline could not preempt anyway, and skipping it is what the soak
+    //    was measuring. `exit(0)` releases the file but gives SQLite no chance
+    //    to checkpoint, so every one of 20 quits left `karmashala.sqlite-wal`
+    //    and `-shm` for the next launch to recover from.
+    try {
+      database?.close();
+    } on Object catch (error) {
+      // A handle already closed, or one a teardown is still inside. The next
+      // launch recovers from the journal exactly as it did before.
+      _logger.warning('lifecycle: closing the database failed reason=$error');
+    }
+
     watch.stop();
     lastShutdownDuration = watch.elapsed;
     _logger.info('lifecycle: shutdown in ${watch.elapsedMilliseconds} ms.');
-    // Last, so the line above makes the file: the log sink batches, and a quit
-    // that loses its own last 400 ms is a quit whose failures are invisible.
-    await _step(
-      'log flush',
-      watch,
-      () => Diagnostics.instance.file?.flush() ?? Future<void>.value(),
-      cap: const Duration(seconds: 1),
-    );
+    await flushLog();
+  }
+
+  /// Puts what has been logged on disk, **outside [kShutdownBudget]**.
+  ///
+  /// It used to be a step like any other, and that was the bug: `_step` bounds
+  /// every action by what is left of the shared deadline, so a shutdown that
+  /// spent its budget skipped exactly the flush that would have recorded it.
+  /// The soak counted the result — 20 quits, 8 `shutdown in N ms` lines — and
+  /// the twelve missing ones are the twelve worth reading. A quit whose own
+  /// account is the first casualty of the quit going wrong is a quit nobody
+  /// can debug.
+  ///
+  /// Called again by `SystemIntegrationService._quit` immediately before the
+  /// process ends, because the window destroy logs after this returns. Two
+  /// flushes cost one empty queue check; a missing one costs the evidence.
+  Future<void> flushLog() async {
+    try {
+      await Diagnostics.instance.flushFile().timeout(kLogFlushBudget);
+    } on Object {
+      // A sink that cannot be written must not hold the app open. Nothing is
+      // logged about it: there is nowhere left for that line to go.
+    }
+  }
+
+  /// The database this container was given, or null when it has none.
+  ///
+  /// Read *before* `dispose()` for the same reason the teardowns are: a
+  /// disposed container cannot be read from, and this is the one handle whose
+  /// close has to outlast every provider that might still be using it.
+  AppDatabase? _databaseOrNull() {
+    try {
+      return _container.read(databaseProvider);
+    } on Object {
+      // Companion mode and a few tools build a container with no database.
+      return null;
+    }
   }
 
   /// Starts the teardowns that container disposal would otherwise fire and

@@ -9,6 +9,8 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/quick_open/quick_open.dart';
 import '../../core/logging/app_logger.dart';
+import '../../core/lifecycle/app_lifecycle.dart';
+import '../../core/logging/diagnostics.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import '../notifications/domain/inbox_item.dart';
@@ -645,16 +647,43 @@ class SystemIntegrationService with TrayListener, WindowListener {
       // will not close.
       _logger.warning('system: shutdown before quit failed.', error, stack);
     }
+    // Bracketed, and the two lines are the whole diagnosis for a quit that
+    // never finishes: on stdout they are unbuffered, so `destroying the
+    // window` with no `window destroyed` after it says the isolate stopped
+    // *here*, and neither line says it stopped earlier.
+    _logger.info('system: shutdown done; destroying the window.');
     try {
       await _native.window.setPreventCloseAndDestroy();
+      _logger.info('system: window destroyed.');
     } on Object catch (error) {
       _logger.warning('system: window destroy failed reason=$error');
     }
+    // Last before the process ends, and the reason it is here rather than only
+    // inside `shutdown()`: everything above logged after that flush, and the
+    // sink batches on a 400 ms timer that is a task for an isolate about to
+    // stop. Whatever went wrong on the way out is on disk before the exit that
+    // would have swallowed it.
+    await _flushLog();
     // Destroying the window does not end the process: `applicationShouldTerminate`
     // cancels AppKit's own termination so this ordered shutdown can run at all,
     // and that cancellation applies just as much to the close that `destroy()`
     // causes. Ending it here is the only thing that actually does.
     _endProcess();
+  }
+
+  /// Writes the queued log lines to disk, bounded, before the process ends.
+  ///
+  /// `LogFileSink.add` arms a 400 ms timer and that timer is a task for *this*
+  /// isolate, so every line logged in the last stretch of a quit dies with it
+  /// unless something asks. The soak counted what that costs: 20 quits, 8
+  /// `shutdown in N ms` lines.
+  Future<void> _flushLog() async {
+    try {
+      await Diagnostics.instance.flushFile().timeout(kLogFlushBudget);
+    } on Object {
+      // Nowhere left to report it, and a sink that will not write must not be
+      // what keeps the app open.
+    }
   }
 
   /// Snapshots the terminal layout on the way out.
