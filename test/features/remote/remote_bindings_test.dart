@@ -50,12 +50,32 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:path/path.dart' as ph;
+
 import '../terminal/fake_instance.dart';
 import 'fake_bindings.dart';
 import '../../support/fakes.dart';
 
+/// The store scan, answered from a map, so nothing here walks the owner's own
+/// `~/.claude` — and so an Antigravity session can be given a store that keeps
+/// a transcript for it, or one that does not.
+class _FixedLocator implements SessionTranscriptLocator {
+  final paths = <String, String>{};
+
+  @override
+  Future<String?> locate({
+    required String agentId,
+    required String externalSessionId,
+  }) async => paths['$agentId/$externalSessionId'];
+
+  @override
+  Future<Map<String, String>> index() async => paths;
+}
+
 void main() {
   late AppDatabase db;
+  late _FixedLocator locator;
   late ProviderContainer container;
   late FakeRepositoryDiscoveryService discovery;
   final now = DateTime.utc(2026, 8, 31, 10);
@@ -71,9 +91,11 @@ void main() {
       ),
     );
     discovery = FakeRepositoryDiscoveryService();
+    locator = _FixedLocator();
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
+        sessionTranscriptLocatorProvider.overrideWithValue(locator),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
         autoImportRunnerProvider.overrideWithValue(
           (_) async => const ImportSummary(),
@@ -542,12 +564,15 @@ void main() {
   // --- Which nothing it is ------------------------------------------------
   //
   // "I have a running antigravity session and in the mobile companion app it
-  // shows running, but when I open it, it doesn't show any transcript." The
-  // reading was never broken — Antigravity's store is protobuf in an
-  // unpublished schema, so `agentSupportsChatView` refuses it by design. What
-  // was broken is that the host knew that and sent `[]`, which is also what a
+  // shows running, but when I open it, it doesn't show any transcript." What
+  // was broken is that the host knew why and sent `[]`, which is also what a
   // session that has not spoken yet sends, so the phone had to hedge across
   // both and drew a welcome screen over the answer.
+  //
+  // **Which nothing it is is read per session now**, not per agent: the same
+  // Antigravity store keeps a readable JSONL transcript for every conversation
+  // on one install here and for none on the other, so both answers below are
+  // reachable for the same agent and the wire has to carry the right one.
   group('a transcript page says why it is empty', () {
     void seedPaneSession(String id, {required String agentId}) {
       AgentInstallationDao(db).insert(
@@ -575,9 +600,22 @@ void main() {
       );
     }
 
-    test('an agent with no readable store is named as the reason', () async {
+    /// A store that holds this conversation's record and no transcript beside
+    /// it — the Windows Antigravity install exactly, whose one brain directory
+    /// is empty. Nothing is written: the reading is about a file's absence.
+    void storeKeepsNoTranscript(String sessionId) {
+      locator.paths['antigravity/ext-$sessionId'] = ph.join(
+        r'C:\store',
+        'conversations',
+        'ext-$sessionId.db',
+      );
+    }
+
+    test('a store that keeps no transcript for this session is the reason',
+        () async {
       seedWorkspace();
       seedPaneSession('s-anti', agentId: 'antigravity');
+      storeKeepsNoTranscript('s-anti');
 
       final bindings = container.read(remoteHostBindingsProvider);
       final page = (await bindings.transcriptFor('s-anti')).page;
@@ -591,6 +629,50 @@ void main() {
       );
     });
 
+    test('the same agent, where its store does keep one, sends the turns',
+        () async {
+      // The refusal above is about this session, not about Antigravity: the
+      // WSL install keeps a plain JSONL transcript for every conversation, and
+      // sending `noChatView` for one of those was the wrong half of a
+      // per-format answer.
+      final store = Directory.systemTemp.createTempSync('karmashala_agy_rb_');
+      addTearDown(() => store.deleteSync(recursive: true));
+      final transcript = File(
+        ph.join(
+          store.path,
+          'brain',
+          'ext-s-live',
+          '.system_generated',
+          'logs',
+          'transcript.jsonl',
+        ),
+      )..parent.createSync(recursive: true);
+      transcript.writeAsStringSync(
+        jsonEncode({
+          'step_index': 0,
+          'source': 'USER_EXPLICIT',
+          'type': 'USER_INPUT',
+          'status': 'DONE',
+          'created_at': '2026-09-09T10:00:00Z',
+          'content': 'list the folder',
+        }),
+      );
+      locator.paths['antigravity/ext-s-live'] = ph.join(
+        store.path,
+        'conversations',
+        'ext-s-live.db',
+      );
+
+      seedWorkspace();
+      seedPaneSession('s-live', agentId: 'antigravity');
+
+      final bindings = container.read(remoteHostBindingsProvider);
+      final page = (await bindings.transcriptFor('s-live')).page;
+
+      expect(page.absence, isNull);
+      expect(page.messages.single.text, 'list the folder');
+    });
+
     // One read, two answers: the page the phone renders and what that same
     // parse says is in flight. Asking twice would double what the poll sweep
     // spends on a transcript, and the largest one here is 53 MB.
@@ -602,6 +684,7 @@ void main() {
         container = ProviderContainer(
           overrides: [
             ...fakeTerminalOverrides(database: db),
+            sessionTranscriptLocatorProvider.overrideWithValue(locator),
             repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
             autoImportRunnerProvider.overrideWithValue(
               (_) async => const ImportSummary(),
@@ -634,6 +717,8 @@ void main() {
         statusIs(AgentActivityStatus.working);
         seedWorkspace();
         seedPaneSession('s-anti', agentId: 'antigravity');
+        locator.paths['antigravity/ext-s-anti'] =
+            ph.join(r'C:\store', 'conversations', 'ext-s-anti.db');
 
         final record = await container
             .read(remoteHostBindingsProvider)

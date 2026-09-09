@@ -132,22 +132,32 @@ class TranscriptMessage {
 /// [subagentsDirectory] overrides where that index is looked for. It exists for
 /// the nested case: a delegate's transcript already lives *in* the directory
 /// that indexes the delegates it spawned in turn.
+/// **The file a session's conversation is actually read from**, or null when
+/// this agent's store keeps none for it.
+///
+/// Antigravity's own `conversations/<id>` file is never read as text: its
+/// message columns are protobuf in an unpublished schema, and without this
+/// redirection [readCliTranscript] would read a binary file as UTF-8 lines
+/// every two seconds behind the imported-session detail pane and arrive at an
+/// empty list by throwing. What changed on 2026-09-09 is that a **plain JSONL**
+/// transcript sits elsewhere in the same store on some installs — see
+/// [antigravityTranscriptPathFor], which has the measurement and answers null
+/// where the store keeps none, so the old refusal still stands there.
+///
+/// Exposed rather than inlined because `SessionChatView` asks the same question
+/// without reading the file: one rule, so the reading and the read cannot
+/// disagree about which file a session's conversation is in.
+String? transcriptFileFor(String filePath, String cli) =>
+    cli == AgentIds.antigravity
+    ? antigravityTranscriptPathFor(filePath)
+    : filePath;
+
 Future<List<TranscriptMessage>> readCliTranscript(
   String filePath,
   String cli, {
   String? subagentsDirectory,
 }) async {
-  // Antigravity's own `conversations/<id>` file is still never read as text:
-  // its message columns are protobuf in an unpublished schema, and without the
-  // redirection below the loop would read a binary file as UTF-8 lines every
-  // two seconds behind the imported-session detail pane and arrive at an empty
-  // list by throwing. What changed is that a **plain JSONL** transcript sits
-  // elsewhere in the same store on some installs — see
-  // [antigravityTranscriptPathFor], which has the measurement and answers null
-  // where the store keeps none, so the old refusal still stands there.
-  final path = cli == AgentIds.antigravity
-      ? antigravityTranscriptPathFor(filePath)
-      : filePath;
+  final path = transcriptFileFor(filePath, cli);
   if (path == null) return const [];
 
   final file = File(path);
