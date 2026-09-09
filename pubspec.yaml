@@ -18,6 +18,7 @@ workspace:
   - packages/agent_cli
   - packages/karmashala_browser
   - packages/karmashala_core
+  - packages/karmashala_devices
   - packages/karmashala_media
   - packages/karmashala_remote
   - packages/local_ipc
@@ -44,6 +45,11 @@ dependencies:
   # with `image` and `ffi`.
   karmashala_media:
     path: packages/karmashala_media
+  # Android devices and iOS simulators: adb, simctl, scrcpy, WebDriverAgent,
+  # the UI tree and screen recording. Built beside the app in phase A —
+  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
+  karmashala_devices:
+    path: packages/karmashala_devices
   karmashala_remote:
     path: packages/karmashala_remote
   # The coding-agent interface: discovery, launch, stream, ask, store reading

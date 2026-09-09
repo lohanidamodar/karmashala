@@ -75,7 +75,15 @@ $map = [ordered]@{
     pkg  = 'packages/karmashala_core'
     app  = @('test/core')
     owns = @('lib/src/core/logging', 'lib/src/core/util', 'lib/src/core/paths',
-             'lib/src/core/media', 'test/core')
+             'test/core')
+  }
+  media = @{
+    pkg  = 'packages/karmashala_media'
+    # The frame sinks and the H.264 writer; `lib/src/core/media` is the app's
+    # provider over them, and the recorders are what exercise them end to end.
+    app  = @('test/features/terminal',
+             'test/features/mcp/recording_tools_test.dart')
+    owns = @('lib/src/core/media')
   }
   agent_cli = @{
     pkg  = 'packages/agent_cli'
