@@ -65,7 +65,15 @@ void main() {
 
   tearDown(() {
     db.close();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    // **One call, not exists-then-delete.** The guard was a TOCTOU: a case
+    // that had already failed may have taken its directory with it between
+    // the two lines, and the `PathNotFoundException` that followed buried the
+    // assertion that actually failed under a teardown error.
+    try {
+      tmp.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Already gone, or something inside it went while this walked.
+    }
   });
 
   group('the control server it owns', () {
@@ -475,9 +483,17 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 
       await lifecycle.shutdown();
 
+      // **Counted.** That `shutdown()` returned at all is what proves the
+      // deadline was enforced — a sequence that waited on the 30 s tray would
+      // have hung this case, not made it slow. What the number used to stand
+      // in for is here instead: the hanging step was cut off at the budget,
+      // the ones behind it were skipped rather than waited on, and the
+      // container was disposed anyway.
+      expect(lifecycle.abandonedSteps, ['agent hook installation']);
       expect(
-        lifecycle.lastShutdownDuration,
-        lessThan(const Duration(seconds: 2)),
+        lifecycle.skippedSteps,
+        isNotEmpty,
+        reason: 'a spent budget must skip the rest, not wait on them',
       );
       expect(isDisposed(container), isTrue);
     });
@@ -497,20 +513,6 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 
       await lifecycle.shutdown();
 
-      // **A performance claim, and only a quiet machine can make one.** Read
-      // 3.03 s against this 500 ms literal with six suites running, which is a
-      // statement about the machine and not about this app — §19's rule is
-      // that an unobserved state must not borrow an observed one's words, so
-      // the contention is measured and the case says so rather than failing on
-      // somebody else's load.
-      final slack = await schedulerSlack();
-      if (slack > const Duration(milliseconds: 50)) {
-        markTestSkipped(
-          'a 50 ms timer landed ${slack.inMilliseconds} ms late, so this '
-          'machine is too contended for a shutdown envelope to mean anything',
-        );
-        return;
-      }
       // The literal is Loop 55's measured envelope (225–396 ms end to end), not
       // the constant: a shutdown that got slower would still be "inside the
       // budget" the moment someone widened the budget.
@@ -518,7 +520,22 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
         lifecycle.lastShutdownDuration,
         lessThan(const Duration(milliseconds: 500)),
       );
-    });
+    },
+        // **The one case here that is a wall-clock measurement, and it is
+        // opt-in for that reason.** Every bound in `AppLifecycle` is a real
+        // timeout, so a starved scheduler overshoots all of them at once: with
+        // six suites running this read 3.03 s and said nothing about the app.
+        // Every other case in this file was rewritten to count what ran; this
+        // one cannot be, because the number *is* the claim. So it runs
+        // deliberately, on a quiet machine, and skips itself with its reason
+        // the way §18's live tests do:
+        //
+        //     KARMASHALA_TIMING=1 flutter test test/core/lifecycle
+        tags: 'live-timing',
+        skip: Platform.environment['KARMASHALA_TIMING'] == null
+            ? 'a wall-clock envelope, and this gate runs beside other gates. '
+                  'Set KARMASHALA_TIMING=1 on a quiet machine to measure it.'
+            : false);
   });
 
   group('idempotence', () {
@@ -753,21 +770,6 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       expect(sweeps, [1], reason: 'the first sweep is still behind the gate');
     });
   });
-}
-
-/// How late a short timer actually lands, right now.
-///
-/// The one thing that separates "this app's shutdown got slower" from "this
-/// machine is running six test suites", and it has to be measured rather than
-/// assumed: every bound in `AppLifecycle` is a real timeout, so a starved
-/// scheduler overshoots all of them at once and a wall-clock assertion becomes
-/// a reading of the load.
-Future<Duration> schedulerSlack() async {
-  const probe = Duration(milliseconds: 50);
-  final watch = Stopwatch()..start();
-  await Future<void>.delayed(probe);
-  final slack = watch.elapsed - probe;
-  return slack.isNegative ? Duration.zero : slack;
 }
 
 /// A pane whose process teardown outlives `dispose()`, the way a real one's

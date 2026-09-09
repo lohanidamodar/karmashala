@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
@@ -15,7 +14,16 @@ void main() {
   late Directory dir;
 
   setUp(() => dir = Directory.systemTemp.createTempSync('karmashala_drainer_'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  // Guarded the way the lifecycle test's is: a case that has already failed
+  // may have taken its own directory with it, and a teardown that then throws
+  // buries the failure that matters under a `PathNotFoundException`.
+  tearDown(() {
+    try {
+      dir.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Already gone, or a file inside it went while this walked.
+    }
+  });
 
   void write(String name, {String event = 'Stop'}) => File(
     p.join(dir.path, name),
@@ -167,7 +175,11 @@ void main() {
     expect(asked, 0, reason: 'and it spends no process finding that out');
   });
 
-  test('watching nothing runs no timer', () async {
+  test('watching nothing arms no tick', () async {
+    // Counted: the loop is never armed at all. This used to sleep 60 ms and
+    // assert that a 5 ms timer had not asked anything in that window, which
+    // says the same thing only on a machine that was listening.
+    final loop = _StepSchedule();
     var asked = 0;
     final drainer = AgentHookSpoolDrainer(
       onEvent: (_) {},
@@ -176,54 +188,66 @@ void main() {
         asked++;
         return {'Ubuntu'};
       },
+      schedule: loop.arm,
+      cancelSchedule: loop.cancel,
     );
     addTearDown(drainer.dispose);
 
     drainer.watch(const []);
-    await Future<void>.delayed(const Duration(milliseconds: 60));
 
+    expect(loop.armedAt, isEmpty, reason: 'nothing to poll, nothing armed');
     expect(asked, 0);
     expect(drainer.sources, isEmpty);
   });
 
-  test('the timer picks payloads up without being stepped', () async {
+  test('the tick it arms is what reads the payload, not the caller', () async {
+    // **The loop is stepped, not waited on.** This slept 120 ms and expected
+    // twelve 10 ms ticks to have delivered one payload; alone and unloaded it
+    // still read `[]` about one run in three, which measured the scheduler
+    // rather than the drainer. What it means to say is that the drainer arms
+    // its own periodic tick at its own interval and that *that* tick — nobody
+    // calling `drainOnce` — is what reads the file. Both halves are counted.
+    final loop = _StepSchedule();
     final seen = <AgentHookSpoolEvent>[];
-    final arrived = Completer<AgentHookSpoolEvent>();
     final drainer = AgentHookSpoolDrainer(
-      onEvent: (event) {
-        seen.add(event);
-        if (!arrived.isCompleted) arrived.complete(event);
-      },
+      onEvent: seen.add,
       interval: const Duration(milliseconds: 10),
       runningDistributions: () async => {'Ubuntu'},
+      schedule: loop.arm,
+      cancelSchedule: loop.cancel,
     );
     addTearDown(drainer.dispose);
     drainer.watch([source()]);
     write('1-0.json');
 
-    // **Waits for the event, not for a duration.** This slept 120 ms and
-    // expected twelve 10 ms ticks to have delivered one payload; on a loaded
-    // machine it read `[]` and failed about one run in three, which measured
-    // the scheduler rather than the drainer. The ceiling below is a failure
-    // bound — a timer that genuinely never fires — and not the thing being
-    // tested.
-    await arrived.future.timeout(const Duration(seconds: 5));
+    expect(loop.armedAt, [const Duration(milliseconds: 10)]);
+    loop.tick();
+    // Awaits the drain that tick started, not a duration.
+    await drainer.settled;
 
     expect(seen, hasLength(1));
   });
 
   test('disposing stops it, so shutdown is not racing a share', () async {
+    final loop = _StepSchedule();
     final seen = <AgentHookSpoolEvent>[];
     final drainer = AgentHookSpoolDrainer(
       onEvent: seen.add,
       interval: const Duration(milliseconds: 5),
       runningDistributions: () async => {'Ubuntu'},
+      schedule: loop.arm,
+      cancelSchedule: loop.cancel,
     );
     drainer.watch([source()]);
     drainer.dispose();
     write('1-0.json');
 
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+    // The tick was cancelled, and firing the one it had armed anyway — the
+    // shape of a callback already in the queue when `dispose` ran — reads
+    // nothing.
+    expect(loop.cancelled, 1);
+    loop.tick();
+    await drainer.settled;
 
     expect(seen, isEmpty);
     expect(drainer.sources, isEmpty);
@@ -244,4 +268,28 @@ class _RecordingSpool extends AgentHookSpool {
     listed.add(directory.path);
     return super.drain(directory, limit: limit);
   }
+}
+
+/// The drainer's loop, held rather than run.
+///
+/// Records every interval armed and lets a case fire the tick itself, so a
+/// case asserts *that the loop was armed and what firing it did* instead of
+/// waiting long enough for a real `Timer` to have fired on this machine.
+class _StepSchedule {
+  final List<Duration> armedAt = <Duration>[];
+  int cancelled = 0;
+  void Function()? _tick;
+
+  Object arm(Duration interval, void Function() tick) {
+    armedAt.add(interval);
+    _tick = tick;
+    return #handle;
+  }
+
+  void cancel(Object handle) => cancelled++;
+
+  /// Fires the armed tick. Deliberately still callable after [cancel]: a
+  /// callback already queued when `dispose` ran is exactly the case
+  /// `disposing stops it` is about.
+  void tick() => _tick?.call();
 }
