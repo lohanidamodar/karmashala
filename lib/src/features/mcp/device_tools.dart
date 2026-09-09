@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../devices/application/device_claims.dart';
 import '../devices/application/device_fleet.dart';
-import '../devices/application/device_screen_memory.dart';
 import '../devices/domain/device_claim.dart';
 import '../devices/domain/device_driver.dart';
 import '../devices/domain/device_input.dart';
@@ -15,6 +13,7 @@ import '../devices/domain/ios_simulator.dart';
 import '../devices/domain/screen_observation.dart';
 import '../devices/domain/ui_node.dart';
 import '../devices/domain/ui_summary.dart';
+import 'device_tool_support.dart';
 
 /// An attached Android device, an Android emulator, or an iOS Simulator, as an
 /// agent can drive it end to end: list, boot, install, launch, tap, read back.
@@ -69,14 +68,8 @@ import '../devices/domain/ui_summary.dart';
 /// one goes through it too, but only to say the holder is still working — a read
 /// never takes a claim and is never refused. See `device_claim.dart` for why a
 /// device gets a lock when a repository deliberately does not.
-class DeviceControlTools {
-  DeviceControlTools(this._container, {this.callerSessionId});
-
-  final ProviderContainer _container;
-
-  /// Which of our sessions is calling, when one is. Established by the
-  /// transport, never by an argument — see `McpCallerRegistry`.
-  final String? callerSessionId;
+class DeviceControlTools extends DeviceToolFamily {
+  DeviceControlTools(super.container, {super.callerSessionId});
 
   static const Set<String> _names = <String>{
     'list_devices',
@@ -103,24 +96,24 @@ class DeviceControlTools {
   Future<Object?> call(String name, Map<String, dynamic> args) async =>
       switch (name) {
         'list_devices' => _listDevices((args['limit'] as num?)?.round()),
-        'device_screenshot' => _deviceScreenshot(_id(args)),
+        'device_screenshot' => _deviceScreenshot(deviceIdIn(args)),
         'device_files_list' => _filesList(
-          _id(args),
+          deviceIdIn(args),
           args['path'] as String?,
         ),
         'device_file_pull' => _filePull(
-          _id(args),
+          deviceIdIn(args),
           args['device_path'] as String?,
           args['destination_directory'] as String?,
         ),
         'device_file_push' => _filePush(
-          _id(args),
+          deviceIdIn(args),
           args['host_path'] as String?,
           args['device_path'] as String?,
           args['overwrite'] == true,
         ),
         'device_tap' => _deviceTap(
-          _id(args),
+          deviceIdIn(args),
           (args['x'] as num?)?.round(),
           (args['y'] as num?)?.round(),
           // Default on. The check is skipped only when the caller says so, so a
@@ -129,140 +122,52 @@ class DeviceControlTools {
           verify: args['verify'] != false,
         ),
         'device_type' => _deviceType(
-          _id(args),
+          deviceIdIn(args),
           args['text'] as String?,
           submit: args['submit'] == true,
         ),
-        'device_key' => _deviceKey(_id(args), args['key'] as String?),
+        'device_key' => _deviceKey(deviceIdIn(args), args['key'] as String?),
         'device_logcat' => _deviceLogcat(
-          id: _id(args),
+          id: deviceIdIn(args),
           packageName: args['package'] as String?,
           level: args['level'] as String?,
           lines: (args['lines'] as num?)?.round(),
         ),
         'device_ui_dump' => _deviceUiDump(
-          id: _id(args),
+          id: deviceIdIn(args),
           full: args['full'] == true,
           filter: args['filter'] as String?,
           limit: (args['limit'] as num?)?.round(),
         ),
         'device_find_elements' => _deviceFindElements(
-          id: _id(args),
-          query: _uiQuery(args),
+          id: deviceIdIn(args),
+          query: uiQueryIn(args),
           limit: (args['limit'] as num?)?.round(),
         ),
         'device_tap_element' => _deviceTapElement(
-          id: _id(args),
-          query: _uiQuery(args),
+          id: deviceIdIn(args),
+          query: uiQueryIn(args),
           index: (args['index'] as num?)?.round(),
         ),
-        'device_stop_emulator' => _deviceStopEmulator(_id(args)),
-        'device_boot' => _deviceBoot((args['name'] as String?) ?? _id(args)),
+        'device_stop_emulator' => _deviceStopEmulator(deviceIdIn(args)),
+        'device_boot' => _deviceBoot((args['name'] as String?) ?? deviceIdIn(args)),
         'device_install_app' => _deviceInstallApp(
-          id: _id(args),
+          id: deviceIdIn(args),
           path: args['path'] as String?,
         ),
         'device_launch_app' => _deviceLaunchApp(
-          id: _id(args),
+          id: deviceIdIn(args),
           appId: args['appId'] as String?,
           activity: args['activity'] as String?,
           relaunch: args['relaunch'] == true,
         ),
         'device_terminate_app' => _deviceTerminateApp(
-          id: _id(args),
+          id: deviceIdIn(args),
           appId: args['appId'] as String?,
         ),
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// Which device the caller means.
-  ///
-  /// Three spellings for one argument. `serial` is what every existing Android
-  /// caller passes and cannot change; `udid` is what `list_devices` calls a
-  /// simulator's id and therefore the word an agent has in front of it when it
-  /// writes the next call. Accepting both costs one line and removes a class of
-  /// "I copied the field name out of your own output and you rejected it".
-  static String? _id(Map<String, dynamic> args) =>
-      (args['serial'] ?? args['udid'] ?? args['device']) as String?;
-
-  Future<DeviceFleet> _fleet() => _container.read(deviceFleetProvider)();
-
-  DeviceClaims get _claims => _container.read(deviceClaimsProvider);
-
-  DeviceScreenMemory get _screens =>
-      _container.read(deviceScreenMemoryProvider);
-
-  /// Files a screen this call has just read, so the next coordinate tap has
-  /// something to be checked against.
-  ScreenObservation _recordLook(DeviceDriver driver, ScreenRead read) =>
-      _screens.record(
-        deviceId: driver.target.id,
-        tree: read.tree,
-        app: read.app,
-        bySessionId: callerSessionId,
-      );
-
-  /// The driver for this call, or a refusal naming the device.
-  Future<DeviceDriver> _driver(String? id, String verb) async =>
-      (await _fleet()).driverFor(id, verb: verb);
-
-  /// The driver for a call that only **reads** this device.
-  ///
-  /// The capability is checked up front rather than left to fail inside the
-  /// driver, so the refusal names the capability that is missing and what still
-  /// works — the driver's own error would name whatever step happened to fall
-  /// over first.
-  ///
-  /// A read renews a claim this caller already holds and never takes one, so
-  /// looking at a phone somebody else is driving is always allowed. It has to
-  /// be: an agent that has just been refused needs to be able to see what the
-  /// holder is doing.
-  Future<DeviceDriver> _driverThatCan(
-    String? id,
-    String verb,
-    DeviceCapability capability,
-  ) async {
-    final driver = await _driver(id, verb);
-    _require(driver, verb, capability);
-    _claims.observed(
-      deviceId: driver.target.id,
-      sessionId: callerSessionId,
-    );
-    return driver;
-  }
-
-  /// The driver for a call that will **change** this device, with the device
-  /// taken for this caller — or [DeviceBusy] naming whoever is driving it.
-  ///
-  /// Ordered deliberately. The driver resolves first so the claim is keyed on
-  /// the canonical id: two agents naming one phone two different ways
-  /// (`emulator-5554` and an AVD name, a serial and a udid) must collide rather
-  /// than miss each other. The capability is checked before the claim, so a
-  /// device that cannot do the thing is not held while it is being told so.
-  Future<DeviceDriver> _driverToDrive(
-    String? id,
-    String verb,
-    DeviceCapability capability,
-  ) async {
-    final driver = await _driver(id, verb);
-    _require(driver, verb, capability);
-    _claims.claim(
-      deviceId: driver.target.id,
-      sessionId: callerSessionId,
-      verb: verb,
-    );
-    return driver;
-  }
-
-  void _require(
-    DeviceDriver driver,
-    String verb,
-    DeviceCapability capability,
-  ) {
-    if (!driver.can(capability)) {
-      throw DeviceRefusal('$verb: ${driver.missingReason(capability)!}');
-    }
-  }
 
   // ---------------------------------------------------------------------------
   // Listing
@@ -281,7 +186,7 @@ class DeviceControlTools {
   static const int _simulatorListLimit = 40;
 
   Future<Object?> _listDevices(int? limit) async {
-    final fleet = await _fleet();
+    final fleet = await deviceFleet();
     // Three probes of three different things — adb, simctl, and the SDK's AVD
     // list — awaited together rather than one after another. They share no
     // state and neither orders the other, so serialising them only added the
@@ -420,7 +325,7 @@ class DeviceControlTools {
   /// be wrong on an iOS device, where the only reachable places are the
   /// containers of development-signed apps.
   Future<Object?> _filesList(String? id, String? path) async {
-    final driver = await _driverThatCan(
+    final driver = await driverThatCan(
       id,
       'device_files_list',
       DeviceCapability.files,
@@ -482,7 +387,7 @@ class DeviceControlTools {
     String? devicePath,
     String? destinationDirectory,
   ) async {
-    final driver = await _driverThatCan(
+    final driver = await driverThatCan(
       id,
       'device_file_pull',
       DeviceCapability.files,
@@ -522,7 +427,7 @@ class DeviceControlTools {
     String? devicePath,
     bool overwrite,
   ) async {
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_file_push',
       DeviceCapability.files,
@@ -560,7 +465,7 @@ class DeviceControlTools {
   // button for it.
 
   Future<Object?> _deviceScreenshot(String? id) async {
-    final driver = await _driverThatCan(
+    final driver = await driverThatCan(
       id,
       'device_screenshot',
       DeviceCapability.screenshot,
@@ -648,7 +553,7 @@ class DeviceControlTools {
     bool verify = true,
   }) async {
     if (x == null || y == null) throw ArgumentError('x and y are required.');
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_tap',
       DeviceCapability.input,
@@ -715,8 +620,8 @@ class DeviceControlTools {
     }
 
     // Read before the new one is filed, or the comparison is with itself.
-    final earlier = _screens.lastLookAt(driver.target.id);
-    final seen = _screens.observationOf(
+    final earlier = screens.lastLookAt(driver.target.id);
+    final seen = screens.observationOf(
       deviceId: driver.target.id,
       tree: read.tree,
       app: read.app,
@@ -758,7 +663,7 @@ class DeviceControlTools {
           'now and nothing else';
     }
 
-    _screens.file(seen);
+    screens.file(seen);
 
     final node = read.tree.at(x, y);
     return _CoordinateCheck(
@@ -784,9 +689,9 @@ class DeviceControlTools {
   /// it. Said anyway, because the caller's wider plan was built on the older
   /// screen and this tap succeeding is not evidence the rest of it will.
   List<String>? _screenMovedSince(DeviceDriver driver, ScreenRead read) {
-    final earlier = _screens.lastLookAt(driver.target.id);
+    final earlier = screens.lastLookAt(driver.target.id);
     if (earlier == null) return null;
-    final seen = _screens.observationOf(
+    final seen = screens.observationOf(
       deviceId: driver.target.id,
       tree: read.tree,
       app: read.app,
@@ -829,7 +734,7 @@ class DeviceControlTools {
     bool submit = false,
   }) async {
     if (text == null) throw ArgumentError('text is required.');
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_type',
       DeviceCapability.input,
@@ -872,7 +777,7 @@ class DeviceControlTools {
         '${DeviceKey.values.map((k) => k.name).join(', ')}.',
       );
     }
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_key',
       DeviceCapability.keys,
@@ -899,7 +804,7 @@ class DeviceControlTools {
     String? level,
     int? lines,
   }) async {
-    final driver = await _driverThatCan(
+    final driver = await driverThatCan(
       id,
       'device_logcat',
       DeviceCapability.logs,
@@ -929,7 +834,7 @@ class DeviceControlTools {
         'simulator name. list_devices shows all three.',
       );
     }
-    final booted = await (await _fleet()).boot(name.trim());
+    final booted = await (await deviceFleet()).boot(name.trim());
     return {
       // Both spellings, because the id is what every following call needs and
       // an agent should not have to know which key its platform uses.
@@ -949,7 +854,7 @@ class DeviceControlTools {
         'iOS.',
       );
     }
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_install_app',
       DeviceCapability.installApp,
@@ -976,7 +881,7 @@ class DeviceControlTools {
         'iOS bundle id (com.example.App).',
       );
     }
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_launch_app',
       DeviceCapability.appLifecycle,
@@ -1001,7 +906,7 @@ class DeviceControlTools {
     if (appId == null || appId.trim().isEmpty) {
       throw ArgumentError('appId is required.');
     }
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_terminate_app',
       DeviceCapability.appLifecycle,
@@ -1044,7 +949,7 @@ class DeviceControlTools {
       );
     }
     final wanted = id.trim();
-    final fleet = await _fleet();
+    final fleet = await deviceFleet();
 
     // An AVD name, before anything else. A running emulator answers to
     // `emulator-5554`, but a *stopped* one answers to nothing at all — the
@@ -1113,7 +1018,7 @@ class DeviceControlTools {
     // name is not the id a driver holds, and the two branches above change
     // nothing — refusing to be told a stopped device is stopped would be a
     // refusal about somebody else's drive of a device nobody is driving.
-    _claims.claim(
+    claims.claim(
       deviceId: target.id,
       sessionId: callerSessionId,
       verb: 'device_stop_emulator',
@@ -1142,51 +1047,29 @@ class DeviceControlTools {
   // the screenshot is in pixels and the tap is in points.
   // ---------------------------------------------------------------------------
 
-  UiElementQuery _uiQuery(Map<String, dynamic> args) => UiElementQuery(
-    text: args['text'] as String?,
-    resourceId: args['resourceId'] as String?,
-    contentDescription: args['contentDesc'] as String?,
-    className: args['className'] as String?,
-    exact: args['exact'] == true,
-    clickableOnly: args['clickable'] == true,
-  );
-
-  /// One line naming the device, the foreground app and the coordinate space.
-  String _uiHeader(DeviceDriver driver, ScreenRead read) =>
-      '${driver.target.id} · ${read.app ?? 'unknown app'} · '
-      'screen ${read.screen ?? 'unknown'} ${read.space.label} · '
-      'rotation ${read.tree.rotation}';
-
-  /// The coordinate space, said once per listing where it cannot be missed.
-  String _spaceLine(ScreenRead read) => read.space == CoordinateSpace.points
-      ? 'Coordinates are in POINTS, which is what device_tap and '
-            'device_tap_element take on this device — NOT the pixels a '
-            'device_screenshot image is in.'
-      : 'Coordinates are in device pixels.';
-
   Future<Object?> _deviceUiDump({
     String? id,
     bool full = false,
     String? filter,
     int? limit,
   }) async {
-    final driver = await _driverThatCan(
+    final driver = await driverThatCan(
       id,
       'device_ui_dump',
       DeviceCapability.uiTree,
     );
     final read = await driver.describeScreen();
-    _recordLook(driver, read);
+    recordLook(driver, read);
     final tree = read.tree;
     final screen = read.screen;
 
     if (full && filter == null) {
       final body = renderUiTree(tree, screen: screen);
-      return _uiText([
-        'Full UI hierarchy · ${_uiHeader(driver, read)}',
+      return uiTextBlock([
+        'Full UI hierarchy · ${uiHeader(driver, read)}',
         '${tree.nodeCount} nodes, indented by depth.',
         uiListingLegend,
-        _spaceLine(read),
+        spaceLine(read),
         '',
         body,
       ]);
@@ -1210,15 +1093,15 @@ class DeviceControlTools {
       screen: screen,
       limit: limit ?? 200,
     );
-    return _uiText([
-      'UI hierarchy · ${_uiHeader(driver, read)}',
+    return uiTextBlock([
+      'UI hierarchy · ${uiHeader(driver, read)}',
       '${rendered.shown} of ${tree.nodeCount} nodes'
           '${full ? '' : ' (text-bearing or interactable)'}'
           '${filter == null ? '' : ', filtered by "$filter"'}'
           '${rendered.truncated == 0 ? '.' : ', ${rendered.truncated} more not '
                     'shown — raise limit.'}',
       uiListingLegend,
-      _spaceLine(read),
+      spaceLine(read),
       '',
       rendered.listing.isEmpty ? '(nothing matched)' : rendered.listing,
       '',
@@ -1256,23 +1139,23 @@ class DeviceControlTools {
         'Use device_ui_dump to see the whole screen.',
       );
     }
-    final driver = await _driverThatCan(
+    final driver = await driverThatCan(
       id,
       'device_find_elements',
       DeviceCapability.uiTree,
     );
     final read = await driver.describeScreen();
-    _recordLook(driver, read);
+    recordLook(driver, read);
     final tree = read.tree;
     final screen = read.screen;
     final matches = tree.find(query);
     if (matches.isEmpty) {
-      return _uiText([
-        'No element matches $query on ${_uiHeader(driver, read)}',
+      return uiTextBlock([
+        'No element matches $query on ${uiHeader(driver, read)}',
         '',
         'What is on screen instead:',
         uiListingLegend,
-        _spaceLine(read),
+        spaceLine(read),
         renderUiElements(
           interestingNodes(tree),
           screen: screen,
@@ -1285,12 +1168,12 @@ class DeviceControlTools {
       screen: screen,
       limit: limit ?? 50,
     );
-    return _uiText([
+    return uiTextBlock([
       '${matches.length} element${matches.length == 1 ? '' : 's'} match '
-          '$query · ${_uiHeader(driver, read)}',
+          '$query · ${uiHeader(driver, read)}',
       'Best match first; an exact label beats a substring.',
       uiListingLegend,
-      _spaceLine(read),
+      spaceLine(read),
       '',
       rendered.listing,
     ]);
@@ -1309,12 +1192,12 @@ class DeviceControlTools {
     // Both capabilities, checked before the read: a driver that could describe
     // a screen but not touch it would otherwise dump the tree, pick a target
     // and fail at the last step, having spent the round trip.
-    final driver = await _driverToDrive(
+    final driver = await driverToDrive(
       id,
       'device_tap_element',
       DeviceCapability.uiTree,
     );
-    _require(driver, 'device_tap_element', DeviceCapability.input);
+    require(driver, 'device_tap_element', DeviceCapability.input);
     // The read *is* this tool's safety net: it resolves the locator against the
     // screen as it is now, so a dialog that arrived between look and tap is
     // caught here rather than by the user. What the note below adds is the
@@ -1322,7 +1205,7 @@ class DeviceControlTools {
     // call succeeded.
     final read = await driver.describeScreen();
     final moved = _screenMovedSince(driver, read);
-    _recordLook(driver, read);
+    recordLook(driver, read);
     final tree = read.tree;
     final screen = read.screen;
     final matches = tree.find(query);
@@ -1358,7 +1241,7 @@ class DeviceControlTools {
         throw DeviceRefusal(
           '$query matches ${matches.length} elements on ${driver.target.id}. '
           'Pass index to choose, or narrow the query:\n'
-          '${_indexed(matches, screen)}',
+          '${indexedMatches(matches, screen)}',
         );
       }
     }
@@ -1397,7 +1280,7 @@ class DeviceControlTools {
 
     final point = bounds.center;
     await driver.tap(point.x, point.y);
-    return _uiText([
+    return uiTextBlock([
       'Tapped (${point.x}, ${point.y}) ${read.space.label} on '
           '${describeUiNode(element, screen: screen)}',
       ...?moved,
@@ -1424,24 +1307,6 @@ class DeviceControlTools {
     }
     return '';
   }
-
-  /// The matches numbered, so the caller can pass `index`.
-  String _indexed(List<UiNode> matches, DeviceScreenSize? screen) => [
-    for (var i = 0; i < matches.length && i < 20; i++)
-      '[$i] ${describeUiNode(matches[i], screen: screen)}',
-  ].join('\n');
-
-  /// Wraps a listing as an MCP text block.
-  ///
-  /// Deliberately not returned as a JSON map: the bridge pretty-prints every
-  /// map result, and one JSON object per node costs several times what one line
-  /// per node does. The whole point of this surface is that a screen fits in a
-  /// few hundred tokens.
-  Object _uiText(List<String> sections) => {
-    '_mcpContent': [
-      {'type': 'text', 'text': sections.join('\n')},
-    ],
-  };
 }
 
 /// What the pre-tap check found, as the three fields the reply carries.
