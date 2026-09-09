@@ -13,6 +13,7 @@ import '../../features/companion/client/companion_gateway.dart';
 import '../../features/companion/client/remote_companion_gateway.dart';
 import '../../features/companion/client/secure_companion_store.dart';
 import '../../features/remote/client/lan_path.dart';
+import '../../features/remote/domain/companion_presence.dart';
 import '../../features/companion/notifications/attention_notification.dart';
 import '../../features/companion/notifications/companion_notifier.dart';
 import '../../features/companion/presentation/session_view_screen.dart';
@@ -68,6 +69,12 @@ Future<void> runCompanionApp() async {
         final gatewayLog = AppLogger.named('companion.gateway');
         final gateway = RemoteCompanionGateway(
           store: SecureCompanionStore(),
+          // What this build actually runs on. Reported so a push can be routed
+          // by it later; nothing spends it yet, and a guess would be worse
+          // than the honest `unknown` every other build sends.
+          deviceKind: !kIsWeb && (Platform.isAndroid || Platform.isIOS)
+              ? CompanionDeviceKind.phone
+              : CompanionDeviceKind.desktop,
           lan: LanPathScout(
             lock: !kIsWeb && Platform.isAndroid
                 ? ChannelMulticastLock()

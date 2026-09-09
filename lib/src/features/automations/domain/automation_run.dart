@@ -59,6 +59,7 @@ class AutomationRun {
     this.sessionId,
     this.finishedAt,
     this.commitsMade,
+    this.checksObservedAt,
   });
 
   final String id;
@@ -92,6 +93,12 @@ class AutomationRun {
   /// run that committed nothing are different facts.
   final int? commitsMade;
 
+  /// When this run's project checks were looked at, or **null when nothing has
+  /// looked yet**. Not the same fact as having no verdicts: a run whose
+  /// checkout configures no check is observed and has none, which is a
+  /// different sentence from one nothing has re-run (§19).
+  final DateTime? checksObservedAt;
+
   Duration? get duration => finishedAt?.difference(firedAt);
 
   AutomationRun copyWith({
@@ -101,6 +108,7 @@ class AutomationRun {
     String? sessionId,
     DateTime? finishedAt,
     int? commitsMade,
+    DateTime? checksObservedAt,
   }) => AutomationRun(
     id: id,
     automationId: automationId,
@@ -112,6 +120,7 @@ class AutomationRun {
     sessionId: sessionId ?? this.sessionId,
     finishedAt: finishedAt ?? this.finishedAt,
     commitsMade: commitsMade ?? this.commitsMade,
+    checksObservedAt: checksObservedAt ?? this.checksObservedAt,
   );
 
   @override

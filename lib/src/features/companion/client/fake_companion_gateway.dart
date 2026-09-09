@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import '../../remote/domain/companion_presence.dart';
 import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import 'companion_gateway.dart';
@@ -192,6 +193,11 @@ class FakeCompanionGateway implements CompanionGateway {
 
   /// How many times the UI asked for a reconnect.
   int reconnectRequests = 0;
+
+  /// Every presence this companion reported, in order. A *call*, not a frame:
+  /// the real gateway drops one that says nothing new, which is where "one
+  /// frame per change" is decided.
+  final presenceReports = <CompanionPresence>[];
 
   /// Every host id the UI asked to switch to, in order.
   final switchRequests = <String>[];
@@ -460,6 +466,23 @@ class FakeCompanionGateway implements CompanionGateway {
     _linkPath.value = null;
     _sessions.value = const [];
   }
+
+  @override
+  Future<void> reportVisibility(CompanionVisibility visibility) async {
+    _presence = _presence.copyWith(visibility: visibility);
+    presenceReports.add(_presence);
+  }
+
+  @override
+  Future<void> reportFocusedSession(String? sessionId) async {
+    _presence = _presence.copyWith(
+      focusedSessionId: sessionId,
+      clearFocusedSession: sessionId == null,
+    );
+    presenceReports.add(_presence);
+  }
+
+  CompanionPresence _presence = CompanionPresence.unknown;
 
   @override
   Future<void> reconnect() async {

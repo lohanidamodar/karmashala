@@ -212,11 +212,17 @@ class _ChangedFileCount extends ConsumerWidget {
 /// nothing in it to decide, which is the test `DeliveryAction` sets for an
 /// action the app owns.
 ///
-/// **It does not first ask whether a merge is in progress.** That question
-/// costs a process, would have to be asked on every poll for the button to
-/// appear by itself, and `git merge --abort` already answers it exactly:
-/// [ChangesService.abortMerge] reports whether a tree came back, so the
-/// outcome below states which of the two happened rather than predicting it.
+/// **It appears only when there is something to abort**, which is now a
+/// reading the panel already holds rather than a process. It used to sit in the
+/// header unconditionally, on the argument that asking would cost a
+/// `CreateProcessW` on every poll — true of `git rev-parse MERGE_HEAD`, and not
+/// true of [mergeInProgressProvider], which is the listing plus at most one
+/// `stat` of `.git`. A permanent undo button beside a clean tree is an offer to
+/// discard work that is not there.
+///
+/// The outcome still states which of the two happened rather than predicting
+/// it: [ChangesService.abortMerge] reports whether a tree came back, and a
+/// reading taken a moment ago is not a promise about what git will find.
 class _AbortMergeButton extends ConsumerWidget {
   const _AbortMergeButton();
 
@@ -224,6 +230,12 @@ class _AbortMergeButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final checkout = ref.watch(viewedCheckoutProvider);
     if (checkout == null) return const SizedBox.shrink();
+    // Hidden while the reading is pending or errored, for the same reason it is
+    // hidden when there is no merge: this button destroys work, so it appears
+    // on evidence and never on a guess.
+    if (ref.watch(mergeInProgressProvider).asData?.value != true) {
+      return const SizedBox.shrink();
+    }
     return IconButton(
       tooltip: 'Abort merge',
       visualDensity: VisualDensity.compact,
@@ -408,10 +420,13 @@ class _ChangedFileSection extends ConsumerWidget {
                   size: Chrome.icon,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
-                Icon(
-                  _iconFor(file.type),
-                  size: Chrome.iconAction,
-                  color: _colorFor(file.type, context),
+                Tooltip(
+                  message: changeWords(file),
+                  child: Icon(
+                    _iconFor(file.type),
+                    size: Chrome.iconAction,
+                    color: _colorFor(file.type, context),
+                  ),
                 ),
                 const SizedBox(width: Insets.xs),
                 Expanded(
@@ -1061,6 +1076,7 @@ IconData _iconFor(FileChangeType type) => switch (type) {
   FileChangeType.deleted => AppIcons.minusCircle,
   FileChangeType.renamed => AppIcons.pencilSimple,
   FileChangeType.untracked => AppIcons.question,
+  FileChangeType.conflicted => AppIcons.warning,
   _ => AppIcons.pencil,
 };
 
@@ -1070,6 +1086,26 @@ Color _colorFor(FileChangeType type, BuildContext context) {
   return switch (type) {
     FileChangeType.added => semantic.diffAdded,
     FileChangeType.deleted => semantic.diffRemoved,
+    // `attention` is the token for "the user is being asked for something",
+    // which is exactly what an unmerged path is; `failure` would say the merge
+    // broke, and it did not — it stopped and is waiting.
+    FileChangeType.conflicted => semantic.attention,
     _ => scheme.primary,
   };
 }
+
+/// What the type glyph means, in words, for the tooltip beside it.
+///
+/// A conflict says **which** one it is: "both modified" and "deleted by them"
+/// are two different pieces of work, and the icon alone cannot carry that.
+String changeWords(FileChange change) => switch (change.type) {
+  FileChangeType.added => 'added',
+  FileChangeType.modified => 'modified',
+  FileChangeType.deleted => 'deleted',
+  FileChangeType.renamed => 'renamed',
+  FileChangeType.copied => 'copied',
+  FileChangeType.untracked => 'untracked',
+  FileChangeType.conflicted =>
+    'conflicted — ${(change.conflict ?? MergeConflict.unrecorded).words}',
+  FileChangeType.unknown => 'changed (unrecognised git status)',
+};

@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../remote/domain/companion_presence.dart';
 import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import 'fake_companion_gateway.dart';
@@ -653,6 +654,23 @@ abstract interface class CompanionGateway {
 
   /// Asks the transport to try connecting now instead of waiting for backoff.
   Future<void> reconnect();
+
+  /// Says whether this companion is on screen.
+  ///
+  /// **For routing notifications, and nothing else.** The desktop spends it in
+  /// `PushFanout` — a backgrounded phone hears a `session.changed` into a
+  /// window nobody can see, and this is what lets a push be sent as well.
+  /// Nothing on the delivery path may ever read it.
+  ///
+  /// Reporting the same answer twice sends nothing: one frame per change, and
+  /// never a tick.
+  Future<void> reportVisibility(CompanionVisibility visibility);
+
+  /// Says which session is on this companion's screen, or null for none.
+  ///
+  /// Same rule and same purpose as [reportVisibility]: it can only ever turn a
+  /// suppressed push into a sent one, never the other way round.
+  Future<void> reportFocusedSession(String? sessionId);
 
   /// `sessions.list` — one snapshot.
   Future<List<CompanionSessionSummary>> listSessions();

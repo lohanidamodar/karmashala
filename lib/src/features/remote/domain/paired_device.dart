@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../protocol.dart';
+import 'companion_presence.dart';
 
 /// The [PairedDevice.relayUrl] sentinel meaning "the relay embedded in this
 /// app" — resolved to the live local relay at serve time, because the LAN IP
@@ -25,6 +26,7 @@ class PairedDevice {
     this.lastSeenAt,
     this.pushToken,
     this.pushPlatform,
+    this.presence = CompanionPresence.unknown,
     this.relayUrl,
   }) : deviceKey = Uint8List.fromList(deviceKey);
 
@@ -57,6 +59,15 @@ class PairedDevice {
   final String? pushToken;
   final String? pushPlatform;
 
+  /// What the phone last said about itself on the same frame — its kind,
+  /// whether it is on screen, and the session it is showing.
+  ///
+  /// **Read only to route a notification** (`PushFanout`), never to decide
+  /// whether a frame is carried. A reading left over from before a restart is
+  /// harmless for that reason and for one more: the link is down too, so the
+  /// value is not even reached until the phone reconnects and re-registers.
+  final CompanionPresence presence;
+
   /// The relay this device was paired through: a hosted relay URL, or
   /// [kLocalRelayMarker] for the embedded local relay. Null only for a row
   /// somehow missed by the v19 backfill — treated as the configured hosted
@@ -86,6 +97,7 @@ class PairedDevice {
     DateTime? lastSeenAt,
     String? pushToken,
     String? pushPlatform,
+    CompanionPresence? presence,
     String? relayUrl,
   }) => PairedDevice(
     id: id,
@@ -98,6 +110,7 @@ class PairedDevice {
     lastSeenAt: lastSeenAt ?? this.lastSeenAt,
     pushToken: pushToken ?? this.pushToken,
     pushPlatform: pushPlatform ?? this.pushPlatform,
+    presence: presence ?? this.presence,
     relayUrl: relayUrl ?? this.relayUrl,
   );
 

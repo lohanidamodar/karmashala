@@ -4,8 +4,16 @@
 /// ignoring the extras, and a new companion decodes an old host's payload by
 /// answering null/false for what is not there. Both directions are pinned
 /// here, through the raw snapshot and through a sealed-shape envelope.
+///
+/// The presence fields on `notifications.register` are pinned here too, and
+/// they are the first additive change travelling the *other* way — companion
+/// to host — so the same two directions have to be read the other way round: a
+/// new phone's extra keys must not stop an old desktop reading the frame, and
+/// a new desktop must answer "nothing was said" for an old phone rather than
+/// invent a state for it.
 library;
 
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -331,6 +339,64 @@ void main() {
         expect(request.waiting, kind, reason: kind.wire);
         expect(request.evidence, ['Run the tests?']);
       }
+    });
+  });
+
+  group('the presence fields, travelling companion to host', () {
+    /// Exactly what an old companion puts on the wire.
+    const old = {'token': 't0k', 'platform': 'android'};
+
+    test('an old phone decodes to nothing said, never to a state', () {
+      final presence = CompanionPresence.fromRegister(old);
+
+      expect(presence.deviceKind, CompanionDeviceKind.unknown);
+      expect(presence.visibility, CompanionVisibility.unknown);
+      expect(presence.focusedSessionId, isNull);
+      expect(presence.isRecorded, isFalse);
+      // And the routing that reads it behaves exactly as it did before the
+      // field existed: a live link suppresses the push.
+      expect(presenceSuppressesPush(presence, 's1'), isTrue);
+    });
+
+    test('a phone with nothing to say sends the bytes it always sent', () {
+      expect(CompanionPresence.unknown.toRegisterFields(), isEmpty);
+      expect({...old, ...CompanionPresence.unknown.toRegisterFields()}, old);
+    });
+
+    test('an old host reads a new phone\'s frame by ignoring the extras', () {
+      const rich = CompanionPresence(
+        deviceKind: CompanionDeviceKind.phone,
+        visibility: CompanionVisibility.background,
+        focusedSessionId: 's1',
+      );
+      final payload = {...old, ...rich.toRegisterFields()};
+
+      // The old host reads two keys and never looks at the rest — and the
+      // envelope carries the whole thing untouched either way.
+      final decoded = Envelope.fromBytes(
+        Envelope.of(
+          FrameType.notificationsRegister,
+          seq: 1,
+          payload: payload,
+        ).toBytes(),
+      );
+      expect(decoded.payload['token'], 't0k');
+      expect(decoded.payload['platform'], 'android');
+      expect(decoded.payload['visibility'], 'background');
+      expect(CompanionPresence.fromRegister(decoded.payload).saysSameAs(rich), isTrue);
+    });
+
+    test('a word this build has never heard, and a wrong type, both read as '
+        'unknown rather than throwing', () {
+      final presence = CompanionPresence.fromRegister(const {
+        'deviceKind': 'watch',
+        'visibility': 42,
+        'focusedSessionId': 7,
+      });
+
+      expect(presence.deviceKind, CompanionDeviceKind.unknown);
+      expect(presence.visibility, CompanionVisibility.unknown);
+      expect(presence.focusedSessionId, isNull);
     });
   });
 }
