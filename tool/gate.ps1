@@ -88,11 +88,22 @@ $map = [ordered]@{
   }
   agent_cli = @{
     pkg  = 'packages/agent_cli'
+    # The three folders whole: what is left in them is the app's half — the
+    # hook installer and spool, the DAOs, the controllers, the providers and
+    # the pickers — and every suite in them now runs against the package's
+    # types. Two goldens reach it: the tool schemas, because `list_agents` and
+    # the session tools are served over its descriptors, and the launch
+    # catalogue, because the argv it pins is `agent_cli`'s to build now.
+    # (`test/core/process` is gone: its one remaining suite followed
+    # `ssh_command_runner.dart` into `test/features/ssh`.)
     app  = @('test/features/agents', 'test/features/cli_detection',
              'test/features/environments',
-             'test/features/mcp/tool_schemas_golden_test.dart')
+             'test/features/mcp/tool_schemas_golden_test.dart',
+             'test/features/sessions/session_launch_golden_test.dart')
     owns = @('lib/src/core/process', 'lib/src/features/agents',
-             'lib/src/features/cli_detection', 'lib/src/features/environments')
+             'lib/src/features/cli_detection', 'lib/src/features/environments',
+             'test/features/agents', 'test/features/cli_detection',
+             'test/features/environments')
   }
   git = @{
     pkg  = 'packages/karmashala_git'
