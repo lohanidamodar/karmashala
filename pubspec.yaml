@@ -18,6 +18,8 @@ workspace:
   - packages/agent_cli
   - packages/karmashala_browser
   - packages/karmashala_core
+  - packages/karmashala_devices
+  - packages/karmashala_media
   - packages/karmashala_remote
   - packages/local_ipc
 
@@ -32,11 +34,22 @@ dependencies:
   # it. No dependencies of its own; the app hands it the process.
   karmashala_browser:
     path: packages/karmashala_browser
-  # The Flutter-free core: logging, small utilities, path probing and the
-  # frame/video encoders. A workspace member, so this path resolves to the
-  # copy in the tree (docs/PACKAGE_SPLIT.md §5).
+  # The Flutter-free core: logging, small utilities and path probing. A
+  # workspace member, so this path resolves to the copy in the tree
+  # (docs/PACKAGE_SPLIT.md §5).
   karmashala_core:
     path: packages/karmashala_core
+  # Frame capture and video encoding — the GIF/PNG sinks and the Media
+  # Foundation H.264 writer — split out of core so a package that only needs to
+  # write a recording (karmashala_devices) does not pull logging and paths in
+  # with `image` and `ffi`.
+  karmashala_media:
+    path: packages/karmashala_media
+  # Android devices and iOS simulators: adb, simctl, scrcpy, WebDriverAgent,
+  # the UI tree and screen recording. Built beside the app in phase A —
+  # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
+  karmashala_devices:
+    path: packages/karmashala_devices
   karmashala_remote:
     path: packages/karmashala_remote
   # The coding-agent interface: discovery, launch, stream, ask, store reading

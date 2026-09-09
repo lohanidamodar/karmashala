@@ -72,9 +72,9 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:test/test.dart';
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 
-import 'package:karmashala_core/testing.dart';
+import 'package:karmashala_media/testing.dart';
 import '../support/temp_directory.dart';
 
 /// A 4x4 frame of one flat colour.

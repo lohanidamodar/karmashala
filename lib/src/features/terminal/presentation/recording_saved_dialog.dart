@@ -6,7 +6,7 @@ import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';

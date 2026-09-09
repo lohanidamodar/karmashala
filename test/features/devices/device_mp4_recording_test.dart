@@ -2,11 +2,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/features/devices/data/recording_sink.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:karmashala_core/testing.dart';
+import 'package:karmashala_media/testing.dart';
 
 /// The device path with the operating system's real muxer, and real H.264.
 ///

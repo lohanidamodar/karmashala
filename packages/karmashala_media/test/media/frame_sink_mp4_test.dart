@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/temp_directory.dart';

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
 import 'package:karmashala/src/features/terminal/data/cast_frame_renderer.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';

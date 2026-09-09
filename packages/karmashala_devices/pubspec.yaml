@@ -1,0 +1,35 @@
+name: karmashala_devices
+description: >-
+  Drive an Android device or an iOS simulator from a desktop: adb and simctl,
+  scrcpy's mirror and control socket, WebDriverAgent, the UI tree, files,
+  logcat, wireless pairing and screen recording. Pure Dart, so it runs under
+  `dart test` without a `flutter_tester`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The runner every adb/simctl/scrcpy invocation goes through, plus
+  # `EnvironmentPath` and `formatBytes`. One-way, and the only reason this
+  # package can reach a WSL distribution at all (docs/PACKAGE_SPLIT.md §2).
+  agent_cli:
+    path: ../agent_cli
+  # The MP4 remuxer a screen recording is written through. One-way, and the
+  # only thing this package takes from the media layer; it is a package of its
+  # own precisely so this dependency does not drag core's logging and paths in.
+  karmashala_media:
+    path: ../karmashala_media
+  # `AppLogger` stays in the app: a package logs through the `logging` package
+  # it wraps, which is the same root logger the app installs its handler on.
+  logging: ^1.3.0
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1
