@@ -277,4 +277,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
     if (index == null) return;
     activateTab(_tabs[(index + by + _tabs.length) % _tabs.length].id);
   }
+
+  void nextTab() => _stepTab(1);
+
+  void previousTab() => _stepTab(-1);
 }
