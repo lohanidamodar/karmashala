@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';

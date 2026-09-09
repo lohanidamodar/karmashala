@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../devices/application/device_claims.dart';
 import '../devices/application/device_fleet.dart';

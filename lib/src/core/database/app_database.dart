@@ -1,8 +1,9 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import 'migrations.dart';
-import '../paths/app_support_directory.dart';
 
 /// The application's SQLite database.
 ///
@@ -38,13 +39,14 @@ class AppDatabase {
   int get schemaVersion =>
       schemaMigrations.keys.fold(0, (a, b) => a > b ? a : b);
 
-  /// Opens the database backed by a file in the per-user application-support
-  /// directory (outside the project tree).
-  static Future<AppDatabase> open() async {
-    final dir = await appSupportDirectory();
-    final file = p.join(dir.path, 'karmashala.sqlite');
-    return AppDatabase(sqlite3.open(file));
-  }
+  /// Opens the database backed by a file in [directory].
+  ///
+  /// The caller supplies the directory — normally the per-user
+  /// application-support directory, resolved by the app at bootstrap. Asking
+  /// for it here would pull `path_provider`, and with it Flutter, into every
+  /// file that touches the database.
+  static AppDatabase open(Directory directory) =>
+      AppDatabase(sqlite3.open(p.join(directory.path, 'karmashala.sqlite')));
 
   /// Opens an ephemeral in-memory database, for tests.
   factory AppDatabase.memory() => AppDatabase(sqlite3.openInMemory());

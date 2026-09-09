@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../repositories/application/repository_providers.dart';
 import '../sessions/application/session_providers.dart';

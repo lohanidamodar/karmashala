@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../notes/application/notes_providers.dart';
 import '../notes/domain/note.dart';

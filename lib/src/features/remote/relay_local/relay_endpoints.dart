@@ -7,7 +7,7 @@
 /// tabs, each pairing a phone onto that relay for good.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../application/relay_prefs.dart';

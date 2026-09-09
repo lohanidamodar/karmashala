@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/id_generator_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';

@@ -16,6 +16,7 @@ import 'src/core/logging/app_logger.dart';
 import 'src/core/logging/build_identity.dart';
 import 'src/core/logging/diagnostics.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
+import 'src/core/paths/app_support_directory.dart';
 import 'src/core/process/local_command_runner.dart';
 import 'src/core/util/clock.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
@@ -69,11 +70,12 @@ Future<void> main() async {
   // Opening the file needs `path_provider`, which is hundreds of milliseconds
   // into the launch — so it backfills the buffer rather than starting blank,
   // and the launch does not wait for it.
-  // Awaited, not fired and forgotten: `AppDatabase.open()` on the next line
-  // asks `path_provider` the same question, so this costs nothing, and it means
-  // the file is open before anything interesting has had a chance to fail.
+  // Awaited, not fired and forgotten: the database directory below is the same
+  // question, so this costs nothing, and it means the file is open before
+  // anything interesting has had a chance to fail.
   await attachDefaultLogFile(Diagnostics.instance);
-  final database = await AppDatabase.open();
+  // The app resolves the directory; `AppDatabase` only opens in it.
+  final database = AppDatabase.open(await appSupportDirectory());
   bootstrapMetadata(database, logger: logger);
 
   // Nothing this process started is running yet, so no row may still claim to

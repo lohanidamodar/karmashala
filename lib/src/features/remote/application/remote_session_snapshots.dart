@@ -6,7 +6,7 @@
 /// the screen beside it cannot describe one session differently.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_registry.dart';

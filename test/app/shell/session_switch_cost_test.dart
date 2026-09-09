@@ -1,3 +1,6 @@
+@Tags(['cost'])
+library;
+
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';

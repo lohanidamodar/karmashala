@@ -13,7 +13,7 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../notifications/application/attention_inbox.dart';

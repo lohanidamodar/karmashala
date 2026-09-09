@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';

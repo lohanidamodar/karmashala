@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';

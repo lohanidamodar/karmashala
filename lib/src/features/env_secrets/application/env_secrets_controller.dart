@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/logging/diagnostics.dart';
 import '../../../core/logging/log_redactor.dart';

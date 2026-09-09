@@ -10,7 +10,7 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../remote/domain/companion_presence.dart';
 import '../../remote/domain/remote_payloads.dart';

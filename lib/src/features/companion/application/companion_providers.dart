@@ -1,7 +1,7 @@
 /// Riverpod bridges from the [CompanionGateway] streams to the phone UI.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../remote/domain/remote_payloads.dart';
 import '../client/companion_gateway.dart';

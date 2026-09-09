@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Opens a page outside the app.

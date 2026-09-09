@@ -6,6 +6,9 @@
 // kill the `app_process` it started, and the forward outlives both: four live
 // servers on one device were found that way. These count what is left after a
 // run of restarts; they never time it.
+@Tags(['cost'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 

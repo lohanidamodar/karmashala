@@ -31,3 +31,10 @@ tags:
   # live tests above skip themselves without their prerequisites, so the
   # ordinary gate is unaffected whether or not it is excluded by name.
   live-timing:
+
+  # A cost or soak measurement rather than a behaviour: seven suites that
+  # spend ~100 s on ~40 tests (docs/PACKAGE_SPLIT.md §7). The full gate still
+  # runs them; the per-package gate that the split introduces excludes them
+  # with `--exclude-tags=live-ssh,live-wsl,cost`, so a change is measured by
+  # its own tests and the soaks stay a pre-merge check.
+  cost:

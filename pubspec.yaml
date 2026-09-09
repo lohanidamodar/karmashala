@@ -33,6 +33,11 @@ dependencies:
   flutter_pty:
     path: packages/flutter_pty
   flutter_riverpod: ^3.3.2
+  # The Flutter-free half of the same package, at the version
+  # `flutter_riverpod` already resolves. Providers, notifiers and containers
+  # that never touch a widget import this instead, so they stay out of
+  # Flutter's import closure and can run under plain `dart test`.
+  riverpod: ^3.3.2
   # Companion mode only: the pairing record (device key) at rest in the
   # platform keystore — design §2 forbids plain preferences.
   flutter_secure_storage: ^10.0.0

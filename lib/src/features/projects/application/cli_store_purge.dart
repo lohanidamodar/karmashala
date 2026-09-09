@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';

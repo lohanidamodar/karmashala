@@ -9,6 +9,7 @@
 /// The id proves nothing, and is not a secret: the sealed handshake is what
 /// proves who is on the line. It is only the name the desktop files this
 /// phone under.
+@Tags(['cost'])
 library;
 
 import 'package:karmashala/src/core/database/app_database.dart';
