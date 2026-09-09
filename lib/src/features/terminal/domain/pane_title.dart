@@ -49,3 +49,63 @@ bool _isBelow(String path, String parent) =>
     path.length > parent.length + 1 &&
     _sameDirectory(path.substring(0, parent.length), parent) &&
     path[parent.length] == '/';
+
+/// Whether [title] is a pane reciting the program we launched rather than
+/// saying anything about the work going on in it.
+///
+/// ConPTY hands the child's image path through as a pane's window title, so a
+/// WSL pane opens announcing itself as `C:\Windows\System32\wsl.exe` — the
+/// wrapper this app put in front of the shell, and the one thing about the pane
+/// the user already knows.
+///
+/// Two conditions, and it takes both to stay narrow. The title has to be an
+/// absolute path *and nothing else*, which leaves `user@host: /home/me/src` and
+/// a bare `wsl` alone — those are real titles a real shell sends. And the file
+/// it names has to be one of [launchers] itself, so a pane naming some other
+/// path is still believed. Compared case-insensitively, because the path comes
+/// from Windows and its casing is not ours to predict.
+bool namesLauncher(String title, Set<String> launchers) {
+  if (launchers.isEmpty || !_isAbsolutePath(title)) return false;
+  return launchers.contains(_basename(title).toLowerCase());
+}
+
+/// Every image name a launch line names — [executable] itself and every `.exe`
+/// token inside [arguments] — lowercased and without its directory.
+///
+/// **Every name, not just the first.** A WSL pane is spawned as
+/// `cmd.exe /c wsl.exe -d <distro> …`, so the image that announces itself is
+/// no longer the executable — and a filter that knew only the first name let
+/// `C:\Windows\System32\wsl.exe` through as a tab label. The arguments are
+/// searched rather than compared, because `throughCommandPrompt` joins the
+/// whole line into one `/c` argument: the `.exe` is a token inside it, not
+/// the end of it.
+Set<String> launcherNames(String executable, List<String> arguments) => {
+  _basename(executable).toLowerCase(),
+  for (final argument in arguments)
+    for (final match in _executableToken.allMatches(argument))
+      _basename(match.group(0)!).toLowerCase(),
+};
+
+/// An image name inside a command line — `wsl.exe`, `C:\…\powershell.exe`.
+/// Quotes and whitespace end a token, which is what keeps a quoted path with a
+/// space in it from swallowing the flag after it.
+final RegExp _executableToken = RegExp(r'[^\s"]+\.exe', caseSensitive: false);
+
+/// Whether [path] is rooted — a drive (`C:\…`), a UNC share (`\\…`) or POSIX
+/// (`/…`).
+bool _isAbsolutePath(String path) {
+  if (path.startsWith('/') || path.startsWith('\\')) return true;
+  if (path.length < 3 || path[1] != ':') return false;
+  if (path[2] != '\\' && path[2] != '/') return false;
+  final drive = path.codeUnitAt(0) | 0x20;
+  return drive >= 0x61 && drive <= 0x7a;
+}
+
+/// The last segment of [path], for either separator — a Windows-first app has
+/// both, often in the same pane.
+String _basename(String path) {
+  final slash = path.lastIndexOf('/');
+  final backslash = path.lastIndexOf('\\');
+  final at = slash > backslash ? slash : backslash;
+  return at < 0 ? path : path.substring(at + 1);
+}
