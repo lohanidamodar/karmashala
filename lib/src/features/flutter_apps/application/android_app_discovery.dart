@@ -6,7 +6,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import '../../devices/application/device_providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import '../domain/vm_service_log_line.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 
 /// How many distinct announcements one device's log may produce.

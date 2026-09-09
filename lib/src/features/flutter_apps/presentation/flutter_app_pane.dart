@@ -14,10 +14,7 @@ import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
-import '../domain/app_log_record.dart';
-import '../domain/attached_app.dart';
-import '../domain/flutter_app_failure.dart';
-import '../domain/flutter_app_registry.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// The debug console for the Flutter app under development, and the two
 /// buttons that make the connection worth having.

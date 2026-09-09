@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:karmashala/src/features/flutter_apps/data/dtd_link.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// A Dart Tooling Daemon that answers in Dart.
 ///
