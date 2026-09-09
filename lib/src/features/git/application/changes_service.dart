@@ -5,6 +5,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
 import '../data/git_files.dart';
+import '../data/git_merge_state.dart';
 import '../data/git_origin_reader.dart';
 import '../data/git_probe_target.dart';
 import '../data/git_service.dart';
@@ -149,6 +150,17 @@ class ChangesService {
           : await _ask(repo, (git, at) => git.originHead(at)),
     );
   }
+
+  /// **Whether a merge is half-done in [repo]**, from one `.git` stat rather
+  /// than a process; null when this host cannot see that filesystem.
+  ///
+  /// Beside [originFacts] for the same reason: it is a fact a file already
+  /// states, and `CreateProcessW` is charged to the calling thread however the
+  /// future looks. See `GitMergeStateReader`.
+  Future<bool?> mergeInProgress(EnvironmentPath repo) => GitMergeStateReader(
+    files: files,
+    hostPathOf: hostPathMapperFor(_environmentOf(repo)),
+  ).read(repo.path);
 
   /// The current branch of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) =>

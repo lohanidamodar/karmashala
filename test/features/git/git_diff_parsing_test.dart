@@ -257,15 +257,16 @@ void main() {
       expect(status.changes.single.type, FileChangeType.renamed);
     });
 
-    test('an unmerged path is still a change, and still unrecognised', () {
+    test('an unmerged path is a conflict, named as one', () {
       // The second trap: v1 reported a conflict as an ordinary `UU` entry, so
       // a parse that handles only `1`, `2` and `?` drops conflicted files out
-      // of the listing and a row mid-merge reports itself clean. The rendering
-      // is unchanged — `FileChangeType.unknown` is what the two callers that
-      // say "changed (unrecognised git status)" have always shown for `UU`.
+      // of the listing and a row mid-merge reports itself clean. It is no
+      // longer `FileChangeType.unknown` either — *"changed (unrecognised git
+      // status)"* was this parse shrugging at a status it could name exactly.
       final status = parseGitStatusV2(porcelainV2(unmerged: ['lib/a.dart']));
       expect(status.changes.single.path, 'lib/a.dart');
-      expect(status.changes.single.type, FileChangeType.unknown);
+      expect(status.changes.single.type, FileChangeType.conflicted);
+      expect(status.changes.single.conflict, MergeConflict.bothModified);
       expect(status.changes.single.staged, isTrue);
       expect(status.changes.single.unstaged, isTrue);
     });
@@ -304,6 +305,106 @@ void main() {
         '? real.txt\n',
       );
       expect(status.changes.single.path, 'real.txt');
+    });
+  });
+
+  /// **`u` records, written from `git status`'s own documentation.**
+  ///
+  /// `git-status(1)` gives an unmerged entry its own record:
+  ///
+  /// ```txt
+  /// u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+  /// ```
+  ///
+  /// — three stage modes and three stage object names, because a conflict is a
+  /// file that exists in up to three versions at once. A stage the merge has no
+  /// version for is written `000000` with the null object name, which is how
+  /// *both added* and *deleted by us* differ on the wire.
+  ///
+  /// `<XY>` is the same page's conflict table, and it is **not** a pair of
+  /// index/work-tree letters: read one letter at a time, `AA` came out *added*
+  /// and `DD` came out *deleted* — two confident wrong verbs about a file the
+  /// merge has not finished with.
+  group('an unmerged record is read as a conflict, and says which kind', () {
+    const h1 = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
+    const h2 = '5c0d1b0e1a3e5f7a9b1c3d5e7f9a1b3c5d7e9f11';
+    const h3 = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+    const nul = '0000000000000000000000000000000000000000';
+
+    test('both modified — every stage present', () {
+      // The ordinary conflict: the merge base and both sides all have the file.
+      final status = parseGitStatusV2(
+        'u UU N... 100644 100644 100644 100644 $h1 $h2 $h3 lib/src/app.dart\n',
+      );
+      final change = status.changes.single;
+      expect(change.path, 'lib/src/app.dart');
+      expect(change.type, FileChangeType.conflicted);
+      expect(change.conflict, MergeConflict.bothModified);
+      expect(change.conflict!.words, 'both modified');
+      expect(change.staged, isTrue);
+      expect(change.unstaged, isTrue);
+      // One path per record. A rename is a `2`, and git writes the conflicted
+      // path once — so there is no second path to be lost here.
+      expect(change.originalPath, isNull);
+    });
+
+    test('both added — stage 1 is absent, and the kind still reads', () {
+      final status = parseGitStatusV2(
+        'u AA N... 000000 100644 100644 100644 $nul $h2 $h3 docs/notes.md\n',
+      );
+      expect(status.changes.single.conflict, MergeConflict.bothAdded);
+      expect(status.changes.single.conflict!.words, 'both added');
+      // The modes are read past, not kept: nothing draws a file mode, and
+      // `<XY>` already says which sides hold the file.
+      expect(status.changes.single.type, FileChangeType.conflicted);
+    });
+
+    test('deleted by us — our stage is absent, and the path keeps its space',
+        () {
+      final status = parseGitStatusV2(
+        'u DU N... 100644 000000 100644 100644 $h1 $nul $h3 tool/build it.sh\n',
+      );
+      expect(status.changes.single.path, 'tool/build it.sh');
+      expect(status.changes.single.conflict, MergeConflict.deletedByUs);
+      expect(status.changes.single.conflict!.words, 'deleted by us');
+    });
+
+    test('a pair git has not documented is named unmerged, never guessed', () {
+      final status = parseGitStatusV2(
+        'u XX N... 100644 100644 100644 100644 $h1 $h2 $h3 lib/a.dart\n',
+      );
+      expect(status.changes.single.type, FileChangeType.conflicted);
+      expect(status.changes.single.conflict, MergeConflict.unrecorded);
+    });
+
+    test('a truncated u record is dropped rather than half-read', () {
+      expect(parseGitStatusV2('u UU N... 100644 100644\n').changes, isEmpty);
+    });
+
+    test('v1 reads the same seven pairs, because v1 is what the panel asks',
+        () {
+      // `ChangesService.changes` runs `--porcelain=v1`, so this is the parse
+      // the Changes panel and the abort-merge reading actually see. v1 has no
+      // separate record, and `AA`/`DD` are the two that a letter-at-a-time
+      // read turns into a plain add and a plain delete.
+      final changes = parseGitStatus(
+        'UU lib/a.dart\n'
+        'AA docs/notes.md\n'
+        'DD tool/gone.sh\n'
+        'UA added-by-them.txt\n'
+        'M  ordinary.dart\n',
+      );
+      expect(changes.map((c) => c.type), [
+        FileChangeType.conflicted,
+        FileChangeType.conflicted,
+        FileChangeType.conflicted,
+        FileChangeType.conflicted,
+        FileChangeType.modified,
+      ]);
+      expect(changes[1].conflict, MergeConflict.bothAdded);
+      expect(changes[2].conflict, MergeConflict.bothDeleted);
+      expect(changes[3].conflict, MergeConflict.addedByThem);
+      expect(changes.last.conflict, isNull);
     });
   });
 }

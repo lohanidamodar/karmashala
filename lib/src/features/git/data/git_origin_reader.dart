@@ -1,5 +1,6 @@
 import 'package:path/path.dart' as p;
 
+import 'git_dir.dart';
 import 'git_files.dart';
 
 /// One fact read off disk, or the admission that the files could not answer it.
@@ -67,7 +68,7 @@ class GitOriginReader {
     );
     final host = hostPathOf(checkout);
     if (host == null) return unknown;
-    final context = _contextFor(host);
+    final context = gitPathContextFor(host);
 
     // The ordinary case first and with no `stat` in front of it: `.git` is a
     // directory, so `.git/config` is simply there. A failed read is how this
@@ -79,10 +80,11 @@ class GitOriginReader {
     if (config == null) {
       // Either not a repository at all, or a working tree whose `.git` is a
       // file: `gitdir: <path to the real git directory>`.
-      final resolved = _gitDirIn(
+      final resolved = gitDirNamedIn(
         await files.readString(dotGit),
         host: host,
         context: context,
+        hostPathOf: hostPathOf,
       );
       if (resolved == null) return unknown;
       common = _commonDirOf(resolved, context);
@@ -104,36 +106,6 @@ class GitOriginReader {
       return (url: url, head: const ReadFact<String?>.known(null));
     }
     return (url: url, head: await _originHeadIn(common, context));
-  }
-
-  /// The `gitdir:` a worktree's or submodule's `.git` file names, in **host**
-  /// spelling, or null when [text] is not such a file.
-  ///
-  /// The path inside it is written the way the repository's own environment
-  /// spells it, so it is translated on the way out — a WSL worktree names
-  /// `/home/me/repo/.git/worktrees/wt-1`, which this process opens as a
-  /// `\\wsl.localhost\…` share. Git also accepts a *relative* gitdir (what
-  /// `--relative-paths` writes since 2.48), which is relative to the working
-  /// tree.
-  String? _gitDirIn(
-    String? text, {
-    required String host,
-    required p.Context context,
-  }) {
-    if (text == null) return null;
-    final line = text
-        .split(RegExp(r'[\r\n]'))
-        .map((l) => l.trim())
-        .firstWhere((l) => l.isNotEmpty, orElse: () => '');
-    if (!line.startsWith('gitdir:')) return null;
-    final named = line.substring('gitdir:'.length).trim();
-    if (named.isEmpty) return null;
-    // Normalised, because a relative gitdir is written as `../../app/.git/…`
-    // and the `..` segments have to be resolved before anything opens it.
-    if (!_isAbsolute(named)) {
-      return context.normalize(context.join(host, named));
-    }
-    return hostPathOf(named);
   }
 
   /// The git directory two worktrees of one clone **share**.
@@ -282,24 +254,6 @@ class GitOriginReader {
   /// Whether [path] is absolute **in its own environment's spelling** — a POSIX
   /// root, a Windows drive, or a UNC root. Asked of a `gitdir:` line, which is
   /// written by git in that environment and not by this process.
-  static bool _isAbsolute(String path) =>
-      path.startsWith('/') ||
-      path.startsWith(r'\\') ||
-      RegExp(r'^[A-Za-z]:').hasMatch(path);
-
-  /// How to join onto [host].
-  ///
-  /// Read off the *host* path's own shape rather than off the environment kind,
-  /// because the two disagree exactly where it matters: paths inside WSL are
-  /// POSIX, but the host spelling of one is the `\\wsl.localhost\…` UNC form,
-  /// which is a Windows path. Joining that with the POSIX context would build
-  /// something no `File` can open — the same trap `storePathContextFor`
-  /// documents for a store home.
-  static p.Context _contextFor(String host) =>
-      RegExp(r'^[A-Za-z]:').hasMatch(host) || host.startsWith(r'\\')
-      ? p.windows
-      : p.posix;
-
   /// `[include]`, `[includeIf "…"]` or `[url "…"]` — the three section headers
   /// that can make a correctly-read `remote.origin.url` the wrong answer.
   static final _indirection = RegExp(
