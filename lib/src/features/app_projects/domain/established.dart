@@ -31,16 +31,22 @@ class Established<T extends Object> {
   /// Somebody ran it. [evidence] is what was run and what came back.
   const Established.measured(T this.value, {required this.evidence})
     : state = EstablishedState.measured,
-      reason = '';
+      reason = '',
+      sketch = '';
 
   /// There is nothing of this kind to have. [reason] says why not.
   const Established.absent(this.reason)
     : state = EstablishedState.absent,
       value = null,
-      evidence = '';
+      evidence = '',
+      sketch = '';
 
-  /// Nobody here could run it. [reason] names what it would take.
-  const Established.unchecked(this.reason)
+  /// Nobody here could run it. [reason] names what it would take, and
+  /// [sketch] is what the field *would* be — written down so it can be
+  /// reviewed, and deliberately not put in [value] where something could run
+  /// it. That separation is the whole point: iOS gets a complete, readable
+  /// spec and no button.
+  const Established.unchecked(this.reason, {this.sketch = ''})
     : state = EstablishedState.unchecked,
       value = null,
       evidence = '';
@@ -56,6 +62,11 @@ class Established<T extends Object> {
   /// Why there is no value. Empty when there is one.
   final String reason;
 
+  /// What this field would be, for an unchecked one. **Never a value.**
+  /// Nothing reads it to act; it exists so a reviewer can check the shape
+  /// before anybody has a machine to run it on.
+  final String sketch;
+
   bool get isMeasured => state.isMeasured;
 
   /// The one sentence a refusal is written from: what is missing and why.
@@ -70,6 +81,7 @@ class Established<T extends Object> {
         : '$value',
     if (evidence.isNotEmpty) 'evidence': evidence,
     if (reason.isNotEmpty) 'reason': reason,
+    if (sketch.isNotEmpty) 'wouldBe': sketch,
   };
 
   @override

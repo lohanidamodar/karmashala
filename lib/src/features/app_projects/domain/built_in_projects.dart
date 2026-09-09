@@ -14,6 +14,7 @@ import 'project_kind.dart';
 const List<ProjectDescriptor> builtInProjectDescriptors = <ProjectDescriptor>[
   _flutter,
   _nativeAndroid,
+  _nativeIos,
 ];
 
 /// The descriptor for [kind], or null when there is none.
@@ -141,12 +142,66 @@ const _nativeAndroid = ProjectDescriptor(
             'Crossed against the applicationId literal in app/build.gradle.kts '
             'and against aapt dump badging on the APK: all three agree, so the '
             'file the build already wrote is used and no second tool is '
-            'spawned.',
+            'spawned. That APK then installed and launched on an emulator by '
+            'that id, through the same adb the device tools run.',
       ),
     ),
     // No iOS spec at all, rather than an unchecked one. An Android project has
     // no iOS target — writing a row that says "unchecked" would claim there is
     // something here nobody got round to.
+  ],
+);
+
+
+/// Native iOS: an Xcode project with a shared scheme, and **every field
+/// unchecked on purpose**.
+///
+/// The shape is written out in full — the scheme `xcodebuild` would be pointed
+/// at, the simulator artifact it would leave, the `Info.plist` key the bundle
+/// id comes out of — because a spec that cannot be read cannot be reviewed,
+/// and the day somebody has a Mac this is what they check against. It is in
+/// `sketch` rather than in `value`, so nothing can run it and the UI has
+/// nothing to offer. **No button nobody ran.**
+///
+/// Detection works, and that alone is worth having: the fourteen `device_*`
+/// tools drive a simulator already, so an iOS checkout that says what it is
+/// can still be installed onto one from an artifact built by hand.
+const _nativeIos = ProjectDescriptor(
+  kind: ProjectKind.nativeIos,
+  summary:
+      'An .xcodeproj with a shared scheme, and no pubspec.yaml or '
+      'package.json beside it. Detected only — nothing here can build it.',
+  liveChannel: Established<String>.absent(
+    'iOS has no live debug channel beyond the device log, which the device '
+    'tools already read. A Flutter app has the VM service because Dart runs '
+    'one; there is no native equivalent to half-build here.',
+  ),
+  builds: <ProjectBuildSpec>[
+    ProjectBuildSpec(
+      target: ProjectTarget.ios,
+      tool: ProjectBuildTool.xcodebuild,
+      command: Established<List<String>>.unchecked(
+        _noMac,
+        sketch:
+            'xcodebuild -scheme <the first shared scheme detection found> '
+            '-sdk iphonesimulator -configuration Debug -derivedDataPath build',
+      ),
+      artifact: Established<ProjectArtifact>.unchecked(
+        _noMac,
+        sketch:
+            'build/Build/Products/Debug-iphonesimulator/<scheme>.app — a '
+            'directory rather than a file, which is what device_install_app '
+            'already takes on iOS.',
+      ),
+      applicationId: Established<ApplicationIdSource>.unchecked(
+        _noMac,
+        sketch:
+            'CFBundleIdentifier out of the built bundle, which is what '
+            'device_install_app reads back and reports today. simctl install '
+            'then simctl launch is the pair after it — both already behind '
+            'device_install_app and device_launch_app.',
+      ),
+    ),
   ],
 );
 

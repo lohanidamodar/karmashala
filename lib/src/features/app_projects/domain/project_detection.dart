@@ -89,7 +89,7 @@ ProjectReading? detectProject({
   if (flutter != null) return flutter;
   final android = _readNativeAndroid(directoryName: directoryName, read: read);
   if (android != null) return android;
-  return null;
+  return _readNativeIos(directoryName: directoryName, read: read, list: list);
 }
 
 /// The files [detectProject] reads before it knows what it is looking at.
@@ -188,6 +188,63 @@ ProjectReading? _readNativeAndroid({
     );
   }
   return null;
+}
+
+/// Native iOS: an Xcode project with, where there is one, a shared scheme.
+///
+/// Asked last, and refused for anything that belongs to somebody else. A
+/// Flutter checkout's `ios/` holds a `Runner.xcodeproj` with a shared
+/// `Runner.xcscheme` and would otherwise read as native.
+ProjectReading? _readNativeIos({
+  required String directoryName,
+  required ProjectFileReader read,
+  ProjectEntryLister? list,
+}) {
+  if (read('pubspec.yaml') != null || read('package.json') != null) return null;
+  if (_parentIsFlutter(read)) return null;
+  // No listing, no answer. An Xcode project is a *directory*, and its schemes
+  // are files inside it, so there is nothing here a file read alone can see —
+  // and guessing would be the confident false statement §19 deletes.
+  if (list == null) return null;
+
+  final entries = list('');
+  // `Flutter/` beside the project is what `flutter create` puts in `ios/`, and
+  // it holds the generated xcconfigs the scheme depends on. A directory with
+  // it is the iOS half of somebody's Flutter app.
+  if (entries.contains('Flutter')) return null;
+
+  final projects = <String>[
+    for (final entry in entries)
+      if (entry.endsWith('.xcodeproj')) entry,
+  ]..sort();
+  if (projects.isEmpty) return null;
+  final project = projects.first;
+
+  // Sorted, so "the first shared scheme" is the same answer every time rather
+  // than whatever order the filesystem handed back.
+  final schemes =
+      <String>[
+        for (final entry in list('$project/xcshareddata/xcschemes'))
+          if (entry.endsWith('.xcscheme'))
+            entry.substring(0, entry.length - '.xcscheme'.length),
+      ]..sort();
+
+  return ProjectReading(
+    kind: ProjectKind.nativeIos,
+    name: project.substring(0, project.length - '.xcodeproj'.length),
+    iosScheme: schemes.isEmpty ? null : schemes.first,
+    evidence: <String>[
+      if (entries.any((entry) => entry.endsWith('.xcworkspace')))
+        '$project is here, beside a workspace'
+      else
+        '$project is here',
+      if (schemes.isEmpty)
+        'no shared scheme under $project/xcshareddata/xcschemes, so there is '
+            'nothing for xcodebuild -scheme to name'
+      else
+        'shared schemes: ${schemes.join(', ')}',
+    ],
+  );
 }
 
 /// Whether the directory **above** this one is a Flutter project.

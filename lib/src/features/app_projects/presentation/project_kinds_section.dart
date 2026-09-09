@@ -168,21 +168,39 @@ class _FieldLine extends StatelessWidget {
           Icon(icon, size: 14, color: colour),
           const SizedBox(width: Insets.xs),
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
                   TextSpan(
-                    text: '$label: ',
+                    children: [
+                      TextSpan(
+                        text: '$label: ',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      TextSpan(text: text),
+                    ],
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                // What it *would* be, kept visibly apart from what anything
+                // ran. It is here so the spec can be reviewed before there is
+                // a machine to run it on — never as an offer.
+                if (value.sketch.isNotEmpty)
+                  Text(
+                    'Would be: ${value.sketch}',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
-                  TextSpan(text: text),
-                ],
-              ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              ],
             ),
           ),
         ],

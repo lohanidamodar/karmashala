@@ -196,6 +196,42 @@ void main() {
       expect(ready.preflight.reason, contains('will not fall back to a'));
     });
 
+    test('a detected iOS project refuses to build, in the descriptor\'s words',
+        () async {
+      make(
+        responder: (request) => request.executable == 'ls'
+            ? switch (request.arguments.last) {
+                '/home/me/android' => const CommandResult(
+                  exitCode: 0,
+                  stdout: 'MyApp.xcodeproj\nMyApp.xcworkspace\nMyApp\n',
+                  stderr: '',
+                ),
+                '/home/me/android/MyApp.xcodeproj/xcshareddata/xcschemes' =>
+                  const CommandResult(
+                    exitCode: 0,
+                    stdout: 'MyApp.xcscheme\n',
+                    stderr: '',
+                  ),
+                _ => const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+              }
+            : const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+      );
+      final scanned = await builds().scan(_project);
+      expect(scanned.project!.kind, ProjectKind.nativeIos);
+      expect(scanned.project!.iosScheme, 'MyApp');
+
+      final ready = await builds().readiness(_project, ProjectTarget.ios);
+      expect(ready.preflight.problem, ProjectBuildProblem.targetUnchecked);
+      expect(ready.preflight.reason, contains('needs a Mac'));
+      expect(
+        ready.preflight.reason,
+        contains('release-build.yml has no macOS job'),
+      );
+      expect(ready.argv, isEmpty);
+      // Detection worked; only the build refused.
+      expect(ready.project, isNotNull);
+    });
+
     test('an Android project has no iOS target, and says so', () async {
       final ready = await builds().readiness(_project, ProjectTarget.ios);
       expect(ready.preflight.problem, ProjectBuildProblem.targetUnknown);

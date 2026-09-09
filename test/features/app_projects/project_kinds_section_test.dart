@@ -47,7 +47,9 @@ void main() {
       findsWidgets,
     );
     // And a known absence reads differently from a blind spot.
-    expect(find.textContaining('no live debug channel'), findsOneWidget);
+    expect(find.textContaining('no live debug channel'), findsWidgets);
+    // The shape is readable, and marked as a shape rather than as a reading.
+    expect(find.textContaining('Would be: xcodebuild -scheme'), findsOneWidget);
   });
 
   testWidgets('survives the window matrix', (tester) async {
