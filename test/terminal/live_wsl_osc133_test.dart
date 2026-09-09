@@ -20,7 +20,6 @@ import 'package:karmashala/src/features/terminal/domain/command_blocks.dart';
 import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/domain/wsl_shell_integration.dart';
-import 'package:xterm2/xterm.dart';
 
 import '../features/terminal/fake_instance.dart';
 
