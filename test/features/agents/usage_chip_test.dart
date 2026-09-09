@@ -14,7 +14,12 @@ import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
-import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
+import 'package:karmashala/src/features/settings/application/settings_tab.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_tab_view.dart';
+import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/document_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,6 +89,17 @@ void main() {
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
         ),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+        // Opening the Settings **tab** builds the terminal controller, whose
+        // real autosave is a periodic timer `testWidgets` refuses to leave
+        // pending. Same stand-in as `fakeTerminalOverrides`, which this file
+        // cannot spread whole — it already overrides the database and clock.
+        scrollbackAutosaveFactoryProvider.overrideWithValue(
+          ({required onTick}) => ScrollbackAutosave(
+            onTick: onTick,
+            schedule: (delay, callback) => Object(),
+            cancel: (_) {},
+          ),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -401,7 +417,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.calls.length, before + 1, reason: 'a click is a refresh');
-    expect(find.byType(SettingsScreen), findsOneWidget);
+    // Settings is a workbench tab now, so the click asks for a **page**
+    // rather than pushing a route: it writes the section and opens the tab.
+    expect(
+      container.read(settingsTabSectionProvider),
+      SettingsSectionId.agents,
+    );
+    // What that page then draws, mounted the way the tab draws it. The
+    // workbench around it is `settings_tab_test`'s subject, not this file's.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SettingsTabView()),
+      ),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('USAGE & LIMITS'), findsOneWidget);
     await quiesce(tester, container);
   });
@@ -421,8 +451,15 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.tap(find.byIcon(AppIcons.circleHalf));
       await tester.pumpAndSettle();
-      Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
-      await tester.pumpAndSettle();
+      // Nothing to dismiss between clicks: the tab is already open, and the
+      // second ask focuses it rather than stacking a second copy.
+      expect(
+        container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .where((tab) => tab.layout.panes.any(isSettingsPane)),
+        hasLength(1),
+      );
     }
 
     expect(service.calls.length, before, reason: 'five clicks, no requests');

@@ -92,6 +92,19 @@ void main() {
       );
     });
 
+    test('the listing forgives a fixed number of missed beacons', () {
+      // The timeout is a beacon count, not a stopwatch reading, and the two
+      // constants have to stay divisible for that sentence to mean anything.
+      expect(
+        kLanHostTimeout.inMilliseconds % kLanBeaconInterval.inMilliseconds,
+        0,
+      );
+      expect(
+        kLanHostTimeout.inMilliseconds ~/ kLanBeaconInterval.inMilliseconds,
+        5,
+      );
+    });
+
     test('accepts a version this build predates, for the caller to judge', () {
       final got = LanAdvert.tryDecode(
         utf8.encode(
@@ -130,28 +143,53 @@ void main() {
     });
 
     test('a host stops being listed once it goes quiet', () async {
+      // The host's nominal period, and how many of them the listing
+      // forgives — the same shape as the shipped pair, where the host
+      // timeout is five `kLanBeaconInterval`s. Neither is ever slept
+      // through: the clock below is the discovery's own, and only this test
+      // moves it.
+      const interval = Duration(milliseconds: 50);
+      const forgiven = 3;
+
+      var now = DateTime.utc(2026, 9, 9, 12);
       final discovery = await LanDiscovery.start(
         group: _group,
         beaconPort: _port,
-        timeout: const Duration(milliseconds: 150),
+        timeout: interval * forgiven,
+        now: () => now,
       );
       addTearDown(discovery.stop);
+
+      // The host announces once. A repeating beacon can land a datagram behind
+      // the assertions and refresh the sighting they are about to judge; one
+      // that has been heard cannot, and the wire has nothing left to deliver.
       final beacon = await LanBeacon.advertise(
         port: 47654,
         tag: 'testhost00000002',
-        interval: const Duration(milliseconds: 50),
+        interval: const Duration(hours: 1),
         group: _group,
         beaconPort: _port,
         bindAddress: _bindAddress,
       );
+      addTearDown(beacon.stop);
 
+      // The last wait in this case, and it waits on the event. Everything
+      // after it is synchronous, so no datagram can be delivered
+      // mid-judgement however starved the isolate is.
       await discovery.adverts.first.timeout(const Duration(seconds: 10));
-      expect(discovery.hosts, hasLength(1));
+      expect(discovery.hosts, hasLength(1), reason: 'heard once');
 
-      beacon.stop();
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      for (var missed = 1; missed <= forgiven; missed++) {
+        now = now.add(interval);
+        expect(discovery.hosts, hasLength(1), reason: '$missed beacons missed');
+      }
 
-      expect(discovery.hosts, isEmpty);
+      now = now.add(interval);
+      expect(
+        discovery.hosts,
+        isEmpty,
+        reason: '${forgiven + 1} beacons missed',
+      );
     });
   });
 }

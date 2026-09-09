@@ -8,11 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/settings/application/settings_controller.dart';
-import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
+import 'workbench_tabs.dart';
 import 'shell_state.dart';
 import 'side_panel_state.dart';
 import '../../features/notifications/application/attention_inbox.dart';
@@ -1066,7 +1066,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           ),
           OpenSettingsIntent: CallbackAction<OpenSettingsIntent>(
             onInvoke: (intent) {
-              SettingsScreen.show(context);
+              openSettingsTab(ref);
               return null;
             },
           ),

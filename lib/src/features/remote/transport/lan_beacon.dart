@@ -37,7 +37,9 @@ const int kLanBeaconPort = 47654;
 /// How often the host repeats itself.
 const Duration kLanBeaconInterval = Duration(seconds: 2);
 
-/// How long a discovered host stays in the list without being heard from.
+/// How long a discovered host stays in the list without being heard from —
+/// five [kLanBeaconInterval]s, so the patience is a count of missed beacons
+/// rather than a stopwatch reading.
 const Duration kLanHostTimeout = Duration(seconds: 10);
 
 /// Longest datagram the beacon will parse, so a stray packet cannot be costly.
@@ -171,7 +173,7 @@ class LanBeacon {
 
 /// The companion side: listens for adverts and keeps a live list of hosts.
 class LanDiscovery {
-  LanDiscovery._(this._socket, this._timeout) {
+  LanDiscovery._(this._socket, this._timeout, this._now) {
     _socket.listen((RawSocketEvent event) {
       if (event != RawSocketEvent.read) return;
       final datagram = _socket.receive();
@@ -181,7 +183,7 @@ class LanDiscovery {
       final host = DiscoveredHost(
         address: datagram.address,
         advert: advert,
-        seenAt: DateTime.now(),
+        seenAt: _now(),
       );
       _hosts['${datagram.address.address}:${advert.port}'] = host;
       if (!_found.isClosed) _found.add(host);
@@ -205,10 +207,16 @@ class LanDiscovery {
   /// A refusal on one interface is skipped rather than fatal: `awdl0` and
   /// friends come and go, and one that will not take the join must not cost the
   /// discovery the interfaces that would have.
+  ///
+  /// [now] is the clock both halves of the freshness judgement read — when a
+  /// host was heard and whether it has since gone quiet. It exists so a caller
+  /// can count missed beacons instead of waiting for them, and so a scout that
+  /// was given a clock has only the one. The default is the wall clock.
   static Future<LanDiscovery> start({
     InternetAddress? group,
     int beaconPort = kLanBeaconPort,
     Duration timeout = kLanHostTimeout,
+    DateTime Function()? now,
   }) async {
     final target = group ?? kLanBeaconGroup;
     final socket = await RawDatagramSocket.bind(
@@ -233,11 +241,12 @@ class LanDiscovery {
     // Nothing enumerable to join on — fall back to letting the OS choose, which
     // is still better than a socket that has joined nothing at all.
     if (joined == 0) socket.joinMulticast(target);
-    return LanDiscovery._(socket, timeout);
+    return LanDiscovery._(socket, timeout, now ?? DateTime.now);
   }
 
   final RawDatagramSocket _socket;
   final Duration _timeout;
+  final DateTime Function() _now;
   final Map<String, DiscoveredHost> _hosts = <String, DiscoveredHost>{};
   final StreamController<DiscoveredHost> _found =
       StreamController<DiscoveredHost>.broadcast();
@@ -246,9 +255,10 @@ class LanDiscovery {
   /// reads [hosts] instead.
   Stream<DiscoveredHost> get adverts => _found.stream;
 
-  /// Hosts heard from recently enough to still be worth dialling.
+  /// Hosts heard from recently enough to still be worth dialling — those
+  /// whose last advert is no more than [kLanHostTimeout], five beacons, old.
   List<DiscoveredHost> get hosts {
-    final cutoff = DateTime.now().subtract(_timeout);
+    final cutoff = _now().subtract(_timeout);
     _hosts.removeWhere((_, host) => host.seenAt.isBefore(cutoff));
     return List<DiscoveredHost>.unmodifiable(_hosts.values);
   }
