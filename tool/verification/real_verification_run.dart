@@ -22,18 +22,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/process/process_handle.dart';
 import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/data/android_sdk_discovery.dart';
 import 'package:karmashala/src/features/devices/domain/device_input.dart';
 import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:karmashala/src/features/devices/domain/ui_node.dart';
-import 'package:karmashala/src/features/browser/data/browser_service.dart';
+import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_tools.dart';
 import 'package:karmashala/src/features/verification/data/verification_artifact_store.dart';
 import 'package:karmashala/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -70,7 +70,9 @@ void main() {
 
     final artifacts = await Directory.systemTemp.createTemp('verify-runs-');
     final db = AppDatabase.memory();
-    final browser = BrowserService(runner: const LocalCommandRunner());
+    final browser = BrowserService(
+      startProcess: browserProcessStarter(const LocalCommandRunner()),
+    );
     final service = VerificationService(
       VerificationDao(db),
       VerificationArtifactStore(artifacts),
@@ -78,7 +80,7 @@ void main() {
       adbOf: () => null,
     );
     final tools = VerificationTools(service);
-    ProcessHandle? chrome;
+    BrowserProcess? chrome;
     String? profileDir;
 
     try {
@@ -251,7 +253,8 @@ void main() {
     final service = VerificationService(
       VerificationDao(db),
       VerificationArtifactStore(artifacts),
-      browserOf: () => BrowserService(runner: runner),
+      browserOf: () =>
+          BrowserService(startProcess: browserProcessStarter(runner)),
       adbOf: () => adb,
     );
     final tools = VerificationTools(service);
