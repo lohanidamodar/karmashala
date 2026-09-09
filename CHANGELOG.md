@@ -49,6 +49,8 @@ installs claim the same version name.
 - **The app now uses `karmashala_devices`**; the device pane converts to the
   package's plain geometry and key records at five sites and draws the same
   tree. A device-layer change is gated in 68 seconds.
+- **The app now uses `karmashala_git`**, with no glue: every git command already
+  ran through `agent_cli`'s runner. A git-layer change is gated in 20 seconds.
 
 ---
 
