@@ -2,11 +2,10 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/flutter_apps/application/android_app_discovery.dart';
 import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';

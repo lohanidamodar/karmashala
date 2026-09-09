@@ -1,12 +1,11 @@
 import 'package:karmashala/src/app/theme/app_icons.dart';
-import 'package:karmashala/src/core/process/wsl_interop.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health.dart';
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
-import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

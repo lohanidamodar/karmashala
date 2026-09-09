@@ -2,11 +2,10 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
-import '../domain/conversation_presence.dart';
+import 'package:agent_cli/read.dart';
 import 'cli_detection_providers.dart';
-import 'cli_detection_service.dart';
 
 /// One reading of every CLI store, able to answer [ConversationPresence] for
 /// any number of conversations without touching the disk again.

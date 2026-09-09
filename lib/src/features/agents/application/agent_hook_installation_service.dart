@@ -5,15 +5,12 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 import '../data/agent_hook_installer.dart';
-import '../domain/agent_descriptor.dart';
-import '../domain/agent_hook_endpoint.dart';
-import '../domain/agent_hook_transport.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_providers.dart';
 import 'agent_status_providers.dart';
-import '../../environments/domain/environment_label.dart';
 
 /// No address this app bound serves this kind of environment at all.
 const String _noAddressBound =
@@ -176,7 +173,6 @@ class AgentHookInstallation {
   /// working agents and no Antigravity CLI was told, in red, that it had no
   /// status callbacks at all.
   final bool agentPresent;
-
 
   /// Why nothing was written, for an environment or agent we deliberately
   /// skipped. `null` when [installed].

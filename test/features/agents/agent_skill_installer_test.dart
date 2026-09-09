@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/data/agent_skill_installer.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/karmashala_skill.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/temp_directory.dart';

@@ -1,15 +1,12 @@
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import '../../agents/data/agent_installation_dao.dart';
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../sessions/data/session_dao.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_status.dart';
-import '../domain/detected_session.dart';
+import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
 
 /// How long after a session row is written its CLI's conversation may have

@@ -15,11 +15,12 @@ import 'src/core/lifecycle/app_lifecycle.dart';
 import 'package:karmashala_core/logging.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/paths/app_support_directory.dart';
-import 'src/core/process/local_command_runner.dart';
+import 'src/core/util/agent_cli_bridge.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
-import 'src/features/environments/data/environment_discovery_service.dart';
+import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'src/features/env_secrets/application/env_secrets_controller.dart';
 import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
@@ -111,8 +112,9 @@ Future<void> main() async {
   ensureLocalEnvironment(environmentDao, clock);
   final discovered = await EnvironmentDiscoveryService(
     host: const LocalCommandRunner(),
-    clock: clock,
-    logger: logger,
+    // The app keeps one clock; the package carries its own copy of the type so
+    // it can be published with no local dependency (agent_cli_bridge.dart).
+    clock: agentCliClock(clock),
   ).discover();
   for (final env in discovered) {
     environmentDao.upsert(env);

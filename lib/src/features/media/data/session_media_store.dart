@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../../agents/domain/agent_ids.dart';
-import '../../sessions/domain/tool_activity.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/stream.dart';
 import '../domain/session_media_item.dart';
 
 /// Finds every picture a session has and puts the ones that exist only as bytes

@@ -1,11 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/command_runner_factory.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../data/execution_environment_dao.dart';
-import '../domain/environment_kind.dart';
-import '../domain/environment_path.dart';
-import '../domain/execution_environment.dart';
 import 'environment_providers.dart';
 
 /// Why the environment a checkout's commands would run in could not be named.
@@ -144,3 +141,20 @@ final environmentResolverProvider = Provider<ExecutionEnvironmentResolver>(
     runners: ref.watch(commandRunnerFactoryProvider),
   ),
 );
+
+/// The `RunnerResolver` `agent_cli` asks for: an environment id in, the runner
+/// that reaches it out.
+///
+/// The package's adapters and its `CliStoreLocator` used to hold a
+/// `CommandRunnerFactory`, an `ExecutionEnvironmentDao` and this resolver
+/// between them — three ways of saying the same thing, each dragging a database
+/// in behind it (docs/PACKAGE_SPLIT.md §3). They now take one function, and
+/// this is where the app composes it: the same resolver every other launch path
+/// uses, so an environment that cannot be placed is refused in the same words,
+/// then the same factory.
+final runnerResolverProvider = Provider<RunnerResolver>((ref) {
+  final resolver = ref.watch(environmentResolverProvider);
+  final runners = ref.watch(commandRunnerFactoryProvider);
+  return (environmentId) =>
+      runners.forEnvironment(resolver.resolve(environmentId).require);
+});

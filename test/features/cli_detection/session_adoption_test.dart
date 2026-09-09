@@ -1,14 +1,12 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/session_adoption_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:karmashala/src/features/cli_detection/domain/detected_session.dart';
-import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';

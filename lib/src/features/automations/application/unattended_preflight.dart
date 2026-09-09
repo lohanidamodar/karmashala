@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_permission_options.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/automation.dart';

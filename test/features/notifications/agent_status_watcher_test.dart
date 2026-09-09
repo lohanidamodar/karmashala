@@ -1,8 +1,6 @@
 import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:karmashala/src/features/agents/data/agent_status_service.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/agent_status_watcher.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';

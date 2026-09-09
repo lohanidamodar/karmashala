@@ -1,21 +1,20 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/clock_provider.dart';
+import '../../../core/util/agent_cli_bridge.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../data/agent_usage_service.dart';
-import '../domain/agent_ids.dart';
-import '../domain/agent_installation.dart';
-import '../domain/agent_usage.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import 'agent_installations_controller.dart';
 
 /// Fetches live usage/limits for an agent installation.
 final agentUsageServiceProvider = Provider<AgentUsageService>(
   (ref) => AgentUsageService(
     storeLocator: ref.watch(cliStoreLocatorProvider),
-    clock: ref.watch(clockProvider),
+    clock: ref.watch(agentCliClockProvider),
   ),
 );
 

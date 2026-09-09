@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 
 /// How long a Flutter SDK reading is taken as still true.
 ///

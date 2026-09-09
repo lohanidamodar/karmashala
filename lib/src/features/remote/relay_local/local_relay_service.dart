@@ -10,7 +10,7 @@ import 'dart:io';
 
 import 'package:karmashala_relay/karmashala_relay.dart';
 
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 
 /// The port the local relay binds unless the user moves it. Deliberately the
 /// relay package's own default, pinned equal by a test.

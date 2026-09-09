@@ -44,7 +44,7 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../../environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 
 /// One segment's characters, and the same set with `.` allowed inside it.
 /// `~` is excluded on purpose — see the `~/` note above.

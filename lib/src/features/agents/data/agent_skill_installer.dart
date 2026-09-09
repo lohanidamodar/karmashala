@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../domain/agent_descriptor.dart';
-import '../domain/karmashala_skill.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// Writes Karmashala's skills into an agent CLI's own skills root, and takes
 /// exactly those back out again.

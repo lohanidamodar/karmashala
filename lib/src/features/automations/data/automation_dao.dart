@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../verification/domain/verification_run.dart';
 import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';

@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../settings/application/settings_controller.dart';
 import 'device_providers.dart';
 import '../data/simctl_service.dart';

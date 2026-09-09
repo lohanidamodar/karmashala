@@ -1,9 +1,6 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/built_in_agents.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:flutter_test/flutter_test.dart';
 

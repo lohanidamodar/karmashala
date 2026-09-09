@@ -2,10 +2,8 @@ import 'dart:convert';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/data/fake_agent_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/stream.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -14,7 +12,6 @@ import 'package:karmashala/src/features/sessions/application/session_engine.dart
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 

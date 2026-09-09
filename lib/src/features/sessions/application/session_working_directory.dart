@@ -4,9 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/session.dart';
 import 'session_providers.dart';

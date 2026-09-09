@@ -8,7 +8,7 @@
 /// arm form says on hover is the sentence the write path throws.
 library;
 
-import '../../settings/domain/permission_risk.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// Where the agent would run, as the environment resolver answered.
 ///

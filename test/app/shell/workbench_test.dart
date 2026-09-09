@@ -1,14 +1,12 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:karmashala/src/features/agents/data/agent_status_service.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/domain/diff_stat.dart';
 import 'package:karmashala/src/features/notifications/application/agent_status_watcher.dart';

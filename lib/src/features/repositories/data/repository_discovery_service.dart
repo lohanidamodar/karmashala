@@ -3,13 +3,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../../core/process/command_runner_factory.dart';
+import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../domain/discovered_repository.dart';
 
 /// Raised when repository discovery cannot proceed (e.g. the root folder does

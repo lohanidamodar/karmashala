@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/automations/domain/unattended_gate.dart';
-import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// The rules that keep an agent from starting with nobody watching.
 ///

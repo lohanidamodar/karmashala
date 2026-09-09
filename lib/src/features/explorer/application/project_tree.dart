@@ -1,8 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/domain/imported_session.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/read.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/domain/git_worktree.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';

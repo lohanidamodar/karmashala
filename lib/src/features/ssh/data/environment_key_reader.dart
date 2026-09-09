@@ -1,9 +1,5 @@
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../../environments/domain/local_environment.dart';
 import 'ssh_connection.dart';
 
 /// Reads a private key from whichever **local** environment owns its path.

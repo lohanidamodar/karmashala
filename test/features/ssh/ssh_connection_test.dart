@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';

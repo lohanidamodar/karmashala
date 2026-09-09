@@ -5,10 +5,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/application/claude_accounts_controller.dart';
-import '../../agents/data/claude_auth_service.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/claude_account.dart';
-import '../../agents/domain/claude_auth_snapshot.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import 'settings_section.dart';
 

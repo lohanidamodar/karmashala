@@ -1,11 +1,10 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_installation.dart';
+import 'package:agent_cli/discovery.dart';
 import 'environment_providers.dart';
-import '../domain/execution_environment.dart';
 
 /// How bad a finding is, **ordered by severity** — `index` is the comparison,
 /// so anything added has to go in the right place.

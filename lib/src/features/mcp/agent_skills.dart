@@ -14,7 +14,7 @@
 /// that no longer exists is worse than no skill: it reads as a capability.
 library;
 
-import '../agents/domain/karmashala_skill.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'instructions_tools.dart';
 
 /// Every skill this app installs, in the order Settings counts them.

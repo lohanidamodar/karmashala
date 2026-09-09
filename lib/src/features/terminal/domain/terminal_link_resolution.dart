@@ -13,11 +13,7 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/path_translator.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../../environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import 'terminal_links.dart';
 import 'terminal_profile.dart';
 

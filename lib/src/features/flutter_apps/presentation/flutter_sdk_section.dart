@@ -6,7 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_section.dart';

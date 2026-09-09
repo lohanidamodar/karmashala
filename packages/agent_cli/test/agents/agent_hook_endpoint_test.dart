@@ -1,6 +1,5 @@
-import 'package:agent_cli/src/agents/domain/agent_hook_endpoint.dart';
-import 'package:agent_cli/src/agents/domain/agent_hook_transport.dart';
-import 'package:agent_cli/src/environments/environment_kind.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart';
 import 'package:test/test.dart';
 
 /// How an agent is told to report, per environment.

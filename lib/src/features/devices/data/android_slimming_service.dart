@@ -1,4 +1,4 @@
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/android_device.dart';
 import '../domain/android_slimming.dart';
 

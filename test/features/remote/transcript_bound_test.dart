@@ -13,11 +13,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
+import 'package:agent_cli/stream.dart';
 
 import '../../support/temp_directory.dart';
 

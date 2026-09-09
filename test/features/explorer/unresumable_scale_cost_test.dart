@@ -8,15 +8,11 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_store_index.dart';
-import 'package:karmashala/src/features/cli_detection/domain/conversation_presence.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/unresumable_sessions.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -120,8 +116,7 @@ class _CountingDatabase extends AppDatabase {
 }
 
 class _CountingLocator extends CliStoreLocator {
-  _CountingLocator(this.stores)
-    : super(runnerFactory: FakeCommandRunnerFactory());
+  _CountingLocator(this.stores) : super(runnerFor: ((_) => FakeCommandRunner()));
 
   final List<CliStore> stores;
   int calls = 0;

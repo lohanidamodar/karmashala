@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// A unit of work rooted at a folder. A project may contain many
 /// repositories (modeled separately). Its [root] folder is bound to the

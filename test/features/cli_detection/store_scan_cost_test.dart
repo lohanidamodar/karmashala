@@ -2,11 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/claude_store_reader.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_store_reader.dart';
-import 'package:karmashala/src/features/cli_detection/data/store_scan_slots.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:path/path.dart' as p;
 

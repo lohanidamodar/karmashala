@@ -1,9 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/data/resume_conflict_source.dart';
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/stream.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../../terminal/data/terminal_grid_text.dart';

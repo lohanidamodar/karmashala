@@ -2,13 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../../environments/domain/local_environment.dart';
-import '../../agents/domain/agent_registry.dart';
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../domain/launch_context.dart';
 import 'pty_launch.dart';
 

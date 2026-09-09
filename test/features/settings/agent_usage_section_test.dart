@@ -5,23 +5,15 @@ import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
-import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_usage_section.dart';
 
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../agents/usage_fixtures.dart';
-
-class _Movable implements Clock {
-  _Movable(this.now);
-  DateTime now;
-  @override
-  DateTime nowUtc() => now.toUtc();
-}
 
 /// **Why there is no number, in words the user can act on.**
 ///
@@ -31,7 +23,7 @@ class _Movable implements Clock {
 /// last reading with its age underneath.
 void main() {
   late AppDatabase db;
-  late _Movable clock;
+  late MovableClock clock;
   late FakeAgentUsageService service;
 
   final installation = agentInstallation();
@@ -39,7 +31,7 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
-    clock = _Movable(testTime);
+    clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
   });
   tearDown(() => db.close());

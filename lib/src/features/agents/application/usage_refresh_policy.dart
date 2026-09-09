@@ -5,14 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../data/usage_throttle.dart';
+import 'package:agent_cli/usage.dart';
 import 'agent_installations_controller.dart';
 import 'agent_usage_providers.dart';
 
 /// The floor under every usage request, re-exported with the throttle that
 /// enforces it on every other way of asking — see [kUsageMinInterval] there for
 /// why sixty seconds stopped being a poll interval.
-export '../data/usage_throttle.dart' show kUsageMinInterval;
+export 'package:agent_cli/usage.dart' show kUsageMinInterval;
 
 /// The floor under the tick, and the seam a test uses to turn it off.
 ///

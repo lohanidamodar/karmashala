@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../github/domain/pull_request_snapshot.dart';
 import '../../sessions/domain/session_delivery.dart';
 import 'delivery_transition.dart';

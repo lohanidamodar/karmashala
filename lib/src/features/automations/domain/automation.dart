@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// When an automation fires: a recurring cron expression, or one absolute
 /// instant.

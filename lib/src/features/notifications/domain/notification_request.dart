@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'evidence_line.dart';
 import 'notification_policy.dart';
 import 'watched_session.dart';

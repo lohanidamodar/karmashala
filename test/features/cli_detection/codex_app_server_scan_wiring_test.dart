@@ -2,14 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_server_client.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_server_launch.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_app_server_reader.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_store_reader.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/cli_detection/data/store_scan_worker.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:path/path.dart' as p;
@@ -44,11 +41,12 @@ void main() {
     return home;
   }
 
-  FakeCommandRunnerFactory homeIs(String home) => FakeCommandRunnerFactory(
-    fallback: FakeCommandRunner(
+  RunnerResolver homeIs(String home) {
+    final runner = FakeCommandRunner(
       responder: (_) => CommandResult(exitCode: 0, stdout: home, stderr: ''),
-    ),
-  );
+    );
+    return (_) => runner;
+  }
 
   group('CliStoreLocator', () {
     late AppDatabase db;
@@ -67,8 +65,8 @@ void main() {
       );
 
       final store = (await CliStoreLocator(
-        runnerFactory: homeIs('/home/me'),
-        installations: AgentInstallationDao(db),
+        runnerFor: homeIs('/home/me'),
+        installations: AgentInstallationDao(db).getAll(),
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 
@@ -80,8 +78,8 @@ void main() {
       AgentInstallationDao(db).insert(agentInstallation());
 
       final store = (await CliStoreLocator(
-        runnerFactory: homeIs('/home/me'),
-        installations: AgentInstallationDao(db),
+        runnerFor: homeIs('/home/me'),
+        installations: AgentInstallationDao(db).getAll(),
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 
@@ -91,7 +89,7 @@ void main() {
 
     test('a locator with no DAO walks every store, as it always did', () async {
       final store = (await CliStoreLocator(
-        runnerFactory: homeIs('/home/me'),
+        runnerFor: homeIs('/home/me'),
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv()])).single;
 

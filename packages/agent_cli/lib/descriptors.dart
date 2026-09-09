@@ -9,6 +9,12 @@
 library;
 
 export 'src/agents/domain/agent_descriptor.dart';
+// The other half of the `AgentHookSpec` a descriptor declares: where an agent's
+// hooks report to, and over which transport. Here rather than in a mode of its
+// own because installing them is the host's job — this package only says what
+// each CLI supports.
+export 'src/agents/domain/agent_hook_endpoint.dart';
+export 'src/agents/domain/agent_hook_transport.dart';
 export 'src/agents/domain/agent_ids.dart';
 export 'src/agents/domain/agent_kind.dart';
 export 'src/agents/domain/agent_model_options.dart';

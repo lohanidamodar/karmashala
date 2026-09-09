@@ -2,18 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:karmashala_core/util.dart';
-import '../../agents/domain/agent_adapter.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/stream.dart';
+import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
+import 'package:agent_cli/process.dart';
 import '../../git/application/worktree_service.dart';
 import '../../repositories/domain/repository.dart';
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../data/session_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_repository_dao.dart';
 import '../domain/session.dart';
 import '../domain/session_event.dart';
-import '../domain/session_event_types.dart';
 import '../domain/session_naming.dart';
 import '../domain/session_status.dart';
 

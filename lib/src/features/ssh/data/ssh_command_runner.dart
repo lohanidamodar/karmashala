@@ -2,19 +2,10 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
-import '../../features/ssh/data/ssh_connection.dart';
-import '../../features/ssh/data/ssh_process_handle.dart';
-import 'command_runner.dart';
-import 'process_handle.dart';
-
-/// Quotes [value] for a POSIX shell.
-///
-/// SSH does not take an argument vector — the server is handed one string that
-/// the login shell parses — so quoting is the boundary that keeps a repository
-/// path containing `;` or `$(...)` from becoming remote code execution. Single
-/// quotes suppress every expansion; the only character they cannot contain is a
-/// single quote, which is spliced back in as `'\''`.
-String posixQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
+import 'ssh_connection.dart';
+import 'ssh_connection_pool.dart';
+import 'ssh_process_handle.dart';
+import 'package:agent_cli/process.dart';
 
 /// Renders [request] as the one command string SSH will run.
 ///
@@ -144,4 +135,45 @@ class SshCommandRunner implements CommandRunner {
 
   static String _decode(List<int> bytes) =>
       const Utf8Decoder(allowMalformed: true).convert(bytes);
+}
+
+/// The factory Karmashala composes: `agent_cli`'s local and WSL cases, plus the
+/// one this app adds.
+///
+/// `agent_cli` runs commands on this machine and inside its WSL distributions
+/// and stops there — reaching another machine means a connection, a key and
+/// somewhere to keep both, which is this app's business and not a coding CLI's
+/// (docs/PACKAGE_SPLIT.md §3). Overriding [unsupported] rather than
+/// [forEnvironment] is what keeps the local and WSL cases from drifting between
+/// the two copies.
+///
+/// [sshConnections] supplies the shared connection an SSH runner needs. It is a
+/// callback rather than a value so that composing the factory — which the whole
+/// app does — never builds a connection pool, and therefore never touches the
+/// database, unless a remote environment is actually asked for. It is optional
+/// because most of the app is composed without one; asking for an SSH runner
+/// without it is a wiring bug and fails loudly rather than connecting something
+/// unconfigured.
+class SshCommandRunnerFactory extends CommandRunnerFactory {
+  const SshCommandRunnerFactory({this.sshConnections});
+
+  final SshConnectionPool Function()? sshConnections;
+
+  @override
+  bool get canReachRemote => sshConnections != null;
+
+  @override
+  CommandRunner unsupported(ExecutionEnvironment environment) {
+    final pool = sshConnections?.call();
+    if (pool == null) {
+      throw StateError(
+        'No SSH connection pool is configured; cannot run commands in '
+        '${environment.id}',
+      );
+    }
+    return SshCommandRunner(
+      environmentId: environment.id,
+      connection: pool.forEnvironment(environment),
+    );
+  }
 }

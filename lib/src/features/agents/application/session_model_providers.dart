@@ -5,7 +5,7 @@ import '../../sessions/application/session_launcher.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// The model one session will run on, and everything a control needs to say so.
 ///

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/cli_detection/domain/session_stats.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/features/sessions/application/session_stats_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_stats_dialog.dart';
 

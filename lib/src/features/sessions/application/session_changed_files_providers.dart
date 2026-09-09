@@ -3,18 +3,15 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../checkpoints/data/checkpoint_dao.dart';
 import '../../checkpoints/domain/checkpoint.dart';
 import '../../cli_detection/application/codex_app_server_providers.dart';
-import '../../cli_detection/data/codex_thread.dart';
+import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../git/data/file_edit_reader.dart';
 import '../../git/domain/file_change.dart';
 import '../../git/domain/file_edit.dart';
@@ -308,7 +305,7 @@ class SessionChangedFilesService {
 
   /// [path] as this host spells it, or null when it cannot be expressed here.
   ///
-  /// The one translator (`core/process/path_translator.dart`), never a second
+  /// The one translator (`agent_cli`'s `path_translator.dart`), never a second
   /// one. An SSH path is deliberately not translated: it names a file on another
   /// machine, and a stat of ours is not evidence either way — the same rule §20
   /// applies to a remote executable.

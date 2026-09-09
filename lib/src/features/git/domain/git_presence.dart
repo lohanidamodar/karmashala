@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// Whether a directory is under git, as far as the **filesystem** could say.
 ///

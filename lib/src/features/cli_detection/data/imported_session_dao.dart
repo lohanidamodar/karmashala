@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 
 /// Data-access for imported CLI sessions. Hand-written SQL, no codegen.
 ///

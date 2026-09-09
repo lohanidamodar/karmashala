@@ -2,13 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../../core/process/command_runner_factory.dart';
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../repositories/data/repository_dao.dart';

@@ -22,11 +22,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/data/android_sdk_discovery.dart';
 import 'package:karmashala/src/features/devices/domain/device_input.dart';
-import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:karmashala/src/features/devices/domain/ui_node.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';

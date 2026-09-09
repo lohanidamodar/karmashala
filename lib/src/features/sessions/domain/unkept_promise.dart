@@ -1,4 +1,4 @@
-import '../../cli_detection/domain/conversation_presence.dart';
+import 'package:agent_cli/read.dart';
 import 'session.dart';
 import 'session_launch.dart';
 

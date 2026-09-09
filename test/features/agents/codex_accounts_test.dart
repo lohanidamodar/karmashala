@@ -3,10 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala_core/util.dart';
+import 'package:agent_cli/discovery.dart' show SystemClock;
 import 'package:karmashala/src/features/agents/data/codex_account_dao.dart';
-import 'package:karmashala/src/features/agents/data/codex_auth_service.dart';
-import 'package:karmashala/src/features/agents/domain/codex_account.dart';
+import 'package:agent_cli/usage.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

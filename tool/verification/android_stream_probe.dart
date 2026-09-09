@@ -1,11 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/data/device_stream.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
 import 'package:media_kit/media_kit.dart';
 

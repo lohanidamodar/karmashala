@@ -8,14 +8,10 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/built_in_agents.dart';
-import 'package:karmashala/src/features/cli_detection/data/conversation_store_index.dart';
-import 'package:karmashala/src/features/cli_detection/domain/conversation_presence.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -212,8 +208,18 @@ void main() {
       });
     }
 
-    test('every built-in declares one, so none is silently defaulted', () {
+    test('no built-in claims one without saying where it was checked', () {
+      // The rule is about the *claim*, not the field. A descriptor that says a
+      // conversation is findable from anywhere is making an assertion about a
+      // CLI's storage, and folklore is what evidence exists to keep out. The
+      // safe side needs no evidence: `findsConversationAnywhere: false` is what
+      // an unfilled `AgentLaunchSpec` already means (the case below), and Gemini
+      // CLI — shipped by `agent_cli` as `-p`/`-m` and nothing else, because
+      // nobody here has run it — is deliberately on it.
       for (final descriptor in builtInAgentDescriptors) {
+        if (!descriptor.launch.resumeLocality.findsConversationAnywhere) {
+          continue;
+        }
         expect(
           descriptor.launch.resumeLocality.evidence,
           isNotEmpty,

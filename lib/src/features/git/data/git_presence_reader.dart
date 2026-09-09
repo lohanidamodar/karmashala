@@ -1,6 +1,6 @@
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/git_presence.dart';
 import 'git_files.dart';
 import 'git_service.dart';

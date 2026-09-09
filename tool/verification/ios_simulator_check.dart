@@ -12,14 +12,13 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/data/mjpeg_stream.dart';
 import 'package:karmashala/src/features/devices/data/wda_backend.dart';
 import 'package:karmashala/src/features/devices/data/wda_locator.dart';
 import 'package:karmashala/src/features/devices/data/simctl_service.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 import 'package:karmashala/src/features/devices/domain/simulator_backend.dart';
-import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 
 const String _tick = '  ok ';
 const String _cross = '  -- ';
@@ -242,7 +241,6 @@ void main(List<String> args) async {
   );
   exit(failures == 0 ? 0 : 1);
 }
-
 
 /// The pixel size in a JPEG's start-of-frame marker, or null if it has none.
 ///

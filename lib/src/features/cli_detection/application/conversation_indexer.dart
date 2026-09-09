@@ -1,9 +1,8 @@
 import 'dart:io';
 
 import 'package:karmashala_core/util.dart';
-import '../data/cli_transcript_reader.dart';
+import 'package:agent_cli/read.dart';
 import '../data/conversation_index_dao.dart';
-import '../domain/detected_session.dart';
 
 /// The roles a search may find.
 ///

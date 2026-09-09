@@ -1,9 +1,8 @@
 import 'package:karmashala_browser/browser.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../../core/process/process_handle.dart';
 
 /// The debugging port Karmashala attaches to (or launches a browser on).
 ///

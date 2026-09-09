@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/ios_simulator.dart';
 import '../domain/simulator_slimming.dart';
 import 'simctl_parsing.dart';

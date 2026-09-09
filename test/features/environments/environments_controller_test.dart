@@ -1,13 +1,11 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/application/environment_discovery_provider.dart';
 import 'package:karmashala/src/features/environments/application/environments_controller.dart';
-import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
-import 'package:karmashala/src/features/environments/domain/local_environment.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/cli_detection/domain/session_stats.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/features/sessions/application/session_stats_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_stats_dialog.dart';
 

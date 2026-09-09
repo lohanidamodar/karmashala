@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'package:riverpod/riverpod.dart';
 
 import '../agents/application/agent_providers.dart';
-import '../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../sessions/application/session_actions.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
 import '../sessions/application/session_wait.dart';
 import '../sessions/domain/session.dart';
-import '../sessions/domain/session_event_types.dart';
+import 'package:agent_cli/stream.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/terminal_grid_text.dart';
 

@@ -13,8 +13,7 @@ import 'package:path/path.dart' as p;
 
 import '../../agents/application/agent_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_label.dart';
-import '../../environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';

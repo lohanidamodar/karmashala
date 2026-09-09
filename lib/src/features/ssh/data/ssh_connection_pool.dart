@@ -1,6 +1,6 @@
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/ssh_host.dart';
 import 'known_host_dao.dart';
 import 'ssh_connection.dart';

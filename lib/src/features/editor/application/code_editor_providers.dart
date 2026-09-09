@@ -1,11 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/local_environment.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/domain/project.dart';
 import '../../settings/application/settings_controller.dart';

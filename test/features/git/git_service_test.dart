@@ -1,6 +1,4 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/data/git_service.dart';
 import 'package:karmashala/src/features/git/domain/diff_stat.dart';
 import 'package:flutter_test/flutter_test.dart';

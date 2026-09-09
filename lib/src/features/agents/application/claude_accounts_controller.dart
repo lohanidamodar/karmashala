@@ -2,15 +2,12 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
+import '../../../core/util/agent_cli_bridge.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../data/claude_account_dao.dart';
-import '../data/claude_auth_service.dart';
-import '../domain/agent_installation.dart';
-import '../domain/claude_account.dart';
-import '../domain/claude_auth_snapshot.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/discovery.dart';
 
 /// Repository-layer provider for saved-Claude-account persistence.
 final claudeAccountDaoProvider = Provider<ClaudeAccountDao>(
@@ -25,8 +22,8 @@ final claudeAuthLocatorProvider = Provider<ClaudeAuthLocator>(
 /// Reads/captures/switches Claude accounts.
 final claudeAuthServiceProvider = Provider<ClaudeAuthService>(
   (ref) => ClaudeAuthService(
-    ids: ref.watch(idGeneratorProvider),
-    clock: ref.watch(clockProvider),
+    ids: ref.watch(agentCliIdsProvider),
+    clock: ref.watch(agentCliClockProvider),
   ),
 );
 

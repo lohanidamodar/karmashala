@@ -21,7 +21,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_browser/tools.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';

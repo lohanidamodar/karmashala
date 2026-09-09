@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
+import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

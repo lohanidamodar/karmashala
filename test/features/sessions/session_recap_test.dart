@@ -5,15 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/session_model_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -48,7 +47,11 @@ void main() {
     });
 
     test('is the same prompt whichever CLI is asked', () async {
-      for (final agentId in AgentIds.builtIn) {
+      for (final agentId in [
+        AgentIds.claudeCode,
+        AgentIds.codex,
+        AgentIds.antigravity,
+      ]) {
         final h = harness(
           agentId: agentId,
           transcript: _transcript(agentId: agentId),
@@ -65,6 +68,32 @@ void main() {
           reason: agentId,
         );
       }
+    });
+
+    test('an agent with no established way to ask refuses, and spawns nothing',
+        () async {
+      // Gemini CLI: `agent_cli` ships the descriptor with `-p` and `-m` and
+      // nothing else, because nobody here has run it, so no non-interactive
+      // recap route is claimed. §19's rule at a launch site — the refusal says
+      // what was not established rather than guessing at a command line.
+      final h = harness(
+        agentId: AgentIds.geminiCli,
+        transcript: _transcript(agentId: AgentIds.geminiCli),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await expectLater(
+        h.container.read(sessionRecapServiceProvider).write('s1'),
+        throwsA(
+          isA<SessionRecapRefusal>().having(
+            (e) => '$e',
+            'says so',
+            contains('has not established how to ask this agent'),
+          ),
+        ),
+      );
+      expect(h.runner.requests, isEmpty);
     });
   });
 

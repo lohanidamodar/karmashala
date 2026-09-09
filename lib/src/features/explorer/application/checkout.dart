@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// A working tree, identified by **where it is** rather than by how a path to
 /// it happens to be spelled.

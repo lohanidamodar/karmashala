@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../agents/domain/agent_installation.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../repositories/domain/repository.dart';
 import 'session_launcher.dart';
 

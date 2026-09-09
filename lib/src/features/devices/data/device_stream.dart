@@ -4,8 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/command_runner.dart';
-import '../../../core/process/process_handle.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/device_input.dart';
 import 'adb_output_parsing.dart';
 import 'adb_service.dart';

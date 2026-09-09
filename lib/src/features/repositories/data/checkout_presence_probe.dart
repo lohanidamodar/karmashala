@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../../../core/process/path_translator.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// What could be established about a recorded directory.
 ///

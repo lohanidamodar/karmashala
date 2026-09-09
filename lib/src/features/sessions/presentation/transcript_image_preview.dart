@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../domain/tool_activity.dart';
+import 'package:agent_cli/stream.dart';
 
 /// How big a file may be before we refuse to hand it to the decoder.
 ///

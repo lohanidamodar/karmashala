@@ -1,13 +1,11 @@
 import 'package:karmashala_core/util.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../projects/data/project_dao.dart';
 import '../../projects/domain/project.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../repositories/domain/repository.dart';
 import '../data/imported_session_dao.dart';
-import '../domain/detected_project.dart';
-import '../domain/detected_session.dart';
-import '../domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 
 /// Counts of what an import added (duplicates are not counted).
 class ImportSummary {

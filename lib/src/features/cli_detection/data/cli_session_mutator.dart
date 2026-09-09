@@ -5,8 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../agents/domain/agent_ids.dart';
-import '../domain/detected_session.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'codex_app_servers.dart';
 
 /// What a batched delete could not remove, in the words a notification uses.

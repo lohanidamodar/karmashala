@@ -9,7 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/row_menu.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../git/application/changes_providers.dart';

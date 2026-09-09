@@ -1,12 +1,6 @@
-import 'package:karmashala/src/features/agents/data/antigravity_adapter.dart';
-import 'package:karmashala/src/features/agents/data/claude_code_adapter.dart';
-import 'package:karmashala/src/features/agents/data/codex_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_kind.dart';
-import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:agent_cli/stream.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,7 +37,9 @@ class _AgentGolden {
 
   final String id;
   final String displayName;
-  final AgentKind kind;
+
+  /// Null for an agent with no protocol adapter of its own.
+  final AgentKind? kind;
 
   /// The executable base name probed on both Windows and WSL.
   final String executable;
@@ -83,7 +79,7 @@ class _AgentGolden {
   ];
 }
 
-/// The three agents Karmashala ships, in registry order.
+/// The agents Karmashala ships, in registry order.
 const List<_AgentGolden> _goldens = [
   _AgentGolden(
     id: 'claudeCode',
@@ -204,6 +200,23 @@ const List<_AgentGolden> _goldens = [
     resumeArguments: ['--conversation', 'sid'],
     interactiveResumeArguments: ['--conversation', 'sid'],
   ),
+  _AgentGolden(
+    id: 'geminiCli',
+    displayName: 'Gemini CLI',
+    // No protocol adapter, so the generic one drives it — and everything below
+    // is empty for the reason the descriptor is thin. `agent_cli` states `-p`
+    // and `-m` and nothing else because nobody here has run this CLI, so an
+    // empty golden is the claim that nothing is claimed.
+    kind: null,
+    executable: 'gemini',
+    baseArguments: [],
+    // `PermissionSelection.empty.canonical`: no mode is offered, so a session
+    // that chose nothing enforces nothing and passes no flags.
+    defaultSelection: 'none',
+    permissionArguments: {},
+    resumeArguments: [],
+    interactiveResumeArguments: [],
+  ),
 ];
 
 void main() {
@@ -223,11 +236,14 @@ void main() {
       _goldens.map((g) => g.kind),
     );
     // Every agent with a protocol adapter is shipped: the enum has no orphans.
-    expect(_goldens.map((g) => g.kind), AgentKind.values);
+    // The nulls are the agents driven by the generic adapter, which is what
+    // `AgentKind` means now — "this one has an adapter" — rather than "this one
+    // is shipped".
+    expect(_goldens.map((g) => g.kind).nonNulls, AgentKind.values);
     // Rows written before the id migration hold `AgentKind.name`, so the id and
-    // the kind must still agree for the three built-ins to load.
+    // the kind must still agree for the built-ins that have one to load.
     for (final golden in _goldens) {
-      expect(golden.id, golden.kind.name);
+      if (golden.kind != null) expect(golden.id, golden.kind!.name);
     }
     expect(registry.byId('nope'), isNull);
   });
@@ -311,7 +327,8 @@ void main() {
       );
       expect(
         support.argumentsFor(null),
-        golden.permissionArguments[golden.defaultSelection],
+        // An agent that offers no mode has no entry, and passes nothing.
+        golden.permissionArguments[golden.defaultSelection] ?? const <String>[],
         reason: golden.id,
       );
       expect(

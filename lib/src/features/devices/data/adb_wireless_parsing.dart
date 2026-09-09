@@ -1,4 +1,4 @@
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/wireless_pairing.dart';
 
 /// Pure parsers for what `adb mdns`, `adb pair` and `adb connect` print.

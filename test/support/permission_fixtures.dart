@@ -1,5 +1,4 @@
-import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
-import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// Permission vocabulary for a **made-up** agent in a test.
 ///

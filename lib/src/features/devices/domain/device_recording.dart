@@ -1,6 +1,6 @@
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/disk_space.dart' show formatBytes;
+import 'package:agent_cli/process.dart' show formatBytes;
 import 'device_target.dart';
 
 /// Where one recording of [target] is written.

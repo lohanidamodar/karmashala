@@ -7,13 +7,11 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_agent_filter.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
@@ -225,14 +223,14 @@ void main() {
       expect(agentFilterTooltip(AgentFilter.all, registry), 'Filter sessions');
       expect(
         agentFilterTooltip(const AgentFilter({AgentIds.codex}), registry),
-        'Showing Codex CLI only — Claude Code and Antigravity hidden',
+        'Showing Codex CLI only — Claude Code, Antigravity and Gemini CLI hidden',
       );
       expect(
         agentFilterTooltip(
           const AgentFilter({AgentIds.codex, AgentIds.claudeCode}),
           registry,
         ),
-        'Showing Claude Code and Codex CLI only — Antigravity hidden',
+        'Showing Claude Code and Codex CLI only — Antigravity and Gemini CLI hidden',
       );
     });
   });
@@ -461,7 +459,7 @@ void main() {
       );
       expect(
         find.byTooltip(
-          'Showing Codex CLI only — Claude Code and Antigravity hidden',
+          'Showing Codex CLI only — Claude Code, Antigravity and Gemini CLI hidden',
         ),
         findsOneWidget,
       );

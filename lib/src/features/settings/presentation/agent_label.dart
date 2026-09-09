@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// An agent id as a person reads it — "Claude Code" rather than `claude`.
 ///

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/codex_account.dart';
+import 'package:agent_cli/usage.dart';
 
 class CodexAccountDao {
   CodexAccountDao(this._db);

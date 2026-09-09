@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/workspaces/application/workspace_suggestion.dart';
 

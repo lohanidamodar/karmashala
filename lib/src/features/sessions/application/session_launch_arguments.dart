@@ -11,8 +11,7 @@
 /// rather than a tidy one. See the function's own note.
 library;
 
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'session_mcp_arguments.dart';
 
 /// The interactive command-line arguments for one agent launch.

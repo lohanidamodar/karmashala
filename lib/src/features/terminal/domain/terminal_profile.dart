@@ -1,5 +1,4 @@
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// The kind of shell a terminal launches (in a host ConPTY).
 enum TerminalShell {

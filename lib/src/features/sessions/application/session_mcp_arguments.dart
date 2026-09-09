@@ -1,9 +1,9 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../mcp/session_mcp.dart';
 import '../../terminal/domain/agent_pane_launch.dart';
 import 'session_working_directory.dart';

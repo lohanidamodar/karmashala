@@ -4,8 +4,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_descriptor.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import '../domain/session_chat_view.dart';
 import '../domain/session_launch.dart';
 import 'session_chat_source.dart';

@@ -1,5 +1,4 @@
-import '../domain/agent_descriptor.dart';
-import '../domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// Orca's third status source: read the agent's status off the bottom of its own
 /// terminal screen.

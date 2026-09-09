@@ -5874,6 +5874,272 @@
         "parentLink": null,
         "hasPane": false
       }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "fresh",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "-d",
+        "C:\\src\\demo\\app",
+        "C:\\bin\\geminiCli"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Elsewhere",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "resume",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "-d",
+        "C:\\src\\demo\\app",
+        "C:\\bin\\geminiCli"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": "ext-geminiCli-windows",
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "fresh",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "wsl.exe",
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/dev/app",
+        "--",
+        "eval",
+        "$(echo 'ZXhlYyAnL3Vzci9sb2NhbC9iaW4vZ2VtaW5pQ2xpJw=='|base64 -d)"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Elsewhere",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "resume",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "wsl.exe",
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/dev/app",
+        "--",
+        "eval",
+        "$(echo 'ZXhlYyAnL3Vzci9sb2NhbC9iaW4vZ2VtaW5pQ2xpJw=='|base64 -d)"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": "ext-geminiCli-wsl:Ubuntu",
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "fresh",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "-d",
+        "/srv/app",
+        "/usr/local/bin/geminiCli"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Elsewhere",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "resume",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "-d",
+        "/srv/app",
+        "/usr/local/bin/geminiCli"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": "ext-geminiCli-ssh:h1",
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "fresh",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "-d",
+        "/Users/me/app",
+        "/opt/homebrew/bin/geminiCli"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Elsewhere",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "resume",
+      "terminal": "wt.exe",
+      "arguments": [
+        "-w",
+        "0",
+        "new-tab",
+        "-d",
+        "/Users/me/app",
+        "/opt/homebrew/bin/geminiCli"
+      ],
+      "workingDirectory": null,
+      "paneId": null,
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "external",
+        "view": "terminal",
+        "externalSessionId": "ext-geminiCli-posix",
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": false
+      }
     }
   ],
   "shapes": [
@@ -5886,11 +6152,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-352",
+        "s-356",
         "read the brief and start"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-352.json"
+        "--mcp-config=C:\\mcp\\session-s-356.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -5926,7 +6192,7 @@
         "--fork-session"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-355.json"
+        "--mcp-config=C:\\mcp\\session-s-359.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -5958,10 +6224,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "seed-80"
+        "seed-84"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-80.json"
+        "--mcp-config=C:\\mcp\\session-seed-84.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -5993,10 +6259,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-360"
+        "s-364"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-360.json"
+        "--mcp-config=C:\\mcp\\session-s-364.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app/.worktrees/feature",
       "wslDistribution": null,
@@ -6028,13 +6294,13 @@
         "--permission-mode",
         "manual",
         "--append-system-prompt-file",
-        "<packets>\\handoff-s-363.md",
+        "<packets>\\handoff-s-367.md",
         "--session-id",
-        "s-363",
+        "s-367",
         "the brief is attached"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-363.json"
+        "--mcp-config=C:\\mcp\\session-s-367.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -6066,11 +6332,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-366",
-        "[message from the Karmashala session \"Earlier work\" (seed-81)]\n\ndo the sub-task"
+        "s-370",
+        "[message from the Karmashala session \"Earlier work\" (seed-85)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-366.json"
+        "--mcp-config=C:\\mcp\\session-s-370.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -6088,7 +6354,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-81",
+        "parentSessionId": "seed-85",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -6104,10 +6370,10 @@
         "--model",
         "fable",
         "--session-id",
-        "s-369"
+        "s-373"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-369.json"
+        "--mcp-config=C:\\mcp\\session-s-373.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -6142,7 +6408,7 @@
         "gone-claudeCode-windows"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-82.json"
+        "--mcp-config=C:\\mcp\\session-seed-86.json"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -6174,11 +6440,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-374",
+        "s-378",
         "read the brief and start"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-374.json"
+        "--mcp-config=C:\\mcp\\session-s-378.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6214,7 +6480,7 @@
         "--fork-session"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-377.json"
+        "--mcp-config=C:\\mcp\\session-s-381.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6246,10 +6512,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "seed-83"
+        "seed-87"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-83.json"
+        "--mcp-config=C:\\mcp\\session-seed-87.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6281,10 +6547,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-382"
+        "s-386"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-382.json"
+        "--mcp-config=C:\\mcp\\session-s-386.json"
       ],
       "workingDirectory": "/home/dev/app/.worktrees/feature",
       "wslDistribution": "Ubuntu",
@@ -6316,13 +6582,13 @@
         "--permission-mode",
         "manual",
         "--append-system-prompt-file",
-        "<packets-wsl>/handoff-s-385.md",
+        "<packets-wsl>/handoff-s-389.md",
         "--session-id",
-        "s-385",
+        "s-389",
         "the brief is attached"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-385.json"
+        "--mcp-config=C:\\mcp\\session-s-389.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6354,11 +6620,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-388",
-        "[message from the Karmashala session \"Earlier work\" (seed-84)]\n\ndo the sub-task"
+        "s-392",
+        "[message from the Karmashala session \"Earlier work\" (seed-88)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-388.json"
+        "--mcp-config=C:\\mcp\\session-s-392.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6376,7 +6642,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-84",
+        "parentSessionId": "seed-88",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -6392,10 +6658,10 @@
         "--model",
         "fable",
         "--session-id",
-        "s-391"
+        "s-395"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-391.json"
+        "--mcp-config=C:\\mcp\\session-s-395.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6430,7 +6696,7 @@
         "gone-claudeCode-wsl:Ubuntu"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-85.json"
+        "--mcp-config=C:\\mcp\\session-seed-89.json"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -6462,11 +6728,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-396",
+        "s-400",
         "read the brief and start"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-396.json"
+        "--mcp-config=C:\\mcp\\session-s-400.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6502,7 +6768,7 @@
         "--fork-session"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-399.json"
+        "--mcp-config=C:\\mcp\\session-s-403.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6534,10 +6800,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "seed-86"
+        "seed-90"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-86.json"
+        "--mcp-config=C:\\mcp\\session-seed-90.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6569,10 +6835,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-404"
+        "s-408"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-404.json"
+        "--mcp-config=C:\\mcp\\session-s-408.json"
       ],
       "workingDirectory": "/srv/app/.worktrees/feature",
       "wslDistribution": null,
@@ -6604,11 +6870,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-407",
+        "s-411",
         "the brief is attached"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-407.json"
+        "--mcp-config=C:\\mcp\\session-s-411.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6640,11 +6906,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-410",
-        "[message from the Karmashala session \"Earlier work\" (seed-87)]\n\ndo the sub-task"
+        "s-414",
+        "[message from the Karmashala session \"Earlier work\" (seed-91)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-410.json"
+        "--mcp-config=C:\\mcp\\session-s-414.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6662,7 +6928,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-87",
+        "parentSessionId": "seed-91",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -6678,10 +6944,10 @@
         "--model",
         "fable",
         "--session-id",
-        "s-413"
+        "s-417"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-413.json"
+        "--mcp-config=C:\\mcp\\session-s-417.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6716,7 +6982,7 @@
         "gone-claudeCode-ssh:h1"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-88.json"
+        "--mcp-config=C:\\mcp\\session-seed-92.json"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -6748,11 +7014,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-418",
+        "s-422",
         "read the brief and start"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-418.json"
+        "--mcp-config=C:\\mcp\\session-s-422.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -6788,7 +7054,7 @@
         "--fork-session"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-421.json"
+        "--mcp-config=C:\\mcp\\session-s-425.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -6820,10 +7086,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "seed-89"
+        "seed-93"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-89.json"
+        "--mcp-config=C:\\mcp\\session-seed-93.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -6855,10 +7121,10 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-426"
+        "s-430"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-426.json"
+        "--mcp-config=C:\\mcp\\session-s-430.json"
       ],
       "workingDirectory": "/Users/me/app/.worktrees/feature",
       "wslDistribution": null,
@@ -6890,13 +7156,13 @@
         "--permission-mode",
         "manual",
         "--append-system-prompt-file",
-        "<packets>\\handoff-s-429.md",
+        "<packets>\\handoff-s-433.md",
         "--session-id",
-        "s-429",
+        "s-433",
         "the brief is attached"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-429.json"
+        "--mcp-config=C:\\mcp\\session-s-433.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -6928,11 +7194,11 @@
         "--permission-mode",
         "manual",
         "--session-id",
-        "s-432",
-        "[message from the Karmashala session \"Earlier work\" (seed-90)]\n\ndo the sub-task"
+        "s-436",
+        "[message from the Karmashala session \"Earlier work\" (seed-94)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-432.json"
+        "--mcp-config=C:\\mcp\\session-s-436.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -6950,7 +7216,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-90",
+        "parentSessionId": "seed-94",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -6966,10 +7232,10 @@
         "--model",
         "fable",
         "--session-id",
-        "s-435"
+        "s-439"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-s-435.json"
+        "--mcp-config=C:\\mcp\\session-s-439.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -7004,7 +7270,7 @@
         "gone-claudeCode-posix"
       ],
       "mcpArguments": [
-        "--mcp-config=C:\\mcp\\session-seed-91.json"
+        "--mcp-config=C:\\mcp\\session-seed-95.json"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -7041,7 +7307,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-440"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-444"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7079,7 +7345,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-443"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-447"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7115,7 +7381,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-92"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-96"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7151,7 +7417,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-448"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-452"
       ],
       "workingDirectory": "C:\\src\\demo\\app/.worktrees/feature",
       "wslDistribution": null,
@@ -7188,7 +7454,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-451"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-455"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7221,11 +7487,11 @@
         "workspace-write",
         "--ask-for-approval",
         "on-request",
-        "[message from the Karmashala session \"Earlier work\" (seed-93)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-97)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-454"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-458"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7243,7 +7509,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-93",
+        "parentSessionId": "seed-97",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -7263,7 +7529,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-457"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-461"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7301,7 +7567,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-94"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-98"
       ],
       "workingDirectory": "C:\\src\\demo\\app",
       "wslDistribution": null,
@@ -7338,7 +7604,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-462"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-466"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7376,7 +7642,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-465"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-469"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7412,7 +7678,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-95"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-99"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7448,7 +7714,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-470"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-474"
       ],
       "workingDirectory": "/home/dev/app/.worktrees/feature",
       "wslDistribution": "Ubuntu",
@@ -7485,7 +7751,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-473"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-477"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7518,11 +7784,11 @@
         "workspace-write",
         "--ask-for-approval",
         "on-request",
-        "[message from the Karmashala session \"Earlier work\" (seed-96)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-100)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-476"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-480"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7540,7 +7806,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-96",
+        "parentSessionId": "seed-100",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -7560,7 +7826,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-479"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-483"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7598,7 +7864,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-97"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-101"
       ],
       "workingDirectory": "/home/dev/app",
       "wslDistribution": "Ubuntu",
@@ -7635,7 +7901,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-484"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-488"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7673,7 +7939,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-487"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-491"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7709,7 +7975,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-98"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-102"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7745,7 +8011,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-492"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-496"
       ],
       "workingDirectory": "/srv/app/.worktrees/feature",
       "wslDistribution": null,
@@ -7782,7 +8048,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-495"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-499"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7815,11 +8081,11 @@
         "workspace-write",
         "--ask-for-approval",
         "on-request",
-        "[message from the Karmashala session \"Earlier work\" (seed-99)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-103)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-498"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-502"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7837,7 +8103,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-99",
+        "parentSessionId": "seed-103",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -7857,7 +8123,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-501"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-505"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7895,7 +8161,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-100"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-104"
       ],
       "workingDirectory": "/srv/app",
       "wslDistribution": null,
@@ -7932,7 +8198,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-506"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-510"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -7970,7 +8236,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-509"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-513"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -8006,7 +8272,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-101"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-105"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -8042,7 +8308,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-514"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-518"
       ],
       "workingDirectory": "/Users/me/app/.worktrees/feature",
       "wslDistribution": null,
@@ -8079,7 +8345,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-517"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-521"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -8112,11 +8378,11 @@
         "workspace-write",
         "--ask-for-approval",
         "on-request",
-        "[message from the Karmashala session \"Earlier work\" (seed-102)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-106)]\n\ndo the sub-task"
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-520"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-524"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -8134,7 +8400,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-102",
+        "parentSessionId": "seed-106",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -8154,7 +8420,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-523"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/s-527"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -8192,7 +8458,7 @@
       ],
       "mcpArguments": [
         "-c",
-        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-103"
+        "mcp_servers.karmashala.url=http://127.0.0.1:7777/mcp/seed-107"
       ],
       "workingDirectory": "/Users/me/app",
       "wslDistribution": null,
@@ -8368,7 +8634,7 @@
       "executable": "C:\\bin\\antigravity",
       "arguments": [
         "--prompt-interactive",
-        "[message from the Karmashala session \"Earlier work\" (seed-105)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-109)]\n\ndo the sub-task"
       ],
       "mcpArguments": [],
       "workingDirectory": "C:\\src\\demo\\app",
@@ -8387,7 +8653,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-105",
+        "parentSessionId": "seed-109",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -8607,7 +8873,7 @@
       "executable": "/usr/local/bin/antigravity",
       "arguments": [
         "--prompt-interactive",
-        "[message from the Karmashala session \"Earlier work\" (seed-108)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-112)]\n\ndo the sub-task"
       ],
       "mcpArguments": [],
       "workingDirectory": "/home/dev/app",
@@ -8626,7 +8892,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-108",
+        "parentSessionId": "seed-112",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -8846,7 +9112,7 @@
       "executable": "/usr/local/bin/antigravity",
       "arguments": [
         "--prompt-interactive",
-        "[message from the Karmashala session \"Earlier work\" (seed-111)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-115)]\n\ndo the sub-task"
       ],
       "mcpArguments": [],
       "workingDirectory": "/srv/app",
@@ -8865,7 +9131,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-111",
+        "parentSessionId": "seed-115",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -9085,7 +9351,7 @@
       "executable": "/opt/homebrew/bin/antigravity",
       "arguments": [
         "--prompt-interactive",
-        "[message from the Karmashala session \"Earlier work\" (seed-114)]\n\ndo the sub-task"
+        "[message from the Karmashala session \"Earlier work\" (seed-118)]\n\ndo the sub-task"
       ],
       "mcpArguments": [],
       "workingDirectory": "/Users/me/app",
@@ -9104,7 +9370,7 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": null,
-        "parentSessionId": "seed-114",
+        "parentSessionId": "seed-118",
         "parentLink": "spawn",
         "hasPane": true
       }
@@ -9170,6 +9436,950 @@
         "parentLink": null,
         "hasPane": true
       }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "openingMessage",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [
+        "-p",
+        "read the brief and start"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "openingMessage",
+      "notice": null,
+      "row": {
+        "title": "openingMessage",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "fork",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "fork",
+      "notice": null,
+      "row": {
+        "title": "fork",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "restart",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "Earlier work",
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "restart-geminiCli-windows",
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "joinedWorktree",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app/.worktrees/feature",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "joinedWorktree",
+      "notice": null,
+      "row": {
+        "title": "joinedWorktree",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app/.worktrees/feature",
+        "worktree": "C:\\src\\demo\\app/.worktrees/feature",
+        "useWorktree": true,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "handoffPacket",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [
+        "-p",
+        "the brief is attached"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "handoffPacket",
+      "notice": null,
+      "row": {
+        "title": "handoffPacket",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "spawnedChild",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [
+        "-p",
+        "[message from the Karmashala session \"Earlier work\" (seed-121)]\n\ndo the sub-task"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "spawnedChild",
+      "notice": null,
+      "row": {
+        "title": "spawnedChild",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": "seed-121",
+        "parentLink": "spawn",
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "modelOverride",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [
+        "-m",
+        "some-model"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "modelOverride",
+      "notice": null,
+      "row": {
+        "title": "modelOverride",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": "some-model",
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "windows",
+      "shape": "directoryGone",
+      "executable": "C:\\bin\\geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "C:\\src\\demo\\app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "Earlier work",
+      "notice": "C:\\src\\demo\\app/gone no longer exists, so this session starts in C:\\src\\demo\\app instead. This runs in C:\\src\\demo\\app rather than C:\\src\\demo\\app/gone, where the conversation was written, and Gemini CLI has not been verified to find a conversation from anywhere but its own launch directory. It may open a new conversation rather than continue gone-geminiCli-windows.",
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "gone-geminiCli-windows",
+        "workingDirectory": "C:\\src\\demo\\app/gone",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "openingMessage",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "read the brief and start"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "openingMessage",
+      "notice": null,
+      "row": {
+        "title": "openingMessage",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "fork",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "fork",
+      "notice": null,
+      "row": {
+        "title": "fork",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "restart",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "Earlier work",
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "restart-geminiCli-wsl:Ubuntu",
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "joinedWorktree",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app/.worktrees/feature",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "joinedWorktree",
+      "notice": null,
+      "row": {
+        "title": "joinedWorktree",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app/.worktrees/feature",
+        "worktree": "/home/dev/app/.worktrees/feature",
+        "useWorktree": true,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "handoffPacket",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "the brief is attached"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "handoffPacket",
+      "notice": null,
+      "row": {
+        "title": "handoffPacket",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "spawnedChild",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "[message from the Karmashala session \"Earlier work\" (seed-124)]\n\ndo the sub-task"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "spawnedChild",
+      "notice": null,
+      "row": {
+        "title": "spawnedChild",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": "seed-124",
+        "parentLink": "spawn",
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "modelOverride",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-m",
+        "some-model"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "modelOverride",
+      "notice": null,
+      "row": {
+        "title": "modelOverride",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/home/dev/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": "some-model",
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "wsl:Ubuntu",
+      "shape": "directoryGone",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/home/dev/app",
+      "wslDistribution": "Ubuntu",
+      "sshHostId": null,
+      "paneTitle": "Earlier work",
+      "notice": "/home/dev/app/gone no longer exists, so this session starts in /home/dev/app instead. This runs in /home/dev/app rather than /home/dev/app/gone, where the conversation was written, and Gemini CLI has not been verified to find a conversation from anywhere but its own launch directory. It may open a new conversation rather than continue gone-geminiCli-wsl:Ubuntu.",
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "gone-geminiCli-wsl:Ubuntu",
+        "workingDirectory": "/home/dev/app/gone",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "openingMessage",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "read the brief and start"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "openingMessage",
+      "notice": null,
+      "row": {
+        "title": "openingMessage",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "fork",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "fork",
+      "notice": null,
+      "row": {
+        "title": "fork",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "restart",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "Earlier work",
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "restart-geminiCli-ssh:h1",
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "joinedWorktree",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app/.worktrees/feature",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "joinedWorktree",
+      "notice": null,
+      "row": {
+        "title": "joinedWorktree",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app/.worktrees/feature",
+        "worktree": "/srv/app/.worktrees/feature",
+        "useWorktree": true,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "handoffPacket",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "the brief is attached"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "handoffPacket",
+      "notice": null,
+      "row": {
+        "title": "handoffPacket",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "spawnedChild",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "[message from the Karmashala session \"Earlier work\" (seed-127)]\n\ndo the sub-task"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "spawnedChild",
+      "notice": null,
+      "row": {
+        "title": "spawnedChild",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": "seed-127",
+        "parentLink": "spawn",
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "modelOverride",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [
+        "-m",
+        "some-model"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "modelOverride",
+      "notice": null,
+      "row": {
+        "title": "modelOverride",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/srv/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": "some-model",
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "ssh:h1",
+      "shape": "directoryGone",
+      "executable": "/usr/local/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/srv/app",
+      "wslDistribution": null,
+      "sshHostId": "h1",
+      "paneTitle": "Earlier work",
+      "notice": "/srv/app/gone no longer exists, so this session starts in /srv/app instead. This runs in /srv/app rather than /srv/app/gone, where the conversation was written, and Gemini CLI has not been verified to find a conversation from anywhere but its own launch directory. It may open a new conversation rather than continue gone-geminiCli-ssh:h1.",
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "gone-geminiCli-ssh:h1",
+        "workingDirectory": "/srv/app/gone",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "openingMessage",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "read the brief and start"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "openingMessage",
+      "notice": null,
+      "row": {
+        "title": "openingMessage",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "fork",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "fork",
+      "notice": null,
+      "row": {
+        "title": "fork",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "restart",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "Earlier work",
+      "notice": null,
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "restart-geminiCli-posix",
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "joinedWorktree",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app/.worktrees/feature",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "joinedWorktree",
+      "notice": null,
+      "row": {
+        "title": "joinedWorktree",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app/.worktrees/feature",
+        "worktree": "/Users/me/app/.worktrees/feature",
+        "useWorktree": true,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "handoffPacket",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "the brief is attached"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "handoffPacket",
+      "notice": null,
+      "row": {
+        "title": "handoffPacket",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "spawnedChild",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [
+        "-p",
+        "[message from the Karmashala session \"Earlier work\" (seed-130)]\n\ndo the sub-task"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "spawnedChild",
+      "notice": null,
+      "row": {
+        "title": "spawnedChild",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": "seed-130",
+        "parentLink": "spawn",
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "modelOverride",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [
+        "-m",
+        "some-model"
+      ],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "modelOverride",
+      "notice": null,
+      "row": {
+        "title": "modelOverride",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "/Users/me/app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": "some-model",
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "environment": "posix",
+      "shape": "directoryGone",
+      "executable": "/opt/homebrew/bin/geminiCli",
+      "arguments": [],
+      "mcpArguments": [],
+      "workingDirectory": "/Users/me/app",
+      "wslDistribution": null,
+      "sshHostId": null,
+      "paneTitle": "Earlier work",
+      "notice": "/Users/me/app/gone no longer exists, so this session starts in /Users/me/app instead. This runs in /Users/me/app rather than /Users/me/app/gone, where the conversation was written, and Gemini CLI has not been verified to find a conversation from anywhere but its own launch directory. It may open a new conversation rather than continue gone-geminiCli-posix.",
+      "row": {
+        "title": "Earlier work",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": "gone-geminiCli-posix",
+        "workingDirectory": "/Users/me/app/gone",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
     }
   ],
   "restart": {
@@ -9179,10 +10389,10 @@
       "--permission-mode",
       "manual",
       "--resume",
-      "s-623"
+      "s-715"
     ],
     "mcpArguments": [
-      "--mcp-config=C:\\mcp\\session-s-623.json"
+      "--mcp-config=C:\\mcp\\session-s-715.json"
     ],
     "workingDirectory": "C:\\src\\demo\\app",
     "wslDistribution": null,
@@ -9234,7 +10444,7 @@
     {
       "case": "a conversation the store has never held",
       "threw": "SessionConversationMissing",
-      "says": "\"Promised\" cannot be resumed: Claude Code has no record of this conversation, so there is nothing to resume. The session reserved its id when it started but the agent never wrote a transcript for it — which is what a session nothing was ever said in looks like, and what a launch that failed leaves behind. No work has been lost. Start a new session in this repository. (conversation id s-619)"
+      "says": "\"Promised\" cannot be resumed: Claude Code has no record of this conversation, so there is nothing to resume. The session reserved its id when it started but the agent never wrote a transcript for it — which is what a session nothing was ever said in looks like, and what a launch that failed leaves behind. No work has been lost. Start a new session in this repository. (conversation id s-711)"
     },
     {
       "case": "a session spawned too deep",
@@ -9303,6 +10513,18 @@
       "resumeActionNoReattach": "resume"
     },
     {
+      "agent": "geminiCli",
+      "displayName": "Gemini CLI",
+      "allowsConcurrentResume": false,
+      "defaultModel": null,
+      "newSession": "none",
+      "existingSession": "none",
+      "resolvedArguments": [],
+      "resumeAction": "resume",
+      "resumeActionHeldElsewhere": "blocked",
+      "resumeActionNoReattach": "resume"
+    },
+    {
       "agent": "muteCli",
       "displayName": "Mute CLI",
       "allowsConcurrentResume": false,
@@ -9348,7 +10570,7 @@
       },
       "hostedLive": true,
       "revealed": true,
-      "attribution": "[message from the Karmashala session \"Reads\" (s-628)]\n\na message",
+      "attribution": "[message from the Karmashala session \"Reads\" (s-720)]\n\na message",
       "sendTo": true,
       "answerPrompt": true,
       "rowAfterReads": {
@@ -9387,7 +10609,7 @@
       },
       "hostedLive": true,
       "revealed": true,
-      "attribution": "[message from the Karmashala session \"Reads\" (s-631)]\n\na message",
+      "attribution": "[message from the Karmashala session \"Reads\" (s-723)]\n\na message",
       "sendTo": true,
       "answerPrompt": true,
       "rowAfterReads": {
@@ -9426,7 +10648,7 @@
       },
       "hostedLive": true,
       "revealed": true,
-      "attribution": "[message from the Karmashala session \"Reads\" (s-634)]\n\na message",
+      "attribution": "[message from the Karmashala session \"Reads\" (s-726)]\n\na message",
       "sendTo": true,
       "answerPrompt": true,
       "rowAfterReads": {
@@ -9440,6 +10662,45 @@
         "useWorktree": false,
         "permissionMode": null,
         "modelId": "gemini-3.1-pro-high",
+        "parentSessionId": null,
+        "parentLink": null,
+        "hasPane": true
+      }
+    },
+    {
+      "agent": "geminiCli",
+      "permission": {
+        "selection": "none",
+        "inherited": true,
+        "unrecognised": false
+      },
+      "model": {
+        "modelId": null,
+        "defaultModelId": null,
+        "inherited": true
+      },
+      "liveSwitchBlocker": "noCommand",
+      "setModel": {
+        "switchedNow": false,
+        "command": null,
+        "deferral": "noModel"
+      },
+      "hostedLive": true,
+      "revealed": true,
+      "attribution": "[message from the Karmashala session \"Reads\" (s-729)]\n\na message",
+      "sendTo": true,
+      "answerPrompt": true,
+      "rowAfterReads": {
+        "title": "Reads",
+        "status": "running",
+        "surface": "pane",
+        "view": "terminal",
+        "externalSessionId": null,
+        "workingDirectory": "C:\\src\\demo\\app",
+        "worktree": null,
+        "useWorktree": false,
+        "permissionMode": null,
+        "modelId": null,
         "parentSessionId": null,
         "parentLink": null,
         "hasPane": true

@@ -14,7 +14,7 @@ import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
 import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
 import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
 import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';

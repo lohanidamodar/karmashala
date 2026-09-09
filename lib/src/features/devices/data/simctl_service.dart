@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../../../core/process/command_runner.dart';
-import '../../../core/process/process_handle.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/device_action.dart';
 import '../domain/device_input.dart';
 import '../domain/ios_simulator.dart';

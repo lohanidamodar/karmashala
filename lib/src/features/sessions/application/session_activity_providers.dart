@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../agents/domain/agent_status.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import '../domain/session.dart';
-import '../domain/session_event_types.dart';
+import 'package:agent_cli/stream.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_status.dart';
 import 'session_chat_source.dart';

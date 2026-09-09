@@ -1,8 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_plan.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import '../domain/session_launch.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';

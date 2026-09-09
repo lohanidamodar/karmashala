@@ -5,7 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_redetect_controller.dart';
-import '../../agents/domain/agent_discovery_report.dart';
+import 'package:agent_cli/discovery.dart';
 import 'agent_label.dart';
 import 'settings_section.dart';
 

@@ -1,8 +1,7 @@
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
 import '../../repositories/domain/repository.dart';
-import '../../agents/domain/agent_permission_support.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import 'session_lineage.dart';
 

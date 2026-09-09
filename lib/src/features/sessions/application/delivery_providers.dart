@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/checkout_probe_queue.dart';
@@ -168,7 +168,7 @@ final repositoryOriginProvider = FutureProvider.autoDispose
 /// **None of those processes starts in the frame that asked for them, and none
 /// of them is created on this isolate at all.** Every one goes through
 /// [checkoutProbeQueueProvider], which waits for the frame to finish first, and
-/// then through the worker isolate in `core/process/process_spawner.dart`,
+/// then through the worker isolate in `agent_cli`'s `process_spawner.dart`,
 /// which is where the creation is charged — see `checkout_probe_queue.dart` for
 /// what each of the two still buys. So a row paints with no branch chip and
 /// no `+N −M`, and fills in once the window is up; `SessionDiffStat` already
@@ -531,7 +531,6 @@ final sessionDeliveryActionsProvider = Provider.autoDispose
         ref.watch(sessionDeliveryProvider(sessionId)).value,
       ),
     );
-
 
 /// Runs [probe], turning any failure into null ("could not tell").
 Future<T?> _orNull<T>(Future<T?> Function() probe) async {

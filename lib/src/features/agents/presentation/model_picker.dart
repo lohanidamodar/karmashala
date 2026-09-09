@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
-import '../domain/agent_descriptor.dart';
-import '../domain/agent_model_options.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// One row of a model menu: a model to run on, or the row that names no model
 /// at all.

@@ -1,16 +1,11 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb, immutable;
+import 'package:flutter/foundation.dart' show immutable, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../../core/process/command_runner_providers.dart';
-import '../../core/process/path_translator.dart';
 import '../../features/environments/application/environment_providers.dart';
-import '../../features/environments/domain/environment_kind.dart';
-import '../../features/environments/domain/environment_path.dart';
-import '../../features/environments/domain/execution_environment.dart';
-import '../../features/environments/domain/local_environment.dart';
 
 /// Which file manager the host has, and therefore how it is asked to show a
 /// path. Injectable so the argument shape can be asserted without a desktop.

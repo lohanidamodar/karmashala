@@ -2,8 +2,8 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../../environments/domain/environment_path.dart';
-import '../domain/agent_installation.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/discovery.dart';
 
 /// Data-access for [AgentInstallation] rows. Hand-written SQL, no codegen.
 ///

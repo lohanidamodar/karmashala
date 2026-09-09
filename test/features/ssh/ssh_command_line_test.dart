@@ -1,6 +1,5 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/process/ssh_command_runner.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_command_runner.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

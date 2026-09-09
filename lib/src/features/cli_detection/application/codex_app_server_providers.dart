@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';

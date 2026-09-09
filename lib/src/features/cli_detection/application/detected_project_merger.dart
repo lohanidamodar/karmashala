@@ -1,9 +1,5 @@
-import '../../../core/process/path_translator.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../domain/detected_project.dart';
-import '../domain/detected_session.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/read.dart';
 
 /// Merges detected sessions into projects keyed by a **canonical path**, so the
 /// same folder seen via different CLIs and environments (e.g. Codex

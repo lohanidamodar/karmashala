@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../domain/tool_activity.dart';
+import 'package:agent_cli/stream.dart';
 import '../domain/transcript_path_link.dart';
 import 'markdown_message.dart';
 import 'transcript_image_preview.dart';

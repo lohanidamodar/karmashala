@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';

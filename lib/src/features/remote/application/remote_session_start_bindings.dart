@@ -9,9 +9,8 @@ library;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_permission_options.dart';
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_actions.dart';

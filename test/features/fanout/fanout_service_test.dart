@@ -1,5 +1,5 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_naming.dart';

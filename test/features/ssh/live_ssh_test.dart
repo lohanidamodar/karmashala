@@ -4,14 +4,12 @@ library;
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/process/ssh_command_runner.dart';
+import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_command_runner.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
+import 'package:karmashala/src/core/util/agent_cli_bridge.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/remote_file_browser.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
@@ -391,7 +389,7 @@ void main() {
         runner: runner,
         environment: environment,
         ids: SequentialIdGenerator(),
-        clock: const SystemClock(),
+        clock: agentCliClock(const SystemClock()),
       ).discover();
 
       for (final installation in found) {

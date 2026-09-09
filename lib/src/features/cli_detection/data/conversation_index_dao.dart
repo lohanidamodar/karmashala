@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/conversation_query.dart';
+import 'package:agent_cli/read.dart';
 
 /// One visible turn, on its way into the index.
 class ConversationTurn {

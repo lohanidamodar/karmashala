@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_connection_providers.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_failure.dart';
 import 'package:karmashala/src/features/ssh/data/remote_file_browser.dart';

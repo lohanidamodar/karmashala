@@ -1,8 +1,6 @@
 import 'dart:io';
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// A code editor installed on the host that we can open a folder in (as opposed
 /// to launching an agent in a terminal).

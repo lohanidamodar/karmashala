@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_permission_options.dart';
-import '../../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../repositories/domain/repository.dart';
 import '../application/automation_providers.dart';
 import '../application/unattended_preflight.dart';

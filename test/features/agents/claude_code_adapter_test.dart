@@ -1,12 +1,9 @@
 import 'dart:async';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/features/agents/data/claude_code_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:agent_cli/stream.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -107,8 +104,7 @@ void main() {
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final runner = FakeCommandRunner();
       final adapter = ClaudeCodeAdapter(
-        runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-        environmentDao: ExecutionEnvironmentDao(db),
+        runnerFor: (_) => runner,
       );
 
       adapter.start(

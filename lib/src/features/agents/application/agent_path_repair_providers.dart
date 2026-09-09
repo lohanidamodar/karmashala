@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/agent_path_repair.dart';
+import 'package:agent_cli/discovery.dart';
 
 /// Ambient state: what the last check of the stored agent paths established.
 ///

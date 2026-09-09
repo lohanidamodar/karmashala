@@ -1,12 +1,11 @@
+import '../../../core/database/sqlite_row_reader.dart';
 import '../../agents/data/agent_installation_dao.dart';
-import '../../agents/data/antigravity_session_resume.dart';
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_registry.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/read.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../sessions/data/session_dao.dart';
 import '../../sessions/domain/session.dart';
-import 'cli_detection_service.dart';
 
 /// How many lines of a pane's scrollback to read looking for `agy`'s own resume
 /// hint.
@@ -52,7 +51,12 @@ class AntigravitySessionAttributionService {
     required this.agents,
     required this.locateStores,
     this.readPaneTail,
-    this.attributor = const AntigravitySessionAttributor(),
+    this.attributor = const AntigravitySessionAttributor(
+      reader: AntigravityStoreReader(
+        countSteps: false,
+        readRows: readSqliteRows,
+      ),
+    ),
     this.onAttributed,
   });
 

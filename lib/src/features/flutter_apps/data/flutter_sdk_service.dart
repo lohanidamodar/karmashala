@@ -1,7 +1,5 @@
-import '../../../core/process/command_runner.dart';
-import '../../agents/data/agent_discovery_service.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/discovery.dart';
 import '../domain/flutter_sdk.dart';
 
 /// Where `flutter` is inside one execution environment, measured.

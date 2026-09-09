@@ -2,8 +2,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/id_generator_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/domain/imported_session.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/read.dart';
+import 'package:agent_cli/process.dart';
 import '../../github/domain/pull_request_snapshot.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';

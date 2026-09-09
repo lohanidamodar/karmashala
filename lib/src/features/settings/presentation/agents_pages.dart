@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
-import '../../agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
 import 'agent_detection_section.dart';

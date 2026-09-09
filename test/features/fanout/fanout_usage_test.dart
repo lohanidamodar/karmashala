@@ -7,16 +7,13 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
-import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
-import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_usage_strip.dart';
@@ -25,6 +22,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../agents/usage_fixtures.dart';
@@ -36,13 +34,6 @@ import '../agents/usage_fixtures.dart';
 /// the number can be in — comfortable, nearly exhausted, unknown, still
 /// arriving — and, in every one of them, that the launch button is still
 /// pressable. That last assertion is the point: this is a warning, never a gate.
-
-class _Movable implements Clock {
-  _Movable(this.now);
-  DateTime now;
-  @override
-  DateTime nowUtc() => now.toUtc();
-}
 
 /// The compact end of the responsive contract (CLAUDE.md §6).
 const phone = WindowCell('390x844 (phone)', Size(390, 844));
@@ -231,7 +222,7 @@ void main() {
     // The strip used to read the error first and print "not recorded" over a
     // reading the app was holding — the fan-out is exactly where losing it
     // costs something, because the number is why the dialog shows it at all.
-    final clock = _Movable(testTime);
+    final clock = MovableClock(testTime);
     final service = FakeAgentUsageService(clock: clock)
       ..answer = usageSnapshot(percent: 62);
     await service.fetch(agentInstallation(id: 'a1'), const []);

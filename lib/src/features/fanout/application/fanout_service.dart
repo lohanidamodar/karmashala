@@ -2,8 +2,8 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import '../../git/domain/file_change.dart';

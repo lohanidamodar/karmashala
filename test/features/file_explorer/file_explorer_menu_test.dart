@@ -1,9 +1,5 @@
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/process/path_translator.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
-import 'package:karmashala/src/features/environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';

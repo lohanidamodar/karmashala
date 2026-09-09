@@ -11,9 +11,7 @@
 /// only the evidence beside it.
 library;
 
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 

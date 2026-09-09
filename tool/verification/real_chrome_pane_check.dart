@@ -14,7 +14,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala_browser/browser.dart';

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/process_handle.dart';
+import 'package:agent_cli/process.dart';
 import '../../devices/application/device_providers.dart';
 import '../../devices/data/adb_service.dart';
 import '../domain/vm_service_log_line.dart';

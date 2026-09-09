@@ -1,17 +1,11 @@
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/data/session_dao.dart';
-import '../data/claude_store_reader.dart';
+import 'package:agent_cli/read.dart';
 import '../data/imported_session_dao.dart';
 import '../data/store_scan_worker.dart';
-import '../domain/detected_session.dart';
-import '../domain/imported_session.dart';
-import 'cli_detection_service.dart';
 import 'detected_project_merger.dart';
 import 'project_import_service.dart';
 

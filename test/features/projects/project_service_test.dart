@@ -1,14 +1,11 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
-import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:karmashala/src/features/projects/application/project_service.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/process/command_runner_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

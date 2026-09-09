@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/sessions/domain/transcript_path_link.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

@@ -1,14 +1,12 @@
 import 'dart:convert';
 
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../agents/data/terminal_grid_status_source.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/data/session_dao.dart';
@@ -17,8 +15,8 @@ import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/session_status.dart';
 import '../data/imported_session_dao.dart';
-import '../domain/agent_command_line.dart';
-import '../domain/detected_session.dart';
+import 'package:agent_cli/launch.dart';
+import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
 
 /// How many store sweeps one armed pane is worth before adoption gives up on

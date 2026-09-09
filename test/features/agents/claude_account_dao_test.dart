@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/claude_account_dao.dart';
-import 'package:karmashala/src/features/agents/domain/claude_account.dart';
+import 'package:agent_cli/usage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -8,10 +8,7 @@ import '../../../app/shell/workbench_tabs.dart';
 import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
-import '../data/agent_usage_service.dart';
-import '../data/usage_throttle.dart';
-import '../domain/agent_usage.dart';
-import '../domain/usage_failure.dart';
+import 'package:agent_cli/usage.dart';
 
 /// Where a quota stops being background information.
 ///

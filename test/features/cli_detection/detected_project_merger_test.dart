@@ -1,7 +1,7 @@
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/detected_project_merger.dart';
-import 'package:karmashala/src/features/cli_detection/domain/detected_session.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/read.dart';
+import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

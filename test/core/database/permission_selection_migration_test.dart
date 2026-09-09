@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/migrations.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`

@@ -1,5 +1,4 @@
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// The environment variable an agent running in one of our panes is told its
 /// Karmashala session id through.

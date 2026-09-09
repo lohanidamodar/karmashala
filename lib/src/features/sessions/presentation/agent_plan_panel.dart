@@ -5,7 +5,7 @@ import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../agents/domain/agent_plan.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../explorer/application/session_context.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_plan_providers.dart';

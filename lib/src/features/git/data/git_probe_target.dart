@@ -1,7 +1,4 @@
-import '../../../core/process/path_translator.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// Which environment answers a read-only git question about a checkout, and
 /// how the path is spelled for it.

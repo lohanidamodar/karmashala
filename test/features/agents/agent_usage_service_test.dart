@@ -2,27 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
-import 'package:karmashala/src/features/agents/data/claude_auth_service.dart';
-import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
-import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 
 import '../../support/fake_cli_store_locator.dart';
+import '../../support/fakes.dart';
 import '../../support/fake_http_client.dart';
 import '../../support/fixtures.dart';
-
-class _MovableClock implements Clock {
-  _MovableClock(this.now);
-  DateTime now;
-  @override
-  DateTime nowUtc() => now.toUtc();
-
-  void advance(Duration by) => now = now.add(by);
-}
+import 'package:agent_cli/read.dart';
 
 const _usageBody = '{"five_hour": {"utilization": 42.0}}';
 
@@ -218,11 +206,11 @@ void main() {
   /// written — asking them to prove a backoff is the one thing a backoff exists
   /// to stop.
   group('the answer the endpoint gave', () {
-    late _MovableClock clock;
+    late MovableClock clock;
     late FakeHttpClient http;
 
     setUp(() {
-      clock = _MovableClock(testTime);
+      clock = MovableClock(testTime);
       http = FakeHttpClient(statusCode: 200, body: _usageBody);
     });
 

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/data/simctl_service.dart';
 import 'package:karmashala/src/features/devices/domain/device_action.dart';
 import 'package:karmashala/src/features/devices/domain/device_input.dart';

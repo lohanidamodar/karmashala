@@ -27,7 +27,7 @@
 /// we have no reader for — the same rule `readCliTranscript` follows.
 library;
 
-import '../../agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../domain/file_edit.dart';
 
 /// Claude Code's file-writing tools. `NotebookEdit` is deliberately absent: its
