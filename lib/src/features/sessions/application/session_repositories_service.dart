@@ -1,6 +1,6 @@
 import '../../explorer/application/checkout.dart';
 import '../../repositories/data/repository_dao.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../data/session_dao.dart';
 import '../data/session_repository_dao.dart';
 import '../domain/session.dart';

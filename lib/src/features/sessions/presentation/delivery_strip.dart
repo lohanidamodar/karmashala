@@ -9,7 +9,7 @@ import '../../explorer/application/checkout.dart';
 import '../../git/application/remote_links.dart';
 import '../../github/application/github_providers.dart';
 import '../../git/presentation/remote_link.dart';
-import '../../github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../verification/application/review_session_service.dart';
 import '../../verification/application/verification_providers.dart';

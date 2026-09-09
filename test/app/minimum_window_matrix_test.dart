@@ -14,7 +14,7 @@ import 'package:karmashala/src/features/environments/presentation/environment_he
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';

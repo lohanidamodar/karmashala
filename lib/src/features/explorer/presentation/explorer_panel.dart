@@ -28,7 +28,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/terminal_profile.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../application/checkout.dart';
 import '../application/explorer_actions.dart';
 import '../application/explorer_agent_filter.dart';

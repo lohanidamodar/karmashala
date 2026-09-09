@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/data/repository_dao.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/domain/session.dart';

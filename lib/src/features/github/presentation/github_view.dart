@@ -7,7 +7,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../git/presentation/remote_link.dart';
 import '../application/github_providers.dart';
-import '../domain/github_repo.dart';
+import 'package:karmashala_git/github.dart';
 
 /// Read-only GitHub overview for the selected repository: open pull requests and
 /// issues, via the `gh` CLI. Refreshable; surfaces gh errors (e.g. not

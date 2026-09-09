@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
-import '../data/checkout_presence_probe.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../data/repository_dao.dart';
 import 'checkout_retirement_service.dart';
 

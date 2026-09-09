@@ -1,12 +1,7 @@
 import 'dart:convert';
 
 import 'package:agent_cli/process.dart';
-import '../domain/branch_protection.dart';
-import '../domain/github_repo.dart';
-import '../domain/issue.dart';
-import '../domain/merge_strategies.dart';
-import '../domain/pull_request.dart';
-import '../domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 
 /// Raised when a `gh` invocation fails (e.g. not installed, not authenticated, or
 /// not a GitHub repository). Carries gh's stderr for an actionable diagnostic.

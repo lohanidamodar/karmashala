@@ -2,10 +2,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import '../data/git_service.dart';
-import '../data/worktree_copier.dart';
-import '../domain/git_worktree.dart';
-import '../domain/worktree_setup.dart';
+import 'package:karmashala_git/git.dart';
 
 /// The checkout a worktree is being made of, and what it wants done.
 ///

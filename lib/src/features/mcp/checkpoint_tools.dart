@@ -4,7 +4,7 @@ import '../checkpoints/application/checkpoint_providers.dart';
 import '../checkpoints/application/checkpoint_service.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../checkpoints/domain/checkpoint.dart';
-import '../git/data/hunk_patch.dart';
+import 'package:karmashala_git/git.dart';
 
 /// The per-turn record of a session's working tree, as an agent can read and
 /// use it.

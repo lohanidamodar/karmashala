@@ -7,7 +7,7 @@ import '../../../app/widgets/desktop_menu.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../application/changes_providers.dart';
-import '../domain/git_worktree.dart';
+import 'package:karmashala_git/git.dart';
 
 /// Points the change-reading surfaces at [worktree], or back at the checkout
 /// itself when that is the row picked.

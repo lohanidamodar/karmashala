@@ -2,8 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/github/application/github_providers.dart';
-import '../../../features/github/domain/issue.dart';
-import '../../../features/github/domain/pull_request.dart';
+import 'package:karmashala_git/github.dart';
 
 /// What quick open knows about a repository from data somebody else already
 /// fetched.

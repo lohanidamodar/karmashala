@@ -1,8 +1,5 @@
-import '../../git/domain/diff_stat.dart';
-import '../../git/domain/remote_repo.dart';
-import '../../github/domain/branch_protection.dart';
-import '../../github/domain/merge_strategies.dart';
-import '../../github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/git.dart';
+import 'package:karmashala_git/github.dart';
 import 'delivery_stage.dart';
 
 /// Everything one session's row and strip need to say where its work stands.

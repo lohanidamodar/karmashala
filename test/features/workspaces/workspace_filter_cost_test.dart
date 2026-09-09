@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/projects/application/project_providers.d
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:sqlite3/sqlite3.dart' hide Session;

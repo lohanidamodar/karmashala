@@ -1,7 +1,7 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
-import '../domain/worktree_setup.dart';
+import 'package:karmashala_git/git.dart';
 
 /// Data-access for the per-repository worktree setup setting and the verdict of
 /// the last setup run against each worktree. Hand-written SQL, no codegen.

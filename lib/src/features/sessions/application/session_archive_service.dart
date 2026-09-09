@@ -4,7 +4,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
-import '../../git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';

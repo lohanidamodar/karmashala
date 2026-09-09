@@ -1,6 +1,5 @@
 import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/features/git/data/file_edit_diff.dart';
-import 'package:karmashala/src/features/git/domain/file_edit.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/file_edit_diff_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

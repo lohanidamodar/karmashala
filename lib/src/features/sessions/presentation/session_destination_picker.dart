@@ -5,7 +5,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../projects/application/project_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 
 /// Where a session is about to run.

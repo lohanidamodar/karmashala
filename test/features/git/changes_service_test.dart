@@ -9,8 +9,7 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
-import 'package:karmashala/src/features/git/data/git_files.dart';
-import 'package:karmashala/src/features/git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

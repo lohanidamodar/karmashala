@@ -1,8 +1,7 @@
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../data/git_service.dart';
-import '../domain/git_worktree.dart';
+import 'package:karmashala_git/git.dart';
 import 'worktree_setup_service.dart';
 
 /// Notified with a directory whose *existence* has just changed — a worktree

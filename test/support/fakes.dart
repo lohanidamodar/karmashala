@@ -1,10 +1,9 @@
 import 'package:agent_cli/discovery.dart' as agent_cli;
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/repositories/data/checkout_presence_probe.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/git/data/git_files.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
-import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
 
 /// A [Clock] that always returns a fixed instant.
 ///

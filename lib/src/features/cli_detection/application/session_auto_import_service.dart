@@ -1,7 +1,7 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../sessions/data/session_dao.dart';
 import 'package:agent_cli/read.dart';
 import '../data/imported_session_dao.dart';

@@ -1,5 +1,5 @@
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
-import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 

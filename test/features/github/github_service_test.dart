@@ -1,7 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/github/data/github_service.dart';
-import 'package:karmashala/src/features/github/domain/branch_protection.dart';
-import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

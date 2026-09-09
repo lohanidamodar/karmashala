@@ -6,7 +6,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
-import 'package:karmashala/src/features/git/domain/worktree_setup.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_dialog.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';

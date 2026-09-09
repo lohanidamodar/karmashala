@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
-import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

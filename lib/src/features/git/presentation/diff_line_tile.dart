@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
-import '../domain/diff_line.dart';
+import 'package:karmashala_git/git.dart';
 
 /// One row of a unified diff.
 ///

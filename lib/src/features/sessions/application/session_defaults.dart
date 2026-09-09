@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/discovery.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'session_launcher.dart';
 
 /// The title a session carries when nobody types one.

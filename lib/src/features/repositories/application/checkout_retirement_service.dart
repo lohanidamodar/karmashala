@@ -1,9 +1,7 @@
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
-import '../data/checkout_presence_probe.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../data/repository_dao.dart';
-import '../domain/checkout_retirement.dart';
-import '../domain/repository.dart';
 
 /// Retires the checkouts a project recorded whose directories have genuinely
 /// gone away.

@@ -2,7 +2,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
-import '../domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 
 /// Data-access for [Repository] rows. Hand-written SQL, no codegen.
 class RepositoryDao {

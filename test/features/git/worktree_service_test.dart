@@ -7,8 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/git_providers.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_service.dart';
-import 'package:karmashala/src/features/git/data/git_service.dart';
-import 'package:karmashala/src/features/git/domain/worktree_setup.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

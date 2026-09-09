@@ -1,6 +1,4 @@
-import 'package:karmashala/src/features/github/domain/branch_protection.dart';
-import 'package:karmashala/src/features/github/domain/merge_strategies.dart';
-import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
 import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -9,13 +9,8 @@ import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
-import '../data/git_files.dart';
-import '../data/git_presence_reader.dart';
-import '../domain/file_change.dart';
-import '../domain/git_commit.dart';
-import '../domain/git_presence.dart';
-import '../domain/git_worktree.dart';
+import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_git/git.dart';
 import 'changes_service.dart';
 import 'git_providers.dart';
 

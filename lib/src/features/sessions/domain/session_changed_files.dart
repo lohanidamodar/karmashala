@@ -1,4 +1,4 @@
-import '../../git/domain/file_edit.dart';
+import 'package:karmashala_git/git.dart';
 
 /// One file a session changed, as **whichever record answered** describes it.
 class SessionChangedFile {

@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/checkpoints/application/checkpoint_servi
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/git/data/git_files.dart';
+import 'package:karmashala_git/git.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

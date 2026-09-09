@@ -1,7 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import 'session_lineage.dart';
 
