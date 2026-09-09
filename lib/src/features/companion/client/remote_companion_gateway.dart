@@ -35,6 +35,7 @@ part 'remote_companion_gateway_connect_loop.dart';
 part 'remote_companion_gateway_dial.dart';
 part 'remote_companion_gateway_liveness.dart';
 part 'remote_companion_gateway_notifications.dart';
+part 'remote_companion_gateway_sessions.dart';
 
 /// The real gateway: [CompanionClient] + [CompanionPairingClient] over an
 /// injected [stored.CompanionStore] (`SecureCompanionStore` on a phone).
@@ -601,51 +602,6 @@ class RemoteCompanionGateway implements CompanionGateway {
         unawaited(_primeActivity(sessionId));
       });
 
-  /// Reads the current activity from the host, and words its refusal when it
-  /// has one.
-  ///
-  /// A pairing without `view_activity` is refused here, in a sentence, and the
-  /// sentence is what the screen shows — never an empty list, which would say
-  /// the session is running nothing.
-  Future<void> _primeActivity(String sessionId) async {
-    try {
-      await _ready;
-      final client = _client;
-      if (client == null) return;
-      final activity = await client.activity(sessionId);
-      _acceptActivity(activity);
-    } on RemoteApiException catch (error) {
-      _activityOf(sessionId).value = CompanionActivity(
-        at: _now(),
-        refused: error.message,
-      );
-    } on Object catch (error) {
-      onLog?.call('activity for a session could not be read: $error');
-    }
-  }
-
-  /// Folds one `session.activity` reading in, whether it was asked for or
-  /// stated.
-  void _acceptActivity(RemoteSessionActivity activity) {
-    _activityOf(activity.sessionId).value = CompanionActivity(
-      at: _now(),
-      absence: activity.absence,
-      calls: [
-        for (final call in activity.calls)
-          CompanionActivityCall(
-            summary: call.summary,
-            subagent: call.subagent,
-            // Both instants are the host's, so this duration is the one number
-            // here that needs no clock of ours.
-            elapsed: _nonNegative(activity.observedAt.difference(call.startedAt)),
-          ),
-      ],
-    );
-  }
-
-  static Duration _nonNegative(Duration value) =>
-      value.isNegative ? Duration.zero : value;
-
   @override
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {
     await _ready;
@@ -722,13 +678,6 @@ class RemoteCompanionGateway implements CompanionGateway {
     _ensureCurrentClient(client);
     await _refreshSessionsNow();
     return resumed;
-  }
-
-  void _ensureCurrentClient(CompanionClient client) {
-    if (identical(_client, client)) return;
-    throw const GatewayException(
-      'The desktop changed while this request was in flight. Nothing was applied to the new desktop.',
-    );
   }
 
   @override
@@ -1282,36 +1231,6 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   // ---------------------------------------------------------------- helpers
 
-  Future<void> _refreshSessions() => _refreshing ??= _refreshSessionsNow()
-      .whenComplete(() => _refreshing = null);
-
-  Future<void> _refreshSessionsNow() async {
-    final client = _client;
-    if (client == null || !client.isConnected) return;
-    List<CompanionSessionSummary> list;
-    try {
-      list = await listSessions();
-    } on GatewayException {
-      return;
-    }
-    for (final session in list) {
-      await _ensureSubscribed(client, session.id);
-    }
-  }
-
-  Future<void> _ensureSubscribed(
-    CompanionClient client,
-    String sessionId,
-  ) async {
-    if (_subscribed.contains(sessionId)) return;
-    try {
-      await client.subscribeSession(sessionId);
-      _subscribed.add(sessionId);
-    } on Object catch (error) {
-      onLog?.call('subscribe $sessionId failed: $error');
-    }
-  }
-
   /// Requests that have gone unanswered with nothing answered between them.
   int _unanswered = 0;
 
@@ -1319,106 +1238,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// went with it, so this link cannot come back — only a fresh pairing can.
   bool _revoked = false;
 
-  void _setSessions(List<CompanionSessionSummary> list) {
-    _sessions = List.unmodifiable(list);
-    if (!_sessionChanges.isClosed) _sessionChanges.add(_sessions!);
-  }
-
-  CompanionSessionSummary? _currentSummary(String sessionId) {
-    for (final session in _sessions ?? const <CompanionSessionSummary>[]) {
-      if (session.id == sessionId) return session;
-    }
-    return null;
-  }
-
-  CompanionSessionSummary _summaryOf(
-    RemoteSessionSnapshot snapshot, {
-    Map<String, Object?>? raw,
-  }) {
-    final kind = _kindOf(snapshot.attention);
-    CompanionAttention? attention;
-    if (kind != null) {
-      final previous = _currentSummary(snapshot.sessionId)?.attention;
-      attention = previous != null && previous.kind == kind
-          ? previous
-          : CompanionAttention(kind: kind, at: _now().toUtc());
-    }
-    // The checkout facts the desktop card's third line is made of. They are
-    // read straight off the row rather than through the typed snapshot: the
-    // host that sends them is newer than this build's payload type, and a
-    // host that does not simply leaves the line as it is today.
-    String? text(String key) {
-      final value = raw?[key];
-      return value is String && value.isNotEmpty ? value : null;
-    }
-
-    return CompanionSessionSummary(
-      id: snapshot.sessionId,
-      title: snapshot.title,
-      // The host words the card's first line itself; an older host that
-      // sent no label leaves only its own status word — the phone never
-      // invents a claim about a process it cannot see.
-      agentLabel: snapshot.agentLabel ?? snapshot.status.replaceAll('_', ' '),
-      // The project the desktop's Explorer groups under, not the repository
-      // inside it — one project holding several repos is one header here too.
-      // Older hosts send no project, so the repository still answers.
-      projectName:
-          snapshot.projectName ?? snapshot.repositoryName ?? 'No project',
-      projectId: snapshot.projectId ?? snapshot.repositoryId,
-      projectPath: snapshot.projectPath,
-      status: _statusOf(snapshot),
-      whereabouts: snapshot.whereabouts,
-      branch: text('branch'),
-      subPath: text('subPath'),
-      worktree: raw?['worktree'] == true,
-      lastActivityAt: _parseInstant(snapshot.lastActivityAt),
-      attention: attention,
-      deliveryStage: snapshot.stage,
-      imported: snapshot.imported,
-      archived: snapshot.archived,
-      folderMissing: snapshot.folderMissing || raw?['folderMissing'] == true,
-      attachments: snapshot.attachments,
-      environmentBadge: snapshot.environmentBadge ?? text('environmentBadge'),
-    );
-  }
-
-  /// An ISO-8601 instant off the wire, or null for anything unreadable — a
-  /// missing age renders as nothing, never as a guess.
-  DateTime? _parseInstant(String? iso) =>
-      iso == null ? null : DateTime.tryParse(iso)?.toUtc();
-
-  CompanionSessionStatus _statusOf(RemoteSessionSnapshot snapshot) {
-    if (snapshot.attention == 'needs_approval') {
-      return CompanionSessionStatus.needsYou;
-    }
-    if (snapshot.attention == 'failed') return CompanionSessionStatus.failed;
-    return switch (snapshot.status) {
-      'running' => CompanionSessionStatus.working,
-      'idle' ||
-      'created' ||
-      'completed' ||
-      'cancelled' => CompanionSessionStatus.idle,
-      'failed' => CompanionSessionStatus.failed,
-      _ => CompanionSessionStatus.unknown,
-    };
-  }
-
-  CompanionAttentionKind? _kindOf(String? attention) => switch (attention) {
-    null => null,
-    'needs_approval' => CompanionAttentionKind.needsYou,
-    'failed' => CompanionAttentionKind.failed,
-    'finished' => CompanionAttentionKind.finished,
-    // A claim this build predates; "needs you" is the only safe reading of
-    // a claim on the user.
-    _ => CompanionAttentionKind.needsYou,
-  };
-
   _TranscriptState _transcriptOf(String sessionId) =>
       _transcripts[sessionId] ??= _TranscriptState();
 
   _Watched<CompanionApproval?> _approvalOf(String sessionId) =>
       _approvals[sessionId] ??= _Watched(null);
-
-  _Watched<CompanionActivity> _activityOf(String sessionId) =>
-      _activity[sessionId] ??= _Watched(CompanionActivity.unknown);
 }
