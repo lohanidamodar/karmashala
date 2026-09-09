@@ -5,8 +5,8 @@
 /// its failure mode is silent in both directions and only one of them is
 /// visible to the person it happens to: a phone told nothing looks like a
 /// desktop with nothing to say. The rule cuts the same way whichever signal is
-/// carrying it — a link the host believes is dead today, a heartbeat carrying
-/// device type, visibility and a focused session tomorrow. So the tests below
+/// carrying it — a link the host believes is dead, and now a heartbeat
+/// carrying device kind, visibility and a focused session. So the tests below
 /// drive the *strongest* statement the host can currently make about a phone
 /// not being there, and assert that every row is still offered to it.
 ///
@@ -15,11 +15,31 @@
 /// the other way round.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/push/push_fanout.dart';
+import 'package:karmashala/src/features/remote/push/relay_push_client.dart';
 
 import 'host_session_api_test.dart' show Harness;
+
+const _deviceId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+PairedDevice _phone(CompanionPresence presence) => PairedDevice(
+  id: _deviceId,
+  name: 'OPPO',
+  deviceKey: Uint8List.fromList(List.generate(32, (i) => i)),
+  capabilities: CapabilitySet.all,
+  generation: 1,
+  createdAt: DateTime.utc(2026, 9, 9),
+  pushToken: 'fcm-token-1',
+  pushPlatform: 'android',
+  presence: presence,
+);
 
 void main() {
   group('the delivery path consults nothing about who is looking', () {
@@ -96,6 +116,127 @@ void main() {
       expect(
         harness.sent.map((f) => f.type),
         contains(FrameType.approvalRequested),
+      );
+    });
+  });
+
+  group('a backgrounded phone gets both', () {
+    /// The frame the phone sends to say it is connected but out of sight.
+    Future<void> register(Harness harness, String visibility) => harness.request(
+      FrameType.notificationsRegister,
+      payload: {
+        'token': 't0k',
+        'platform': 'android',
+        'deviceKind': 'phone',
+        'visibility': visibility,
+      },
+    );
+
+    test('the stream still carries every row while it says it is hidden',
+        () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await register(harness, 'background');
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+        RemoteTranscriptMessage(role: 'agent', text: 'a turn it cannot see'),
+      ];
+      await harness.api.pollTranscript('s1');
+
+      final appended = harness.sent
+          .where((f) => f.type == FrameType.transcriptAppended)
+          .toList();
+      expect(
+        appended,
+        hasLength(1),
+        reason: 'presence reached the api through nothing; it has no such value',
+      );
+      final page = RemoteTranscriptPage.fromJson(appended.single.payload);
+      expect(page.messages.single.text, 'a turn it cannot see');
+    });
+
+    /// The push half, over the fan-out the routing actually lives in.
+    Future<List<String>> pushesFor(
+      CompanionPresence presence, {
+      required bool live,
+    }) async {
+      final paths = <String>[];
+      final fanout = PushFanout(
+        devices: () => [_phone(presence)],
+        hasLiveLink: (_) => live,
+        clientFor: (_) => RelayPushClient(
+          relay: Uri.parse('wss://relay.example.com'),
+          post: (url, jsonBody) async {
+            paths.add(url.path);
+            return url.path.endsWith('/register')
+                ? (status: 204, body: '')
+                : (status: 202, body: 'accepted\n');
+          },
+        ),
+        now: () => DateTime.utc(2026, 9, 9, 12),
+      );
+      await fanout.notifyAttention(
+        sessionId: 's1',
+        title: 'Fix the tests',
+        kind: 'needs_approval',
+      );
+      return paths;
+    }
+
+    test('and the push it used to be denied now leaves for the relay',
+        () async {
+      expect(
+        await pushesFor(
+          const CompanionPresence(
+            deviceKind: CompanionDeviceKind.phone,
+            visibility: CompanionVisibility.background,
+          ),
+          live: true,
+        ),
+        ['/v1/push/register', '/v1/push'],
+      );
+    });
+
+    test('a phone looking at the very session is still not pushed at',
+        () async {
+      expect(
+        await pushesFor(
+          const CompanionPresence(
+            visibility: CompanionVisibility.foreground,
+            focusedSessionId: 's1',
+          ),
+          live: true,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a phone looking at another session is', () async {
+      expect(
+        await pushesFor(
+          const CompanionPresence(
+            visibility: CompanionVisibility.foreground,
+            focusedSessionId: 's2',
+          ),
+          live: true,
+        ),
+        ['/v1/push/register', '/v1/push'],
+      );
+    });
+
+    test('a phone that says nothing behaves exactly as it did before',
+        () async {
+      // The compatibility half: an old companion sends no presence at all, and
+      // a live link suppresses its push the way it always has.
+      expect(await pushesFor(CompanionPresence.unknown, live: true), isEmpty);
+      expect(
+        await pushesFor(CompanionPresence.unknown, live: false),
+        ['/v1/push/register', '/v1/push'],
       );
     });
   });

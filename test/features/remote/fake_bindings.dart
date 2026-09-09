@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
 import 'package:karmashala/src/features/remote/domain/paired_device.dart';
@@ -58,7 +59,15 @@ class FakeRemoteBindings {
   /// Every answer that actually reached the terminal. A refused one must not
   /// appear here — that is the whole point of refusing it.
   final List<({String sessionId, String decision})> approvalAnswers = [];
-  final List<({String deviceId, String token, String platform})> pushes = [];
+  final List<
+    ({
+      String deviceId,
+      String token,
+      String platform,
+      CompanionPresence presence,
+    })
+  >
+  pushes = [];
 
   /// When set, [RemoteHostBindings.answerApproval] throws this.
   RemoteApiRefusal? approvalRefusal;
@@ -190,8 +199,13 @@ class FakeRemoteBindings {
     },
     approvalEvidenceFor: (sessionId) async =>
         approvals[sessionId] ?? RemoteApprovalRequest(sessionId: sessionId),
-    registerPush: (deviceId, token, platform) async {
-      pushes.add((deviceId: deviceId, token: token, platform: platform));
+    registerPush: (deviceId, token, platform, presence) async {
+      pushes.add((
+        deviceId: deviceId,
+        token: token,
+        platform: platform,
+        presence: presence,
+      ));
     },
     listWorkspace: () => List.of(workspace),
     listProjects: () => List.of(workspace),
