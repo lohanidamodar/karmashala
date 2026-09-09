@@ -6,8 +6,18 @@ import 'vm_service_uri.dart';
 /// file `flutter run` wrote is evidence a Flutter app started here, while an
 /// address a person typed is evidence of nothing but their intent.
 enum AppDiscovery {
-  /// A `--vmservice-out-file` left in the directory this app watches.
+  /// A `--vmservice-out-file` left in the directory this app watches. Only
+  /// runs Karmashala started write one; nothing asks a user to add the flag.
   uriFile,
+
+  /// A Dart Tooling Daemon on this machine named it. Every `flutter run`
+  /// starts one and it records its own address on disk, so this is the reader
+  /// that finds a run started in somebody else's terminal.
+  toolingDaemon,
+
+  /// The Dart VM announced it in a device log and an `adb forward` made it
+  /// reachable from here.
+  deviceLog,
 
   /// Typed or pasted by the user, or handed over by an agent through
   /// `flutter_attach`.
@@ -96,8 +106,9 @@ class AttachedApp {
   /// the file's basename before that.
   final String? label;
 
-  /// The `--vmservice-out-file` this came from, when it came from one. Kept so
-  /// a stale file can be pointed at, and forgotten, by name.
+  /// Where this came from, when there is a path to name: the
+  /// `--vmservice-out-file`, or the project a tooling daemon was started in.
+  /// Kept so a stale row can be pointed at, and forgotten, by name.
   final String? sourcePath;
 
   /// The main isolate, which every service extension call needs. Null unless
