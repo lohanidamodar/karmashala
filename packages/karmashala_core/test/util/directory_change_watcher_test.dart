@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala/src/core/util/directory_change_watcher.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/util.dart';
+import 'package:test/test.dart';
 
 void main() {
   const root = r'C:\repo';

@@ -21,8 +21,7 @@ import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../database/app_database.dart';
 import '../database/database_providers.dart';
-import '../logging/app_logger.dart';
-import '../logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless.

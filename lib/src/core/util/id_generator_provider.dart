@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import 'id_generator.dart';
+import 'package:karmashala_core/util.dart';
 
 /// Provides the application's [IdGenerator]. Overridden in tests with a
 /// deterministic generator.

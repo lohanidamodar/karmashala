@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../../cli_detection/application/cli_detection_service.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';

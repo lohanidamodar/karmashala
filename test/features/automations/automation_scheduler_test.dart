@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';

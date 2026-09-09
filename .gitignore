@@ -74,3 +74,8 @@ macos/Vendor/wda/
 # Android NDK build output for the vendored flutter_pty; the package is
 # in-tree but its native build products are not.
 packages/flutter_pty/android/.cxx/
+
+# Gate logs. `tool/gate.ps1` redirects every run here so a verdict is read from
+# a file rather than laundered through a pipe; the logs themselves are a
+# reading of one machine at one moment and are not history.
+.gate/

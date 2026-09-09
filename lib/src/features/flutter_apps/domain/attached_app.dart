@@ -27,7 +27,7 @@ enum AppDiscovery {
 /// Whether we can reach a VM service, and whether we have tried.
 ///
 /// Four values, for the same reason `ExecutableReachability` has four
-/// (`core/paths/path_probe.dart`): "nothing answered" and "we did not ask" are
+/// (`package:karmashala_core/paths.dart`): "nothing answered" and "we did not ask" are
 /// opposite instructions to the reader, and collapsing them is the §19 mistake
 /// of reporting a reading that was never taken as a reading of zero.
 enum AppReachability {

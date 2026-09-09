@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import 'path_probe.dart';
+import 'package:karmashala_core/paths.dart';
 
 /// Provides the filesystem seam path repair stats through. Overridden in tests
 /// with a described disk.

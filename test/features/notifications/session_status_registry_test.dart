@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:karmashala/src/features/agents/data/agent_state_file_status_source.dart';
 import 'package:karmashala/src/features/agents/data/agent_status_service.dart';

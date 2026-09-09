@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/media/media_foundation.dart';
+import 'package:karmashala_core/media.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
-import 'package:karmashala/src/core/media/video_writer.dart';
 import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/recording_tools.dart';

@@ -1,8 +1,8 @@
-import 'package:karmashala/src/core/paths/path_probe.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/paths.dart';
+import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/fake_path_probe.dart';
+import 'package:karmashala_core/testing.dart';
 
 /// The chain Codex's self-updater left on the owner's machine, measured
 /// 2026-09-07 with `Link.targetSync()` from Dart:

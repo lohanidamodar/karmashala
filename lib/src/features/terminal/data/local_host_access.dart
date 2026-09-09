@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_host/protocol.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../ssh/data/host_deploy_target.dart';
 import '../../ssh/data/host_session_access.dart';
 import '../../ssh/domain/host_deployment.dart';

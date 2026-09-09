@@ -5,7 +5,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/util/directory_change_watcher.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';

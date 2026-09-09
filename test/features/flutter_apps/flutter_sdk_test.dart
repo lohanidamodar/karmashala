@@ -4,7 +4,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';

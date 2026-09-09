@@ -1,4 +1,4 @@
-import '../../../core/util/bounded_text.dart';
+import 'package:karmashala_core/util.dart';
 import '../../agents/domain/agent_plan.dart';
 
 /// What one tool call in a transcript is actually *about*.

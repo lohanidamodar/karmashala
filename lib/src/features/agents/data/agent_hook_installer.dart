@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../core/util/json_object_splice.dart';
+import 'package:karmashala_core/util.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';

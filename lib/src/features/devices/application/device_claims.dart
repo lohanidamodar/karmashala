@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../domain/device_claim.dart';

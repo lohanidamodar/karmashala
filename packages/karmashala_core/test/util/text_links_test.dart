@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/util/text_links.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_core/util.dart';
 
 /// **One definition of what a URL is, for every surface that shows text.**
 ///

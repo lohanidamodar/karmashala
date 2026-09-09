@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';

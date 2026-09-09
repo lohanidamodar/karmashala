@@ -1,7 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import 'media_foundation.dart';
-import 'video_writer.dart';
+import 'package:karmashala_core/media.dart';
 
 /// The one reading of what this host can write a video with.
 ///

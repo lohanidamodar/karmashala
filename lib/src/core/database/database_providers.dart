@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import 'app_database.dart';
 
 /// Provides the application [AppDatabase].

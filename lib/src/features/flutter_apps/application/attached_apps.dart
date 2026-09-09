@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../data/dtd_link.dart';
 import '../data/flutter_app_link.dart';

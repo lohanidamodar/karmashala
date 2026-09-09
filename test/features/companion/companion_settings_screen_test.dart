@@ -3,7 +3,7 @@
 /// been in the state it is claiming.
 library;
 
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';

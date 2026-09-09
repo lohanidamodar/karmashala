@@ -1,5 +1,5 @@
-import 'package:karmashala/src/core/logging/log_redactor.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:test/test.dart';
 
 /// The shapes a real secret takes in this app's logs. Each is fake, but each is
 /// spelled the way the thing it stands for actually is.

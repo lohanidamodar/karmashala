@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/antigravity_resume_providers.dart';

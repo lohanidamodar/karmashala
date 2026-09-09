@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 
 /// Restricts [file] so no other user on the machine can read it.
 ///

@@ -3,10 +3,10 @@ import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala_core/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
-import '../../support/fake_path_probe.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 

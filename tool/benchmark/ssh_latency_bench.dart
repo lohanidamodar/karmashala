@@ -5,7 +5,7 @@ import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/ssh_command_runner.dart';
 import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/core/process/wsl_command_runner.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart';
 import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';

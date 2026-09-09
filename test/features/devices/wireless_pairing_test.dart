@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/logging/log_redactor.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/devices/data/adb_wireless_parsing.dart';
 import 'package:karmashala/src/features/devices/domain/wireless_pairing.dart';

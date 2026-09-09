@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/logging/build_identity.dart';
+import 'package:karmashala_core/logging.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 

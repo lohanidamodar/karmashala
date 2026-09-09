@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';

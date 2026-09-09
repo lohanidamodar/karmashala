@@ -8,7 +8,7 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
-import 'package:karmashala/src/core/media/video_writer.dart';
+import 'package:karmashala_core/media.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';

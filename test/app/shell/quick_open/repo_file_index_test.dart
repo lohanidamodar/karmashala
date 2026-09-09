@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:karmashala/src/core/util/directory_change_watcher.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

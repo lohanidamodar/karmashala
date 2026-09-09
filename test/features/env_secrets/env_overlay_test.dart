@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/logging/log_redactor.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/env_secrets/application/env_overlay.dart';
 import 'package:karmashala/src/features/env_secrets/domain/env_variable.dart';
 

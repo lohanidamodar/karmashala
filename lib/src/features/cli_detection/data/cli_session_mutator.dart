@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../domain/detected_session.dart';
 import 'codex_app_servers.dart';

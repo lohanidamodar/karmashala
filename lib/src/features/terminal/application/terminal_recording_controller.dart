@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 
 import '../../../app/theme/design_tokens.dart';
-import '../../../core/media/frame_sink.dart';
+import 'package:karmashala_core/media.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../../../core/paths/app_support_directory.dart';
 import '../data/cast_frame_renderer.dart';

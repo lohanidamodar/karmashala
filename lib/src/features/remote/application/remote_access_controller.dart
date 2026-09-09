@@ -15,7 +15,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/inbox_item.dart';

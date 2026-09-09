@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../domain/ssh_host.dart';
 import '../domain/ssh_host_key.dart';
 

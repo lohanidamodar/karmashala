@@ -1,5 +1,5 @@
-import '../../../core/logging/app_logger.dart';
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_core/util.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../domain/ssh_host.dart';
 import 'known_host_dao.dart';

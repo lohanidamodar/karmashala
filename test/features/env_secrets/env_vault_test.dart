@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/env_secrets/data/env_value_cipher.dart';
 import 'package:karmashala/src/features/env_secrets/data/env_vault.dart';
 import 'package:karmashala/src/features/env_secrets/domain/env_variable.dart';

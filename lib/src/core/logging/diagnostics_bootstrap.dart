@@ -4,8 +4,7 @@ import 'dart:io';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
-import 'diagnostics.dart';
-import 'log_file_sink.dart';
+import 'package:karmashala_core/logging.dart';
 import '../paths/app_support_directory.dart';
 
 /// Where log files live: `<app support>/logs`.

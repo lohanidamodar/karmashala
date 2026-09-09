@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../data/conversation_index_dao.dart';
 import 'conversation_indexer.dart';
 

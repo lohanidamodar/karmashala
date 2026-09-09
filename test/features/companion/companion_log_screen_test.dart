@@ -6,7 +6,7 @@
 /// turn "it just says connecting" into a report with evidence in it.
 library;
 
-import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_log_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_settings_screen.dart';

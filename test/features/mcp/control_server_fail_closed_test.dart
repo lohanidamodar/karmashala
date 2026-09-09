@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/mcp/control_server_status.dart';

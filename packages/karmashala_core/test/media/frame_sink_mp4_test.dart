@@ -1,12 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/media/frame_sink.dart';
-import 'package:karmashala/src/core/media/video_writer.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_core/media.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/temp_directory.dart';
+import '../support/temp_directory.dart';
 
 /// Stands in for the operating system's encoder so no test needs a real one.
 class _FakeVideoEncoder implements VideoEncoder {

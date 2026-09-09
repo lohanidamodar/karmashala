@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 
 /// How long a *settled* launch stays on the ledger.
 ///

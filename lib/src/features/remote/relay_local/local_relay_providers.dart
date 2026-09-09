@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner_providers.dart';
 import 'local_relay_service.dart';
 

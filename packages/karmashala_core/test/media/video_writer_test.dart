@@ -71,12 +71,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/media/frame_sink.dart';
-import 'package:karmashala/src/core/media/media_foundation.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_core/media.dart';
 
-import 'mp4_reader.dart';
-import '../../support/temp_directory.dart';
+import 'package:karmashala_core/testing.dart';
+import '../support/temp_directory.dart';
 
 /// A 4x4 frame of one flat colour.
 RgbaFrame _frame(int r, int g, int b, {int size = 64}) {

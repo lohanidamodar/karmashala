@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/paths/path_probe.dart';
+import 'package:karmashala_core/paths.dart';
 
 /// A described disk: which files exist, which components are reparse points and
 /// where they lead, and which paths the OS refuses to answer about.

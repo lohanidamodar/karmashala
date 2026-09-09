@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../core/paths/path_probe.dart';
+import 'package:karmashala_core/paths.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../agents/application/agent_installations_controller.dart';

@@ -1,10 +1,7 @@
 import 'dart:io';
 
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
-import 'package:karmashala/src/core/logging/log_entry.dart';
-import 'package:karmashala/src/core/logging/log_file_sink.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:test/test.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 

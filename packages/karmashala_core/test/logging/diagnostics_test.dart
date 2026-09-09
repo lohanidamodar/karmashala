@@ -1,8 +1,5 @@
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
-import 'package:karmashala/src/core/logging/log_buffer.dart';
-import 'package:karmashala/src/core/logging/log_entry.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:test/test.dart';
 import 'package:logging/logging.dart';
 
 /// A buffer that fails the way a sink fails: on the caller's thread.

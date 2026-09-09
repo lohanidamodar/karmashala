@@ -6,9 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
-import 'package:karmashala/src/core/logging/log_file_sink.dart';
+import 'package:karmashala_core/logging.dart';
 
 import '../../features/system/fake_native_adapters.dart';
 

@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_usage.dart';
 import '../domain/usage_failure.dart';

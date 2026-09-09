@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/domain/environment_path.dart';

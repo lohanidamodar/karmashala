@@ -2,7 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../../core/util/bounded_text.dart';
+import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/session_model_providers.dart';

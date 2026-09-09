@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 
 import '../../core/logging/diagnostics_providers.dart';
-import '../../core/logging/log_entry.dart';
+import 'package:karmashala_core/logging.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 

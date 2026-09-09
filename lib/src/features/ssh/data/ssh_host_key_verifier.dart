@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../../../core/logging/app_logger.dart';
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_core/util.dart';
 import '../domain/ssh_host_key.dart';
 import 'known_host_dao.dart';
 

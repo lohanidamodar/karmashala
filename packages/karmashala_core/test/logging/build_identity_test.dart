@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:karmashala/src/core/logging/build_identity.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:test/test.dart';
 
 /// The line every log opens with.
 ///

@@ -1,4 +1,4 @@
-import '../../../core/logging/log_buffer.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../devices/domain/android_slimming.dart';
 import '../../devices/domain/simulator_slimming.dart';
 import 'app_theme_mode.dart';

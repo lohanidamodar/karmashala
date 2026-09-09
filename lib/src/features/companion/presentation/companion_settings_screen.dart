@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../core/logging/build_identity.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart' show compactAge;
 import '../../sessions/domain/session_resume.dart' show describeAge;

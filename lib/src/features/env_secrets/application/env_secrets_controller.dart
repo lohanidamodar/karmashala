@@ -1,7 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/diagnostics.dart';
-import '../../../core/logging/log_redactor.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../data/env_vault.dart';

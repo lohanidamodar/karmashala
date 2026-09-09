@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/devices/application/device_claims.dart';
 import 'package:karmashala/src/features/devices/domain/device_claim.dart';
 import 'package:flutter_test/flutter_test.dart';

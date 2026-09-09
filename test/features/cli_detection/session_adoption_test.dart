@@ -1,5 +1,5 @@
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';

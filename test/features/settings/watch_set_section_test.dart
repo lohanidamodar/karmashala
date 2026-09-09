@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala/src/features/settings/presentation/diagnostics_page.dart';

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/features/agents/data/claude_auth_service.dart';
 import 'package:karmashala/src/features/agents/data/usage_throttle.dart';

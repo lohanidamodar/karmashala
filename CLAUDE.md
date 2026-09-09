@@ -949,7 +949,7 @@ resolves junctions itself.
 | Piece | Where |
 | --- | --- |
 | The check, every launch, behind the first frame | `AppLifecycle.repairAgentPaths` |
-| The reading — usable / missing / unreachable / unchecked | `core/paths/path_probe.dart` |
+| The reading — usable / missing / unreachable / unchecked | `packages/karmashala_core/lib/src/paths/path_probe.dart` |
 | The repair, as the *same* sweep Settings runs | `AgentInstallationsController.repairBrokenPaths` |
 | The manual lever and the honest report | `settings/presentation/agent_path_section.dart` |
 

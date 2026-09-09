@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/process_handle.dart';
 import '../../devices/application/device_providers.dart';
 import '../../devices/data/adb_service.dart';

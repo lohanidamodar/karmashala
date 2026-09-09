@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
