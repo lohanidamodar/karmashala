@@ -27,6 +27,7 @@ import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_presets.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/domain/document_pane.dart';
 import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/domain/pane_liveness.dart';
 import '../../features/terminal/domain/terminal_drag.dart';
@@ -38,12 +39,18 @@ import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
 import 'tab_picker.dart';
+import 'workbench_tabs.dart';
 import 'tab_strip_metrics.dart';
 
 // The strip's uniform-extent rule lives beside the strip's other consumers —
 // a region header shares it. Re-exported so `workbench.dart` is still the one
 // import anything about the tab strip needs.
 export 'tab_strip_metrics.dart';
+
+// The verbs that open and switch a workbench tab moved out so a feature
+// widget can reach them without importing the whole workbench back. Still
+// exported here, because this is the file the strip's callers already import.
+export 'workbench_tabs.dart';
 
 /// The switcher between the two surfaces. Named so a test can read which one is
 /// painted on a given frame without going through whatever either one renders.
@@ -98,7 +105,7 @@ const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 /// **What the selection is for, though, is asking to see a session.** Ending
 /// one is the opposite, so the empty state is not the answer to it: the
 /// selection is released instead and the user lands on whatever the terminal
-/// still has. See [_releaseEndedPane], and [_releaseHijackedSelection] for the
+/// still has. See [_releaseEndedPane], and [releaseHijackedSelection] for the
 /// other gesture that means the same thing.
 class WorkbenchView extends ConsumerStatefulWidget {
   const WorkbenchView({super.key});
@@ -245,7 +252,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// draws whatever the terminal has — that neighbour, or the empty workbench
   /// when the ended session was the last tab.
   ///
-  /// **Cleared, not out-voted**, for the reason [_releaseHijackedSelection]
+  /// **Cleared, not out-voted**, for the reason [releaseHijackedSelection]
   /// gives: `null` is the one value the selection listeners in [build] ignore,
   /// so writing the neighbour's session id here would restart the fight where
   /// a tap opens a session's terminal and something else undoes it.
@@ -1660,6 +1667,14 @@ class _TabChip extends ConsumerWidget {
       title: title,
       liveness: _liveness(ref),
       agentStatus: _agentActivity(ref),
+      // A document tab has nothing running in it, so it wears what it is
+      // rather than a liveness dot reporting `exited` — see
+      // [TerminalTabChip.icon].
+      icon:
+          tab.layout.panes.length == 1 &&
+              isSettingsPane(tab.layout.panes.single)
+          ? AppIcons.gearSix
+          : null,
       selected: selected,
       accented: accented,
       index: index,
@@ -2081,60 +2096,6 @@ bool _showingPanes(WidgetRef ref, {String? groupId}) {
   if (group == null) return true;
   if (!ref.watch(terminalVisibleInGroupProvider(group))) return false;
   return _hostedSelection(ref, group) == null;
-}
-
-/// Brings [tabId] to the front and makes sure the terminal is what the
-/// workbench is showing: picking a tab from a strip or a list is a request to
-/// *see* it, and it may well have been picked from the conversation — or from
-/// the empty state of a session that is not in any tab at all
-/// ([_releaseHijackedSelection]).
-void activateTerminalTab(WidgetRef ref, String tabId) {
-  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-  terminals.activateTab(tabId);
-  // The group that holds it, which activating the tab has just focused.
-  terminals.showTerminalForTab(tabId);
-  _releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
-}
-
-/// Lets go of a selection that has no pane of ours, because the user has just
-/// asked to see one that has.
-///
-/// [_NoPaneForSession] replaces the **whole** pane stack, which is right while
-/// the selection is the only thing anyone has asked for and wrong the moment it
-/// is not: a selected session nothing of ours runs held the middle of the
-/// window against every live tab in the strip. Activating one moved the tab and
-/// changed nothing on screen, and `_showingPanes` — false, because no tab was
-/// showing — left every chip drawn inactive. That is the reported "after
-/// closing a session with end session on a tab, other tabs are not accessible".
-/// The terminal was healthy throughout; only the choice of surface was wrong.
-///
-/// **Cleared, not out-voted by a second mode.** `null` is the one value the
-/// selection listeners in [WorkbenchView] ignore (`if (next != null)`), so this
-/// cannot restart the fight where a tap opens a session's terminal and
-/// something else undoes it. It is also what keeps the way back open: picking
-/// the same row again is now a *change*, so the workbench opens it exactly as
-/// it did the first time, empty state and all.
-///
-/// **Only the selection that is in the way.** One that has a pane is the
-/// session the user is looking at, and the toggle to its conversation is
-/// offered off the back of it; activating a tab must not quietly drop it.
-///
-/// **And only in the way of the group it was opened into.** A tab activated in
-/// another group is not a statement about this one, and clearing the selection
-/// then would empty a group nobody had asked about — the very thing
-/// [selectionHostGroupProvider] exists to stop.
-void _releaseHijackedSelection(WidgetRef ref, {String? inGroup}) {
-  final host = ref.read(selectionHostGroupProvider);
-  if (inGroup != null && host != null && host != inGroup) return;
-  // An imported CLI session has no pane of ours by definition, so it is always
-  // the paneless kind.
-  if (ref.read(selectedImportedSessionIdProvider) != null) {
-    ref.read(selectedImportedSessionIdProvider.notifier).select(null);
-  }
-  final selected = ref.read(selectedSessionIdProvider);
-  if (selected != null && sessionTerminalPane(ref, selected) == null) {
-    ref.read(selectedSessionIdProvider.notifier).select(null);
-  }
 }
 
 /// Every terminal tab, as [TabPicker] lists them.

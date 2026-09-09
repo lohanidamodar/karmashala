@@ -32,11 +32,19 @@ import 'tools_page.dart';
 /// app bar. The selected section lives on this state, so resizing across the
 /// breakpoint keeps your place.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({this.initialSection, super.key});
+  const SettingsScreen({this.initialSection, this.onSectionChanged, super.key});
 
   /// The section to land on — how menu items and quick open deep-link
-  /// ("agents" from an agent entry, and so on).
+  /// ("agents" from an agent entry, and so on). Changing it moves the page,
+  /// so a deep link into a Settings tab that is already open lands on its
+  /// section rather than leaving the user where they were.
   final SettingsSectionId? initialSection;
+
+  /// Told which section the user moved to, and told `null` when a compact
+  /// window backs out to the list. How the workbench tab keeps the page
+  /// outside a `State` it drops every time another tab is on screen — see
+  /// [SettingsTabView].
+  final ValueChanged<SettingsSectionId?>? onSectionChanged;
 
   static Future<void> show(
     BuildContext context, {
@@ -57,10 +65,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Deep links open straight into their section.
   late bool _openOnCompact = widget.initialSection != null;
 
-  void _select(SettingsSectionId section) => setState(() {
-    _selected = section;
-    _openOnCompact = true;
-  });
+  @override
+  void didUpdateWidget(SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialSection == oldWidget.initialSection) return;
+    // A deep link arriving at a screen that is already up. Null is the compact
+    // list rather than a section, which is what backing out writes.
+    _selected = widget.initialSection ?? _selected;
+    _openOnCompact = widget.initialSection != null;
+  }
+
+  void _select(SettingsSectionId section) {
+    setState(() {
+      _selected = section;
+      _openOnCompact = true;
+    });
+    widget.onSectionChanged?.call(section);
+  }
+
+  void _backToList() {
+    setState(() => _openOnCompact = false);
+    widget.onSectionChanged?.call(null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,9 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // in it.
             toolbarHeight: 44,
             leading: compact && _openOnCompact
-                ? BackButton(
-                    onPressed: () => setState(() => _openOnCompact = false),
-                  )
+                ? BackButton(onPressed: _backToList)
                 : const BackButton(),
             title: Row(
               children: [
