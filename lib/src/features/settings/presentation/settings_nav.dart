@@ -118,6 +118,10 @@ enum SettingsSectionId {
     'windows',
     'discover',
     'installations',
+    'flutter',
+    'flutter sdk',
+    'sdk',
+    'dart',
   ]),
   environmentVariables('Environment variables', AppIcons.code, [
     'env',

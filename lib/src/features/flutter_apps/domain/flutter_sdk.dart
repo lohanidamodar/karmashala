@@ -11,9 +11,9 @@ const Duration kFlutterSdkReadingFreshFor = Duration(hours: 12);
 
 /// Why an environment has no Flutter we are willing to run.
 ///
-/// Four values because they need four different things done about them, and
-/// because collapsing the last one into "not found" is precisely the silent
-/// failure CLAUDE.md §17 is about.
+/// Five values because they need five different things done about them, and
+/// because collapsing [windowsInstallOnPosixPath] into "not found" is
+/// precisely the silent failure CLAUDE.md §17 is about.
 enum FlutterSdkRefusal {
   /// Nothing named `flutter` on that environment's PATH.
   notFound,
@@ -29,6 +29,15 @@ enum FlutterSdkRefusal {
 
   /// It was located and would not say what version it is.
   versionUnreadable,
+
+  /// The path **a person named** for this environment could not be run.
+  ///
+  /// Its own value rather than [notFound], because the thing to do about it is
+  /// different and nothing else can be done at all: installing a Flutter will
+  /// not help, and neither will PATH — the row says where to look and the
+  /// answer is not there. Correct the row, or clear it and let PATH answer
+  /// again. See `ExecutionEnvironment.flutterSdkPath`.
+  handSetUnusable,
 }
 
 /// What `flutter` is called in [kind], and CLAUDE.md §17 written as code.
@@ -48,23 +57,40 @@ String flutterExecutableFor(EnvironmentKind kind) =>
 /// `/mnt/c/Users/<you>/flutter/bin/flutter` whenever `/mnt/c` is on PATH,
 /// which it is by default — and that file is the same POSIX script §17 forbids,
 /// reached over DrvFs. It runs, it looks like it worked, and it replaces the
-/// Windows `dart-sdk` with a Linux one for everybody. So a located path under
-/// a drive mount is **refused before anything is spawned**: the harm is in the
+/// Windows `dart-sdk` with a Linux one for everybody. So a path under a drive
+/// mount is **refused before anything is spawned**: the harm is in the
 /// running, not in the looking.
+///
+/// [handSet] changes only where the sentence says the path came from, and it
+/// exists because the other wording would be a small lie: a path somebody
+/// typed into Settings is not "the only flutter on this distribution's PATH",
+/// and telling them to install one inside the distribution is not the fix when
+/// they have already named a file. The danger, and the refusal, are identical.
 ///
 /// The judgement is the automount root, `/mnt/<letter>/`, which is what WSL
 /// uses unless `/etc/wsl.conf` moves it. A distribution that has moved it hides
 /// its Windows drives from this check and would be run — recorded here rather
 /// than guessed at, because the alternative is spawning the thing to find out.
-String? windowsInstallRefusal(EnvironmentKind kind, String path) {
+String? windowsInstallRefusal(
+  EnvironmentKind kind,
+  String path, {
+  bool handSet = false,
+}) {
   if (kind != EnvironmentKind.wsl) return null;
   if (!RegExp(r'^/mnt/[a-zA-Z]/').hasMatch(path)) return null;
-  return 'The only "flutter" on this distribution\'s PATH is $path — the '
-      'Windows installation, reached through the drive mount. Running it makes '
-      'Flutter download a Linux Dart SDK over the Windows one that every '
-      'terminal, build and agent on this machine shares, and it fails silently '
-      'for whoever ran it (CLAUDE.md §17). Install Flutter inside the '
-      'distribution, or run this checkout in the Windows environment instead.';
+  final source = handSet
+      ? 'The Flutter SDK path set for this distribution is $path'
+      : 'The only "flutter" on this distribution\'s PATH is $path';
+  final fix = handSet
+      ? 'Point it at a Flutter installed inside the distribution, clear it to '
+            'look on PATH, or run this checkout in the Windows environment '
+            'instead.'
+      : 'Install Flutter inside the distribution, or run this checkout in the '
+            'Windows environment instead.';
+  return '$source — the Windows installation, reached through the drive '
+      'mount. Running it makes Flutter download a Linux Dart SDK over the '
+      'Windows one that every terminal, build and agent on this machine '
+      'shares, and it fails silently for whoever ran it (CLAUDE.md §17). $fix';
 }
 
 /// What one environment answered when it was asked where `flutter` is.

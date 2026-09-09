@@ -92,6 +92,12 @@ class AgentHookReceiver {
     // session name and nothing else.
     final message = spec == null ? '' : _messageIn(spec, payload, declared);
 
+    // **What the agent said about the session, not about the turn.** Same
+    // division as the status above: a subtype the payload carries answers for
+    // itself, and only an event with no subtype falls back to the spec's own
+    // per-event table.
+    final ending = kind.isEmpty ? spec?.eventEnding[name] : declared?.ending;
+
     final report = AgentStatusReport(
       agentId: id,
       sessionId: sessionId,
@@ -100,6 +106,7 @@ class AgentHookReceiver {
       observedAt: observedAt ?? clock.nowUtc(),
       detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
+      ending: ending,
       // Only a session that stopped *for the user* has anything to be waiting
       // on, so nothing else is asked the question. Without that guard the prose
       // rules would run over a finished turn's own summary, and an agent that
