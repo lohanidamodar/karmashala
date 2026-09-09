@@ -12,7 +12,12 @@
 /// defines it — [isAtMost] is an index comparison for that reason.
 enum PermissionRisk {
   /// Reads and proposes; changes nothing.
-  readOnly('Read-only', 'Reads and proposes. Changes nothing.', 'Read-only'),
+  readOnly(
+    'Read-only',
+    'Reads and proposes. Changes nothing.',
+    'Read-only',
+    familiarName: 'Plan',
+  ),
 
   /// May do anything, after asking.
   ask('Ask every time', 'Prompts before edits and commands.', 'Ask'),
@@ -22,6 +27,7 @@ enum PermissionRisk {
     'Accept edits',
     'Writes without asking. Still asks before running commands.',
     'Accept edits',
+    familiarName: 'Build',
   ),
 
   /// No routine prompts, but something other than the user still screens what
@@ -30,6 +36,7 @@ enum PermissionRisk {
     'Automatic',
     'No routine prompts. A sandbox or a reviewer model screens what runs.',
     'Automatic',
+    familiarName: 'Build',
   ),
 
   /// No prompts and nothing screening. Dangerous.
@@ -39,13 +46,47 @@ enum PermissionRisk {
     'Bypass',
   );
 
-  const PermissionRisk(this.label, this.description, this.shortLabel);
+  const PermissionRisk(
+    this.label,
+    this.description,
+    this.shortLabel, {
+    this.familiarName,
+  });
 
   final String label;
   final String description;
 
   /// The name that fits on a chip. [label] has room to explain itself.
   final String shortLabel;
+
+  /// The name this rung goes by outside this app, or null where it has none.
+  ///
+  /// **Borrowed from jean, and only where it reads better than ours.** jean
+  /// models the same modes as Plan / Build / Yolo, and two of those three names
+  /// solve a problem our own labels have: the *rung* is the thing three CLIs
+  /// spell three different ways, and until now it had no name a person could
+  /// carry between them. Codex's read-only rung is called a sandbox, Claude's
+  /// is called a permission mode, and only Antigravity's says "plan" — so a
+  /// user comparing three sessions had three words for one idea.
+  ///
+  /// Nothing about the modes themselves changes. This is a name shown
+  /// **beside** the CLI's own word, never instead of it: a person configuring
+  /// Codex still needs `read-only` and `on-request`, and the evidence each
+  /// value carries is untouched. Where a CLI already says the familiar word,
+  /// it is not said twice — see `pairedWithFamiliarName`.
+  ///
+  /// Two rungs deliberately have none:
+  ///
+  /// * **[ask]** — jean has no equivalent. Its approval flow is a separate
+  ///   axis, not a rung, so there is nothing here to borrow.
+  /// * **[bypass]** — jean calls it *Yolo*, and this is the one place a
+  ///   shorter, more familiar name is worse. "Bypass" says what is bypassed to
+  ///   somebody who has never met the term; "Yolo" is an in-joke, and it lands
+  ///   next to `--dangerously-skip-permissions` in a confirmation dialog whose
+  ///   title is the label itself — "Yolo?" is a worse question than "Bypass
+  ///   (full autonomy)?". Constraint 12 asks this rung to be *surfaced with a
+  ///   warning*; a nickname is the opposite move.
+  final String? familiarName;
 
   /// Architecture constraint 12: the dangerous rung is never a default and is
   /// always surfaced with a warning.

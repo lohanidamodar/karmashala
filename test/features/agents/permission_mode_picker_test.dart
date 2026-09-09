@@ -61,12 +61,15 @@ void main() {
     await tester.tap(find.byType(PermissionModePicker));
     await tester.pumpAndSettle();
 
+    // Each row is the CLI's own word, with the rung's familiar name in front
+    // of it where that reads better. "Plan mode" keeps its own name — Claude
+    // Code already says the word — and the bypass rung was left alone.
     for (final label in [
       'Plan mode',
-      "Don't ask",
+      "Plan · Don't ask",
       'Ask every time',
-      'Accept edits',
-      'Automatic',
+      'Build · Accept edits',
+      'Build · Automatic',
       'Bypass (full autonomy)',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
@@ -92,7 +95,10 @@ void main() {
 
     expect(find.text('SANDBOX'), findsOneWidget);
     expect(find.text('APPROVAL POLICY'), findsOneWidget);
-    expect(find.text('Read-only'), findsOneWidget);
+    // Codex spells the read-only rung as a sandbox, which is where the
+    // borrowed name earns its place; its approval values are all the bypass
+    // rung, which has none.
+    expect(find.text('Plan · Read-only'), findsOneWidget);
     expect(find.text('Never ask'), findsOneWidget);
   });
 

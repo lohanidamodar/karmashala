@@ -1,3 +1,4 @@
+import '../../settings/domain/permission_risk.dart';
 import 'agent_descriptor.dart';
 import 'agent_permission_support.dart';
 
@@ -41,6 +42,17 @@ class AgentPermissionOption {
 
   /// One sentence about what picking this actually does to this agent.
   String get summary => disabledReason ?? value.description;
+
+  /// [label] with the familiar name for its rung in front of it.
+  ///
+  /// A row is one rung of one CLI, so the pairing belongs here rather than at
+  /// the call sites: Settings, the automations form and both menus draw the
+  /// same row and must not name it three ways.
+  String get pairedLabel => pairedWithFamiliarName(label, value.permits);
+
+  /// The same on a chip's budget.
+  String get pairedShortLabel =>
+      pairedWithFamiliarName(shortLabel, value.permits);
 }
 
 /// One axis of one agent, with its rows — what a picker draws.
@@ -161,6 +173,57 @@ String describeSelectionShort(
         axis.valueFor(resolved.valueFor(axis.id))?.shortLabel,
   ].whereType<String>().join(' · ');
 }
+
+/// [words] with the familiar name for [risk] in front of them, or [words] alone.
+///
+/// The whole of what was borrowed. Three rules, and each is a decision:
+///
+/// * A rung with no [PermissionRisk.familiarName] is left exactly as it was,
+///   and so is a null [risk] — an agent whose modes are unestablished has no
+///   rung to name, and inventing one would be the guess this app refuses
+///   everywhere else. Two of the five rungs have none, on purpose — see the
+///   field.
+/// * A CLI that **already says the word** says it once. Claude Code and
+///   Antigravity both label their read-only rung "Plan mode", and "Plan · Plan
+///   mode" is not clearer than "Plan mode" — the name is borrowed only where it
+///   reads better than ours, which for those two is nowhere.
+/// * The CLI's own word never leaves. A person configuring Codex needs
+///   `read-only` and `on-request`, so the familiar name is a prefix and never a
+///   replacement — and where the CLI's words are already a list (Codex's two
+///   axes) they are bracketed, so the reader can tell the one borrowed name
+///   from the two the CLI supplied.
+String pairedWithFamiliarName(String words, PermissionRisk? risk) {
+  final familiar = risk?.familiarName;
+  if (familiar == null || words.isEmpty) return words;
+  if (words.toLowerCase().contains(familiar.toLowerCase())) return words;
+  return words.contains(' · ') ? '$familiar ($words)' : '$familiar · $words';
+}
+
+/// [describeSelection] with the familiar name for the selection's rung.
+///
+/// The rung is [AgentPermissionSupport.riskOf], which composes a multi-axis
+/// selection by taking the least any one axis permits — so the name attached
+/// here is the one that describes what will actually run, not the loosest axis.
+String describeSelectionFamiliar(
+  AgentPermissionSupport support,
+  PermissionSelection? selection,
+) => support.isKnown
+    ? pairedWithFamiliarName(
+        describeSelection(support, selection),
+        support.riskOf(selection),
+      )
+    : '';
+
+/// The same, in short labels, for a chip with a third of a window to live in.
+String describeSelectionFamiliarShort(
+  AgentPermissionSupport support,
+  PermissionSelection? selection,
+) => support.isKnown
+    ? pairedWithFamiliarName(
+        describeSelectionShort(support, selection),
+        support.riskOf(selection),
+      )
+    : '';
 
 /// What the chosen values say they do, joined into one sentence.
 String? describeSelectionDetail(
