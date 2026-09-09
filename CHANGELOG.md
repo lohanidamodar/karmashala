@@ -45,6 +45,9 @@ installs claim the same version name.
   store reading and usage; 1,758 import lines rewritten, and a change to the
   coding-agent interface is gated in 52 seconds. Gemini CLI appears as a fourth
   descriptor, launch-only and unverified on this machine.
+- **The app now uses `karmashala_devices`**; the device pane converts to the
+  package's plain geometry and key records at five sites and draws the same
+  tree. A device-layer change is gated in 68 seconds.
 
 ---
 
