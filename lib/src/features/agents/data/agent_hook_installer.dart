@@ -1156,13 +1156,17 @@ class AgentHookInstaller {
     }
   }
 
-  /// Removes a staging file if it is there. Never throws: it is somebody else's
-  /// directory, and both callers have something better to fail on.
+  /// Removes a staging file. Never throws: it is somebody else's directory, and
+  /// both callers have something better to fail on.
+  ///
+  /// One call rather than exists-then-delete, which is one file operation
+  /// instead of two on a path that may be a `\\wsl.localhost` share — and not
+  /// a TOCTOU, which the same shape was here before.
   Future<void> _removeStaged(File staged) async {
     try {
-      if (await staged.exists()) await staged.delete();
+      await staged.delete();
     } on FileSystemException {
-      // Held or already gone; the next sweep tries again.
+      // Not there, or held by something; the next sweep tries again.
     }
   }
 

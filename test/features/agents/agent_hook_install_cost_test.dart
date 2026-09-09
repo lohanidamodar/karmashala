@@ -89,9 +89,11 @@ void main() {
       );
       // The operations themselves, so a change that doubles them is visible.
       // Three files are written — the callback script, the endpoint file and
-      // the config entry — and each one is staged, renamed, checked for a
-      // leftover staging file and then read back.
-      expect(io.async, hasLength(22));
+      // the config entry — and each one clears any staging file a killed quit
+      // left, is staged, is renamed, has its own staging file removed and is
+      // read back. 22 before that first clear, which the 2026-09-09 soak added
+      // after finding `.karmashala-tmp` files accumulating in the store homes.
+      expect(io.async, hasLength(25));
       expect(
         io.async.where((op) => op.startsWith('File.readAsString')).length,
         3,
