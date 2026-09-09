@@ -79,10 +79,10 @@ CliInvocation oneShotInvocation(
     ],
     parse: (line) => _text(parseAntigravityMessage(line)),
   ),
-  // Everything else, Gemini CLI included: the descriptor says how it takes a
-  // prompt and a model, and its output is plain text. An agent that declares
-  // neither is still asked — with the prompt as its only argument — because
-  // that is what a CLI with no flags does.
+  // Everything else: the descriptor says how it takes a prompt and a model,
+  // and its output is plain text. An agent that declares neither is still
+  // asked — with the prompt as its only argument — because that is what a CLI
+  // with no flags does.
   _ => CliInvocation(
     arguments: _fromDescriptor(descriptor, prompt, systemPrompt, model),
     parse: (line) => _text(parseGenericAgentLine(line)),

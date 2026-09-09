@@ -20,44 +20,7 @@ const List<AgentDescriptor> builtInAgentDescriptors = [
   _claudeCode,
   _codex,
   _antigravity,
-  _geminiCli,
 ];
-
-/// Gemini CLI: the fourth descriptor, and the one with no adapter.
-///
-/// It arrives from the `agent_cli` package this library now lives in, whose
-/// `CliAgentKind` knew three CLIs and named `gemini` as one of them. Everything
-/// asserted here is what that package asserted and no more: the executable is
-/// `gemini`, one question is asked with `-p`, a model is chosen with `-m`, and
-/// the answer comes back as plain text on stdout rather than as a JSON stream.
-///
-/// **Deliberately thin.** No [AgentKind], so it gets the generic adapter; no
-/// store, so nothing tries to read a transcript it has never seen; no
-/// permission modes, no resume, no hooks — every one of those is a claim about
-/// a CLI nobody here has sat in front of, and CLAUDE.md §19's rule is that an
-/// unknown is reported as unknown rather than as a zero. It is discovered,
-/// listed, launchable and askable, which is exactly what is known to work.
-const _geminiCli = AgentDescriptor(
-  id: 'geminiCli',
-  displayName: 'Gemini CLI',
-  binaries: AgentBinaries(windows: ['gemini'], posix: ['gemini']),
-  launch: AgentLaunchSpec(
-    prompt: AgentPromptSupport.flag(
-      '-p',
-      evidence:
-          'agent_cli 0.1.0 (lohanidamodar/agent_cli, 2026-08-24) builds its '
-          'one-shot invocation as `gemini -p <prompt>` and reads the reply as '
-          'plain text.',
-    ),
-    model: AgentModelSupport.atLaunchOnly(
-      flag: '-m',
-      models: [],
-      evidence:
-          'agent_cli 0.1.0 passes the model as `-m <id>`; which ids it accepts '
-          'has not been read off the binary, so none are listed.',
-    ),
-  ),
-);
 
 const _claudeCode = AgentDescriptor(
   id: 'claudeCode',

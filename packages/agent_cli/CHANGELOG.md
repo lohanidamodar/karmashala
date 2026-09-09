@@ -7,8 +7,11 @@ Karmashala's coding-agent layer folded in; this package becomes its home.
 - **Five modes over one descriptor table**: `launch`, `stream`, `ask`, `read`,
   `usage`, plus `discovery` and `process`.
 - `AgentDescriptor` + `built_in_agents` replace `CliAgentKind`: Claude Code,
-  Codex, Antigravity and Gemini CLI, each carrying the evidence its claims were
-  read off. Gemini CLI is the fourth and declares only what 0.1.0 knew.
+  Codex and Antigravity, each carrying the evidence its claims were read off.
+- **Gemini CLI is removed** — 0.1.0 discovered and asked it; Google retired it
+  on 2026-06-18 for individual accounts in favour of Antigravity CLI, which is
+  already a descriptor here
+  ([announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)).
 - `stream`: protocol adapters for Claude Code, Codex and Antigravity over
   `StreamingAgentSession`, plus the generic one for a registry-only agent.
 - `read`: the CLIs' own stores and transcripts — Claude Code's JSONL, Codex's

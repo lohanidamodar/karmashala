@@ -17,8 +17,8 @@ void main() {
   const registry = AgentRegistry.builtIn;
 
   test('every agent that declares modes offers its own axes, safest-first', () {
-    // An agent whose modes nobody has established offers nothing and says so —
-    // asserted on its own below, and true of Gemini CLI by design.
+    // An agent whose modes nobody has established offers nothing and says so,
+    // which is asserted on its own below.
     for (final descriptor in registry.descriptors.where(
       (d) => d.launch.permission.isKnown,
     )) {

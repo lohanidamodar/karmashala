@@ -10,15 +10,6 @@ abstract final class AgentIds {
   static const String codex = 'codex';
   static const String antigravity = 'antigravity';
 
-  /// The fourth, and the only one with no protocol adapter — see
-  /// `built_in_agents.dart`.
-  static const String geminiCli = 'geminiCli';
-
-  /// The four shipped ids, in registry order.
-  static const List<String> builtIn = [
-    claudeCode,
-    codex,
-    antigravity,
-    geminiCli,
-  ];
+  /// The three shipped ids, in registry order.
+  static const List<String> builtIn = [claudeCode, codex, antigravity];
 }
