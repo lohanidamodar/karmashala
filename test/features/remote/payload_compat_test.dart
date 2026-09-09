@@ -399,4 +399,107 @@ void main() {
       expect(presence.focusedSessionId, isNull);
     });
   });
+
+  group("a transcript's absence gained a second word, additively", () {
+    // The desktop now tells "this agent's store is unreadable" from "no
+    // transcript file for this session", and the wire had one word for both.
+    // A second word is only additive if the phone that has never heard it
+    // still gets a sentence: unknown here reads as null, and null is the hedge
+    // — a welcome screen with starter prompts — which is the exact bug the
+    // field was added to kill. So the coarse word rides beside the refinement.
+    const noFile = RemoteTranscriptPage(
+      sessionId: 's1',
+      messages: [],
+      cursor: 0,
+      absence: RemoteTranscriptAbsence.noTranscriptFile,
+    );
+
+    test('the two words say different things, and coarsen to the same one', () {
+      expect(
+        RemoteTranscriptAbsence.noTranscriptFile.wire,
+        isNot(RemoteTranscriptAbsence.noChatView.wire),
+      );
+      expect(
+        RemoteTranscriptAbsence.noTranscriptFile.coarseWire,
+        RemoteTranscriptAbsence.noChatView.wire,
+      );
+    });
+
+    test('old companion, new host: `absence` still carries the known word', () {
+      final json = noFile.toJson();
+
+      expect(json['absence'], 'no_chat_view');
+      expect(json['absenceKind'], 'no_transcript_file');
+    });
+
+    test('new companion, new host: the refinement is what it reads, through '
+        'the envelope', () {
+      final decoded = Envelope.fromBytes(
+        Envelope.of(
+          FrameType.transcriptAppended,
+          seq: 3,
+          payload: noFile.toJson(),
+        ).toBytes(),
+      );
+
+      expect(
+        RemoteTranscriptPage.fromJson(decoded.payload).absence,
+        RemoteTranscriptAbsence.noTranscriptFile,
+      );
+    });
+
+    test('new companion, old host: the coarse word alone still decodes', () {
+      final page = RemoteTranscriptPage.fromJson(const {
+        'sessionId': 's1',
+        'messages': <Object?>[],
+        'cursor': 0,
+        'absence': 'no_chat_view',
+      });
+
+      expect(page.absence, RemoteTranscriptAbsence.noChatView);
+    });
+
+    test('a refinement this build has never heard reads as the coarse word, '
+        'never as the hedge', () {
+      final page = RemoteTranscriptPage.fromJson(const {
+        'sessionId': 's1',
+        'messages': <Object?>[],
+        'cursor': 0,
+        'absence': 'no_chat_view',
+        'absenceKind': 'brain_directory_empty',
+      });
+
+      expect(page.absence, RemoteTranscriptAbsence.noChatView);
+    });
+
+    test('every value round-trips and names its coarse word on the wire', () {
+      for (final value in RemoteTranscriptAbsence.values) {
+        final json = RemoteTranscriptPage(
+          sessionId: 's1',
+          messages: const [],
+          cursor: 0,
+          absence: value,
+        ).toJson();
+
+        expect(json['absence'], value.coarseWire, reason: value.wire);
+        expect(
+          RemoteTranscriptPage.fromJson(json).absence,
+          value,
+          reason: value.wire,
+        );
+      }
+    });
+
+    test('a page with no absence claims neither key', () {
+      const page = RemoteTranscriptPage(
+        sessionId: 's1',
+        messages: [],
+        cursor: 0,
+      );
+
+      expect(page.toJson().containsKey('absence'), isFalse);
+      expect(page.toJson().containsKey('absenceKind'), isFalse);
+      expect(RemoteTranscriptPage.fromJson(page.toJson()).absence, isNull);
+    });
+  });
 }

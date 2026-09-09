@@ -332,6 +332,33 @@ void main() {
       });
     }
 
+    testWidgets('the other structural nothing is its own sentence, under the '
+        'same heading', (tester) async {
+      // The heading is true of both — there is no chat view either way — and
+      // the sentence under it is the half that differs, so the screen shows
+      // whichever the host sent rather than one wording for two facts.
+      await pumpPhone(
+        tester,
+        gateway: gateway(
+          messages: const [
+            CompanionChatMessage(
+              role: kCompanionAbsenceRole,
+              text: 'This session\'s store kept the conversation and no '
+                  'transcript this app can read beside it, so there is no '
+                  'chat view for it — on the desktop or here.',
+            ),
+          ],
+        ),
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      expect(find.text('No chat view for this session'), findsOneWidget);
+      expect(find.textContaining('kept the conversation'), findsOneWidget);
+      expect(find.textContaining('This agent keeps'), findsNothing);
+      expect(find.text('Start a conversation'), findsNothing);
+    });
+
     testWidgets('a session that has not started is still welcomed', (
       tester,
     ) async {

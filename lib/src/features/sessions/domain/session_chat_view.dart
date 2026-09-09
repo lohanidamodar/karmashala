@@ -91,9 +91,10 @@ class SessionChatView {
   bool get isMeasured => evidence != ChatViewEvidence.unread;
 
   /// Whether this is a refusal that will still hold after the agent answers —
-  /// the **structural** nothing the companion wire carries as
-  /// `RemoteTranscriptAbsence.noChatView`. A session we merely have no id for
-  /// is not one of these: that is a gap, and it closes on its own.
+  /// the **structural** nothing the companion wire carries, as
+  /// `RemoteTranscriptAbsence.noChatView` for the store and `noTranscriptFile`
+  /// for the conversation. A session we merely have no id for is not one of
+  /// these: that is a gap, and it closes on its own.
   bool get keepsNoRecord =>
       evidence == ChatViewEvidence.storeUnreadable ||
       evidence == ChatViewEvidence.transcriptAbsent;

@@ -50,6 +50,7 @@ import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_attribution.dart';
+import '../../sessions/domain/session_chat_view.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../notes/application/composer_draft.dart';
@@ -1097,6 +1098,16 @@ const _AgentRecord _nothingKnown = (
   turns: null,
 );
 
+/// A structural nothing, in the wire's own words — which of the two the reading
+/// found, so the phone can say the one that is true of this session.
+_AgentRecord _structuralNothing(SessionChatView reading) => (
+  messages: const <RemoteTranscriptMessage>[],
+  absence: reading.evidence == ChatViewEvidence.transcriptAbsent
+      ? RemoteTranscriptAbsence.noTranscriptFile
+      : RemoteTranscriptAbsence.noChatView,
+  turns: null,
+);
+
 /// The agent's own transcript file — `sessionChatTranscriptProvider`'s source,
 /// read once rather than polled. Tool rows are dropped, as the desktop chat
 /// view drops them.
@@ -1119,13 +1130,8 @@ const _AgentRecord _nothingKnown = (
 /// chat view and plan panel use, off the store scan this already pays for, so
 /// the two ends cannot describe one session differently.
 Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
-  const noChatView = (
-    messages: <RemoteTranscriptMessage>[],
-    absence: RemoteTranscriptAbsence.noChatView,
-    turns: null,
-  );
   final screen = screenSessionChatView(ref, session.id);
-  if (screen.keepsNoRecord) return noChatView;
+  if (screen.keepsNoRecord) return _structuralNothing(screen);
   final externalId = session.externalSessionId;
   if (externalId == null || externalId.isEmpty) return _nothingKnown;
   final agentId = ref
@@ -1142,7 +1148,7 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
     prior: screen.prior,
     at: ref.read(clockProvider).nowUtc(),
   );
-  if (chatView.keepsNoRecord) return noChatView;
+  if (chatView.keepsNoRecord) return _structuralNothing(chatView);
   if (path == null || !chatView.hasChatView) return _nothingKnown;
   final messages = await readCliTranscript(path, agentId);
   return (

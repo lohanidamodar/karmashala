@@ -2382,6 +2382,18 @@ class RemoteCompanionGateway implements CompanionGateway {
               'the session, and the desktop is where that lives. Messages you '
               'send from here still reach it.',
         ),
+        // The same refusal about a conversation rather than an agent, so it
+        // does not say "this agent" about a store whose other sessions read
+        // perfectly well.
+        RemoteTranscriptAbsence.noTranscriptFile => const CompanionChatMessage(
+          role: kCompanionAbsenceRole,
+          text:
+              'This session\'s store kept the conversation and no transcript '
+              'this app can read beside it, so there is no chat view for it — '
+              'on the desktop or here. Its terminal is the session, and the '
+              'desktop is where that lives. Messages you send from here still '
+              'reach it.',
+        ),
         null => null,
       };
 

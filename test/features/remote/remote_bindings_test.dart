@@ -622,8 +622,34 @@ void main() {
       final page = (await bindings.transcriptFor('s-anti')).page;
 
       expect(page.messages, isEmpty);
-      expect(page.absence, RemoteTranscriptAbsence.noChatView);
+      // About this conversation, not about Antigravity: the sibling test below
+      // is the store-wide refusal, and they are two different sentences on the
+      // phone.
+      expect(page.absence, RemoteTranscriptAbsence.noTranscriptFile);
       // The fact survives the round trip a phone actually reads it through.
+      expect(
+        RemoteTranscriptPage.fromJson(page.toJson()).absence,
+        RemoteTranscriptAbsence.noTranscriptFile,
+      );
+    });
+
+    test('a store that yields no transcript path at all is the other reason',
+        () async {
+      // Nothing to derive a readable file from, for this session or any other
+      // of the same agent — which is what `noChatView` has always meant, and
+      // now means only.
+      seedWorkspace();
+      seedPaneSession('s-blind', agentId: 'antigravity');
+      locator.paths['antigravity/ext-s-blind'] = ph.join(
+        r'C:\store',
+        'ext-s-blind.db',
+      );
+
+      final bindings = container.read(remoteHostBindingsProvider);
+      final page = (await bindings.transcriptFor('s-blind')).page;
+
+      expect(page.messages, isEmpty);
+      expect(page.absence, RemoteTranscriptAbsence.noChatView);
       expect(
         RemoteTranscriptPage.fromJson(page.toJson()).absence,
         RemoteTranscriptAbsence.noChatView,
@@ -725,7 +751,7 @@ void main() {
             .read(remoteHostBindingsProvider)
             .transcriptFor('s-anti');
 
-        expect(record.page.absence, RemoteTranscriptAbsence.noChatView);
+        expect(record.page.absence, RemoteTranscriptAbsence.noTranscriptFile);
         expect(record.activity.calls, isEmpty);
         expect(record.activity.absence, RemoteActivityAbsence.noRecord);
         // The fact survives the round trip a phone actually reads it through.
