@@ -598,7 +598,7 @@ things outside this app.
 
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
-| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart`, `test/terminal/live_wsl_input_boundary_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `python3` in it for the input-boundary read, `flutter_pty` for the pane tests | there is no WSL, no `python3` in it, or no `flutter_pty.dll` to spawn a ConPTY with |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart`, `test/terminal/live_wsl_input_boundary_test.dart`, `test/terminal/live_wsl_osc133_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `python3` in it for the input-boundary read, `flutter_pty` for the pane tests | there is no WSL, no `python3` in it, or no `flutter_pty.dll` to spawn a ConPTY with |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
@@ -608,9 +608,8 @@ closing an **empty** WSL shell ends it. `shouldDetachOnClose` has to guess
 whether a shell holds history worth keeping, and it guesses by counting
 non-blank lines — so the answer turns on how many rows a real prompt paints per
 command, which is a property of the user's shell and of nothing in this
-repository. WSL is where it matters most, because `shellSupportsIntegration`
-covers PowerShell alone: a WSL pane can never be instrumented, so the line count
-is the only rule it ever gets.
+repository. WSL is where it matters most, because shell integration is off by
+default, so for most WSL panes the line count is the only rule they ever get.
 
 **Measured 2026-09-03 against `archlinux`,** whose zsh runs starship at three
 rows per command — a blank separator, a directory line and a prompt line:
@@ -670,6 +669,40 @@ follow every resize, and so does a burst of 60 at a drag's cadence — the last
 one is the one the process ends up on, so nothing here debounces badly or lands
 a size behind. That is the evidence that ruled the PTY out of the "resizing
 doesn't work as expected" report.
+
+`live_wsl_osc133_test.dart` answers whether a **WSL pane reports its own
+command boundaries**, which is what `terminal_run` needs to name an exit code.
+It is the test Loop 32 could not write: the bash rcfile was verified against
+real bash then parked, partly because through a *pipe* the marker order came
+out wrong — a spurious `D;0`, a doubled `C` — and telling a relay artifact from
+a real ordering bug needs a ConPTY, not a pipe.
+
+**Measured 2026-09-09 against `archlinux`** (bash 5.3.15, zsh 5.9.2, starship),
+through the launch this app builds and with the login shell forced for the half
+the machine does not have:
+
+```txt
+bash  true / false / sh -c 'exit 7'   ->  A B C D;0  A B C D;1  A B C D;7
+zsh   the same three                  ->  the same stream
+empty Enter                           ->  A B D with no C; the block is dropped
+terminal_run echo karmashala-ok       ->  finished, exit 0, its own output
+terminal_run sh -c 'exit 5'           ->  finished, exit 5, exitCodeKnown true
+```
+
+The delivery is what makes it safe, and it is the whole reason the item could be
+unparked. `bash --rcfile` pointed at a file it cannot read starts a shell with
+**no user configuration at all** — worse than no feature — so Loop 32 wanted a
+probe on the launch path confirming both the login shell and the file. Instead
+the payload the launch already carries (`cmd.exe /c wsl.exe -d <distro> -- eval
+$(…|base64 -d)`, unchanged in shape) *writes* the rc file inside the
+distribution and then reads it, into a fresh `mktemp -d` each script deletes as
+its last statement; every path that does not end in a working rc file ends in
+`exec "$shell" -l`, the pane this app always opened. **`cmd.exe` is still
+excluded, and that is measured too:** `prompt $E]133;A$E\` really does put the
+sequence on the wire, but `cmd` has no hook between reading a command and
+running it, and `%ERRORLEVEL%` in `PROMPT` is substituted once when the prompt
+is *set* and then frozen — so `C` and a live `D;<code>` are both out of reach
+and a `cmd` pane's exit code is genuinely unknown.
 
 `live_wsl_input_boundary_test.dart` answers the input-side counterpart: **does
 an escape sequence this app writes reach the process in the pane in one piece?**

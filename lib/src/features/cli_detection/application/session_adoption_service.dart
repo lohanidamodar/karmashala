@@ -374,8 +374,9 @@ class SessionAdoptionService {
 
   /// Arms panes whose screen shows an agent's own TUI.
   ///
-  /// The signal for a shell with no OSC 133 — WSL bash today, `cmd.exe`
-  /// always. Only unarmed, unbound, live plain panes are read, so the cost
+  /// The signal for a shell with no OSC 133 — `cmd.exe` always, and anything
+  /// with the setting off. Only unarmed, unbound, live plain panes are read,
+  /// so the cost
   /// falls as panes are adopted and is zero once every pane is accounted for.
   void _armFromScreens() {
     final read = readPaneTail;

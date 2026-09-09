@@ -24,11 +24,13 @@ String _decodeEncodedCommand(String base64Text) {
 
 void main() {
   group('shellSupportsIntegration', () {
-    test('only PowerShell is integrated', () {
+    test('PowerShell and WSL are integrated, cmd.exe never', () {
       expect(shellSupportsIntegration(TerminalShell.powerShell), isTrue);
-      // cmd.exe has no prompt hook able to emit OSC 133; WSL bash is deferred.
+      // A WSL pane is instrumented by the payload its launch already carries;
+      // `cmd.exe` has no hook between reading a command and running it, and its
+      // PROMPT cannot carry a live exit code — both measured, see the doc.
+      expect(shellSupportsIntegration(TerminalShell.wsl), isTrue);
       expect(shellSupportsIntegration(TerminalShell.commandPrompt), isFalse);
-      expect(shellSupportsIntegration(TerminalShell.wsl), isFalse);
     });
   });
 
@@ -62,21 +64,23 @@ void main() {
       expect(explicit.arguments, off.arguments);
     });
 
-    test('cmd and WSL are unchanged even when integration is on', () {
+    test('cmd is unchanged even when integration is on', () {
       final cmd = ptyLaunchFor(
         TerminalProfile.commandPrompt,
         shellIntegration: true,
       );
       expect(cmd.executable, 'cmd.exe');
       expect(cmd.arguments, isEmpty);
+    });
 
+    test('a WSL pane with integration off is byte-identical to before', () {
       const wsl = TerminalProfile(
         id: 'wsl:Ubuntu',
         label: 'Ubuntu (WSL)',
         shell: TerminalShell.wsl,
         wslDistribution: 'Ubuntu',
       );
-      final launch = ptyLaunchFor(wsl, shellIntegration: true);
+      final launch = ptyLaunchFor(wsl);
       expect(launch.executable, 'cmd.exe');
       expect(launch.arguments, const ['/c', 'wsl.exe -d Ubuntu']);
     });
@@ -224,22 +228,23 @@ void main() {
 
     test('a shell that cannot emit markers does not get a recorder', () {
       // The factory used to gate on the setting alone, so with integration on
-      // every cmd.exe and WSL pane carried a live CommandBlockRecorder and a
-      // permanent onPrivateOSC listener that no marker could reach.
+      // every cmd.exe pane carried a live CommandBlockRecorder and a permanent
+      // onPrivateOSC listener that no marker could reach.
       expect(applies(TerminalProfile.powerShell), isTrue);
+      expect(applies(wsl), isTrue);
       expect(applies(TerminalProfile.commandPrompt), isFalse);
-      expect(applies(wsl), isFalse);
     });
 
-    test('and those shells still start, byte-for-byte as before', () {
-      // The other half of the fix: withholding the recorder must not withhold
-      // the shell. cmd and WSL launch exactly as they do with the setting off.
-      for (final profile in const [TerminalProfile.commandPrompt, wsl]) {
-        final off = ptyLaunchFor(profile);
-        final on = ptyLaunchFor(profile, shellIntegration: true);
-        expect(on.executable, off.executable);
-        expect(on.arguments, off.arguments);
-      }
+    test('and cmd.exe still starts, byte-for-byte as before', () {
+      // The other half of that fix: withholding the recorder must not withhold
+      // the shell.
+      final off = ptyLaunchFor(TerminalProfile.commandPrompt);
+      final on = ptyLaunchFor(
+        TerminalProfile.commandPrompt,
+        shellIntegration: true,
+      );
+      expect(on.executable, off.executable);
+      expect(on.arguments, off.arguments);
     });
 
     test('the setting still has to be on', () {

@@ -262,10 +262,11 @@ class TerminalControlTools {
           'Typed and submitted, but NOT waited for: this pane'
           '${shell == null ? '' : ' ($shell)'} has no OSC 133 shell '
           'integration, so it cannot report when a command ends or what it '
-          'exited with. Integration is PowerShell-only today, and off until '
-          'Settings > Terminal enables it; cmd.exe has no prompt hook that '
-          'could carry it at all. The exit code is UNKNOWN — not 0, and not '
-          '"probably fine". Read what happened with terminal_output '
+          'exited with. PowerShell and WSL panes can be integrated, but not '
+          'until Settings > Terminal enables it; cmd.exe never can — it has no '
+          'hook between reading a command and running it, and its PROMPT '
+          'cannot carry a live exit code. The exit code is UNKNOWN — not 0, '
+          'and not "probably fine". Read what happened with terminal_output '
           'paneId=${instance.id}.',
     };
   }

@@ -22,8 +22,8 @@ import 'package:xterm2/xterm.dart';
 /// history. No unit test can see that: it turns on how many rows a real shell
 /// paints per command, which is a property of the user's prompt and of nothing
 /// this repository controls. A WSL pane is where it matters most, because
-/// `shellSupportsIntegration` covers PowerShell alone — so a WSL pane can never
-/// be instrumented, and the line count is the only rule it ever gets.
+/// shell integration is off by default — so a WSL pane usually is not
+/// instrumented, and the line count is the only rule it ever gets.
 ///
 /// The owner's report was *"empty wsl terminal stays in the background instead
 /// of just ending"*. Measured on Windows 10.0.26200 against `archlinux`, whose

@@ -982,7 +982,7 @@ class DormantTerminalInstance
 ///   prompt hook to emit markers;
 /// * the user's setting has to be on;
 /// * and the shell has to be one this app can make emit them
-///   ([shellSupportsIntegration] — PowerShell today).
+///   ([shellSupportsIntegration] — PowerShell and WSL; never `cmd.exe`).
 ///
 /// `ptyLaunchFor` has always applied the third rule to the *launch*; until
 /// Loop 65 the factory did not apply it to the *recorder*, so every cmd.exe and
