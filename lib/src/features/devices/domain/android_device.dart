@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// Connection state of a device as reported by `adb devices -l`.
 enum DeviceConnectionState {

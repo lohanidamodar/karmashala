@@ -1,13 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/data/device_gesture_sink.dart';
 import 'package:karmashala/src/features/devices/data/scrcpy_control.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
 import 'package:karmashala/src/features/devices/domain/device_input.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

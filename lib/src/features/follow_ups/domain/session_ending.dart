@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../sessions/domain/session_status.dart';
 
 /// How a session stopped — which is **not one event**, and the difference is

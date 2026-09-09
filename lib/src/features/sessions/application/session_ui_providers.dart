@@ -2,11 +2,9 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/data/antigravity_transcript.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
-import '../../cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../domain/session.dart';

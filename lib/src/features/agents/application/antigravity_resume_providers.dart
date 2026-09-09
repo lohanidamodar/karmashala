@@ -1,3 +1,4 @@
+import '../../../core/database/sqlite_row_reader.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -5,9 +6,8 @@ import '../../environments/application/environment_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/domain/session.dart';
-import '../data/antigravity_session_resume.dart';
-import '../data/antigravity_store_reader.dart';
-import '../domain/agent_descriptor.dart';
+import 'package:agent_cli/read.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';
 
 /// How to continue [session] when the app has no conversation id recorded for
@@ -78,7 +78,9 @@ final antigravityResumePlannerProvider = Provider<AntigravityResumePlanner>((
         final home = store.homesByAgentId[descriptor.id];
         if (home == null) continue;
         latest = conversationForDirectory(
-          await const AntigravityStoreReader().readLastConversations(home),
+          await const AntigravityStoreReader(
+            readRows: readSqliteRows,
+          ).readLastConversations(home),
           directory.path,
         );
         break;

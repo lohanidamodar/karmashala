@@ -1,13 +1,12 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -16,15 +15,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
-
-class _MovableClock implements Clock {
-  _MovableClock(this.now);
-  DateTime now;
-  @override
-  DateTime nowUtc() => now.toUtc();
-}
 
 /// **When the quota is read again, and — far more importantly — when it is
 /// not.**
@@ -47,14 +40,14 @@ class _MovableClock implements Clock {
 void main() {
   late AppDatabase db;
   late FakeAgentUsageService service;
-  late _MovableClock clock;
+  late MovableClock clock;
 
   /// The key both the throttle and the policy file this workspace's quota
   /// under: `claudeCode@windows`.
   final claudeAccount = usageAccountKey(agentInstallation());
 
   setUp(() {
-    clock = _MovableClock(testTime);
+    clock = MovableClock(testTime);
     // The service's own clock, so the age of a reading moves with the test's.
     // A fixed clock would make every reading eternally fresh and no schedule
     // here would ever be exercised.

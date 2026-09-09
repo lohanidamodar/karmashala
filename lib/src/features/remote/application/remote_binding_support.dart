@@ -9,12 +9,9 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_label.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/session_diff_stat.dart';
 import '../../sessions/application/session_providers.dart';

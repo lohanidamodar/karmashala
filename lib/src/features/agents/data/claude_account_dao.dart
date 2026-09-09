@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/claude_account.dart';
+import 'package:agent_cli/usage.dart';
 
 /// Data-access for saved [ClaudeAccount] rows. Hand-written SQL, no codegen.
 class ClaudeAccountDao {

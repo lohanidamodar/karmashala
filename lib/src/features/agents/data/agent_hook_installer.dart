@@ -5,11 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/util.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../domain/agent_descriptor.dart';
-import '../domain/agent_hook_endpoint.dart';
-import '../domain/agent_hook_transport.dart';
-import '../domain/agent_status.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// Marks the hook entries Karmashala owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.

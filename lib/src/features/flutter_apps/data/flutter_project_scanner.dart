@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/flutter_project.dart';
 
 /// Directory names never worth descending into looking for a project.

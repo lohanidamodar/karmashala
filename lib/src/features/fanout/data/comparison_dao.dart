@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/comparison.dart';
 
 /// Data-access for persisted fan-out comparisons. Hand-written SQL, no codegen.

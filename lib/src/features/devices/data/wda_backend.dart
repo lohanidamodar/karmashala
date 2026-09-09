@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/simulator_backend.dart';
 import '../domain/ui_node.dart';
 import 'simctl_service.dart';

@@ -1,5 +1,4 @@
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../data/checkout_presence_probe.dart';
 import '../data/repository_dao.dart';

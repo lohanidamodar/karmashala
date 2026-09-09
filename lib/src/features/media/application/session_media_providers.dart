@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../editor/application/code_editor_providers.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';

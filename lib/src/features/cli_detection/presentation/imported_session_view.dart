@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../editor/application/code_editor_providers.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/chat_transcript.dart';
@@ -12,7 +12,7 @@ import '../../sessions/presentation/message_composer.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/cli_detection_providers.dart';
-import '../domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 
 /// History for an imported CLI session, rendered like the chat transcript. Typing
 /// a message resumes the session in place (it becomes a live session and the

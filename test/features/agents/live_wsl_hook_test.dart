@@ -10,9 +10,8 @@ import 'package:karmashala/src/features/agents/application/agent_status_provider
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_spool.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

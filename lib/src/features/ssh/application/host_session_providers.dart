@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 import '../data/host_binaries.dart';
 import '../data/host_session_access.dart';
 import '../domain/ssh_host.dart';

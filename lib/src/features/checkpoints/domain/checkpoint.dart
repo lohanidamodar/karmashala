@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/domain/file_change.dart';
 
 /// Why a checkpoint was taken. It is not decoration: [safety] checkpoints are

@@ -6,8 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../sessions/presentation/markdown_message.dart';
 import '../../sessions/presentation/tool_activity_row.dart';
 import '../application/subagent_providers.dart';
-import '../data/cli_transcript_reader.dart';
-import '../data/subagent_transcript.dart';
+import 'package:agent_cli/read.dart';
 
 /// How many delegates deep the rendering will nest before it stops offering to
 /// go further.

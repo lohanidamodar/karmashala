@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/cli_detection/data/codex_store_reader.dart';
+import 'package:agent_cli/read.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/temp_directory.dart';

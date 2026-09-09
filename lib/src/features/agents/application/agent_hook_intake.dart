@@ -4,7 +4,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_outcome_writer.dart';
-import '../domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_status_providers.dart';
 

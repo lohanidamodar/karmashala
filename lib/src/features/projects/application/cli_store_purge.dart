@@ -2,7 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
-import '../../cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/notification_request.dart';
 import '../../sessions/application/session_actions.dart';

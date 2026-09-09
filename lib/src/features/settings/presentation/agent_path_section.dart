@@ -3,14 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import 'package:karmashala_core/paths.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_path_repair.dart';
-import '../../agents/domain/agent_version_reading.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import 'agent_label.dart';

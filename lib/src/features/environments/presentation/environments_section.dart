@@ -5,17 +5,15 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_installations_controller.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
 import '../../ssh/domain/ssh_host.dart';
 import '../../ssh/presentation/ssh_connection_status_chip.dart';
 import '../application/environment_scan_controller.dart';
 import '../application/environments_controller.dart';
-import '../domain/environment_kind.dart';
-import '../domain/execution_environment.dart';
-import '../domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// Every place Karmashala can run an agent, and what it found there.
 ///

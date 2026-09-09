@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// **Which agents the Explorer is showing.**
 ///

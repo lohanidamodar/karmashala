@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// A Git repository belonging to a [Project]. Its working-tree [path] is bound
 /// to the execution environment that owns it.

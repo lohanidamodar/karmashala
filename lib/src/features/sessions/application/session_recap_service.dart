@@ -1,12 +1,12 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/session_model_providers.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../domain/session_recap.dart';
 import 'session_chat_source.dart';

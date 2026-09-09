@@ -2,15 +2,11 @@ import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
-import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
-import 'package:karmashala/src/features/agents/data/usage_throttle.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_usage.dart';
-import 'package:karmashala/src/features/agents/domain/usage_failure.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -24,16 +20,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fakes.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import 'usage_fixtures.dart';
-
-class _Movable implements Clock {
-  _Movable(this.now);
-  DateTime now;
-  @override
-  DateTime nowUtc() => now.toUtc();
-}
 
 /// **Every provider the chip's tree caused to exist**, by name — the bill
 /// `session_switch_cost_test.dart` counts the same way.
@@ -81,7 +71,7 @@ Widget chipIn(ProviderContainer container, {bool visible = true}) =>
 /// signal (`session_verdict_mark.dart` states it, and `CandidateStateMark` —
 /// the last surface that broke it — now keeps it too).
 void main() {
-  late _Movable clock;
+  late MovableClock clock;
   late FakeAgentUsageService service;
   final light = SemanticColors.forBrightness(Brightness.light);
 
@@ -90,7 +80,7 @@ void main() {
     // time past the account's floor moves it for both. A fixed clock leaves
     // every reading eternally fresh and no refresh in this file can reach the
     // endpoint.
-    clock = _Movable(testTime);
+    clock = MovableClock(testTime);
     service = FakeAgentUsageService(clock: clock);
   });
 

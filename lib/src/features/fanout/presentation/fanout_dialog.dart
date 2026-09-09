@@ -5,7 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_installation.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala/src/features/cli_detection/data/claude_store_reader.dart';
+import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

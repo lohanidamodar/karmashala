@@ -9,9 +9,9 @@ library;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/project_tree.dart';
 import '../../explorer/application/session_forest.dart';

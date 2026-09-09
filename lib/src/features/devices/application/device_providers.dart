@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../../environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/adb_service.dart';
 import '../data/android_sdk_discovery.dart';

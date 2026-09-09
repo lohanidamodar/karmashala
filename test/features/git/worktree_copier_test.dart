@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/data/worktree_copier.dart';
 import 'package:karmashala/src/features/git/domain/worktree_setup.dart';
 import 'package:flutter_test/flutter_test.dart';

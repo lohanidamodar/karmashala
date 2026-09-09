@@ -1,13 +1,10 @@
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/features/git/data/git_files.dart';
 import 'package:karmashala/src/features/git/data/hunk_patch.dart';
 import 'package:flutter_test/flutter_test.dart';

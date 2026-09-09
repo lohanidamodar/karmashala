@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/data/automation_dao.dart';
 import 'package:karmashala/src/features/automations/data/project_check_dao.dart';
 import 'package:karmashala/src/features/automations/domain/automation.dart';

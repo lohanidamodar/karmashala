@@ -1,6 +1,4 @@
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// How Karmashala authenticates to a remote host.
 ///

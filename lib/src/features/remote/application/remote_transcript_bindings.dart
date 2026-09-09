@@ -13,8 +13,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
-import '../../cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import '../../sessions/application/session_activity_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_chat_view_providers.dart';
@@ -24,7 +23,7 @@ import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_attribution.dart';
 import '../../sessions/domain/session_chat_view.dart';
 import '../../sessions/domain/session_launch.dart';
-import '../../sessions/domain/session_event_types.dart';
+import 'package:agent_cli/stream.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';

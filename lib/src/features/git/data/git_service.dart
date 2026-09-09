@@ -1,8 +1,6 @@
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';

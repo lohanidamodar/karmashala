@@ -1,7 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/agent_discovery_report.dart';
-import '../domain/agent_path_repair.dart';
+import 'package:agent_cli/discovery.dart';
 import 'agent_installations_controller.dart';
 import 'agent_path_repair_providers.dart';
 

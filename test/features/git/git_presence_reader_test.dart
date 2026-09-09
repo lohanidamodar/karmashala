@@ -1,5 +1,4 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/data/git_files.dart';
 import 'package:karmashala/src/features/git/data/git_presence_reader.dart';
 import 'package:karmashala/src/features/git/data/git_service.dart';

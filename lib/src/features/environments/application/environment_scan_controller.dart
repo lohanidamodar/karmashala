@@ -1,16 +1,13 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/paths/path_probe_provider.dart';
+import '../../../core/util/agent_cli_bridge.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/data/agent_discovery_service.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../ssh/application/ssh_failure.dart';
 import '../../ssh/application/ssh_providers.dart';
-import '../domain/environment_kind.dart';
-import '../domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// What the last agent scan of one environment did.
 class EnvironmentScan {
@@ -60,14 +57,14 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
             .read(commandRunnerFactoryProvider)
             .forEnvironment(environment),
         environment: environment,
-        ids: ref.read(idGeneratorProvider),
-        clock: ref.read(clockProvider),
+        ids: ref.read(agentCliIdsProvider),
+        clock: ref.read(agentCliClockProvider),
         registry: ref.read(agentRegistryProvider),
         // The third and last caller of discovery, so a per-environment scan
         // sees through a Windows junction chain exactly as the other two do.
         // Without this, the one control a user reaches for after "my agent is
         // not showing up" is the one that still cannot find it.
-        pathProbe: ref.read(pathProbeProvider),
+        pathProbe: ref.read(agentCliPathProbeProvider),
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover();
 

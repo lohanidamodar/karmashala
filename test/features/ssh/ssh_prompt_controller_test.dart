@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_prompt_controller.dart';
 import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';

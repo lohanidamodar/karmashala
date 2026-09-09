@@ -2,7 +2,7 @@ import 'package:karmashala/src/features/notifications/domain/agent_session_key.d
 import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
 import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
 import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _coalescer = NotificationCoalescer();

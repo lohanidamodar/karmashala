@@ -1,10 +1,9 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/permission_carry.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/domain/file_change.dart';
 import '../../repositories/application/repository_providers.dart';

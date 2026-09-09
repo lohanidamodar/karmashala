@@ -2,25 +2,14 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_providers.dart';
-import 'package:karmashala_core/paths.dart';
-import '../../../core/paths/path_probe_provider.dart';
-import '../../../core/process/command_runner.dart';
-import '../../../core/process/command_runner_factory.dart';
+import '../../../core/util/agent_cli_bridge.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
-import 'package:karmashala_core/util.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../data/agent_discovery_service.dart';
+import 'package:agent_cli/discovery.dart';
 import '../data/agent_installation_dao.dart';
 import '../data/agent_probe_log.dart';
-import '../domain/agent_discovery_report.dart';
-import '../domain/agent_installation.dart';
-import '../domain/agent_path_repair.dart';
-import '../domain/agent_registry.dart';
-import '../domain/agent_version_reading.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';
 
 /// Holds the known agent installations and can (re)discover them across every
@@ -72,12 +61,12 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
     final factory = ref.read(commandRunnerFactoryProvider);
     final dao = ref.read(agentInstallationDaoProvider);
-    final ids = ref.read(idGeneratorProvider);
-    final clock = ref.read(clockProvider);
+    final ids = ref.read(agentCliIdsProvider);
+    final clock = ref.read(agentCliClockProvider);
     final registry = ref.read(agentRegistryProvider);
     final log = AgentProbeLog(ref.read(databaseProvider));
     final hostEnvironment = ref.read(hostEnvironmentProvider);
-    final pathProbe = ref.read(pathProbeProvider);
+    final pathProbe = ref.read(agentCliPathProbeProvider);
 
     // **Every environment is asked at once; every environment is written in
     // order.** The probes are genuinely independent — a WSL distribution and a
@@ -447,7 +436,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   List<AgentPathReading> readStoredPaths() {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
-    final probe = ref.read(pathProbeProvider);
+    final probe = ref.read(agentCliPathProbeProvider);
     final byId = <String, ExecutableReading>{};
     for (final environment in ref
         .read(executionEnvironmentDaoProvider)
@@ -497,7 +486,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// this same method rather than a second one on purpose: the button and the
   /// startup check must not be able to disagree about what a repair does.
   Future<AgentPathRepairReport> repairBrokenPaths({bool full = false}) async {
-    final clock = ref.read(clockProvider);
+    final clock = ref.read(agentCliClockProvider);
     final broken = [
       for (final reading in readStoredPaths())
         if (reading.isBroken) reading,
@@ -591,7 +580,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   Future<List<AgentVersionChange>> refreshStaleVersions() async {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
-    final clock = ref.read(clockProvider);
+    final clock = ref.read(agentCliClockProvider);
     final factory = ref.read(commandRunnerFactoryProvider);
     final now = clock.nowUtc();
 
@@ -613,7 +602,11 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
 
       // Empty for anything but this machine, which is what leaves a WSL row
       // ungated — a path spelled for its disk is not ours to judge.
-      final readings = _readingsFor(environment, dao, ref.read(pathProbeProvider));
+      final readings = _readingsFor(
+        environment,
+        dao,
+        ref.read(agentCliPathProbeProvider),
+      );
 
       final CommandRunner runner;
       try {
@@ -657,7 +650,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   /// Through the environment's [CommandRunner] and never `Process.run`, which
   /// is what keeps the creation off the isolate that draws: `Process.run` is
   /// charged to its caller before the future exists, and `ProcessSpawner` is
-  /// the seam that moves it to a worker. See `core/process/process_spawn.dart`.
+  /// the seam that moves it to a worker. See `agent_cli`'s `process_spawn.dart`.
   Future<String?> _readVersion(
     CommandRunner runner,
     AgentInstallation row,
@@ -721,9 +714,9 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
     final log = AgentProbeLog(ref.read(databaseProvider));
-    final clock = ref.read(clockProvider);
+    final clock = ref.read(agentCliClockProvider);
     final factory = ref.read(commandRunnerFactoryProvider);
-    final ids = ref.read(idGeneratorProvider);
+    final ids = ref.read(agentCliIdsProvider);
 
     final discovered = <AgentInstallation>[];
     for (final environment
@@ -749,7 +742,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         ids: ids,
         clock: clock,
         registry: registry,
-        pathProbe: ref.read(pathProbeProvider),
+        pathProbe: ref.read(agentCliPathProbeProvider),
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover(agentIds: missing);
 

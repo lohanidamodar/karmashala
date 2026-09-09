@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/model_picker.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/default_model_section.dart';

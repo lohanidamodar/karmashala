@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
@@ -15,8 +15,6 @@ import 'package:karmashala/src/features/devices/domain/device_recording.dart';
 import 'package:karmashala/src/features/devices/domain/device_target.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
-import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 
 import '../../support/fake_command_runner.dart';
 

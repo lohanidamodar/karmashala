@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// A Git worktree as reported by `git worktree list`.
 class GitWorktree {

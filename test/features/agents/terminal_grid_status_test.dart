@@ -1,9 +1,7 @@
 import 'dart:io';
 
 import 'package:karmashala/src/features/agents/data/terminal_grid_status_source.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';

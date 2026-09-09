@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'session_chat_view_providers.dart';

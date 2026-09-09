@@ -1,7 +1,7 @@
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 import 'fake_command_runner.dart';
+import 'package:agent_cli/read.dart';
 
 /// A [CliStoreLocator] that hands back stores a test built on disk.
 ///
@@ -9,7 +9,7 @@ import 'fake_command_runner.dart';
 /// test using it would answer questions about the machine's own CLI stores.
 /// This keeps every store fixture inside the test's temp directory.
 class FixedLocator extends CliStoreLocator {
-  FixedLocator(this.stores) : super(runnerFactory: FakeCommandRunnerFactory());
+  FixedLocator(this.stores) : super(runnerFor: ((_) => FakeCommandRunner()));
 
   final List<CliStore> stores;
 

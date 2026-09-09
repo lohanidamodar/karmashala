@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../data/session_dao.dart';
 import '../domain/session_status.dart';
 import 'session_providers.dart';

@@ -1,10 +1,6 @@
-import '../../../core/process/command_runner_factory.dart';
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../git/data/git_files.dart';
 import '../../git/data/git_service.dart';
 import '../../git/data/hunk_patch.dart';

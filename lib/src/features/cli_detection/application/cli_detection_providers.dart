@@ -1,12 +1,13 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
-import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environment_resolver.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -20,12 +21,9 @@ import '../../terminal/domain/pane_liveness.dart';
 import '../data/cli_session_mutator.dart';
 import 'codex_app_server_providers.dart';
 import '../data/conversation_index_dao.dart';
-import '../data/conversation_store_index.dart';
+import 'package:agent_cli/read.dart';
 import '../data/store_scan_worker.dart';
 import '../data/imported_session_dao.dart';
-import '../domain/conversation_presence.dart';
-import '../domain/detected_project.dart';
-import '../domain/detected_session.dart';
 import 'antigravity_attribution_service.dart';
 import 'cli_detection_service.dart';
 import 'conversation_index_backfill.dart';
@@ -395,12 +393,13 @@ Future<List<DetectedSession>> scanCliStores(Ref ref) async {
 
 final cliStoreLocatorProvider = Provider<CliStoreLocator>(
   (ref) => CliStoreLocator(
-    runnerFactory: ref.watch(commandRunnerFactoryProvider),
+    runnerFor: ref.watch(runnerResolverProvider),
     registry: ref.watch(agentRegistryProvider),
-    // So a located Codex store carries how to reach its app-server: the two
-    // DAO reads happen here, on the isolate that has a database, and cross to
-    // the scan worker as plain data.
-    installations: ref.watch(agentInstallationDaoProvider),
+    // So a located Codex store carries how to reach its app-server. The rows
+    // are read here, on the isolate that has a database, and cross to the scan
+    // worker as plain data; watching the controller rather than snapshotting
+    // the DAO is what keeps a Codex detected later from being missed.
+    installations: ref.watch(agentInstallationsControllerProvider),
   ),
 );
 

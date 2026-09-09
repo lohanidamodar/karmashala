@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/process/process_spawn.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/devices/application/device_clipboard_bridge.dart';
 import 'package:karmashala/src/features/devices/domain/device_clipboard.dart';
 

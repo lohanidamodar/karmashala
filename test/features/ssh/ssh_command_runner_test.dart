@@ -1,11 +1,6 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/process/command_runner_factory.dart';
-import 'package:karmashala/src/core/process/process_spawn.dart';
-import 'package:karmashala/src/core/process/process_spawner.dart';
-import 'package:karmashala/src/core/process/ssh_command_runner.dart';
+import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_command_runner.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection_pool.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
@@ -43,7 +38,7 @@ void main() {
 
   test('the factory builds an SshCommandRunner for an ssh environment', () {
     SshHostDao(db).upsert(saved);
-    final runner = CommandRunnerFactory(
+    final runner = SshCommandRunnerFactory(
       sshConnections: pool,
     ).forEnvironment(remote);
     expect(runner, isA<SshCommandRunner>());
@@ -52,14 +47,14 @@ void main() {
 
   test('an ssh environment without a connection pool fails loudly', () {
     expect(
-      () => const CommandRunnerFactory().forEnvironment(remote),
+      () => const SshCommandRunnerFactory().forEnvironment(remote),
       throwsA(isA<StateError>()),
     );
   });
 
   test('an ssh environment without a saved host fails loudly', () {
     expect(
-      () => CommandRunnerFactory(sshConnections: pool).forEnvironment(remote),
+      () => SshCommandRunnerFactory(sshConnections: pool).forEnvironment(remote),
       throwsA(isA<ArgumentError>()),
     );
   });
@@ -73,14 +68,14 @@ void main() {
       createdAt: testTime,
     );
     expect(
-      () => CommandRunnerFactory(sshConnections: pool).forEnvironment(orphan),
+      () => SshCommandRunnerFactory(sshConnections: pool).forEnvironment(orphan),
       throwsA(isA<ArgumentError>()),
     );
   });
 
   test('an SSH command creates no process, here or on a worker', () async {
     SshHostDao(db).upsert(saved);
-    final runner = CommandRunnerFactory(
+    final runner = SshCommandRunnerFactory(
       sshConnections: pool,
     ).forEnvironment(remote);
     final spawnsHere = processSpawnsOnThisIsolate;

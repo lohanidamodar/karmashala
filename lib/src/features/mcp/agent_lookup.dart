@@ -1,9 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../agents/application/agent_providers.dart';
-import '../agents/domain/agent_ids.dart';
-import '../agents/domain/agent_installation.dart';
-import '../agents/domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/discovery.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/domain/session_launch.dart';
 

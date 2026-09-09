@@ -1,9 +1,8 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
-import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -12,10 +11,9 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
+import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
-import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

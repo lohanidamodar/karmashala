@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/explorer/application/project_tree.dart';
 import 'package:karmashala/src/features/git/domain/git_worktree.dart';

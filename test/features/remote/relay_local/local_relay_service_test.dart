@@ -7,7 +7,7 @@ library;
 
 import 'dart:io';
 
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_test/flutter_test.dart';

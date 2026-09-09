@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/devices/data/device_keyboard_sink.dart';
 import 'package:karmashala/src/features/devices/data/scrcpy_control.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
 import 'package:karmashala/src/features/devices/domain/device_keyboard.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 import '../../support/fake_command_runner.dart';
 

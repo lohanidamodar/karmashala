@@ -6,11 +6,8 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -35,6 +32,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
+import 'package:agent_cli/read.dart';
 
 /// The owner's report: *"when resuming last active tabs after restarting the
 /// app instead it seems to have created new sessions"*, with

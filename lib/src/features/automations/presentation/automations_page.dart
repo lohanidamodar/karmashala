@@ -6,7 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';

@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

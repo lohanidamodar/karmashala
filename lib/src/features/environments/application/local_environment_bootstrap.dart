@@ -1,6 +1,6 @@
 import 'package:karmashala_core/util.dart';
 import '../data/execution_environment_dao.dart';
-import '../domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// Ensures the always-present local host execution environment row exists.
 ///

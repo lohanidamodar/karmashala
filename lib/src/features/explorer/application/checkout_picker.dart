@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
 import '../../git/domain/git_worktree.dart';

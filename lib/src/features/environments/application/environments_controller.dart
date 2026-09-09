@@ -1,8 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/environment_label.dart';
-import '../domain/execution_environment.dart';
-import '../domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import 'environment_discovery_provider.dart';
 import 'environment_providers.dart';
 

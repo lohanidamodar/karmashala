@@ -2,15 +2,12 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/data/antigravity_adapter.dart';
-import 'package:karmashala/src/features/agents/data/claude_code_adapter.dart';
-import 'package:karmashala/src/features/agents/data/codex_adapter.dart';
-import 'package:karmashala/src/features/agents/data/generic_agent_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/stream.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/codex_app_servers.dart';
+import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
@@ -55,6 +52,20 @@ void main() {
 
   FakeCommandRunnerFactory factory() =>
       FakeCommandRunnerFactory(fallback: runner);
+
+  /// The `RunnerResolver` the app composes: the resolver's refusal first, then
+  /// the factory. The adapters take this instead of resolving for themselves,
+  /// so it is where their words come from now.
+  RunnerResolver appRunnerResolver() {
+    final c = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        commandRunnerFactoryProvider.overrideWithValue(factory()),
+      ],
+    );
+    addTearDown(c.dispose);
+    return c.read(runnerResolverProvider);
+  }
 
   Matcher saysSo<T>() =>
       throwsA(isA<T>().having((e) => '$e', 'message', contains(words)));
@@ -117,24 +128,21 @@ void main() {
 
     test('Claude Code refuses', () {
       final adapter = ClaudeCodeAdapter(
-        runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        runnerFor: appRunnerResolver(),
       );
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('Codex refuses', () {
       final adapter = CodexAdapter(
-        runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        runnerFor: appRunnerResolver(),
       );
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('Antigravity refuses', () {
       final adapter = AntigravityAdapter(
-        runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        runnerFor: appRunnerResolver(),
       );
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
@@ -143,8 +151,7 @@ void main() {
       final adapter = GenericAgentAdapter(
         agentId: 'roverCli',
         launch: const AgentLaunchSpec(),
-        runnerFactory: factory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        runnerFor: appRunnerResolver(),
       );
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });

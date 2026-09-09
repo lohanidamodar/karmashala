@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:karmashala_core/logging.dart';
-import '../../agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../application/cli_detection_service.dart';
-import '../domain/detected_session.dart';
-import 'store_scan_slots.dart';
+import 'package:agent_cli/read.dart';
 
 /// What to scan, in a form that crosses to a worker isolate.
 class StoreScanRequest {

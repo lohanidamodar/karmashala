@@ -2,11 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

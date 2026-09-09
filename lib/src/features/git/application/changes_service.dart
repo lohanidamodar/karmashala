@@ -1,9 +1,6 @@
-import '../../../core/process/command_runner_factory.dart';
+import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../../environments/domain/local_environment.dart';
 import '../data/git_files.dart';
 import '../data/git_merge_state.dart';
 import '../data/git_origin_reader.dart';

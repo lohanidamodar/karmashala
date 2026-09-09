@@ -11,13 +11,10 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';

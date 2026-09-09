@@ -1,4 +1,4 @@
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../data/remote_file_browser.dart';
 import '../data/ssh_connection.dart';
 import '../domain/ssh_host_key.dart';

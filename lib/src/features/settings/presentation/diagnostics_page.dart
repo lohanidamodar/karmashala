@@ -7,7 +7,7 @@ import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/settings_controller.dart';

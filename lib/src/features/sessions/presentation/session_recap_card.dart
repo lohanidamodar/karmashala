@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_providers.dart';
 import '../application/session_recap_service.dart';

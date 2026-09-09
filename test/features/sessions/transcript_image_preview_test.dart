@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
+import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
 import 'package:flutter/material.dart';

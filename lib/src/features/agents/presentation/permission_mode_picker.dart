@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
-import '../../settings/domain/permission_risk.dart';
-import '../domain/agent_descriptor.dart';
-import '../domain/agent_permission_options.dart';
-import '../domain/agent_permission_support.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// A menu of the permission modes one agent really has, in that agent's own
 /// words.

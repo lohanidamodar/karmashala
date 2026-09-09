@@ -6,8 +6,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import '../../agents/data/agent_state_file_status_source.dart';
 import '../../agents/data/agent_status_service.dart';
-import '../../agents/domain/agent_registry.dart';
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/watched_session.dart';
 

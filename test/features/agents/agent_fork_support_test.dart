@@ -1,6 +1,4 @@
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:flutter_test/flutter_test.dart';
 

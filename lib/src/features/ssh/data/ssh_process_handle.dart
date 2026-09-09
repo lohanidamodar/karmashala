@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
-import '../../../core/process/process_handle.dart';
+import 'package:agent_cli/process.dart';
 
 /// Exit code reported when a remote process ends without one — the connection
 /// dropped, or the server never sent an exit status. It is `ssh(1)`'s own code
@@ -40,6 +40,19 @@ class SshProcessHandle implements ProcessHandle {
   @override
   void writeLine(String line) {
     _session.write(Uint8List.fromList(utf8.encode('$line\n')));
+  }
+
+  @override
+  Future<void> closeStdin() async {
+    // The channel's EOF. `dartssh2` pipes this sink into the channel, so
+    // closing it is what tells the remote process no more input is coming —
+    // `codex exec` and the package's one-shot `ask` wait on stdin forever
+    // without it. Already closed, or a session that is gone, is not an error.
+    try {
+      await _session.stdin.close();
+    } on Object {
+      // Nothing left to close.
+    }
   }
 
   @override

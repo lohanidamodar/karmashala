@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_status_transition.dart';
 import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';

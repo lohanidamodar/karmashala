@@ -45,7 +45,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// above described a `Process.run` reached from the build phase; the creation
 /// itself no longer happens on this isolate at all — `LocalCommandRunner` and
 /// `WslCommandRunner` hand the request to a worker isolate, and
-/// `core/process/process_spawner.dart` says why. What is left on the frame's
+/// `agent_cli`'s `process_spawner.dart` says why. What is left on the frame's
 /// thread is the request, the port hop and the decoding of what comes back,
 /// which is real but is not the two hundred milliseconds a `wsl.exe` cost.
 /// The gate stays because the *rest* of that work still belongs after the

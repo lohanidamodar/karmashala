@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/row_mapping.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/domain/file_change.dart';
 import '../domain/checkpoint.dart';
 

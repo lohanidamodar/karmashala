@@ -1,4 +1,4 @@
-import '../../agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// What forking *this* session would actually do.
 ///

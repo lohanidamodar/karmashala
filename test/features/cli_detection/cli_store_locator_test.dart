@@ -1,17 +1,17 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import 'package:agent_cli/read.dart';
 
-FakeCommandRunnerFactory _homeIs(String home) => FakeCommandRunnerFactory(
-  fallback: FakeCommandRunner(
+RunnerResolver _homeIs(String home) {
+  final runner = FakeCommandRunner(
     responder: (_) => CommandResult(exitCode: 0, stdout: home, stderr: ''),
-  ),
-);
+  );
+  return (_) => runner;
+}
 
 void main() {
   group('the local host store', () {
@@ -24,7 +24,7 @@ void main() {
 
     test('a POSIX desktop reads \$HOME, with POSIX separators', () async {
       final stores = await CliStoreLocator(
-        runnerFactory: _homeIs('/home/me'),
+        runnerFor: _homeIs('/home/me'),
         environment: const {'HOME': '/Users/me'},
       ).locate([posixEnv()]);
 
@@ -39,7 +39,7 @@ void main() {
       'a Windows desktop reads %USERPROFILE%, with Windows separators',
       () async {
         final stores = await CliStoreLocator(
-          runnerFactory: _homeIs('/home/me'),
+          runnerFor: _homeIs('/home/me'),
           environment: const {'USERPROFILE': r'C:\Users\me'},
         ).locate([windowsEnv()]);
 
@@ -55,14 +55,14 @@ void main() {
       // wrong one would point the scan at a directory that is not the store.
       expect(
         await CliStoreLocator(
-          runnerFactory: _homeIs('/home/me'),
+          runnerFor: _homeIs('/home/me'),
           environment: const {'USERPROFILE': r'C:\Users\me'},
         ).locate([posixEnv()]),
         isEmpty,
       );
       expect(
         await CliStoreLocator(
-          runnerFactory: _homeIs('/home/me'),
+          runnerFor: _homeIs('/home/me'),
           environment: const {'HOME': '/Users/me'},
         ).locate([windowsEnv()]),
         isEmpty,
@@ -73,7 +73,7 @@ void main() {
       'a blank home yields no store rather than a store at the root',
       () async {
         final stores = await CliStoreLocator(
-          runnerFactory: _homeIs('/home/me'),
+          runnerFor: _homeIs('/home/me'),
           environment: const {'HOME': '   '},
         ).locate([posixEnv()]);
 
@@ -83,7 +83,7 @@ void main() {
 
     test('WSL is still located beside a Windows desktop', () async {
       final stores = await CliStoreLocator(
-        runnerFactory: _homeIs('/home/me'),
+        runnerFor: _homeIs('/home/me'),
         environment: const {'USERPROFILE': r'C:\Users\me'},
       ).locate([windowsEnv(), wslEnv()]);
 
@@ -93,7 +93,7 @@ void main() {
 
   test('builds one home per descriptor that declares a store', () async {
     final stores = await CliStoreLocator(
-      runnerFactory: _homeIs('/home/me'),
+      runnerFor: _homeIs('/home/me'),
     ).locate([windowsEnv(), wslEnv()]);
 
     final wsl = stores.firstWhere((s) => s.environmentId == 'wsl:Ubuntu');
@@ -120,7 +120,7 @@ void main() {
     );
 
     final stores = await CliStoreLocator(
-      runnerFactory: _homeIs('/home/me'),
+      runnerFor: _homeIs('/home/me'),
       registry: const AgentRegistry([storeless]),
     ).locate([windowsEnv(), wslEnv()]);
 
@@ -143,7 +143,7 @@ void main() {
       );
 
       final stores = await CliStoreLocator(
-        runnerFactory: _homeIs('/home/me'),
+        runnerFor: _homeIs('/home/me'),
         registry: const AgentRegistry([newAgent]),
       ).locate([windowsEnv(), wslEnv()]);
 
@@ -156,12 +156,10 @@ void main() {
   );
 
   test('an unreachable WSL home contributes no store', () async {
-    final factory = FakeCommandRunnerFactory(
-      fallback: FakeCommandRunner(throwError: CommandException('offline')),
-    );
+    final offline = FakeCommandRunner(throwError: CommandException('offline'));
 
     final stores = await CliStoreLocator(
-      runnerFactory: factory,
+      runnerFor: (_) => offline,
     ).locate([windowsEnv(), wslEnv()]);
 
     expect(stores.where((s) => s.environmentId == 'wsl:Ubuntu'), isEmpty);

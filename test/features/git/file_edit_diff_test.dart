@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/git/data/file_edit_diff.dart';
 import 'package:karmashala/src/features/git/data/file_edit_reader.dart';
 import 'package:karmashala/src/features/git/domain/diff_line.dart';

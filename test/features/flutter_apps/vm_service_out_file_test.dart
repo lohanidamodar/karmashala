@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/flutter_apps/domain/vm_service_out_file.dart';
 
 void main() {

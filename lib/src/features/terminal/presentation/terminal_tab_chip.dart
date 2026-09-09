@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../domain/pane_liveness.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
 import '../../../app/widgets/desktop_menu.dart';

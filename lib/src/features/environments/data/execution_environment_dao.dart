@@ -1,7 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/environment_kind.dart';
-import '../domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// Data-access for [ExecutionEnvironment] rows. Hand-written SQL, no codegen.
 class ExecutionEnvironmentDao {

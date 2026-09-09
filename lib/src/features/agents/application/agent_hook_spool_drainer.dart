@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../../../core/process/command_runner.dart';
-import '../../../core/process/process_spawner.dart';
-import '../../../core/process/wsl_distributions.dart';
+import 'package:agent_cli/process.dart';
 import '../data/agent_hook_spool.dart';
 
 /// One environment's spool directory, as this app can name it.
@@ -35,7 +33,7 @@ class AgentHookSpoolSource {
 /// **All 188 ms of it used to be the UI isolate's**, every [runningRefresh],
 /// for as long as a WSL store was being polled: creating a process is
 /// synchronous work charged to the isolate that asks (see
-/// `core/process/process_spawn.dart`), and this is a `wsl.exe`, the dearest
+/// `agent_cli`'s `process_spawn.dart`), and this is a `wsl.exe`, the dearest
 /// kind. It goes through [sharedProcessSpawner] for the same reason the command
 /// runners do, and by the same route — the app-wide worker isolate.
 Future<Set<String>> wslRunningDistributions() async {

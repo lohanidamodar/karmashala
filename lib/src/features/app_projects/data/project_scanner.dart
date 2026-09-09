@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/gradle_project.dart';
 import '../domain/project_detection.dart';
 

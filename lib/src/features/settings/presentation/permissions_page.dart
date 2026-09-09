@@ -3,10 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../agents/domain/agent_descriptor.dart';
-import '../../agents/domain/agent_permission_options.dart';
-import '../../agents/domain/agent_permission_support.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'settings_section.dart';

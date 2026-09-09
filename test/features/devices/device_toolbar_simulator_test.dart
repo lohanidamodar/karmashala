@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/devices/domain/android_device.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 import 'package:karmashala/src/features/devices/domain/simulator_backend.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// The toolbar beside the device picker, while a simulator's picture is up.
 ///

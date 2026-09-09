@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../data/cli_transcript_reader.dart';
+import 'package:agent_cli/read.dart';
 
 /// Reads one subagent's turns off disk.
 ///

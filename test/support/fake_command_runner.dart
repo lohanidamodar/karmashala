@@ -1,10 +1,6 @@
 import 'dart:async';
 
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/process/command_runner_factory.dart';
-import 'package:karmashala/src/core/process/process_handle.dart';
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_connection_pool.dart';
+import 'package:agent_cli/process.dart';
 
 /// A deterministic [CommandRunner] test double.
 ///
@@ -66,6 +62,10 @@ class FakeProcessHandle implements ProcessHandle {
   final List<String> written = [];
   bool killed = false;
 
+  /// Whether stdin was closed — what the one-shot modes do so a CLI reading a
+  /// non-terminal stdin stops waiting for input that is never coming.
+  bool stdinClosed = false;
+
   /// Whether the process was asked to stop the way Ctrl-C would, rather than
   /// terminated. The two are a real difference for `simctl recordVideo`.
   bool interrupted = false;
@@ -116,6 +116,11 @@ class FakeProcessHandle implements ProcessHandle {
   }
 
   @override
+  Future<void> closeStdin() async {
+    stdinClosed = true;
+  }
+
+  @override
   Future<void> kill() async {
     killed = true;
     complete(137);
@@ -134,14 +139,16 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
   final Map<String, FakeCommandRunner> _byEnvironmentId;
   final FakeCommandRunner _fallback;
 
-  /// Fakes never open a real connection, so there is nothing to hand out.
-  @override
-  SshConnectionPool Function()? get sshConnections => null;
-
-  /// But a fake does hand out a runner for an SSH environment, so a resolver
-  /// asking this factory must not refuse one.
+  /// A fake hands out a runner for an SSH environment too, so a resolver asking
+  /// this factory must not refuse one.
   @override
   bool get canReachRemote => true;
+
+  /// The hook the package's factory leaves for a host with its own transport;
+  /// here every kind is placed by [forEnvironment], so nothing reaches it.
+  @override
+  CommandRunner unsupported(ExecutionEnvironment environment) =>
+      forEnvironment(environment);
 
   @override
   CommandRunner forEnvironment(ExecutionEnvironment environment) =>

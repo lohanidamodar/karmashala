@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../core/process/path_translator.dart';
-import '../environments/domain/environment_kind.dart';
-import '../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 
 /// Everything one launching session needs to reach the app's own MCP endpoint.
 ///

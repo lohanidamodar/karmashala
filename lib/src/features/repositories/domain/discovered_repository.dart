@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// A Git repository found on disk by discovery, before it is persisted.
 ///

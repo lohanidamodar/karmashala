@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/file_picking.dart';
@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/devices/application/device_providers.dar
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
 import 'package:karmashala/src/features/devices/presentation/device_app_controls.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';

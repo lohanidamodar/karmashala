@@ -5,7 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../cli_detection/domain/session_stats.dart';
+import 'package:agent_cli/usage.dart';
 import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_stats_providers.dart';

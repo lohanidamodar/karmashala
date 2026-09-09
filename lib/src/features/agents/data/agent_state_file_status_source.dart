@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../domain/agent_descriptor.dart';
-import '../domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// Derives an agent's status from its own session/state file.
 ///

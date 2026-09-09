@@ -1,8 +1,7 @@
 import 'dart:convert';
 
 import 'package:karmashala_core/util.dart';
-import '../domain/agent_registry.dart';
-import '../domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 
 /// The latest hook-reported status per `(agentId, sessionId)`.
 ///

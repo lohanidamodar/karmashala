@@ -8,14 +8,11 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
-import '../../cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
@@ -219,7 +216,6 @@ class ProjectsController extends Notifier<List<Project>> {
     _refresh();
     return result;
   }
-
 
   /// Re-runs repository discovery over [projectId]'s root and records anything
   /// new. Returns the repositories that were added.

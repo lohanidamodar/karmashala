@@ -4,11 +4,10 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/domain/environment_label.dart';
+import 'package:agent_cli/process.dart';
 import '../../mcp/agent_skills.dart';
 import '../data/agent_skill_installer.dart';
-import '../domain/agent_descriptor.dart';
-import '../domain/karmashala_skill.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';
 
 /// One agent's skills in one environment, or the reason there are none.

@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../explorer/presentation/session_card.dart' show compactAge;
-import '../domain/tool_activity.dart';
+import 'package:agent_cli/stream.dart';
 import 'markdown_message.dart';
 import 'tool_activity_row.dart';
 

@@ -1,6 +1,6 @@
 import 'package:dartssh2/dartssh2.dart';
 
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/remote_directory_entry.dart';
 import 'ssh_connection.dart';
 

@@ -9,8 +9,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/row_menu.dart';
 import '../../editor/application/code_editor_providers.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/local_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';
 import '../data/file_listing_service.dart';
 

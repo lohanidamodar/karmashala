@@ -1,14 +1,12 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../../core/util/id_generator_provider.dart';
+import '../../../core/util/agent_cli_bridge.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../data/codex_account_dao.dart';
-import '../data/codex_auth_service.dart';
-import '../domain/agent_installation.dart';
-import '../domain/codex_account.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/discovery.dart';
 
 final codexAccountDaoProvider = Provider<CodexAccountDao>(
   (ref) => CodexAccountDao(ref.watch(databaseProvider)),
@@ -20,8 +18,8 @@ final codexAuthLocatorProvider = Provider<CodexAuthLocator>(
 
 final codexAuthServiceProvider = Provider<CodexAuthService>(
   (ref) => CodexAuthService(
-    ids: ref.watch(idGeneratorProvider),
-    clock: ref.watch(clockProvider),
+    ids: ref.watch(agentCliIdsProvider),
+    clock: ref.watch(agentCliClockProvider),
   ),
 );
 

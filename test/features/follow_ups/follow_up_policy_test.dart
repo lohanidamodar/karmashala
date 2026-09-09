@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up_policy.dart';
 import 'package:karmashala/src/features/follow_ups/domain/session_ending.dart';

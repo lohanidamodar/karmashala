@@ -6,11 +6,9 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../app/widgets/desktop_menu.dart';
-import '../../agents/domain/agent_ids.dart';
-import '../../agents/domain/agent_registry.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../application/cli_detection_providers.dart';
-import '../domain/detected_project.dart';
-import '../domain/detected_session.dart';
+import 'package:agent_cli/read.dart';
 
 /// Browses projects and sessions auto-detected from the Claude Code and Codex
 /// CLI stores. Projects are merged by path across CLIs and environments;

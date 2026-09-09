@@ -1,9 +1,7 @@
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner_factory.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
 import '../data/git_service.dart';
 import '../data/worktree_copier.dart';
 import '../domain/git_worktree.dart';

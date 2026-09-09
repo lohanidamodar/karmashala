@@ -1,4 +1,4 @@
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 
 /// What kind of thing a remote directory entry is.
 enum RemoteEntryKind { directory, file, symlink, other }

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/mcp/session_launch_tools.dart';
 
 import '../../support/fakes.dart';

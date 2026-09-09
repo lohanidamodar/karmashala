@@ -1,21 +1,42 @@
-import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:agent_cli/discovery.dart' as agent_cli;
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/repositories/data/checkout_presence_probe.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/git/data/git_files.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
 
 /// A [Clock] that always returns a fixed instant.
-class FixedClock implements Clock {
+///
+/// It implements the package's copy of the interface as well as core's.
+/// `agent_cli` is published and carries verbatim copies of `Clock` and
+/// `IdGenerator` rather than depending on `karmashala_core` for them
+/// (docs/PACKAGE_SPLIT.md §2); one fake satisfying both is what keeps every
+/// suite that pins a time or an id on a single double.
+class FixedClock implements Clock, agent_cli.Clock {
   FixedClock(this._now);
   final DateTime _now;
   @override
   DateTime nowUtc() => _now.toUtc();
 }
 
+/// A [Clock] a test can move, for the schedules a fixed instant cannot show.
+///
+/// Satisfies both copies of the interface, for the same reason [FixedClock]
+/// does.
+class MovableClock implements Clock, agent_cli.Clock {
+  MovableClock(this.now);
+
+  DateTime now;
+
+  @override
+  DateTime nowUtc() => now.toUtc();
+
+  void advance(Duration by) => now = now.add(by);
+}
+
 /// An [IdGenerator] that returns predictable, sequential ids (`id-0`, `id-1`…).
-class SequentialIdGenerator implements IdGenerator {
+class SequentialIdGenerator implements IdGenerator, agent_cli.IdGenerator {
   SequentialIdGenerator([this._prefix = 'id-']);
   final String _prefix;
   int _next = 0;

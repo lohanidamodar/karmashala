@@ -1,9 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/flutter_apps/data/flutter_project_scanner.dart';
 import 'package:path/path.dart' as p;
 

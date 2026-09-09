@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../core/process/command_runner.dart';
-import '../../core/process/process_handle.dart';
+import 'package:agent_cli/process.dart';
 import 'launcher_mcp.dart';
 
 /// What a probe of the stdio bridge found.

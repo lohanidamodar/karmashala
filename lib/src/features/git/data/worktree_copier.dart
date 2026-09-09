@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/execution_environment.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/worktree_setup.dart';
 
 /// Copies one gitignored path from a checkout into a worktree beside it.

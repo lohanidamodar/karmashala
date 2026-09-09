@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

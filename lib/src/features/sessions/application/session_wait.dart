@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/domain/evidence_line.dart';
 import '../../notifications/domain/inbox_item.dart';
 import '../../terminal/application/pane_exit_signal.dart';
-import '../domain/session_event_types.dart';
+import 'package:agent_cli/stream.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';

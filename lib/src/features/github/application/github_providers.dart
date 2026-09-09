@@ -1,11 +1,10 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/process/command_runner_factory.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../data/github_service.dart';

@@ -7,7 +7,7 @@ import '../../features/agents/application/agent_skill_installation_service.dart'
 import '../../features/agents/application/agent_hook_intake.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
-import '../../features/agents/domain/agent_hook_endpoint.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';

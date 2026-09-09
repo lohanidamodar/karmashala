@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/media/data/session_media_store.dart';
 import 'package:karmashala/src/features/media/domain/session_image_reference.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';

@@ -1,12 +1,7 @@
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
-import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/permission_carry.dart';
-import 'package:karmashala/src/features/cli_detection/domain/agent_command_line.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What Karmashala is allowed to claim about Antigravity.

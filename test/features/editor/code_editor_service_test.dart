@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/editor/data/code_editor_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 

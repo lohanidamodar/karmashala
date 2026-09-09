@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/logging.dart';
 import '../../../core/paths/app_support_directory.dart';
-import '../../../core/process/process_handle.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/util/clock_provider.dart';
 import '../data/loopback_media_server.dart' show MediaStreamFactory;
 import '../data/recording_sink.dart';

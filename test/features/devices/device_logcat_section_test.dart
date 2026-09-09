@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/devices/application/device_logcat_session.dart';
@@ -14,7 +14,6 @@ import 'package:karmashala/src/features/devices/domain/logcat_tail.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
 import 'package:karmashala/src/features/devices/presentation/device_logcat_section.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

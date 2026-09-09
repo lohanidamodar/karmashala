@@ -6,12 +6,9 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
-import 'package:karmashala/src/features/agents/domain/agent_status.dart';
-import 'package:karmashala/src/features/agents/domain/built_in_agents.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
+import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -29,8 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -425,7 +421,6 @@ void main() {
       expect(body.containsKey('state'), isFalse);
     });
   });
-
 
   group('identity', () {
     test('a caller inside a session needs no sessionId', () async {

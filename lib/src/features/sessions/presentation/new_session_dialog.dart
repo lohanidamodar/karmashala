@@ -6,7 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
-import '../../agents/domain/agent_installation.dart';
+import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../projects/application/projects_controller.dart';

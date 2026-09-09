@@ -8,14 +8,9 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 
-import '../../../core/process/path_translator.dart';
+import 'package:agent_cli/process.dart';
 import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../environments/domain/environment_kind.dart';
-import '../../environments/domain/environment_label.dart';
-import '../../environments/domain/environment_path.dart';
-import '../../environments/domain/execution_environment.dart';
-import '../../environments/domain/local_environment.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
 import '../../ssh/presentation/remote_file_browser_dialog.dart';

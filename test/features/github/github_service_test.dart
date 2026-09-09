@@ -1,5 +1,4 @@
-import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/github/data/github_service.dart';
 import 'package:karmashala/src/features/github/domain/branch_protection.dart';
 import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';

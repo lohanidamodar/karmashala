@@ -1,12 +1,11 @@
+import '../../../core/database/sqlite_row_reader.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../agents/domain/agent_descriptor.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
-import '../../cli_detection/data/agent_lifetime_reader.dart';
-import '../../cli_detection/data/claude_store_reader.dart';
-import '../../cli_detection/data/codex_stats_reader.dart';
-import '../../cli_detection/domain/session_stats.dart';
+import 'package:agent_cli/usage.dart';
+import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
@@ -240,7 +239,7 @@ final claudeLifetimeReaderProvider = Provider<ClaudeLifetimeReader>(
 );
 
 final codexLifetimeReaderProvider = Provider<CodexLifetimeReader>(
-  (ref) => const CodexLifetimeReader(),
+  (ref) => const CodexLifetimeReader(readRows: readSqliteRows),
 );
 
 final sessionStatsServiceProvider = Provider<SessionStatsService>(

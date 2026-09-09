@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../agents/domain/agent_status.dart';
+import 'package:agent_cli/descriptors.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../domain/pane_liveness.dart';

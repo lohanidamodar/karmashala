@@ -1,6 +1,6 @@
 import 'package:path/path.dart' as p;
 
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../../projects/domain/project.dart';
 
 /// Suggests which context a project at [root] probably belongs to, by looking

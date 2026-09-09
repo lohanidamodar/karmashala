@@ -1,5 +1,4 @@
-import '../../../core/process/path_translator.dart';
-import '../../environments/domain/environment_kind.dart';
+import 'package:agent_cli/process.dart';
 
 /// Where `--vmservice-out-file` should point for a run in [kind], given the
 /// **host** directory this app watches — or null when no path can be spelled

@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/process/command_runner.dart';
-import '../../environments/domain/environment_path.dart';
+import 'package:agent_cli/process.dart';
 import '../domain/branch_protection.dart';
 import '../domain/github_repo.dart';
 import '../domain/issue.dart';
