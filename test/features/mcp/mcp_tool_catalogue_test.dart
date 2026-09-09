@@ -114,8 +114,10 @@ void main() {
       'inbox_open',
       // Repoints the Explorer, the diff view and the side panel.
       'select_checkout',
-      // Opens a terminal tab for the run and focuses it.
+      // Opens a terminal tab for the run and focuses it — and the same for
+      // project_build's "build", which is the worst of that tool's four.
       'flutter_run',
+      'project_build',
       // Puts the running app into widget-select mode and waits on a person.
       'flutter_pick_widget',
       // Each can end up launching a visible Chrome; `browser_tabs` opens a

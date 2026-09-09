@@ -13,6 +13,7 @@ import 'project_kind.dart';
 /// else, which is the honest outcome for a framework nobody here has built.
 const List<ProjectDescriptor> builtInProjectDescriptors = <ProjectDescriptor>[
   _flutter,
+  _nativeAndroid,
 ];
 
 /// The descriptor for [kind], or null when there is none.
@@ -47,6 +48,7 @@ const _flutter = ProjectDescriptor(
   builds: <ProjectBuildSpec>[
     ProjectBuildSpec(
       target: ProjectTarget.android,
+      tool: ProjectBuildTool.flutterSdk,
       command: Established<List<String>>.measured(
         <String>['build', 'apk', '--debug'],
         evidence:
@@ -74,10 +76,77 @@ const _flutter = ProjectDescriptor(
     ),
     ProjectBuildSpec(
       target: ProjectTarget.ios,
+      tool: ProjectBuildTool.xcodebuild,
       command: Established<List<String>>.unchecked(_noMac),
       artifact: Established<ProjectArtifact>.unchecked(_noMac),
       applicationId: Established<ApplicationIdSource>.unchecked(_noMac),
     ),
+  ],
+);
+
+
+/// Native Android: a Gradle build whose settings script includes a module
+/// applying `com.android.application`.
+///
+/// **Measured against a project made for the measurement, because this
+/// machine has none.** Every Android project on this disk is a Flutter app —
+/// including this repository's own `android/`, which is a Flutter *host
+/// module*: its settings script `includeBuild`s `flutter_tools/gradle`,
+/// applies `dev.flutter.flutter-plugin-loader`, reads `flutter.sdk` out of
+/// `local.properties`, and ships no `gradlew` or `gradlew.bat` at all, because
+/// Flutter drives Gradle through its own tooling. So it is not a usable native
+/// fixture, and `gradleSettingsIsFlutterHost` exists to keep it out of this
+/// path rather than build somebody's Flutter app behind their back.
+///
+/// A throwaway minimal native project was built instead, through the Windows
+/// toolchain, and deleted after. The evidence on each field is that run.
+const _nativeAndroid = ProjectDescriptor(
+  kind: ProjectKind.nativeAndroid,
+  summary:
+      'A settings.gradle(.kts) including a module that applies '
+      'com.android.application, with no pubspec.yaml beside it.',
+  liveChannel: Established<String>.absent(
+    'Android has no live debug channel beyond logcat, which device_logcat '
+    'already reads. A Flutter app has the VM service because Dart runs one; '
+    'there is no native equivalent to half-build here.',
+  ),
+  builds: <ProjectBuildSpec>[
+    ProjectBuildSpec(
+      target: ProjectTarget.android,
+      tool: ProjectBuildTool.gradleWrapper,
+      command: Established<List<String>>.measured(
+        <String>['${ProjectBuildSpec.modulePlaceholder}:assembleDebug'],
+        evidence:
+            'gradlew.bat :app:assembleDebug, run 2026-09-09 through the '
+            'Windows toolchain against a minimal AGP 9.0.1 / Gradle 9.1.0 '
+            'project: "BUILD SUCCESSFUL in 32s", 32 tasks executed, exit 0.',
+      ),
+      artifact: Established<ProjectArtifact>.measured(
+        ProjectArtifact(
+          directory:
+              '${ProjectBuildSpec.modulePlaceholder}/build/outputs/apk/debug',
+          fileName: '${ProjectBuildSpec.modulePlaceholder}-debug.apk',
+        ),
+        evidence:
+            'That run left app/build/outputs/apk/debug/app-debug.apk, 5,811 '
+            'bytes. The file name is only expected: AGP names the APK after '
+            'the module\'s archives base name, so the metadata beside it is '
+            'read for the real one.',
+      ),
+      applicationId: Established<ApplicationIdSource>.measured(
+        ApplicationIdSource.buildOutputMetadata,
+        evidence:
+            'output-metadata.json from that run reads "applicationId": '
+            '"com.popupbits.nativeprobe" and "outputFile": "app-debug.apk". '
+            'Crossed against the applicationId literal in app/build.gradle.kts '
+            'and against aapt dump badging on the APK: all three agree, so the '
+            'file the build already wrote is used and no second tool is '
+            'spawned.',
+      ),
+    ),
+    // No iOS spec at all, rather than an unchecked one. An Android project has
+    // no iOS target — writing a row that says "unchecked" would claim there is
+    // something here nobody got round to.
   ],
 );
 

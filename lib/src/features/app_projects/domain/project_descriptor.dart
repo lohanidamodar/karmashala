@@ -47,6 +47,36 @@ enum ApplicationIdSource {
   final String label;
 }
 
+
+/// Which program runs a [ProjectBuildSpec.command], resolved per environment.
+///
+/// **The second kind is what made this a field.** With only Flutter in the
+/// table the tool was implicit — there was one — and the controller could
+/// assume it. `gradlew` is the second, and it is not a name on PATH but a file
+/// *in the project*: the descriptor has to say which of the two it wants, or
+/// the code that runs it is guessing.
+enum ProjectBuildTool {
+  /// The Flutter SDK found for that environment by `FlutterSdkReadings`,
+  /// which is where CLAUDE.md §17's refusal lives.
+  flutterSdk('the Flutter SDK for that environment'),
+
+  /// The `gradlew` wrapper **in the project**. Never a `gradle` on PATH: the
+  /// wrapper is how a project pins the Gradle it was written for, and building
+  /// with another one is building something else.
+  gradleWrapper('the project\'s own gradlew'),
+
+  /// `xcodebuild`, which exists only on a Mac.
+  xcodebuild('xcodebuild'),
+
+  /// The project's own package script, run through its package manager.
+  packageScript('the project\'s package script'),
+  ;
+
+  const ProjectBuildTool(this.label);
+
+  final String label;
+}
+
 /// Where a build's artifact lands, relative to the project directory.
 class ProjectArtifact {
   const ProjectArtifact({required this.directory, required this.fileName});
@@ -73,12 +103,17 @@ class ProjectArtifact {
 class ProjectBuildSpec {
   const ProjectBuildSpec({
     required this.target,
+    required this.tool,
     required this.command,
     required this.artifact,
     required this.applicationId,
   });
 
   final ProjectTarget target;
+
+  /// What runs [command]. Resolved to a real executable per environment, and
+  /// never guessed at from a bare name.
+  final ProjectBuildTool tool;
 
   /// The argv, run **in the project directory**. May contain
   /// [modulePlaceholder], which detection fills in.
@@ -124,6 +159,8 @@ class ProjectBuildSpec {
 
   Map<String, Object?> toJson() => <String, Object?>{
     'target': target.name,
+    'tool': tool.name,
+    'toolNote': tool.label,
     'command': command.toJson(),
     'artifact': artifact.toJson(),
     'applicationId': applicationId.toJson(),

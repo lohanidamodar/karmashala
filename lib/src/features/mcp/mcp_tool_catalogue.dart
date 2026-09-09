@@ -554,6 +554,19 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
         openWorld: true,
         movesAttention: true,
       ),
+      // A build overwrites the artifact that was there, with no undo, and
+      // resolves dependencies from the network — so destructive and open-world
+      // for the same reasons `flutter_run` is. Idempotent because building the
+      // same tree twice leaves the same artifact and a retry after a failed
+      // build is safe, which is not true of a launch. "build" opens and
+      // focuses a terminal tab; "detect", "status" and "stop" do not, and the
+      // annotation describes the worst of the four.
+      'project_build': McpToolAnnotations(
+        destructive: true,
+        idempotent: true,
+        openWorld: true,
+        movesAttention: true,
+      ),
 
       // Verification runs.
       'verification_list': McpToolAnnotations.read,
@@ -623,6 +636,10 @@ enum McpToolCategory {
   flutterApps(
     'Flutter apps',
     'Starting a Flutter project, and the app once it is running.',
+  ),
+  appProjects(
+    'App projects',
+    'What a checkout is, and the artifact its own toolchain builds.',
   ),
   guides(
     'Guides',
@@ -1080,6 +1097,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'flutter_run': McpToolListing(
     McpToolCategory.flutterApps,
     'Start a project: pub get, launch on a device, and run its gates.',
+  ),
+  'project_build': McpToolListing(
+    McpToolCategory.appProjects,
+    'What a checkout is, and the artifact its own toolchain builds.',
   ),
 
   // Guides.

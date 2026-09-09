@@ -64,6 +64,7 @@ void main() {
     test('the module placeholder is filled from detection', () {
       const spec = ProjectBuildSpec(
         target: ProjectTarget.android,
+        tool: ProjectBuildTool.gradleWrapper,
         command: Established<List<String>>.measured(
           <String>['<module>:assembleDebug'],
           evidence: 'ran it',
@@ -92,6 +93,7 @@ void main() {
     test('an unchecked command is not runnable and answers with a refusal', () {
       const spec = ProjectBuildSpec(
         target: ProjectTarget.ios,
+        tool: ProjectBuildTool.xcodebuild,
         command: Established<List<String>>.unchecked('needs a Mac'),
         artifact: Established<ProjectArtifact>.unchecked('needs a Mac'),
         applicationId: Established<ApplicationIdSource>.unchecked('needs a Mac'),

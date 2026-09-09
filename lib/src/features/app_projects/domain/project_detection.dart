@@ -1,5 +1,6 @@
 import '../../flutter_apps/domain/flutter_project.dart';
 import 'built_in_projects.dart';
+import 'gradle_project.dart';
 import 'project_descriptor.dart';
 import 'project_kind.dart';
 
@@ -86,7 +87,118 @@ ProjectReading? detectProject({
 }) {
   final flutter = _readFlutter(directoryName: directoryName, read: read);
   if (flutter != null) return flutter;
+  final android = _readNativeAndroid(directoryName: directoryName, read: read);
+  if (android != null) return android;
   return null;
+}
+
+/// The files [detectProject] reads before it knows what it is looking at.
+///
+/// Named so the scanner fetches exactly these and no more: a detection is a
+/// bounded handful of reads, not a walk. The module scripts are a second round
+/// — which ones to read is a question only the settings script can answer.
+const List<String> kProjectRootFiles = <String>[
+  'pubspec.yaml',
+  'package.json',
+  'settings.gradle.kts',
+  'settings.gradle',
+  'gradle/libs.versions.toml',
+  '../pubspec.yaml',
+];
+
+/// The build scripts to read for [modules], both spellings, in the order they
+/// are preferred.
+List<String> gradleModuleScriptPaths(List<String> modules) => <String>[
+  for (final module in modules)
+    for (final name in const <String>['build.gradle.kts', 'build.gradle'])
+      '${module.replaceFirst(':', '').replaceAll(':', '/')}/$name',
+];
+
+/// Why a directory that carries Gradle is still not a project we build, when
+/// there is something specific to say. Null when there is not.
+///
+/// This exists because the generic "no marker Karmashala knows" is *wrong* for
+/// the most likely case on a Flutter machine: pointing at `android/` inside a
+/// Flutter checkout. That directory has every native Android marker and is the
+/// Android half of the app one level up, so the refusal has to say which.
+String? notAProjectNote({required ProjectFileReader read}) {
+  final settings = read('settings.gradle.kts') ?? read('settings.gradle');
+  if (settings == null) return null;
+  if (!gradleSettingsIsFlutterHost(settings) && !_parentIsFlutter(read)) {
+    return null;
+  }
+  return 'This is the Android half of a Flutter project, not a native Android '
+      'project: its settings script reaches into the Flutter SDK '
+      '(dev.flutter.flutter-plugin-loader, includeBuild of '
+      'flutter_tools/gradle, flutter.sdk from local.properties). Building it '
+      'directly would build somebody else\'s app behind their back, and it '
+      'usually has no gradlew of its own because Flutter drives Gradle through '
+      'its own tooling. Point at the Flutter project one directory up.';
+}
+
+/// Native Android: a Gradle build with an application module, and no Flutter
+/// or React Native above or around it.
+///
+/// The two exclusions are not decoration. Every Android project on the
+/// machine this was written for is a Flutter host module, and a React Native
+/// project carries an `android/` that looks exactly like this one.
+ProjectReading? _readNativeAndroid({
+  required String directoryName,
+  required ProjectFileReader read,
+}) {
+  // The item's own rule: `settings.gradle` with an app module, **no
+  // pubspec.yaml**. A pubspec here would already have been answered above
+  // unless it is a plain Dart package, and a plain Dart package that also
+  // holds an Android app is not a shape worth guessing at.
+  if (read('pubspec.yaml') != null) return null;
+  final settings = read('settings.gradle.kts') ?? read('settings.gradle');
+  if (settings == null) return null;
+  if (gradleSettingsIsFlutterHost(settings) || _parentIsFlutter(read)) {
+    return null;
+  }
+
+  final catalog = gradlePluginCatalog(read('gradle/libs.versions.toml') ?? '');
+  final modules = gradleIncludedModules(settings);
+  for (final module in modules) {
+    final directory = module.replaceFirst(':', '').replaceAll(':', '/');
+    final script =
+        read('$directory/build.gradle.kts') ?? read('$directory/build.gradle');
+    if (script == null) continue;
+    final moduleReading = readGradleModule(script);
+    // A Flutter host module can be included by a settings script that says
+    // nothing about Flutter itself, so the module is checked too.
+    if (moduleReading.isFlutterHostModule) return null;
+    if (!moduleReading.appliesAndroidApplication(catalog: catalog)) continue;
+    return ProjectReading(
+      kind: ProjectKind.nativeAndroid,
+      name: gradleRootProjectName(settings) ?? directoryName,
+      androidModule: module,
+      evidence: <String>[
+        'settings script includes ${modules.join(', ')}',
+        '$directory build script applies com.android.application',
+        if (moduleReading.applicationId != null)
+          'applicationId "${moduleReading.applicationId}" is a literal in that '
+              'script; the build\'s own output-metadata.json is read for the '
+              'one that shipped',
+        if (moduleReading.applicationId == null)
+          'no applicationId literal in that script, so it is read from the '
+              'build\'s own output-metadata.json and is unknown until there '
+              'is a build',
+      ],
+    );
+  }
+  return null;
+}
+
+/// Whether the directory **above** this one is a Flutter project.
+///
+/// The second, independent signal that an `android/` belongs to somebody. It
+/// catches a host module whose settings script has been rewritten and no
+/// longer names Flutter — which `flutter create` does not produce, but a
+/// person editing one can.
+bool _parentIsFlutter(ProjectFileReader read) {
+  final parent = read('../pubspec.yaml');
+  return parent != null && readPubspec(parent).isFlutter;
 }
 
 /// Flutter, read through `readPubspec` rather than beside it.
