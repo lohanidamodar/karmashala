@@ -39,6 +39,7 @@ part 'remote_companion_gateway_sessions.dart';
 part 'remote_companion_gateway_transcript.dart';
 part 'remote_companion_gateway_host_events.dart';
 part 'remote_companion_gateway_approvals.dart';
+part 'remote_companion_gateway_attachments.dart';
 
 /// The real gateway: [CompanionClient] + [CompanionPairingClient] over an
 /// injected [stored.CompanionStore] (`SecureCompanionStore` on a phone).
@@ -695,41 +696,17 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (attachment == null) {
       return _mapRefusals(() => client.sendPrompt(sessionId, text));
     }
-    // Declared first, so a refusal costs one small frame rather than the
-    // megabytes of a photo the desktop cannot use.
-    final offer = await _mapRefusals(
-      () => client.beginAttachment(
-        RemoteAttachmentBegin(
-          sessionId: sessionId,
-          name: attachment.name,
-          mediaType: attachment.mediaType,
-          bytes: attachment.bytes.length,
-        ),
-      ),
+    final uploadId = await _uploadAttachment(
+      client,
+      sessionId,
+      attachment,
+      onProgress,
     );
-    final total = (attachment.bytes.length / offer.chunkBytes).ceil();
-    onProgress?.call(0, total);
-    var seq = 0;
-    for (var at = 0; at < attachment.bytes.length; at += offer.chunkBytes) {
-      final end = at + offer.chunkBytes < attachment.bytes.length
-          ? at + offer.chunkBytes
-          : attachment.bytes.length;
-      // Awaited one at a time. The outbound queue drops its oldest frame under
-      // pressure, so a slice nobody acknowledged is a slice that is gone.
-      await _mapRefusals(
-        () => client.sendAttachmentChunk(
-          offer.uploadId,
-          seq,
-          Uint8List.sublistView(attachment.bytes, at, end),
-        ),
-      );
-      onProgress?.call(++seq, total);
-    }
     // The prompt is the commit: the host checks the length here, so a short
     // upload takes the prompt with it rather than becoming a truncated file an
     // agent is told to open.
     return _mapRefusals(
-      () => client.sendPrompt(sessionId, text, attachmentId: offer.uploadId),
+      () => client.sendPrompt(sessionId, text, attachmentId: uploadId),
     );
   }
 
