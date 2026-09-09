@@ -36,12 +36,18 @@ class SlowStore implements stored.CompanionStore {
   SlowStore(this.disk);
 
   final Map<String, String> disk;
-  Duration writeCost = Duration.zero;
 
-  /// Held open, every write waits here. The keystore call the connect loop
-  /// makes from INSIDE its dial — persisting the generation counter — is the
-  /// one window in which a link can be torn down under a `connect()` that has
-  /// already been answered, so a test needs to be able to stand in it.
+  /// Held open, every write waits here. The two keystore calls the connect
+  /// loop makes around the answer to its dial — the generation counter from
+  /// inside `connect()`, and the host's greeting written down straight after
+  /// `connected` — are the windows in which a link can be torn down with
+  /// nothing yet in existence for its death to land on, so a test needs to be
+  /// able to stand in them.
+  ///
+  /// Held rather than *widened*: a `writeCost` of 400 real milliseconds made
+  /// the window long enough to race a kill into on an idle machine and short
+  /// enough to miss on a loaded one, which is a reading of the machine rather
+  /// than of the loop.
   Completer<void>? gate;
 
   /// How many writes the gate has held.
@@ -57,7 +63,6 @@ class SlowStore implements stored.CompanionStore {
       gated++;
       await waiting.future;
     }
-    if (writeCost > Duration.zero) await Future<void>.delayed(writeCost);
     disk[key] = value;
   }
 
@@ -97,7 +102,6 @@ void main() {
   });
 
   tearDown(() async {
-    store.writeCost = Duration.zero;
     // A held gate would deadlock the shutdown as surely as it holds the dial.
     if (store.gate?.isCompleted == false) store.gate!.complete();
     store.gate = null;
@@ -131,9 +135,21 @@ void main() {
     return started;
   }
 
+  /// The bounds below are hang-guards, not the measurement — same reasoning as
+  /// [awaitLink]. Neither test asks how fast the phone says hello or how fast
+  /// the desktop answers a request, so a handshake bounded at 150ms and a
+  /// request at 500ms were two extra ways to fail that protected nothing.
+  ///
+  /// Measured on this file before they were raised: the 150ms handshake bound
+  /// expires **twice per run with no load at all** (`the socket came back but
+  /// the host did not: TimeoutException after 0:00:00.150000`), and a request
+  /// that is answered is answered in 23–30ms — so the 500ms one had headroom
+  /// only until the machine was busy. A bound that expires on an idle machine
+  /// is not a bound, it is the reading; two seconds is what the siblings use
+  /// for machinery, and 90 seconds is a pairing that has not hung.
   RemoteCompanionGateway makeGateway({
     LanPathScout? scout,
-    Duration pairingTimeout = const Duration(seconds: 20),
+    Duration pairingTimeout = const Duration(seconds: 90),
   }) {
     final gateway = RemoteCompanionGateway(
       store: store,
@@ -149,8 +165,8 @@ void main() {
         phoneTransports.add(transport);
         return transport;
       },
-      requestTimeout: const Duration(milliseconds: 500),
-      helloTimeout: const Duration(milliseconds: 150),
+      requestTimeout: const Duration(seconds: 2),
+      helloTimeout: const Duration(seconds: 2),
       reconnectBackoff: fastBackoff(),
     );
     gateways.add(gateway);
@@ -204,21 +220,25 @@ void main() {
     await startService();
     final gateway = await pairedPhone();
 
-    // From here every keystore write is slow, which is what widens the window
-    // between "the dial came back" and "the loop is watching for a death"
-    // from microseconds to something a test can stand inside. On a phone that
-    // window is the platform channel's own latency.
-    store.writeCost = const Duration(milliseconds: 400);
-
     var arming = false;
     var killed = false;
     // Completes when the desktop is really gone, not merely on its way out:
     // the restart below must not overwrite `service` from under the stop that
     // is still running.
     final killDone = Completer<void>();
+    // Every state the phone published, in order. The re-dial below is asserted
+    // against this rather than against a clock.
+    final seen = <CompanionLinkState>[];
+    int cameUp() => seen.where((s) => s == CompanionLinkState.connected).length;
     final watch = gateway.linkStates.listen((state) {
+      seen.add(state);
       if (state != CompanionLinkState.connected || !arming || killed) return;
       killed = true;
+      // The window opens here and is HELD open. The loop has said `connected`
+      // and its next awaited work is writing the host's greeting down; with
+      // every write blocked it cannot get past that to the completer a death
+      // would land on, however long the kill below takes.
+      store.gate = Completer<void>();
       // Inside the window: the desktop goes away and the socket bounces, so
       // the phone's re-proof finds nobody and declares the link dead — with
       // nothing yet in existence for that death to land on.
@@ -240,25 +260,40 @@ void main() {
     // work the loop used to lose deaths behind.
     arming = true;
     await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:1'));
-    while (!killed) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    // Wait for the two facts the three-second sleep here used to stand in
-    // for: the desktop is down, and the phone has noticed. Three seconds is
-    // enough for both on an idle machine and a guess on a loaded one, which
-    // is part of why this file fails under `--concurrency=4` and passes
-    // alone.
+
+    // Three facts, each awaited: the phone got there, the desktop is down,
+    // and the loop is standing in the window rather than past it. The last is
+    // what a `writeCost` window could never assert — it hoped.
+    await until(() => killed, reason: 'the phone reaches connected again');
     await killDone.future;
+    await until(
+      () => store.gated > 0,
+      reason: 'the loop is inside the write the death has to land under',
+    );
+
+    // How many times the link had come up when the death was handed over.
+    final cameUpAtDeath = cameUp();
+    store.gate!.complete();
+    store.gate = null;
     await until(
       () => gateway.link != CompanionLinkState.connected,
       reason: 'the phone acts on the death it was handed mid-dial',
     );
-    store.writeCost = Duration.zero;
 
     // The desktop comes back. Nobody touches the phone: it must re-dial on
     // its own, exactly as it does after any other outage.
     await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:2'));
     await awaitLink(gateway, CompanionLinkState.connected);
+    // The second coming-up, counted — not `awaitLink` alone, which seeds the
+    // state the phone is already in and would be answered by the link that
+    // died. Whether the loop re-dialled or the transport healed itself is the
+    // transport's business; that the phone got back up after a death nothing
+    // was waiting for is this test's.
+    expect(
+      cameUp(),
+      greaterThan(cameUpAtDeath),
+      reason: 'the link came up again; it did not park on a death it lost',
+    );
     expect((await gateway.listSessions()).single.id, 's1');
   });
 
