@@ -27,6 +27,8 @@ import '../../remote/transport/relay_transport.dart';
 import '../../remote/transport/remote_transport.dart';
 import 'companion_gateway.dart';
 
+part 'remote_companion_gateway_state.dart';
+
 /// The two refusals every unreachable-or-unpaired path shares; kept identical
 /// to the fake gateway's copy so the UI reads one voice.
 const String _kNotPaired = 'This phone is not paired with a host.';
@@ -68,43 +70,6 @@ const String _kRevoked =
 /// the dial fail is a thing that gets fixed, and a phone that has to be
 /// force-quit to use its own LAN is not a phone that works.
 const Duration kLanUpgradeRefusalTtl = Duration(minutes: 30);
-
-/// A current value plus its changes. Streams emit the value on listen, then
-/// every set — the seeding the gateway contract asks for.
-class _Watched<T> {
-  _Watched(this._value, {this.onSet});
-
-  T _value;
-  final _changes = StreamController<T>.broadcast(sync: true);
-
-  /// Run after every set, changed or not — deduping is the caller's job.
-  final void Function()? onSet;
-
-  T get value => _value;
-
-  set value(T next) {
-    _value = next;
-    _changes.add(next);
-    onSet?.call();
-  }
-
-  Stream<T> get stream async* {
-    yield _value;
-    yield* _changes.stream;
-  }
-}
-
-/// One session's transcript as this phone has assembled it so far.
-class _TranscriptState {
-  final listeners = <MultiStreamController<List<CompanionChatMessage>>>{};
-  List<CompanionChatMessage> messages = const [];
-  int cursor = 0;
-  bool loaded = false;
-
-  /// True once a re-dial invalidated [cursor]: what is held still shows, but
-  /// appends must wait for a full re-read.
-  bool stale = false;
-}
 
 /// The real gateway: [CompanionClient] + [CompanionPairingClient] over an
 /// injected [stored.CompanionStore] (`SecureCompanionStore` on a phone).
