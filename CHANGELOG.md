@@ -39,6 +39,8 @@ installs claim the same version name.
   built beside the app** (687, 238 and 127 tests, seconds each), and the media
   layer is its own package, `karmashala_media`, so core is logging and paths
   only.
+- **The app now uses `karmashala_remote`** — its own copies are gone; a change
+  to the wire or the companion client is gated in under a minute.
 
 ---
 
