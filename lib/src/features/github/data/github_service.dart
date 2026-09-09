@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
+import '../domain/branch_protection.dart';
 import '../domain/github_repo.dart';
 import '../domain/issue.dart';
 import '../domain/merge_strategies.dart';
@@ -64,6 +65,7 @@ PullRequestSnapshot? parseGhPullRequestView(String json) {
     ),
     checks: parseCheckRollup(decoded['statusCheckRollup']),
     headRefName: _stringOrNull(decoded['headRefName']),
+    baseRefName: _stringOrNull(decoded['baseRefName']),
   );
 }
 
@@ -205,6 +207,65 @@ ForgePolicy parseForgePolicy(String json) {
   return (strategies: strategies, unresolvedReviewThreads: unresolved);
 }
 
+/// Parses one `/branches/{b}/protection` body into the rules it names.
+///
+/// Every field is read positively: a missing `required_pull_request_reviews`
+/// leaves [BranchProtection.requiredApprovals] null rather than zero, because
+/// "the body did not carry it" and "no review is required" would send the
+/// strip to name the wrong rule — or to stop naming the right one.
+BranchProtection parseBranchProtection(String json, {String? branch}) {
+  final trimmed = json.trim();
+  if (trimmed.isEmpty) return BranchProtection.unknown;
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(trimmed);
+  } catch (_) {
+    return BranchProtection.unknown;
+  }
+  if (decoded is! Map) return BranchProtection.unknown;
+  // An error body is not a set of rules. `gh api` prints the response even on
+  // a failure, and GitHub's error shape carries `message` and no rule keys.
+  if (decoded.containsKey('message') && !decoded.containsKey('url')) {
+    return mentionsForbidden(trimmed)
+        ? const BranchProtection(status: BranchProtectionRead.forbidden)
+        : BranchProtection.unknown;
+  }
+
+  bool enabled(Object? node) => node is Map && node['enabled'] == true;
+
+  final reviews = decoded['required_pull_request_reviews'];
+  final checks = decoded['required_status_checks'];
+  final contexts = checks is Map ? checks['contexts'] : null;
+  return BranchProtection(
+    status: BranchProtectionRead.read,
+    branch: branch,
+    requiredApprovals: reviews is Map
+        ? (reviews['required_approving_review_count'] as num?)?.toInt()
+        : null,
+    requiresCodeOwnerReview:
+        reviews is Map && reviews['require_code_owner_reviews'] == true,
+    requiredChecks: [
+      if (contexts is List)
+        for (final context in contexts)
+          if (context is String && context.isNotEmpty) context,
+    ],
+    requiresConversationResolution: enabled(
+      decoded['required_conversation_resolution'],
+    ),
+    requiresSignatures: enabled(decoded['required_signatures']),
+    requiresLinearHistory: enabled(decoded['required_linear_history']),
+  );
+}
+
+/// Whether this failure was GitHub refusing the *reader*, not the branch
+/// having nothing to say.
+///
+/// `gh api` prints the response body on stdout and its own line on stderr, so
+/// both are searched: `{"message":"Must have admin rights to Repository.",
+/// "status":"403"}` and `gh: Must have admin rights to Repository. (HTTP 403)`.
+bool mentionsForbidden(String text) =>
+    text.contains('HTTP 403') || text.contains('"403"');
+
 /// Whether `gh` said the branch simply has no pull request — a fact — rather
 /// than failing for a reason that means we could not tell.
 bool mentionsNoPullRequest(String stderr) =>
@@ -330,8 +391,11 @@ class GitHubService {
       // computed lazily, the same computation behind `mergeable` — and asking
       // for it beside `mergeable` costs nothing more, because requesting
       // either one is what triggers the computation in the first place.
+      // `baseRefName` rides along too: branch protection is a property of the
+      // base, so naming a BLOCKED merge's rule needs it, and asking for it
+      // here costs nothing over asking for the rest.
       'number,title,state,url,isDraft,mergeable,mergeStateStatus,'
-          'reviewDecision,statusCheckRollup,headRefName',
+          'reviewDecision,statusCheckRollup,headRefName,baseRefName',
     ]);
     if (!result.ok) {
       if (mentionsNoPullRequest(result.stderr)) return null;
@@ -385,6 +449,40 @@ class GitHubService {
     // more than none, and a body that carries nothing usable degrades to
     // "could not tell" inside the parser.
     return parseForgePolicy(result.stdout);
+  }
+
+  /// The branch-protection rules on [branch], for naming what a `BLOCKED`
+  /// merge is waiting on.
+  ///
+  /// **The third `gh` process, and the only one paid for by a reading rather
+  /// than by a row.** `mergeStateStatus: BLOCKED` is the common state of every
+  /// open pull request in a protected repository, so this is asked only once
+  /// something has already read that status — see
+  /// `checkoutMergeProtectionProvider`, which short-circuits before the
+  /// process for every other state.
+  ///
+  /// **Never throws for a policy reason.** A 403 is the ordinary answer for a
+  /// non-admin and comes back as [BranchProtectionRead.forbidden]; a 404 (the
+  /// branch is guarded by a ruleset rather than by classic protection, or by
+  /// nothing at all), a logged-out `gh` and an unparseable body all come back
+  /// as [BranchProtection.unknown], which leaves the caller's own sentence
+  /// exactly as it was.
+  Future<BranchProtection> branchProtectionFor(
+    EnvironmentPath repo, {
+    required String branch,
+  }) async {
+    final result = await _gh(repo, [
+      'api',
+      // `{owner}` and `{repo}` are gh's own placeholders, filled from the
+      // working directory — repo-relative like every other call here.
+      'repos/{owner}/{repo}/branches/$branch/protection',
+    ]);
+    if (!result.ok) {
+      return mentionsForbidden('${result.stdout}\n${result.stderr}')
+          ? BranchProtection.forbidden
+          : BranchProtection.unknown;
+    }
+    return parseBranchProtection(result.stdout, branch: branch);
   }
 
   /// Takes a pull request out of draft (`gh pr ready`).

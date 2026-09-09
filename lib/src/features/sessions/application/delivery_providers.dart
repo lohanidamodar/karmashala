@@ -11,6 +11,7 @@ import '../../git/domain/remote_repo.dart';
 import '../../git/domain/repository_origin.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/data/github_service.dart';
+import '../../github/domain/branch_protection.dart';
 import '../../github/domain/pull_request_snapshot.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/delivery_attention.dart';
@@ -345,6 +346,40 @@ final checkoutForgePolicyProvider = FutureProvider.autoDispose
           kUnknownForgePolicy;
     });
 
+/// What the base branch's protection requires — the sentence behind a
+/// disabled `Merge` that GitHub would only call `BLOCKED`.
+///
+/// **The third `gh` process, and the narrowest.** It short-circuits before
+/// spawning anything unless the pull request this tick already read says
+/// `mergeStateStatus: BLOCKED`, so a clean, behind, dirty or draft pull
+/// request costs nothing — and since it chains off
+/// [checkoutPullRequestProvider] rather than re-reading, the branch it asks
+/// about is the base of the pull request the strip is showing, on the tick
+/// that observed the status.
+///
+/// A failure is [BranchProtection.unknown], never an error: everything
+/// downstream treats "could not tell" as "keep the sentence you had", so a
+/// token that cannot read a repository's settings leaves the strip exactly as
+/// it was before this provider existed.
+final checkoutMergeProtectionProvider = FutureProvider.autoDispose
+    .family<BranchProtection, Checkout>((ref, checkout) async {
+      final pr = await ref.watch(checkoutPullRequestProvider(checkout).future);
+      if (pr == null || !pr.isOpen) return BranchProtection.unknown;
+      // The one state this call can explain. Every other one already has a
+      // sentence that does not need a process.
+      if (pr.mergeStateStatus != MergeStateStatus.blocked) {
+        return BranchProtection.unknown;
+      }
+      final base = pr.baseRefName;
+      if (base == null) return BranchProtection.unknown;
+      return await _orNull(
+            () => ref
+                .read(gitHubReviewServiceProvider)
+                .branchProtectionFor(checkout.path, branch: base),
+          ) ??
+          BranchProtection.unknown;
+    });
+
 /// The **local** delivery state of the place one session works: its branch, its
 /// change count, `+N −M`, and how far it stands from its base. No `gh`.
 ///
@@ -415,6 +450,11 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
       final policy = ref.watch(
         checkoutForgePolicyProvider(Checkout(directory)).future,
       );
+      // Same shape, same reason: it chains off the pull request too, so
+      // starting it here overlaps rather than serialises.
+      final protection = ref.watch(
+        checkoutMergeProtectionProvider(Checkout(directory)).future,
+      );
 
       final snapshot = await pullRequest;
       final forge = await policy;
@@ -423,6 +463,7 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
           forge.unresolvedReviewThreads,
         ),
         mergeStrategies: forge.strategies,
+        branchProtection: await protection,
         agentRunning:
             ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
       );

@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/github/domain/branch_protection.dart';
 import 'package:karmashala/src/features/github/domain/merge_strategies.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
@@ -46,6 +47,9 @@ void main() {
   var revList = '0\t2\n';
   var numstat = '30\t4\tlib/a.dart\n';
   String? prJson;
+  var protectionJson =
+      '{"url":"u","required_pull_request_reviews":'
+      '{"required_approving_review_count":1}}';
   var policyJson =
       '{"data":{"repository":{"mergeCommitAllowed":false,'
       '"squashMergeAllowed":true,"rebaseMergeAllowed":false,'
@@ -59,6 +63,9 @@ void main() {
     revList = '0\t2\n';
     numstat = '30\t4\tlib/a.dart\n';
     prJson = null;
+    protectionJson =
+        '{"url":"u","required_pull_request_reviews":'
+        '{"required_approving_review_count":1}}';
     policyJson =
         '{"data":{"repository":{"mergeCommitAllowed":false,'
         '"squashMergeAllowed":true,"rebaseMergeAllowed":false,'
@@ -79,7 +86,10 @@ void main() {
     if (request.executable == 'gh') {
       ghCalls.add(args);
       if (args.first == 'api') {
-        return CommandResult(exitCode: 0, stdout: policyJson, stderr: '');
+        if (args[1] == 'graphql') {
+          return CommandResult(exitCode: 0, stdout: policyJson, stderr: '');
+        }
+        return CommandResult(exitCode: 0, stdout: protectionJson, stderr: '');
       }
       final json = prJson;
       if (json == null) {
@@ -297,6 +307,64 @@ void main() {
       expect(delivery.mergeStrategies, MergeStrategies.unknown);
       expect(delivery.pullRequest?.unresolvedReviewThreads, isNull);
       // And the pull request itself still arrived: the two halves fail apart.
+      expect(delivery.pullRequest?.number, 9);
+    });
+  });
+
+  group('the branch-protection read behind a BLOCKED merge', () {
+    // One extra `gh`, only when the status is BLOCKED, only on the tick that
+    // observed it. Every open pull request in a protected repository reports
+    // BLOCKED, so paying for this on any other status would be a process per
+    // tick for a sentence nobody reads.
+    List<List<String>> protectionCalls() => ghCalls
+        .where((c) => c.first == 'api' && c[1] != 'graphql')
+        .toList();
+
+    test('a blocked merge buys the rule, once, for the base branch', () async {
+      addSession('s1', at: null);
+      prJson =
+          '{"number":9,"state":"OPEN","url":"u","mergeable":"MERGEABLE",'
+          '"mergeStateStatus":"BLOCKED","baseRefName":"main",'
+          '"statusCheckRollup":[]}';
+
+      final delivery = await harness().read(
+        sessionDeliveryProvider('s1').future,
+      );
+
+      expect(protectionCalls(), [
+        ['api', 'repos/{owner}/{repo}/branches/main/protection'],
+      ]);
+      expect(delivery.branchProtection.requiredApprovals, 1);
+    });
+
+    test('every other merge state costs nothing at all', () async {
+      addSession('s1', at: null);
+      prJson =
+          '{"number":9,"state":"OPEN","url":"u","mergeable":"MERGEABLE",'
+          '"mergeStateStatus":"CLEAN","baseRefName":"main",'
+          '"statusCheckRollup":[]}';
+
+      final delivery = await harness().read(
+        sessionDeliveryProvider('s1').future,
+      );
+
+      expect(protectionCalls(), isEmpty);
+      expect(delivery.branchProtection, BranchProtection.unknown);
+    });
+
+    test('a refused read leaves the strip exactly as it was', () async {
+      addSession('s1', at: null);
+      prJson =
+          '{"number":9,"state":"OPEN","url":"u","mergeable":"MERGEABLE",'
+          '"mergeStateStatus":"BLOCKED","baseRefName":"main",'
+          '"statusCheckRollup":[]}';
+      protectionJson = 'not json at all';
+
+      final delivery = await harness().read(
+        sessionDeliveryProvider('s1').future,
+      );
+
+      expect(delivery.branchProtection.status, BranchProtectionRead.unknown);
       expect(delivery.pullRequest?.number, 9);
     });
   });

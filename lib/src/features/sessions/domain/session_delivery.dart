@@ -1,5 +1,6 @@
 import '../../git/domain/diff_stat.dart';
 import '../../git/domain/remote_repo.dart';
+import '../../github/domain/branch_protection.dart';
 import '../../github/domain/merge_strategies.dart';
 import '../../github/domain/pull_request_snapshot.dart';
 import 'delivery_stage.dart';
@@ -29,6 +30,7 @@ class SessionDelivery {
     this.unpushed,
     this.pullRequest,
     this.mergeStrategies = MergeStrategies.unknown,
+    this.branchProtection = BranchProtection.unknown,
     this.hasWorktree = false,
     this.agentRunning,
     this.archived = false,
@@ -82,6 +84,13 @@ class SessionDelivery {
   /// not ask" and "we asked and learned nothing" are the same thing to every
   /// reader, and the type already carries a null per strategy for it.
   final MergeStrategies mergeStrategies;
+
+  /// What the base branch's protection requires, when a merge has been read as
+  /// `BLOCKED` and the rules could be read.
+  ///
+  /// [BranchProtection.unknown] by default and for every other merge state:
+  /// this costs a `gh` process and `BLOCKED` is the only state it can explain.
+  final BranchProtection branchProtection;
 
   /// Whether this session works in a worktree of its own — the only thing
   /// archiving can remove.
@@ -192,6 +201,7 @@ class SessionDelivery {
     int? unpushed,
     PullRequestSnapshot? pullRequest,
     MergeStrategies? mergeStrategies,
+    BranchProtection? branchProtection,
     bool? hasWorktree,
     bool? agentRunning,
     bool? archived,
@@ -209,6 +219,7 @@ class SessionDelivery {
     unpushed: unpushed ?? this.unpushed,
     pullRequest: pullRequest ?? this.pullRequest,
     mergeStrategies: mergeStrategies ?? this.mergeStrategies,
+    branchProtection: branchProtection ?? this.branchProtection,
     hasWorktree: hasWorktree ?? this.hasWorktree,
     agentRunning: agentRunning ?? this.agentRunning,
     archived: archived ?? this.archived,
@@ -230,6 +241,7 @@ class SessionDelivery {
       other.unpushed == unpushed &&
       other.pullRequest == pullRequest &&
       other.mergeStrategies == mergeStrategies &&
+      other.branchProtection == branchProtection &&
       other.hasWorktree == hasWorktree &&
       other.agentRunning == agentRunning &&
       other.archived == archived;
@@ -250,6 +262,7 @@ class SessionDelivery {
     Object.hash(
       pullRequest,
       mergeStrategies,
+      branchProtection,
       hasWorktree,
       agentRunning,
       archived,
