@@ -907,9 +907,14 @@ class AdbService {
   }
 
   /// Starts a live `logcat` stream. The caller owns the handle and must kill it.
+  ///
+  /// [tags] narrows the stream at adb with `-s`, which silences every other
+  /// tag. A reader after one line — the Dart VM's service announcement — pays
+  /// nothing for a device that is otherwise chatty.
   Future<ProcessHandle> streamLogcat(
     String serial, {
     List<int> pids = const [],
+    List<String> tags = const [],
   }) => runner.start(
     _forDevice(serial, [
       'shell',
@@ -917,6 +922,7 @@ class AdbService {
       '-v',
       'threadtime',
       ...pids.expand((pid) => ['--pid', '$pid']),
+      if (tags.isNotEmpty) ...['-s', ...tags],
     ]),
   );
 
@@ -942,6 +948,20 @@ class AdbService {
     if (!result.ok) {
       throw StateError('adb forward failed: ${result.stderr.trim()}');
     }
+  }
+
+  /// Forwards to a device port, letting adb pick the host port, and returns
+  /// the port it picked — or null when adb refused.
+  ///
+  /// `tcp:0` is adb's own way of saying "choose one": it prints the number on
+  /// stdout, which is how `flutter attach` gets a host port too. Picking one
+  /// ourselves would race every other tool on the machine.
+  Future<int?> forwardToFreePort(String serial, int devicePort) async {
+    final result = await runner.run(
+      _forDevice(serial, ['forward', 'tcp:0', 'tcp:$devicePort']),
+    );
+    if (!result.ok) return null;
+    return int.tryParse(result.stdout.trim());
   }
 
   Future<void> removeForward(String serial, int localPort) async {

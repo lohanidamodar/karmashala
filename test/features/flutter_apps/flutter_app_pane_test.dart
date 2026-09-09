@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
+import 'package:karmashala/src/features/flutter_apps/data/dtd_pid_files.dart';
 import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
 
@@ -42,6 +44,14 @@ void main() {
         flutterAppDiscoveryDirectoryProvider.overrideWith(
           (ref) async => VmServiceUriDirectory(temp),
         ),
+        // This test knows about no tooling daemons. Without it the real
+        // ones on the machine running the suite are read, and a live
+        // `flutter run` in another window becomes an extra row.
+        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
+        // And no Android SDK and no devices, so opening the pane spawns no
+        // `adb` and reads no real phone.
+        adbServiceProvider.overrideWithValue(null),
+        devicesProvider.overrideWith((ref) async => const []),
         vmServiceConnectorProvider.overrideWithValue((uri) async {
           final fake = reachable[uri.toString()];
           if (fake == null) throw const _Refused();
@@ -67,14 +77,17 @@ void main() {
     expect(
       find.text(
         'No Flutter app is running that we can see.\n\n'
-        'Start it with "flutter run --vmservice-out-file='
-        '"${temp.path}${Platform.pathSeparator}<name>.uri"" — anything '
-        'written there is picked up automatically. An address "flutter run" '
-        'already printed can be attached by hand instead.',
+        'A run Karmashala started, a "flutter run" started anywhere else on '
+        'this machine, and an app on a connected Android device are all found '
+        'on their own. A run on another machine is the one that still needs '
+        'its address attached by hand.',
       ),
       findsOneWidget,
     );
+    // The one remaining lever. The button that copied a flag to paste into
+    // somebody else's command is gone with the flag.
     expect(find.text('Attach by address'), findsOneWidget);
+    expect(find.text('Copy'), findsNothing);
   });
 
   testWidgets('opening the pane looks once, and never again on its own', (
@@ -168,6 +181,11 @@ void main() {
     expect(find.text('2 Flutter apps attached.  ·  checked just now'), findsOneWidget);
     expect(find.text('windows'), findsOneWidget);
     expect(find.text('pixel'), findsOneWidget);
+    // Each row says where it was found and how old that reading is.
+    expect(
+      find.textContaining('started here · found just now'),
+      findsNWidgets(2),
+    );
   });
 
   testWidgets('says a build carries no widget locations rather than nothing', (

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
+import 'package:karmashala/src/features/flutter_apps/data/dtd_pid_files.dart';
 import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
 import 'package:karmashala/src/features/flutter_apps/domain/attached_app.dart';
 import 'package:karmashala/src/features/flutter_apps/domain/flutter_app_failure.dart';
@@ -40,6 +41,10 @@ void main() {
         flutterAppDiscoveryDirectoryProvider.overrideWith(
           (ref) async => VmServiceUriDirectory(temp),
         ),
+        // This test knows about no tooling daemons. Without it the real
+        // ones on the machine running the suite are read, and a live
+        // `flutter run` in another window becomes an extra row.
+        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
         vmServiceConnectorProvider.overrideWithValue((uri) async {
           final fake = reachable[uri.toString()];
           if (fake == null) throw const _Refused();
@@ -145,10 +150,16 @@ void main() {
       expect(registry().apps, isEmpty);
     });
 
-    test('the remedy names the real directory', () async {
+    test('the remedy asks for nothing that is found on its own', () async {
       await apps().look();
-      expect(apps().attachHint, contains(temp.path));
-      expect(apps().attachHint, contains('--vmservice-out-file'));
+      // The old wording told the user to add `--vmservice-out-file` pointed
+      // into this app's own application-support folder. Both halves were
+      // wrong: it rewrote their command, and it aimed it at another program's
+      // directory. Karmashala still passes that flag to the runs *it* starts.
+      expect(apps().attachHint, isNot(contains('--vmservice-out-file')));
+      expect(apps().attachHint, isNot(contains(temp.path)));
+      expect(apps().attachHint, contains('found on their own'));
+      expect(apps().attachHint, contains('another machine'));
     });
   });
 
@@ -228,7 +239,7 @@ void main() {
         throwsA(
           isA<FlutterAppException>()
               .having((e) => e.failure, 'failure', FlutterAppFailure.noAppAttached)
-              .having((e) => e.message, 'message', contains('--vmservice-out-file')),
+              .having((e) => e.message, 'message', contains('found on their own')),
         ),
       );
     });
