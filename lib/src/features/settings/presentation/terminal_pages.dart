@@ -61,7 +61,7 @@ class TerminalPage extends ConsumerWidget {
                     'Mark where each command starts and ends, so the '
                     'terminal can show exit codes and durations and jump '
                     'between commands. PowerShell, and bash or zsh in a WSL pane; '
-                    'never cmd, which has no hook for a command's end. Set up at launch — '
+                    'never cmd, which has no hook for a command’s end. Set up at launch — '
                     'your profile is never modified — and applies to new '
                     'terminals.',
                 value: settings.shellIntegrationEnabled,
