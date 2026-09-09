@@ -18,6 +18,7 @@ workspace:
   - packages/agent_cli
   - packages/karmashala_browser
   - packages/karmashala_core
+  - packages/karmashala_git
   - packages/karmashala_remote
   - packages/local_ipc
 
@@ -39,6 +40,11 @@ dependencies:
     path: packages/karmashala_core
   karmashala_remote:
     path: packages/karmashala_remote
+  # Git and GitHub as values plus the readers and parsers that produce them.
+  # Built beside the app in phase A — nothing under `lib/` imports it yet
+  # (docs/PACKAGE_SPLIT.md §2).
+  karmashala_git:
+    path: packages/karmashala_git
   # The coding-agent interface: discovery, launch, stream, ask, store reading
   # and usage, over one descriptor table. Built beside the app in phase A —
   # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §3).
