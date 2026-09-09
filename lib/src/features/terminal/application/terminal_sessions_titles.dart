@@ -130,13 +130,8 @@ extension TerminalPaneTitles on TerminalSessionsController {
   /// arriving as a window title is a ConPTY behaviour, and on a POSIX host
   /// there is no wrapper for a pane to be named after.
   ///
-  /// **Every name, not just the first.** A WSL pane is now spawned as
-  /// `cmd.exe /c wsl.exe -d <distro> …`, so the image that announces itself is
-  /// no longer the executable — and a filter that knew only the first name let
-  /// `C:\Windows\System32\wsl.exe` through as a tab label. The arguments are
-  /// searched rather than compared, because `throughCommandPrompt` joins the
-  /// whole line into one `/c` argument: the `.exe` is a token inside it, not
-  /// the end of it.
+  /// Which names those are is [launcherNames], which is pure and tested as
+  /// such; what is here is only which profile to ask about.
   Set<String> _launcherNames(TerminalInstance instance) {
     // An agent pane never consults OSC at all — see [_titleForPane].
     if (instance.agentLaunch != null) return const {};
@@ -147,12 +142,7 @@ extension TerminalPaneTitles on TerminalSessionsController {
     // reinterpret a remote profile as a host process.
     if (profile.shell == TerminalShell.ssh) return const {};
     final launch = ptyLaunchFor(profile);
-    return {
-      _basename(launch.executable).toLowerCase(),
-      for (final argument in launch.arguments)
-        for (final match in _executableToken.allMatches(argument))
-          _basename(match.group(0)!).toLowerCase(),
-    };
+    return launcherNames(launch.executable, launch.arguments);
   }
 
   /// A pane named its own window (OSC 0 or 2).
@@ -163,7 +153,7 @@ extension TerminalPaneTitles on TerminalSessionsController {
     // Dropped on the way in rather than filtered on the way out: a title that
     // says nothing leaves the pane called whatever it was called before, and
     // costs no publish at all.
-    if (_namesLauncher(trimmed, launchers)) return;
+    if (namesLauncher(trimmed, launchers)) return;
     if (trimmed.isEmpty) {
       _oscTitles.remove(paneId);
     } else {
