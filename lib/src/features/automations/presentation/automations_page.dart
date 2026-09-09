@@ -12,9 +12,11 @@ import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../terminal/presentation/session_status.dart' show describeAge;
+import '../../verification/domain/verification_run.dart';
 import '../application/automation_providers.dart';
 import '../application/unattended_preflight.dart';
 import '../domain/automation.dart';
+import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
 import 'automation_dialog.dart';
@@ -352,8 +354,41 @@ class _RunLine extends ConsumerWidget {
               run.reason,
               style: theme.textTheme.bodySmall?.copyWith(color: colour),
             ),
+          if (!run.state.isLive) _checks(context, ref),
         ],
       ),
+    );
+  }
+
+  /// What the checkout's own checks said about the work this run left — one
+  /// summary line, then a line per check with its verdict and its age.
+  Widget _checks(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final checks = ref.watch(automationRunChecksProvider(run.id));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          describeAutomationChecks(checks, observedAt: run.checksObservedAt),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        for (final check in checks)
+          Text(
+            '${check.verdict.label} · ${check.name} · '
+            '${describeAge(check.checkedAt, now: now)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: switch (check.verdict) {
+                VerificationVerdict.pass => scheme.onSurfaceVariant,
+                VerificationVerdict.fail => scheme.error,
+                VerificationVerdict.inconclusive => scheme.onSurfaceVariant,
+              },
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+      ],
     );
   }
 }

@@ -88,10 +88,20 @@ typedef MigrationStep = void Function(Database db);
 ///   agent run a person armed in advance, every occurrence of it (including
 ///   the ones nobody was here for), and the per-checkout verification the gate
 ///   refuses without.
+/// * **v44** — what repository a checkout *is*, as distinct from where it is:
+///   a nullable canonical id derived from `origin`.
 /// * **v45** — named terminal presets: the *shape* of a workbench — its tabs,
 ///   their regions and splits, and each pane's profile and directory — with
 ///   nothing running in it, so opening one starts fresh panes rather than
 ///   resurrecting old ones.
+/// * **v46** — what an automation's project checks actually said: one verdict
+///   row per check per occurrence, and the moment the run's checks were looked
+///   at, so "nothing has re-run this yet" and "this checkout has no check"
+///   stay different answers.
+/// * **v47** — what a companion says about itself when it registers for
+///   notifications: its kind, whether it is on screen, and the session it is
+///   showing. Read only to route a push, never to decide whether a frame is
+///   carried.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -138,6 +148,8 @@ final Map<int, MigrationStep> schemaMigrations = {
   43: _migrateToV43,
   44: _migrateToV44,
   45: _migrateToV45,
+  46: _migrateToV46,
+  47: _migrateToV47,
 };
 
 /// Was this pane running when its row was written?
@@ -1995,4 +2007,78 @@ void _migrateToV45(Database db) {
       updated_at TEXT NOT NULL
     );
   ''');
+}
+
+/// The verdicts an automation's project checks left on one occurrence.
+///
+/// **A row per check, and a timestamp on the run saying the checks were looked
+/// at.** The two are not the same fact and collapsing them would lose the one
+/// that matters: no rows and no timestamp is *"nothing has re-run this yet"*,
+/// while no rows *with* a timestamp is *"this checkout has no check
+/// configured"*. A schema that could only say "no verdicts" would read the
+/// second as the first — an unknown reported as a zero (§19).
+///
+/// `check_id` is a plain column with **no foreign key**: deleting a check must
+/// not rewrite what last night's run found, the same reason
+/// `automations.agent_installation_id` is not one. `name` and `command` are
+/// copied onto the row for that too — a verdict has to still say what it ran
+/// after the check it came from is edited or gone.
+///
+/// `verification_run_id` points at the `verification_runs` row
+/// `VerificationService.recordCommandCheck` wrote, and is **null when nothing
+/// ran** — a check whose environment could not be reached is a verdict with no
+/// command behind it.
+///
+/// **v46, renumbered twice on the way in**, for the reason v44 above gives:
+/// the number is compared against the stored `user_version` and never read as
+/// a label, so whichever branch merges second moves — twice here, because two
+/// did.
+void _migrateToV46(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS automation_run_checks (
+      run_id              TEXT NOT NULL
+        REFERENCES automation_runs(id) ON DELETE CASCADE,
+      ordinal             INTEGER NOT NULL,
+      check_id            TEXT,
+      name                TEXT NOT NULL,
+      command             TEXT NOT NULL,
+      verdict             TEXT NOT NULL,
+      reason              TEXT NOT NULL,
+      verification_run_id TEXT,
+      checked_at          TEXT NOT NULL,
+      PRIMARY KEY (run_id, ordinal)
+    );
+  ''');
+  final columns = db
+      .select('PRAGMA table_info(automation_runs);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('checks_observed_at')) return;
+  db.execute('ALTER TABLE automation_runs ADD COLUMN checks_observed_at TEXT;');
+}
+
+/// A companion's presence, as it last described itself.
+///
+/// **Four nullable columns and no defaults**, because every one of them has to
+/// be able to say *nothing was said*: an old companion sends none of these
+/// fields, and a row that answered "foreground" for it would be a claim
+/// invented by this schema (§19). `presence_at` is the reading's own age and is
+/// never backfilled from `created_at` — an unknown reading time is not a
+/// reading time.
+///
+/// Written by `notifications.register` beside the push token, and read in
+/// exactly one place: `PushFanout`, which spends presence to decide whether a
+/// phone that can already hear the news needs a push as well. Nothing on the
+/// delivery path reads it, which is the invariant
+/// `presence_is_not_delivery_test.dart` exists to hold.
+///
+/// **v47, renumbered with v46 above it** and for the same reason.
+void _migrateToV47(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(paired_devices);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('presence_at')) return;
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_kind TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_visibility TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_session TEXT;');
+  db.execute('ALTER TABLE paired_devices ADD COLUMN presence_at TEXT;');
 }

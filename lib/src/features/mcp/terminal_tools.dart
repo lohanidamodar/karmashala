@@ -214,7 +214,13 @@ class TerminalControlTools {
       'finished': outcome.finished,
       // Never invented. `null` is "we were not told", which is not zero.
       'exitCode': outcome.exitCode,
-      'exitCodeKnown': outcome.finished && outcome.exitCode != null,
+      // The code, not the shape of the ending. It used to require
+      // `finished` because only an OSC 133 `D` could carry one; a pane whose
+      // process died now carries the host's own code, and reporting it beside
+      // a note denying one existed would be worse than either alone. The
+      // `paneExited` note below is the other half of this line — change them
+      // together or not at all.
+      'exitCodeKnown': outcome.exitCode != null,
       'durationMs': outcome.duration?.inMilliseconds,
       'output': outcome.output.lines,
       'note': _noteFor(outcome, paneId: paneId, timeout: timeout),
@@ -302,9 +308,15 @@ class TerminalControlTools {
         }
       case CommandRunEnd.paneExited:
         note.write(
-          'The pane\'s process exited while the command was running, so no '
-          'exit code was ever reported. What is here is what it printed before '
-          'that.',
+          outcome.exitCode == null
+              ? 'The pane\'s process exited while the command was running, and '
+                    'nothing reported an exit code, so the command\'s status is '
+                    'UNKNOWN — not 0. What is here is what it printed before '
+                    'that.'
+              : 'The pane\'s process exited while the command was running, with '
+                    'code ${outcome.exitCode}. That is the SESSION\'s code, not '
+                    'the command\'s: the shell died before it could report one. '
+                    'What is here is what it printed before that.',
         );
     }
     if (!outcome.output.scoped) {

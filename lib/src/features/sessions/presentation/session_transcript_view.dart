@@ -25,9 +25,11 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
+import '../application/session_chat_view_providers.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_providers.dart';
 import '../application/session_ui_providers.dart';
+import '../domain/session_chat_view.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
@@ -294,11 +296,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final resolveHostPath = _hostPathResolver();
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
-    // Whether a chat rendering is possible at all for this agent — a registry
-    // question, not a runtime one. Antigravity and any agent added as data have
-    // the same PTY as Claude Code; they simply have no readable record of the
-    // conversation to draw a transcript from.
-    final chatAvailable = !fromPty || sessionHasChatView(ref, widget.sessionId);
+    // Whether a chat rendering is possible for **this session** — a reading,
+    // not a registry lookup. Every in-app session has the same PTY; what
+    // differs is whether the agent left a transcript of this one where we can
+    // read it, and `reading.reason` says which nothing it is when it did not.
+    final reading = fromPty
+        ? sessionChatView(ref, widget.sessionId)
+        : const SessionChatView.unread(prior: true);
+    final chatAvailable = !fromPty || reading.hasChatView;
     // Whether there is a terminal to point at. Nothing lands a session here on
     // its own any more — the workbench shows the terminal surface and says so
     // there — but the user can always switch to the conversation, so every
@@ -411,6 +416,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               ),
               emptyHint: _emptyHint(
                 chatAvailable: chatAvailable,
+                reading: reading,
                 fromPty: fromPty,
                 active: active,
                 hasTerminal: hasTerminal,
@@ -431,17 +437,23 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// is the session" when there was no terminal left.
   String _emptyHint({
     required bool chatAvailable,
+    required SessionChatView reading,
     required bool fromPty,
     required bool active,
     required bool hasTerminal,
   }) {
     if (!chatAvailable) {
+      // The refusal names *why* it is one. "This agent keeps no transcript we
+      // can read" was true of every Antigravity session until one install
+      // turned out to keep one for every conversation, so the sentence is the
+      // reading's own — an unreadable store, or a transcript file that is not
+      // on this disk.
       return hasTerminal
-          ? 'This agent keeps no transcript we can read, so there is no chat '
-                'view for it. Its terminal is the session.'
-          : 'This agent keeps no transcript we can read, and this session has '
-                'no terminal open, so there is nothing to show. Type below to '
-                'run it again.';
+          ? 'No chat view for this session. ${reading.reason} Its terminal is '
+                'the session.'
+          : 'No chat view for this session. ${reading.reason} This session has '
+                'no terminal open either, so there is nothing to show. '
+                'Type below to run it again.';
     }
     if (fromPty) {
       return hasTerminal
@@ -679,18 +691,13 @@ List<ChatMessage> chatMessagesFromTranscript(
   return out;
 }
 
-/// Whether a chat view can be built for the agent behind [sessionId].
+/// **Whether a chat view can be built for this session**, as a reading rather
+/// than a fact about the agent.
 ///
-/// A capability question about the *agent*, answered from the registry — not a
-/// question about which runtime the session uses, because every in-app session
-/// uses the same one.
-bool sessionHasChatView(WidgetRef ref, String sessionId) {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
-  if (session == null) return false;
-  final agentId = ref
-      .read(agentInstallationDaoProvider)
-      .getById(session.agentInstallationId)
-      ?.agentId;
-  if (agentId == null) return false;
-  return agentSupportsChatView(ref.read(agentRegistryProvider).byId(agentId));
-}
+/// It was a registry question — `agentSupportsChatView` over the store format —
+/// until Antigravity's transcripts turned out to exist on one install and not
+/// on the other. Now it is [sessionChatViewProvider]: the same allowlist as the
+/// prior, and a look at this session's own file where the prior refuses.
+/// Watched rather than read, so the view redraws when the probe settles.
+SessionChatView sessionChatView(WidgetRef ref, String sessionId) =>
+    ref.watch(sessionChatViewProvider(sessionId));

@@ -9,6 +9,7 @@
 /// terminals and agents.
 library;
 
+import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
 import '../protocol.dart';
 
@@ -109,8 +110,18 @@ class RemoteHostBindings {
   final Future<RemoteApprovalRequest> Function(String sessionId)
   approvalEvidenceFor;
 
-  /// Persists a push registration for [deviceId]. Delivery is Loop D.
-  final Future<void> Function(String deviceId, String token, String platform)
+  /// Persists a push registration for [deviceId], and the presence the phone
+  /// sent with it.
+  ///
+  /// [presence] is additive and is [CompanionPresence.unknown] for a companion
+  /// that says nothing — which is every build before the field existed, and is
+  /// why nothing here is required.
+  final Future<void> Function(
+    String deviceId,
+    String token,
+    String platform,
+    CompanionPresence presence,
+  )
   registerPush;
 
   /// What could be started here: the desktop's projects, their checkouts, and

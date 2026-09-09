@@ -10,6 +10,7 @@ library;
 import 'dart:convert';
 
 import '../../../core/util/bounded_text.dart';
+import '../domain/companion_presence.dart';
 import '../domain/paired_device.dart';
 import '../domain/remote_payloads.dart';
 import '../protocol.dart';
@@ -373,7 +374,16 @@ class HostSessionApi {
         case FrameType.notificationsRegister:
           final token = _requireString(envelope, 'token');
           final platform = _requireString(envelope, 'platform');
-          await bindings.registerPush(device.id, token, platform);
+          // Additive and never required: an old companion sends neither field
+          // and decodes to the presence that behaves exactly as before. The
+          // value goes to `PushFanout` and reaches nothing on this api — see
+          // the paragraph in `pollTranscript`, which is the enforcement.
+          await bindings.registerPush(
+            device.id,
+            token,
+            platform,
+            CompanionPresence.fromRegister(envelope.payload),
+          );
           await _result(envelope.id, const {});
         case FrameType.workspaceList:
           await _result(envelope.id, {

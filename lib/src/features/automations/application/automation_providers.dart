@@ -6,6 +6,7 @@ import '../../../core/util/id_generator_provider.dart';
 import '../data/automation_dao.dart';
 import '../data/project_check_dao.dart';
 import '../domain/automation.dart';
+import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/project_check.dart';
 
@@ -45,6 +46,13 @@ final automationRunsProvider = Provider.family<List<AutomationRun>, String>((
   ref.watch(automationsRevisionProvider);
   return ref.watch(automationDaoProvider).runsFor(automationId);
 });
+
+/// What one occurrence's project checks said, in the order they ran.
+final automationRunChecksProvider =
+    Provider.family<List<AutomationCheckVerdict>, String>((ref, runId) {
+      ref.watch(automationsRevisionProvider);
+      return ref.watch(automationDaoProvider).checksFor(runId);
+    });
 
 /// One checkout's configured checks.
 final projectChecksProvider = Provider.family<List<ProjectCheck>, String>((
