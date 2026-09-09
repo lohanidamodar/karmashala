@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import 'diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 import 'diagnostics_bootstrap.dart';
 
 /// The app's log sinks. A provider over the process-wide instance so a test can

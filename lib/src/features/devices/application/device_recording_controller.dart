@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/paths/app_support_directory.dart';
 import '../../../core/process/process_handle.dart';
 import '../../../core/util/clock_provider.dart';

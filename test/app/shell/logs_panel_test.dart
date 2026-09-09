@@ -1,10 +1,8 @@
 import 'package:karmashala/src/app/shell/logs_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
-import 'package:karmashala/src/core/logging/log_buffer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

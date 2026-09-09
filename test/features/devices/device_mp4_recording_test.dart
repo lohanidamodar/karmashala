@@ -2,13 +2,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/media/frame_sink.dart';
-import 'package:karmashala/src/core/media/media_foundation.dart';
-import 'package:karmashala/src/core/media/video_writer.dart';
+import 'package:karmashala_core/media.dart';
 import 'package:karmashala/src/features/devices/data/recording_sink.dart';
 import 'package:path/path.dart' as p;
 
-import '../../core/media/mp4_reader.dart';
+import 'package:karmashala_core/testing.dart';
 
 /// The device path with the operating system's real muxer, and real H.264.
 ///

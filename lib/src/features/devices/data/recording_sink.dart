@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../../../core/media/media_foundation.dart';
-import '../../../core/media/video_writer.dart';
+import 'package:karmashala_core/media.dart';
 
 /// One encoded frame off a device, with the stream state it was produced under.
 ///

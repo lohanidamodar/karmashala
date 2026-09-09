@@ -20,7 +20,7 @@ library;
 
 import 'package:xterm2/xterm.dart';
 
-import '../../../core/util/text_links.dart';
+import 'package:karmashala_core/util.dart';
 
 import 'terminal_search.dart';
 

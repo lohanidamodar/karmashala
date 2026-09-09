@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../core/media/frame_sink.dart';
+import 'package:karmashala_core/media.dart';
 import '../../core/media/video_support_provider.dart';
 import '../devices/application/device_recording_controller.dart';
 import '../devices/domain/device_recording.dart';

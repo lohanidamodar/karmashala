@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:vm_service/vm_service.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../domain/app_log_record.dart';
 import '../domain/attached_app.dart';
 import '../domain/flutter_app_failure.dart';

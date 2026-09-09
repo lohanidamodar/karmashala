@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/logging/app_logger.dart';
-import '../../core/logging/build_identity.dart';
-import '../../core/logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../core/logging/diagnostics_bootstrap.dart';
 import '../../features/companion/client/companion_gateway.dart';
 import '../../features/companion/client/remote_companion_gateway.dart';

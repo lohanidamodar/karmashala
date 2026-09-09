@@ -1,4 +1,4 @@
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../../core/process/path_translator.dart';

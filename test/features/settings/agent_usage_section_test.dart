@@ -5,7 +5,7 @@ import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';

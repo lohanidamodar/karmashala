@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/process_handle.dart';
 import '../domain/device_input.dart';

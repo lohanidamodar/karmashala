@@ -121,7 +121,7 @@ class DeviceClipboardRead {
   /// [DeviceClipboardOutcome.text].
   ///
   /// **User data.** Never logged, never put in a [DeviceAction] summary, and
-  /// never in an error message — see `core/logging/log_redactor.dart`, which
+  /// never in an error message — see `package:karmashala_core/logging.dart`, which
   /// cannot help here because clipboard text has no shape to match on.
   final String? text;
 

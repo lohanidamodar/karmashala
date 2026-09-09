@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';

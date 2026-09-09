@@ -7,7 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../application/device_clipboard_bridge.dart';
 import '../application/device_providers.dart';

@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../../verification/application/verification_providers.dart';
 import '../domain/flutter_command_run.dart';

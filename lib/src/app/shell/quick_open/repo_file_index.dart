@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/directory_change_watcher.dart';
+import 'package:karmashala_core/util.dart';
 import '../../../features/checkpoints/application/checkpoint_providers.dart';
 import '../../../features/file_explorer/application/file_explorer_providers.dart';
 import '../../../features/sessions/application/session_ui_providers.dart';

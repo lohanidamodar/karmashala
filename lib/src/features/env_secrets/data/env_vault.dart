@@ -10,7 +10,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../mcp/handshake_file_permissions.dart';
 import '../domain/env_variable.dart';
 import 'env_value_cipher.dart';

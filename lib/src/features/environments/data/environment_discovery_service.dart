@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/wsl_distributions.dart';
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../domain/environment_kind.dart';
 import '../domain/execution_environment.dart';
 import '../domain/local_environment.dart';

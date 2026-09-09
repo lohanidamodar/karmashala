@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/process_handle.dart';
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
 import '../data/adb_output_parsing.dart';
 import '../data/adb_service.dart';

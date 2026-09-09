@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/ssh_connection_state.dart';
 import '../domain/ssh_host.dart';

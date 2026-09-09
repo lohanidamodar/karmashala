@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/util/bounded_text.dart';
+import 'package:karmashala_core/util.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_plan.dart';
 import '../../sessions/domain/session_event_types.dart';

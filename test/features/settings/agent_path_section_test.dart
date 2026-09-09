@@ -1,6 +1,7 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
-import 'package:karmashala/src/core/paths/path_probe.dart';
+import 'package:karmashala_core/paths.dart';
+import 'package:karmashala_core/testing.dart';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_path_repair_providers.dart';
@@ -13,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/fake_path_probe.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 

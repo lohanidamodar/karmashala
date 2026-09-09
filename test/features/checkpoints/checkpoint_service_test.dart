@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';

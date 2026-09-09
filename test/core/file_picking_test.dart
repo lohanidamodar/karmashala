@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/logging/app_logger.dart';
-import 'package:karmashala/src/core/logging/diagnostics.dart';
-import 'package:karmashala/src/core/logging/log_file_sink.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/file_picking.dart';
 
 /// The freeze itself is out of reach from here: it happens on the platform

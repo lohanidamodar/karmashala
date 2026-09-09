@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:xterm2/xterm.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../ssh/data/host_session_access.dart';
 import '../../ssh/domain/host_deployment.dart';
 import '../domain/agent_pane_launch.dart';

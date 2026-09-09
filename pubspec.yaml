@@ -6,6 +6,18 @@ version: 1.20.0+36
 environment:
   sdk: ^3.12.2
 
+# Pub workspace. The app is the root; every member declares `resolution:
+# workspace` and shares this one resolution, lock file and `.dart_tool`, so a
+# member's `dart test` needs no `pub get` of its own (docs/PACKAGE_SPLIT.md §2).
+# `host/`, `mcp_bridge/` and the plugin packages stay out on purpose: their
+# resolutions must not follow the app's.
+# `packages/relay` is deliberately NOT a member: its Dockerfile (fly.io, see
+# packages/relay/fly.toml) copies that directory alone and runs `dart pub get`
+# in it, which a member cannot do — "found no workspace root including it".
+workspace:
+  - packages/karmashala_core
+  - packages/local_ipc
+
 dependencies:
   # The session host's protocol and domain, shared with the binary deployed to
   # remote machines so the two ends of the wire cannot drift. The app imports
@@ -13,6 +25,11 @@ dependencies:
   # through dart:ffi and a web build would refuse the whole package for it.
   karmashala_host:
     path: host
+  # The Flutter-free core: logging, small utilities, path probing and the
+  # frame/video encoders. A workspace member, so this path resolves to the
+  # copy in the tree (docs/PACKAGE_SPLIT.md §5).
+  karmashala_core:
+    path: packages/karmashala_core
   karmashala_local_ipc:
     path: packages/local_ipc
   # The relay server itself, embedded in the desktop app so "This computer

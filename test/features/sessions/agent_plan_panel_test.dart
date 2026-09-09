@@ -1,5 +1,5 @@
 import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/domain/agent_plan.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';

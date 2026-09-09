@@ -1,4 +1,4 @@
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../domain/agent_registry.dart';
 import '../domain/agent_status.dart';
 import 'agent_hook_receiver.dart';

@@ -8,9 +8,8 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/quick_open/quick_open.dart';
-import '../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../core/lifecycle/app_lifecycle.dart';
-import '../../core/logging/diagnostics.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import '../notifications/domain/inbox_item.dart';

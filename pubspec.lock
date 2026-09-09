@@ -595,13 +595,6 @@ packages:
       relative: true
     source: path
     version: "0.0.0"
-  karmashala_local_ipc:
-    dependency: "direct main"
-    description:
-      path: "packages/local_ipc"
-      relative: true
-    source: path
-    version: "0.2.0"
   karmashala_relay:
     dependency: "direct main"
     description:

@@ -5,9 +5,8 @@ import 'package:logging/logging.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../core/logging/build_identity.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/logging/diagnostics_providers.dart';
-import '../../../core/logging/log_entry.dart';
 import 'companion_chrome.dart';
 
 /// The companion's own log, on the phone that produced it.

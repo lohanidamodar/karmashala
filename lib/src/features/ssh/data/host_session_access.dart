@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../domain/host_deployment.dart';
 import '../domain/ssh_connection_state.dart';
 import '../domain/ssh_host.dart';

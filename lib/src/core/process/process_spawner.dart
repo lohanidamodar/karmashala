@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import '../logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import 'command_runner.dart';
 import 'process_spawn.dart';
 

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../domain/device_driver.dart';
 import '../domain/device_files.dart';
 import '../domain/device_input.dart';

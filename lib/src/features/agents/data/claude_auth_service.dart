@@ -3,10 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../core/logging/app_logger.dart';
-import '../../../core/util/clock.dart';
-import '../../../core/util/id_generator.dart';
-import '../../../core/util/json_object_splice.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_core/util.dart';
 import '../../cli_detection/application/cli_detection_service.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';

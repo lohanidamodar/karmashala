@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/diagnostics_providers.dart';
-import '../../../core/logging/log_buffer.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';

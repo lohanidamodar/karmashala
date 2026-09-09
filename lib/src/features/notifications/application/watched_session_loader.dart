@@ -3,7 +3,7 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
 
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../../agents/data/agent_hook_receiver.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../cli_detection/data/imported_session_dao.dart';

@@ -7,7 +7,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:path/path.dart' as p;
 
-import '../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../core/util/clock_provider.dart';
 import '../agents/application/agent_hook_intake.dart';
 import '../agents/domain/agent_hook_endpoint.dart';

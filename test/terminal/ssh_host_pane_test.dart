@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/ssh/data/host_session_access.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
 import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';

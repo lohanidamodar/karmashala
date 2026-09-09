@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner.dart';
 import '../domain/simulator_backend.dart';
 import '../domain/ui_node.dart';

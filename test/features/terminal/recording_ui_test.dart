@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
-import 'package:karmashala/src/core/media/video_writer.dart';
+import 'package:karmashala_core/media.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';

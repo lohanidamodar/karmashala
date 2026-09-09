@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../sessions/application/decision_recorder.dart';
 import '../../sessions/application/session_providers.dart';

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../application/cli_detection_service.dart';
 import '../domain/detected_session.dart';

@@ -1,4 +1,4 @@
-import '../../../core/paths/path_probe.dart';
+import 'package:karmashala_core/paths.dart';
 import 'agent_discovery_report.dart';
 import 'agent_installation.dart';
 

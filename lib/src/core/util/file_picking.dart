@@ -39,8 +39,7 @@ library;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 
-import '../logging/app_logger.dart';
-import '../logging/diagnostics.dart';
+import 'package:karmashala_core/logging.dart';
 
 /// The picker types a caller needs, so nothing outside this file has to import
 /// `file_selector` and go round the announcement.

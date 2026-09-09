@@ -1,8 +1,7 @@
 import 'dart:convert';
 
 import '../../../core/process/path_translator.dart';
-import '../../../core/util/clock.dart';
-import '../../../core/util/id_generator.dart';
+import 'package:karmashala_core/util.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../agents/data/terminal_grid_status_source.dart';
 import '../../agents/domain/agent_installation.dart';

@@ -9,7 +9,7 @@ library;
 
 import 'dart:convert';
 
-import '../../../core/util/bounded_text.dart';
+import 'package:karmashala_core/util.dart';
 import '../domain/companion_presence.dart';
 import '../domain/paired_device.dart';
 import '../domain/remote_payloads.dart';

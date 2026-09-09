@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';

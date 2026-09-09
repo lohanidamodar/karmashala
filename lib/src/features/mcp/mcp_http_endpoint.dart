@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_protocol.dart';
 

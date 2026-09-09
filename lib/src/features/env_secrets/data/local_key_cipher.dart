@@ -12,7 +12,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../../mcp/handshake_file_permissions.dart';
 import 'env_value_cipher.dart';
 

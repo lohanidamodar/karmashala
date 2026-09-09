@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:karmashala_host/protocol.dart';
 
-import '../../../core/logging/app_logger.dart';
+import 'package:karmashala_core/logging.dart';
 import '../domain/host_deployment.dart';
 import 'host_binaries.dart';
 import 'host_deploy_target.dart';

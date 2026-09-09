@@ -12,7 +12,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/util/bounded_text.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
 import 'package:karmashala/src/features/remote/application/host_session_api.dart';

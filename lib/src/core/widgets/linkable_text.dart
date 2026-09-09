@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../util/text_links.dart';
+import 'package:karmashala_core/util.dart';
 
 /// Text whose URLs are clickable, for a surface where a tap already means
 /// something else.

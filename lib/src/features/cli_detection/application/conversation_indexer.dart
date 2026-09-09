@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../../../core/util/clock.dart';
+import 'package:karmashala_core/util.dart';
 import '../data/cli_transcript_reader.dart';
 import '../data/conversation_index_dao.dart';
 import '../domain/detected_session.dart';
