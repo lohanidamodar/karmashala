@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/lifecycle/app_lifecycle.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
@@ -11,6 +12,7 @@ import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
@@ -99,6 +101,67 @@ void main() {
         reason: 'a stale handshake points a bridge at a dead port',
       );
       expect(File(p.join(tmp.path, 'ipc', 'rpc.sock')).existsSync(), isFalse);
+    });
+
+    test('it is retained before it is started, not after', () async {
+      // **What the app soak found.** `start()` publishes the handshake
+      // part-way through — the socket node is already bound, the WSL listener
+      // and the session configs are still to come — and this field used to be
+      // assigned only once `start()` returned. So from the moment
+      // `mcp_bridge.json` appeared there were several hundred milliseconds in
+      // which a quit found step 3 with nothing to stop, and it said nothing
+      // about it: no skip, no timeout, no failure. 18 of 20 quits left the
+      // handshake, the socket node and `data\mcp` behind that way.
+      final lifecycle = AppLifecycle(container);
+      final server = LauncherControlServer(container);
+
+      final starting = lifecycle.startControlServer(server: server);
+
+      expect(
+        lifecycle.controlServer,
+        same(server),
+        reason: 'a quit that lands mid-start must find something to stop',
+      );
+      await starting;
+      await server.stop();
+    });
+
+    test('a stop that lands mid-start leaves nothing published', () async {
+      // The other half. Retaining the instance is no use if the rest of the
+      // start then publishes over what `stop()` has just removed — and it did:
+      // the handshake is *written* several awaits after the empty file that
+      // carries its ACL is created, so a stop in between removed a file the
+      // start then put back, in full, on its way out.
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final sessionConfigs = Directory(p.join(tmp.path, 'mcp'));
+      // The ACL call is the synchronisation point rather than a delay: it sits
+      // exactly where the soak's close message arrived, with the socket node
+      // already bound and the handshake not yet written.
+      final atRestrict = Completer<void>();
+      final release = Completer<bool>();
+      final server = LauncherControlServer(
+        container,
+        permissions: _GatedPermissions(atRestrict, release),
+      );
+
+      final starting = server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+        sessionConfigDirectory: sessionConfigs.path,
+      );
+      await atRestrict.future;
+
+      await server.stop();
+      release.complete(true);
+      await starting;
+
+      expect(
+        File(bridge).existsSync(),
+        isFalse,
+        reason: 'the rest of the start published on its way out',
+      );
+      expect(File(p.join(tmp.path, 'ipc', 'rpc.sock')).existsSync(), isFalse);
+      expect(sessionConfigs.existsSync(), isFalse);
     });
 
     test('the pid stays in the handshake for the crash case', () async {
@@ -850,4 +913,24 @@ class _RecordingControlServer extends LauncherControlServer {
     _order.add('control server');
     await super.stop();
   }
+}
+
+/// Suspends the handshake file's ACL call, which is where a quit lands: the
+/// socket node is bound, `mcp_bridge.json` exists and is still empty, and the
+/// tokens have not been written into it yet.
+class _GatedPermissions extends HandshakePermissions {
+  _GatedPermissions(this._reached, this._release);
+
+  final Completer<void> _reached;
+  final Completer<bool> _release;
+
+  @override
+  Future<bool> restrictFile(File file, {AppLogger? logger}) {
+    if (!_reached.isCompleted) _reached.complete();
+    return _release.future;
+  }
+
+  @override
+  Future<bool> restrictDirectory(Directory dir, {AppLogger? logger}) async =>
+      true;
 }

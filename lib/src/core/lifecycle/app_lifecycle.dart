@@ -188,6 +188,19 @@ class AppLifecycle {
 
   /// Starts the local control server and retains it, so `stop()` has a caller.
   ///
+  /// **Retained before it is started, not after.** `start()` publishes the
+  /// handshake part-way through — the socket node is already bound, and the WSL
+  /// listener and the session-config directory come *after* it — so from the
+  /// moment `mcp_bridge.json` appears there is a server with files on disk and
+  /// several hundred milliseconds of starting left to do. Assigning this field
+  /// only once `start()` returned left that whole window with nothing for step
+  /// 3 to stop: it took the `?? Future<void>.value()` branch and logged no
+  /// skip, no timeout and no failure, because from its point of view there was
+  /// no server. The 2026-09-09 soak measured that as the *usual* outcome of a
+  /// quit — 18 of 20 — and this line is half the fix; the other half is
+  /// `LauncherControlServer.stop` making an in-flight `start` unwind instead of
+  /// republishing what it just removed.
+  ///
   /// Returns `null` when the server could not be started at all — distinct from
   /// a server that started and withheld privileged RPC, which is a running
   /// server with a [LauncherControlServer.status] to show.
@@ -196,15 +209,14 @@ class AppLifecycle {
   }) async {
     final instance =
         server ?? LauncherControlServer(_container, logger: _logger);
+    // Before the await: a partially started server may hold a port and files,
+    // and `stop()` is safe on one that never bound.
+    _controlServer = instance;
     try {
       await instance.start();
-      _controlServer = instance;
       return instance;
     } on Object catch (error, stack) {
       _logger.warning('Launcher control server failed to start.', error, stack);
-      // Retained anyway: a partially started server may still hold a port, and
-      // `stop()` is safe on one that never bound.
-      _controlServer = instance;
       return null;
     }
   }

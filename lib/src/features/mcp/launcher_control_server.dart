@@ -242,6 +242,17 @@ class LauncherControlServer implements SessionMcp {
   /// could not be locked to this user and so nothing is written at all.
   SessionMcpConfigs? _sessionConfigs;
 
+  /// Set by [stop], and read by [start] wherever it is about to publish
+  /// something.
+  ///
+  /// A quit can land in the middle of a start: the handshake goes out while the
+  /// WSL listener and the session-config directory are still to come, and the
+  /// soak's `CloseMainWindow` arrives ~300 ms after that file appears. Without
+  /// this, `stop()` would remove what had been published and the rest of
+  /// `start()` would then calmly publish the rest — a stale handshake and an
+  /// `mcp` directory created *after* the app decided to quit.
+  bool _stopped = false;
+
   /// Which session each per-session MCP credential names. Survives the endpoint
   /// so a config written before a restart keeps meaning what it meant.
   final McpCallerRegistry _callers = McpCallerRegistry();
@@ -469,9 +480,11 @@ class LauncherControlServer implements SessionMcp {
     Duration retryWslEvery = wslRetryInterval,
   }) async {
     if (_server != null) return;
+    _stopped = false;
     _wslRetryEvery = retryWslEvery;
     final server = await _bindControlPort(preferredPort);
     _server = server;
+    if (await _abandonedMidStart()) return;
     // A *separate* token for /agent-hook. It is pasted verbatim into a curl
     // command in the agent's own config file, so it also shows up in process
     // command lines; the /rpc token opens sessions and drives devices, and must
@@ -550,7 +563,9 @@ class LauncherControlServer implements SessionMcp {
       detail ??= 'the handshake file ACL was not applied';
       await _withholdPrivilegedRpc();
     }
+    if (await _abandonedMidStart()) return;
     await _publishHandshake(file, server.port);
+    if (await _abandonedMidStart()) return;
 
     _publishStatus(
       stage == null
@@ -567,6 +582,11 @@ class LauncherControlServer implements SessionMcp {
     if (hostCanHaveWsl ?? Platform.isWindows) {
       await _bindWslInterface(server.port, wslHostAddress);
     }
+    // The last checkpoint, and the one the soak needed: looking for the WSL
+    // switch is a subprocess and a bind, and the directory below is created
+    // *after* it — so without this a quit asked for while the lookup was
+    // outstanding left an `mcp` directory the app created on its way out.
+    if (await _abandonedMidStart()) return;
     // Beside the handshake file rather than resolved separately: they belong in
     // the same application-support directory, and a second
     // `appSupportDirectory()` would be a platform-channel call on a
@@ -574,9 +594,26 @@ class LauncherControlServer implements SessionMcp {
     await _prepareSessionConfigs(
       sessionConfigDirectory ?? p.join(p.dirname(file.path), 'mcp'),
     );
+    if (await _abandonedMidStart()) return;
     _publishSessionMcp(this);
     _startCheckpointRecorder();
     _tokenReaper.start();
+  }
+
+  /// Whether a [stop] landed while [start] was suspended — and if it did,
+  /// unwinds through [stop] again so whatever the last step published goes back
+  /// off disk.
+  ///
+  /// Calling [stop] a second time is what makes this cheap to place: it is
+  /// idempotent by construction (every field it clears is nulled, every removal
+  /// checks for the file first), so each checkpoint costs one boolean on the
+  /// path that matters and one extra pass over already-empty state on the path
+  /// that does not.
+  Future<bool> _abandonedMidStart() async {
+    if (!_stopped) return false;
+    _logger.info('Control server start abandoned: the app is quitting.');
+    await stop();
+    return true;
   }
 
   /// Also listens on the WSL virtual switch's host address, so an agent inside
@@ -833,7 +870,16 @@ class LauncherControlServer implements SessionMcp {
   /// nothing on disk. `local_rpc_socket_test` and the lifecycle's own
   /// `no filesystem work outlives shutdown` case count that rather than waiting
   /// for it.
+  ///
+  /// **It also stops a [start] that has not finished yet**, which is the half
+  /// the 2026-09-09 soak found missing. The handshake appears well before
+  /// `start()` returns, and a quit asked for in that window used to leave the
+  /// rest of the start to publish the session-config directory afterwards. See
+  /// [_stopped].
   Future<void> stop() async {
+    // First of all, and synchronously: a `start()` suspended somewhere above
+    // reads this at its next checkpoint and unwinds rather than republishing.
+    _stopped = true;
     _cancelWslRetry();
     _tokenReaper.stop();
     if (_publishedBridgePath case final published?) _unpublish(published);
