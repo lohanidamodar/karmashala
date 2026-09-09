@@ -19,7 +19,7 @@ installs claim the same version name.
 ## Unreleased
 
 **Two days, 2026-09-08 and -09, 137 commits, and almost all of it new capability
-rather than repair.** Schema head is **v43**: a database written by a build from
+rather than repair.** Schema head is **v48**: a database written by a build from
 this range cannot be read by 1.19.0. Nothing here has a build number yet.
 
 ### Our own session host, remote first and then local
@@ -143,6 +143,17 @@ different store.
 
 **Deferred:** `deviceId` is taken as the caller's word, and a long run outliving
 its two-minute device claim is by design, the pane check refusing a second launch.
+
+**A running app is found, not pointed at.** The empty Flutter pane used to hand
+over a `--vmservice-out-file` flag to paste into someone else's command, aimed
+at another program's folder. Now three readers run on their own: the out-file
+for runs Karmashala started, **the Dart Tooling Daemon's pid file** for any
+`flutter run` on this machine (its socket answers the VM service address with
+its token, no secret needed), and the VM's own `listening on` line out of
+`adb logcat` for an app on a device, forwarded to a free host port. Each row
+says where it came from and how old the reading is. A run on another machine is
+the one case left for *Attach by address*; the Copy button and the suggested
+flag are gone.
 
 ### One agent hands work to another and waits
 

@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
+import '../data/dtd_link.dart';
 import '../data/flutter_app_link.dart';
 import '../data/vm_service_uri_directory.dart';
 import '../domain/app_log_record.dart';
 import '../domain/attached_app.dart';
+import '../domain/dtd_instance.dart';
 import '../domain/flutter_app_failure.dart';
 import '../domain/flutter_app_registry.dart';
 import '../domain/vm_service_uri.dart';
@@ -25,8 +27,16 @@ import 'flutter_app_providers.dart';
 /// own answer to "can this be hot reloaded"; a surface that acts on one names
 /// which one.
 ///
-/// **Nothing polls.** Discovery is a directory subscription plus an explicit
-/// look; a connection reports its own death through
+/// **Three readers, and none of them asks the user for anything.** A run this
+/// app started writes a `--vmservice-out-file`; every other `flutter run` on
+/// this machine is found through the Dart Tooling Daemon it starts, which
+/// records its own address on disk and hands over each attached app's VM
+/// service URI, token and all; an app on a device is found by
+/// `AndroidAppDiscovery` from the line the VM prints to the log. Only a run on
+/// another machine still needs an address pasted.
+///
+/// **Nothing polls.** Discovery is two directory subscriptions, a daemon event
+/// stream and an explicit look; a connection reports its own death through
 /// `FlutterAppLink.done`. There is no timer anywhere in this file, and the
 /// first look happens when a surface opens or a caller asks — never at
 /// start-up, which nothing here is worth adding to.
@@ -38,8 +48,21 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
 
   final Map<String, FlutterAppLink> _links = <String, FlutterAppLink>{};
   StreamSubscription<FileSystemEvent>? _watch;
+  StreamSubscription<FileSystemEvent>? _daemonWatch;
   VmServiceUriDirectory? _directory;
   Future<void>? _looking;
+
+  /// Rows a discovery is opening a connection for right now.
+  ///
+  /// Two announcements of one app can arrive a microtask apart — a daemon
+  /// event and a sweep — and both would pass the "already attached" check
+  /// while the first handshake is still in flight. One connection per app.
+  final Set<String> _connecting = <String>{};
+
+  /// One open conversation per tooling daemon, keyed by its pid. Held open so
+  /// an app that starts later in an IDE's long-lived daemon arrives as an
+  /// event — the pid file does not change when it does.
+  final Map<int, DtdLink> _daemons = <int, DtdLink>{};
 
   /// Whether this notifier is still alive.
   ///
@@ -55,6 +78,12 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     ref.onDispose(() {
       _mounted = false;
       _watch?.cancel();
+      _daemonWatch?.cancel();
+      final daemons = _daemons.values.toList(growable: false);
+      _daemons.clear();
+      for (final daemon in daemons) {
+        daemon.dispose();
+      }
       final links = _links.values.toList(growable: false);
       _links.clear();
       for (final link in links) {
@@ -102,8 +131,11 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       clearDiscoveryFailure: true,
     );
     _startWatching(directory);
+    _startWatchingDaemons();
 
     final files = await directory.scan();
+    if (!_mounted) return;
+    final daemonApps = await _readDaemons();
     if (!_mounted) return;
     final rows = <String, AttachedApp>{
       for (final app in state.apps) app.id: app,
@@ -130,6 +162,15 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       );
     }
 
+    // Every app a daemon names becomes a row too. Same rule as a file: one
+    // already attached keeps its connection.
+    for (final found in daemonApps) {
+      final id = AttachedApp.idFor(found.app.uri);
+      final existing = rows[id];
+      if (existing != null && existing.isAttached) continue;
+      rows[id] = _rowForDaemonApp(found);
+    }
+
     // A file-backed row whose file is gone is dropped; a hand-attached row is
     // kept, because the user's intent did not disappear with a file they never
     // wrote.
@@ -141,14 +182,32 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
           (app.sourcePath == null || !paths.contains(app.sourcePath)),
     );
 
+    // A daemon row nobody named this time is gone with the run that made it.
+    final named = daemonApps
+        .map((found) => AttachedApp.idFor(found.app.uri))
+        .toSet();
+    rows.removeWhere(
+      (id, app) =>
+          app.discovery == AppDiscovery.toolingDaemon &&
+          !app.isAttached &&
+          !named.contains(id),
+    );
+
     state = state.copyWith(
       apps: rows.values.toList(growable: false),
       lookedAt: _now,
     );
 
     for (final app in rows.values) {
-      if (app.reachability == AppReachability.unchecked) {
-        await _connect(app);
+      // Skipped when a daemon event is already opening this one: the sweep and
+      // the event can name the same app, and it gets one connection.
+      if (app.reachability == AppReachability.unchecked &&
+          _connecting.add(app.id)) {
+        try {
+          await _connect(app);
+        } finally {
+          _connecting.remove(app.id);
+        }
       }
       if (!_mounted) return;
     }
@@ -167,6 +226,139 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
           _logger.debug('watching ${directory.path} failed: $error'),
       cancelOnError: false,
     );
+  }
+
+  /// A daemon starting or stopping is a file appearing or vanishing, so a
+  /// `flutter run` in somebody's terminal reaches us as an event.
+  void _startWatchingDaemons() {
+    if (_daemonWatch != null) return;
+    _daemonWatch = ref
+        .read(dtdPidFilesProvider)
+        .changes()
+        .listen(
+          (_) => look(),
+          onError: (Object error) =>
+              _logger.debug('watching tooling daemons failed: $error'),
+          cancelOnError: false,
+        );
+  }
+
+  /// Every app the tooling daemons on this machine currently know about.
+  ///
+  /// A daemon that cannot be reached is **dropped rather than reported**: its
+  /// pid file outlives a crash, so an unreachable one is ordinary and saying
+  /// so would put somebody else's dead process in this app's error surface.
+  Future<List<_DaemonApp>> _readDaemons() async {
+    final DtdChannelOpener open;
+    final List<DtdInstance> instances;
+    try {
+      open = ref.read(dtdChannelOpenerProvider);
+      instances = ref.read(dtdPidFilesProvider).scan();
+    } on Object catch (error) {
+      _logger.debug('reading tooling daemons failed: $error');
+      return const <_DaemonApp>[];
+    }
+
+    final found = <_DaemonApp>[];
+    final live = <int>{};
+    for (final instance in instances) {
+      live.add(instance.pid);
+      var link = _daemons[instance.pid];
+      if (link == null) {
+        try {
+          link = await DtdLink.open(instance.wsUri, open: open);
+        } on Object catch (error) {
+          _logger.debug('tooling daemon ${instance.pid}: $error');
+          continue;
+        }
+        if (!_mounted) {
+          await link.dispose();
+          return found;
+        }
+        _daemons[instance.pid] = link;
+        link.registered.listen((app) => _offerFromDaemon(app, instance));
+      }
+      try {
+        for (final app in await link.apps()) {
+          found.add((app: app, daemon: instance));
+        }
+      } on Object catch (error) {
+        _logger.debug('tooling daemon ${instance.pid}: $error');
+        await _daemons.remove(instance.pid)?.dispose();
+      }
+    }
+
+    final gone = _daemons.keys.where((pid) => !live.contains(pid)).toList();
+    for (final pid in gone) {
+      await _daemons.remove(pid)?.dispose();
+    }
+    return found;
+  }
+
+  /// An app announced in a device log, reachable here through [hostUri].
+  ///
+  /// [serial] is the device it is on, kept as the row's source so the pane can
+  /// say *which* phone. Offered once: an address already attached is left
+  /// alone rather than handshaken again.
+  Future<void> offerFromDevice({
+    required Uri hostUri,
+    required String serial,
+    String? label,
+  }) async {
+    if (!_mounted) return;
+    final uri = normaliseVmServiceUri(hostUri.toString());
+    if (uri == null) return;
+    final id = AttachedApp.idFor(uri);
+    final existing = state.byId(id);
+    if (existing != null && existing.isAttached) return;
+    if (!_connecting.add(id)) return;
+    final row = AttachedApp(
+      id: id,
+      uri: uri,
+      discovery: AppDiscovery.deviceLog,
+      reachability: AppReachability.unchecked,
+      observedAt: _now,
+      label: label ?? serial,
+      sourcePath: serial,
+    );
+    _replace(row);
+    state = state.copyWith(lookedAt: _now);
+    try {
+      await _connect(row);
+    } finally {
+      _connecting.remove(id);
+    }
+  }
+
+  /// An app a daemon named after the sweep that found its daemon.
+  void _offerFromDaemon(DtdApp app, DtdInstance daemon) {
+    if (!_mounted) return;
+    final row = _rowForDaemonApp((app: app, daemon: daemon));
+    final existing = state.byId(row.id);
+    // Offered once. A second announcement of an app already attached would
+    // cost the app a handshake and tell us nothing new.
+    if (existing != null && existing.isAttached) return;
+    if (!_connecting.add(row.id)) return;
+    _replace(row);
+    state = state.copyWith(lookedAt: _now);
+    unawaited(_connect(row).whenComplete(() => _connecting.remove(row.id)));
+  }
+
+  AttachedApp _rowForDaemonApp(_DaemonApp found) => AttachedApp(
+    id: AttachedApp.idFor(found.app.uri),
+    uri: found.app.uri,
+    discovery: AppDiscovery.toolingDaemon,
+    reachability: AppReachability.unchecked,
+    observedAt: _now,
+    label: found.app.name ?? _lastSegment(found.daemon.workspaceRoot),
+    sourcePath: found.daemon.workspaceRoot.isEmpty
+        ? null
+        : found.daemon.workspaceRoot,
+  );
+
+  static String _lastSegment(String path) {
+    final parts = path.split(RegExp(r'[\\/]')).where((part) => part.isNotEmpty);
+    return parts.isEmpty ? 'a Flutter app' : parts.last;
   }
 
   /// Attaches to an address the user typed or an agent handed over.
@@ -348,22 +540,20 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     );
   }
 
-  /// The one sentence that says how to make an app discoverable.
+  /// The one sentence that says how an app becomes visible.
   ///
-  /// §19's "say what to do about it", and the only honest lever this app has:
-  /// it does not start the run, so it cannot add the flag — it can only ask,
-  /// and it asks with the real path filled in.
-  String get attachHint {
-    final directory = _directory;
-    if (directory == null) {
-      return 'Run the app with "flutter run --vmservice-out-file=<path>" and '
-          'Karmashala will pick it up, or attach the address "flutter run" '
-          'printed by hand.';
-    }
-    return 'Start it with "flutter run ${directory.suggestedFlag}" — anything '
-        'written there is picked up automatically. An address "flutter run" '
-        'already printed can be attached by hand instead.';
-  }
+  /// §19's "say what to do about it" — and there is now almost nothing to do.
+  /// It used to ask the user to add `--vmservice-out-file` pointed at a folder
+  /// under *this app's* application-support directory, which was the wrong
+  /// thing to ask twice over: it rewrote somebody else's command, and it
+  /// pointed it into another program's private folder. The out-file is still
+  /// how a run **Karmashala starts** is found, because Karmashala writes that
+  /// flag itself; nobody else is asked for it.
+  String get attachHint =>
+      'A run Karmashala started, a "flutter run" started anywhere else on this '
+      'machine, and an app on a connected Android device are all found on '
+      'their own. A run on another machine is the one that still needs its '
+      'address attached by hand.';
 
   Future<void> hotReload(String? id) async {
     final app = requireApp(id);
@@ -510,3 +700,6 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
 
 final attachedAppsProvider =
     NotifierProvider<AttachedApps, FlutterAppRegistry>(AttachedApps.new);
+
+/// One app, and the daemon that named it — the pair a row is built from.
+typedef _DaemonApp = ({DtdApp app, DtdInstance daemon});

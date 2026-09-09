@@ -19,7 +19,13 @@ class VmServiceUriFile {
   }
 }
 
-/// The directory Karmashala watches for VM service addresses.
+/// The directory Karmashala watches for the addresses **its own runs** write.
+///
+/// It is not a place anybody else is asked to write to. It used to be: the
+/// empty pane offered a `--vmservice-out-file` pointed here, which meant
+/// rewriting somebody's command to aim it into this app's private
+/// application-support folder. Runs started elsewhere are found through their
+/// tooling daemon now (`DtdPidFiles`), and a device's apps through its log.
 ///
 /// **Why a directory of files and not a scan of terminal output.**
 /// `flutter run --vmservice-out-file=<path>` writes the `ws://…/ws` address
@@ -42,13 +48,6 @@ class VmServiceUriDirectory {
   final Directory directory;
 
   String get path => directory.path;
-
-  /// The `--vmservice-out-file` argument to suggest, with a placeholder name.
-  ///
-  /// One string, used by the panel, by the MCP tools' remedy line and by the
-  /// instructions guide, so the three cannot drift apart.
-  String get suggestedFlag =>
-      '--vmservice-out-file="${_join(directory.path, '<name>.uri')}"';
 
   Future<void> ensureExists() async {
     if (!directory.existsSync()) {
@@ -120,9 +119,4 @@ class VmServiceUriDirectory {
       // already reports that nothing answers there.
     }
   }
-
-  static String _join(String base, String name) =>
-      base.endsWith(Platform.pathSeparator) || base.endsWith('/')
-      ? '$base$name'
-      : '$base${Platform.pathSeparator}$name';
 }

@@ -11,6 +11,7 @@ import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
+import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
 import '../domain/app_log_record.dart';
@@ -50,6 +51,9 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
 
   @override
   Widget build(BuildContext context) {
+    // Watching this is what puts a `logcat` reader on each connected device.
+    // Nothing else subscribes, so a closed pane reads no device at all.
+    ref.watch(androidAppDiscoveryProvider);
     final registry = ref.watch(attachedAppsProvider);
     final selectedId = ref.watch(paneFlutterAppIdProvider);
     final selected = selectedId == null ? null : registry.byId(selectedId);
@@ -134,6 +138,14 @@ class _StatusRow extends ConsumerWidget {
   }
 }
 
+/// Where each app came from, in the fewest words that still say it.
+String describeAppDiscovery(AppDiscovery discovery) => switch (discovery) {
+  AppDiscovery.uriFile => 'started here',
+  AppDiscovery.toolingDaemon => 'flutter run on this machine',
+  AppDiscovery.deviceLog => 'announced on a device',
+  AppDiscovery.byHand => 'attached by hand',
+};
+
 /// The apps, when there is more than one to choose between.
 class _AppList extends ConsumerWidget {
   const _AppList({required this.registry, required this.selectedId});
@@ -144,6 +156,7 @@ class _AppList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final now = ref.watch(clockProvider).nowUtc();
     return Column(
       children: [
         for (final app in registry.apps)
@@ -155,10 +168,13 @@ class _AppList extends ConsumerWidget {
               size: 14,
             ),
             title: Text(app.label ?? app.id, style: theme.textTheme.bodySmall),
+            // How it was found and how old that reading is, before the
+            // address: those two survive the ellipsis in a 272px panel, and
+            // they are what says whether the row is still worth believing.
             subtitle: Text(
-              app.isAttached
-                  ? app.printedUri
-                  : app.detail ?? 'Nothing answers on ${app.printedUri}',
+              '${describeAppDiscovery(app.discovery)} · found '
+              '${describeAge(now.difference(app.observedAt))}  ·  '
+              '${app.isAttached ? app.printedUri : app.detail ?? 'nothing answers on ${app.printedUri}'}',
               style: theme.textTheme.labelSmall,
               overflow: TextOverflow.ellipsis,
             ),
@@ -336,25 +352,14 @@ class _NothingAttached extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The remedy first says there is none, because for everything but another
+    // machine's run there genuinely is none. The button below is the one case
+    // that is left.
     final hint = ref.read(attachedAppsProvider.notifier).attachHint;
     return PanePlaceholder(
       icon: AppIcons.play,
       message: '${describeRegistry(registry)}\n\n$hint',
-      // Wrapped rather than a Row: the side panel is 272px wide at its
-      // narrowest and two buttons side by side do not fit in it.
-      action: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: Insets.sm,
-        runSpacing: Insets.xs,
-        children: [
-          TextButton.icon(
-            onPressed: () => Clipboard.setData(ClipboardData(text: hint)),
-            icon: const Icon(AppIcons.copy, size: 14),
-            label: const Text('Copy'),
-          ),
-          const _AttachByAddress(),
-        ],
-      ),
+      action: const _AttachByAddress(),
     );
   }
 }
