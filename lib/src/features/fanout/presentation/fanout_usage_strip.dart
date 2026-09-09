@@ -135,16 +135,23 @@ class _AccountUsage extends ConsumerWidget {
               error is UsageException ? error.message : '$error',
             );
     }
-    final window = _tightest(value);
-    // A reply with no windows in it measured nothing, so it is reported the same
-    // way an unreachable account is.
-    if (window == null) {
-      return _notRecorded(context, account, 'No usage windows reported.');
+    final reading = _tightest(value);
+    // A reply that measured nothing is reported the same way an unreachable
+    // account is: no windows at all, or windows the endpoint named and reported
+    // no quota against — every Antigravity tier. Neither is 0%.
+    if (reading == null) {
+      return _notRecorded(
+        context,
+        account,
+        value.isEmpty
+            ? 'No usage windows reported.'
+            : 'No quota reported for this account.',
+      );
     }
     return _measured(
       context,
       account,
-      window,
+      reading,
       // A number that could not be confirmed says so, and says how old it is —
       // never silently, which would make a stale figure look live.
       note: error == null
@@ -158,14 +165,16 @@ class _AccountUsage extends ConsumerWidget {
   Widget _measured(
     BuildContext context,
     String account,
-    UsageWindow window, {
+    ({UsageWindow window, double percent}) reading, {
     String? note,
   }) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
-    final color = window.percent >= 95
+    final window = reading.window;
+    final percent = reading.percent;
+    final color = percent >= 95
         ? semantic.failure
-        : window.percent >= 80
+        : percent >= 80
         ? semantic.attention
         : theme.colorScheme.primary;
     final reset = window.resetsAt == null
@@ -187,7 +196,7 @@ class _AccountUsage extends ConsumerWidget {
                 ),
               ),
               Text(
-                '${window.percent.toStringAsFixed(0)}%$reset',
+                '${percent.toStringAsFixed(0)}%$reset',
                 style: theme.textTheme.bodySmall,
               ),
             ],
@@ -196,7 +205,7 @@ class _AccountUsage extends ConsumerWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(Radii.sm),
             child: LinearProgressIndicator(
-              value: (window.percent / 100).clamp(0.0, 1.0),
+              value: (percent / 100).clamp(0.0, 1.0),
               minHeight: 6,
               backgroundColor: theme.colorScheme.surfaceContainerHighest,
               color: color,
@@ -209,7 +218,7 @@ class _AccountUsage extends ConsumerWidget {
                 color: SemanticColors.of(context).neutral,
               ),
             ),
-          if (window.percent >= 80) ...[
+          if (percent >= 80) ...[
             const SizedBox(height: Insets.xs),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,7 +227,7 @@ class _AccountUsage extends ConsumerWidget {
                 const SizedBox(width: Insets.xs),
                 Expanded(
                   child: Text(
-                    _warning(account, window),
+                    _warning(account, reading),
                     style: theme.textTheme.bodySmall?.copyWith(color: color),
                   ),
                 ),
@@ -233,11 +242,15 @@ class _AccountUsage extends ConsumerWidget {
   /// What is left, beside what this fan-out spends on it. Both halves are
   /// measured — how much a session *consumes* is not, so nothing here projects
   /// a total.
-  String _warning(String account, UsageWindow window) {
-    final head = window.percent >= 100
-        ? 'No ${window.label} limit left on $account'
-        : 'Only ${(100 - window.percent).toStringAsFixed(0)}% left on '
-              '$account (${window.label})';
+  String _warning(
+    String account,
+    ({UsageWindow window, double percent}) reading,
+  ) {
+    final label = reading.window.label;
+    final head = reading.percent >= 100
+        ? 'No $label limit left on $account'
+        : 'Only ${(100 - reading.percent).toStringAsFixed(0)}% left on '
+              '$account ($label)';
     return '$head — ${_cost()}';
   }
 
@@ -296,10 +309,25 @@ class _AccountUsage extends ConsumerWidget {
   }
 }
 
-/// The window closest to running out — the one a fan-out hits first.
-UsageWindow? _tightest(AgentUsage usage) => usage.windows.isEmpty
-    ? null
-    : usage.windows.reduce((a, b) => b.percent > a.percent ? b : a);
+/// The window closest to running out — the one a fan-out hits first — and the
+/// reading it carries.
+///
+/// **Only windows that carry one.** [UsageWindow.percent] is null where the
+/// endpoint named a window and measured nothing for it, and such a window can
+/// never be the tightest: there is nothing to compare and nothing to draw. Null
+/// here means this account reported no number at all, which the row says in
+/// words.
+({UsageWindow window, double percent})? _tightest(AgentUsage usage) {
+  ({UsageWindow window, double percent})? tightest;
+  for (final window in usage.windows) {
+    final percent = window.percent;
+    if (percent == null) continue;
+    if (tightest == null || percent > tightest.percent) {
+      tightest = (window: window, percent: percent);
+    }
+  }
+  return tightest;
+}
 
 /// A short relative reset time, in the settings page's words.
 String _relativeReset(DateTime when) {

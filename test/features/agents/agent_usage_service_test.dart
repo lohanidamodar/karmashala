@@ -126,7 +126,12 @@ void main() {
   });
 
   group('parseAntigravityUsage', () {
-    test('maps allowedTiers to usage windows with token expiry reset', () {
+    // **What `loadCodeAssist` actually carries.** `allowedTiers` names the
+    // tiers the account is allowed — `id`, `name`, `description` — and nothing
+    // in the reply counts anything: no used/limit pair, no remaining, no reset.
+    // So the windows it produces are labels, and the percent every surface
+    // draws is absent rather than zero.
+    test('names each tier and claims no quota for it', () {
       final expiry = DateTime.utc(2026, 7, 28, 13);
       final usage = parseAntigravityUsage({
         'allowedTiers': [
@@ -135,18 +140,47 @@ void main() {
             'name': 'Gemini Code Assist',
             'description': 'Unlimited coding assistant',
           },
+          {'id': 'legacy-tier', 'name': 'Code Assist (legacy)'},
         ],
       }, now, email: 'dev@google.com', tokenExpiry: expiry);
 
       expect(usage.email, 'dev@google.com');
-      expect(usage.windows.map((w) => w.label).toList(), ['Gemini Code Assist']);
-      expect(usage.windows.first.percent, 0.0);
-      expect(usage.windows.first.resetsAt, expiry);
+      expect(usage.windows.map((w) => w.label).toList(), [
+        'Gemini Code Assist',
+        'Code Assist (legacy)',
+      ]);
+      expect(
+        usage.windows.map((w) => w.percent),
+        everyElement(isNull),
+        reason: 'nothing measured these, and 0.0 said something else',
+      );
+      expect(usage.isEmpty, isFalse, reason: 'the tiers themselves are known');
+    });
+
+    test('the token expiry is the account\'s, not a window\'s reset', () {
+      // It used to be written into `resetsAt`, so the app said a quota it had
+      // never read would reset the moment the user's sign-in lapsed. Two
+      // different facts, and only one of them puts a number back to zero.
+      final expiry = DateTime.utc(2026, 7, 28, 13);
+      final usage = parseAntigravityUsage({
+        'allowedTiers': [
+          {'id': 'standard-tier', 'name': 'Gemini Code Assist'},
+        ],
+      }, now, tokenExpiry: expiry);
+
+      expect(usage.tokenExpiresAt, expiry);
+      expect(usage.windows.single.resetsAt, isNull);
+      expect(
+        usage.windows.single.span,
+        isNull,
+        reason: 'a tier is not a period, so it cannot bound the ask rate',
+      );
     });
 
     test('falls back to default Code Assist window when allowedTiers is empty', () {
       final usage = parseAntigravityUsage({}, now, email: 'test@example.com');
-      expect(usage.windows.first.label, 'Gemini Code Assist');
+      expect(usage.windows.single.label, 'Gemini Code Assist');
+      expect(usage.windows.single.percent, isNull);
       expect(usage.email, 'test@example.com');
     });
   });

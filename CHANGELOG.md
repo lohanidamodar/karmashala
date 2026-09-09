@@ -419,6 +419,10 @@ worktrees the app made and a per-checkout install lands in the user's
 - **The usage chip shows both limit windows** — `◑ 12% · 4h   59% · 3d` — each
   slot chosen by the window's period, never by which resets soonest. A period
   nothing reported draws nothing rather than `0%`.
+- **Antigravity's chip no longer says `0%`.** Its API reports tiers and no
+  quota, so the chip says so (`usage —`, "No quota reported for this account")
+  and shows when the sign-in expires instead of calling it a reset. `get_usage`
+  omits the percent for such a window.
 
 ---
 

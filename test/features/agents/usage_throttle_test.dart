@@ -386,6 +386,29 @@ void main() {
       );
     });
 
+    test('a reply that measured nothing idles like any other unmoved one', () {
+      // Antigravity: the same tiers every time and a number in none of them.
+      // There is nothing to watch move, so the ladder is what stops the app
+      // asking at the floor forever — and the sign-in's expiry, which is not a
+      // window reset, cannot pull the next ask in to the moment it lapses.
+      AgentUsage tiers() => AgentUsage(
+        windows: const [UsageWindow(label: 'Gemini Code Assist')],
+        fetchedAt: clock.nowUtc(),
+        tokenExpiresAt: clock.nowUtc().add(const Duration(minutes: 4)),
+      );
+
+      throttle.recordSuccess(claude, tiers());
+      expect(throttle.dueIn(claude), kUsageMinInterval);
+
+      clock.advance(kUsageMinInterval);
+      throttle.recordSuccess(claude, tiers());
+      expect(
+        throttle.dueIn(claude),
+        kUsageMinInterval * 2,
+        reason: 'nothing moved, because nothing was measured',
+      );
+    });
+
     test('a movement anywhere in the account collapses the ladder', () {
       throttle.recordSuccess(claude, measured(percent: 40, weekly: 3));
       for (var i = 0; i < 4; i++) {
