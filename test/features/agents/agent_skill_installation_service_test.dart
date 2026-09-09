@@ -233,8 +233,63 @@ void main() {
       AgentSkillInstallationReport(results).unknownByAgent.keys,
       ['claudeCode'],
     );
+
+    // **And the work stopped with the wait.** The bound ends the wait; a Dart
+    // future cannot be cancelled, so without `SkillSweepDeadline` the install
+    // would go on creating directories under a home this row has already
+    // reported as unknown — in a test, one whose `tearDown` is about to walk
+    // it.
+    //
+    // The first drain lets whatever was already in flight finish, because that
+    // is the honest guarantee: an abandoned sweep completes at most the
+    // operation it had started and begins no new one. The snapshot is taken
+    // after it, and the two drains that follow are what prove nothing else follows.
+    // Counted, never waited out.
+    await pumpEventQueue();
+    final settled = _filesUnder(home);
+    await pumpEventQueue();
+    await pumpEventQueue();
+    expect(
+      _filesUnder(home),
+      settled,
+      reason: 'an abandoned sweep started new work after it was given up on',
+    );
+    // And it never leaves a staged file behind: the write and its rename are
+    // one operation, so what survives is a skill or nothing.
+    expect(
+      settled.where((f) => f.endsWith('.tmp')),
+      isEmpty,
+      reason: 'a staged write outlived the sweep that started it',
+    );
+  });
+
+  test('shutdown gives up on a sweep in flight', () async {
+    Directory(claudeStore()).createSync(recursive: true);
+    final container = containerWith(localStore());
+    final service = serviceIn(container);
+
+    // Nothing has been swept, so there is nothing to give up on and this must
+    // still be safe to call — shutdown runs it unconditionally.
+    service.abandon();
+
+    await service.sweep();
+    final settled = _filesUnder(home);
+    service.abandon();
+    await pumpEventQueue();
+
+    expect(_filesUnder(home), settled);
   });
 }
 
 /// A `Ref` from inside the container, which is what the service takes.
 final _refProvider = Provider<Ref>((ref) => ref);
+
+/// Every file under [root], relative and sorted — a count of what a sweep put
+/// on disk, so "it wrote nothing more" is a comparison rather than a wait.
+List<String> _filesUnder(Directory root) =>
+    root
+        .listSync(recursive: true, followLinks: false)
+        .whereType<File>()
+        .map((f) => p.relative(f.path, from: root.path).replaceAll(r'\', '/'))
+        .toList()
+      ..sort();

@@ -190,10 +190,12 @@ class LauncherControlServer implements SessionMcp {
     AppLogger? logger,
     HandshakePermissions? permissions,
     File? Function()? bridgeExecutable,
+    void Function(String path)? unpublish,
   }) : _logger = logger ?? AppLogger.named('mcp-control'),
        _permissions = permissions ?? const SystemHandshakePermissions(),
        _bridgeExecutable =
-           bridgeExecutable ?? const LauncherMcp().bridgeExecutable;
+           bridgeExecutable ?? const LauncherMcp().bridgeExecutable,
+       _unpublish = unpublish ?? _deleteIfPresent;
 
   final ProviderContainer _container;
   final AppLogger _logger;
@@ -203,6 +205,22 @@ class LauncherControlServer implements SessionMcp {
   /// WSL session's whole transport, and a test cannot put an executable next to
   /// the test runner.
   final File? Function() _bridgeExecutable;
+
+  /// How a published path is taken back off disk. **Synchronous on purpose**
+  /// — see [stop] — and injectable so a test can *count* the removals rather
+  /// than time them, which is the only way to state that a shutdown step
+  /// abandoned on its budget leaves no filesystem work running behind it.
+  final void Function(String path) _unpublish;
+
+  static void _deleteIfPresent(String path) {
+    try {
+      final file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    } on FileSystemException {
+      // Held by something, or already gone. `stop` logs neither: the caller
+      // observes the file, and a warning here fires on every clean quit.
+    }
+  }
 
   /// How the owner-only boundary is applied. Injectable because the failure
   /// path *is* the security contract: `icacls` cannot be made to fail on
@@ -814,24 +832,46 @@ class LauncherControlServer implements SessionMcp {
     return socket;
   }
 
+  /// **The two published files go first, and synchronously**, before this
+  /// method suspends for the first time.
+  ///
+  /// The handshake delete used to sit *last*, behind three awaited socket
+  /// closes, and that is where a real defect lived. `AppLifecycle._step` bounds
+  /// the **wait**, not the work — a Dart future cannot be cancelled — and the
+  /// control-server step's slice is 100 ms. On a loaded machine
+  /// `HttpServer.close(force: true)` alone can spend it, so `shutdown()`
+  /// returned with `mcp_bridge.json` still on disk and the deletes landed later
+  /// at a moment nothing owned. That is exactly the failure `AppLifecycle`
+  /// exists to prevent: a stale handshake advertising a port nothing is
+  /// listening on, at precisely the time it is most likely — quitting a busy
+  /// machine.
+  ///
+  /// Ordering is the whole fix. Removing a file is one syscall and a bounded
+  /// wait cannot preempt a synchronous prefix, so after this the only thing an
+  /// abandoned step can still be doing is closing sockets — which touches
+  /// nothing on disk. `local_rpc_socket_test` and the lifecycle's own
+  /// `no filesystem work outlives shutdown` case count that rather than waiting
+  /// for it.
   Future<void> stop() async {
     _cancelWslRetry();
     _tokenReaper.stop();
+    if (_publishedBridgePath case final published?) _unpublish(published);
+    // The socket node too: unlinking a *bound* one is allowed and immediate,
+    // so `LocalRpcServer.close` below finds nothing left to delete after its
+    // own await. See `LocalRpcServer.unlink`.
+    if (_socketServer case final socket?) _unpublish(socket.path);
+    // And the per-session MCP configs, which are a whole directory tree —
+    // `SessionMcpConfigs.dispose` is a recursive delete, and it was the third
+    // thing on the far side of those awaits.
+    _sessionConfigs?.dispose();
+    _sessionConfigs = null;
+
+    // Sockets only from here down: slow, and touching nothing on disk, so a
+    // step abandoned on its budget leaves nothing observable running.
     await _server?.close(force: true);
     await _wslServer?.close(force: true);
     await _socketServer?.close();
-    final published = _publishedBridgePath;
-    if (published != null) {
-      try {
-        final file = File(published);
-        if (await file.exists()) await file.delete();
-      } on Object catch (error) {
-        _logger.warning('Could not remove stale bridge handshake: $error');
-      }
-    }
     _publishSessionMcp(null);
-    _sessionConfigs?.dispose();
-    _sessionConfigs = null;
     _server = null;
     _wslServer = null;
     _wslHost = null;

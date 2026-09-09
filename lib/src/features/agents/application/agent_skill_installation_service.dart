@@ -138,13 +138,31 @@ class AgentSkillInstallationService {
   final Duration _storeBudget;
   final List<KarmashalaSkill> _skills;
 
+  /// Every sweep this service has started, so a quit can give up on all of
+  /// them at once. Cleared each sweep; see [abandon].
+  final List<SkillSweepDeadline> _deadlines = <SkillSweepDeadline>[];
+
+  /// Stops every sweep in flight from touching the filesystem again.
+  ///
+  /// **What shutdown calls instead of awaiting.** A sweep writes constant bytes
+  /// into somebody's home and there is nothing half-written to finish — each
+  /// `SKILL.md` is staged and renamed — so the app owes it no grace period. It
+  /// owes it an ending, which is this: free, synchronous, and needing no slice
+  /// of the shutdown budget.
+  void abandon() {
+    for (final deadline in _deadlines) {
+      deadline.giveUp();
+    }
+  }
+
   Future<List<AgentSkillInstallation>> installAll() => _forEachStore(
     verb: 'install',
     removing: false,
-    act: (installer, descriptor, home) => installer.install(
+    act: (installer, descriptor, home, deadline) => installer.install(
       descriptor: descriptor,
       storeHome: home,
       skills: _skills,
+      deadline: deadline,
     ),
   );
 
@@ -158,8 +176,11 @@ class AgentSkillInstallationService {
   Future<List<AgentSkillInstallation>> uninstallAll() => _forEachStore(
     verb: 'uninstall',
     removing: true,
-    act: (installer, descriptor, home) =>
-        installer.uninstall(descriptor: descriptor, storeHome: home),
+    act: (installer, descriptor, home, deadline) => installer.uninstall(
+      descriptor: descriptor,
+      storeHome: home,
+      deadline: deadline,
+    ),
   );
 
   Future<List<AgentSkillInstallation>> _forEachStore({
@@ -169,12 +190,16 @@ class AgentSkillInstallationService {
       AgentSkillInstaller installer,
       AgentDescriptor descriptor,
       String home,
+      SkillSweepDeadline deadline,
     )
     act,
   }) async {
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
     if (environments.isEmpty) return const [];
 
+    // The previous sweep's tokens are spent; a new one starts its own so
+    // `abandon` never has to walk a list that only grows.
+    _deadlines.clear();
     final stores = await _ref
         .read(cliStoreLocatorProvider)
         .locate(environments);
@@ -189,11 +214,16 @@ class AgentSkillInstallationService {
       for (final descriptor in registry.descriptors) {
         final home = store.homesByAgentId[descriptor.id];
         if (home == null) continue;
+        // One per pair, held here so both the bound and a quit can give up on
+        // it — see [SkillSweepDeadline].
+        final deadline = SkillSweepDeadline();
+        _deadlines.add(deadline);
         pending.add(
           _bounded(
             agentId: descriptor.id,
             environmentId: store.environmentId,
             home: home,
+            deadline: deadline,
             body: () => _oneStore(
               verb: verb,
               removing: removing,
@@ -202,6 +232,7 @@ class AgentSkillInstallationService {
               descriptor: descriptor,
               environmentId: store.environmentId,
               home: home,
+              deadline: deadline,
             ),
           ),
         );
@@ -214,10 +245,15 @@ class AgentSkillInstallationService {
     required String agentId,
     required String environmentId,
     required String home,
+    required SkillSweepDeadline deadline,
     required Future<AgentSkillInstallation> Function() body,
   }) => body().timeout(
     _storeBudget,
     onTimeout: () {
+      // **The wait is what the bound ends; the work has to be told.** Without
+      // this the install goes on creating directories under a store home the
+      // app has already reported as unknown, at a moment nothing owns.
+      deadline.giveUp();
       final budget = _storeBudget.inSeconds >= 1
           ? '${_storeBudget.inSeconds}s'
           : '${_storeBudget.inMilliseconds} ms';
@@ -250,12 +286,14 @@ class AgentSkillInstallationService {
       AgentSkillInstaller installer,
       AgentDescriptor descriptor,
       String home,
+      SkillSweepDeadline deadline,
     )
     act,
     required AgentSkillInstaller installer,
     required AgentDescriptor descriptor,
     required String environmentId,
     required String home,
+    required SkillSweepDeadline deadline,
   }) async {
     final root = installer.rootFor(descriptor, home);
     if (root == null) {
@@ -274,7 +312,7 @@ class AgentSkillInstallationService {
       );
     }
     try {
-      await act(installer, descriptor, home);
+      await act(installer, descriptor, home, deadline);
       final present = await installer.installedSkills(
         descriptor: descriptor,
         storeHome: home,
