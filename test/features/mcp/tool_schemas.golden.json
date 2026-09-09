@@ -218,7 +218,7 @@
     },
     {
       "name": "get_usage",
-      "description": "Get current usage/limit percentages for an agent. cli is \"claude\" or \"codex\"; environmentId is optional (defaults to the first matching installation).",
+      "description": "An agent account's usage against its limits, read live. cli is \"claude\", \"codex\" or \"antigravity\"; environmentId is optional (defaults to the first matching installation). Each window carries a label and, when the agent reported one, a \"percent\" used and a \"resetsAt\". A window with no \"percent\" was not measured — Antigravity names the account's tiers and reports no quota against them — and that absence means unknown, never zero. \"fetchedAt\" is when the reading was taken.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -4130,7 +4130,7 @@
     },
     "get_usage": {
       "category": "sessions",
-      "summary": "An agent's usage against its limit, as percentages."
+      "summary": "An agent's usage against its limit, where the agent reports one."
     },
     "open_session": {
       "category": "sessions",

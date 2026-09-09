@@ -392,6 +392,43 @@ void main() {
     });
   }
 
+  testWidgets('an Antigravity pane draws no number, because nothing measured '
+      'one', (tester) async {
+    // The bug this file's Antigravity case exists for: `loadCodeAssist` names
+    // the account's tiers and reports no quota, and the parser used to turn
+    // each tier into `percent: 0.0`. The chip then spelled out a confident
+    // `0%` — the most alarming reading there is — for something nobody had
+    // read. It now says what it says for any unmeasured thing.
+    service.answer = antigravitySnapshot();
+    final container = await pumpChip(tester, agentId: AgentIds.antigravity);
+
+    expect(find.text('usage —'), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing, reason: 'not 0%, not any %');
+    expect(colourOf(tester, 'usage —'), light.neutral);
+    expect(
+      find.byIcon(AppIcons.question),
+      findsOneWidget,
+      reason: 'the glyph claims what the label does: nothing was observed',
+    );
+    expect(find.byIcon(AppIcons.circleHalf), findsNothing);
+
+    // And the tooltip says everything that *is* known.
+    final tip = tooltipOf(tester);
+    expect(tip, contains('No quota reported for this account.'));
+    expect(tip, contains('Gemini Code Assist · no quota reported'));
+    expect(tip, contains('dev@google.com'));
+    expect(
+      tip,
+      contains(
+        'Sign-in expires in 3h '
+        '(${formatResetClock(testTime.add(const Duration(hours: 3)), testTime)})',
+      ),
+      reason: 'the token expiry is a fact, and it is not a quota reset',
+    );
+    expect(tip, contains('Checked just now'));
+    await quiesce(tester, container);
+  });
+
   testWidgets('is absent entirely for an agent we have no endpoint for', (
     tester,
   ) async {
@@ -762,6 +799,59 @@ void main() {
         view.longLabel,
         isNull,
         reason: 'an unread period says nothing rather than nothing-shaped',
+      );
+    });
+
+    test('claims nothing when the reply measured nothing', () {
+      // Antigravity's shape: windows the endpoint named, and no reading in any
+      // of them. A successful fetch, so not an error — and still not a number.
+      final view = usageChipViewFor(
+        AsyncData(antigravitySnapshot()),
+        testTime,
+      );
+      expect(view.label, 'usage —', reason: 'a dash, never a zero');
+      expect(view.longLabel, isNull);
+      expect(view.tone, UsageTone.muted);
+      expect(
+        view.mark,
+        UsageMark.unknown,
+        reason: 'a gauge glyph would claim a measurement that was not taken',
+      );
+      expect(view.tooltip, contains('No quota reported for this account.'));
+      expect(view.tooltip, isNot(contains('%')));
+    });
+
+    test('names a window with no reading in the tooltip, and never on the '
+        'chip', () {
+      // A reading that carries both. The measured window is the whole chip;
+      // the unmeasured one is a line of the tooltip and nothing else — it
+      // cannot take a slot, and it cannot take the colour.
+      final view = usageChipViewFor(
+        AsyncData(
+          AgentUsage(
+            windows: const [
+              UsageWindow(
+                label: '5-hour',
+                percent: 12,
+                span: kUsageFiveHourWindow,
+              ),
+              UsageWindow(label: 'Gemini Code Assist'),
+            ],
+            fetchedAt: testTime,
+          ),
+        ),
+        testTime,
+      );
+      expect(view.label, '12%');
+      expect(view.longLabel, isNull);
+      expect(view.tone, UsageTone.healthy);
+      expect(view.mark, UsageMark.live);
+      expect(view.tooltip, contains('5-hour · 12%'));
+      expect(view.tooltip, contains('Gemini Code Assist · no quota reported'));
+      expect(
+        view.tooltip,
+        isNot(contains('Gemini Code Assist · 0%')),
+        reason: 'the line that used to be here is the whole bug',
       );
     });
 
