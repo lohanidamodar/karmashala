@@ -1,0 +1,35 @@
+name: karmashala_git
+description: >-
+  Reading and driving git: the porcelain and diff parsers, worktrees and their
+  setup plans, the on-disk `.git` reader, review threads, GitHub's pull-request
+  and branch-protection models, and the repository identities they hang off.
+  Pure Dart, so it runs under `dart test` without a `flutter_tester` or a
+  `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The runner a git command executes through and the environment types a path
+  # is spelled in (`CommandRunner`, `EnvironmentPath`, `PathTranslator`), plus
+  # `AgentIds` for the two CLI transcript shapes `file_edit_reader` parses.
+  # One-way, per docs/PACKAGE_SPLIT.md §2: agent_cli never imports this.
+  agent_cli:
+    path: ../agent_cli
+  # `ListEquality` for `BranchProtection`'s required-checks list, which used
+  # `listEquals` from `package:flutter/foundation.dart` in the app.
+  collection: ^1.19.1
+  # `@immutable`, the other half of that same foundation import.
+  meta: ^1.16.0
+  # Joining and normalising the paths the `.git` readers walk.
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

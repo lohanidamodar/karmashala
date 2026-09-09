@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:xterm2/xterm.dart';
 
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 import '../domain/cast_playback.dart';
 import '../domain/terminal_cast.dart';
 

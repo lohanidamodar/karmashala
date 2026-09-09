@@ -7,7 +7,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/process_spawn.dart';
 import 'package:karmashala_core/util.dart';

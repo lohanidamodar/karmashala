@@ -35,6 +35,10 @@ installs claim the same version name.
   over one descriptor table; 500 tests in two seconds; no local dependency.
 - **The app now uses `karmashala_browser`** — its own copies are gone; a
   change to the browser layer is gated in 24 seconds.
+- **`karmashala_devices`, `karmashala_git` and `karmashala_flutter_apps` are
+  built beside the app** (687, 238 and 127 tests, seconds each), and the media
+  layer is its own package, `karmashala_media`, so core is logging and paths
+  only.
 
 ---
 
