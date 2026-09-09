@@ -10,7 +10,7 @@ import '../../features/explorer/application/checkout.dart';
 import '../../features/explorer/application/checkout_picker.dart';
 import '../../features/projects/application/project_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
-import '../../features/repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 
 /// Asks for a rescan of the project's folder from the picker.
 class _RescanChoice {

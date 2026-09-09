@@ -16,7 +16,7 @@ import 'package:karmashala/src/features/explorer/presentation/session_card.dart'
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';

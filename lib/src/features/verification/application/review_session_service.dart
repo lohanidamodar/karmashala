@@ -5,7 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
-import '../../git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';

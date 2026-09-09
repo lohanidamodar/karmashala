@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../git/domain/worktree_setup.dart'
+import 'package:karmashala_git/git.dart'
     show joinCommandLine, splitCommandLine;
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/automation_providers.dart';
 import '../domain/project_check.dart';

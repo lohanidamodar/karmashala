@@ -12,16 +12,10 @@ import '../application/changes_providers.dart';
 import '../application/review_threads.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../data/git_diff_parsing.dart';
-import '../data/git_presence_reader.dart';
-import '../domain/git_presence.dart';
+import 'package:karmashala_git/git.dart';
 import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import 'worktree_browse.dart';
-import '../domain/diff_line.dart';
-import '../domain/review_order.dart';
-import '../domain/review_thread.dart';
-import '../domain/file_change.dart';
 
 /// Read-only Git change review, desktop-style: a vertical list of changed files,
 /// each expandable to reveal its unified diff inline, and openable full-screen

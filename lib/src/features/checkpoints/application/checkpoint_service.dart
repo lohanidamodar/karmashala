@@ -1,10 +1,7 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../../git/data/git_files.dart';
-import '../../git/data/git_service.dart';
-import '../../git/data/hunk_patch.dart';
-import '../../git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 import '../data/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
 

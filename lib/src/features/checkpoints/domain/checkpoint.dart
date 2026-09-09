@@ -1,5 +1,5 @@
 import 'package:agent_cli/process.dart';
-import '../../git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 
 /// Why a checkpoint was taken. It is not decoration: [safety] checkpoints are
 /// what make a restore undoable, so a reader needs to be able to tell them from

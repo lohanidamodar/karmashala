@@ -1,5 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
-import '../../github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import '../../sessions/domain/session_delivery.dart';
 import 'delivery_transition.dart';
 import 'agent_status_transition.dart';

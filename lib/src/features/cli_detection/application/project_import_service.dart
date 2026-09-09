@@ -3,7 +3,7 @@ import 'package:agent_cli/process.dart';
 import '../../projects/data/project_dao.dart';
 import '../../projects/domain/project.dart';
 import '../../repositories/data/repository_dao.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
 

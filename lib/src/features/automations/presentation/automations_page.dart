@@ -9,7 +9,7 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../terminal/presentation/session_status.dart' show describeAge;
 import '../../verification/domain/verification_run.dart';

@@ -4,12 +4,11 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout.dart';
-import 'package:karmashala/src/features/git/data/git_files.dart';
-import 'package:karmashala/src/features/git/domain/repository_origin.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/application/repository_identity_recorder.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/domain/repository_identity.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 
 import '../../support/fixtures.dart';

@@ -28,8 +28,7 @@ import 'package:flutter/services.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../data/file_edit_diff.dart';
-import '../domain/file_edit.dart';
+import 'package:karmashala_git/git.dart';
 import 'diff_line_tile.dart';
 
 /// How many diff rows a card draws inline before it gives the diff its own

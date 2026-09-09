@@ -4,7 +4,7 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
-import '../../github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/session_attention.dart';

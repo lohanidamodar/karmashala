@@ -8,12 +8,11 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../settings/presentation/settings_section.dart';
 import '../application/worktree_setup_providers.dart';
-import '../domain/git_worktree.dart';
-import '../domain/worktree_setup.dart';
+import 'package:karmashala_git/git.dart';
 import 'worktree_setup_dialog.dart';
 
 /// Settings → Worktrees: what each checkout wants done to a worktree the moment

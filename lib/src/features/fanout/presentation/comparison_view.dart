@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../git/domain/review_order.dart';
+import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../verification/presentation/review_action.dart';
 import '../application/comparison_providers.dart';

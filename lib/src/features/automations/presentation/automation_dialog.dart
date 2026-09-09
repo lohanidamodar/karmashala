@@ -5,7 +5,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../application/automation_providers.dart';
 import '../application/unattended_preflight.dart';
 import '../domain/automation.dart';

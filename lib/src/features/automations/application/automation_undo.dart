@@ -4,7 +4,7 @@ import '../../checkpoints/application/checkpoint_providers.dart';
 import '../../checkpoints/application/checkpoint_service.dart';
 import '../../checkpoints/data/checkpoint_dao.dart';
 import '../../git/application/changes_providers.dart';
-import '../../git/domain/git_commit.dart';
+import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/automation_run.dart';
 import '../domain/undo_run.dart';

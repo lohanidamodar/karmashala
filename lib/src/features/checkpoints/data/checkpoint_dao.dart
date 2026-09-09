@@ -4,7 +4,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
-import '../../git/domain/file_change.dart';
+import 'package:karmashala_git/git.dart';
 import '../domain/checkpoint.dart';
 
 /// Data access for session checkpoints (schema v12).

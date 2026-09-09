@@ -7,7 +7,7 @@ import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
-import 'package:karmashala/src/features/git/data/git_files.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';

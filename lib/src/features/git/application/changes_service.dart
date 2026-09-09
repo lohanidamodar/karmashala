@@ -1,16 +1,7 @@
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../data/git_files.dart';
-import '../data/git_merge_state.dart';
-import '../data/git_origin_reader.dart';
-import '../data/git_probe_target.dart';
-import '../data/git_service.dart';
-import '../domain/diff_stat.dart';
-import '../domain/file_change.dart';
-import '../domain/git_commit.dart';
-import '../domain/repository_origin.dart';
-import '../domain/working_tree_status.dart';
+import 'package:karmashala_git/git.dart';
 
 /// Notified with a repository whose working tree this service has just
 /// rewritten. Quick Open's index marks that root stale; see [CheckoutMoved] for

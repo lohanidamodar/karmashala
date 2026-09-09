@@ -1,7 +1,7 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/data/review_thread_dao.dart';
-import 'package:karmashala/src/features/git/domain/review_thread.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -1,4 +1,4 @@
-import '../../github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import '../../sessions/domain/delivery_stage.dart';
 import '../../sessions/domain/session_status.dart';
 

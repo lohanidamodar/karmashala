@@ -7,7 +7,7 @@ import 'package:agent_cli/discovery.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import '../repositories/application/repository_providers.dart';
-import '../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/session_handoff_service.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';

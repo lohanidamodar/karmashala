@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/git/domain/review_thread.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'review_thread_harness.dart';

@@ -2,7 +2,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
-import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_event.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';

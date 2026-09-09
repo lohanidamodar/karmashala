@@ -14,7 +14,7 @@ import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';

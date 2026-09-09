@@ -1,6 +1,6 @@
 import 'delivery_stage.dart';
 import 'session_delivery.dart';
-import '../../github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 
 /// The delivery strip's actions: one line from a working tree to an archived
 /// worktree, with the next sensible step drawn as the primary one.

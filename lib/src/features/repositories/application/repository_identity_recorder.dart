@@ -1,7 +1,7 @@
 import 'package:agent_cli/process.dart';
-import '../../git/domain/repository_origin.dart';
+import 'package:karmashala_git/git.dart';
 import '../data/repository_dao.dart';
-import '../domain/repository_identity.dart';
+import 'package:karmashala_git/repositories.dart';
 
 /// Writes what [origin] says the checkout at [path] *is* onto the rows that
 /// name that directory.

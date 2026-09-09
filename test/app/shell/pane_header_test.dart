@@ -20,8 +20,7 @@ import 'package:karmashala/src/features/file_explorer/application/file_explorer_
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/domain/file_change.dart';
-import 'package:karmashala/src/features/git/domain/git_commit.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
 import 'package:karmashala/src/features/github/presentation/github_view.dart';

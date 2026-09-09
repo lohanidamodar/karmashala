@@ -6,7 +6,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
 import 'package:agent_cli/process.dart';
 import '../../git/application/worktree_service.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../data/session_dao.dart';
 import '../data/session_event_dao.dart';

@@ -7,7 +7,7 @@ import 'package:karmashala_core/util.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../repositories/data/repository_dao.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../data/project_dao.dart';
 import '../domain/project.dart';
 

@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../git/application/review_threads.dart';
-import '../git/domain/review_thread.dart';
+import 'package:karmashala_git/git.dart';
 import '../sessions/application/session_providers.dart';
 
 /// Review comments as an agent can read, raise, answer and be answered in.

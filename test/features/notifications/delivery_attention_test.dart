@@ -2,7 +2,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
+import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/delivery_attention.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';

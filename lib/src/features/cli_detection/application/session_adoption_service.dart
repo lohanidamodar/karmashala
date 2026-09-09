@@ -8,7 +8,7 @@ import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../repositories/data/repository_dao.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../sessions/data/session_dao.dart';
 import '../../sessions/data/session_repository_dao.dart';
 import '../../sessions/domain/session.dart';

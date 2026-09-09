@@ -8,7 +8,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../application/fanout_service.dart';
 import 'comparison_list.dart';
 import 'comparison_view.dart';

@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/projects/application/project_providers.d
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

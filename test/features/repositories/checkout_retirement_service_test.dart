@@ -7,9 +7,8 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/application/checkout_retirement_service.dart';
-import 'package:karmashala/src/features/repositories/data/checkout_presence_probe.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/domain/checkout_retirement.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 

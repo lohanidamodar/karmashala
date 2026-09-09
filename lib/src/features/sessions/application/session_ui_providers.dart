@@ -6,7 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../git/application/changes_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../domain/session.dart';
 import '../domain/session_event.dart';
 import 'session_engine_provider.dart';

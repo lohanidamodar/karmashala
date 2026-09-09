@@ -17,7 +17,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';

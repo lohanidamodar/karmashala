@@ -1,8 +1,8 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/explorer/application/project_tree.dart';
-import 'package:karmashala/src/features/git/domain/git_worktree.dart';
-import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala_git/git.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

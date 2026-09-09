@@ -4,7 +4,7 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../data/worktree_setup_dao.dart';
-import '../domain/worktree_setup.dart';
+import 'package:karmashala_git/git.dart';
 import 'git_providers.dart';
 
 final worktreeSetupDaoProvider = Provider<WorktreeSetupDao>(

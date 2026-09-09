@@ -56,7 +56,7 @@ import 'package:karmashala/src/features/remote/data/companion_attachment_store.d
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';

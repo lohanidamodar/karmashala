@@ -1,8 +1,5 @@
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala/src/features/git/domain/file_change.dart';
-import 'package:karmashala/src/features/git/domain/git_commit.dart';
-import 'package:karmashala/src/features/git/domain/git_worktree.dart';
-import 'package:karmashala/src/features/git/domain/remote_repo.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';

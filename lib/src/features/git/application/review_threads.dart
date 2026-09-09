@@ -5,7 +5,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../data/review_thread_dao.dart';
-import '../domain/review_thread.dart';
+import 'package:karmashala_git/git.dart';
 import 'changes_providers.dart';
 
 /// Opening, answering and triaging review threads, and holding every anchor

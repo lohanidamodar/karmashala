@@ -4,7 +4,7 @@ import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
-import '../repositories/domain/repository.dart';
+import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/delivery_providers.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session_checkouts.dart';

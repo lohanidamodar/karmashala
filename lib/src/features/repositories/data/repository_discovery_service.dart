@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import '../domain/discovered_repository.dart';
+import 'package:karmashala_git/repositories.dart';
 
 /// Raised when repository discovery cannot proceed (e.g. the root folder does
 /// not exist). Carries an actionable message for the UI.

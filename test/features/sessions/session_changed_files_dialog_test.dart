@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/git/domain/file_edit.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/sessions/application/session_changed_files_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_changed_files.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_changed_files_dialog.dart';
