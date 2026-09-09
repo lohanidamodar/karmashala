@@ -23,8 +23,8 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/widgets.dart';
 
-import '../../features/companion/client/companion_gateway.dart';
-import '../../features/remote/domain/companion_presence.dart';
+import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/remote.dart';
 
 class CompanionLifecycleReconnector with WidgetsBindingObserver {
   CompanionLifecycleReconnector(this._gateway, {this.onLog});

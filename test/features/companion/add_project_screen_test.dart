@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/companion/application/companion_providers.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/add_project_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 
 import 'companion_test_support.dart';
 

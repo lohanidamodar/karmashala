@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// Draws [value] through its four states.
 ///

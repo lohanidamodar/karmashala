@@ -1,7 +1,8 @@
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/companion/application/companion_providers.dart';
+import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;

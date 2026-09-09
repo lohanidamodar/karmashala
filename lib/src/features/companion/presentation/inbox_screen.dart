@@ -6,7 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/domain/session_resume.dart';
 import '../application/companion_providers.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';

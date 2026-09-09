@@ -4,8 +4,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/remote_providers.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
-import 'package:karmashala/src/features/remote/domain/paired_device.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

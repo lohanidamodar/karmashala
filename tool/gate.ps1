@@ -26,8 +26,8 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below — today `core` and `browser` are extracted; the rest
-  are listed so the mapping is ready when they are.
+  A key of the map below — today `core`, `browser` and `remote` are extracted;
+  the rest are listed so the mapping is ready when they are.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -68,9 +68,9 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# Only `core` and `browser` are extracted today — the rest are the plan
-# (PACKAGE_SPLIT §2), and a run against one of them says so and falls back to
-# the app half alone.
+# Only `core`, `browser` and `remote` are extracted today — the rest are the
+# plan (PACKAGE_SPLIT §2), and a run against one of them says so and falls
+# back to the app half alone.
 $map = [ordered]@{
   core = @{
     pkg  = 'packages/karmashala_core'
@@ -120,8 +120,12 @@ $map = [ordered]@{
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
+    # Both folders whole: what is left in them is the app's half of the link —
+    # the DAOs, the host service, the providers and the phone's screens — and
+    # `bound_frames_golden_test.dart` sits inside the first.
     app  = @('test/features/remote', 'test/features/companion')
-    owns = @('lib/src/features/remote', 'lib/src/features/companion')
+    owns = @('lib/src/features/remote', 'lib/src/features/companion',
+             'test/features/remote', 'test/features/companion')
   }
 }
 

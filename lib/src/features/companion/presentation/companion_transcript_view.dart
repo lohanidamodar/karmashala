@@ -4,7 +4,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/markdown_message.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// The phone's transcript: a conversation drawn from its newest message
 /// upwards.

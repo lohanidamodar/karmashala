@@ -3,8 +3,19 @@ library;
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../remote/domain/remote_payloads.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/companion.dart';
+
+/// The gateway the companion UI reads.
+///
+/// The package owns the interface and both implementations; the provider over
+/// them is the app's wiring, so it stays here. Defaults to an unpaired
+/// [FakeCompanionGateway] so companion mode boots to the pairing screen with
+/// no host wired; the orchestrator overrides this with the real client at
+/// integration.
+final companionGatewayProvider = Provider<CompanionGateway>(
+  (ref) => FakeCompanionGateway(),
+);
 
 /// The pairing in effect, or null when this phone has never paired.
 final companionPairingProvider = StreamProvider<CompanionPairing?>(

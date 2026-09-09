@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_icons.dart';
 import '../../../../app/theme/design_tokens.dart';
-import '../../../remote/protocol.dart';
-import '../../client/companion_gateway.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/companion.dart';
+import '../../application/companion_providers.dart';
 import '../companion_chrome.dart';
 
 /// The moment a QR is decoded or a code submitted, the camera/input screen

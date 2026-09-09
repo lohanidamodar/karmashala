@@ -13,9 +13,8 @@ import '../../agents/domain/agent_status.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../domain/remote_payloads.dart';
-import '../protocol.dart';
-import 'host_bindings.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/host.dart';
 
 /// The Loop-49 evidence lookup, stubbed in tests for the same reason: the
 /// real one reads `agentSessionStatusProvider`, whose sources include a

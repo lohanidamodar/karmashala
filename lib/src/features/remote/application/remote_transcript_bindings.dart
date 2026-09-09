@@ -25,9 +25,8 @@ import '../../sessions/domain/session_attribution.dart';
 import '../../sessions/domain/session_chat_view.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/session_event_types.dart';
-import '../domain/remote_payloads.dart';
-import '../protocol.dart';
-import 'host_bindings.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';
 
 /// The same source selection as `SessionTranscriptView`: a PTY-hosted

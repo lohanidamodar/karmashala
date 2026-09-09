@@ -15,8 +15,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
-import 'package:karmashala/src/features/remote/application/host_session_api.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala_remote/host.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
 
 import '../../support/temp_directory.dart';

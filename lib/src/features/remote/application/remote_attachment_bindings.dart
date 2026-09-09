@@ -23,9 +23,8 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../data/companion_attachment_store.dart';
-import '../domain/remote_payloads.dart';
-import '../protocol.dart';
-import 'host_bindings.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/host.dart';
 import 'remote_providers.dart';
 
 /// What a file sent to one session may be — the answer the phone is shown on

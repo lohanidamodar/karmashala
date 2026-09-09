@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/notifications/attention_notification.dart';
 import 'package:flutter_test/flutter_test.dart';
 

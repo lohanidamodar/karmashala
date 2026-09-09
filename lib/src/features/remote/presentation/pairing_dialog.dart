@@ -6,12 +6,9 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/widgets/qr_painter.dart';
 import '../application/remote_access_controller.dart';
-import '../domain/paired_device.dart';
-import '../pairing/host_pairing.dart';
-import '../pairing/pairing_code.dart';
-import '../pairing/pairing_payload.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/pairing.dart';
 import '../pairing/pairing_relay_endpoints.dart';
-import '../protocol.dart';
 
 /// The pairing dialog: what the phone may do, then the QR code, then the
 /// confirmation that a phone proved the key and was stored.

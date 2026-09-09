@@ -7,11 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../core/logging/diagnostics_bootstrap.dart';
-import '../../features/companion/client/companion_gateway.dart';
-import '../../features/companion/client/remote_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import '../../features/companion/client/secure_companion_store.dart';
-import '../../features/remote/client/lan_path.dart';
-import '../../features/remote/domain/companion_presence.dart';
+import 'package:karmashala_remote/client.dart';
+import 'package:karmashala_remote/remote.dart';
+import '../../features/companion/application/companion_providers.dart';
 import '../../features/companion/notifications/attention_notification.dart';
 import '../../features/companion/notifications/companion_notifier.dart';
 import '../../features/companion/presentation/session_view_screen.dart';

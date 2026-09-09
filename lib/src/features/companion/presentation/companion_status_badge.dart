@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// The desktop's status vocabulary for a session the host described.
 ///

@@ -3,14 +3,12 @@
 /// progress screen's staged states, failure, Retry and Back.
 library;
 
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/pairing_input.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/pairing_progress_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/scan_qr_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/short_code_screen.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
-import 'package:karmashala/src/features/remote/pairing/pairing_code.dart';
+import 'package:karmashala_remote/pairing.dart' hide PairingException;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

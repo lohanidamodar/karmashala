@@ -11,14 +11,13 @@ library;
 
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
-import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
 import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
 import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/file_picking.dart';
-import '../../remote/domain/remote_payloads.dart';
-import '../client/companion_gateway.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/companion.dart';
 
 /// The phone's message box: a prompt, and at most one file to go with it.
 ///

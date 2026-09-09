@@ -36,8 +36,7 @@ library;
 import 'dart:io';
 import 'dart:math';
 
-import '../domain/remote_payloads.dart';
-import '../protocol.dart';
+import 'package:karmashala_remote/remote.dart';
 
 /// How many committed attachments are kept. The newest win, the way
 /// `kSessionMediaCap` picks which pictures the media panel keeps.

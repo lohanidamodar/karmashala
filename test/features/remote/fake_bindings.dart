@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/features/remote/domain/companion_presence.dart';
-import 'package:karmashala/src/features/remote/application/host_bindings.dart';
+import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/data/companion_attachment_store.dart';
-import 'package:karmashala/src/features/remote/domain/paired_device.dart';
-import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
-import 'package:karmashala/src/features/remote/protocol.dart';
 
 /// In-memory bindings: sessions, transcripts and recorded actions, with no
 /// providers, processes or terminals anywhere near them.

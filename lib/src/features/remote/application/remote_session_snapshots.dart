@@ -26,7 +26,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../settings/application/settings_controller.dart';
-import '../domain/remote_payloads.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'remote_attachment_bindings.dart';
 import 'remote_binding_support.dart';
 

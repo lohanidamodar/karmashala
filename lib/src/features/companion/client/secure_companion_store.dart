@@ -15,7 +15,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../../remote/client/companion_store.dart';
+import 'package:karmashala_remote/client.dart';
 
 /// Reads one value, or null when the key has never been written.
 typedef SecureRead = Future<String?> Function(String key);
