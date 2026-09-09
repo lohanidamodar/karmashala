@@ -129,10 +129,10 @@ void main() {
 
     // An installation row is itself proof somebody looked. Re-probing it would
     // spawn a process per agent per environment on every single launch.
-    expect(located().toSet(), {'agy', 'gemini'});
+    expect(located().toSet(), {'agy'});
     expect(
       located().length,
-      4,
+      2,
       reason: 'once per unprobed agent per environment, no more',
     );
   });
@@ -178,7 +178,7 @@ void main() {
         .read(agentInstallationsControllerProvider.notifier)
         .discoverUnprobed();
 
-    expect(located().toSet(), {'claude', 'codex', 'agy', 'gemini'});
+    expect(located().toSet(), {'claude', 'codex', 'agy'});
     expect(found.map((i) => i.agentId), [AgentIds.antigravity]);
   });
 }

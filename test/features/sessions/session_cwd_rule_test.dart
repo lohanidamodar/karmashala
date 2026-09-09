@@ -213,9 +213,8 @@ void main() {
       // conversation is findable from anywhere is making an assertion about a
       // CLI's storage, and folklore is what evidence exists to keep out. The
       // safe side needs no evidence: `findsConversationAnywhere: false` is what
-      // an unfilled `AgentLaunchSpec` already means (the case below), and Gemini
-      // CLI — shipped by `agent_cli` as `-p`/`-m` and nothing else, because
-      // nobody here has run it — is deliberately on it.
+      // an unfilled `AgentLaunchSpec` already means (the case below), which is
+      // where an agent nobody has checked belongs.
       for (final descriptor in builtInAgentDescriptors) {
         if (!descriptor.launch.resumeLocality.findsConversationAnywhere) {
           continue;

@@ -223,14 +223,14 @@ void main() {
       expect(agentFilterTooltip(AgentFilter.all, registry), 'Filter sessions');
       expect(
         agentFilterTooltip(const AgentFilter({AgentIds.codex}), registry),
-        'Showing Codex CLI only — Claude Code, Antigravity and Gemini CLI hidden',
+        'Showing Codex CLI only — Claude Code and Antigravity hidden',
       );
       expect(
         agentFilterTooltip(
           const AgentFilter({AgentIds.codex, AgentIds.claudeCode}),
           registry,
         ),
-        'Showing Claude Code and Codex CLI only — Antigravity and Gemini CLI hidden',
+        'Showing Claude Code and Codex CLI only — Antigravity hidden',
       );
     });
   });
@@ -459,7 +459,7 @@ void main() {
       );
       expect(
         find.byTooltip(
-          'Showing Codex CLI only — Claude Code, Antigravity and Gemini CLI hidden',
+          'Showing Codex CLI only — Claude Code and Antigravity hidden',
         ),
         findsOneWidget,
       );
