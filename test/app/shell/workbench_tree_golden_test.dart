@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
@@ -89,6 +90,10 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         // Every id in the dump is a name a reader can follow between states.
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
+        // The usage chip reports the *age* of its reading, so an unpinned clock
+        // rewrites this file every hour on its own — a golden that fails for
+        // the time of day teaches everyone to regenerate it without looking.
+        clockProvider.overrideWithValue(FixedClock(testTime)),
         // Nothing here may reach the host: the bar's delivery line, the
         // transcript header's terminal list and the theme scan all would.
         sessionTranscriptProvider.overrideWith(

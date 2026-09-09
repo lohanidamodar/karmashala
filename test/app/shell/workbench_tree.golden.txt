@@ -2084,7 +2084,7 @@ WorkbenchView
                                                         GestureDetector
                                                           RawGestureDetector
                                                             Listener
-                                                              Tooltip tooltip="5-hour · 62% · resets in now (Fri 11:00)\n7-day · 1% · resets in now (Mon 08:49)\nowner@example.com\nChecked 250d6h ago"
+                                                              Tooltip tooltip="5-hour · 62% · resets in 2h11m (11:00)\n7-day · 1% · resets in 3d (Mon 08:49)\nowner@example.com\nChecked just now"
                                                                 RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                   OverlayPortal
                                                                     _OverlayPortal
@@ -2103,7 +2103,7 @@ WorkbenchView
                                                                                               RichText
                                                                                     SizedBox
                                                                                     Flexible
-                                                                                      Text text="62% · now"
+                                                                                      Text text="62% · 2h11m"
                                                                                         RichText
                           SessionNoticeLine
                             SizedBox
@@ -4095,7 +4095,7 @@ WorkbenchView
                                                         GestureDetector
                                                           RawGestureDetector
                                                             Listener
-                                                              Tooltip tooltip="5-hour · 62% · resets in now (Fri 11:00)\n7-day · 1% · resets in now (Mon 08:49)\nowner@example.com\nChecked 250d6h ago"
+                                                              Tooltip tooltip="5-hour · 62% · resets in 2h11m (11:00)\n7-day · 1% · resets in 3d (Mon 08:49)\nowner@example.com\nChecked just now"
                                                                 RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                   OverlayPortal
                                                                     _OverlayPortal
@@ -4114,7 +4114,7 @@ WorkbenchView
                                                                                               RichText
                                                                                     SizedBox
                                                                                     Flexible
-                                                                                      Text text="62% · now"
+                                                                                      Text text="62% · 2h11m"
                                                                                         RichText
                           SessionNoticeLine
                             SizedBox
@@ -4860,7 +4860,7 @@ WorkbenchView
                                                         GestureDetector
                                                           RawGestureDetector
                                                             Listener
-                                                              Tooltip tooltip="5-hour · 62% · resets in now (Fri 11:00)\n7-day · 1% · resets in now (Mon 08:49)\nowner@example.com\nChecked 250d6h ago"
+                                                              Tooltip tooltip="5-hour · 62% · resets in 2h11m (11:00)\n7-day · 1% · resets in 3d (Mon 08:49)\nowner@example.com\nChecked just now"
                                                                 RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                   OverlayPortal
                                                                     _OverlayPortal
@@ -4879,7 +4879,7 @@ WorkbenchView
                                                                                               RichText
                                                                                     SizedBox
                                                                                     Flexible
-                                                                                      Text text="62% · now"
+                                                                                      Text text="62% · 2h11m"
                                                                                         RichText
                           SessionNoticeLine
                             SizedBox
