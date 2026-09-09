@@ -27,8 +27,8 @@ class FlutterAppRegistry {
   /// prints them differently.
   final DateTime? lookedAt;
 
-  /// Where `--vmservice-out-file` should be pointed. Shown to the user and
-  /// handed to agents verbatim, so it is the same string in both places.
+  /// Where the runs **Karmashala starts** write their address. Reported so a
+  /// reader can see what was looked at; nobody is asked to write here.
   final String? discoveryDirectory;
 
   /// Why discovery itself could not run — the directory could not be created

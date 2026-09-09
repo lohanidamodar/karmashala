@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/flutter_apps/application/attached_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
+import 'package:karmashala/src/features/flutter_apps/data/dtd_pid_files.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
 import 'package:karmashala/src/features/flutter_apps/domain/attached_app.dart';
@@ -119,6 +120,10 @@ void main() {
         flutterAppDiscoveryDirectoryProvider.overrideWith(
           (ref) async => VmServiceUriDirectory(vmDirectory),
         ),
+        // This test knows about no tooling daemons. Without it the real
+        // ones on the machine running the suite are read, and a live
+        // `flutter run` in another window becomes an extra row.
+        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
         vmServiceConnectorProvider.overrideWithValue((uri) async {
           final fake = reachable[uri.toString()];
           if (fake == null) throw const _Refused();

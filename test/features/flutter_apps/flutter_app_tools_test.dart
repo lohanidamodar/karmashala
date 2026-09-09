@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
+import 'package:karmashala/src/features/flutter_apps/data/dtd_pid_files.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_tools.dart';
 import 'package:karmashala/src/features/flutter_apps/data/vm_service_uri_directory.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -28,6 +29,10 @@ void main() {
         flutterAppDiscoveryDirectoryProvider.overrideWith(
           (ref) async => VmServiceUriDirectory(temp),
         ),
+        // This test knows about no tooling daemons. Without it the real
+        // ones on the machine running the suite are read, and a live
+        // `flutter run` in another window becomes an extra row.
+        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
         vmServiceConnectorProvider.overrideWithValue((uri) async {
           final fake = reachable[uri.toString()];
           if (fake == null) throw const _Refused();
@@ -132,7 +137,7 @@ void main() {
         expect(reply['ok'], isTrue, reason: 'RPC failed: ${reply['error']}');
         expect(
           (reply['result']! as Map)['howToMakeOneVisible'],
-          contains('--vmservice-out-file'),
+          contains('found on their own'),
         );
       } finally {
         client.close(force: true);
@@ -142,12 +147,12 @@ void main() {
   });
 
   group('flutter_apps', () {
-    test('an empty answer carries the flag to add, not just the news', () async {
+    test('an empty answer says what is looked at, not what to add', () async {
       final result = await tools.call('flutter_apps', {}) as Map;
       expect(result['summary'], 'No Flutter app is running that we can see.');
       expect(result['apps'], isEmpty);
-      expect(result['howToMakeOneVisible'], contains('--vmservice-out-file'));
-      expect(result['howToMakeOneVisible'], contains(temp.path));
+      expect(result['howToMakeOneVisible'], contains('found on their own'));
+      expect(result['howToMakeOneVisible'], isNot(contains('--vmservice-out-file')));
       expect(result['checkedAt'], isNotNull);
     });
 
@@ -198,7 +203,7 @@ void main() {
           isA<ArgumentError>().having(
             (e) => '${e.message}',
             'message',
-            contains('--vmservice-out-file'),
+            contains('found on their own'),
           ),
         ),
       );
