@@ -16,6 +16,7 @@ environment:
 # in it, which a member cannot do — "found no workspace root including it".
 workspace:
   - packages/karmashala_core
+  - packages/karmashala_remote
   - packages/local_ipc
 
 dependencies:
@@ -30,6 +31,8 @@ dependencies:
   # copy in the tree (docs/PACKAGE_SPLIT.md §5).
   karmashala_core:
     path: packages/karmashala_core
+  karmashala_remote:
+    path: packages/karmashala_remote
   karmashala_local_ipc:
     path: packages/local_ipc
   # The relay server itself, embedded in the desktop app so "This computer
