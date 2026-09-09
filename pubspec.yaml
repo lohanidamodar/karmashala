@@ -18,6 +18,7 @@ workspace:
   - packages/agent_cli
   - packages/karmashala_browser
   - packages/karmashala_core
+  - packages/karmashala_flutter_apps
   - packages/karmashala_remote
   - packages/local_ipc
 
@@ -37,6 +38,12 @@ dependencies:
   # copy in the tree (docs/PACKAGE_SPLIT.md §5).
   karmashala_core:
     path: packages/karmashala_core
+  # Finding, running and driving a Flutter app from outside it: project and
+  # SDK discovery, the four routes to a VM service address, the Dart Tooling
+  # Daemon and the VM service link. Built beside the app in phase A — nothing
+  # under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §2).
+  karmashala_flutter_apps:
+    path: packages/karmashala_flutter_apps
   karmashala_remote:
     path: packages/karmashala_remote
   # The coding-agent interface: discovery, launch, stream, ask, store reading
