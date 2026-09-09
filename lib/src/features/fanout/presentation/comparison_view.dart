@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../git/domain/review_order.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../verification/presentation/review_action.dart';
 import '../application/comparison_providers.dart';
@@ -569,7 +570,10 @@ class _CandidateColumn extends ConsumerWidget {
               : snapshot.data!.trim().isEmpty
               ? 'Nothing uncommitted. Committed work shows as a commit count '
                     'above.'
-              : snapshot.data!,
+              // Where the tiering earns most: four columns are drawn side by
+              // side, and git's alphabetical order opens all four on
+              // `pubspec.lock`. Reordered, never trimmed.
+              : orderUnifiedDiffForReview(snapshot.data!),
           style: MonoStyles.small,
         ),
       ),

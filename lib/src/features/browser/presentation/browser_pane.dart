@@ -9,6 +9,8 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/browser_pane_controller.dart';
 import '../domain/element_capture.dart';
+import 'browser_console.dart';
+import 'browser_viewport_shot.dart';
 
 /// The browser pane: attach to the Chrome the developer already has open,
 /// drive it, and point at an element to send it to an agent.
@@ -70,6 +72,9 @@ class _BrowserPaneState extends ConsumerState<BrowserPane> {
             message: state.error!,
             onDismiss: _controller.clearError,
           ),
+        // Under the actions and above the picture: the two questions a person
+        // asks a page they are debugging, over the same service the tools use.
+        BrowserConsole(state: state),
         Expanded(child: _Body(state: state)),
       ],
     );
@@ -367,6 +372,10 @@ class _Body extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final capture = state.capture;
     if (capture == null) {
+      // A pick's crop wins when there is one: it is the more specific answer,
+      // and it is the one the user asked for by pointing at something.
+      final shot = ref.watch(browserViewportShotProvider);
+      if (!shot.isEmpty) return BrowserViewportShotView(shot: shot);
       return PanePlaceholder(
         message: switch (state.status) {
           BrowserPaneStatus.disconnected =>

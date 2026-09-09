@@ -10,6 +10,7 @@ export 'src/domain/age.dart';
 export 'src/domain/host_session.dart';
 export 'src/domain/output_backlog.dart';
 export 'src/domain/session_lifecycle.dart';
+export 'src/domain/session_recorder.dart';
 export 'src/domain/session_registry.dart';
 export 'src/domain/write_token.dart';
 export 'src/host_version.dart';
