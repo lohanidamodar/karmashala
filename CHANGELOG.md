@@ -28,6 +28,8 @@ installs claim the same version name.
   it in 36 seconds. Nothing changes in the app.
 - **`karmashala_browser` is built beside the app** — 326 tests in four seconds,
   no dependencies; the app still runs its own copy until the cut-over.
+- **`karmashala_remote` is built beside the app** — the wire and both ends of
+  it, 440 tests in three seconds, one runtime dependency.
 
 ---
 
