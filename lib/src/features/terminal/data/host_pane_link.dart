@@ -289,7 +289,13 @@ class HostPaneLink {
           bound,
           onTimeout: () {
             _pending.remove(id);
-            throw HostLinkException('The host did not answer in ${bound.inSeconds}s.');
+            throw HostLinkException(
+              'The host did not answer in ${_describe(bound)}.',
+              // A bound that expired is a reading of how busy the machine was,
+              // and callers that would otherwise act on it as "nobody is there"
+              // need to be able to tell the two apart.
+              timedOut: true,
+            );
           },
         )
         .then((message) => message as T);
@@ -306,8 +312,16 @@ class HostSessionEnd {
 }
 
 class HostLinkException implements Exception {
-  const HostLinkException(this.message);
+  const HostLinkException(this.message, {this.timedOut = false});
   final String message;
+
+  /// Whether the bound expired rather than the host saying something.
+  final bool timedOut;
+
   @override
   String toString() => message;
 }
+
+/// Seconds read better than `0:00:05.000000`, and a sub-second bound needs ms.
+String _describe(Duration bound) =>
+    bound.inSeconds >= 1 ? '${bound.inSeconds}s' : '${bound.inMilliseconds}ms';

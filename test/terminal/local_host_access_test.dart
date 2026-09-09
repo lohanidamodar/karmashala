@@ -46,6 +46,28 @@ void main() {
     return listener;
   }
 
+  /// A socket that accepts and answers nothing — what a host on a machine too
+  /// busy to schedule its reply looks like from here.
+  ///
+  /// The accepted sockets are HELD: one nobody references is finalised by the
+  /// VM's next collection and sends a clean FIN, which is a host hanging up
+  /// rather than a slow one (SETTLED.md, the stranger that hung up).
+  Future<void> silentHost() async {
+    final server = await ServerSocket.bind(
+      InternetAddress(paths.socketPath, type: InternetAddressType.unix),
+      0,
+    );
+    final held = <Socket>[];
+    final subscription = server.listen(held.add);
+    addTearDown(() async {
+      await subscription.cancel();
+      for (final socket in held) {
+        socket.destroy();
+      }
+      await server.close();
+    });
+  }
+
   File anExecutable() {
     final file = File('${home.path}/${LocalHostExecutable.fileName}')
       ..writeAsStringSync('not really a binary');
@@ -76,12 +98,64 @@ void main() {
   test('a reading is memoised on the future, so two panes share one', () async {
     await serve();
     anExecutable();
+    var started = 0;
     final access = LocalHostSessionAccess(
       paths: paths,
       executable: LocalHostExecutable(executableDirectory: home.path),
+      // Counted, not omitted. Without it a hello this machine was too busy to
+      // answer sent this case at a real `Process.start` on a file the test had
+      // just written — the one unbounded await on the path.
+      startServe: (_) async {
+        started++;
+        throw StateError('a host is listening; nothing should have been started');
+      },
     );
     final both = await Future.wait([access.deployment(), access.deployment()]);
     expect(identical(both.first, both.last), isTrue);
+    expect(started, 0);
+  });
+
+  test('a host that is listening but slow to answer is not replaced', () async {
+    await silentHost();
+    anExecutable();
+    var started = 0;
+    final access = LocalHostSessionAccess(
+      paths: paths,
+      executable: LocalHostExecutable(executableDirectory: home.path),
+      helloBound: const Duration(milliseconds: 150),
+      startServe: (_) async {
+        started++;
+        throw StateError('a second host must not be started over a live one');
+      },
+    );
+
+    final reading = await access.deployment();
+    // A refused connection is an event — nobody is there. A handshake nobody
+    // answered is a reading of a busy machine, and a reading must not be acted
+    // on as if it were the other one.
+    expect(started, 0);
+    expect(reading.status, HostDeploymentStatus.unknown);
+    expect(reading.reason, contains('did not answer'));
+    expect(reading.reason, contains(paths.socketPath));
+  });
+
+  test('a reading nobody could take is not remembered, so the next pane asks again', () async {
+    await silentHost();
+    anExecutable();
+    final access = LocalHostSessionAccess(
+      paths: paths,
+      executable: LocalHostExecutable(executableDirectory: home.path),
+      helloBound: const Duration(milliseconds: 150),
+      startServe: (_) async =>
+          throw StateError('a second host must not be started over a live one'),
+    );
+
+    final first = await access.deployment();
+    final second = await access.deployment();
+    expect(first.status, HostDeploymentStatus.unknown);
+    // The memoised future is the point of the case above; this is its limit —
+    // §19's missing reading is a moment, not a fact to hand the next pane.
+    expect(identical(first, second), isFalse);
   });
 
   test('with no binary anywhere it says where it looked, and starts nothing', () async {
@@ -172,18 +246,43 @@ void main() {
       expect(access.lastReading, isNull, reason: 'nobody has taken a real reading yet');
     });
 
-    test('reports the version and the time it was read when one answers', () async {
-      await serve();
+    test('says a host is there but silent, not that nothing is listening', () async {
+      await silentHost();
       anExecutable();
       final access = LocalHostSessionAccess(
         paths: paths,
         executable: LocalHostExecutable(executableDirectory: home.path),
+        helloBound: const Duration(milliseconds: 150),
+      );
+
+      final reading = await access.observe();
+      expect(reading.status, HostDeploymentStatus.unknown);
+      expect(reading.reason, contains('did not answer'));
+      expect(
+        reading.reason,
+        isNot(contains('Nothing is listening')),
+        reason: 'something IS listening; the row must not say the opposite',
+      );
+    });
+
+    test('reports the version and the time it was read when one answers', () async {
+      await serve();
+      anExecutable();
+      var started = 0;
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        startServe: (_) async {
+          started++;
+          throw StateError('a status row must not launch a daemon');
+        },
       );
       final before = DateTime.now();
       final reading = await access.observe();
       expect(reading.status, HostDeploymentStatus.ready);
       expect(reading.hostVersion, kHostVersion);
       expect(reading.observedAt.isBefore(before), isFalse);
+      expect(started, 0);
     });
   });
 
@@ -193,6 +292,8 @@ void main() {
     final access = LocalHostSessionAccess(
       paths: paths,
       executable: LocalHostExecutable(executableDirectory: home.path),
+      startServe: (_) async =>
+          throw StateError('a host is listening; nothing should have been started'),
     );
     expect((await access.deployment()).status, HostDeploymentStatus.ready);
 
