@@ -22,6 +22,10 @@ installs claim the same version name.
   the provider files that draw no widget import plain `riverpod`; 585 of 1,027
   library files and 302 of 868 suites are now Flutter-free. Seven cost/soak
   suites are tagged `cost`. Nothing changes in the app.
+- **`karmashala_core` is the first package out of the app** — logging, small
+  utilities, path probing and the media layer, a pub-workspace member with 95
+  tests that run in two seconds. `tool/gate.ps1 -Package core` gates a change to
+  it in 36 seconds. Nothing changes in the app.
 
 ---
 
