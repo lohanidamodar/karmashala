@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/automations/application/automation_provi
 import 'package:karmashala/src/features/automations/data/automation_dao.dart';
 import 'package:karmashala/src/features/automations/domain/automation.dart';
 import 'package:karmashala/src/features/automations/domain/automation_run.dart';
+import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -117,6 +118,42 @@ void main() {
     expect(find.text('AUTOMATIONS'), findsOneWidget);
     expect(find.text('Nothing is armed.'), findsOneWidget);
     expect(find.text('Arm an automation'), findsOneWidget);
+  });
+
+  testWidgets('the arm form names each rung beside the CLI own word', (
+    tester,
+  ) async {
+    // The form picks whole selections rather than axes, so the name it pairs
+    // is the composed rung's — the one the unattended gate reads.
+    makeReady();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: AutomationDialog(
+              repository: repository(),
+              // An armed automation, so the form opens with an agent chosen
+              // and the mode picker drawn — a blank form has neither.
+              existing: nightly(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The mode dropdown, not the agent one above it.
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+
+    // Claude Code already says "Plan", so it is not said twice; the two rungs
+    // whose CLI word describes the prompt policy rather than the work get the
+    // borrowed name, and the bypass rung keeps ours.
+    expect(find.text('Plan mode'), findsWidgets);
+    expect(find.text('Build · Accept edits'), findsWidgets);
+    expect(find.text('Build · Automatic'), findsWidgets);
+    expect(find.text('Bypass (full autonomy)'), findsWidgets);
   });
 
   testWidgets('the preconditions are on the same page as the refusal', (

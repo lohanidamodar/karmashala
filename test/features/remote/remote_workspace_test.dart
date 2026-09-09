@@ -158,7 +158,9 @@ void main() {
       ]);
       expect(agent.permissionModes.every((m) => m.selectable), isTrue);
       final accept = agent.permissionModes[1];
-      expect(accept.label, 'Accept edits');
+      // Minted host-side with the rung's borrowed name in front of the CLI's
+      // own word, so the phone shows the pairing without knowing rungs exist.
+      expect(accept.label, 'Build · Accept edits');
       expect(
         accept.summary,
         contains('Auto-approves edits'),

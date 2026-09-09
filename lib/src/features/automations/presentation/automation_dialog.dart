@@ -304,7 +304,10 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
         for (final selection in selections)
           DropdownMenuItem(
             value: selection.canonical,
-            child: Text(describeSelection(support, selection)),
+            // Whole selections rather than axes here, so the familiar name is
+            // the composed rung's — which is the one the unattended gate
+            // reads.
+            child: Text(describeSelectionFamiliar(support, selection)),
           ),
       ],
       onChanged: (value) => setState(

@@ -483,7 +483,7 @@
                             "permissionModes": [
                               {
                                 "mode": "mode=dontAsk",
-                                "label": "Don't ask",
+                                "label": "Plan · Don't ask",
                                 "summary": "Auto-deny anything that would prompt.",
                                 "selectable": true
                               },
@@ -501,13 +501,13 @@
                               },
                               {
                                 "mode": "mode=acceptEdits",
-                                "label": "Accept edits",
+                                "label": "Build · Accept edits",
                                 "summary": "Auto-approve file edits and common file commands.",
                                 "selectable": true
                               },
                               {
                                 "mode": "mode=auto",
-                                "label": "Automatic",
+                                "label": "Build · Automatic",
                                 "summary": "No routine prompts; a reviewer model screens actions.",
                                 "selectable": true
                               },
@@ -562,7 +562,7 @@
                             "permissionModes": [
                               {
                                 "mode": "mode=dontAsk",
-                                "label": "Don't ask",
+                                "label": "Plan · Don't ask",
                                 "summary": "Auto-deny anything that would prompt.",
                                 "selectable": true
                               },
@@ -580,13 +580,13 @@
                               },
                               {
                                 "mode": "mode=acceptEdits",
-                                "label": "Accept edits",
+                                "label": "Build · Accept edits",
                                 "summary": "Auto-approve file edits and common file commands.",
                                 "selectable": true
                               },
                               {
                                 "mode": "mode=auto",
-                                "label": "Automatic",
+                                "label": "Build · Automatic",
                                 "summary": "No routine prompts; a reviewer model screens actions.",
                                 "selectable": true
                               },
@@ -627,7 +627,7 @@
                             "permissionModes": [
                               {
                                 "mode": "mode=dontAsk",
-                                "label": "Don't ask",
+                                "label": "Plan · Don't ask",
                                 "summary": "Auto-deny anything that would prompt.",
                                 "selectable": true
                               },
@@ -645,13 +645,13 @@
                               },
                               {
                                 "mode": "mode=acceptEdits",
-                                "label": "Accept edits",
+                                "label": "Build · Accept edits",
                                 "summary": "Auto-approve file edits and common file commands.",
                                 "selectable": true
                               },
                               {
                                 "mode": "mode=auto",
-                                "label": "Automatic",
+                                "label": "Build · Automatic",
                                 "summary": "No routine prompts; a reviewer model screens actions.",
                                 "selectable": true
                               },

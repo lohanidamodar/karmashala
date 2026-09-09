@@ -174,7 +174,9 @@ class _PermissionCard extends StatelessWidget {
           DropdownMenuItem(
             value: option.id,
             enabled: option.isSelectable,
-            child: Text(option.label, overflow: TextOverflow.ellipsis),
+            // Per row rather than per selection: this page picks one axis at a
+            // time, and the row's own rung is what its name should say.
+            child: Text(option.pairedLabel, overflow: TextOverflow.ellipsis),
           ),
       ],
       onChanged: (picked) {

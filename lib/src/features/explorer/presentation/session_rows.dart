@@ -20,6 +20,7 @@ import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../sessions/presentation/session_changed_files_dialog.dart';
+import '../../sessions/presentation/session_recap_card.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
@@ -204,6 +205,15 @@ class NativeSessionRow extends ConsumerWidget {
           label: 'Continue with…',
           icon: AppIcons.gitBranch,
         ),
+        // The other place a recap can be asked for, and the one that matters
+        // for the session this feature exists for: the row you come back to a
+        // day later and have not opened yet. It spends a turn, so it is an
+        // entry the user picks and never something the row does on its own.
+        DesktopMenuItem(
+          value: 'recap',
+          label: 'Recap',
+          icon: AppIcons.article,
+        ),
         // One entry, not one per installed terminal. Three of the eight items
         // in this menu used to be external-terminal openers, which is a lot of
         // room for something the owner does not reach for; the default
@@ -268,6 +278,8 @@ class NativeSessionRow extends ConsumerWidget {
           return;
         }
         switch (action) {
+          case 'recap':
+            await requestSessionRecap(context, ref, session.id);
           case 'continue-with':
             // The dialog owns every decision here — which agent, handoff or
             // fork, and what permission mode the session lands in — and it
