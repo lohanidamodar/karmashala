@@ -1,0 +1,77 @@
+{
+  "note": "Committed so the host and the companion cannot drift. Regenerate with test/features/remote/generate_vectors.dart.",
+  "hkdf": "HKDF-SHA256",
+  "salt": "karmashala/remote/v1",
+  "aead": "XChaCha20-Poly1305, frame = nonce(24) || ciphertext || mac(16), sealed plaintext = uint64be(sequence) || payload, aad = the direction label",
+  "pairingSecret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "hostId": "11111111222222223333333344444444",
+  "deviceId": "aaaaaaaabbbbbbbbccccccccdddddddd",
+  "deviceKey": "4ffd2b999ee37cff41d14fdec7f75b396c1c2c233f0dccbcb4063cf34dbefe5f",
+  "generations": [
+    {
+      "generation": 0,
+      "rendezvous": "1a8fa41f695ddd32716c18642369c360",
+      "hostToDevice": "cd3ef1a99d3325c173fb64b1f3ee1ad3630dde15e7f8cd3f6dba224eb3885dd1",
+      "deviceToHost": "cba1a63e1a9b6d4ac14109eb40d446d4613cd6704fc23ce3d7030694cd5b0dbe"
+    },
+    {
+      "generation": 1,
+      "rendezvous": "e9ed6cd52cce51d1c23654c8469b6bee",
+      "hostToDevice": "6298c9c2f7a86804b514c633867089da650e53b1aadc7049146c057e74cee380",
+      "deviceToHost": "04e123e5eefc08d6c2843256b81de55fcb95ec60de3431cedd4ec0326cdf272c"
+    },
+    {
+      "generation": 7,
+      "rendezvous": "40c9a9313ad0014e62df70c45cffd64e",
+      "hostToDevice": "0572ddc6c40becc013c712ba25c985538dc24814235d0b0374fac2f7db7f4a2b",
+      "deviceToHost": "2fb7eb886b0584c466ec7a4730fe67f4f4c3724547258003c238ecc23f932a36"
+    },
+    {
+      "generation": 1000,
+      "rendezvous": "e0e43d445dc758d85953095acb589f38",
+      "hostToDevice": "2e4f17c688c8a159dc0327b8a41b0d6cd29cd96a4518b475944bca4e45c871ef",
+      "deviceToHost": "325c220362586e941da9956c0658feaa0083683437b05f11f872749a4b5bd8e6"
+    }
+  ],
+  "frames": [
+    {
+      "generation": 0,
+      "role": "host",
+      "sequence": 0,
+      "nonce": "303132333435363738393a3b3c3d3e3f4041424344454647",
+      "plaintext": "7b2276223a312c22736571223a302c2274223a2273657373696f6e732e6c697374222c2270223a7b7d7d",
+      "frame": "303132333435363738393a3b3c3d3e3f4041424344454647d57027ce361f8e8c800fdc22657da16127fbe6b4d7bf4dd74c406d65c0c2a1747f0827c7ec4bcf03108ba06723e3202ba9113c79c466d4cfcd1fc381455db857d838"
+    },
+    {
+      "generation": 0,
+      "role": "host",
+      "sequence": 1,
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "plaintext": "",
+      "frame": "505152535455565758595a5b5c5d5e5f6061626364656667cb71053b8de10706410b0a0f67cf32dd4b1a766089390b78"
+    },
+    {
+      "generation": 0,
+      "role": "companion",
+      "sequence": 0,
+      "nonce": "303132333435363738393a3b3c3d3e3f4041424344454647",
+      "plaintext": "7b2276223a312c22736571223a302c2274223a2273657373696f6e732e6c697374222c2270223a7b7d7d",
+      "frame": "303132333435363738393a3b3c3d3e3f404142434445464728455c5220a341bc11601e60b74397973d45d21a8b71834c64a008e882910937863129397aba3218a89260f546276ac9f1caf26df5bd73b277117168ced335d8d6d6"
+    },
+    {
+      "generation": 0,
+      "role": "companion",
+      "sequence": 1,
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "plaintext": "",
+      "frame": "505152535455565758595a5b5c5d5e5f60616263646566672d8f2b188187859c94cdae5f0c9060ef555191fffd77291a"
+    }
+  ],
+  "pairingCode": {
+    "codeSecret": "000102030405060708090a0b0c0d0e0f10111213",
+    "code": "AAAQ-EAYE-AUDA-OCAJ-BIFQ-YDIO-B4IB-CEQT",
+    "pairingSecret": "65e9686520683f060b19554532e634bc53fa124030525f9baf74449475f259c8",
+    "pairingRendezvous": "4a4c83aba6eafb6f3ebdf17afbbc2adb",
+    "confirmKey": "693b27f67557d4e8f598ff75f34aa3cadf6eb466919cebdf8ee8b5aec7c52ada"
+  }
+}
