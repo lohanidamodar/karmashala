@@ -1,0 +1,902 @@
+{
+  "note": "Every companion frame answered from the production bindings, in FrameType declaration order. Regenerate with KARMASHALA_WRITE_BOUND_FRAMES_GOLDEN=1; see test/features/remote/bound_frames_golden_test.dart.",
+  "frames": [
+    {
+      "frame": "sessions.list",
+      "capability": "view_sessions",
+      "cases": [
+        {
+          "request": {},
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessions": [
+                  {
+                    "sessionId": "new-0",
+                    "title": "Live pane",
+                    "status": "running",
+                    "archived": false,
+                    "stage": "working",
+                    "repositoryId": "r1",
+                    "repositoryName": "proj-repo",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  running",
+                    "whereabouts": "running here",
+                    "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                    "projectId": "p1",
+                    "projectName": "Proj",
+                    "projectPath": "C:\\work",
+                    "subPath": "proj",
+                    "branch": "main",
+                    "attach": {
+                      "types": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/gif",
+                        "image/webp"
+                      ],
+                      "max": 12582912
+                    }
+                  },
+                  {
+                    "sessionId": "s1",
+                    "title": "Fix the build",
+                    "status": "running",
+                    "archived": false,
+                    "stage": "working",
+                    "repositoryId": "r1",
+                    "repositoryName": "proj-repo",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  running",
+                    "whereabouts": "running here",
+                    "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                    "projectId": "p1",
+                    "projectName": "Proj",
+                    "projectPath": "C:\\work",
+                    "subPath": "proj",
+                    "branch": "main",
+                    "attach": {
+                      "types": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/gif",
+                        "image/webp"
+                      ],
+                      "max": 12582912
+                    }
+                  },
+                  {
+                    "sessionId": "s2",
+                    "title": "Follow-up",
+                    "status": "running",
+                    "archived": false,
+                    "stage": "working",
+                    "repositoryId": "r1",
+                    "repositoryName": "proj-repo",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  running",
+                    "whereabouts": "running here",
+                    "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                    "projectId": "p1",
+                    "projectName": "Proj",
+                    "projectPath": "C:\\work",
+                    "subPath": "proj",
+                    "branch": "main",
+                    "attach": {
+                      "types": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/gif",
+                        "image/webp"
+                      ],
+                      "max": 12582912
+                    }
+                  },
+                  {
+                    "sessionId": "s3",
+                    "title": "Unreadable store",
+                    "status": "running",
+                    "archived": false,
+                    "stage": "working",
+                    "repositoryId": "r1",
+                    "repositoryName": "proj-repo",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "mystery  ·  running",
+                    "whereabouts": "running here",
+                    "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                    "projectId": "p1",
+                    "projectName": "Proj",
+                    "projectPath": "C:\\work",
+                    "subPath": "proj",
+                    "branch": "main",
+                    "attach": {
+                      "types": [],
+                      "max": 0,
+                      "why": "This agent is not known to open a file named in a prompt."
+                    }
+                  },
+                  {
+                    "sessionId": "imp1",
+                    "title": "Old CLI chat",
+                    "status": "imported",
+                    "archived": false,
+                    "repositoryId": "r1",
+                    "repositoryName": "proj-repo",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  imported",
+                    "lastActivityAt": "2026-08-31T08:00:00.000Z",
+                    "imported": true,
+                    "projectId": "p1",
+                    "projectName": "Proj",
+                    "projectPath": "C:\\work",
+                    "subPath": "proj",
+                    "branch": "main",
+                    "attach": {
+                      "types": [],
+                      "max": 0,
+                      "why": "This is imported history, read-only here — continue it in its own terminal to attach anything."
+                    }
+                  },
+                  {
+                    "sessionId": "s4",
+                    "title": "In the subsystem",
+                    "status": "running",
+                    "archived": false,
+                    "stage": "working",
+                    "repositoryId": "r2",
+                    "repositoryName": "api",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  running",
+                    "whereabouts": "running here",
+                    "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                    "projectId": "p2",
+                    "projectName": "Api",
+                    "projectPath": "/home/dev/work",
+                    "subPath": "api",
+                    "branch": "main",
+                    "attach": {
+                      "types": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/gif",
+                        "image/webp"
+                      ],
+                      "max": 12582912
+                    },
+                    "environmentBadge": "WSL · Ubuntu"
+                  },
+                  {
+                    "sessionId": "imp2",
+                    "title": "Old subsystem chat",
+                    "status": "imported",
+                    "archived": false,
+                    "repositoryId": "r2",
+                    "repositoryName": "api",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  imported",
+                    "lastActivityAt": "2026-08-31T07:00:00.000Z",
+                    "imported": true,
+                    "projectId": "p2",
+                    "projectName": "Api",
+                    "projectPath": "/home/dev/work",
+                    "subPath": "api",
+                    "branch": "main",
+                    "attach": {
+                      "types": [],
+                      "max": 0,
+                      "why": "This is imported history, read-only here — continue it in its own terminal to attach anything."
+                    },
+                    "environmentBadge": "WSL · Ubuntu"
+                  },
+                  {
+                    "sessionId": "s5",
+                    "title": "On another machine",
+                    "status": "running",
+                    "archived": false,
+                    "stage": "working",
+                    "repositoryId": "r3",
+                    "repositoryName": "farm",
+                    "createdAt": "2026-08-31T10:00:00.000Z",
+                    "agentLabel": "Claude Code  ·  running",
+                    "whereabouts": "running here",
+                    "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                    "projectId": "p3",
+                    "projectName": "Farm",
+                    "projectPath": "/srv/farm",
+                    "subPath": "runner",
+                    "branch": "main",
+                    "attach": {
+                      "types": [],
+                      "max": 0,
+                      "why": "build-box runs on another machine — a file written here is not a file it can open."
+                    },
+                    "environmentBadge": "SSH · build-box"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "session.subscribe",
+      "capability": "view_sessions",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {}
+            },
+            {
+              "type": "session.changed",
+              "payload": {
+                "sessionId": "s1",
+                "title": "Fix the build",
+                "status": "running",
+                "archived": false,
+                "stage": "working",
+                "repositoryId": "r1",
+                "repositoryName": "proj-repo",
+                "createdAt": "2026-08-31T10:00:00.000Z",
+                "agentLabel": "Claude Code  ·  running",
+                "whereabouts": "running here",
+                "lastActivityAt": "2026-08-31T09:00:00.000Z",
+                "projectId": "p1",
+                "projectName": "Proj",
+                "projectPath": "C:\\work",
+                "subPath": "proj",
+                "branch": "main",
+                "attach": {
+                  "types": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/gif",
+                    "image/webp"
+                  ],
+                  "max": 12582912
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "session.unsubscribe",
+      "capability": "view_sessions",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "transcript.get",
+      "capability": "read_transcript",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "s1",
+                "messages": [
+                  {
+                    "role": "user",
+                    "text": "build it"
+                  },
+                  {
+                    "role": "agent",
+                    "text": "building"
+                  },
+                  {
+                    "role": "error",
+                    "text": "it did not compile"
+                  },
+                  {
+                    "role": "error",
+                    "text": "Session failed."
+                  },
+                  {
+                    "role": "tool",
+                    "text": "Session ended."
+                  }
+                ],
+                "cursor": 5
+              }
+            }
+          ]
+        },
+        {
+          "request": {
+            "sessionId": "s2"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "s2",
+                "messages": [
+                  {
+                    "role": "user",
+                    "text": "and again"
+                  }
+                ],
+                "cursor": 1
+              }
+            }
+          ]
+        },
+        {
+          "request": {
+            "sessionId": "s3"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "s3",
+                "messages": [],
+                "cursor": 0,
+                "absence": "no_chat_view"
+              }
+            }
+          ]
+        },
+        {
+          "request": {
+            "sessionId": "imp1"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "imp1",
+                "messages": [],
+                "cursor": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "prompt.send",
+      "capability": "send_prompt",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "new-0",
+            "text": "carry on"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {}
+            }
+          ]
+        },
+        {
+          "request": {
+            "sessionId": "imp1",
+            "text": "carry on"
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "this session was imported from the CLI — read-only here; continue it in its own terminal"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "approval.answer",
+      "capability": "approve",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1",
+            "decision": "approve"
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "this approval has already been answered"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "notifications.register",
+      "capability": "receive_notifications",
+      "cases": [
+        {
+          "request": {
+            "token": "t0k",
+            "platform": "android"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "workspace.list",
+      "capability": "start_session",
+      "cases": [
+        {
+          "request": {},
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "projects": [
+                  {
+                    "projectId": "p1",
+                    "name": "Proj",
+                    "path": "C:\\work",
+                    "environmentName": "Windows",
+                    "checkouts": [
+                      {
+                        "repositoryId": "r1",
+                        "name": "proj-repo",
+                        "path": "C:\\work\\proj",
+                        "subPath": "proj",
+                        "branch": "main",
+                        "environmentName": "Windows",
+                        "agents": [
+                          {
+                            "installationId": "i1",
+                            "agentId": "claudeCode",
+                            "name": "Claude Code",
+                            "defaultMode": "mode=manual",
+                            "acceptsOpeningMessage": true,
+                            "permissionModes": [
+                              {
+                                "mode": "mode=dontAsk",
+                                "label": "Don't ask",
+                                "summary": "Auto-deny anything that would prompt.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=plan",
+                                "label": "Plan mode",
+                                "summary": "Research and propose changes without making them.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=manual",
+                                "label": "Ask every time",
+                                "summary": "Ask each time, before edits and commands.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=acceptEdits",
+                                "label": "Accept edits",
+                                "summary": "Auto-approve file edits and common file commands.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=auto",
+                                "label": "Automatic",
+                                "summary": "No routine prompts; a reviewer model screens actions.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=bypassPermissions",
+                                "label": "Bypass (full autonomy)",
+                                "summary": "No further prompts of any kind.",
+                                "selectable": true,
+                                "dangerous": true
+                              }
+                            ]
+                          },
+                          {
+                            "installationId": "i2",
+                            "agentId": "mystery",
+                            "name": "mystery",
+                            "defaultMode": "none",
+                            "permissionModes": [
+                              {
+                                "mode": "",
+                                "label": "Not established",
+                                "summary": "Karmashala has not established which permission modes mystery has, so it starts under its own default and nothing here can govern it.",
+                                "selectable": false
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "projectId": "p2",
+                    "name": "Api",
+                    "path": "/home/dev/work",
+                    "environmentName": "WSL · Ubuntu",
+                    "environmentBadge": "WSL · Ubuntu",
+                    "checkouts": [
+                      {
+                        "repositoryId": "r2",
+                        "name": "api",
+                        "path": "/home/dev/work/api",
+                        "subPath": "api",
+                        "branch": "main",
+                        "environmentName": "WSL · Ubuntu",
+                        "agents": [
+                          {
+                            "installationId": "i3",
+                            "agentId": "claudeCode",
+                            "name": "Claude Code",
+                            "defaultMode": "mode=manual",
+                            "acceptsOpeningMessage": true,
+                            "permissionModes": [
+                              {
+                                "mode": "mode=dontAsk",
+                                "label": "Don't ask",
+                                "summary": "Auto-deny anything that would prompt.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=plan",
+                                "label": "Plan mode",
+                                "summary": "Research and propose changes without making them.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=manual",
+                                "label": "Ask every time",
+                                "summary": "Ask each time, before edits and commands.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=acceptEdits",
+                                "label": "Accept edits",
+                                "summary": "Auto-approve file edits and common file commands.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=auto",
+                                "label": "Automatic",
+                                "summary": "No routine prompts; a reviewer model screens actions.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=bypassPermissions",
+                                "label": "Bypass (full autonomy)",
+                                "summary": "No further prompts of any kind.",
+                                "selectable": true,
+                                "dangerous": true
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "projectId": "p3",
+                    "name": "Farm",
+                    "path": "/srv/farm",
+                    "environmentName": "SSH · build-box",
+                    "environmentBadge": "SSH · build-box",
+                    "checkouts": [
+                      {
+                        "repositoryId": "r3",
+                        "name": "farm",
+                        "path": "/srv/farm/runner",
+                        "subPath": "runner",
+                        "branch": "main",
+                        "environmentName": "SSH · build-box",
+                        "agents": [
+                          {
+                            "installationId": "i4",
+                            "agentId": "claudeCode",
+                            "name": "Claude Code",
+                            "defaultMode": "mode=manual",
+                            "acceptsOpeningMessage": true,
+                            "permissionModes": [
+                              {
+                                "mode": "mode=dontAsk",
+                                "label": "Don't ask",
+                                "summary": "Auto-deny anything that would prompt.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=plan",
+                                "label": "Plan mode",
+                                "summary": "Research and propose changes without making them.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=manual",
+                                "label": "Ask every time",
+                                "summary": "Ask each time, before edits and commands.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=acceptEdits",
+                                "label": "Accept edits",
+                                "summary": "Auto-approve file edits and common file commands.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=auto",
+                                "label": "Automatic",
+                                "summary": "No routine prompts; a reviewer model screens actions.",
+                                "selectable": true
+                              },
+                              {
+                                "mode": "mode=bypassPermissions",
+                                "label": "Bypass (full autonomy)",
+                                "summary": "No further prompts of any kind.",
+                                "selectable": true,
+                                "dangerous": true
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "projects.list",
+      "capability": "view_sessions",
+      "cases": [
+        {
+          "request": {},
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "projects": [
+                  {
+                    "projectId": "p1",
+                    "name": "Proj",
+                    "path": "C:\\work",
+                    "environmentName": "Windows"
+                  },
+                  {
+                    "projectId": "p2",
+                    "name": "Api",
+                    "path": "/home/dev/work",
+                    "environmentName": "WSL · Ubuntu",
+                    "environmentBadge": "WSL · Ubuntu"
+                  },
+                  {
+                    "projectId": "p3",
+                    "name": "Farm",
+                    "path": "/srv/farm",
+                    "environmentName": "SSH · build-box",
+                    "environmentBadge": "SSH · build-box"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "project.add",
+      "capability": "add_project",
+      "cases": [
+        {
+          "request": {
+            "requestId": "add-1",
+            "name": "Workspace",
+            "path": "<projectFolder>"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "projectId": "new-3",
+                "name": "Workspace",
+                "path": "<projectFolder>",
+                "environmentName": "Windows",
+                "checkouts": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "session.start",
+      "capability": "start_session",
+      "cases": [
+        {
+          "request": {
+            "requestId": "start-1",
+            "repositoryId": "r1",
+            "installationId": "i1",
+            "permissionMode": "mode=manual",
+            "title": "From the phone",
+            "message": "hello"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "new-4",
+                "title": "From the phone",
+                "permissionMode": "mode=manual"
+              }
+            }
+          ]
+        },
+        {
+          "request": {
+            "requestId": "start-2",
+            "repositoryId": "r1",
+            "installationId": "i2",
+            "permissionMode": "mode=manual"
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "Karmashala has not established which permission modes mystery has, so it starts under its own default and nothing here can govern it."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "session.resume",
+      "capability": "start_session",
+      "cases": [
+        {
+          "request": {
+            "requestId": "resume-1",
+            "sessionId": "new-0"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "new-0",
+                "title": "Live pane",
+                "permissionMode": "mode=manual"
+              }
+            }
+          ]
+        },
+        {
+          "request": {
+            "requestId": "resume-2",
+            "sessionId": "s1"
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "this session has no conversation to resume"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "session.activity",
+      "capability": "view_activity",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "s1",
+                "observedAt": "2026-08-31T10:00:00.000Z",
+                "calls": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "attachment.begin",
+      "capability": "send_attachment",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "new-0",
+            "name": "shot.png",
+            "type": "image/png",
+            "bytes": 4
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "uploadId": "<uploadId>",
+                "chunkBytes": 131072
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "attachment.chunk",
+      "capability": "send_attachment",
+      "cases": [
+        {
+          "request": {
+            "uploadId": "<uploadId>",
+            "seq": 0,
+            "data": "AQIDBA=="
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "attachmentOffer": {
+    "frames": [
+      {
+        "type": "result",
+        "payload": {
+          "delivery": "offered"
+        }
+      }
+    ]
+  },
+  "hostStatus": {
+    "versions": {
+      "min": 1,
+      "max": 1
+    },
+    "host": "<hostName>"
+  }
+}
