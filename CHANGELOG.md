@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.20.0 (2026-09-09)**, and what
+This file records **1.1.0 (2026-08-31) through 1.20.1 (2026-09-10)**, and what
 is on `main` past it. Anything before 1.1.0 is not recorded — no release notes
 were written for those versions and this file does not invent them.
 
@@ -16,7 +16,11 @@ installs claim the same version name.
 
 ---
 
-## Unreleased
+## 1.20.1 — 2026-09-10 (build 37)
+
+**The package split, end to end, and nothing else the user sees.** The build
+exists to prove the release recipe with a pub workspace in place. Schema head
+is still **v48**.
 
 - **Package split, step 0.** The database takes the directory it opens in, and
   the provider files that draw no widget import plain `riverpod`; 585 of 1,027
