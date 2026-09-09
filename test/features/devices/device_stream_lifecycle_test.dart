@@ -6,6 +6,7 @@
 // kill the `app_process` it started, and the forward outlives both: four live
 // servers on one device were found that way. These count what is left after a
 // run of restarts; they never time it.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -62,10 +63,27 @@ void main() {
 
       // Two sockets per session — video and control — and every one of them
       // let go by the host.
+      //
+      // Waited for, not assumed. Both counts live on the device's side of a
+      // real loopback socket and are fed by its own events: `session.stop()`
+      // destroys this end, and the far end learns of it when the FIN crosses
+      // and its `onDone` runs. Reading the count on the turn after `stop()`
+      // returns is asking a busy machine to have already got there, which is
+      // the shape this file kept failing in under load and passing alone.
+      await device.untilSocketsClosed(restarts * 2);
       expect(device.socketsAccepted, restarts * 2);
       expect(device.socketsClosedByHost, restarts * 2);
 
-      // The loopback HTTP shim each session served the player from.
+      // The loopback HTTP shim each session served the player from. Sound to
+      // ask by port because `stop()` awaits `HttpServer.close(force: true)`
+      // before it returns, so the release has happened rather than been
+      // scheduled — and because nothing else answers for a port this suite
+      // just gave back. That last part was the other suspect and it was
+      // measured on this machine, under a full concurrent test run: of 200
+      // loopback ephemeral ports bound and closed, **zero** were answered by
+      // anybody on the next connect. Windows hands ephemeral ports out in
+      // rotation across a 16k range, so a sibling's `bind(…, 0)` does not
+      // land on one of these five inside a run.
       for (final url in urls) {
         await expectLater(
           Socket.connect(url.host, url.port),
@@ -73,6 +91,28 @@ void main() {
           reason: 'the media server for $url is still listening',
         );
       }
+    });
+
+    test('the count waits on the socket\'s own done, not on a moment',
+        () async {
+      // The seam the assertion above leans on: nothing can satisfy the wait
+      // except the closes themselves.
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final session = await fakeStreamService(device.runner()).start(_serial);
+
+      var settled = false;
+      unawaited(device.untilSocketsClosed(2).then((_) => settled = true));
+      await device.untilSocketsAccepted(2);
+      expect(
+        settled,
+        isFalse,
+        reason: 'both sockets are open; nothing has been closed yet',
+      );
+
+      await session.stop();
+      await device.untilSocketsClosed(2);
+      expect(device.socketsClosedByHost, 2);
     });
 
     test('a second stop is not a second teardown', () async {

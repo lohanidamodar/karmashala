@@ -405,7 +405,15 @@ String? _mergeBlocker(SessionDelivery delivery, PullRequestSnapshot pr) {
     return 'This repository allows no merge strategy.';
   }
   if (pr.mergeStateStatus == MergeStateStatus.blocked) {
-    return 'GitHub is blocking this merge; open the pull request to see why.';
+    // The rule, when it could be read. `BLOCKED` names none of them, so a
+    // second call goes and asks the base branch's protection which rules it
+    // carries — and, for the two the pull request can settle on its own, which
+    // one is unmet. When the reading says nothing, so does this: a token
+    // without admin rights gets a 403 on `/protection`, which is the ordinary
+    // case rather than an error, and the old sentence is what it falls back
+    // to.
+    return delivery.branchProtection.describeFor(pr) ??
+        'GitHub is blocking this merge; open the pull request to see why.';
   }
   return null;
 }

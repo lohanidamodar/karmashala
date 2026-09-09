@@ -9,6 +9,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../data/github_service.dart';
+import '../domain/branch_protection.dart';
 import '../domain/github_repo.dart';
 import '../domain/issue.dart';
 import '../domain/pull_request.dart';
@@ -59,6 +60,14 @@ class GitHubReviewService {
     EnvironmentPath repo, {
     required int number,
   }) => _ghFor(repo).forgePolicyFor(repo, number: number);
+
+  /// The branch-protection rules on [branch]. One more process, paid only
+  /// when a merge has already been read as `BLOCKED` — see
+  /// `checkoutMergeProtectionProvider`.
+  Future<BranchProtection> branchProtectionFor(
+    EnvironmentPath repo, {
+    required String branch,
+  }) => _ghFor(repo).branchProtectionFor(repo, branch: branch);
 
   /// Takes pull request [number] out of draft. The app's own operation; see
   /// `DeliveryAction.markReady` for why it is not a prompt.

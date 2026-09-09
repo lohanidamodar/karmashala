@@ -227,6 +227,45 @@ void main() {
       fail('expected the fetch to fail');
     }
 
+    test('a Keychain refusal is not a signed-out account, and carries its '
+        'age', () async {
+      // The memo holds a refusal for ten minutes on purpose — caching only
+      // successes would re-raise the dialog on every poll — so what the chip
+      // shows can be that old and has to say so.
+      final askedAt = testTime.subtract(const Duration(minutes: 7));
+      final service = AgentUsageService(
+        storeLocator: FixedLocator([
+          const CliStore(
+            environmentId: 'windows',
+            homesByAgentId: {'claudeCode': '/Users/me/.claude'},
+          ),
+        ]),
+        clock: clock,
+        httpClientFactory: () => http,
+        keychain: ClaudeKeychainCache(
+          read: () async => const ClaudeKeychainRead(
+            ClaudeKeychainOutcome.refused,
+            detail: 'User interaction is not allowed.',
+          ),
+          now: () => askedAt,
+        ),
+        hostIsMacOS: true,
+        throttle: UsageThrottle(clock: clock, jitter: () => 0),
+      );
+
+      final failure = await failureOf(service);
+      expect(failure.kind, UsageFailureKind.auth);
+      expect(
+        failure.message,
+        allOf(
+          contains('Keychain'),
+          contains('User interaction is not allowed.'),
+          contains('7m ago'),
+          isNot(contains('Not signed in')),
+        ),
+      );
+    });
+
     test('429 is a rate limit, and the next ask never leaves the '
         'machine', () async {
       http.statusCode = HttpStatus.tooManyRequests;
