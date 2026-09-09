@@ -5,6 +5,14 @@
 /// reconnection through the transports' own backoff. What this file adds is
 /// the contract the phone UI pinned: streams that seed their current value,
 /// and every refusal rewritten as a sentence a user can read.
+///
+/// This file is the gateway's state and the [CompanionGateway] surface that
+/// reads it; each family lives in a `part` beside it. A moved private member
+/// is an `extension` on this class rather than a new library, because Dart
+/// finds an extension member by unqualified name from inside the class and
+/// from the other parts — so nothing was renamed to make the split. The
+/// surface itself cannot move: an extension member does not satisfy
+/// `implements`.
 library;
 
 import 'dart:async';
@@ -254,6 +262,22 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// trying again on a schedule, and paying for it with the link that works,
   /// is not.
   final _lanUpgradeRefused = <String, DateTime>{};
+
+  /// What this phone last said about itself, resent whenever it changes.
+  ///
+  /// Held rather than derived so a report that arrives while the link is down
+  /// is not lost: the next connection's registration carries it.
+  CompanionPresence _presence = CompanionPresence.unknown;
+
+  /// Sessions with a gap recovery in flight, so two never race each other.
+  final _draining = <String>{};
+
+  /// Requests that have gone unanswered with nothing answered between them.
+  int _unanswered = 0;
+
+  /// Set when the host says the pairing is gone. Never cleared: the device key
+  /// went with it, so this link cannot come back — only a fresh pairing can.
+  bool _revoked = false;
 
   // ---------------------------------------------------------------- pairing
 
@@ -736,6 +760,18 @@ class RemoteCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionAttentionEvent> get attentionEvents => _attention.stream;
 
+  @override
+  Future<void> reportVisibility(CompanionVisibility visibility) =>
+      _report(_presence.copyWith(visibility: visibility));
+
+  @override
+  Future<void> reportFocusedSession(String? sessionId) => _report(
+    _presence.copyWith(
+      focusedSessionId: sessionId,
+      clearFocusedSession: sessionId == null,
+    ),
+  );
+
   /// Stops everything. For tests and the provider container's dispose — a
   /// phone unpairs, it never closes its gateway.
   Future<void> close() async {
@@ -761,40 +797,4 @@ class RemoteCompanionGateway implements CompanionGateway {
     await _approvalResolutions.close();
     await _progress.close();
   }
-
-  // ------------------------------------------------------- connection loop
-
-  /// What this phone last said about itself, resent whenever it changes.
-  ///
-  /// Held rather than derived so a report that arrives while the link is down
-  /// is not lost: the next connection's registration carries it.
-  CompanionPresence _presence = CompanionPresence.unknown;
-
-  @override
-  Future<void> reportVisibility(CompanionVisibility visibility) =>
-      _report(_presence.copyWith(visibility: visibility));
-
-  @override
-  Future<void> reportFocusedSession(String? sessionId) => _report(
-    _presence.copyWith(
-      focusedSessionId: sessionId,
-      clearFocusedSession: sessionId == null,
-    ),
-  );
-
-  // ------------------------------------------------------------ host events
-
-  // ------------------------------------------------------------- transcripts
-
-  /// Sessions with a gap recovery in flight, so two never race each other.
-  final _draining = <String>{};
-
-  // ---------------------------------------------------------------- helpers
-
-  /// Requests that have gone unanswered with nothing answered between them.
-  int _unanswered = 0;
-
-  /// Set when the host says the pairing is gone. Never cleared: the device key
-  /// went with it, so this link cannot come back — only a fresh pairing can.
-  bool _revoked = false;
 }
