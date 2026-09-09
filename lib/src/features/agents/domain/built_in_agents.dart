@@ -1922,15 +1922,22 @@ const _antigravity = AgentDescriptor(
   // write_to_file — no plan or todo tool anywhere in it. `manage_task` and the
   // `steps.task_details` column beside it look like the thing and are not: both
   // describe a **background shell command** (a task id, a log file URL and the
-  // command line), which is what `schedule` starts. Message content is
-  // protobuf in an unpublished schema, so even a plan written in prose would
-  // be unreadable — the same finding `agentSupportsChatView` already refuses
-  // this agent for.
+  // command line), which is what `schedule` starts. **136 `manage_task` calls
+  // read 2026-09-09**, every one of them `{Action, TaskId}`.
+  // The refusal names two files because it took two to answer. The store's own
+  // `conversations/<id>.db` is protobuf in an unpublished schema, so a plan
+  // written in prose there would be unreadable; the JSONL transcript beside it
+  // — present for all 25 WSL conversations, absent on Windows — is readable and
+  // has no plan tool in it. So neither file has a plan to read, and this is no
+  // longer "the finding `agentSupportsChatView` refuses this agent for": that
+  // allowlist is now only the prior to a per-session reading.
   plan: AgentPlanSupport.none(
     refusal:
-        'Antigravity keeps no plan we can read: its CLI has no todo or plan '
-        'tool, and its conversation store is protobuf in an unpublished '
-        'schema.',
+        'Antigravity keeps no plan we can read: the conversation file its '
+        'store indexes is protobuf in an unpublished schema, and the readable '
+        'JSONL transcript beside it, where one exists, names no plan tool — '
+        'its 136 `manage_task` calls are all `{Action, TaskId}` for a '
+        'background shell command — so there is no plan to read either way.',
   ),
   // Not under this agent's store home: sessions are in `.gemini/antigravity-cli`
   // and skills are in `.gemini/config`, which is why the root is home-relative.
