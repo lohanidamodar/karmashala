@@ -38,4 +38,5 @@ export 'src/domain/element_capture.dart';
 export 'src/domain/found_element.dart';
 export 'src/domain/page_diagnostics.dart';
 export 'src/domain/picked_element.dart';
+export 'src/domain/project_scoped_browser_consent.dart';
 export 'src/domain/untrusted_content.dart';

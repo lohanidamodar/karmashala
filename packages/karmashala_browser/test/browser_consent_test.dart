@@ -1,6 +1,5 @@
-import 'package:karmashala/src/features/browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// The consent record: what it remembers, what it forgets, and what it does
 /// when it cannot tell.
