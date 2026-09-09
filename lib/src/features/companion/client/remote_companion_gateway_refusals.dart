@@ -103,6 +103,12 @@ extension _GatewayRefusals on RemoteCompanionGateway {
   }
 
   void _noteUnanswered() {
+    // A promotion is deciding whether a second link carries. A request that
+    // goes unanswered while it does is news about that candidate, not about
+    // the link this phone is holding — and the promotion's own rollback is
+    // what answers it. Counting it here would declare the working link dead
+    // for the sake of one that never became a link at all.
+    if (_promoting) return;
     _unanswered++;
     if (_unanswered < _kUnansweredBeforeDoubt) {
       onLog?.call('a request went unanswered; the link itself still holds');

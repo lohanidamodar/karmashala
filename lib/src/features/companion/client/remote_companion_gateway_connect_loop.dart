@@ -2,20 +2,20 @@ part of 'remote_companion_gateway.dart';
 
 // The loop that keeps a link: dial, park until something says the link died,
 // then wait out a backoff and dial again. The beacon's offer to upgrade a
-// working relay link to the LAN is answered here too, because it is the one
-// thing that ends a healthy link on purpose.
+// working relay link to the LAN is heard here and handed to the promotion
+// beside it, which no longer ends anything to take it up.
 
-/// How long a beacon host that refused a direct dial is left alone by the LAN
-/// *upgrade* — the one that spends a working link on the attempt.
+/// The most beacons a failed promotion may ask the next one to wait out.
 ///
-/// Much longer than [kLanRetryCooldown] on purpose. The scout's two-minute
-/// grudge is about dialling, which costs one attempt timeout and only ever
-/// happens with the link already down; this one is about tearing a link that
-/// works down to try again, which is what the owner reported as "connection
-/// is not stable". But "never again" is not the answer either: whatever made
-/// the dial fail is a thing that gets fixed, and a phone that has to be
-/// force-quit to use its own LAN is not a phone that works.
-const Duration kLanUpgradeRefusalTtl = Duration(minutes: 30);
+/// The hold-off doubles — 1, 2, 4 … — and stops here, so a desktop that is
+/// audible and permanently undialable settles into one dial every sixty-odd
+/// beacons rather than into never again. At [kLanBeaconInterval] that is a
+/// couple of minutes, which is about what a dial costing nothing but a second
+/// transport is worth. The cap exists because "never again" was the previous
+/// answer's real failure: whatever made a dial fail is a thing that gets
+/// fixed, and a phone that has to be force-quit to use its own LAN is not a
+/// phone that works.
+const int kLanPromotionHoldOffCap = 64;
 
 extension _GatewayConnectLoop on RemoteCompanionGateway {
   void _startLoop() {
@@ -34,8 +34,9 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     _lanSightings = scout.sightings.listen(_onLanSighting);
   }
 
-  /// A beacon while the relay carries the link: re-dial, LAN first. Gateway
-  /// state survives — subscriptions rebuild, held transcripts re-read.
+  /// A beacon while the relay carries the link: dial the LAN *alongside* it.
+  /// Nothing is torn down — the promotion adopts the second link only once it
+  /// has answered, and hands the relay's own frames over with it.
   void _onLanSighting(DiscoveredHost host) {
     final scout = lan;
     if (scout == null || _closed || _record == null) return;
@@ -43,32 +44,17 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     if (_linkPath.value != CompanionLinkPath.relay) return;
     // The desktop IS the relay: the embedded local relay is served on the very
     // address the beacon arrives from, so a "direct" socket would reach the
-    // same machine over the same network, one hop shorter. That is not worth
-    // a link — and paying for it every time the beacon repeats is what made
-    // the owner's local-relay link drop on a schedule.
+    // same machine over the same network, one hop shorter. It no longer costs
+    // a link to find that out, but it still costs a dial every two seconds
+    // for a hop nobody would notice.
     if (host.address.address == _activeRelay?.host) {
       return;
     }
     if (scout.inCooldown(host)) return;
-    if (_lanUpgradeIsRefused(scout.keyOf(host))) return;
-    onLog?.call('beacon sighted; switching the link to the LAN');
-    _declareDead();
-  }
-
-  /// Whether the beacon's offer to upgrade to [key] is still refused.
-  ///
-  /// The refusal expires, because the verdict behind it does not last: a
-  /// firewall rule gets fixed, a desktop restarts with its LAN listener up,
-  /// and the key is an `address:port` that does not even survive the
-  /// desktop's next DHCP lease — so keys from every network the phone has
-  /// ever been on pile up in here. One blip used to pin a phone to the relay
-  /// until it was force-quit, which on Android can be days.
-  bool _lanUpgradeIsRefused(String key) {
-    final refusedAt = _lanUpgradeRefused[key];
-    if (refusedAt == null) return false;
-    if (_now().difference(refusedAt) < kLanUpgradeRefusalTtl) return true;
-    _lanUpgradeRefused.remove(key);
-    return false;
+    // Last of the gates, so the count is spent only on beacons that would
+    // otherwise have cost a dial.
+    if (_holdingOffPromotion()) return;
+    unawaited(_promoteToLan(scout, host));
   }
 
   Future<void> _connectLoop() async {

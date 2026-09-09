@@ -45,6 +45,18 @@ extension _GatewayLiveness on RemoteCompanionGateway {
         case TransportState.connecting:
         case TransportState.disconnected:
           dropped = true;
+          // A drop while a second link is being proved to the SAME desktop is
+          // usually that promotion's own doing: the host moves to the new
+          // rendezvous the instant it reads the hello, and the relay closes
+          // the pair it was forwarding. Held, not reported — `connected` was
+          // observed a round trip ago and a better-proved link is on its way;
+          // the heal below still bounds it, and a promotion that does not
+          // happen hands the drop straight back.
+          if (_promoting) {
+            _dropDeferred = true;
+            _armHeal();
+            return;
+          }
           // The transport re-dials the same rendezvous by itself; the
           // channel and its sequences survive the blip (loop 64's rule).
           if (_link.value == CompanionLinkState.connected) {
