@@ -26,6 +26,22 @@ import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
 
+/// What a pane prints when its remote process ends.
+///
+/// One spelling for both routes out of this pane — the session host's `Exited`
+/// frame and dartssh2's own `session.done` — because the two used to disagree
+/// about the only thing that matters here: the tmux path read a missing status
+/// as `?? 0` and announced a success nobody observed. **A code nobody
+/// collected is unknown, never a zero** (§19).
+String remoteExitNotice(int? exitCode, {String? reason}) {
+  if (exitCode != null) {
+    return '\r\n\x1b[90m[remote process exited with code $exitCode]\x1b[0m\r\n';
+  }
+  final because = reason == null || reason.isEmpty ? '' : ' ($reason)';
+  return '\r\n\x1b[90m[remote process ended; exit code unknown$because]'
+      '\x1b[0m\r\n';
+}
+
 /// A [TerminalInstance] backed by a remote interactive session over SSH.
 ///
 /// Two paths, and which one is used is a *measurement* — [hostDeployment],
@@ -73,8 +89,11 @@ class SshTerminalInstance
     _osc.add(_cwd.handleOsc);
 
     if (adoptTerminal == null) {
+      _hasStoredHistory =
+          restoredScrollback != null && restoredScrollback.isNotEmpty;
       writeRestoredScrollback(terminal, restoredScrollback);
     } else {
+      _hasStoredHistory = nonBlankLineCount(terminal) > 0;
       writeRestoreMarker(terminal);
     }
 
@@ -299,9 +318,12 @@ class SshTerminalInstance
         session.done.then((_) {
           _exited = true;
           if (_disposed) return;
-          final code = session.exitCode ?? 0;
-          _exitCode = code;
-          _emit('\r\n\x1b[90m[remote process exited with code $code]\x1b[0m\r\n');
+          // Never a zero: dartssh2 reports no status at all for a peer that
+          // was signalled or that closed without one, and reading that as
+          // success is the mistake §19 exists to prevent. Through the same
+          // notice the host path prints, so the two cannot drift.
+          _exitCode = session.exitCode;
+          _emit(remoteExitNotice(session.exitCode));
           _liveness.value = PaneLiveness.exited;
         }),
       );
@@ -364,6 +386,17 @@ class SshTerminalInstance
     return true;
   }
 
+  /// Whether this pane opened holding the app's own record of its history.
+  ///
+  /// It matters because on the host path there are two records of the same
+  /// output — the text the app stored when it last closed, and the host's ring
+  /// — and showing both would print the session twice. See [_dialHost].
+  var _hasStoredHistory = false;
+
+  /// Whether this pane attached to a session that already existed, rather than
+  /// opening one. Only a resume has a second record to collide with.
+  var _resumed = false;
+
   StreamSubscription<void>? _reconnects;
 
   /// Opens a link and attaches this pane's session to it. Returns false when
@@ -393,6 +426,18 @@ class SshTerminalInstance
       // pane always finds the same session. `attach` first: on a reconnect the
       // session is already there and asking to open it would be refused.
       final attachment = await _attachOrOpen(link, width, height, resumeFrom);
+      if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
+        // Two records of one session: the text this app stored when it last
+        // closed, and the ring the host kept. The replay about to arrive is
+        // the more accurate of the two — the session's own bytes rather than a
+        // re-encoding of a buffer — so the stored copy goes rather than being
+        // printed above an identical one. Erase display *and* scrollback: a
+        // plain clear leaves the history one scroll away. Cleared once: a
+        // reconnect resumes from `_lastHostOffset` and replays nothing that is
+        // already on screen.
+        terminal.write('\x1b[H\x1b[2J\x1b[3J');
+        _hasStoredHistory = false;
+      }
       _emit(
         '\x1b[90m[session host ${deployment.hostVersion ?? 'unknown'} on '
         '${host.address}: ${attachment.sessionId}, '
@@ -461,7 +506,12 @@ class SshTerminalInstance
   ) async {
     final sessionId = _hostSessionId();
     try {
-      return await link.attachSession(sessionId: sessionId, sinceOffset: sinceOffset);
+      final attachment = await link.attachSession(
+        sessionId: sessionId,
+        sinceOffset: sinceOffset,
+      );
+      _resumed = true;
+      return attachment;
     } on HostLinkException {
       // No such session: this is the pane's first run on this host.
       final launch = agentLaunch;
@@ -518,13 +568,7 @@ class SshTerminalInstance
     _exited = true;
     if (_disposed) return;
     _exitCode = end.exitCode;
-    _emit(
-      end.exitCode == null
-          // Never a zero: a code the host could not collect is not a success.
-          ? '\r\n\x1b[90m[remote process ended; exit code unknown '
-                '(${end.reason})]\x1b[0m\r\n'
-          : '\r\n\x1b[90m[remote process exited with code ${end.exitCode}]\x1b[0m\r\n',
-    );
+    _emit(remoteExitNotice(end.exitCode, reason: end.reason));
     _liveness.value = PaneLiveness.exited;
   }
 

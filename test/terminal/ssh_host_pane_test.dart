@@ -30,15 +30,20 @@ HostDeployment ready({bool restarted = false}) => readyDeployment(restarted: res
 /// A pane with a viewport wide enough that a notice is not wrapped by the
 /// terminal — an assertion about a sentence should not depend on where 80
 /// columns happened to fall.
-SshTerminalInstance paneWith({HostSessionAccess? access}) =>
-    _sized(_paneWith(access: access));
+SshTerminalInstance paneWith({
+  HostSessionAccess? access,
+  String? restoredScrollback,
+}) => _sized(_paneWith(access: access, restoredScrollback: restoredScrollback));
 
 SshTerminalInstance _sized(SshTerminalInstance pane) {
   pane.terminal.resize(200, 60);
   return pane;
 }
 
-SshTerminalInstance _paneWith({HostSessionAccess? access}) => SshTerminalInstance(
+SshTerminalInstance _paneWith({
+  HostSessionAccess? access,
+  String? restoredScrollback,
+}) => SshTerminalInstance(
   id: 'p1',
   title: 'box',
   profileId: 'default',
@@ -55,6 +60,7 @@ SshTerminalInstance _paneWith({HostSessionAccess? access}) => SshTerminalInstanc
     ),
   ),
   hostAccess: access,
+  restoredScrollback: restoredScrollback,
 );
 
 /// The pane's whole visible buffer as plain text. terminalTailLines reads only
@@ -377,5 +383,89 @@ void main() {
     expect(text, contains('tmux'));
     expect(access.execs, isEmpty);
     pane.dispose();
+  });
+
+  group('a restored pane and the host both hold the same history', () {
+    test('a resumed session is not printed twice over the app\'s own record',
+        () async {
+      final access = PaneAccess(ready())
+        ..liveSessions.add('karmashala_h1_p1')
+        ..resumedTotalBytes = 26;
+      final pane = paneWith(
+        access: access,
+        // What the app stored when it last closed — the same output the host
+        // still holds in its ring.
+        restoredScrollback: 'a build that was running\r\n',
+      );
+      await settle();
+
+      access.channels.single.pushOutput(
+        0,
+        'a build that was running\r\nand now this\r\n',
+      );
+      await settle();
+
+      final screen = screenText(pane.terminal);
+      expect(
+        'a build that was running'.allMatches(screen).length,
+        1,
+        reason: 'the host replayed it; the stored copy is the one that goes',
+      );
+      expect(screen, contains('and now this'));
+      pane.dispose();
+    });
+
+    test('a pane with no stored history keeps every byte the host replays',
+        () async {
+      final access = PaneAccess(ready())..liveSessions.add('karmashala_h1_p1');
+      final pane = paneWith(access: access);
+      await settle();
+
+      access.channels.single.pushOutput(0, 'only the host has this\r\n');
+      await settle();
+
+      expect(screenText(pane.terminal), contains('only the host has this'));
+      pane.dispose();
+    });
+
+    test('a first run keeps its restored text — nothing replayed it', () async {
+      // No live session on the host, so this pane OPENS one: there is no
+      // second record, and clearing here would throw the only one away.
+      final access = PaneAccess(ready());
+      final pane = paneWith(
+        access: access,
+        restoredScrollback: 'what it said last time\r\n',
+      );
+      await settle();
+
+      expect(screenText(pane.terminal), contains('what it said last time'));
+      pane.dispose();
+    });
+  });
+
+  group('the notice both routes print', () {
+    test('a code nobody collected is never a zero', () {
+      // The tmux path used to read dartssh2's missing status as `?? 0` and
+      // announce a success nobody observed. One spelling now, and it cannot
+      // say "0" for a code it does not have.
+      final notice = remoteExitNotice(null);
+      expect(notice, contains('exit code unknown'));
+      expect(notice, isNot(contains('code 0')));
+      expect(notice, isNot(contains('exited with')));
+    });
+
+    test('a code that was collected is shown as itself', () {
+      expect(remoteExitNotice(7), contains('exited with code 7'));
+      expect(remoteExitNotice(0), contains('exited with code 0'));
+    });
+
+    test('the host\'s reason rides along when there is one', () {
+      expect(
+        remoteExitNotice(null, reason: 'the child could not be reaped'),
+        contains('unknown (the child could not be reaped)'),
+      );
+      // And nothing is invented for the route that has none.
+      expect(remoteExitNotice(null, reason: ''), isNot(contains('(')));
+    });
   });
 }
