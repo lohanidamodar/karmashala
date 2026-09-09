@@ -2135,8 +2135,14 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
           group: QuickOpenGroup.tabs,
           title: sessions.titleForTab(tab.id),
           subtitle: _whereabouts(tab, titles, sessions),
-          detail: sessions.livenessForTab(tab.id).isLive ? null : 'not running',
-          icon: AppIcons.terminal,
+          // A document is not a process, so it has neither a liveness to
+          // report nor a shell's glyph — "not running" would be true of a page
+          // and would say nothing about it.
+          detail:
+              _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
+              ? null
+              : 'not running',
+          icon: _isDocumentTab(tab) ? AppIcons.gearSix : AppIcons.terminal,
           onSelect: () => activateTerminalTab(ref, tab.id),
         ),
         active: onPanes && tab.id == active,
@@ -2144,6 +2150,10 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
       ),
   ];
 }
+
+/// Whether every pane in [tab] is a surface the workbench draws itself — the
+/// Settings tab, and nothing else so far.
+bool _isDocumentTab(TerminalTab tab) => tab.layout.panes.every(isDocumentPane);
 
 /// Where a tab is: the session running in its focused pane, the directory
 /// that pane is in, or both.

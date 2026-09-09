@@ -26,7 +26,6 @@ import '../../../features/sessions/domain/session_resume.dart' show describeAge;
 import '../../../features/sessions/presentation/new_session_dialog.dart';
 import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
-import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/snippets/application/snippet_insertion.dart';
 import '../../../features/snippets/application/snippet_providers.dart';
 import '../../../features/snippets/domain/command_snippet.dart';
@@ -321,7 +320,7 @@ class QuickOpenSources {
         'Open Settings',
         icon: AppIcons.gearSix,
         keywords: const ['preferences', 'options'],
-        onSelect: () => SettingsScreen.show(context),
+        onSelect: () => openSettingsTab(ref),
       ),
     ];
   }
@@ -999,10 +998,7 @@ class QuickOpenSources {
           // Lands on the Agents section — the entry is an agent, and a jump
           // to the top of Appearance would be a jump to nowhere.
           onSelect: () => dismiss(
-            () => SettingsScreen.show(
-              context,
-              section: SettingsSectionId.agents,
-            ),
+            () => openSettingsTab(ref, section: SettingsSectionId.agents),
           ),
         ),
     ];
