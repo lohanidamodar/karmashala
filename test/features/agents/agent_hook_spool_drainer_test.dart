@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
@@ -187,8 +188,12 @@ void main() {
 
   test('the timer picks payloads up without being stepped', () async {
     final seen = <AgentHookSpoolEvent>[];
+    final arrived = Completer<AgentHookSpoolEvent>();
     final drainer = AgentHookSpoolDrainer(
-      onEvent: seen.add,
+      onEvent: (event) {
+        seen.add(event);
+        if (!arrived.isCompleted) arrived.complete(event);
+      },
       interval: const Duration(milliseconds: 10),
       runningDistributions: () async => {'Ubuntu'},
     );
@@ -196,7 +201,13 @@ void main() {
     drainer.watch([source()]);
     write('1-0.json');
 
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    // **Waits for the event, not for a duration.** This slept 120 ms and
+    // expected twelve 10 ms ticks to have delivered one payload; on a loaded
+    // machine it read `[]` and failed about one run in three, which measured
+    // the scheduler rather than the drainer. The ceiling below is a failure
+    // bound — a timer that genuinely never fires — and not the thing being
+    // tested.
+    await arrived.future.timeout(const Duration(seconds: 5));
 
     expect(seen, hasLength(1));
   });
