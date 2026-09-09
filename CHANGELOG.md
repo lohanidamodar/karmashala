@@ -416,6 +416,8 @@ worktrees the app made and a per-checkout install lands in the user's
   *last* parenthesis.
 - `device_tools.dart` is five device-family files behind one composition; the
   served tool schemas are byte-identical.
+- `terminal_panel.dart` is nine files behind one composition; a 23-state tree
+  golden did not move.
 - **The usage chip shows both limit windows** — `◑ 12% · 4h   59% · 3d` — each
   slot chosen by the window's period, never by which resets soonest. A period
   nothing reported draws nothing rather than `0%`.
