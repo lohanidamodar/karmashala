@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:karmashala_core/media.dart';
+import 'package:karmashala_media/media.dart';
 
 /// The H.264 out of an MP4, in the Annex-B shape a remuxer takes back.
 ///
