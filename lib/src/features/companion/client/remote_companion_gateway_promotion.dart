@@ -51,6 +51,7 @@ extension _GatewayPromotion on RemoteCompanionGateway {
     try {
       final standby = await _dialStandbyLan(scout, host);
       if (standby == null) {
+        _promotionFailed();
         _releaseDeferredDrop();
         onLog?.call(
           'lan promotion: the dial found nobody; the relay is untouched',
@@ -67,11 +68,15 @@ extension _GatewayPromotion on RemoteCompanionGateway {
       }
       if (await _adoptStandby(standby)) {
         scout.noteSuccess(host);
+        // The path works: the next beacon after a fall back to the relay
+        // deserves an immediate try, not the count this one climbed to.
+        _promotionHoldOff = 0;
+        _promotionPenalty = 0;
         onLog?.call('lan promotion: adopted the LAN link');
         return;
       }
       scout.noteFailure(host);
-      _lanUpgradeRefused[scout.keyOf(host)] = _now();
+      _promotionFailed();
       _releaseDeferredDrop();
       onLog?.call('lan promotion: the new link carried nothing; rolled back');
     } finally {
@@ -142,8 +147,30 @@ extension _GatewayPromotion on RemoteCompanionGateway {
       }
     }
     scout.noteFailure(host);
-    _lanUpgradeRefused[scout.keyOf(host)] = _now();
     return null;
+  }
+
+  /// Whether this beacon is one a failed promotion asked to wait out.
+  ///
+  /// A promotion costs a second transport and one hello timeout and nothing
+  /// else — the link that works is never touched — so the answer to a LAN that
+  /// flaps is not a long refusal but a widening count: try, then wait one
+  /// beacon, then two, then four, and never stop trying altogether.
+  bool _holdingOffPromotion() {
+    if (_promotionHoldOff <= 0) return false;
+    _promotionHoldOff--;
+    onLog?.call(
+      'lan promotion: held off, $_promotionHoldOff beacon(s) to go',
+    );
+    return true;
+  }
+
+  /// A promotion that did not land doubles what the next one waits for.
+  void _promotionFailed() {
+    _promotionPenalty = _promotionPenalty == 0
+        ? 1
+        : (_promotionPenalty * 2).clamp(1, kLanPromotionHoldOffCap);
+    _promotionHoldOff = _promotionPenalty;
   }
 
   /// Makes the standby the link, in place.

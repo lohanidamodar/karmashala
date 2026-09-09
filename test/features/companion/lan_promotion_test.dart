@@ -512,6 +512,38 @@ void main() {
     });
   });
 
+  test('a failed promotion waits out beacons, doubling — never a clock',
+      timeout: const Timeout(Duration(minutes: 3)), () async {
+    await startService();
+    final scout = ScriptedScout(
+      attemptTimeout: const Duration(milliseconds: 200),
+      dialer: (host, port) => LanTransport.dial(
+        host: '127.0.0.1',
+        port: 1,
+        connectTimeout: const Duration(milliseconds: 100),
+        backoff: fastBackoff(),
+      ),
+    );
+    final gateway = await pairedPhone(scout: scout);
+    final host = beaconAt(41234);
+
+    // 1, 2, 4: each failure asks for twice as many beacons as the last, and
+    // every beacon in between is answered by counting rather than by dialling.
+    // The tenth beacon is the fourth attempt, which is the whole claim.
+    const dialsAfterBeacon = [1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 4];
+    for (var i = 0; i < dialsAfterBeacon.length; i++) {
+      await beaconOnce(scout, host);
+      expect(
+        scout.dials,
+        dialsAfterBeacon[i],
+        reason: 'beacon ${i + 1} of ${dialsAfterBeacon.length}',
+      );
+    }
+    expect(gateway.link, CompanionLinkState.connected);
+    expect(gateway.linkPath, CompanionLinkPath.relay);
+    expect((await gateway.listSessions()).single.id, 's1');
+  });
+
   test('a LAN link that dies after a promotion falls back through the loop '
       'that was always there', timeout: const Timeout(Duration(minutes: 3)),
       () async {

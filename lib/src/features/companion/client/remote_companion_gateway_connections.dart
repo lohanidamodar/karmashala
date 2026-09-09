@@ -88,7 +88,8 @@ extension _GatewayConnections on RemoteCompanionGateway {
   /// Everything the gateway holds that belongs to ONE host.
   void _resetHostState() {
     // A verdict about reaching THAT desktop says nothing about this one.
-    _lanUpgradeRefused.clear();
+    _promotionHoldOff = 0;
+    _promotionPenalty = 0;
     _unanswered = 0;
     _sessions = null;
     _hostOrder.clear();

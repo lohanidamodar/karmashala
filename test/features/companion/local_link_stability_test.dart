@@ -117,6 +117,10 @@ void main() {
   final gateways = <RemoteCompanionGateway>[];
   final phoneTransports = <CountingRelayTransport>[];
 
+  /// The gateway's own lifecycle log. Every promotion says how it ended on it,
+  /// which is what lets a beacon be waited for as an event.
+  final logs = <String>[];
+
   final hostId = DeviceId.parse('11111111222222223333333344444444');
 
   /// The compressed clock. Every one of these is minutes in production; the
@@ -145,6 +149,7 @@ void main() {
     store.values[RemoteCompanionGateway.kPairingRelayStoreKey] =
         relayUri.toString();
     phoneTransports.clear();
+    logs.clear();
   });
 
   tearDown(() async {
@@ -206,6 +211,7 @@ void main() {
       // other test here is measuring.
       localReconnectBackoff: localBackoff,
       now: () => DateTime.now().add(clockShift),
+      onLog: logs.add,
     );
     gateways.add(gateway);
     return gateway;
@@ -231,6 +237,21 @@ void main() {
     while (!check()) {
       if (DateTime.now().isAfter(deadline)) fail('never happened: $reason');
       await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+
+  /// Fires one beacon and waits for the promotion to answer it — a dial that
+  /// failed, or a hold-off saying how many beacons are left. Counting beacons
+  /// only means anything if the test feeds them one at a time.
+  Future<void> beaconOnce(ScriptedScout scout, DiscoveredHost host) async {
+    int outcomes() =>
+        logs.where((l) => l.startsWith('lan promotion:')).length;
+    final before = outcomes();
+    scout.hear(host);
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (outcomes() == before) {
+      if (DateTime.now().isAfter(deadline)) fail('the beacon went unanswered');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
     }
   }
 
@@ -297,9 +318,9 @@ void main() {
     expect((await gateway.listSessions()).single.id, 's1');
   });
 
-  test('a desktop that is NOT where the relay is still earns exactly one '
-      'direct attempt', timeout: const Timeout(Duration(minutes: 3)),
-      () async {
+  test('a desktop that is NOT where the relay earns direct attempts at a '
+      'widening count of beacons, and the link pays for none of them',
+      timeout: const Timeout(Duration(minutes: 3)), () async {
     await startService();
     final scout = ScriptedScout(
       attemptTimeout: const Duration(milliseconds: 100),
@@ -322,12 +343,17 @@ void main() {
     final watch = gateway.linkStates.listen(states.add);
     addTearDown(watch.cancel);
     for (var i = 0; i < 6; i++) {
-      scout.hear(elsewhere);
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await beaconOnce(scout, elsewhere);
     }
     await watch.cancel();
 
-    expect(scout.dials, 1, reason: 'worth trying — once');
+    expect(
+      scout.dials,
+      3,
+      reason: 'six sightings, three attempts: one, then a beacon\'s wait, '
+          'then two — the hold-off doubles after each failure and is counted '
+          'in beacons, because the beacon is the only event here',
+    );
     expect(
       states.where((s) => s != CompanionLinkState.connected),
       isEmpty,
@@ -344,10 +370,8 @@ void main() {
     );
   });
 
-  test('a desktop refused once is worth one more try when the refusal has '
-      'expired — never again is not an answer', timeout: const Timeout(
-    Duration(minutes: 3),
-  ), () async {
+  test('a desktop that keeps beaconing keeps being tried — never again is '
+      'not an answer', timeout: const Timeout(Duration(minutes: 3)), () async {
     await startService();
     final scout = ScriptedScout(
       attemptTimeout: const Duration(milliseconds: 100),
@@ -370,32 +394,26 @@ void main() {
 
     Future<void> beaconRepeatedly() async {
       for (var i = 0; i < 6; i++) {
-        scout.hear(elsewhere);
-        await Future<void>.delayed(const Duration(milliseconds: 150));
+        await beaconOnce(scout, elsewhere);
       }
     }
 
     await beaconRepeatedly();
-    expect(
-      scout.dials,
-      1,
-      reason: 'six sightings, one attempt — the refusal holds while it is '
-          'fresh',
-    );
+    expect(scout.dials, 3, reason: 'one, then one beacon\'s wait, then two');
 
-    // Half an hour on. The firewall rule was fixed, or the desktop restarted
-    // with its LAN listener up, or this is a different network wearing the
-    // same address — an `address:port` is not an identity, and the phone has
-    // no way to tell any of those apart except by trying again.
-    clockShift = kLanUpgradeRefusalTtl + const Duration(minutes: 1);
+    // Six more. Whatever made the dial fail is a thing that gets fixed — a
+    // firewall rule, a desktop restarted with its LAN listener up, or a
+    // different network wearing the same address, which an `address:port`
+    // cannot tell apart — so the count widens and never closes.
     await beaconRepeatedly();
     await watch.cancel();
 
     expect(
       scout.dials,
-      2,
-      reason: 'the refusal expires: one blip must not pin this phone to the '
-          'relay for as long as the app happens to stay alive',
+      4,
+      reason: 'four beacons held off, then a fourth attempt: one blip must '
+          'not pin this phone to the relay for as long as the app happens to '
+          'stay alive',
     );
     expect(
       states.where((s) => s != CompanionLinkState.connected),

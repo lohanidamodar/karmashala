@@ -253,16 +253,15 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Runs while a dropped transport is being given its chance to come back.
   Timer? _healTimer;
 
-  /// Beacon hosts whose direct dial has failed, by [LanPathScout.keyOf], with
-  /// when — read only by the beacon's *upgrade*, never by the dial path.
+  /// Beacons still to be heard before the LAN is probed again, and how many
+  /// the next failed promotion will ask for. See `_holdingOffPromotion`.
   ///
-  /// The beacon repeats every two seconds and the scout's grudge lasts two
-  /// minutes, so a desktop that is audible but not dialable — a firewall on
-  /// its LAN port is the ordinary cause — used to make the phone throw away a
-  /// working relay link every two minutes, for ever. Trying once is right;
-  /// trying again on a schedule, and paying for it with the link that works,
-  /// is not.
-  final _lanUpgradeRefused = <String, DateTime>{};
+  /// Counted in beacons, never timed. The beacon is the event (§19), so a
+  /// clock here would be a second opinion about a world the beacon is already
+  /// reporting on — and a phone whose desktop has stopped beaconing stops
+  /// re-probing for it, which is the right answer and one no timer can give.
+  int _promotionHoldOff = 0;
+  int _promotionPenalty = 0;
 
   /// True while a second link is being dialled and adopted.
   ///
