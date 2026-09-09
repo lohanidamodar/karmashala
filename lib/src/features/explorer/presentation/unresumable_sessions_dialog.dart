@@ -7,6 +7,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../../core/widgets/reveal_on_focus.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../sessions/domain/unkept_promise.dart';
 import '../application/unresumable_sessions.dart';
@@ -346,59 +347,64 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tick = ticked;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      // Two lines and two stops, deliberately.
-      //
-      // The first version put the restart verb in the subtitle as a text
-      // button and gave the tile its own `onTap` as well. Both were wrong at
-      // 720x560 with Windows' text turned up to 1.3x, and the window matrix
-      // said so: three focus stops per row where two do the same thing, and a
-      // tile tall enough that two rows and a section header overflowed the
-      // panel into a scroll — after which Tab's `ensureVisible` moved the list
-      // under the traversal and the ring revisited a stop it had already had.
-      //
-      // So the checkbox is the only thing that ticks the row, and the verb is
-      // a trailing glyph inside the tile's own box: shorter, one stop, and it
-      // still reads at 390px.
-      leading: tick == null
-          ? Icon(
-              AppIcons.warningCircle,
-              size: Touch.icon,
-              color: theme.colorScheme.onSurfaceVariant,
-            )
-          : Checkbox(value: tick, onChanged: (_) => onToggle?.call()),
-      title: Text(
-        row.session.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        row.note,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
+    // Once the rows outgrow the dialog they are in a scroll, and a stop the
+    // list has moved above the viewport is one forward Tab will not scroll back
+    // to. See [RevealOnFocus].
+    return RevealOnFocus(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        // Two lines and two stops, deliberately.
+        //
+        // The first version put the restart verb in the subtitle as a text
+        // button and gave the tile its own `onTap` as well. Both were wrong at
+        // 720x560 with Windows' text turned up to 1.3x, and the window matrix
+        // said so: three focus stops per row where two do the same thing, and a
+        // tile tall enough that two rows and a section header overflowed the
+        // panel into a scroll — after which Tab's `ensureVisible` moved the list
+        // under the traversal and the ring revisited a stop it had already had.
+        //
+        // So the checkbox is the only thing that ticks the row, and the verb is
+        // a trailing glyph inside the tile's own box: shorter, one stop, and it
+        // still reads at 390px.
+        leading: tick == null
+            ? Icon(
+                AppIcons.warningCircle,
+                size: Touch.icon,
+                color: theme.colorScheme.onSurfaceVariant,
+              )
+            : Checkbox(value: tick, onChanged: (_) => onToggle?.call()),
+        title: Text(
+          row.session.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
+        subtitle: Text(
+          row.note,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        // The row's own way out, and the one that keeps it. Named for what it
+        // does to *this* session rather than "new session", which is the advice
+        // `resumeMissingConversationMessage` already gives and which loses the
+        // row.
+        //
+        // **Absent on a row nothing could judge**, which is the same rule as the
+        // missing checkbox and matters more. An `unknown` verdict means the
+        // store was unreachable, so the conversation may well be there and
+        // resumable once the distribution is running — and starting a second one
+        // over the row would abandon it. A row we cannot speak for is offered
+        // neither verb.
+        trailing: onRestart == null
+            ? null
+            : IconButton(
+                icon: const Icon(AppIcons.plus, size: Chrome.icon),
+                tooltip: 'Start a conversation here',
+                onPressed: onRestart,
+              ),
       ),
-      // The row's own way out, and the one that keeps it. Named for what it
-      // does to *this* session rather than "new session", which is the advice
-      // `resumeMissingConversationMessage` already gives and which loses the
-      // row.
-      //
-      // **Absent on a row nothing could judge**, which is the same rule as the
-      // missing checkbox and matters more. An `unknown` verdict means the
-      // store was unreachable, so the conversation may well be there and
-      // resumable once the distribution is running — and starting a second one
-      // over the row would abandon it. A row we cannot speak for is offered
-      // neither verb.
-      trailing: onRestart == null
-          ? null
-          : IconButton(
-              icon: const Icon(AppIcons.plus, size: Chrome.icon),
-              tooltip: 'Start a conversation here',
-              onPressed: onRestart,
-            ),
     );
   }
 }

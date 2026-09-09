@@ -65,7 +65,15 @@ void main() {
 
   tearDown(() {
     db.close();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    // **One call, not exists-then-delete.** The guard was a TOCTOU: a case
+    // that had already failed may have taken its directory with it between
+    // the two lines, and the `PathNotFoundException` that followed buried the
+    // assertion that actually failed under a teardown error.
+    try {
+      tmp.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Already gone, or something inside it went while this walked.
+    }
   });
 
   group('the control server it owns', () {
@@ -150,6 +158,99 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 
       expect(natives.tray.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
+    });
+  });
+
+  group('nothing it started outlives it', () {
+    /// **The bug this group exists for, and the shape of it.**
+    ///
+    /// `_step` bounds the **wait**, not the work — a Dart future cannot be
+    /// cancelled — and the control server's slice is 100 ms. The handshake
+    /// delete used to sit *last* in `LauncherControlServer.stop`, behind three
+    /// awaited socket closes, so on a loaded machine `shutdown()` returned with
+    /// `mcp_bridge.json` still on disk and the deletes landed afterwards at a
+    /// moment nothing owned. Two symptoms, one event: the assertion this owner
+    /// exists for was false, and the stray deletes raced the suite's own
+    /// `deleteSync(recursive: true)` into a `PathNotFoundException` — a
+    /// different pair of tests each run, because which steps blow their slice
+    /// depends on the load.
+    ///
+    /// Both cases below are **counted, never timed**: the first observes the
+    /// files without awaiting anything, the second compares a removal count
+    /// across a pumped event queue.
+
+    test('the published files are gone before stop() suspends', () async {
+      final server = LauncherControlServer(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final socket = p.join(tmp.path, 'ipc', 'rpc.sock');
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      expect(File(bridge).existsSync(), isTrue);
+
+      // Deliberately not awaited. Everything between this line and the next is
+      // `stop`'s synchronous prefix, which is the only part of it a bounded
+      // step cannot be preempted out of.
+      final pending = server.stop();
+
+      expect(
+        File(bridge).existsSync(),
+        isFalse,
+        reason: 'the handshake outlived the first await',
+      );
+      expect(
+        File(socket).existsSync(),
+        isFalse,
+        reason: 'the socket node outlived the first await',
+      );
+
+      await pending;
+    });
+
+    test('a shutdown that abandons the step still leaves nothing behind', () async {
+      final removals = <String>[];
+      final lifecycle = AppLifecycle(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final server = LauncherControlServer(
+        container,
+        unpublish: (path) {
+          removals.add(path);
+          final file = File(path);
+          if (file.existsSync()) file.deleteSync();
+        },
+      );
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      // A hook step that never returns, so the budget is already under
+      // pressure when the control server's turn comes — the shape of the run
+      // that failed.
+      lifecycle.adopt(
+        controlServer: server,
+        hookInstallation: Completer<void>().future,
+      );
+
+      await lifecycle.shutdown();
+
+      final counted = removals.length;
+      expect(counted, 2, reason: 'the handshake and the socket node');
+      expect(File(bridge).existsSync(), isFalse);
+
+      // **The count, not the clock.** Every continuation the abandoned step
+      // left behind runs here; if any of them still removed something, this
+      // grows. A `pumpEventQueue` drains the microtask and event queues rather
+      // than waiting out a duration, so a slower machine cannot pass it by
+      // being slow.
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(
+        removals.length,
+        counted,
+        reason: 'a filesystem removal outlived shutdown()',
+      );
     });
   });
 
@@ -343,12 +444,22 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 
       await lifecycle.shutdown();
 
-      // A literal, and a tight one: the hook step's own 150 ms cap is the whole
-      // cost here. Bounding this by `kShutdownBudget` instead meant a step that
-      // helped itself to the shared budget still passed.
+      // **Counted, not timed.** This used to be `lastShutdownDuration <
+      // 800 ms`, and under six concurrent suites it read 902 ms — which said
+      // nothing about the budget and everything about the machine. Worse, it
+      // was weak in the direction that matters: a 700 ms shutdown that skipped
+      // the control server step entirely would have passed it. The property is
+      // that *this* step was cut off at its own cap and nothing after it was
+      // starved, and that is two lists.
       expect(
-        lifecycle.lastShutdownDuration,
-        lessThan(const Duration(milliseconds: 800)),
+        lifecycle.abandonedSteps,
+        ['agent hook installation'],
+        reason: 'only the step that hangs may be cut off',
+      );
+      expect(
+        lifecycle.skippedSteps,
+        isEmpty,
+        reason: 'a hanging step helped itself to the shared budget',
       );
       expect(File(bridge).existsSync(), isFalse, reason: 'handshake removed');
       expect(natives.tray.destroyed, isTrue);
@@ -372,9 +483,17 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
 
       await lifecycle.shutdown();
 
+      // **Counted.** That `shutdown()` returned at all is what proves the
+      // deadline was enforced — a sequence that waited on the 30 s tray would
+      // have hung this case, not made it slow. What the number used to stand
+      // in for is here instead: the hanging step was cut off at the budget,
+      // the ones behind it were skipped rather than waited on, and the
+      // container was disposed anyway.
+      expect(lifecycle.abandonedSteps, ['agent hook installation']);
       expect(
-        lifecycle.lastShutdownDuration,
-        lessThan(const Duration(seconds: 2)),
+        lifecycle.skippedSteps,
+        isNotEmpty,
+        reason: 'a spent budget must skip the rest, not wait on them',
       );
       expect(isDisposed(container), isTrue);
     });
@@ -401,7 +520,22 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
         lifecycle.lastShutdownDuration,
         lessThan(const Duration(milliseconds: 500)),
       );
-    });
+    },
+        // **The one case here that is a wall-clock measurement, and it is
+        // opt-in for that reason.** Every bound in `AppLifecycle` is a real
+        // timeout, so a starved scheduler overshoots all of them at once: with
+        // six suites running this read 3.03 s and said nothing about the app.
+        // Every other case in this file was rewritten to count what ran; this
+        // one cannot be, because the number *is* the claim. So it runs
+        // deliberately, on a quiet machine, and skips itself with its reason
+        // the way §18's live tests do:
+        //
+        //     KARMASHALA_TIMING=1 flutter test test/core/lifecycle
+        tags: 'live-timing',
+        skip: Platform.environment['KARMASHALA_TIMING'] == null
+            ? 'a wall-clock envelope, and this gate runs beside other gates. '
+                  'Set KARMASHALA_TIMING=1 on a quiet machine to measure it.'
+            : false);
   });
 
   group('idempotence', () {

@@ -8,6 +8,7 @@ class ClaudeAuthSnapshot {
   const ClaudeAuthSnapshot({
     required this.environmentId,
     this.email,
+    this.keychainRefusal,
     this.organizationName,
     this.organizationUuid,
     this.subscriptionType,
@@ -16,7 +17,13 @@ class ClaudeAuthSnapshot {
   });
 
   /// An empty snapshot for an installation with no credentials on disk.
-  const ClaudeAuthSnapshot.signedOut(this.environmentId)
+  ///
+  /// [keychainRefusal] is the one kind of emptiness that is not a signed-out
+  /// account: macOS was asked for the credential and said no. It is a whole
+  /// sentence, with the age of the reading in it, because "not signed in" is
+  /// the wrong thing to tell someone whose credential is sitting there behind
+  /// a *Deny* they clicked.
+  const ClaudeAuthSnapshot.signedOut(this.environmentId, {this.keychainRefusal})
     : email = null,
       organizationName = null,
       organizationUuid = null,
@@ -31,6 +38,11 @@ class ClaudeAuthSnapshot {
   final String? subscriptionType;
   final String? rateLimitTier;
   final DateTime? accessTokenExpiresAt;
+
+  /// Why there is no account, when the reason is a Keychain refusal rather
+  /// than a signed-out installation. Null everywhere else, including on a
+  /// Keychain that simply holds nothing.
+  final String? keychainRefusal;
 
   /// Whether a signed-in account was found for this installation.
   bool get isSignedIn => email != null;

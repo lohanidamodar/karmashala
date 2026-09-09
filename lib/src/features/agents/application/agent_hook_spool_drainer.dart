@@ -86,6 +86,15 @@ Future<Set<String>> wslRunningDistributions() async {
 /// Fails **open**: a running-set query that errors is read as "all of them",
 /// because polling a distribution needlessly costs a millisecond and skipping
 /// one wrongly costs every status it would have reported.
+/// How the drainer arms its polling loop, and how it takes it down.
+///
+/// The same shape `ScrollbackAutosave` established for the terminal's only
+/// periodic timer: a pair of functions with real-`Timer` defaults, so the app
+/// runs on a clock and a test steps one.
+typedef PeriodicSchedule =
+    Object Function(Duration interval, void Function() tick);
+typedef CancelPeriodic = void Function(Object handle);
+
 class AgentHookSpoolDrainer {
   AgentHookSpoolDrainer({
     required this.onEvent,
@@ -94,6 +103,8 @@ class AgentHookSpoolDrainer {
     this.runningRefresh = const Duration(seconds: 15),
     this.maxPerTick = 64,
     this.runningDistributions = wslRunningDistributions,
+    this.schedule = _defaultSchedule,
+    this.cancelSchedule = _defaultCancel,
   });
 
   /// What one drained payload does. Wired to `applyAgentHookCallback` in the
@@ -112,11 +123,31 @@ class AgentHookSpoolDrainer {
   /// See the class doc. Injected so a test never spawns `wsl.exe`.
   final Future<Set<String>> Function() runningDistributions;
 
-  Timer? _timer;
+  /// How the loop is armed, and how it is taken down. Injected exactly the way
+  /// `ScrollbackAutosave`'s `DelayedSchedule` is, and for the same reason: a
+  /// real `Timer` makes a test **wait**, and a test that waits is measuring
+  /// this machine's scheduler rather than this class. With the seam a case
+  /// fires the tick the drainer armed and counts what that tick did — the
+  /// repo's rule that work is counted and never timed.
+  final PeriodicSchedule schedule;
+  final CancelPeriodic cancelSchedule;
+
+  Object? _handle;
   List<AgentHookSpoolSource> _sources = const [];
   Set<String>? _running;
   DateTime? _runningAt;
   bool _draining = false;
+  bool _disposed = false;
+  Future<void>? _inFlight;
+
+  /// The drain the last tick started, or a completed future when none has run.
+  ///
+  /// Exists for the one caller that has to know when a tick it *fired* has
+  /// finished: a test stepping the loop through [schedule]. The alternative is
+  /// waiting a duration and hoping, which is what this class's cases used to
+  /// do and what the repo's rule forbids. The app never reads it — nothing is
+  /// meant to wait on a poll.
+  Future<void> get settled => _inFlight ?? Future<void>.value();
 
   /// The directories being polled, or none. Exposed for the settings surface
   /// and for tests; the app has no reason to read it.
@@ -128,11 +159,17 @@ class AgentHookSpoolDrainer {
   /// is the usual case: a machine with no WSL, or one where every store went to
   /// the HTTP transport.
   void watch(List<AgentHookSpoolSource> sources) {
+    // A disposed drainer stays disposed: `dispose` is what shutdown calls, and
+    // a late `watch` must not put the loop back on a share that is going away.
+    if (_disposed) return;
     _sources = List.unmodifiable(sources);
-    _timer?.cancel();
-    _timer = null;
+    _cancel();
     if (_sources.isEmpty) return;
-    _timer = Timer.periodic(interval, (_) => unawaited(drainOnce()));
+    _handle = schedule(interval, () {
+      final drain = drainOnce();
+      _inFlight = drain;
+      unawaited(drain);
+    });
   }
 
   /// One pass over every source. Public so a test can step the loop.
@@ -141,11 +178,18 @@ class AgentHookSpoolDrainer {
   /// waiting on a distribution has nothing to gain from a second one behind it,
   /// and the files it has not read yet will still be there.
   Future<void> drainOnce() async {
-    if (_draining) return;
+    if (_draining || _disposed) return;
     _draining = true;
     try {
       final running = await _runningSet();
+      // **Checked between sources, not once at the top.** `dispose` cancels
+      // the timer, which ends the *next* tick; a drain already awaiting a
+      // distribution goes on reading and deleting payloads under directories
+      // nobody owns any more — somebody's store home after a quit, and in a
+      // test the temp directory `tearDown` is already walking, which is where
+      // the `PathNotFoundException` on `%TEMP%\karmashala_drainer_*` came from.
       for (final source in _sources) {
+        if (_disposed) return;
         final distribution = source.wslDistribution;
         if (distribution != null &&
             running != null &&
@@ -184,9 +228,21 @@ class AgentHookSpoolDrainer {
     return _running;
   }
 
+  /// Stops the loop, and stops the drain already in flight from touching the
+  /// filesystem again. Cancelling the timer alone only ended the next tick.
   void dispose() {
-    _timer?.cancel();
-    _timer = null;
+    _disposed = true;
+    _cancel();
     _sources = const [];
   }
+
+  void _cancel() {
+    if (_handle case final handle?) cancelSchedule(handle);
+    _handle = null;
+  }
+
+  static Object _defaultSchedule(Duration interval, void Function() tick) =>
+      Timer.periodic(interval, (_) => tick());
+
+  static void _defaultCancel(Object handle) => (handle as Timer).cancel();
 }

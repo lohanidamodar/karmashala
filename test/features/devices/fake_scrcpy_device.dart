@@ -6,6 +6,7 @@
 // code; only adb and the server process are faked. It also keeps the device's
 // side of the story — which servers it believes are running — so a test can ask
 // what was left behind rather than only what the app asked for.
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -58,14 +59,20 @@ class FakeScrcpyDevice {
   FakeScrcpyDevice._(this._server) {
     _server.listen((socket) {
       _sockets.add(socket);
+      _announce();
       final isVideo = _sockets.length.isOdd;
+      void closed() {
+        _closedByHost += 1;
+        _announce();
+      }
+
       socket.listen(
         (data) {
           // Only the control socket ever carries client→server bytes.
           if (!isVideo) controlBytes.addAll(data);
         },
-        onDone: () => _closedByHost += 1,
-        onError: (Object _) => _closedByHost += 1,
+        onDone: closed,
+        onError: (Object _) => closed(),
       );
       // Each session opens video first and control second, so every odd
       // arrival is a video socket — and a restart's new session must be fed
@@ -84,6 +91,10 @@ class FakeScrcpyDevice {
   final List<Socket> _sockets = [];
   final List<Socket> _videoSockets = [];
   int _closedByHost = 0;
+
+  /// One tick per accept and per close, so a test can wait for the count it
+  /// needs instead of assuming the machine has caught up.
+  final StreamController<void> _socketEvents = StreamController.broadcast();
 
   /// Every scrcpy server process the app asked this device to start.
   final List<FakeProcessHandle> handles = [];
@@ -104,6 +115,32 @@ class FakeScrcpyDevice {
   int get socketsAccepted => _sockets.length;
   int get socketsClosedByHost => _closedByHost;
 
+  /// Completes once this device has *observed* [count] sockets accepted.
+  Future<void> untilSocketsAccepted(int count) =>
+      _until(() => socketsAccepted >= count);
+
+  /// Completes once this device has *observed* [count] sockets closed by the
+  /// host — the socket's own `done`, never a timer.
+  ///
+  /// Both waits exist because the two counters are fed by events on the
+  /// device's side of a real loopback socket, and an event is not a moment. The
+  /// app connecting is not the device having accepted; `session.stop()`
+  /// destroying a socket is not the FIN having crossed and this end's `onDone`
+  /// having run. Reading either count straight after the call that caused it
+  /// asks the machine to have got there already, which a busy one does later —
+  /// never differently.
+  Future<void> untilSocketsClosed(int count) =>
+      _until(() => socketsClosedByHost >= count);
+
+  Future<void> _until(bool Function() reached) async {
+    if (reached()) return;
+    await _socketEvents.stream.firstWhere((_) => reached());
+  }
+
+  void _announce() {
+    if (!_socketEvents.isClosed) _socketEvents.add(null);
+  }
+
   /// The video socket of the newest session.
   Socket get video => _videoSockets.last;
 
@@ -120,6 +157,7 @@ class FakeScrcpyDevice {
     for (final socket in _sockets) {
       socket.destroy();
     }
+    await _socketEvents.close();
     await _server.close();
   }
 

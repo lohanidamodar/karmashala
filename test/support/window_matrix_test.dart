@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/widgets/reveal_on_focus.dart';
 
 import 'window_matrix.dart';
 
@@ -113,6 +114,34 @@ void main() {
           icon: const Icon(Icons.close),
         ),
       ),
+    );
+  });
+
+  testWidgets('a list long enough to recycle its rows still closes its ring', (
+    tester,
+  ) async {
+    // Thirty rows in a 560-tall window is more than the sliver keeps: by the
+    // time Tab reaches the last one the first row has been disposed, so the
+    // node the harness recorded as "the first stop" no longer exists and the
+    // traversal wraps to the earliest row that does. Identity called that a
+    // revisit — a focus trap — against a list that has none, and every long
+    // scrolling surface in the app was covered by that check.
+    //
+    // [RevealOnFocus] is what keeps the wrapped-to rows on screen; without it
+    // the same run reports five stops above the window edge, because forward
+    // traversal's `keepVisibleAtEnd` will not scroll backwards.
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => wrap(
+        ListView.builder(
+          itemCount: 30,
+          itemBuilder: (context, index) => RevealOnFocus(
+            child: ListTile(title: Text('Row $index'), onTap: () {}),
+          ),
+        ),
+      ),
+      checkSemantics: false,
+      because: 'a lazy list disposes the row the ring started at',
     );
   });
 

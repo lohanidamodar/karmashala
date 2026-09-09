@@ -304,11 +304,11 @@ class AgentUsageService {
     // said no — usually *Deny* on the access prompt, sometimes a locked login
     // Keychain — and only the user can undo that.
     if (read.outcome == ClaudeKeychainOutcome.refused) {
-      final detail = read.detail;
+      // One wording for both surfaces, age included: the memo holds a refusal
+      // for ten minutes, so what the chip shows can be ten minutes old and
+      // must say so.
       throw UsageException(
-        'macOS would not release the Claude credential from the Keychain'
-        '${detail == null ? '' : ' ($detail)'}. Allow Karmashala access to '
-        '"${ClaudeAuthService.keychainService}" in Keychain Access.',
+        claudeKeychainRefusalMessage(read, now: clock.nowUtc()),
         kind: UsageFailureKind.auth,
       );
     }

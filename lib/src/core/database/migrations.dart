@@ -90,11 +90,15 @@ typedef MigrationStep = void Function(Database db);
 ///   refuses without.
 /// * **v44** — what repository a checkout *is*, as distinct from where it is:
 ///   a nullable canonical id derived from `origin`.
-/// * **v45** — what an automation's project checks actually said: one verdict
+/// * **v45** — named terminal presets: the *shape* of a workbench — its tabs,
+///   their regions and splits, and each pane's profile and directory — with
+///   nothing running in it, so opening one starts fresh panes rather than
+///   resurrecting old ones.
+/// * **v46** — what an automation's project checks actually said: one verdict
 ///   row per check per occurrence, and the moment the run's checks were looked
 ///   at, so "nothing has re-run this yet" and "this checkout has no check"
 ///   stay different answers.
-/// * **v46** — what a companion says about itself when it registers for
+/// * **v47** — what a companion says about itself when it registers for
 ///   notifications: its kind, whether it is on screen, and the session it is
 ///   showing. Read only to route a push, never to decide whether a frame is
 ///   carried.
@@ -145,6 +149,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   44: _migrateToV44,
   45: _migrateToV45,
   46: _migrateToV46,
+  47: _migrateToV47,
 };
 
 /// Was this pane running when its row was written?
@@ -1981,6 +1986,29 @@ void _migrateToV44(Database db) {
   db.execute('ALTER TABLE repositories ADD COLUMN canonical_id TEXT;');
 }
 
+/// A named workbench shape the user can reopen.
+///
+/// One `shape` column holding the whole document rather than a row per tab and
+/// a row per pane, for the reason `kTerminalWorkspaceKey` gives about the split
+/// tree beside it: the shape *is* a document, and half of one written across N
+/// rows is a shape that cannot be read back. A table rather than a metadata key
+/// because presets are a list the user names, adds to and deletes from.
+///
+/// **v45, renumbered on the merge**, for the reason the note above gives one
+/// number earlier: it was written as v44 and the canonical repository id
+/// landed that number first.
+void _migrateToV45(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_presets (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      shape      TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  ''');
+}
+
 /// The verdicts an automation's project checks left on one occurrence.
 ///
 /// **A row per check, and a timestamp on the run saying the checks were looked
@@ -2001,10 +2029,11 @@ void _migrateToV44(Database db) {
 /// ran** — a check whose environment could not be reached is a verdict with no
 /// command behind it.
 ///
-/// **v45, renumbered on the merge**, for the reason v44 above gives: the
-/// number is compared against the stored `user_version` and never read as a
-/// label, so whichever branch merges second moves.
-void _migrateToV45(Database db) {
+/// **v46, renumbered twice on the way in**, for the reason v44 above gives:
+/// the number is compared against the stored `user_version` and never read as
+/// a label, so whichever branch merges second moves — twice here, because two
+/// did.
+void _migrateToV46(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS automation_run_checks (
       run_id              TEXT NOT NULL
@@ -2042,9 +2071,8 @@ void _migrateToV45(Database db) {
 /// delivery path reads it, which is the invariant
 /// `presence_is_not_delivery_test.dart` exists to hold.
 ///
-/// **v46, renumbered on the merge**, with v45 above it and for the same
-/// reason.
-void _migrateToV46(Database db) {
+/// **v47, renumbered with v46 above it** and for the same reason.
+void _migrateToV47(Database db) {
   final columns = db
       .select('PRAGMA table_info(paired_devices);')
       .map((row) => row['name'] as String);

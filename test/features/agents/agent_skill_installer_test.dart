@@ -227,6 +227,92 @@ void main() {
     expect(file.readAsStringSync(), skills.first.render());
   });
 
+  test('a foreign karmashala_ directory under the root is never touched', () async {
+    // **The rule, stated as a test.** A sweep may remove what it wrote — by
+    // its marker — and nothing else, ever by prefix. The suite itself fills
+    // the system temp root with `karmashala_*` directories, and a sweep that
+    // matched on a name rather than on a marker would delete other tests'
+    // working directories out from under them.
+    final store = storeHomeFor(claude);
+    Directory(store).createSync(recursive: true);
+    await installer.install(
+      descriptor: claude,
+      storeHome: store,
+      skills: skills,
+    );
+
+    // Three shapes of somebody else's, side by side with ours: a temp
+    // directory named the way this suite names them, a directory that shares
+    // our prefix exactly, and a skill of the user's own.
+    final root = p.join(home.path, '.claude', 'skills');
+    final foreignTemp = Directory(p.join(root, 'karmashala_lifecycle_ab12cd34'))
+      ..createSync(recursive: true);
+    File(p.join(foreignTemp.path, 'settings.json')).writeAsStringSync('{}');
+    final foreignPrefixed = Directory(p.join(root, 'karmashala-one-more'))
+      ..createSync(recursive: true);
+    File(p.join(foreignPrefixed.path, 'SKILL.md')).writeAsStringSync(
+      '---\nname: karmashala-one-more\n---\nSomebody else wrote this.',
+    );
+
+    await installer.uninstall(descriptor: claude, storeHome: store);
+
+    expect(foreignTemp.existsSync(), isTrue);
+    expect(
+      File(p.join(foreignTemp.path, 'settings.json')).existsSync(),
+      isTrue,
+    );
+    expect(foreignPrefixed.existsSync(), isTrue);
+    expect(
+      File(p.join(foreignPrefixed.path, 'SKILL.md')).readAsStringSync(),
+      contains('Somebody else wrote this.'),
+    );
+    // And ours really did go, so this is not passing by doing nothing.
+    expect(Directory(p.join(root, 'karmashala-one')).existsSync(), isFalse);
+  });
+
+  test('an abandoned sweep writes nothing more', () async {
+    // A bounded wait ends the **wait**; a Dart future cannot be cancelled. So
+    // an install given up on halfway would go on creating directories under a
+    // home nobody owns any more — in the app, somebody's real `~/.claude`
+    // after a quit; in the suite, a temp root that has already been torn down.
+    // Counted, not timed: the second skill's directory is simply never there.
+    final store = storeHomeFor(claude);
+    Directory(store).createSync(recursive: true);
+    final deadline = SkillSweepDeadline()..giveUp();
+
+    final installed = await installer.install(
+      descriptor: claude,
+      storeHome: store,
+      skills: skills,
+      deadline: deadline,
+    );
+
+    expect(installed, isFalse);
+    expect(filesUnder(home), isEmpty);
+  });
+
+  test('a sweep given up on midway leaves the rest alone', () async {
+    final store = storeHomeFor(claude);
+    Directory(store).createSync(recursive: true);
+    await installer.install(
+      descriptor: claude,
+      storeHome: store,
+      skills: skills,
+    );
+    // Given up on before the removal starts: nothing of ours goes, which is
+    // the same guarantee read from the other direction.
+    final deadline = SkillSweepDeadline()..giveUp();
+
+    final changed = await installer.uninstall(
+      descriptor: claude,
+      storeHome: store,
+      deadline: deadline,
+    );
+
+    expect(changed, isFalse);
+    expect(filesUnder(home), hasLength(2));
+  });
+
   test('the rendered frontmatter is the shape all three CLIs read', () {
     const skill = KarmashalaSkill(
       name: 'karmashala-example',

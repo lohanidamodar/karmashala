@@ -168,6 +168,21 @@ class LocalRpcServer {
     await _server.close();
     // `ServerSocket.close` unlinks the node itself, but a crash-safe server
     // should not depend on that having happened.
+    unlink();
+  }
+
+  /// Removes the socket node **without waiting for the server to close**.
+  ///
+  /// Separate from [close] so a caller that must guarantee the node is gone
+  /// before it suspends can say so. A shutdown step is bounded, and a bound
+  /// wait that is abandoned leaves the rest of [close] running — so the delete
+  /// has to happen in the synchronous prefix or it happens at an unowned
+  /// moment.
+  ///
+  /// **Unlinking a *bound* node is allowed**, measured on Windows 2026-09-09:
+  /// the file goes at once and the listening socket stays valid until [close].
+  /// Idempotent, and [close] still calls it for callers that do not.
+  void unlink() {
     try {
       final file = File(path);
       if (file.existsSync()) file.deleteSync();
