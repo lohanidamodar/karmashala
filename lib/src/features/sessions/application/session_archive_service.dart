@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/application/git_providers.dart';
@@ -87,7 +88,40 @@ class SessionArchiveService {
 
   final Ref _ref;
 
+  /// **One line per archive, saying what it decided.** The same discipline
+  /// `sessions.launch`, `sessions.handoff` and now `sessions.actions` keep.
+  ///
+  /// This path removes a directory and every one of its six outcomes is
+  /// invisible afterwards: the four refusals leave the worktree exactly as it
+  /// was, and a failure leaves it as git left it. A user who says "it did
+  /// nothing" has nothing to hand over, and the reason was never written down.
+  static final _log = AppLogger.named('sessions.archive');
+
   Future<ArchiveOutcome> archive(
+    String sessionId, {
+    bool discardUncommitted = false,
+  }) async {
+    final outcome = await _archive(
+      sessionId,
+      discardUncommitted: discardUncommitted,
+    );
+    _log.info(
+      'Archive $sessionId: ${_verdictOf(outcome)} '
+      'discardUncommitted=$discardUncommitted '
+      'uncommitted=${outcome.changes.length}',
+    );
+    return outcome;
+  }
+
+  /// The one word for what happened, so a line can be read without matching a
+  /// sentence written for a human.
+  static String _verdictOf(ArchiveOutcome outcome) {
+    if (outcome.isArchived) return 'archived';
+    final refusal = outcome.refusal;
+    return refusal == null ? 'failed (${outcome.error})' : refusal.name;
+  }
+
+  Future<ArchiveOutcome> _archive(
     String sessionId, {
     bool discardUncommitted = false,
   }) async {

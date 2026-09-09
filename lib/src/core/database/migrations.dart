@@ -88,11 +88,13 @@ typedef MigrationStep = void Function(Database db);
 ///   agent run a person armed in advance, every occurrence of it (including
 ///   the ones nobody was here for), and the per-checkout verification the gate
 ///   refuses without.
-/// * **v44** — what those checks actually said: one verdict row per check per
-///   occurrence, and the moment the run's checks were looked at, so "nothing
-///   has re-run this yet" and "this checkout has no check" stay different
-///   answers.
-/// * **v45** — what a companion says about itself when it registers for
+/// * **v44** — what repository a checkout *is*, as distinct from where it is:
+///   a nullable canonical id derived from `origin`.
+/// * **v45** — what an automation's project checks actually said: one verdict
+///   row per check per occurrence, and the moment the run's checks were looked
+///   at, so "nothing has re-run this yet" and "this checkout has no check"
+///   stay different answers.
+/// * **v46** — what a companion says about itself when it registers for
 ///   notifications: its kind, whether it is on screen, and the session it is
 ///   showing. Read only to route a push, never to decide whether a frame is
 ///   carried.
@@ -142,6 +144,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   43: _migrateToV43,
   44: _migrateToV44,
   45: _migrateToV45,
+  46: _migrateToV46,
 };
 
 /// Was this pane running when its row was written?
@@ -1943,6 +1946,41 @@ void _migrateToV43(Database db) {
   );
 }
 
+/// **What repository a checkout is**, as distinct from where it is.
+///
+/// `repositories` was `(id, project_id, name, environment_id, path,
+/// created_at)` — a location with no canonical key — so nothing could tell two
+/// checkouts of one repository apart from two unrelated repositories. On the
+/// owner's machine that is sixty-nine rows standing for a handful of actual
+/// repositories, and the difference was unrepresentable.
+///
+/// `TEXT` and **nullable**, which is the whole contract. It is derived from
+/// `origin` ([canonicalRepositoryId]) and there are three ordinary ways for a
+/// row not to have one: a `git init` with no remote, a local or `file://`
+/// remote, and a row nothing has read `origin` for yet. So it is filled in when
+/// the app happens to learn a checkout's origin — never on a sweep and never on
+/// a tick — and every reader has to degrade to path-only behaviour when it is
+/// null.
+///
+/// **Not `UNIQUE` and not an identity of its own.** Two rows sharing it is the
+/// normal case and the point: a clone and each of its worktrees all carry the
+/// same string. `id` stays the row's identity, which is what every session,
+/// checkpoint and fanout row already references.
+///
+/// **v44, renumbered on the merge.** It was written as v43 and the
+/// automations branch landed that number first, which is exactly the case
+/// the v36 note above describes: a version is compared against the stored
+/// `user_version`, never read as a label, so whichever branch merges second
+/// moves.
+void _migrateToV44(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(repositories);')
+      .map((row) => row['name'] as String)
+      .toSet();
+  if (columns.contains('canonical_id')) return;
+  db.execute('ALTER TABLE repositories ADD COLUMN canonical_id TEXT;');
+}
+
 /// The verdicts an automation's project checks left on one occurrence.
 ///
 /// **A row per check, and a timestamp on the run saying the checks were looked
@@ -1962,7 +2000,11 @@ void _migrateToV43(Database db) {
 /// `VerificationService.recordCommandCheck` wrote, and is **null when nothing
 /// ran** — a check whose environment could not be reached is a verdict with no
 /// command behind it.
-void _migrateToV44(Database db) {
+///
+/// **v45, renumbered on the merge**, for the reason v44 above gives: the
+/// number is compared against the stored `user_version` and never read as a
+/// label, so whichever branch merges second moves.
+void _migrateToV45(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS automation_run_checks (
       run_id              TEXT NOT NULL
@@ -1999,7 +2041,10 @@ void _migrateToV44(Database db) {
 /// phone that can already hear the news needs a push as well. Nothing on the
 /// delivery path reads it, which is the invariant
 /// `presence_is_not_delivery_test.dart` exists to hold.
-void _migrateToV45(Database db) {
+///
+/// **v46, renumbered on the merge**, with v45 above it and for the same
+/// reason.
+void _migrateToV46(Database db) {
   final columns = db
       .select('PRAGMA table_info(paired_devices);')
       .map((row) => row['name'] as String);

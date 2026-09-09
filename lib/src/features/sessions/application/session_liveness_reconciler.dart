@@ -4,6 +4,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../data/session_dao.dart';
 import '../domain/session_status.dart';
+import 'session_launch_refusal.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
@@ -160,5 +161,8 @@ final sessionLivenessReconcilerProvider = Provider<void>((ref) {
     final stopped = panesThatStoppedRunning(previous?.liveness, next.liveness);
     if (stopped.isEmpty) return;
     reconciler.panesStopped(stopped);
+    // The same edge, and the only one on which a refusal is readable: the CLI
+    // has printed it and exited. See [reportRefusedLaunches].
+    reportRefusedLaunches(ref, stopped);
   });
 });
