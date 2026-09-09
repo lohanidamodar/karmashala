@@ -42,6 +42,7 @@ import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_activity_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
+import '../../sessions/application/session_chat_view_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
@@ -1101,14 +1102,30 @@ const _AgentRecord _nothingKnown = (
 /// view drops them.
 ///
 /// The empty answers are not interchangeable, and this is the only place that
-/// can tell them apart. `agentSupportsChatView` refusing the agent is a
-/// **structural** nothing: Antigravity's store is protobuf in an unpublished
-/// schema, so there will never be a transcript here however long the session
-/// runs, and the desktop says exactly that in its own empty state. Every other
-/// early return is a nothing we cannot account for — no external id yet, an
-/// installation that has gone, a store file the locator could not find — and
-/// those stay unexplained rather than being dressed up as the structural one.
+/// can tell them apart. A **structural** nothing is one that will still hold
+/// after the agent answers — an agent whose store keeps its messages in a form
+/// nothing here opens, or a session whose store keeps the conversation and no
+/// readable transcript beside it — and the phone words that as its own empty
+/// state. Every other early return is a nothing we cannot account for — no
+/// external id yet, an installation that has gone, a store file the locator
+/// could not find — and those stay unexplained rather than being dressed up as
+/// the structural one.
+///
+/// **Which one this is is now read per session, not per agent.** It was
+/// `agentSupportsChatView` over the store format, which sent `noChatView` for
+/// every Antigravity session; the WSL install here keeps a readable JSONL
+/// transcript for all 25 of its conversations, so that refusal was wrong for
+/// every one of them. `SessionChatView` is the same reading the desktop's own
+/// chat view and plan panel use, off the store scan this already pays for, so
+/// the two ends cannot describe one session differently.
 Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
+  const noChatView = (
+    messages: <RemoteTranscriptMessage>[],
+    absence: RemoteTranscriptAbsence.noChatView,
+    turns: null,
+  );
+  final screen = screenSessionChatView(ref, session.id);
+  if (screen.keepsNoRecord) return noChatView;
   final externalId = session.externalSessionId;
   if (externalId == null || externalId.isEmpty) return _nothingKnown;
   final agentId = ref
@@ -1116,17 +1133,17 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
       .getById(session.agentInstallationId)
       ?.agentId;
   if (agentId == null) return _nothingKnown;
-  if (!agentSupportsChatView(ref.read(agentRegistryProvider).byId(agentId))) {
-    return const (
-      messages: <RemoteTranscriptMessage>[],
-      absence: RemoteTranscriptAbsence.noChatView,
-      turns: null,
-    );
-  }
   final path = await ref
       .read(sessionTranscriptLocatorProvider)
       .locate(agentId: agentId, externalSessionId: externalId);
-  if (path == null) return _nothingKnown;
+  final chatView = await readChatViewAt(
+    storePath: path,
+    agentId: agentId,
+    prior: screen.prior,
+    at: ref.read(clockProvider).nowUtc(),
+  );
+  if (chatView.keepsNoRecord) return noChatView;
+  if (path == null || !chatView.hasChatView) return _nothingKnown;
   final messages = await readCliTranscript(path, agentId);
   return (
     messages: [

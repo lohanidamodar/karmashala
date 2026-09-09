@@ -406,12 +406,19 @@ class SessionHandoffService {
       FileChangeType.renamed => 'renamed',
       FileChangeType.copied => 'copied',
       FileChangeType.untracked => 'untracked',
+      // Named, because it is the one state that is not the user's own
+      // edit: a merge stopped here and both sides are still in the index.
+      FileChangeType.conflicted =>
+        'conflicted (${(change.conflict ?? MergeConflict.unrecorded).words})',
       // `unknown` is git's own shrug at a status code we do not model, and it
       // is reported as that rather than folded into "modified" — a wrong verb
       // about a file the next agent is about to edit is worse than an honest
       // one.
       FileChangeType.unknown => 'changed (unrecognised git status)',
     };
+    // A conflict is never described as staged: both sides sit in the index
+    // because git put them there, and "staged" would read as work the user did.
+    if (change.type == FileChangeType.conflicted) return kind;
     if (change.staged && change.unstaged) return '$kind, staged and unstaged';
     if (change.staged) return '$kind, staged';
     return kind;
