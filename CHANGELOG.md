@@ -16,6 +16,15 @@ installs claim the same version name.
 
 ---
 
+## Unreleased
+
+- **Package split, step 0.** The database takes the directory it opens in, and
+  the provider files that draw no widget import plain `riverpod`; 585 of 1,027
+  library files and 302 of 868 suites are now Flutter-free. Seven cost/soak
+  suites are tagged `cost`. Nothing changes in the app.
+
+---
+
 ## 1.20.0 — 2026-09-09 (build 36)
 
 **Two days, 2026-09-08 and -09, 409 commits, and almost all of it new capability
