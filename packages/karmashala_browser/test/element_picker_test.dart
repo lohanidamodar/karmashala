@@ -68,10 +68,8 @@ Matcher failsWith(BrowserFailure failure) => throwsA(
 void main() {
   group('installing the picker', () {
     test('brings the page forward before it arms anything', () async {
-      // The pane's own text is "Click an element in the browser…", which is an
-      // instruction to leave the app. A picker that arms a binding and waits
-      // two minutes on a window it never raised is waiting on a click the user
-      // cannot see the target of.
+      // The pane says "Click an element in the browser…"; arming a binding on a
+      // window that was never raised waits on a click the user cannot see.
       final fixture = build();
       final pending = fixture.picker.pick();
       await pumpEventQueue();

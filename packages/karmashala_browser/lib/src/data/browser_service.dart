@@ -15,7 +15,6 @@ import 'element_picker.dart';
 import 'page_input.dart';
 import 'page_observer.dart';
 
-/// An attached browser plus the page we are driving in it.
 class BrowserSession {
   BrowserSession({
     required this.endpoint,
@@ -28,10 +27,8 @@ class BrowserSession {
   final CdpPage page;
   final ElementPicker picker;
 
-  /// Clicking, typing and filling in the attached page.
   final PageInput input;
 
-  /// Whether the browser is still there.
   bool get isConnected => page.isConnected;
 
   /// Completes when the browser or tab goes away.
@@ -45,12 +42,8 @@ class BrowserSession {
   }
 }
 
-/// The feature's public API — the surface an MCP tool set will call.
-///
-/// Everything an agent needs is one method here: `connect`, `navigate`,
-/// `evaluate`, `capture`, `pickElement`, `screenshot`, `listTargets`. Nothing
-/// in this class talks to Flutter, so wiring it to the MCP bridge is a matter
-/// of mapping tool arguments onto these calls.
+/// The feature's public API. Nothing here talks to Flutter, so wiring it to the
+/// MCP bridge is a matter of mapping tool arguments onto these calls.
 class BrowserService {
   BrowserService({
     required BrowserProcessStarter startProcess,
@@ -66,48 +59,36 @@ class BrowserService {
   PageObserver? _observer;
   bool _observeRequested = false;
 
-  /// Who is recording what this service does, or null for nobody.
-  ///
-  /// A seam rather than a recording subclass: the pane, the MCP tools and any
-  /// harness all drive this one object, so installing a sink here records all
-  /// of them without a second implementation to keep in step.
+  /// Who is recording what this service does, or null for nobody. A seam rather
+  /// than a subclass: pane, MCP tools and harness all drive this one object.
   BrowserActionSink? actionSink;
 
-  /// The active session, or null when not connected.
   BrowserSession? get session => _session;
 
   /// Watching the page's console and network, when something asked for it.
   PageObserver? get observer => _observer;
 
-  /// Whether there is a session and its browser is still alive.
   bool get isConnected => _session?.isConnected ?? false;
 
-  /// Starts collecting console errors and failed requests from the attached
-  /// page.
-  ///
-  /// Switching tab or reconnecting re-points **the same** collector at the new
-  /// page rather than making a second one, so a navigation part-way through a
-  /// run does not quietly discard the errors that came before it.
+  /// Starts collecting console errors and failed requests. Switching tab or
+  /// reconnecting re-points the same collector rather than making a second one,
+  /// so a navigation part-way through a run keeps the errors before it.
   Future<void> startObserving() async {
     _observeRequested = true;
     final observer = _observer ??= PageObserver();
     await observer.watch(_require().page);
   }
 
-  /// Stops collecting. **What was already collected stays readable** through
-  /// [observer] — a caller stops the watch and then writes down what it saw,
-  /// and losing the evidence at that exact moment would be the whole point.
+  /// Stops collecting. What was already collected stays readable through
+  /// [observer]; losing the evidence at that moment would be the whole point.
   Future<void> stopObserving() async {
     _observeRequested = false;
     await _observer?.stop();
   }
 
   /// Attaches to a browser on [port], launching one only if nothing is there.
-  ///
-  /// When [url] is given, the page ends up there: an existing tab is navigated,
-  /// and a browser with no drivable page gets a new tab. Without [url], a
-  /// browser with no page is reported as [BrowserFailure.noTarget] rather than
-  /// silently opening something the user did not ask for.
+  /// With [url] the page ends up there; without it, a browser with no drivable
+  /// page is [BrowserFailure.noTarget] rather than a tab nobody asked for.
   Future<BrowserSession> connect({
     int port = BrowserLauncher.defaultPort,
     bool spawnIfNeeded = true,
@@ -183,8 +164,7 @@ class BrowserService {
     );
     _session = session;
 
-    // A run that asked to watch the console keeps watching across a reconnect
-    // or a tab switch; otherwise switching tab would silently stop collecting.
+    // A run that asked to watch keeps watching across a reconnect or tab switch.
     if (_observeRequested) await startObserving();
 
     if (url != null && target.url != url) {
@@ -200,7 +180,6 @@ class BrowserService {
     return session;
   }
 
-  /// Ends the session, if there is one.
   Future<void> disconnect() async {
     final session = _session;
     _session = null;
@@ -222,7 +201,6 @@ class BrowserService {
     () => _require().page.navigate(url, timeout: timeout),
   );
 
-  /// Evaluates JavaScript in the attached page and returns its value.
   Future<Object?> evaluate(
     String expression, {
     bool awaitPromise = false,
@@ -237,7 +215,6 @@ class BrowserService {
     ),
   );
 
-  /// How many elements match [selector] in the attached page.
   Future<int> countMatches(String selector) async =>
       _require().page.countMatches(selector);
 
@@ -260,7 +237,6 @@ class BrowserService {
         _captureAction(capture, 'Picked ${capture.selector}'),
   );
 
-  /// Abandons a pick in progress.
   void cancelPick() => _session?.picker.cancel();
 
   /// A PNG of the viewport, the whole page, or one element.
@@ -311,7 +287,6 @@ class BrowserService {
     ),
   );
 
-  /// Clicks the element matching [selector] or visible [text].
   Future<ClickResult> click({
     String? selector,
     String? text,
@@ -386,7 +361,6 @@ class BrowserService {
   Future<void> pressKey(String key) async =>
       _recorded('key', 'Pressed $key', () => _require().input.pressKey(key));
 
-  /// Scrolls the page by a wheel gesture.
   Future<void> scrollBy({double dx = 0, double dy = 0}) async => _recorded(
     'other',
     'Scrolled by (${dx.round()}, ${dy.round()})',
@@ -399,7 +373,6 @@ class BrowserService {
   /// The attached page's title, read from the page itself.
   Future<String> currentTitle() async => _require().page.currentTitle();
 
-  /// Every debuggable target the browser reports.
   Future<List<BrowserTarget>> listTargets() async =>
       _require().endpoint.http.listTargets();
 
@@ -407,13 +380,8 @@ class BrowserService {
   Future<BrowserTarget> openTab(String url) async =>
       _require().endpoint.http.openTab(url);
 
-  // --- Recording -------------------------------------------------------------
-
-  /// Runs [action], telling [actionSink] what happened either way.
-  ///
-  /// A failure is reported *and* rethrown: "the click was refused because a
-  /// banner covered the button" is evidence a verification run needs, and
-  /// swallowing it here would also change how every existing caller behaves.
+  /// Runs [action], telling [actionSink] what happened either way. A failure is
+  /// reported *and* rethrown: the refusal is evidence a verification run needs.
   Future<T> _recorded<T>(
     String verb,
     String summary,

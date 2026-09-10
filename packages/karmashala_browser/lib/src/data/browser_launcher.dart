@@ -6,7 +6,6 @@ import 'browser_process.dart';
 import 'chrome_discovery.dart';
 import 'devtools_http_endpoint.dart';
 
-/// How we got hold of the browser we are driving.
 enum BrowserConnectionMode {
   /// Attached to a browser the user already had listening on the port.
   attached,
@@ -15,7 +14,6 @@ enum BrowserConnectionMode {
   spawned,
 }
 
-/// A live debugging endpoint plus how it came to exist.
 class BrowserEndpoint {
   const BrowserEndpoint({
     required this.port,
@@ -40,7 +38,6 @@ class BrowserEndpoint {
   /// The spawned process, so the caller can shut it down again.
   final BrowserProcess? process;
 
-  /// One line describing the connection, for the UI and for logs.
   String get description => switch (mode) {
     BrowserConnectionMode.attached =>
       'Attached to the browser already listening on port $port',
@@ -50,13 +47,9 @@ class BrowserEndpoint {
   };
 }
 
-/// Finds a debuggable browser: **attach first, spawn only as a fallback**.
-///
-/// Attaching is preferred because it drives the browser the user is actually
-/// looking at, with their session, their extensions and their logged-in state.
-/// Spawning is the fallback when nothing is listening, and it always uses a
-/// throwaway `--user-data-dir` so the user's real profile is never opened,
-/// locked, or modified by us.
+/// Finds a debuggable browser: attach first, spawn only as a fallback.
+/// Attaching drives the browser the user is looking at; a spawn always uses a
+/// throwaway `--user-data-dir`, so their real profile is never opened or locked.
 class BrowserLauncher {
   BrowserLauncher({
     required this.startProcess,
@@ -82,13 +75,9 @@ class BrowserLauncher {
   final DevToolsHttpEndpoint Function(int port) _endpointFactory;
   final Future<String> Function() _createUserDataDir;
 
-  /// Connects to a debugging endpoint on [port].
-  ///
-  /// Throws [BrowserException] with, in order of what actually went wrong:
-  /// [BrowserFailure.portInUse] (something else owns the port),
-  /// [BrowserFailure.notRunning] (nothing listening and [spawnIfNeeded] is
-  /// false), [BrowserFailure.chromeNotFound] (no browser installed), and
-  /// [BrowserFailure.startupFailed] (spawned, but the port never opened).
+  /// Connects to a debugging endpoint on [port]. Throws [BrowserException]:
+  /// portInUse, notRunning (nothing there and [spawnIfNeeded] false),
+  /// chromeNotFound, or startupFailed (spawned, but the port never opened).
   Future<BrowserEndpoint> connect({
     int port = defaultPort,
     bool spawnIfNeeded = true,

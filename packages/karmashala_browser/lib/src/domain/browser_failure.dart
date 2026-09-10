@@ -1,8 +1,5 @@
-/// Why a browser operation failed.
-///
-/// Every failure carries one of these so callers (and later the MCP bridge) can
-/// react to the *kind* of problem, not to a string. The paired message on
-/// [BrowserException] is written for a human reading it in the UI.
+/// Why a browser operation failed: callers react to the kind, not to a string.
+/// The paired message on [BrowserException] is written for a human in the UI.
 enum BrowserFailure {
   /// No Chromium-family browser executable could be located.
   chromeNotFound,
@@ -12,12 +9,8 @@ enum BrowserFailure {
   portInUse,
 
   /// Nothing is listening on the debugging port and we were told not to spawn.
-  ///
-  /// Also covers a Chrome that *is* running and ignored
-  /// `--remote-debugging-port` because it is on the default data directory
-  /// (Chrome 136 and later). There is no separate kind for that: both are a
-  /// refused connection, so nothing here can tell them apart, and the message
-  /// names both rather than picking one.
+  /// Also a Chrome 136+ that ignored `--remote-debugging-port` because it is on
+  /// the default data directory: both are a refused connection, indistinguishable.
   notRunning,
 
   /// A browser was spawned but never opened its debugging endpoint.
@@ -55,10 +48,7 @@ enum BrowserFailure {
 }
 
 /// The single exception type raised by everything under `features/browser`.
-///
-/// [message] is user-facing and must stay actionable — the whole point of the
-/// [BrowserFailure] taxonomy is that "something went wrong" never reaches the
-/// UI. [cause] keeps the underlying error for logs.
+/// [message] is user-facing and must stay actionable; [cause] is for logs.
 class BrowserException implements Exception {
   const BrowserException(this.failure, this.message, {this.cause});
 
@@ -70,10 +60,8 @@ class BrowserException implements Exception {
   String toString() => 'BrowserException(${failure.name}): $message';
 }
 
-/// Standard, actionable wording for each failure kind.
-///
-/// Kept as a pure function so the phrasing is unit-testable and identical
-/// wherever a failure is raised.
+/// Standard, actionable wording for each failure kind. A pure function, so the
+/// phrasing is testable and identical wherever a failure is raised.
 String describeBrowserFailure(
   BrowserFailure failure, {
   String? detail,

@@ -3,11 +3,9 @@ import 'dart:math';
 import 'package:karmashala_browser/browser.dart';
 import 'package:test/test.dart';
 
-/// The fence, held against the thing it exists to stop.
-///
-/// These are not tests of a formatting helper. Each one is a page trying to get
-/// out of the box: printing the closer, printing it in different case, putting
-/// a quote in a URL. The fence is only worth its tokens if those all fail.
+/// The fence, held against the thing it exists to stop: each case is a page
+/// trying to get out of the box, and the fence is only worth its tokens if they
+/// all fail.
 void main() {
   group('wrapUntrustedPageContent', () {
     test('marks both ends with the same unguessable id', () {

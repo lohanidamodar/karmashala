@@ -1,12 +1,9 @@
 import 'package:karmashala_browser/browser.dart';
 import 'package:test/test.dart';
 
-/// The consent record: what it remembers, what it forgets, and what it does
-/// when it cannot tell.
-///
-/// Every "cannot tell" case here asserts a *denial*. That is the property worth
-/// defending — a permission store whose error path is permissive is worse than
-/// no store, because it reads to a reviewer as if a decision was made.
+/// The consent record: what it remembers, forgets, and does when it cannot
+/// tell. Every "cannot tell" case asserts a denial — a permission store with a
+/// permissive error path reads to a reviewer as if a decision was made.
 void main() {
   BrowserConsentStore store() => BrowserConsentStore(MemoryConsentJournal());
 

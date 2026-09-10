@@ -12,11 +12,8 @@ class CdpFault implements Exception {
   final String? data;
 }
 
-/// A scriptable [CdpSocket] — the whole point of the [CdpSocket] seam.
-///
-/// Records outbound frames, answers them through [responder], and can emit
-/// events or drop the connection on demand, so correlation, timeouts and
-/// disconnect handling are all testable without a browser.
+/// A scriptable [CdpSocket] — the whole point of the seam. Correlation, timeouts
+/// and disconnect handling are all testable without a browser.
 class FakeCdpSocket implements CdpSocket {
   FakeCdpSocket({this.responder});
 

@@ -5,10 +5,8 @@ import 'package:test/test.dart';
 
 import 'support/fake_browser_process.dart';
 
-/// A [DevToolsHttpEndpoint] whose probe answers are scripted.
-///
-/// The last state is repeated once the script runs out, so "not listening,
-/// then listening after the browser starts" is one short list.
+/// A [DevToolsHttpEndpoint] whose probe answers are scripted. The last state
+/// repeats once the script runs out, so a start-up sequence is one short list.
 class ScriptedEndpoint extends DevToolsHttpEndpoint {
   ScriptedEndpoint(this.states, {required super.port});
 

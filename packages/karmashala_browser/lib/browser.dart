@@ -1,14 +1,6 @@
 /// Driving a real Chrome over the DevTools protocol: finding or launching one,
-/// attaching to a page, and reading, clicking and typing in it.
-///
-/// The domain half is the vocabulary — targets, failures and their remedies,
-/// key names, element captures, the consent record and the untrusted-content
-/// fence. The data half is the machinery: Chrome discovery, the HTTP endpoint,
-/// the CDP socket and page, the element picker, page input and the observer.
-///
-/// Pure Dart. The one thing it does not own is the process: [BrowserLauncher]
-/// takes a [BrowserProcessStarter] so the app's own runner spawns the browser
-/// without this package reaching back for it.
+/// attaching to a page, and reading, clicking and typing in it. Pure Dart — the
+/// one thing it does not own is the process, which [BrowserLauncher] is handed.
 library;
 
 export 'src/data/browser_launcher.dart';

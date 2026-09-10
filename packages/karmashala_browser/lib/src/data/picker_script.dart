@@ -2,23 +2,18 @@ import 'dart:convert';
 
 import 'selector_js.dart';
 
-/// Name of the CDP binding the injected picker calls to report a selection.
-///
-/// `Runtime.addBinding` installs a function of this name on the page's global
-/// object; calling it emits a `Runtime.bindingCalled` event on our socket.
-/// That is how a click inside the page becomes a message on the wire.
+/// Name of the CDP binding the injected picker calls. `Runtime.addBinding` puts
+/// a function of this name on the page; calling it emits `Runtime.bindingCalled`
+/// on our socket, which is how a click inside the page becomes a wire message.
 const String kPickerBindingName = '__karmashalaPick';
 
 /// Global the injected picker parks its own teardown function on, so a second
 /// pick (or an explicit cancel) can dismantle the first cleanly.
 const String kPickerNamespace = '__karmashalaPicker';
 
-/// The script injected into the page while picking.
-///
-/// Deliberately small and self-removing: it adds one absolutely-positioned
-/// overlay and six capture-phase listeners, and `stop()` removes every one of
-/// them plus the global it parked. It runs `stop()` **before** reporting, so
-/// the highlight is never baked into the screenshot that follows.
+/// The script injected into the page while picking. Small and self-removing, and
+/// it runs `stop()` *before* reporting so the highlight is never baked into the
+/// screenshot that follows.
 String buildPickerScript({
   String bindingName = kPickerBindingName,
   String namespace = kPickerNamespace,

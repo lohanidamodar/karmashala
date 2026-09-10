@@ -1,9 +1,5 @@
-/// The three shapes a Chrome DevTools Protocol frame can take.
-///
-/// One WebSocket carries request/response *and* asynchronous events. Every
-/// inbound frame is exactly one of: a result for a request id, an error for a
-/// request id, or an unsolicited event. Keeping that as a sealed hierarchy is
-/// what lets the correlation logic be exhaustive rather than defensive.
+/// The three shapes a CDP frame can take. One socket carries request/response
+/// and events, and a sealed hierarchy is what lets correlation be exhaustive.
 sealed class CdpMessage {
   const CdpMessage({this.sessionId});
 

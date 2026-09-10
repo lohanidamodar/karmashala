@@ -5,19 +5,15 @@ import '../domain/browser_failure.dart';
 /// Host operating system, as far as browser locations are concerned.
 enum HostKind { windows, macos, linux }
 
-/// The host we are running on.
 HostKind currentHostKind() {
   if (Platform.isWindows) return HostKind.windows;
   if (Platform.isMacOS) return HostKind.macos;
   return HostKind.linux;
 }
 
-/// Ordered candidate paths for a Chromium-family browser.
-///
-/// `CHROME_EXECUTABLE` (the variable Flutter itself honours) wins, then
-/// `CHROME_PATH`, then the platform's usual install locations. Edge is
-/// included last: it speaks the same protocol, and on Windows it is present on
-/// machines where Chrome is not.
+/// Ordered candidate paths for a Chromium-family browser. `CHROME_EXECUTABLE`
+/// (which Flutter itself honours) wins, then `CHROME_PATH`, then the platform's
+/// usual locations; Edge last, because it speaks the same protocol.
 List<String> chromeCandidatePaths({
   required HostKind host,
   required Map<String, String> env,
@@ -67,10 +63,8 @@ List<String> chromeCandidatePaths({
   return candidates;
 }
 
-/// Locates a browser executable, using [exists] to probe the filesystem.
-///
-/// [exists] is injected so the ordering logic is testable without installing
-/// browsers on the machine running the tests.
+/// Locates a browser executable. [exists] is injected so the ordering is
+/// testable without installing browsers on the machine running the tests.
 String? findChromeExecutable({
   required HostKind host,
   required Map<String, String> env,
@@ -91,14 +85,9 @@ String? locateChromeExecutable({HostKind? host, Map<String, String>? env}) =>
     );
 
 /// The command line used when Karmashala launches its own browser.
-///
-/// [userDataDir] is **always** a throwaway directory of ours. Three reasons,
-/// and all matter: it keeps us out of the user's real profile, cookies and
-/// signed in sessions; it stops an already-running Chrome on the default
-/// profile from swallowing the launch and exiting without ever opening the
-/// debugging port; and since Chrome 136 `--remote-debugging-port` is ignored
-/// outright on the default data directory, so without this switch the launch
-/// below would open no port at all.
+/// [userDataDir] is always a throwaway of ours: it keeps us out of the user's
+/// profile, stops a running Chrome on the default profile swallowing the launch,
+/// and since Chrome 136 `--remote-debugging-port` is ignored on the default one.
 List<String> chromeLaunchArguments({
   required int port,
   required String userDataDir,
