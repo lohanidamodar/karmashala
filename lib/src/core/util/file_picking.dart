@@ -30,10 +30,22 @@
 /// leaves an `opening` line on disk with no matching outcome line, which names
 /// both the freeze and where it happened.
 ///
+/// **So the isolate is asked to be still, not merely to be quick.** [
+/// PickerQuiet] is announced at the same seam: anything that works on this
+/// isolate while the user is looking at a picker registers there, is told to
+/// stop before [openFile] is called and to carry on when the dialog has
+/// answered — whichever way it answered, and even if it threw. The device
+/// pane's live view is the first registrant, and it is the shape the rest
+/// should copy: **pause, never tear down.** A subsystem that dropped its
+/// connection for a dialog would trade a freeze for a reconnect.
+///
 /// **What this cannot do.** Nothing on this isolate can time the picker out or
 /// recover the frame: a `Timer` is a task for the thread that is already
-/// blocked. The way out stays the field beside the button — every surface that
-/// offers Browse also accepts a typed path.
+/// blocked. Nor is quieting a proof: the freeze reported on 2026-09-09 has no
+/// `device-stream` line anywhere in its run, and a healthy stream logs nothing,
+/// so the log neither convicts the live view nor clears it. The way out stays
+/// the field beside the button — every surface that offers Browse also accepts
+/// a typed path.
 library;
 
 import 'package:file_selector/file_selector.dart';
@@ -65,6 +77,76 @@ typedef ShowDirectoryDialog =
 
 final _logger = AppLogger.named('picker');
 
+/// Told `true` when a picker is about to be shown and `false` when it has
+/// answered. Never called with the value it was last given.
+typedef PickerQuietHook = void Function(bool quiet);
+
+/// Everything on this isolate that must stop while a host dialog is being
+/// created — see the library comment.
+///
+/// A registry rather than a call at each Browse button, because the rule is
+/// about the *isolate*, not about the surface: the pane that is busy is rarely
+/// the pane the user is picking from, and a later occupant should be covered by
+/// registering rather than by every picker learning about it.
+class PickerQuiet {
+  /// The one every [pickOneFile] and [pickOneDirectory] announces to.
+  static final PickerQuiet instance = PickerQuiet();
+
+  final List<PickerQuietHook> _hooks = [];
+  int _depth = 0;
+
+  /// Whether a picker is up right now.
+  bool get isQuiet => _depth > 0;
+
+  /// How many subsystems are registered. For a test that has to prove one let
+  /// go of its registration.
+  @visibleForTesting
+  int get registered => _hooks.length;
+
+  /// Registers [hook] and returns the callback that removes it.
+  ///
+  /// A hook registered while a picker is already up is quieted immediately, and
+  /// one removed while a picker is up is released: a subsystem must never be
+  /// left stopped by a dialog it never heard finish.
+  VoidCallback register(PickerQuietHook hook) {
+    _hooks.add(hook);
+    if (isQuiet) _tell(hook, true);
+    return () {
+      if (_hooks.remove(hook) && isQuiet) _tell(hook, false);
+    };
+  }
+
+  /// Quiets every registrant. The returned callback resumes them, and is safe
+  /// to call more than once.
+  VoidCallback begin() {
+    if (_depth++ == 0) {
+      for (final hook in [..._hooks]) {
+        _tell(hook, true);
+      }
+    }
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      if (--_depth == 0) {
+        for (final hook in [..._hooks]) {
+          _tell(hook, false);
+        }
+      }
+    };
+  }
+
+  /// One registrant's failure is not the picker's problem, and above all is not
+  /// a reason to leave the others quiet.
+  void _tell(PickerQuietHook hook, bool quiet) {
+    try {
+      hook(quiet);
+    } on Object catch (error, stack) {
+      _logger.warning('a picker-quiet hook refused $quiet', error, stack);
+    }
+  }
+}
+
 /// Asks the host for one file, announcing it first.
 ///
 /// [what] is the thing being chosen, in the user's words — it is the only part
@@ -75,7 +157,12 @@ Future<XFile?> pickOneFile({
   String? initialDirectory,
   @visibleForTesting ShowFileDialog show = openFile,
   @visibleForTesting Diagnostics? diagnostics,
+  @visibleForTesting PickerQuiet? quiet,
 }) async {
+  // Before the announce, not between it and the call: the flush below yields to
+  // the event loop, and whatever runs in that gap is already on the thread the
+  // dialog is about to need.
+  final resume = (quiet ?? PickerQuiet.instance).begin();
   await _announce('file', what, diagnostics);
   final elapsed = Stopwatch()..start();
   try {
@@ -88,6 +175,8 @@ Future<XFile?> pickOneFile({
   } on Object catch (error, stack) {
     _fail('file', what, elapsed, error, stack);
     return null;
+  } finally {
+    resume();
   }
 }
 
@@ -98,7 +187,9 @@ Future<String?> pickOneDirectory({
   String? initialDirectory,
   @visibleForTesting ShowDirectoryDialog show = getDirectoryPath,
   @visibleForTesting Diagnostics? diagnostics,
+  @visibleForTesting PickerQuiet? quiet,
 }) async {
+  final resume = (quiet ?? PickerQuiet.instance).begin();
   await _announce('directory', what, diagnostics);
   final elapsed = Stopwatch()..start();
   try {
@@ -111,6 +202,8 @@ Future<String?> pickOneDirectory({
   } on Object catch (error, stack) {
     _fail('directory', what, elapsed, error, stack);
     return null;
+  } finally {
+    resume();
   }
 }
 
