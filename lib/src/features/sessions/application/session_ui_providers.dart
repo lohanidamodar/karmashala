@@ -14,14 +14,12 @@ import 'session_providers.dart';
 import 'session_signals.dart';
 
 /// `sessionsRevisionProvider` moved to `session_signals.dart` when it gained a
-/// narrow half; re-exported so the twenty-odd files that import it from here
-/// keep working.
+/// narrow half; re-exported so the files that import it from here keep working.
 export 'session_signals.dart';
 
-/// Sessions belonging to the currently selected repository.
-///
-/// Draws names and statuses, so it says so. It is *not* woken by a permission
-/// mode being set on a row, nor by a project rescan that touched no session.
+/// Sessions belonging to the currently selected repository. Draws names and
+/// statuses, so it says so: not woken by a permission mode being set on a row,
+/// nor by a project rescan that touched no session.
 final sessionsForSelectedRepositoryProvider =
     Provider.autoDispose<List<Session>>((ref) {
       ref.watchSessionKinds(const {
@@ -35,11 +33,9 @@ final sessionsForSelectedRepositoryProvider =
       return ref.read(sessionDaoProvider).getByRepository(repoId);
     });
 
-/// Imported CLI sessions belonging to the selected repository.
-///
-/// Placement is on the list because a *native* row learning its conversation
-/// id hides the imported record for that conversation (`ImportedSessionDao`),
-/// so this list shortens on a fact that is nothing to do with its own rows.
+/// Imported CLI sessions belonging to the selected repository. Placement is on
+/// the list because a *native* row learning its conversation id hides the
+/// imported record for it, so this list shortens on a fact about other rows.
 final importedSessionsForSelectedRepositoryProvider =
     Provider.autoDispose<List<ImportedSession>>((ref) {
       ref.watchSessionKinds(const {
@@ -74,11 +70,9 @@ final importedTranscriptProvider = StreamProvider.autoDispose
         yield const [];
         return;
       }
-      // Antigravity's session file is a database this app cannot read, and it
-      // used to be refused here by name. A plain JSONL transcript sits
-      // elsewhere in the same store on some installs; resolve it **once**, so
-      // the poll below stats the file it is actually going to read, and where
-      // the store keeps none the refusal stands exactly as it did.
+      // Antigravity's session file is a database this app cannot read; a plain
+      // JSONL transcript sits elsewhere in the same store on some installs, so
+      // it is resolved **once** and the poll below stats the file it will read.
       final path = session.cli == AgentIds.antigravity
           ? antigravityTranscriptPathFor(session.filePath)
           : session.filePath;
@@ -93,11 +87,8 @@ final importedTranscriptProvider = StreamProvider.autoDispose
         DateTime? modified;
         try {
           // `stat()` rather than `existsSync()` + `lastModifiedSync()`: this
-          // runs on the UI isolate, and the transcripts it polls can live on a
-          // `\\wsl.localhost\...` share where the synchronous pair measures
-          // 1.19 ms against 0.07 ms locally. One file every two seconds is not
-          // the hitch Loop 90 was chasing, but there is no reason to block for
-          // it — the asynchronous form runs on `dart:io`'s thread pool.
+          // runs on the UI isolate, and on a `\\wsl.localhost\...` share the
+          // synchronous pair measures 1.19 ms against 0.07 ms locally.
           final stat = await file.stat();
           modified = stat.type == FileSystemEntityType.notFound
               ? null
@@ -126,13 +117,10 @@ final selectedImportedSessionIdProvider =
       SelectedImportedSessionController.new,
     );
 
-/// Repositories [sessionId] spans (primary first). Refreshes when *that*
-/// session's checkouts are attached or detached — not when any other session
-/// moves.
-///
-/// Keyed by session rather than by the Explorer's selection: it draws a row
-/// inside one group's conversation, and with two groups up "the selected one"
-/// is a different session from the one that conversation is about.
+/// Repositories [sessionId] spans (primary first), refreshed when *that*
+/// session's checkouts are attached or detached. Keyed by session rather than
+/// by the Explorer's selection: with two groups up, "the selected one" is a
+/// different session from the one this conversation is about.
 final sessionRepositoriesProvider = Provider.autoDispose
     .family<List<Repository>, String>((ref, sessionId) {
       ref.watchSession(sessionId);
@@ -140,15 +128,13 @@ final sessionRepositoriesProvider = Provider.autoDispose
     });
 
 /// Live transcript for [id]: the persisted event history, refreshed whenever
-/// the engine appends a new event to an active session.
-///
-/// Keyed by session for the reason [sessionRepositoriesProvider] gives — the
-/// view that reads it is one group's conversation, and it is named.
+/// the engine appends a new event. Keyed by session for the reason
+/// [sessionRepositoriesProvider] gives — the view that reads it is one group's
+/// conversation, and it is named.
 final sessionTranscriptProvider = StreamProvider.autoDispose
     .family<List<SessionEvent>, String>((ref, id) async* {
-      // Re-subscribe when *this* session is (re)started, so a freshly
-      // relaunched agent's live stream is picked up. Another session starting
-      // used to tear this stream down and rebuild it from the event log.
+      // Re-subscribe when *this* session is (re)started; another session
+      // starting used to tear this stream down and rebuild it from the log.
       ref.watchSession(id);
       final eventDao = ref.read(sessionEventDaoProvider);
       final engine = ref.read(sessionEngineProvider);

@@ -21,11 +21,9 @@ import '../domain/session_status.dart';
 typedef AdapterResolver = AgentAdapter Function(String agentId);
 
 /// Runs agent sessions: persists the normalized, append-only event log, manages
-/// session status, and supports multiple concurrent sessions.
-///
-/// The engine is protocol-agnostic — it talks to [AgentAdapter]/[AgentSession]
-/// and serializes their normalized [AgentEvent]s into [SessionEvent] rows. It is
-/// the single place that drives a session's lifecycle.
+/// session status, and supports multiple concurrent sessions. Protocol-agnostic
+/// — it talks to [AgentAdapter]/[AgentSession] and serializes their normalized
+/// [AgentEvent]s into [SessionEvent] rows.
 class SessionEngine {
   SessionEngine({
     required this.sessionDao,
@@ -52,17 +50,16 @@ class SessionEngine {
 
   bool isActive(String sessionId) => _runtimes.containsKey(sessionId);
 
-  /// A live broadcast of events for an active session, or `null` if not running.
+  /// A live broadcast of events for an active session, or `null` if not
+  /// running.
   Stream<SessionEvent>? watch(String sessionId) =>
       _runtimes[sessionId]?.controller.stream;
 
   /// Completes when an active session finishes (completed/failed/cancelled).
   Future<void>? whenDone(String sessionId) => _runtimes[sessionId]?.done.future;
 
-  /// Starts a session for [repository] using [installation].
-  ///
-  /// When [useWorktree] is set, a dedicated Git worktree is created first and the
-  /// agent runs there; otherwise it runs in the repository itself.
+  /// Starts a session for [repository] using [installation]. With [useWorktree]
+  /// a dedicated Git worktree is created first and the agent runs there.
   Future<Session> start({
     required Repository repository,
     required AgentInstallation installation,
@@ -119,9 +116,9 @@ class SessionEngine {
     return session;
   }
 
-  /// Relaunches the agent for an existing [session] (e.g. one that has ended), so
-  /// the user can continue it. No-op if it is already active. Reuses the same
-  /// session id and event log.
+  /// Relaunches the agent for an existing [session] so the user can continue
+  /// it. No-op if it is already active; reuses the same session id and event
+  /// log.
   Future<void> resume({
     required Session session,
     required EnvironmentPath workingDirectory,
@@ -209,10 +206,9 @@ class SessionEngine {
     String type,
     Map<String, Object?> data,
   ) {
-    // The one field that ever carries a tool's output, bounded at the row —
-    // the same cut the live stream and provider-history rehydration make. A
-    // stored row that kept more was a payload a reopened session could restore
-    // after the phone had already been sent the trimmed one.
+    // The one field that ever carries a tool's output, bounded at the row — the
+    // same cut the live stream makes. A stored row that kept more could restore
+    // a payload the phone had already been sent trimmed.
     final text = data['text'];
     final payload = text is String
         ? {...data, 'text': boundedText(text).$1}
@@ -241,17 +237,11 @@ class SessionEngine {
     if (!runtime.done.isCompleted) runtime.done.complete();
   }
 
-  /// Ends every active run and releases what it holds.
-  ///
-  /// Nothing else does: [_finish] is driven by the agent's own stream closing,
-  /// and on quit that never happens — the app goes away first, leaving an
-  /// [AgentSession] child process and a [StreamSubscription] per active run.
-  ///
-  /// Deliberately not [_finish]: this is the app closing, not the sessions
-  /// ending, so no status is written and no lifecycle event is appended. A run
-  /// that was `running` stays `running`, which is what a resume needs to see.
-  ///
-  /// Idempotent; the returned future completes once every agent has stopped.
+  /// Ends every active run and releases what it holds. Nothing else does:
+  /// [_finish] is driven by the agent's own stream closing, and on quit that
+  /// never happens. Deliberately not [_finish] — this is the app closing, not
+  /// the sessions ending, so no status is written and a run that was `running`
+  /// stays `running`, which is what a resume needs to see. Idempotent.
   Future<void> dispose() => _disposal ??= _stopAll();
 
   Future<void>? _disposal;

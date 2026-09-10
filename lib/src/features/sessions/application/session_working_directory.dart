@@ -9,18 +9,12 @@ import '../../repositories/application/repository_providers.dart';
 import '../domain/session.dart';
 import 'session_providers.dart';
 
-/// The directory a session's agent actually runs in: the one it recorded when
-/// it has one, then its worktree, then the repository itself. `null` when the
-/// session or its repository is gone.
-///
-/// The order is the order of decreasing certainty. `Session.workingDirectory`
-/// is where the process was *observed or started*; the worktree is where a
-/// worktree session must be; the repository root is the fallback that was the
-/// only answer before schema v22, and is a guess rather than a record.
-///
-/// This is deliberately *not* `selectedRepositoryIdProvider` — that tracks the
-/// repository pane's selection, which for a worktree session points somewhere
-/// the agent is not.
+/// The directory a session's agent actually runs in: the one it recorded, then
+/// its worktree, then the repository itself — the order of decreasing
+/// certainty, where the root is a guess rather than a record. `null` when the
+/// session or its repository is gone. Deliberately *not*
+/// `selectedRepositoryIdProvider`, which for a worktree session points
+/// somewhere the agent is not.
 EnvironmentPath? sessionWorkingDirectory(Ref ref, String sessionId) {
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return null;
@@ -34,13 +28,10 @@ EnvironmentPath? sessionWorkingDirectoryOf(Ref ref, Session session) {
   return ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
 }
 
-/// Whether a directory a session recorded is still there.
-///
-/// A seam, like `remoteFolderMissingProvider`: production touches the
-/// filesystem, tests stub it. **True also means "could not tell"** — a path in
-/// an environment with no translation to a Windows-reachable form is never
-/// declared missing, because refusing a directory we merely failed to check
-/// would break every SSH session to close a much smaller hole.
+/// Whether a directory a session recorded is still there. A seam: production
+/// touches the filesystem, tests stub it. **True also means "could not tell"**
+/// — refusing a directory we merely failed to check would break every SSH
+/// session to close a much smaller hole.
 final sessionDirectoryPresentProvider =
     Provider<bool Function(EnvironmentPath directory)>((ref) {
       return (directory) {
@@ -51,9 +42,8 @@ final sessionDirectoryPresentProvider =
           var resolved = directory.path;
           // A path on this machine is already the name this process opens it
           // by. Asking only about `windowsNative` meant a Mac fell into the
-          // translation branch, found no Windows environment to translate to,
-          // and answered "could not tell" for every session it owns — so a
-          // checkout deleted under the app was never flagged.
+          // translation branch, found nothing to translate to, and answered
+          // "could not tell" for every session it owns.
           if (!isLocalHost(env.kind)) {
             ExecutionEnvironment? windows;
             for (final candidate in environments.getAll()) {
@@ -76,13 +66,9 @@ final sessionDirectoryPresentProvider =
     });
 
 /// [directory] when it is still there, otherwise [fallback] and the plain words
-/// explaining the substitution.
-///
-/// The one place the fallback is decided, so a resume into a pane, a resume
-/// into an external terminal and a handoff all behave the same way and say the
-/// same thing. A `null` [directory] — a row from before schema v22 — is not a
-/// substitution and earns no notice: nothing was recorded, so nothing was
-/// replaced.
+/// explaining the substitution — the one place that is decided, so a resume
+/// into a pane, a resume into an external terminal and a handoff all behave the
+/// same way. A `null` [directory] is not a substitution and earns no notice.
 ({EnvironmentPath directory, String? notice}) directoryOrFallback(
   Ref ref, {
   required EnvironmentPath? directory,

@@ -14,10 +14,9 @@ import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 import 'session_working_directory.dart';
 
-/// Why a recap could not be written. Never a bare failure: every sentence here
-/// is one a person can act on, and the one that matters most — this session has
-/// no transcript to read — is the chat view's **own** words, so the refusal and
-/// the empty conversation behind it cannot describe one session differently.
+/// Why a recap could not be written. Never a bare failure, and the one that
+/// matters most — this session has no transcript to read — is the chat view's
+/// **own** words, so the refusal and the empty conversation cannot disagree.
 class SessionRecapRefusal implements Exception {
   SessionRecapRefusal(this.reason);
   final String reason;
@@ -27,18 +26,11 @@ class SessionRecapRefusal implements Exception {
 
 /// Writes the recap a person asked for, by running the session's own CLI.
 ///
-/// **Only ever from the action.** There is no tick, no launch hook and no
-/// end-of-session hook anywhere in this file's callers, and that is the whole
-/// decision behind the feature rather than an accident of where the button
-/// went: a recap costs a turn of the owner's quota, and `session_recap_test`
-/// counts the spawns across a launch, an end and a restore to keep it true.
-///
-/// It also does not type into the running session. `SessionHandoffService`
-/// does — its brief is asked for down `session_send` and waited for on
-/// `session_wait`, because the packet wants *that agent's* view of its own
-/// context. A recap wants the conversation, which is on disk, so it starts a
-/// second process in print mode and lets it exit. Nothing is added to the
-/// session the user comes back to.
+/// **Only ever from the action**: no tick, no launch hook and no end-of-session
+/// hook, because a recap costs a turn of the owner's quota —
+/// `session_recap_test` counts the spawns to keep it true. It does not type
+/// into the running session either: a recap wants the conversation, which is on
+/// disk, so it starts a second process in print mode and lets it exit.
 class SessionRecapService {
   SessionRecapService(this._ref);
 
@@ -73,9 +65,8 @@ class SessionRecapService {
       );
     }
 
-    // The reading, not the allowlist. A session with no readable transcript
-    // refuses in the conversation's own sentence, which is the one already on
-    // screen behind this action.
+    // The reading, not the allowlist: a session with no readable transcript
+    // refuses in the conversation's own sentence.
     final reading = await _ref.read(
       sessionChatViewProbeProvider(sessionId).future,
     );
@@ -104,8 +95,7 @@ class SessionRecapService {
     }
 
     // Asked for explicitly wherever the CLI takes a flag, so the stored row can
-    // name the model truthfully. Where it takes none the row says nothing
-    // rather than repeating the session's model as though we had asked for it.
+    // name the model truthfully; where it takes none, the row says nothing.
     final model = _ref.read(sessionModelProvider(sessionId))?.modelId;
     final flag = descriptor.launch.model.flag;
     final modelArguments = flag.isEmpty || model == null || model.isEmpty
@@ -155,9 +145,8 @@ class SessionRecapService {
       text: text,
       agentId: installation.agentId,
       model: modelArguments.isEmpty ? null : model,
-      // What the conversation held when it was read — not how much of it fit,
-      // which the document itself says in its first line. This is the number
-      // "the session has moved since" is counted against.
+      // What the conversation held when it was read — the number "the session
+      // has moved since" is counted against.
       turnCount: turns.length,
       writtenAt: _ref.read(clockProvider).nowUtc(),
     );
@@ -182,18 +171,12 @@ class SessionRecapService {
     return readCliTranscript(path, agentId);
   }
 
-  /// The conversation as one document, **newest-first-fitted**.
-  ///
-  /// Bounded at [kMaxTranscriptTextBytes] — the one number every other path
-  /// this app moves transcript text down is bounded at — and the turns that fit
-  /// are taken from the **end**, because a recap is asked for by somebody
-  /// returning to a session and the end is what they are returning to. Cutting
-  /// from the end instead would recap the opening of a conversation and call it
-  /// a conclusion.
-  ///
-  /// When anything is left out the document says so in its first line. A model
+  /// The conversation as one document, **newest-first-fitted**: bounded at
+  /// [kMaxTranscriptTextBytes], and the turns that fit are taken from the
+  /// **end**, because a recap is asked for by somebody returning to a session.
+  /// When anything is left out the document says so in its first line — a model
   /// told it has the whole conversation will write about the whole
-  /// conversation, which is how a bound becomes a false statement.
+  /// conversation.
   String _blob(List<TranscriptMessage> turns) {
     final kept = <String>[];
     var bytes = 0;
@@ -220,10 +203,9 @@ final sessionRecapServiceProvider = Provider<SessionRecapService>(
   SessionRecapService.new,
 );
 
-/// The recap [sessionId] holds, or null when nobody has asked for one.
-///
-/// A plain read of the stored row, invalidated by the service after a write.
-/// Nothing here refreshes on its own — the row only changes when a person asks.
+/// The recap [sessionId] holds, or null when nobody has asked for one. A plain
+/// read of the stored row, invalidated by the service after a write; nothing
+/// here refreshes on its own.
 final sessionRecapProvider = Provider.autoDispose.family<SessionRecap?, String>(
   (ref, sessionId) => ref.watch(sessionRecapDaoProvider).forSession(sessionId),
 );

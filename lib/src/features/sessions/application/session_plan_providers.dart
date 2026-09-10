@@ -9,28 +9,19 @@ import 'session_chat_view_providers.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
-/// **How long a plan can stand still before it is worth pointing at.**
-///
-/// Fifteen minutes, taken from agenttrail (`0d5d151`), which infers a missed
-/// `Stop` after exactly that and archives a run after two hours — the same
-/// problem from the other end. Borrowed rather than invented because the number
-/// has been lived with, and because `Stop` is precisely the event we cannot
-/// rely on for every agent here.
-///
-/// **It is not a claim that the agent is stuck**, and nothing worded from it
-/// may say so. It says the plan has not moved in fifteen minutes, which is a
-/// reading with an age on it (§19) rather than a diagnosis. An agent can sit on
-/// one item for an hour legitimately; the point is that a reader should be able
-/// to see which of four is the one that has.
+/// **How long a plan can stand still before it is worth pointing at.** Fifteen
+/// minutes, borrowed from agenttrail (`0d5d151`) rather than invented, because
+/// the number has been lived with. It is **not** a claim that the agent is
+/// stuck — one item can legitimately take an hour; it says only which of four
+/// has not moved.
 const Duration kPlanGoesStaleAfter = Duration(minutes: 15);
 
 /// Why there is no plan to draw. Four shapes, because they are four different
 /// sentences and collapsing them is what makes an empty list a lie.
 enum AgentPlanAbsence {
-  /// **This agent keeps no plan we can read.** A capability answer, measured
-  /// per CLI and carried on the descriptor with its evidence — see
-  /// [AgentPlanSupport]. The panel says so in words rather than drawing an
-  /// empty list, which reads as "no work planned".
+  /// **This agent keeps no plan we can read** — a capability answer, measured
+  /// per CLI and carried on the descriptor with its evidence. The panel says so
+  /// in words rather than drawing an empty list, which reads as "no work".
   agentPublishesNone,
 
   /// The agent does keep one, and has not written one in this conversation
@@ -43,39 +34,27 @@ enum AgentPlanAbsence {
   noRecord,
 
   /// **There is a record and we have not read it.** The transcript is re-read
-  /// only while a conversation is the surface in front (see
-  /// [chatTranscriptPollingProvider]); nothing here arms a second poll to close
-  /// that, so this is the honest answer while every group shows its terminal.
+  /// only while a conversation is the surface in front, and nothing here arms a
+  /// second poll to close that gap.
   notRead,
 }
 
-/// **One reading of an agent's own plan, with the age of the reading on it.**
+/// **One reading of an agent's own plan, with the age of the reading on it** —
+/// a plan that has been overtaken looks exactly like a current one, and a
+/// reader glancing at four of them cannot tell which is which without the age.
 ///
-/// §19's rule, applied to the one surface where a stale value is worse than no
-/// value: a plan that has been overtaken looks exactly like a plan that is
-/// current, and a reader glancing at four of them cannot tell which is which
-/// without the age.
-///
-/// [writtenAt] is **when the agent wrote the plan**, from the transcript line's
-/// own timestamp — never a first-sighting time, the same rule
-/// [OutstandingCall.startedAt] follows. One age rather than two (written, read)
-/// on purpose: a plan we hold can never be newer than the last time we read the
-/// file, so the written time is already the conservative of the pair, and a
-/// second number nobody can act on is a number that trains the eye to skip the
-/// row.
-///
-/// A value type with real equality, for [SessionActivity]'s reason: the file
-/// moves constantly and a re-parse that found the same plan must leave the
-/// panel asleep.
+/// [writtenAt] is when the agent *wrote* the plan, from the transcript line's
+/// own timestamp, never a first-sighting time. One age rather than two: a plan
+/// we hold can never be newer than the last read, so the written time is
+/// already the conservative of the pair. Real equality, so a re-parse that
+/// found the same plan leaves the panel asleep.
 class AgentPlanReading {
   const AgentPlanReading.of(AgentPlan this.plan, {required this.writtenAt})
     : absence = null,
       refusal = '';
 
   /// There is nothing to draw, and [absence] says which nothing it is.
-  /// [refusal] is the sentence behind it when there is a more specific one —
-  /// the agent's own recorded refusal for [AgentPlanAbsence.agentPublishesNone],
-  /// and `SessionChatView.reason` for [AgentPlanAbsence.noRecord].
+  /// [refusal] is the more specific sentence behind it when there is one.
   const AgentPlanReading.absent(AgentPlanAbsence this.absence,
       {this.refusal = ''})
     : plan = null,
@@ -105,11 +84,8 @@ class AgentPlanReading {
   }
 
   /// Whether this plan has work left in it and has not moved for
-  /// [kPlanGoesStaleAfter].
-  ///
-  /// False for a finished plan however old it is: a list whose items are all
-  /// done is a completed piece of work, not a stalled one, and marking it would
-  /// be the loudest wrong answer this panel could give.
+  /// [kPlanGoesStaleAfter]. False for a finished plan however old it is: a list
+  /// whose items are all done is completed work, not stalled work.
   bool isStaleAt(DateTime now) {
     final current = plan;
     if (current == null || current.isFinished) return false;
@@ -135,23 +111,15 @@ class AgentPlanReading {
 }
 
 /// **The plan [messages] leaves standing: the last snapshot, and when it was
-/// written.**
+/// written.** One walk of a list the parse already produced; nothing here opens
+/// a file.
 ///
-/// One walk of a list the parse already produced — no second read, no second
-/// poll, and nothing here opens a file, exactly as [outstandingCallsIn] does.
-///
-/// **Last one wins, and that is measured rather than assumed.** Both CLIs that
-/// have a plan resend the whole list on every change (the counts are on
-/// [kClaudeCodeTodoWrite] and [kCodexUpdatePlan]), so folding would draw items
+/// Last one wins, and that is measured rather than assumed: both CLIs that keep
+/// a plan resend the whole list on every change, so folding would draw items
 /// the agent had already dropped — one real session goes 15 items → 4 → 11 and
-/// ends at 1. A CLI that publishes deltas would need a different fold, which is
-/// why [AgentPlanStyle] records which kind each one is instead of leaving it
-/// implicit here.
-///
-/// A row whose plan failed to parse contributes **nothing** rather than an
-/// empty plan, so a format that changed under us leaves the last plan we did
-/// understand on screen with its age, rather than replacing it with "no work
-/// planned".
+/// ends at 1. A row whose plan failed to parse contributes **nothing** rather
+/// than an empty plan, so a changed format leaves the last plan we understood
+/// on screen.
 AgentPlanReading agentPlanIn(List<TranscriptMessage> messages) {
   AgentPlan? plan;
   DateTime? at;
@@ -167,23 +135,13 @@ AgentPlanReading agentPlanIn(List<TranscriptMessage> messages) {
 }
 
 /// **The plan one session's agent is working to**, for the panel beside its
-/// pane.
-///
-/// Derived entirely from the transcript the conversation is already watching —
-/// `sessionChatTranscriptProvider` is an `autoDispose` family, so the panel, the
-/// conversation and the activity strip share one subscription, one poll and one
-/// parse. Nothing here adds a read, and **nothing here polls**.
-///
-/// The consequence is stated rather than hidden: that subscription only works
-/// while a conversation is the surface in front, so with every group showing
-/// its terminal this answers [AgentPlanAbsence.notRead] and then, once it has
-/// read, an ageing plan that says how old it is. Closing that gap would mean
-/// either a second poll — refused — or a hook path, and neither was built here.
-///
-/// Not gated on the session *working*, unlike
-/// [sessionOutstandingCallsProvider]: a finished plan on an idle agent is worth
-/// exactly as much as a live one, and telling those two apart is the question
-/// the panel exists for.
+/// pane. Derived entirely from the transcript the conversation is already
+/// watching, so the panel, the conversation and the activity strip share one
+/// subscription, one poll and one parse; **nothing here polls**. That
+/// subscription only works while a conversation is the surface in front, so
+/// behind the terminal this answers [AgentPlanAbsence.notRead]. Not gated on
+/// the session *working*: a finished plan on an idle agent is worth as much as
+/// a live one, and telling those apart is what the panel exists for.
 final sessionAgentPlanProvider = Provider.autoDispose
     .family<AgentPlanReading, String>((ref, sessionId) {
       ref.watchSessionKinds(const {
@@ -197,9 +155,7 @@ final sessionAgentPlanProvider = Provider.autoDispose
 
       // The capability answer comes first and costs nothing: an agent that
       // keeps no plan must never reach a transcript subscription — nor a
-      // `SessionChatView` probe — to find that out. Antigravity is the one that
-      // publishes none, and whether its *record* can be read is now a separate
-      // per-session question this never has to ask.
+      // `SessionChatView` probe — to find that out.
       final agentId = ref
           .read(agentInstallationDaoProvider)
           .getById(row.agentInstallationId)
@@ -225,11 +181,9 @@ final sessionAgentPlanProvider = Provider.autoDispose
         );
       }
 
-      // **Which nothing, in the reading's own words.** The panel used to say
-      // "it is running somewhere this app cannot follow, or it has not said
-      // anything yet" for every shape at once; `SessionChatView.reason` tells
-      // an unreadable store from a session whose transcript file is simply not
-      // there, and this is the sentence the panel draws.
+      // **Which nothing, in the reading's own words**: `SessionChatView.reason`
+      // tells an unreadable store from a session whose transcript file is
+      // simply not there, where the panel used to say both at once.
       final chatView = ref.watch(sessionChatViewProvider(sessionId));
       if (!chatView.hasChatView) {
         return AgentPlanReading.absent(
@@ -242,10 +196,9 @@ final sessionAgentPlanProvider = Provider.autoDispose
           .watch(sessionChatTranscriptProvider(sessionId))
           .asData
           ?.value;
-      // Empty is **not** "no plan". The chat source yields an empty list before
+      // Empty is **not** "no plan": the chat source yields an empty list before
       // it has located the file and while the poll is paused behind the
-      // terminal, and a conversation with no turns in it has no plan either
-      // way — so both are the same honest answer and neither is a zero.
+      // terminal, and a conversation with no turns has no plan either way.
       if (messages == null || messages.isEmpty) {
         return const AgentPlanReading.absent(AgentPlanAbsence.notRead);
       }
