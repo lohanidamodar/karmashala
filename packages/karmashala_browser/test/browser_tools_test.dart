@@ -217,10 +217,8 @@ void main() {
     test('a click says what it hit and where', () async {
       final (tools, _) = await connectedTools(replies: standard);
       final text = textOf(await tools.call('browser_click', {'text': 'Go'}));
-      // The element's own listing moved inside the untrusted-content fence
-      // when the trust boundary went in: `button#go` is the page's tag and the
-      // page's id, so it cannot sit in our sentence. What we say — that a
-      // click happened, where, and to look again — stays outside it.
+      // `button#go` is the page's tag and the page's id, so the listing sits
+      // inside the fence; what we say about the click stays outside it.
       expect(text, contains('Clicked'));
       expect(text, contains('clicked: button#go'));
       expect(text, contains('(60, 35)'));
@@ -414,9 +412,8 @@ void main() {
 
   group('the consent gate', () {
     test('evaluate is refused when nothing granted it', () async {
-      // `BrowserTools(service)` with no consent is the fail-closed default:
-      // a code path that forgets to thread the gate through must not be the
-      // permissive one.
+      // The fail-closed default: a code path that forgets to thread the gate
+      // through must not be the permissive one.
       final (tools, _) = await connectedTools();
       await expectLater(
         tools.call('browser_evaluate', {'expression': 'document.cookie'}),

@@ -23,9 +23,8 @@ const int kTIOCGWINSZ = 0x5413;
 const int kOReadWrite = 2; // O_RDWR
 const int kPosixSpawnSetsid = 0x80; // glibc POSIX_SPAWN_SETSID
 
-/// glibc's `posix_spawnattr_t` is 336 bytes and `posix_spawn_file_actions_t`
-/// 80 on x86_64; both are opaque and neither is in a header we can read from
-/// Dart. Over-allocating is harmless and survives a libc that grew them.
+/// glibc's `posix_spawnattr_t` is 336 bytes and `posix_spawn_file_actions_t` 80
+/// on x86_64, both opaque; over-allocating survives a libc that grew them.
 const int kOpaqueSpawnStructBytes = 1024;
 
 typedef OpenptyNative =
@@ -55,15 +54,12 @@ typedef PosixSpawnDart =
       Pointer<Pointer<Uint8>>,
     );
 
-/// Where the pty entry points were actually found, reported rather than
-/// assumed: glibc 2.34 folded `libutil` into `libc`, older ones did not.
+/// Where the pty entry points were found: glibc 2.34 folded `libutil` into
+/// `libc`, older ones did not.
 enum PtySymbolSource { libc, libutil }
 
 /// libc as this process sees it, plus the pty entry points wherever they live.
-///
-/// One instance per isolate: `DynamicLibrary` handles do not travel over a
-/// `SendPort`, so the reader isolate calls [open] again rather than receiving
-/// this object.
+/// One instance per isolate: a `DynamicLibrary` cannot travel over a `SendPort`.
 class Libc {
   Libc._(this._libc, this.ptySymbolSource, this.ptySymbolLibrary)
     : openpty = _resolveOpenpty(_libc, ptySymbolSource == PtySymbolSource.libc ? _libc : _util!),
@@ -153,9 +149,8 @@ class Libc {
 
   int get errno => errnoLocation().value;
 
-  /// `posix_spawn_file_actions_addchdir_np` is glibc 2.29+. A host without it
-  /// still runs sessions; it just cannot honour a working directory, and the
-  /// launcher says so rather than starting the child in the wrong place.
+  /// glibc 2.29+. Without it a host still runs sessions but refuses a working
+  /// directory rather than starting the child in the wrong place.
   late final int Function(Pointer<Void>, Pointer<Uint8>)? faAddChdir = () {
     try {
       return _libc
@@ -173,9 +168,8 @@ class Libc {
 
   static Libc? _instance;
 
-  /// libc first, then `libutil.so.1`. Resolving in that order is the whole
-  /// point: on glibc >= 2.34 libutil is an empty stub, and on a host old
-  /// enough to need it, libc alone has no `openpty` at all.
+  /// libc first, then `libutil.so.1`: on glibc >= 2.34 libutil is an empty stub,
+  /// and on a host old enough to need it libc has no `openpty` at all.
   static Libc open() {
     final existing = _instance;
     if (existing != null) return existing;
@@ -193,11 +187,8 @@ class Libc {
     return _instance = Libc._(libc, source, library);
   }
 
-  /// `forkpty` is looked up but deliberately never called: after `fork` in a
-  /// multithreaded VM only async-signal-safe code is legal, and returning into
-  /// Dart is not. The pty pair comes from `openpty` and the child from
-  /// `posix_spawn`, which glibc implements with CLONE_VFORK. Reported because
-  /// it answers the same "which library" question `openpty` does.
+  /// Looked up, never called: after `fork` in a multithreaded VM only
+  /// async-signal-safe code is legal and returning into Dart is not.
   bool get providesForkpty =>
       _libc.providesSymbol('forkpty') || (_util?.providesSymbol('forkpty') ?? false);
 }

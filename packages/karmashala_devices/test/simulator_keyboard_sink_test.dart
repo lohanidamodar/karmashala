@@ -110,8 +110,7 @@ void main() {
   group('characters', () {
     test('are typed as text, not translated into keys', () async {
       // XCUITest's typeText produces whatever the iOS keyboard can, so an
-      // accent and an emoji travel as themselves rather than through a map
-      // that would have to refuse them.
+      // accent and an emoji travel as themselves.
       expect(sink.send(const DeviceTextIntent('é')), isTrue);
       expect(sink.send(const DeviceTextIntent('🙂')), isTrue);
       await Future<void>.delayed(Duration.zero);
@@ -124,9 +123,8 @@ void main() {
 
   group('named keys', () {
     test('go out as HID presses, never as typed text', () async {
-      // The whole reason `pressKey` exists: posting the XCUIKeyboardKey escape
-      // for Left Arrow to /wda/keys inserts U+F702 into the focused field as a
-      // character instead of moving the caret.
+      // The whole reason `pressKey` exists: the XCUIKeyboardKey escape for Left
+      // Arrow inserts U+F702 as a character instead of moving the caret.
       expect(sink.send(_down(DesktopKey.arrowLeft)), isTrue);
       expect(sink.send(_down(DesktopKey.backspace)), isTrue);
       expect(sink.send(_down(DesktopKey.enter)), isTrue);
@@ -179,9 +177,8 @@ void main() {
       expect(backend.pressed, isEmpty);
       expect(sink.refusal, isNotNull);
       expect(sink.refusal, startsWith('iOS has no'));
-      // The specific reason, not the transport's blanket line about chords —
-      // that would send the user hunting for a modifier problem they do not
-      // have.
+      // The specific reason, not the transport's blanket line about chords,
+      // which would send the user hunting for a problem they do not have.
       expect(
         sink.refusal,
         isNot(DeviceKeyboardTransport.webDriverAgent.limitation),
@@ -249,9 +246,9 @@ void main() {
     });
 
     test('carries the HID keyboard-page usages the simulator was probed with', () {
-      // Measured against WebDriverAgent 16.11.4 on an iOS 18.2 simulator:
-      // page 0x07 with these usages moved the caret, deleted, dismissed the
-      // field's edit and submitted it respectively.
+      // Measured against WebDriverAgent 16.11.4 on an iOS 18.2 simulator: page
+      // 0x07 with these usages moved the caret, deleted, dismissed and
+      // submitted.
       expect(SimulatorKey.arrowLeft.hidUsage, 0x50);
       expect(SimulatorKey.backspace.hidUsage, 0x2A);
       expect(SimulatorKey.escape.hidUsage, 0x29);

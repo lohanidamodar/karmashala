@@ -12,33 +12,25 @@ class BacklogSlice {
   final int offset;
   final Uint8List bytes;
 
-  /// How much the caller asked for that the ring had already overwritten.
-  /// A viewer that has been away for a week is told what it lost rather than
-  /// being handed a stream that silently skips.
+  /// How much the caller asked for that the ring had already overwritten, so a
+  /// long-absent viewer is told what it lost rather than handed a silent skip.
   final int droppedBytes;
 
   int get nextOffset => offset + bytes.length;
   bool get isEmpty => bytes.isEmpty;
 }
 
-/// A session's output, bounded, addressed by absolute byte count.
-///
-/// Bounded because a session that runs for a week must not grow without limit;
-/// absolute because a client that reconnects says "everything since N" and the
-/// host must be able to answer exactly, or say how much it cannot.
+/// A session's output, bounded, addressed by absolute byte count: a client
+/// reconnecting asks for "everything since N" and gets it, or a count of what
+/// is gone.
 class OutputBacklog {
   OutputBacklog({this.capacityBytes = defaultCapacityBytes})
     : assert(capacityBytes > 0),
       _ring = Uint8List(capacityBytes);
 
-  /// A ring rebuilt from a record on disk: [tail] is the newest bytes that
-  /// survived and [totalBytes] is the absolute count the session had reached.
-  ///
-  /// The two are separate because they are separately true — a session that
-  /// produced 40 MiB and kept the last 4 must answer `attach since 39_000_000`
-  /// with bytes, and `attach since 0` with a count of what it discarded. A
-  /// restarted host that reset the total to `tail.length` would hand every
-  /// client an offset from a different session's numbering.
+  /// A ring rebuilt from disk. [tail] and [totalBytes] are separate because they
+  /// are separately true: resetting the total to `tail.length` would renumber
+  /// every offset a client already holds.
   factory OutputBacklog.restored({
     int capacityBytes = defaultCapacityBytes,
     required int totalBytes,
@@ -60,8 +52,8 @@ class OutputBacklog {
   int _held = 0;
   int _total = 0;
 
-  /// Every byte the session has ever produced. This is the offset the next
-  /// chunk will start at, and what a client stores to reattach.
+  /// Every byte ever produced: where the next chunk starts, and what a client
+  /// stores to reattach.
   int get totalBytes => _total;
 
   /// The oldest offset still answerable. Below it the ring has overwritten.
@@ -91,10 +83,8 @@ class OutputBacklog {
     _held = (_held + chunk.length).clamp(0, capacityBytes);
   }
 
-  /// Everything from [offset] on. An offset older than the ring is clamped and
-  /// the shortfall reported; an offset ahead of what exists — a client from a
-  /// previous host, or a bug — yields nothing at [totalBytes] rather than
-  /// pretending, so the client resynchronises instead of reading garbage.
+  /// Everything from [offset] on: older than the ring is clamped with the
+  /// shortfall reported, ahead of it yields nothing at [totalBytes].
   BacklogSlice since(int offset) {
     if (offset >= _total) {
       return BacklogSlice(offset: _total, bytes: Uint8List(0), droppedBytes: 0);

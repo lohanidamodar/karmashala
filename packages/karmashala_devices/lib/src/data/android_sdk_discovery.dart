@@ -12,12 +12,9 @@ String _join(EnvironmentKind kind, List<String> parts) {
       .join(sep);
 }
 
-/// Ordered SDK root candidates for [kind], given the environment variables
-/// [env] read from that environment.
-///
-/// `ANDROID_HOME` wins, then the deprecated-but-common `ANDROID_SDK_ROOT`, then
-/// the platform's default install location. Blank values are ignored — an
-/// unset variable often expands to an empty string rather than being absent.
+/// Ordered SDK root candidates for [kind], given the environment variables [env]
+/// read from that environment. `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then the
+/// platform default. Blank values are ignored: unset often expands to empty.
 List<String> sdkCandidateRoots({
   required EnvironmentKind kind,
   required Map<String, String> env,
@@ -42,9 +39,8 @@ List<String> sdkCandidateRoots({
     case EnvironmentKind.localPosix:
       final home = env['HOME']?.trim();
       if (home != null && home.isNotEmpty) {
-        // Android Studio's default on macOS; on Linux it is ~/Android/Sdk.
-        // Both are offered because these are candidates, probed in order, and
-        // the kind alone does not say which of the two POSIX hosts this is.
+        // Android Studio's default on macOS; on Linux it is ~/Android/Sdk. Both
+        // are offered because the kind alone does not say which POSIX host.
         add(_join(kind, [home, 'Library', 'Android', 'sdk']));
         add(_join(kind, [home, 'Android', 'Sdk']));
         add(_join(kind, [home, 'android-sdk']));
@@ -88,26 +84,18 @@ String? sdkRootFromAdbPath(String adbPath, EnvironmentKind kind) {
   return trimmed.join(sep);
 }
 
-/// Marks a line of [environmentRequest]'s output as one of ours.
-///
-/// A login shell runs the user's profile, and profiles print things — a version
-/// manager's banner, a fortune, a warning about a missing tool. Reading values
-/// off line numbers would hand the SDK root whatever that noise happened to
-/// say, so each value names itself and everything unmarked is ignored.
+/// Marks a line of [environmentRequest]'s output as one of ours. A login shell
+/// runs the user's profile, and profiles print things, so each value names
+/// itself and everything unmarked is ignored.
 const kEnvMarker = '__karmashala_env:';
 
 /// Command that prints every one of [names] with its value, in **one** shell.
-///
-/// One, not one per variable, and that is the whole point: on POSIX this is a
-/// *login* shell — needed so `PATH` and `ANDROID_HOME` from `~/.profile` are
-/// visible at all — and a login shell costs about 63ms on the owner's Mac
-/// against 72ms for one that answers all three. Asked separately, reading three
-/// variables cost 190ms of the device pane's first open.
+/// One, not one per variable: on POSIX this is a *login* shell, and asking
+/// separately cost 190 ms of the device pane's first open.
 CommandRequest environmentRequest(EnvironmentKind kind, List<String> names) =>
     switch (kind) {
       // `echo %VAR%` prints the literal `%VAR%` when unset; the caller treats
-      // that as empty. No space before `&`, or the value picks up a trailing
-      // one.
+      // that as empty. No space before `&`, or the value gains a trailing one.
       EnvironmentKind.windowsNative => CommandRequest(
         executable: 'cmd',
         arguments: [
@@ -126,10 +114,8 @@ CommandRequest environmentRequest(EnvironmentKind kind, List<String> names) =>
       ),
     };
 
-/// The values [environmentRequest] printed, by name.
-///
-/// Unmarked lines are dropped, and so is a Windows value that came back as the
-/// literal `%NAME%` — that is `cmd`'s way of saying the variable is unset.
+/// The values [environmentRequest] printed, by name. Unmarked lines are dropped,
+/// and so is a Windows value of the literal `%NAME%` — `cmd` for "unset".
 Map<String, String> parseEnvironmentOutput(String stdout) {
   final values = <String, String>{};
   for (final line in stdout.split(RegExp(r'[\r\n]+'))) {
@@ -146,14 +132,9 @@ Map<String, String> parseEnvironmentOutput(String stdout) {
   return values;
 }
 
-/// Command that succeeds only when [path] is a runnable SDK tool.
-///
-/// The tool is **executed** (with a harmless version flag) rather than tested
-/// for existence. That is deliberate on two counts: it proves the binary
-/// actually runs rather than merely being present, and it avoids
-/// `cmd /c if exist "..."`, whose nested quotes are mangled by Windows argument
-/// escaping — that probe reported "missing" for an adb.exe that was really
-/// there.
+/// Command that succeeds only when [path] is a runnable SDK tool. The tool is
+/// **executed** with a harmless version flag: it proves the binary runs, and it
+/// avoids `cmd /c if exist`, whose nested quotes Windows escaping mangles.
 CommandRequest executableProbeRequest(String path, List<String> versionFlag) =>
     CommandRequest(executable: path, arguments: versionFlag);
 
@@ -179,13 +160,10 @@ CommandRequest adbOnPathRequest(EnvironmentKind kind) => switch (kind) {
   ),
 };
 
-/// Locates the Android SDK in one execution environment.
-///
-/// Order: `ANDROID_HOME`, `ANDROID_SDK_ROOT`, the platform's default install
-/// location, then `adb` on the PATH (from which the root is derived). Everything
-/// runs through the supplied [runner] (constraint 6), so a WSL SDK is probed
-/// inside WSL and a Windows SDK on Windows — the two adb servers are different
-/// and their device lists are not interchangeable.
+/// Locates the Android SDK in one execution environment: `ANDROID_HOME`,
+/// `ANDROID_SDK_ROOT`, the default location, then `adb` on the PATH. Everything
+/// runs through [runner], so a WSL SDK is probed inside WSL — the two adb
+/// servers are different and their device lists are not interchangeable.
 class AndroidSdkDiscoveryService {
   AndroidSdkDiscoveryService({required this.runner, required this.environment});
 
@@ -238,8 +216,8 @@ class AndroidSdkDiscoveryService {
     return output == null ? const {} : parseEnvironmentOutput(output);
   }
 
-  /// Whether [path] runs. A missing executable surfaces as a [CommandException]
-  /// from the runner, which reads as "not installed" rather than an error.
+  /// Whether [path] runs. A missing executable surfaces as a [CommandException],
+  /// which reads as "not installed" rather than an error.
   Future<bool> _isRunnable(String path, List<String> versionFlag) async {
     try {
       final result = await runner.run(
@@ -262,8 +240,7 @@ class AndroidSdkDiscoveryService {
   }
 
   /// Runs [request], returning stdout on success and `null` on any failure —
-  /// including an unavailable environment (e.g. WSL not running), which must
-  /// read as "no SDK here" rather than crash discovery.
+  /// including an unavailable environment, which must read as "no SDK here".
   Future<String?> _runOrNull(CommandRequest request) async {
     try {
       final result = await runner.run(request);

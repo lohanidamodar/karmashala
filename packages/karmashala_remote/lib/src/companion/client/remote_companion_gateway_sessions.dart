@@ -133,11 +133,8 @@ extension _GatewaySessions on RemoteCompanionGateway {
   };
 
   /// Reads the current activity from the host, and words its refusal when it
-  /// has one.
-  ///
-  /// A pairing without `view_activity` is refused here, in a sentence, and the
-  /// sentence is what the screen shows — never an empty list, which would say
-  /// the session is running nothing.
+  /// has one. A pairing without `view_activity` is refused in a sentence, never
+  /// an empty list, which would say the session is running nothing.
   Future<void> _primeActivity(String sessionId) async {
     try {
       await _ready;

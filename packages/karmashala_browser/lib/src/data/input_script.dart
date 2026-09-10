@@ -10,13 +10,8 @@ const String kInteractiveSelectorJs =
     '[role=checkbox],[role=switch],[role=radio],[role=textbox],'
     '[contenteditable=""],[contenteditable=true],[tabindex],[onclick]';
 
-/// Helpers every input script shares: derive a selector, read an element's
-/// visible label, decide whether it is visible, and describe it in the JSON
-/// shape [FoundElement] parses.
-///
-/// Kept as one preamble so "what the page says about an element" has a single
-/// definition — a find and the click that follows it must agree, or the caller
-/// acts on something other than what it was shown.
+/// Helpers every input script shares. One preamble so a find and the click that
+/// follows it cannot disagree about what an element is.
 String _preamble() =>
     '''
 $kUniqueSelectorJs
@@ -73,15 +68,10 @@ $kUniqueSelectorJs
   }
 ''';
 
-/// Finds elements by CSS [selector] or by visible [text].
-///
-/// Text matching is the one that survives a redesign, so it gets the care:
-/// it looks at the label a person actually sees (own text, `aria-label`,
-/// `placeholder`, `title`, an input's value), keeps only the **innermost**
-/// match so an ancestor is never returned for its child's text, and ranks
-/// exact over prefix over substring, then interactive over inert, then
-/// shortest label. Ordering is what makes "click the element with this text"
-/// deterministic instead of a coin toss between a button and its wrapper.
+/// Finds elements by CSS [selector] or by visible [text]. Only the innermost
+/// match is kept, so an ancestor is never returned for its child's text, and
+/// matches rank exact > prefix > substring, then interactive, then shortest
+/// label — the ordering is what makes a text click deterministic.
 String buildFindElementsScript({
   String? selector,
   String? text,
@@ -155,19 +145,10 @@ ${_preamble()}
 })()
 ''';
 
-/// Prepares a click on [selector]: scrolls the element into view, then reports
-/// the point to click **and what is actually at that point**.
-///
-/// Three things are deliberately done here, in the page, rather than in Dart:
-///
-/// 1. `behavior: 'instant'` — a smooth scroll animates, and a rect read while
-///    it is still running names a position the element has already left. Loop
-///    35 lost a click to exactly that.
-/// 2. The rect is read *after* the scroll, in the same turn, so nothing can
-///    move in between.
-/// 3. `elementFromPoint` — if a cookie banner covers the button, the click
-///    would land on the banner and we would report success. This reports the
-///    blocker instead.
+/// Prepares a click on [selector]: the point to click, and what is actually at
+/// it. The scroll is `behavior: 'instant'` and the rect is read in the same
+/// turn — a smooth scroll's rect names a position the element has left — and
+/// `elementFromPoint` reports a covering banner rather than clicking it.
 String buildClickTargetScript(String selector) =>
     '''
 (function () {
@@ -202,12 +183,10 @@ ${_preamble()}
 })()
 ''';
 
-/// Focuses the field matching [selector] and selects what it already holds, so
-/// the text that follows replaces it rather than appending to it.
-///
-/// `<select>` is handled here outright — there is no keystroke that picks an
-/// option — by matching [value] against option values *and* their visible
-/// labels, then firing `input` and `change` so a framework notices.
+/// Focuses the field matching [selector] and selects what it holds, so the text
+/// that follows replaces it. `<select>` is handled outright — no keystroke picks
+/// an option — by value or visible label, then `input` and `change` so a
+/// framework notices.
 String buildPrepareFieldScript(String selector, String value) =>
     '''
 (function () {

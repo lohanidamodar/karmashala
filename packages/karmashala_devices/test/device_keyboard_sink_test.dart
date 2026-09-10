@@ -216,8 +216,7 @@ void main() {
 
     test('a shift chord still goes, because the character carries it', () async {
       // Shift alone is expressible: the printable path already produced the
-      // shifted character, and a shifted navigation key is a selection Android
-      // reads off the keycode.
+      // shifted character, and a shifted navigation key is a selection.
       final runner = FakeCommandRunner();
       final sink = AdbKeyboardSink(
         adb: AdbService(runner: runner, sdk: _sdk()),

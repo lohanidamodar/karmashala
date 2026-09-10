@@ -11,10 +11,8 @@ import '../protocol/wire.dart';
 import '../pty/pty.dart';
 import '../transport/transport.dart';
 
-/// Serves the protocol to whoever connects, over whatever carried them.
-///
-/// It knows nothing about SSH, and must not: the same server answers a local
-/// client in stage two (see transport.dart).
+/// Serves the protocol to whoever connects, over whatever carried them. It
+/// knows nothing about SSH, and must not (see transport.dart).
 class HostServer {
   HostServer({
     required this.registry,
@@ -30,16 +28,15 @@ class HostServer {
   final DateTime Function() _now;
   final DateTime startedAt;
 
-  /// UTC everywhere on the wire: the host and the app are often on machines
-  /// in different zones, and a timestamp that needs a zone to be read is a
-  /// reading nobody can compare.
+  /// UTC everywhere on the wire: the host and the app are often in different
+  /// zones, and a timestamp needing one is a reading nobody can compare.
   static DateTime _utcNow() => DateTime.now().toUtc();
 
   final _clients = <_ClientSession>[];
   int get clientCount => _clients.length;
 
-  /// Serves one connection until the peer goes away. Returns then, having
-  /// released that client's tokens — and having killed nothing.
+  /// Serves one connection until the peer goes away, then releases that
+  /// client's tokens and kills nothing.
   Future<void> serveConnection(HostConnection connection) async {
     final client = _ClientSession(this, connection);
     _clients.add(client);
@@ -106,8 +103,7 @@ class _ClientSession {
     }
     _subscriptions.clear();
     _exitWatches.clear();
-    // The whole point of the host: a disconnect frees the write token and
-    // leaves every session running.
+    // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
     await _connection.close();
   }
@@ -174,8 +170,8 @@ class _ClientSession {
 
   void _onHello(HelloMessage message) {
     if (message.protocolVersion != kProtocolVersion) {
-      // Loudly, on the first exchange: a skewed client that keeps talking
-      // corrupts a pane in a way nobody traces back to a version.
+      // On the first exchange: a skewed client that keeps talking corrupts a
+      // pane in a way nobody traces back to a version.
       _send(
         ErrorMessage(
           message.requestId,
@@ -222,8 +218,7 @@ class _ClientSession {
       _send(ErrorMessage(message.requestId, ProtocolErrorCode.spawnFailed, e.toString()));
       return;
     }
-    // Opening implies attaching from nothing, with the write token: whoever
-    // started a session is driving it until they say otherwise.
+    // Opening implies attaching from nothing, with the write token.
     _onAttach(
       AttachMessage(
         requestId: message.requestId,
@@ -252,8 +247,7 @@ class _ClientSession {
       holder = refusal?.holder?.clientId ?? _clientId;
     }
 
-    // The slice is measured before the pump starts, so the numbers the client
-    // is told are the numbers it will actually receive.
+    // Measured before the pump starts, so the numbers told are the numbers sent.
     final slice = session.backlog.since(message.sinceOffset);
     _send(
       AttachedMessage(
@@ -275,9 +269,8 @@ class _ClientSession {
     late final StreamSubscription<OutputChunk> subscription;
     subscription = session.readFrom(message.sinceOffset).listen((chunk) {
       _send(OutputMessage(ref, chunk.offset, chunk.bytes));
-      // Counted, not timed: after eight frames we wait for the sink to drain
-      // rather than letting a slow link grow an unbounded queue in this
-      // process. A stalled client stalls its own pump and nothing else.
+      // Counted, not timed: a slow link stalls its own pump rather than growing
+      // an unbounded queue in this process.
       if (++inFlight >= 8) {
         subscription.pause();
         _connection.flush().whenComplete(() {

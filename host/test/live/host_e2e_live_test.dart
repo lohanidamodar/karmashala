@@ -11,13 +11,9 @@ import 'package:test/test.dart';
 
 import 'wsl_harness.dart';
 
-/// The whole host, end to end, on a machine that can actually run it: the
-/// cross-compiled binary serving inside WSL and `attach` proxying the protocol
-/// over stdio, which is byte for byte what the app will do over an SSH exec
-/// channel.
-///
-/// Everything here counts — bytes, offsets, frames, replayed lengths. The one
-/// `Duration` in the file is a failure bound on a future, not a poll.
+/// The whole host end to end: the cross-compiled binary serving inside WSL with
+/// `attach` proxying over stdio, which is what the app does over SSH. Everything
+/// counts bytes; the one `Duration` is a failure bound, not a poll.
 void main() {
   final unavailable = WslHarness.unavailableReason();
 
@@ -28,8 +24,7 @@ void main() {
   setUpAll(() async {
     if (unavailable != null) return;
     harness = WslHarness.prepare();
-    // Its own HOME, so the test never touches a host a person is using and
-    // the socket lands under $root/.karmashala by the documented fallback.
+    // Its own HOME, so the test never touches a host a person is using.
     harness.runOrThrow('''
 pkill -f karmashala-host-live/.karmashala/bin/karmashala_host || true
 rm -rf $root
@@ -42,9 +37,8 @@ chmod +x $root/kh
 test -x $root/.karmashala/bin/karmashala_host
 ''');
     serving = await harness.start(['sh', '$root/kh', 'serve']);
-    // Started, not slept for: the daemon says where it bound and the test
-    // waits on that line. If it exits first, the failure quotes what it said —
-    // "another host is already running" is the one that costs an hour.
+    // Started, not slept for: the daemon says where it bound. If it exits
+    // first the failure quotes it, because "already running" costs an hour.
     final banner = Completer<String>();
     final said = StringBuffer();
     serving.stdout.transform(utf8.decoder).listen((text) {
@@ -74,7 +68,6 @@ test -x $root/.karmashala/bin/karmashala_host
   test('a session is opened, driven, survives a disconnect and reports its code', () async {
     final client = await _AttachClient.start(harness, '$root/kh', 'pane-1');
 
-    // hello
     final welcome = await client.expectMessage<WelcomeMessage>();
     expect(welcome.protocolVersion, kProtocolVersion);
     expect(welcome.hostVersion, kHostVersion);
@@ -82,7 +75,6 @@ test -x $root/.karmashala/bin/karmashala_host
     expect(welcome.architecture, 'x64');
     expect(welcome.ptyLibrary, anyOf('libc.so.6', 'libutil.so.1'));
 
-    // open
     client.send(
       const OpenMessage(
         requestId: 2,
@@ -100,16 +92,14 @@ test -x $root/.karmashala/bin/karmashala_host
     expect(attached.replayFromOffset, 0);
     final ref = attached.sessionRef;
 
-    // A command whose output differs from its echo, so a match proves the
-    // child ran it rather than the tty repeating it back.
+    // Output that differs from the echo, so a match proves the child ran it.
     client.send(InputMessage(ref, _ascii("echo karma''shala\n")));
     await client.untilOutput('karmashala\r\n');
     final seenBeforeDisconnect = client.nextOffset;
     expect(seenBeforeDisconnect, greaterThan(0));
     expect(client.outputOffsetsAreContiguous, isTrue);
 
-    // Disconnect exactly as an SSH channel closing does: our end of the pipe
-    // goes away and `attach` closes the socket under it.
+    // Disconnect as an SSH channel closing does: our end of the pipe goes away.
     client.send(InputMessage(ref, _ascii("echo while''-away\n")));
     await client.untilOutput('while-away\r\n');
     final seenAll = client.nextOffset;
@@ -124,10 +114,8 @@ test -x $root/.karmashala/bin/karmashala_host
     final row = listed.summaries.firstWhere((s) => s.id == 'live-a');
     expect(row.lifecycle, isA<SessionRunning>(), reason: 'a disconnect kills nothing');
     expect(row.writeHolder, isNull, reason: 'and it frees the write token');
-    // The pane's offset is what it *rendered*; the host is allowed to be
-    // ahead of it, and after a command the shell's next prompt usually puts it
-    // there. Equality here would be a flake, and asserting it would be
-    // asserting something that is not true of the design.
+    // The pane's offset is what it *rendered*; the host may be ahead, so
+    // asserting equality here would be a flake and also untrue of the design.
     expect(row.totalBytes, greaterThanOrEqualTo(seenAll));
 
     // Reattach from part way back and get exactly the missing bytes.
@@ -304,8 +292,7 @@ class _AttachClient {
         .then((m) => m as T);
   }
 
-  /// Waits until the child's bytes contain [needle]. A count of bytes seen,
-  /// not a sleep.
+  /// Waits until the child's bytes contain [needle] — counted, never slept for.
   Future<void> untilOutput(String needle, {Duration within = const Duration(seconds: 30)}) {
     if (_output.toString().contains(needle)) return Future.value();
     _outputWanted = needle;
@@ -316,12 +303,8 @@ class _AttachClient {
     );
   }
 
-  /// Closing our end is exactly what an SSH channel closing does.
-  ///
-  /// The bound is on `wsl.exe` reporting the exit, not on the host: measured
-  /// 2026-09-08, `attach` inside the distribution exits in 0 s with rc 0 when
-  /// the host hangs up on it. The relay process can take much longer to say so,
-  /// and waiting on it would only make the suite slow.
+  /// Closing our end is what an SSH channel closing does. The bound is on
+  /// `wsl.exe` relaying the exit, not on `attach`, which answers immediately.
   Future<void> hangUp() async {
     try {
       await _process.stdin.close();

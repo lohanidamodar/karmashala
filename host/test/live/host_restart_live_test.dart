@@ -7,11 +7,8 @@ import 'package:test/test.dart';
 
 import 'local_host_harness.dart';
 
-/// What a real host, really killed, can answer for when it comes back.
-///
-/// The unit tests build the registry twice over one store; this kills the
-/// process — which is the only thing that proves the record was on disk before
-/// anybody asked for it, rather than written on the way out.
+/// What a real host, really killed, can answer for when it comes back — the
+/// only thing that proves the record was on disk before anybody asked.
 void main() {
   test('a session killed with its host comes back readable, and lost', () async {
     final home = temporaryHome('karmashala-host-restart');
@@ -39,13 +36,11 @@ void main() {
     expect(await before.output('karmashala'), isTrue, reason: before.tail(400));
     await before.close();
 
-    // No shutdown, no signal it can act on: the process goes, and the child
-    // with it. This is the app crashing, and the case the whole stage is for.
+    // No shutdown, no signal it can act on: this is the app crashing.
     await first.kill();
 
-    // The sentence the restore path prints says the process "did not survive".
-    // On Windows a terminated host runs no cleanup of its own, so this is only
-    // true because each child is in a job that dies with it.
+    // "Did not survive" is only true on Windows because each child is in a job
+    // that dies with the host; a terminated host runs no cleanup of its own.
     expect(
       _stillRunning(running.pid),
       isFalse,
@@ -109,11 +104,8 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
-/// Whether [pid] names a process that is still alive right now.
-///
-/// A handle that cannot be opened is a process that is gone; one that opens and
-/// is already signalled has exited. Pids are reused, so this is only asked
-/// seconds after the process in question was seen.
+/// Whether [pid] is still alive: a handle that will not open is a process that
+/// is gone. Pids are reused, so this is only asked seconds after it was seen.
 bool _stillRunning(int pid) {
   final k = Kernel32.open();
   final handle = k.openProcess(kProcessQueryLimitedInformation | kSynchronize, 0, pid);

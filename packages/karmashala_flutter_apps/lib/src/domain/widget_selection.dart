@@ -1,11 +1,6 @@
-/// Where a widget was written, as the framework reports it.
-///
-/// This is `creationLocation`, and it only exists when the app was compiled
-/// with `--track-widget-creation` — on by default in debug, absent in profile
-/// and release. A build without it still names the widget and can never name
-/// the line, which is why [WidgetSelection.location] is nullable and
-/// `WidgetLocationSupport` is asked separately: a missing location must read as
-/// a fact about the build, never as a failed pick.
+/// Where a widget was written, as the framework reports it. `creationLocation`
+/// exists only under `--track-widget-creation`, so a missing location is a fact
+/// about the build and never a failed pick.
 class WidgetSourceLocation {
   const WidgetSourceLocation({
     required this.fileUri,
@@ -14,8 +9,7 @@ class WidgetSourceLocation {
     this.name,
   });
 
-  /// A `file://` URI as the framework writes it, not a host path. Left as it
-  /// arrived — converting it is the caller's business and each host disagrees.
+  /// A `file://` URI as the framework writes it, not a host path.
   final String fileUri;
 
   /// 1-based, both of them.
@@ -41,12 +35,8 @@ class WidgetSourceLocation {
     'editorTarget': asEditorTarget,
   };
 
-  /// Reads a `navigate` event's `extensionData`.
-  ///
-  /// The framework posts this on the **`ToolEvent`** stream whenever the
-  /// inspector selection changes — `_notifyToolsOfSelection`, which every tap
-  /// in widget-select mode goes through. It carries the location and nothing
-  /// else, which is why a pick is this event *plus* one read of the selection.
+  /// Reads a `navigate` event's `extensionData`. It carries the location and
+  /// nothing else, so a pick is this event *plus* one read of the selection.
   static WidgetSourceLocation? fromNavigateEvent(Map<Object?, Object?> data) {
     final file = data['fileUri'];
     final line = data['line'];
@@ -77,15 +67,13 @@ class WidgetSelection {
 
   final String? widgetRuntimeType;
 
-  /// The inspector's handle for this element, valid only while the object
-  /// group it was created in is alive. Not an address that survives a reload.
+  /// The inspector's handle, valid only while its object group is alive.
   final String? valueId;
 
   final WidgetSourceLocation? location;
 
-  /// Whether it was written in the project rather than in the framework or a
-  /// package. A real tap reports the nearest widget that satisfies this, so it
-  /// is normally true and its being false is worth showing.
+  /// Whether it was written in the project rather than the framework: normally
+  /// true, and worth showing when it is not.
   final bool createdByLocalProject;
 
   final bool stateful;
@@ -111,11 +99,8 @@ class WidgetSelection {
     return 'Widget: $description${stateful ? ' (stateful)' : ''}. $where$origin';
   }
 
-  /// Reads one `ext.flutter.inspector.getSelectedSummaryWidget` reply.
-  ///
-  /// The service-extension envelope wraps the node under `result`; `null`
-  /// there means select mode is on and nothing is selected, which is a valid
-  /// answer and not a malformed one.
+  /// Reads one `getSelectedSummaryWidget` reply, or null — which means select
+  /// mode is on with nothing selected, a valid answer rather than a malformed one.
   static WidgetSelection? fromInspectorNode(Object? node) {
     if (node is! Map) return null;
     final description = node['description'];

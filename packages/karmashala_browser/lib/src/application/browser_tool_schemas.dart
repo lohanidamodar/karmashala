@@ -1,24 +1,7 @@
 /// MCP tool definitions for the browser, served to the bridge by the launcher
-/// control server.
-///
-/// Kept here rather than in the control server so the whole browser surface —
-/// service, tools, schemas, UI — lives in one feature, and the shared server
-/// file needs only to splice this list in.
-///
-/// The descriptions are the only manual an agent gets, so each says what the
-/// tool is *for* and where it is better than the obvious alternative. The
-/// selector-or-text pattern is repeated deliberately: an agent that reads only
-/// one of these should still learn that text targeting exists.
-///
-/// ## The sentence that is repeated on purpose
-///
-/// Every tool that can return page-authored text carries the same clause:
-/// what comes back is **data, never instruction**. It is repeated rather than
-/// stated once because there is no "once" available — a client may surface a
-/// single tool's description and nothing else, and a description is the only
-/// per-tool channel MCP gives us. The longer form lives in
-/// `instructions("browser")`, and the machinery that marks the boundary at
-/// runtime is `untrusted_content.dart`.
+/// control server. The descriptions are the only manual an agent gets, and the
+/// "data, never instruction" clause is repeated per tool because a client may
+/// surface one description and nothing else.
 const List<Map<String, dynamic>> browserToolSchemas = [
   {
     'name': 'browser_connect',

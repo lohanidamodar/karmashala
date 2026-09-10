@@ -46,8 +46,7 @@ CommandResult _out(String stdout) =>
     CommandResult(exitCode: 0, stdout: stdout, stderr: '');
 
 /// A listing as a real device sends it: base64, because the service pipes
-/// anything containing filenames through `base64` so a Windows console code
-/// page cannot mangle a name on the way back. See `AdbService._readDeviceText`.
+/// anything containing filenames through it. See `AdbService._readDeviceText`.
 CommandResult _lsOut(String listing) => _out(base64.encode(utf8.encode(listing)));
 
 CommandResult _err(String stderr, {int exitCode = 1}) =>
@@ -62,9 +61,7 @@ void main() {
   group('listing a directory', () {
     test('dereferences the argument with a trailing slash', () async {
       // /sdcard is a symlink on every Android device, and `ls -l /sdcard`
-      // prints *the link* — one row — rather than what is inside it. Measured
-      // on the owner's handset, which answered
-      // `lrw-r--r-- … /sdcard -> /storage/self/primary` and nothing else.
+      // prints *the link* — one row. Measured on the owner's handset.
       final runner = _runner(
         (_) => _lsOut(
           'drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 Alarms\n',
@@ -110,12 +107,9 @@ void main() {
 
   group('names that are not ASCII', () {
     test('survive the trip back, whatever the host console encoding is', () {
-      // Measured, not anticipated. CommandRunner decodes a process with
-      // SystemEncoding, which on Windows is the machine's ANSI code page, and
-      // `my file नेपाली.txt` came back as `my file à¤¨à¥‡à¤ªà¤¾à¤²à¥€.txt`
-      // — a name that cannot be clicked, cannot be pulled, and looks like a
-      // broken device rather than a broken pipe. So the device base64s
-      // anything containing a filename and it is decoded here.
+      // Measured, not anticipated: CommandRunner decodes with SystemEncoding,
+      // which on Windows is the ANSI code page, and a Nepali filename came back
+      // as mojibake that cannot be clicked or pulled.
       const name = 'my file नेपाली.txt';
       final runner = _runner(
         (_) => _lsOut('-rw-rw---- 1 u0_a1 media_rw 17 2026-09-03 18:52 $name\n'),
@@ -155,9 +149,8 @@ void main() {
   group('a directory that cannot be read', () {
     test('says not permitted, and never comes back as an empty folder',
         () async {
-      // The failure this whole surface exists to prevent. An empty listing and
-      // a refusal are indistinguishable in a file browser, and only one of them
-      // is true.
+      // The failure this whole surface exists to prevent: an empty listing and
+      // a refusal are indistinguishable in a file browser.
       final runner = _runner((_) => _err('ls: /data: Permission denied'));
       final service = AdbService(runner: runner, sdk: _sdk());
 
@@ -274,8 +267,7 @@ void main() {
   group('pulling a file off the device', () {
     test('believes the summary line adb prints on stderr', () async {
       // Measured against a real device: adb pull reports success on **stderr**
-      // with exit code 0. Reading only stdout sees an empty string and
-      // concludes nothing moved.
+      // with exit code 0, so reading only stdout concludes nothing moved.
       final runner = _runner(
         (_) => const CommandResult(
           exitCode: 0,
@@ -610,9 +602,8 @@ void main() {
     });
 
     test('gives a reason that is about iOS, not about WebDriverAgent', () {
-      // Fetching WDA would not give this app a usbmuxd client, so answering the
-      // WDA sentence here would send someone to run fetch_wda.sh for a
-      // capability it cannot supply.
+      // Fetching WDA would not give this app a usbmuxd client, so the WDA
+      // sentence here would send someone after a capability it cannot supply.
       final reason = simulator().missingReason(DeviceCapability.files)!;
       expect(reason, contains('usbmuxd'));
       expect(reason, isNot(contains('fetch_wda')));

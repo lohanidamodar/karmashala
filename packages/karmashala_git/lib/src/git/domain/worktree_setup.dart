@@ -3,41 +3,19 @@ import 'dart:convert';
 /// What a repository wants done to a worktree the moment git finishes making
 /// one: files git will not put there, and a command to run in it.
 ///
-/// **Both halves exist because a fresh worktree of a real project does not
-/// build.** This repository is the worked example twice over. It has no
-/// `.dart_tool`, so the first thing any agent does in a new worktree is
-/// `flutter pub get` — the one command `CLAUDE.md` §17 spends a page on,
-/// because a bare `flutter` from a WSL shell swaps a Linux Dart SDK into the
-/// shared Windows install and *fails silently for the agent that ran it*. And
-/// `PROFILE-2026-09-03.md` records `macos/Vendor/` ignored wholesale while the
-/// Xcode run-script phase calls `${SRCROOT}/Vendor/copy_wda.sh`
-/// unconditionally, so only worktrees that had `tool/vendor/fetch_wda.sh` run
-/// in them build at all.
-///
-/// **Copied, never shared.** Orca splits "share" from "copy" and offers a
-/// symlink; there is no symlink here and no setting that could ask for one.
-/// Two live worktrees pointing one `.dart_tool` or `node_modules` at the same
-/// directory through a junction corrupt each other under concurrent builds,
-/// and this app runs agents concurrently by design — so the cheap option is
-/// the one that loses work. It is a refusal, not a preference, and the way it
-/// is enforced is that nothing in this file can express it.
+/// **Copied, never shared, and no setting can ask otherwise.** Two live
+/// worktrees pointing one `.dart_tool` at a shared directory corrupt each other
+/// under the concurrent builds this app runs by design.
 class WorktreeSetup {
   const WorktreeSetup({this.command = const [], this.copyPaths = const []});
 
   /// The command as **argv**, not as a line: `['flutter', 'pub', 'get']`.
   ///
-  /// A line would have to be split again by whoever ran it, and the splitter
-  /// would be a second parser disagreeing with the shell that finally sees it.
-  /// Argv is what `AgentPaneLaunch` takes and what `wrapForPty` quotes, once,
-  /// for whichever context the pane opens into — PowerShell here, the
-  /// distribution's login shell over WSL, `sh` over SSH. Empty means no
-  /// command, which is a complete and common setting.
+  /// Argv, so no second parser gets between the setting and the shell that
+  /// finally sees it. Empty means no command, which is a complete setting.
   final List<String> command;
 
   /// Repository-relative paths to copy into the new worktree, `/`-separated.
-  ///
-  /// Written the way `.gitignore` writes them — `macos/Vendor`, `.dart_tool` —
-  /// and joined onto each environment's own separator when they are used.
   final List<String> copyPaths;
 
   bool get isEmpty => command.isEmpty && copyPaths.isEmpty;
@@ -54,9 +32,8 @@ class WorktreeSetup {
 
   /// Rebuilds a setting from the two stored JSON columns.
   ///
-  /// Forgiving in the same way `AgentPaneLaunch.fromJson` is: a row this code
-  /// did not write reads as empty rather than throwing, because a setting that
-  /// cannot be parsed must not stop a worktree being created.
+  /// A row this code did not write reads as empty rather than throwing: an
+  /// unparseable setting must not stop a worktree being created.
   static WorktreeSetup fromJson(String? command, String? copyPaths) =>
       WorktreeSetup(
         command: _strings(command),
@@ -103,23 +80,13 @@ class WorktreeSetup {
 
 /// The one spelling a copy path is allowed to have.
 ///
-/// Deliberately narrow, and the same everywhere. A path for a **WSL or SSH**
-/// repository is copied by `cp` reached through `wsl.exe … -- …` or an SSH
-/// exec, and `CLAUDE.md` §18 measures what that costs: the line is parsed a
-/// second time by the distribution's login shell, where a space splits an
-/// argument, `*` globs and `$(…)` *runs*. One rule for every environment
-/// rather than a laxer one for the host, because a setting written against a
-/// Windows checkout is the same row after the project moves into a
-/// distribution.
+/// The same rule for every environment: a WSL or SSH copy path is parsed again
+/// by that machine's login shell, where a space splits, `*` globs and `$(…)` runs.
 final RegExp _safeCopyPath = RegExp(
   r'^[A-Za-z0-9._][A-Za-z0-9._-]*(/[A-Za-z0-9._-]+)*$',
 );
 
 /// Why [path] will not be copied into a worktree, or `null` when it will be.
-///
-/// Every ground is checked before anything runs, so a refusal names the thing
-/// in the way rather than relaying an error about a path the user never typed
-/// — the rule `WorktreeControlTools` already follows for a worktree's name.
 String? worktreeCopyPathRefusal(String path) {
   final value = path.trim();
   if (value.isEmpty) {
@@ -159,9 +126,8 @@ enum WorktreeCopyResult {
   /// The path was copied into the worktree.
   copied,
 
-  /// Nothing is at that path in the checkout, so there was nothing to copy.
-  /// A normal answer for a repository whose fetch script has never been run,
-  /// and reported rather than swallowed so the user can see it was expected.
+  /// Nothing is at that path in the checkout — normal, and reported rather than
+  /// swallowed so the user can see it was expected.
   nothingAtSource,
 
   /// The path is not ignored by git, so git already put its own copy in the
@@ -178,10 +144,8 @@ enum WorktreeCopyResult {
   /// the copier's own words.
   failed,
 
-  /// A reading could not be taken at all: git could not be asked whether the
-  /// path is ignored, or the filesystem could not be asked what is there.
-  /// **Never read as success** — the rule `worktree_tools.dart` states nine
-  /// times over, applied to the other direction.
+  /// A reading could not be taken at all: git or the filesystem could not be
+  /// asked. **Never read as success.**
   unknown;
 
   /// Whether this verdict is one the user has to look at.
@@ -236,10 +200,8 @@ enum WorktreeCommandResult {
 
   /// A pane was opened on it and the command is running in view.
   ///
-  /// **This is where it usually stops.** A pane is a PTY, and the app does not
-  /// wait for the process behind one: a setup script has no bound, and holding
-  /// the session launch on it would let a hung script hang the window. The
-  /// exit code arrives later through `PaneExitSignal`, or never.
+  /// **This is where it usually stops.** Nothing waits for the process behind a
+  /// pane; a setup script has no bound, and waiting would hang the session launch.
   running,
 
   /// The pane's process exited 0.
@@ -249,15 +211,12 @@ enum WorktreeCommandResult {
   /// has the number.
   failed,
 
-  /// The process stopped and **we never learned what with**. Not success:
-  /// `PaneExit.exitCode` is nullable for exactly this, and reading a missing
-  /// number as a zero is the mistake §19 exists to prevent. The pane still
-  /// has the output.
+  /// The process stopped and **we never learned what with**. Not success: a
+  /// missing exit code must not read as zero (§19). The pane still has the output.
   stoppedWithoutCode,
 
-  /// There was nowhere to run it where the user would see it, so it was not
-  /// run at all. Running it invisibly is the failure this feature exists to
-  /// remove, so it is refused instead.
+  /// There was nowhere to run it where the user would see it, so it was not run.
+  /// Running it invisibly is the failure this feature exists to remove.
   refusedNoPane,
 
   /// It could not be started. The reason is the launcher's own words.
@@ -293,18 +252,14 @@ class WorktreeCommandVerdict {
   /// its scrollback is persisted, so the words are still there tomorrow.
   final String? paneId;
 
-  /// Null means **not recorded**, never zero. A pane that is still running,
-  /// one whose process we never saw stop, and a shell that exited 0 are three
-  /// different facts and only the last one is success.
+  /// Null means **not recorded**, never zero: still running, never seen to stop,
+  /// and exited 0 are three different facts.
   final int? exitCode;
 
   /// This verdict once the pane's process has **stopped**, with [code] or with
   /// nothing.
-  ///
-  /// There is no "it stopped and it is fine" path through a null: a process
-  /// whose exit code never arrived is [WorktreeCommandResult.stoppedWithoutCode]
-  /// and needs looking at, because the only thing we know is that it is no
-  /// longer running.
+  /// A null [code] is [WorktreeCommandResult.stoppedWithoutCode], never success:
+  /// all that is known is that it is no longer running.
   WorktreeCommandVerdict afterExit(int? code) => WorktreeCommandVerdict(
     result: switch (code) {
       null => WorktreeCommandResult.stoppedWithoutCode,
@@ -368,13 +323,9 @@ enum WorktreeSetupVerdict {
 
 /// What a repository's setup did to one worktree, and when.
 ///
-/// **The worktree is created whether or not any of this worked.** Deleting a
-/// checkout because a setup script exited non-zero would destroy the one thing
-/// that is expensive to make in order to punish the one thing that is cheap to
-/// re-run — and `WorktreeControlTools` already draws that line the other way
-/// round for removal, which is the irreversible half. So the failure is
-/// recorded against the worktree instead of thrown out of the create: loud,
-/// attached, and carrying its age, rather than a line in a log.
+/// **The worktree is created whether or not any of this worked.** Deleting an
+/// expensive checkout to punish a cheap, re-runnable script is the wrong trade,
+/// so the failure is recorded against the worktree instead.
 class WorktreeSetupReport {
   const WorktreeSetupReport({
     required this.repositoryId,
@@ -457,18 +408,10 @@ class WorktreeSetupReport {
 
 /// Splits a typed command line into argv.
 ///
-/// **Deliberately the smallest parser that can be described in a sentence**,
-/// because it is the only one between what the user types and the argv that is
-/// stored: whitespace separates, `'…'` and `"…"` group, and *nothing else
-/// happens*. In particular there is no backslash escape — a Windows path is
-/// full of backslashes, and treating them as escapes is the classic way to turn
-/// `C:\src\app` into `C:srcapp` — and no expansion of variables, globs or
-/// substitutions. Those belong to the shell the pane opens, which will see the
-/// argument exactly as it was typed.
-///
-/// It runs **once**, when the setting is saved, and the result is shown back
-/// before it is stored: what is kept is argv, and no second parser ever gets
-/// between the setting and the shell. See [WorktreeSetup.command].
+/// The smallest parser that can be described in a sentence: whitespace
+/// separates, `'…'` and `"…"` group, nothing else happens. No backslash escape —
+/// a Windows path is full of them. It runs once, when the setting is saved, and
+/// argv is what is stored.
 List<String> splitCommandLine(String line) {
   final parts = <String>[];
   final buffer = StringBuffer();
@@ -504,9 +447,8 @@ List<String> splitCommandLine(String line) {
 
 /// [command] written back as one line, for a field the user edits.
 ///
-/// The inverse of [splitCommandLine] for everything [splitCommandLine] can
-/// produce: an argument holding whitespace or a quote is wrapped, so a
-/// round-trip through the editor never silently splits an argument in two.
+/// The inverse of [splitCommandLine]: an argument holding whitespace or a quote
+/// is wrapped, so a round-trip through the editor never splits one in two.
 String joinCommandLine(List<String> command) => command
     .map((part) {
       if (part.isEmpty) return '""';

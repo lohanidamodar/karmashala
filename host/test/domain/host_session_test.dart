@@ -169,10 +169,8 @@ void main() {
       await session.ended;
       await Future<void>.delayed(Duration.zero);
 
-      // Nobody called terminate. An ended session is kept so a pane
-      // reconnecting a moment late can read its code; what it does not need to
-      // keep is a file descriptor, a pipe and a job object that nothing would
-      // ever reach again once it is pruned.
+      // Nobody called terminate: an ended session keeps its code for a late
+      // reconnect, but not the fd, the pipe and the job nothing would reach again.
       expect(pty.closeCount, 1);
       expect(session.backlog.totalBytes, 9, reason: 'and every byte it wrote is still readable');
     });

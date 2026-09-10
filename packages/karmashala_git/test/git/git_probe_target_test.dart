@@ -71,9 +71,8 @@ void main() {
     });
 
     test('the reverse direction is not taken', () {
-      // §18 measures `\\wsl.localhost` as working but slow, and
-      // `Directory.watch` on it never fires. Moving a probe onto the share
-      // would be moving it the wrong way.
+      // §18 measures `\\wsl.localhost` as working but slow, and `Directory.watch`
+      // on it never fires. Moving a probe onto the share is the wrong direction.
       final answer = probe(
         'wsl:Ubuntu',
         r'\\wsl.localhost\Ubuntu\home\me\app',

@@ -1,9 +1,5 @@
-/// What is in the way of a Flutter command, before anything is spawned.
-///
-/// Each value is a different thing to *do*, which is why they are not one
-/// "not ready": an environment that cannot be named and an SDK that is not
-/// installed need different people to fix them, and a project with no
-/// `.dart_tool` needs nobody at all — the app can fix that one itself.
+/// What is in the way of a Flutter command, before anything is spawned. Each
+/// value is a different thing to *do*, which is why "not ready" is not one.
 enum FlutterPreflightProblem {
   /// The resolver could not say where this checkout's commands run. Its own
   /// words are carried through (`environmentUnknown`, `sshUnavailable`, …).
@@ -18,8 +14,7 @@ enum FlutterPreflightProblem {
   /// A package or a plugin: real Flutter, no entrypoint, nothing to run.
   notRunnable,
 
-  /// No `.dart_tool/package_config.json`. `pub get` is the fix and the app can
-  /// run it.
+  /// No `.dart_tool/package_config.json` — the app can run `pub get` itself.
   noPackages,
 
   /// No device was named and none could be chosen.
@@ -37,12 +32,7 @@ enum FlutterPreflightProblem {
 }
 
 /// The preflight line: one sentence naming the problem **and the fix**, or
-/// nothing in the way.
-///
-/// A value rather than an exception, for the reason `EnvironmentResolution`
-/// gives: the caller shows it. `flutter_run` puts it in the answer whether or
-/// not it stopped anything, so an agent reading a successful reply still sees
-/// what nearly went wrong.
+/// nothing in the way. A value rather than an exception — the caller shows it.
 class FlutterPreflight {
   const FlutterPreflight.clear() : problem = null, reason = '';
 

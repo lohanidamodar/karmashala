@@ -34,8 +34,7 @@ void main() {
 
     expect(found!.source, WdaSource.bundled);
     // Joined rather than spelled with `/`: the locator builds a host path, and
-    // on Windows — where this suite also runs — that is `\`. The assertion is
-    // about *which* directory was chosen, not about a separator.
+    // on Windows — where this suite also runs — that is `\`.
     expect(found.appPath, contains(p.join('K.app', 'Contents', 'Resources')));
   });
 
@@ -53,8 +52,7 @@ void main() {
 
   test('off macOS it finds nothing, without touching the filesystem', () {
     // The bundle is never shipped to Windows or Linux: it lives under macos/,
-    // which those builds do not read, and it is deliberately not a Flutter
-    // asset, because assets are copied into every platform's bundle.
+    // and it is deliberately not a Flutter asset.
     plant('checkout/macos/Vendor/wda');
 
     final found = WdaLocator(
@@ -68,9 +66,7 @@ void main() {
 
   test('the pinned version travels with the runner', () {
     // The runner is a built binary tied to one version, so "which build is
-    // this?" is the first question when it will not attach to a simulator —
-    // and the field report could not answer it, because the failure said only
-    // that nothing came up.
+    // this?" is the first question when it will not attach to a simulator.
     final app = plant('K.app/Contents/Resources/wda');
     File(
       p.join(p.dirname(app), '.wda-version'),

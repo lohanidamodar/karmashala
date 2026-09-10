@@ -164,9 +164,8 @@ sambandha_test
   });
 
   group('parseOwnedScrcpyPids', () {
-    // Real `ps -A -o PID,ARGS` output. The jar path only ever appears on the
-    // wrapping `sh -c` line — `CLASSPATH` is an environment assignment, not an
-    // argument — so the app_process child has to be found by its scid.
+    // Real `ps -A -o PID,ARGS`. The jar path only ever appears on the wrapping
+    // `sh -c` line, so the app_process child has to be found by its scid.
     const ps =
         '   PID ARGS\n'
         '     1 init second_stage\n'
@@ -209,10 +208,8 @@ sambandha_test
     });
 
     test('anything a two-state button cannot represent is unknown', () {
-      // `auto` is "whatever the light sensor says" and the custom modes are
-      // schedules — none of them a state this app set or can promise. Saying
-      // "unknown" lets the caller leave the control alone instead of claiming
-      // the device is light while it is dark.
+      // `auto` and the custom modes are not states this app set or can promise;
+      // "unknown" lets the caller leave the control alone.
       expect(parseNightMode('Night mode: auto'), isNull);
       expect(parseNightMode('Night mode: custom_schedule'), isNull);
       expect(parseNightMode(''), isNull);

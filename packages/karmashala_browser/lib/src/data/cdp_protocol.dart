@@ -2,10 +2,8 @@ import 'dart:convert';
 
 import '../domain/cdp_message.dart';
 
-/// Encodes one CDP command frame.
-///
-/// `params` is omitted entirely when empty: a few domains reject an explicit
-/// empty object where they expect the field to be absent.
+/// Encodes one CDP command frame. `params` is omitted entirely when empty: a few
+/// domains reject an explicit empty object where they expect no field.
 String encodeCdpCommand({
   required int id,
   required String method,
@@ -18,12 +16,9 @@ String encodeCdpCommand({
   return jsonEncode(frame);
 }
 
-/// Decodes one inbound CDP frame into a [CdpResult], [CdpErrorMessage] or
-/// [CdpEvent].
-///
-/// Throws [CdpProtocolException] for anything that is not recognisably CDP —
-/// deliberately, so a garbled socket surfaces instead of being silently
-/// swallowed as "no reply yet".
+/// Decodes one inbound CDP frame. Throws [CdpProtocolException] for anything not
+/// recognisably CDP, so a garbled socket surfaces instead of reading as
+/// "no reply yet".
 CdpMessage decodeCdpMessage(String raw) {
   final Object? decoded;
   try {

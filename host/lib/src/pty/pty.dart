@@ -15,9 +15,8 @@ class PtySpawnRequest {
   /// argv[0] is the executable; it is resolved on PATH by the launcher.
   final List<String> argv;
   final String? workingDirectory;
-  /// The child's environment. POSIX takes it as the whole of one; Windows
-  /// layers it over the host process's, because a block with no `SystemRoot`
-  /// cannot load a DLL. See [ConPtyLauncher].
+  /// POSIX takes this as the whole environment; Windows layers it over the host
+  /// process's, because a block with no `SystemRoot` cannot load a DLL.
   final Map<String, String> environment;
   final int columns;
   final int rows;
@@ -31,20 +30,17 @@ class PtySpawnRequest {
   );
 }
 
-/// A running child attached to a pseudo-terminal.
-///
-/// Nothing here polls: [output] is fed by a blocking read on the master fd in
-/// its own isolate, and [exitCode] completes from the `waitpid` that follows
-/// that read reaching end-of-file.
+/// A running child attached to a pseudo-terminal. Nothing here polls: a
+/// blocking read in its own isolate feeds [output], and its end-of-file is what
+/// [exitCode] waits behind.
 abstract class PtyHandle {
   int get pid;
 
   /// Raw bytes the child wrote. Never decoded here — the host relays bytes.
   Stream<Uint8List> get output;
 
-  /// Completes when the child has been reaped. A child killed by a signal
-  /// reports `128 + signal`, the shell convention, so a caller never has to
-  /// decode a wait status.
+  /// Completes when the child has been reaped. A signalled child reports
+  /// `128 + signal`, so a caller never decodes a wait status.
   Future<int> get exitCode;
 
   void write(Uint8List bytes);

@@ -1,16 +1,7 @@
 /// Everything this package knows about a device: the vocabulary (`src/domain`)
-/// and the drivers that speak it (`src/data`).
-///
-/// **The shape.** `domain` is values and interfaces — a device, a target, a UI
-/// node, a keystroke, a recording — and nothing in it starts a process.
-/// `data` is what does: `AdbService` and `SimctlService` over an
-/// `agent_cli` `CommandRunner`, scrcpy's video and control sockets, a
-/// WebDriverAgent client, and the parsers for what each of them prints.
-///
-/// **Where the boundary is.** A DAO, a provider and a widget are all the app's
-/// (docs/PACKAGE_SPLIT.md §6): this package takes its inputs as values and
-/// hands its outputs back the same way, so a caller can drive a device from a
-/// test, a tool or a UI without either of the other two knowing.
+/// and the drivers that speak it (`src/data`). Nothing in `domain` starts a
+/// process; a DAO, a provider and a widget are all the app's, so this package
+/// takes values in and hands values back.
 library;
 
 export 'src/data/adb_device_driver.dart';
@@ -59,10 +50,8 @@ export 'src/domain/logcat_tail.dart';
 export 'src/domain/screen_observation.dart';
 export 'src/domain/simulator_backend.dart';
 // `featureLossFor` is the same question asked of two platforms and answered
-// from two tables — an Android package name in one, a simulator runtime in the
-// other — so it is the same name twice, here as it already was in the app.
-// The Android one wins the short name; a caller that wants the simulator's
-// imports `src/domain/simulator_slimming.dart` for it.
+// from two tables. The Android one wins the short name; a caller that wants the
+// simulator's imports `src/domain/simulator_slimming.dart`.
 export 'src/domain/simulator_slimming.dart' hide featureLossFor;
 export 'src/domain/ui_node.dart';
 export 'src/domain/ui_summary.dart';

@@ -170,8 +170,7 @@ void main() {
       'an exact content-desc beats a longer one that merely contains it',
       () {
         // Found on the physical OPPO: contentDesc "a" on a Flutter keyboard
-        // ranked the clock widget first, because its four-line description
-        // contains an "a" and it comes earlier in the tree than the "a" key.
+        // ranked the clock widget first, whose description contains an "a".
         final tree = UiHierarchy(
           roots: [
             _node(

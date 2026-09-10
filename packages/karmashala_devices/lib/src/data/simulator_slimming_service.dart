@@ -6,11 +6,7 @@ import '../domain/simulator_slimming.dart';
 import 'simctl_parsing.dart';
 
 /// The four filesystem operations slimming needs, behind an interface so tests
-/// never touch `/private/var/tmp`.
-///
-/// A test that wrote for real would be editing one of the developer's actual
-/// simulators, and the failure mode is not a red test — it is a device that
-/// boots into a zombie state days later.
+/// never touch `/private/var/tmp` — a real write edits a real simulator.
 abstract interface class SlimmingFileStore {
   /// Contents of [path], or null when it does not exist.
   Future<String?> readAsString(String path);
@@ -51,15 +47,9 @@ class LocalSlimmingFileStore implements SlimmingFileStore {
   }
 }
 
-/// Reads a flat `<key>/<true|false>` plist into a map, or returns null when the
-/// document is not that shape.
-///
-/// Null means **refuse to touch it**, not "empty". The file is shared with
-/// launchd, which writes entries of its own into it, and a document this parser
-/// cannot round-trip is one whose foreign entries a rewrite would silently
-/// destroy. A binary plist (`bplist00`) lands here too, since it has no
-/// `<dict>` — it has never been observed for this file, but guessing would be
-/// the expensive kind of wrong.
+/// Reads a flat `<key>/<true|false>` plist into a map, or null when the document
+/// is not that shape. Null means **refuse to touch it**: launchd writes entries
+/// of its own, which a rewrite this parser cannot round-trip would destroy.
 Map<String, bool>? parseDisabledPlist(String xml) {
   // `<dict/>` is how an empty dictionary is written; it has no body to scan.
   if (RegExp(r'<dict\s*/>').hasMatch(xml)) return <String, bool>{};
@@ -89,11 +79,8 @@ Map<String, bool>? parseDisabledPlist(String xml) {
   return entries;
 }
 
-/// Writes [entries] as the XML plist CoreSimulator and launchd both read.
-///
-/// Keys are sorted so that re-running with the same selection produces a
-/// byte-identical file, which makes "did anything actually change?" answerable
-/// by looking at the device.
+/// Writes [entries] as the XML plist CoreSimulator and launchd both read. Keys
+/// are sorted, so re-running with the same selection is byte-identical.
 String encodeDisabledPlist(Map<String, bool> entries) {
   final keys = entries.keys.toList()..sort();
   final buffer = StringBuffer()
@@ -138,14 +125,8 @@ String _unescapeXml(String value) => value
     .replaceAll('&apos;', "'")
     .replaceAll('&amp;', '&');
 
-/// The labels a booted device's launchd currently knows about, from
-/// `launchctl list`'s three-column table (`PID\tStatus\tLabel`, one header
-/// row first).
-///
-/// Tolerant like the plist parsers above: a row that does not split into
-/// three tab-separated fields is skipped rather than thrown over, and the
-/// header row itself never matches a label because no real label is called
-/// `Label`.
+/// The labels a booted device's launchd knows about, from `launchctl list`'s
+/// `PID\tStatus\tLabel` table. A row that does not split into three is skipped.
 Set<String> parseLaunchctlLabels(String output) {
   final labels = <String>{};
   for (final line in output.split('\n')) {
@@ -158,11 +139,8 @@ Set<String> parseLaunchctlLabels(String output) {
   return labels;
 }
 
-/// What a device's `disabled.plist` currently says.
-///
-/// Readable on a **shut-down** device, which is the point: `simctl spawn
-/// launchctl print` needs a booted one, so it cannot answer "is this simulator
-/// slimmed?" for the ninety-odd devices a machine accumulates.
+/// What a device's `disabled.plist` currently says. Readable on a **shut-down**
+/// device, unlike `simctl spawn launchctl print`, which needs a booted one.
 class SlimmingStatus {
   const SlimmingStatus({
     required this.udid,
@@ -196,10 +174,8 @@ class SlimmingStatus {
   /// Disabled labels this build owns, and would put back.
   Set<String> get disabledManaged => disabled.intersection(allManagedLabels);
 
-  /// Disabled labels somebody else turned off — simslim itself, a hand edit, a
-  /// future version of this table. [SimulatorSlimmingService.unslim] leaves
-  /// these alone, and a UI should say so rather than claim the device is
-  /// un-slimmed.
+  /// Disabled labels somebody else turned off. [SimulatorSlimmingService.unslim]
+  /// leaves these alone, and a UI should say so rather than claim un-slimmed.
   Set<String> get disabledUnmanaged => disabled.difference(allManagedLabels);
 
   bool get isSlimmed => disabledManaged.isNotEmpty;
@@ -234,22 +210,10 @@ class SlimmingStatus {
       'disabled=${disabledManaged.length}+${disabledUnmanaged.length})';
 }
 
-/// Switches iOS Simulator background services off by writing the one file that
-/// controls them.
-///
-/// The whole mechanism is
+/// Switches iOS Simulator background services off by writing
 /// `/private/var/tmp/com.apple.CoreSimulator.SimDevice.<UDID>/disabled.plist` —
 /// **not** anything under `~/Library/Developer/CoreSimulator/Devices/<udid>/`,
-/// which is where it looks like it should be and is not.
-///
-/// Writing it directly is both simpler and far faster than driving `launchctl`:
-/// simslim boots the device, issues ~170 sequential `launchctl disable` calls
-/// (~84 seconds), then reboots to apply them. The file write is sub-millisecond
-/// and applies on the *first* boot, so the cost is one boot instead of two plus
-/// a minute and a half.
-///
-/// Every process this runs goes through [runner] (architecture constraint 6),
-/// and every file it touches goes through [files].
+/// where it looks like it should be. It applies on the *first* boot.
 class SimulatorSlimmingService {
   SimulatorSlimmingService({
     required this.runner,
@@ -261,9 +225,8 @@ class SimulatorSlimmingService {
   final CommandRunner runner;
   final SlimmingFileStore files;
 
-  /// How long to wait for a device to actually reach Shutdown. `simctl
-  /// shutdown` returns as soon as the request is accepted, not when the device
-  /// is down.
+  /// How long to wait for a device to actually reach Shutdown. `simctl shutdown`
+  /// returns when the request is accepted, not when the device is down.
   final Duration shutdownTimeout;
 
   /// Gap between state polls. Tests set it to zero.
@@ -271,13 +234,8 @@ class SimulatorSlimmingService {
 
   static const _xcrun = 'xcrun';
 
-  /// The per-device CoreSimulator scratch directory.
-  ///
-  /// The UDID is upper-cased because that is how CoreSimulator names the
-  /// directory, and `simctl` accepts a lower-case UDID on the command line — so
-  /// a caller that got its udid from somewhere lax would otherwise read and
-  /// write a path that quietly does not exist, and [status] would report every
-  /// device as un-slimmed.
+  /// The per-device CoreSimulator scratch directory. Upper-cased because that is
+  /// how CoreSimulator names it, while `simctl` accepts a lower-case UDID.
   static String directoryFor(String udid) =>
       '/private/var/tmp/com.apple.CoreSimulator.SimDevice.'
       '${udid.toUpperCase()}';
@@ -298,11 +256,9 @@ class SimulatorSlimmingService {
     );
   }
 
-  /// Disables every managed service except those in [except] / [keep], then
-  /// boots the device.
-  ///
-  /// The device is shut down first if it is running — see [_writeEntries] for
-  /// why that is not optional.
+  /// Disables every managed service except those in [except] / [keep], then boots
+  /// the device. Shut down first — see [_writeEntries] for why that is not
+  /// optional.
   Future<void> slim(
     String udid, {
     Set<SlimmingCategory> except = const {},
@@ -314,31 +270,14 @@ class SimulatorSlimmingService {
     boot: boot,
   );
 
-  /// Puts every managed service back, then boots the device.
-  ///
-  /// This is also the recovery path for a device slimmed too far: shut down,
-  /// drop our keys, boot. `simctl erase` is **not** needed, and would throw
-  /// away the device's apps and data for nothing.
-  ///
-  /// Labels this build does not manage are left disabled — see
-  /// [SlimmingStatus.disabledUnmanaged].
+  /// Puts every managed service back, then boots. Also the recovery path for a
+  /// device slimmed too far; `simctl erase` is not needed and destroys data.
   Future<void> unslim(String udid, {bool boot = true}) =>
       _writeEntries(udid, const {}, boot: boot);
 
-  /// Labels this build manages that a **booted** device's launchd has never
-  /// heard of.
-  ///
-  /// A label Apple renamed or removed between iOS releases is not an error to
-  /// `launchctl` — disabling it, or leaving a now-meaningless entry in
-  /// `disabled.plist`, is silently ignored, so a whole category can look like
-  /// it is working while doing nothing. This is the drift check: it runs
-  /// `launchctl list` against the real device and reports whatever this
-  /// build's table names that the device does not.
-  ///
-  /// Needs a booted device — `simctl spawn` only reaches a running one, which
-  /// is why this is a separate call rather than folded into [slim]: slimming
-  /// itself only ever touches a shut-down device (see [_ensureShutdown]), and
-  /// this check would force a boot first for no other reason.
+  /// Labels this build manages that a **booted** device's launchd has never heard
+  /// of. A renamed label is silently ignored, so a whole category can look like
+  /// it is working while doing nothing; this is the drift check.
   Future<Set<String>> staleLabels(String udid) async {
     final result = await runner.run(
       CommandRequest(
@@ -380,17 +319,8 @@ class SimulatorSlimmingService {
     if (boot) await _boot(udid);
   }
 
-  /// Brings [udid] to Shutdown, or throws.
-  ///
-  /// **Never write the plist while the device is booted.** launchd reads the
-  /// set once at boot and holds it in memory; an edit underneath it is racy —
-  /// it may be re-serialised away, or half-applied on the next boot. The write
-  /// on a shut-down device is the whole reason this is a single boot rather
-  /// than two.
-  ///
-  /// Note also that [SimulatorState] is not a health check. A device whose
-  /// SpringBoard has been disabled still reports Booted forever; state is only
-  /// trustworthy for the transition being waited on here.
+  /// Brings [udid] to Shutdown, or throws. **Never write the plist on a booted
+  /// device:** launchd reads the set once at boot, so an edit under it is racy.
   Future<void> _ensureShutdown(String udid) async {
     var state = await _stateOf(udid);
     if (state == null) {
@@ -433,13 +363,8 @@ class SimulatorSlimmingService {
     return null;
   }
 
-  /// Writes the plist so that a reader never sees a half-written file.
-  ///
-  /// The directory is created through the runner rather than `dart:io` because
-  /// it must end up mode 0700 and Dart has no chmod; doing both as processes
-  /// keeps the two halves of one operation in one place. A fresh device that
-  /// has never been booted has no directory at all, so this is the common case,
-  /// not the edge case.
+  /// Writes the plist so a reader never sees a half-written file. The directory
+  /// is made through the runner: it must end up 0700 and Dart has no chmod.
   Future<void> _writeAtomically(String udid, String contents) async {
     final directory = directoryFor(udid);
     await runner.run(

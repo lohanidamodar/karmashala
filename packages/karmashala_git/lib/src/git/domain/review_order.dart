@@ -1,15 +1,8 @@
 /// **Tier a diff, never filter it.**
 ///
-/// Every changed file stays in the list; the order is the whole of the
-/// intervention. It earns most in a fan-out, where four candidate columns are
-/// drawn side by side and four columns each opening on `pubspec.lock` is four
-/// columns of noise above the first line anybody came to read.
-///
-/// The table is Dart-flavoured and small on purpose. A path this file has no
-/// opinion about is [ReviewTier.source] — the *first* tier — because a file we
-/// do not recognise is a file a person may well have written, and the cost of
-/// guessing wrong in that direction is a hand-written change pushed below a
-/// lockfile.
+/// Every changed file stays in the list; only the order changes. A path this file
+/// has no opinion about is [ReviewTier.source] — the *first* tier — because
+/// guessing wrong that way pushes a hand-written change below a lockfile.
 library;
 
 /// How much of a reviewer's attention a changed path is likely to be worth,
@@ -22,9 +15,8 @@ enum ReviewTier {
   /// runs: `*.g.dart` (json_serializable, drift, riverpod) and `*.freezed.dart`.
   generated,
 
-  /// A dependency lockfile. `pubspec.lock` moves on every `pub get` and
-  /// `Podfile.lock` moves with it on any app that builds for iOS or macOS —
-  /// this repository's root holds both.
+  /// A dependency lockfile. `pubspec.lock` moves on every `pub get`, and
+  /// `Podfile.lock` with it on anything that builds for iOS or macOS.
   lockfile,
 
   /// Build output: written by a tool, read by nobody, and in a diff at all
@@ -34,10 +26,8 @@ enum ReviewTier {
 
 /// Which tier [path] falls in. Repository-relative, either slash.
 ///
-/// A segment named `build` counts as build output wherever it sits, not only
-/// at the root, because a diff spans packages and every one of them has its
-/// own. A source directory genuinely called `build` is therefore demoted —
-/// which costs it a position in a list it never leaves.
+/// A segment named `build` counts wherever it sits, not only at the root, because
+/// a diff spans packages. A source directory really called `build` is demoted.
 ReviewTier reviewTierOf(String path) {
   final segments = path.replaceAll(r'\', '/').split('/');
   for (final segment in segments) {
@@ -58,8 +48,7 @@ ReviewTier reviewTierOf(String path) {
 /// [items] in tier order, **stably**: within a tier they keep the order they
 /// arrived in, which is git's own and already alphabetical.
 ///
-/// Nothing is dropped, so the returned list is always the same length as the
-/// one given.
+/// Nothing is dropped: the returned list is always the same length.
 List<T> orderedForReview<T>(Iterable<T> items, String Function(T item) pathOf) {
   final buckets = <ReviewTier, List<T>>{
     for (final tier in ReviewTier.values) tier: <T>[],
@@ -73,12 +62,9 @@ List<T> orderedForReview<T>(Iterable<T> items, String Function(T item) pathOf) {
 /// The same order applied to the **file sections of a unified diff**, for the
 /// surface that has git's text rather than a list of rows.
 ///
-/// Sections are split on `diff --git`, which git writes once per file and
-/// never inside a hunk — a `-diff --git` line in a patch being edited carries
-/// its own leading `-`. Anything before the first section (a `commit`/`Author`
-/// preamble) is kept where it is, and a section whose header does not parse
-/// keeps [ReviewTier.source], so a diff this cannot read comes back reordered
-/// by nothing rather than mangled.
+/// Sections split on `diff --git`, which git never writes inside a hunk. A
+/// preamble stays where it is and an unparsable header keeps [ReviewTier.source],
+/// so a diff this cannot read comes back reordered by nothing rather than mangled.
 String orderUnifiedDiffForReview(String diff) {
   if (diff.isEmpty) return diff;
   const marker = 'diff --git ';
@@ -104,10 +90,8 @@ String orderUnifiedDiffForReview(String diff) {
 
 /// The `b/` path of a `diff --git a/<old> b/<new>` header.
 ///
-/// The `b` side because it is the file as it now is — a rename's old name is
-/// not what a reviewer is looking for. Read to the end of the line rather than
-/// split on whitespace: a path may contain spaces, and the two sides of the
-/// header are the only fields there are.
+/// The `b` side, because it is the file as it now is. Read to the end of the line
+/// rather than split on whitespace: a path may contain spaces.
 String _diffSectionPath(List<String> section) {
   final header = section.first;
   final split = header.indexOf(' b/');

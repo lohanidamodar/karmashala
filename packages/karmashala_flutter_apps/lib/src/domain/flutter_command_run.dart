@@ -5,12 +5,8 @@ enum FlutterCommandKind {
   analyze,
   test;
 
-  /// Whether this command produces a verdict worth recording.
-  ///
-  /// `analyze` and `test` do: they end, and their exit code *is* the answer.
-  /// `pub get` and `run` do not — one is a prerequisite and the other has no
-  /// end, and filing either as a check would fill the record with rows nobody
-  /// asked a question with.
+  /// Whether this command produces a verdict worth recording: `analyze` and
+  /// `test` end with an exit code that *is* the answer; `run` never ends.
   bool get isGate =>
       this == FlutterCommandKind.analyze || this == FlutterCommandKind.test;
 
@@ -30,20 +26,12 @@ enum FlutterCommandKind {
   };
 }
 
-/// Whether the process in a run's pane is still going — and the third answer.
-///
-/// `unknown` is not decoration: a pane whose id the terminal no longer knows
-/// (the user closed the tab, the app restarted) is a run we have lost sight
-/// of, and calling that "finished" would be the confident false statement §19
-/// deletes. It is reported with the age of the last thing we did observe.
+/// Whether the process in a run's pane is still going. `unknown` is a pane the
+/// terminal no longer knows — calling that "finished" is the §19 false claim.
 enum FlutterRunLiveness { running, finished, unknown }
 
-/// One command the app started, and everything known about it.
-///
-/// **The pane is the process.** There is no second handle: a run's id *is* its
-/// pane id, its liveness is the pane's liveness, and its output is the pane's
-/// buffer. Nothing here polls anything — the liveness is read when someone
-/// asks and carries [startedAt] so the answer has an age.
+/// One command the app started. The pane *is* the process: a run's id is its
+/// pane id, and there is no second handle.
 class FlutterCommandRun {
   const FlutterCommandRun({
     required this.paneId,
@@ -71,8 +59,7 @@ class FlutterCommandRun {
 
   final String environmentId;
 
-  /// The argv actually spelled, so a reader can see the SDK that was chosen
-  /// and the flags that were added.
+  /// The argv actually spelled, so a reader can see which SDK was chosen.
   final List<String> command;
 
   final DateTime startedAt;
@@ -95,9 +82,8 @@ class FlutterCommandRun {
   /// Null while running **and** when the exit was never observed.
   final int? exitCode;
 
-  /// The `verification_runs` row a finished gate was recorded as. Null for a
-  /// gate still going, and for `pubGet` and `run`, which have no verdict —
-  /// they are not checks.
+  /// The `verification_runs` row a finished gate was recorded as; null for a
+  /// gate still going and for the kinds that have no verdict.
   final String? verificationRunId;
 
   bool get isAttached => appId != null;

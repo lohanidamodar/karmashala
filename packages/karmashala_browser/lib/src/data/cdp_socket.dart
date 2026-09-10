@@ -4,11 +4,8 @@ import 'dart:io';
 
 import '../domain/browser_failure.dart';
 
-/// The one-way-duplex text channel a [CdpConnection] talks over.
-///
-/// Abstracted so the correlation logic can be exercised against a scripted
-/// socket in tests — CDP framing is where the bugs live, and it should not
-/// need a running browser to test.
+/// The text channel a [CdpConnection] talks over. Abstracted so CDP framing —
+/// where the bugs live — is testable against a scripted socket.
 abstract interface class CdpSocket {
   /// Inbound frames. Closing this stream means the peer went away.
   Stream<String> get messages;

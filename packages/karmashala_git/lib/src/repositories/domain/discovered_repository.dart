@@ -1,9 +1,6 @@
 import 'package:agent_cli/process.dart';
 
 /// A Git repository found on disk by discovery, before it is persisted.
-///
-/// Carries only what discovery can know: a display [name] (the folder name) and
-/// its [path], bound to the environment that was scanned.
 class DiscoveredRepository {
   const DiscoveredRepository({required this.name, required this.path});
 

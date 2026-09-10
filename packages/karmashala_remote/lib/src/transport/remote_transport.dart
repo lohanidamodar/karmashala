@@ -1,8 +1,6 @@
-/// The transport contract the sealed channel sits on.
-///
-/// A transport moves opaque frames. It knows nothing about the protocol, and
-/// the protocol knows nothing about which transport carried it — that is what
-/// lets the LAN path and the relay path share one conformance suite.
+/// The transport contract the sealed channel sits on. A transport moves opaque
+/// frames and knows nothing about the protocol, which is what lets the LAN path
+/// and the relay path share one conformance suite.
 library;
 
 import 'dart:async';
@@ -12,13 +10,9 @@ import 'dart:typed_data';
 /// Largest frame a transport will send or accept. Matches the relay's cap.
 const int kMaxTransportFrameBytes = 1024 * 1024 + 4096;
 
-/// The most one peer's outbound queue will hold while that peer is away.
-///
-/// Four megabytes: enough that an ordinary blip costs nothing — a reconnect
-/// inside a few seconds replays everything — and small enough that a phone
-/// which walked out of range is a bounded amount of the desktop's memory
-/// rather than an open-ended one. Roughly four full frames, or several
-/// thousand ordinary ones.
+/// The most one peer's outbound queue will hold while that peer is away. Four
+/// megabytes: an ordinary blip replays in full, and a phone that walked out of
+/// range is a bounded amount of the desktop's memory rather than open-ended.
 const int kMaxQueuedBytes = 4 * 1024 * 1024;
 
 /// Bytes of big-endian length prefix on a stream transport.
@@ -44,10 +38,8 @@ enum TransportState {
 
 /// A framed, connection-oriented byte pipe between the host and one phone.
 abstract class RemoteTransport {
-  /// Whole frames, in arrival order, across any internal reconnect.
-  ///
-  /// Single-subscription and buffered, so nothing is lost between the first
-  /// connection and the caller listening.
+  /// Whole frames, in arrival order, across any internal reconnect. Single-
+  /// subscription and buffered, so nothing is lost before the caller listens.
   Stream<Uint8List> get frames;
 
   /// State changes, starting from the current state.
@@ -82,22 +74,10 @@ class TransportFramingException extends TransportException {
 }
 
 /// Capped exponential backoff with jitter, so a relay coming back up does not
-/// meet every host at once.
-///
-/// **One second, doubling, to a thirty-second ceiling.** The floor used to be
-/// 250 ms, which on an idle phone whose desktop is refusing — a relay that is
-/// up and answering, with no host at the rendezvous — is four dials and four
-/// log lines a second, for as long as the app is open, to learn the same
-/// refusal each time. A retry rate is a claim about how fast the far end can
-/// change, and nothing on the other side of one refusal changes in 250 ms.
-///
-/// The ceiling is what keeps it a *reconnect* rather than a give-up: half a
-/// minute is the longest a desktop that has come back stays unnoticed, and the
-/// three things that mean the wait is now pointless — a link that worked, the
-/// app coming back to the foreground, and the user asking — all reset it, so
-/// the ceiling is never what the user is actually waiting out. A path with a
-/// different physics says so by passing its own: a desktop on the same table
-/// is dialled on the 200 ms schedule `_localBackoff` names.
+/// meet every host at once: one second, doubling, to a thirty-second ceiling.
+/// A link that worked, the app returning to the foreground and the user asking
+/// all reset it, so the ceiling is never what the user is actually waiting out.
+/// A path with different physics passes its own — see `_localBackoff`.
 class Backoff {
   Backoff({
     this.initial = const Duration(seconds: 1),
@@ -133,7 +113,6 @@ class Backoff {
 }
 
 /// Length-prefixed framing for a stream transport: `uint32be length || frame`.
-///
 /// WebSocket already has message boundaries, so only the LAN path needs this.
 class LengthPrefixedFramer {
   LengthPrefixedFramer({this.maxFrameBytes = kMaxTransportFrameBytes});
@@ -200,11 +179,9 @@ class LengthPrefixedFramer {
   }
 }
 
-/// Shared plumbing for a transport that dials, drops and dials again.
-///
-/// Subclasses implement one connection attempt; this owns the frame stream, the
-/// state stream, the outbound queue and the backoff, so the LAN and relay
-/// clients behave the same way when the network misbehaves.
+/// Shared plumbing for a transport that dials, drops and dials again: the frame
+/// stream, the state stream, the outbound queue and the backoff, so the LAN and
+/// relay clients behave the same way when the network misbehaves.
 abstract class ReconnectingTransport implements RemoteTransport {
   ReconnectingTransport({
     Backoff? backoff,
@@ -216,14 +193,9 @@ abstract class ReconnectingTransport implements RemoteTransport {
   /// Frames the caller sent while disconnected. Oldest is dropped on overflow.
   final int maxQueuedFrames;
 
-  /// And the same queue in bytes, which is the bound that actually holds.
-  ///
-  /// A count is not a size: at [kMaxTransportFrameBytes] each, 256 frames is
-  /// a quarter of a gigabyte a desktop would hold for one phone that walked
-  /// out of range — and the frames most likely to fill it are exactly the
-  /// large ones, a transcript page for a session that is busy. So the queue is
-  /// bounded by both, and a slow reader is dropped rather than paid for
-  /// without limit.
+  /// And the same queue in bytes, which is the bound that actually holds. A
+  /// count is not a size: 256 frames at [kMaxTransportFrameBytes] each is a
+  /// quarter of a gigabyte held for one phone that walked out of range.
   final int maxQueuedBytes;
   final Backoff backoff;
 
@@ -335,9 +307,7 @@ abstract class ReconnectingTransport implements RemoteTransport {
     _queue.add(bytes);
     _queuedBytes += bytes.length;
     // Oldest first, until it fits both bounds. The newest frame is never the
-    // one dropped: it is the only one whose news the peer has not already had
-    // a chance at, and a queue that answered overflow by refusing the present
-    // would be a link that goes deaf the moment it falls behind.
+    // one dropped: it is the only one the peer has had no chance at.
     var dropped = 0;
     var droppedBytes = 0;
     while (_queue.length > 1 &&
@@ -366,9 +336,8 @@ abstract class ReconnectingTransport implements RemoteTransport {
     _queuedBytes = 0;
     await abort();
     _setState(TransportState.closed);
-    // Not awaited: a buffered single-subscription controller only completes its
-    // close when a listener takes the done event, and a caller that never read
-    // the frames would hang here forever.
+    // Not awaited: a buffered single-subscription controller completes its
+    // close only when a listener takes the done event.
     unawaited(_frames.close());
     await _states.close();
   }

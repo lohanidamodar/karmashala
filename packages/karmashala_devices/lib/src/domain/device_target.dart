@@ -1,13 +1,9 @@
 import 'android_device.dart';
 import 'ios_simulator.dart';
 
-/// The two kinds of thing this app can drive.
-///
-/// Not a feature flag and not a capability: a *fact* about a device, used to
-/// pick the driver and to name the coordinate space in a message. What a
-/// device can actually do is [DeviceCapability] in `device_driver.dart`, and
-/// the two are deliberately separate — a simulator on a build with no
-/// WebDriverAgent is still iOS, it just cannot be tapped.
+/// The two kinds of thing this app can drive. A *fact* about a device, used to
+/// pick the driver and name the coordinate space — what it can actually do is
+/// [DeviceCapability], and a simulator with no WebDriverAgent is still iOS.
 enum DevicePlatform {
   android('Android'),
   ios('iOS');
@@ -17,33 +13,16 @@ enum DevicePlatform {
   final String label;
 }
 
-/// [id] made safe as one component of a **host** filename.
-///
-/// A device attached over Wi-Fi identifies itself as `HOST:PORT` rather than by
-/// hardware serial, and on Windows a colon in a filename does not fail — it
-/// opens an *alternate data stream*, so `adb pull` writes somewhere nothing
-/// reads back and the failure looks like an empty screenshot. Everything
-/// outside `[A-Za-z0-9._-]` becomes `-`, which leaves a hardware serial and an
-/// `emulator-<port>` untouched.
+/// [id] made safe as one component of a **host** filename. A Wi-Fi device is
+/// `HOST:PORT`, and on Windows a colon opens an alternate data stream, so the
+/// write succeeds and the screenshot reads back empty.
 String fileSafeDeviceId(String id) =>
     id.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
 
-/// One device this app knows about: an attached Android device, an Android
-/// emulator, or an iOS Simulator.
-///
-/// ## Why the two live behind one type
-///
-/// The `device_*` MCP tools took an Android serial and nothing else, and the
-/// obvious way to add simulators was a `simulator_*` family beside them. That
-/// would have doubled the vocabulary an agent has to hold — `device_tap` and
-/// `simulator_tap` do the same thing to the same kind of object — and worse, it
-/// would have made "which verb do I call" a question the caller must answer
-/// *before* it knows what kind of device it has. The identifiers give nothing
-/// away: `emulator-5554` and `70592006-11CD-…` are both just strings out of
-/// `list_devices`.
-///
-/// So the id is the discriminator, this type carries the answer, and the
-/// dispatch happens once — in `DeviceFleet.driverFor`, not in every caller.
+/// One device this app knows about: an attached Android device, an emulator, or
+/// an iOS Simulator. One type rather than a `simulator_*` tool family, because
+/// the identifiers give nothing away — `emulator-5554` and a udid are both just
+/// strings — so the id is the discriminator and the dispatch happens once.
 sealed class DeviceTarget {
   const DeviceTarget();
 
@@ -56,9 +35,8 @@ sealed class DeviceTarget {
 
   DevicePlatform get platform;
 
-  /// Whether it can be driven right now. An Android device that is
-  /// `unauthorized`, or a simulator that is shut down, is a real row in a
-  /// device listing and not a mistake to hide — but it cannot be tapped.
+  /// Whether it can be driven right now. An `unauthorized` device is a real row
+  /// in a listing and not a mistake to hide — but it cannot be tapped.
   bool get isReady;
 
   /// Why it is not ready, in the caller's terms, or null when it is.

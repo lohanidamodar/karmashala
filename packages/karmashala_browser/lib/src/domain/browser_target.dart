@@ -1,7 +1,5 @@
-/// One debuggable target reported by Chrome's `/json/list` endpoint.
-///
-/// Only pages are drivable; service workers, extension backgrounds and the
-/// browser target itself also appear in that list and are filtered out by
+/// One debuggable target from Chrome's `/json/list`. Only pages are drivable;
+/// workers, extension backgrounds and the browser target are filtered out by
 /// [isDrivablePage].
 class BrowserTarget {
   const BrowserTarget({
@@ -21,10 +19,8 @@ class BrowserTarget {
   /// us attach to (already-attached targets report no URL).
   final String? webSocketDebuggerUrl;
 
-  /// Whether this target is an ordinary page we can attach to and drive.
-  ///
-  /// `devtools://` pages are the DevTools UI itself and `chrome://` pages
-  /// refuse most commands, so both are excluded.
+  /// Whether this is an ordinary page we can drive. `devtools://` is the
+  /// DevTools UI itself and `chrome://` refuses most commands.
   bool get isDrivablePage =>
       type == 'page' &&
       webSocketDebuggerUrl != null &&

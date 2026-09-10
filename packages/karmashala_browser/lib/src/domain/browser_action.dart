@@ -1,12 +1,8 @@
 import 'dart:typed_data';
 
-/// Something the browser feature did, reported to whoever is recording.
-///
-/// The seam exists so a verification run can watch the *existing*
-/// [BrowserService] rather than a second, recording copy of it: the pane, the
-/// MCP tools and a test harness all drive the same object, so all three are
-/// recorded by construction. The browser feature knows nothing about runs — it
-/// reports, and something else decides whether anyone is listening.
+/// Something the browser feature did, reported to whoever is recording. A seam
+/// so a run watches the *existing* [BrowserService] rather than a second copy:
+/// pane, MCP tools and harness drive one object, so all three are recorded.
 class BrowserAction {
   const BrowserAction({
     required this.verb,
@@ -18,9 +14,8 @@ class BrowserAction {
     this.pageUrl,
   });
 
-  /// What was done: `navigate`, `click`, `type`, `screenshot`, `capture`…
-  /// Chosen from a small vocabulary so a recorder can classify without parsing
-  /// prose.
+  /// What was done, from a small vocabulary so a recorder can classify it
+  /// without parsing prose.
   final String verb;
 
   /// One line: the action and its target.

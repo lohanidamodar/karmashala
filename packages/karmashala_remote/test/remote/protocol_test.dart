@@ -226,8 +226,7 @@ void main() {
 
     // Both are the phone's own verbs. `session.activity` needed
     // [FrameOrigin.either] because the host states it unprompted too; nothing
-    // here is ever host-sent, so the refusal an old pairing hears arrives on
-    // its own request rather than needing a direction added to carry it.
+    // here is ever host-sent.
     test('the attachment frames are the companion\'s alone', () {
       for (final type in [
         FrameType.attachmentBegin,

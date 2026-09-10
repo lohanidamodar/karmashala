@@ -1,11 +1,8 @@
 import 'dart:typed_data';
 
-/// Something done to a device, reported to whoever is recording.
-///
-/// The mirror of `BrowserAction`. It exists so a verification run can watch the
-/// *existing* `AdbService` — the one the device pane, the `device_*` MCP tools
-/// and any harness already share — instead of a second, recording copy that
-/// would drift from it.
+/// Something done to a device, reported to whoever is recording. It exists so a
+/// verification run watches the *existing* `AdbService` rather than a second,
+/// recording copy that would drift from it.
 class DeviceAction {
   const DeviceAction({
     required this.verb,

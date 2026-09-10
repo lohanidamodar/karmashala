@@ -6,8 +6,7 @@ import 'package:test/test.dart';
 import 'package:karmashala_devices/src/data/mjpeg_stream.dart';
 
 /// A JPEG-shaped payload: the real start and end markers around [size] bytes of
-/// filler. The parser must not be confused by a body that contains bytes
-/// resembling a boundary or a marker.
+/// filler, so a body resembling a boundary cannot confuse the parser.
 Uint8List jpeg(int size, {int fill = 0x41}) {
   final bytes = Uint8List(size + 4)
     ..[0] = 0xFF
@@ -73,9 +72,8 @@ void main() {
     });
 
     test('reassembles a frame split across chunks', () async {
-      // The realistic case: a 120 KB frame never arrives in one read, and the
-      // split lands wherever the network puts it — including inside the part
-      // headers, which is what makes header parsing incremental.
+      // A 120 KB frame never arrives in one read, and the split lands wherever
+      // the network puts it — including inside the part headers.
       final frame = jpeg(4096, fill: 0x33);
       final bytes = part(frame);
       final chunks = <List<int>>[
@@ -128,9 +126,8 @@ void main() {
       server = await serve([part(jpeg(32)), part(jpeg(32))]);
       final subscription = MjpegStream.connect(urlOf(server)).listen(null);
 
-      // Cancelling has to tear down the HTTP client: this body never ends on
-      // its own, so a leaked subscription keeps WebDriverAgent streaming
-      // frames at a pane that is no longer on screen.
+      // Cancelling has to tear down the HTTP client: this body never ends, so a
+      // leaked subscription keeps WebDriverAgent streaming at nothing.
       await subscription.cancel();
 
       await expectLater(server.close(), completes);

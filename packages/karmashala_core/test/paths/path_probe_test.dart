@@ -4,17 +4,9 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/testing.dart';
 
-/// The chain Codex's self-updater left on the owner's machine, measured
-/// 2026-09-07 with `Link.targetSync()` from Dart:
-///
-/// ```txt
-/// …\OpenAI\Codex\bin  ->  …\.codex\packages\standalone\current\bin
-///                     ->  …\releases\0.153.4-x86_64-pc-windows-msvc\bin
-/// ```
-///
-/// The disk is described the way the real one measured: `existsSync` on the
-/// stored leaf answers a flat **false** rather than raising, so nothing here
-/// leans on an exception to tell an unreachable file from an absent one.
+/// The junction chain Codex's self-updater left, measured 2026-09-07: the
+/// stored leaf's `existsSync` answers a flat **false** rather than raising, so
+/// nothing here leans on an exception to tell unreachable from absent.
 const _stable = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe';
 const _stableDir = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin';
 const _current = r'C:\Users\d\.codex\packages\standalone\current';
@@ -54,10 +46,8 @@ void main() {
     });
 
     test('a junction chain to a real file reads as unreachable', () {
-      // The §19 rule in one assertion: an installed-but-untraversable Codex
-      // must not answer the same as an uninstalled one, because "install it"
-      // and "the route to it is broken" are opposite instructions. And the
-      // file's real location comes back so a repair has somewhere to move to.
+      // An installed-but-untraversable Codex must not answer the same as an
+      // uninstalled one; the real location comes back so a repair can use it.
       final reading = readExecutable(_stable, codexProbe(), context: p.windows);
       expect(reading.reachability, ExecutableReachability.unreachable);
       expect(reading.resolved, _real);
@@ -65,9 +55,8 @@ void main() {
     });
 
     test('a junction that leads nowhere reads as missing', () {
-      // The route *was* completed — every link read, and the file at the end
-      // of it is gone. That is evidence of absence, so it is reported as such
-      // rather than hidden behind "could not look".
+      // The route completed and the file at the end is gone: evidence of
+      // absence, not "could not look".
       final probe = FakePathProbe(
         links: const {_stableDir: '$_current\\bin', _current: _release},
       );
@@ -77,8 +66,8 @@ void main() {
     });
 
     test('a chain that cannot be walked reads as unreachable', () {
-      // A junction whose reparse data the OS will not hand over. Nothing was
-      // established, so nothing is claimed — least of all "not installed".
+      // Nothing was established, so nothing is claimed — least of all
+      // "not installed".
       final reading = readExecutable(
         r'C:\a\codex.exe',
         _UnreadableLink(),
@@ -118,8 +107,7 @@ void main() {
     });
 
     test('resolves a relative link target against the link\'s parent', () {
-      // POSIX symlinks are commonly relative; joining one onto the wrong
-      // directory would silently produce a path that cannot exist.
+      // POSIX symlinks are commonly relative; the wrong base joins silently.
       final probe = FakePathProbe(
         files: const {'/opt/agents/0.9/codex'},
         links: const {'/opt/agents/current': '0.9'},
@@ -153,8 +141,7 @@ void main() {
 
   group('traversablePath', () {
     test('hands back a usable path unchanged', () {
-      // A working install keeps its stable path. Resolving it would swap it for
-      // a version-pinned one that rots on the next update, for no benefit.
+      // A working install keeps its stable path; a version-pinned one rots.
       final probe = FakePathProbe(
         files: const {r'C:\tools\codex.exe'},
         links: const {r'C:\tools': r'C:\real'},
@@ -190,7 +177,7 @@ void main() {
 }
 
 /// A component that reports itself a link and then refuses to say where it
-/// leads — a junction whose reparse data the OS will not hand over.
+/// leads.
 class _UnreadableLink implements PathProbe {
   @override
   bool? fileExists(String path) => false;

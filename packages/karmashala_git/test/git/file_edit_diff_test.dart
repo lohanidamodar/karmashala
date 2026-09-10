@@ -2,10 +2,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:test/test.dart';
 
-/// The shapes here are copied off real transcripts on this machine — a Claude
-/// Code `~/.claude/projects/**.jsonl` and a Codex `~/.codex/sessions/**.jsonl`.
-/// If they drift, the feature degrades to "no diff recorded", never to a wrong
-/// one, and these tests are the record of what was true when it was written.
+/// The shapes here are copied off real transcripts on this machine. If they
+/// drift the feature degrades to "no diff recorded", never to a wrong one.
 void main() {
   setUp(clearFileEditDiffCache);
 
@@ -513,8 +511,7 @@ void main() {
       buildFileEditDiff(record);
       buildFileEditDiff(record);
       // A different instance holding the same change is the same diff: the
-      // transcript re-parses its file every poll tick and hands over new
-      // objects each time.
+      // transcript re-parses its file every poll tick and hands over new objects.
       buildFileEditDiff(
         const FileEditRecord(
           path: '/repo/a.dart',

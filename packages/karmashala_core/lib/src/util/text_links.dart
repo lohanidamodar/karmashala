@@ -1,40 +1,25 @@
-/// Finding URLs in ordinary text, for every surface that shows some.
+/// Finding URLs in ordinary text, for every surface that shows some — one regex
+/// rather than one per surface, which would drift.
 ///
-/// These primitives were the terminal's, and the terminal still uses exactly
-/// these: `features/terminal/domain/terminal_links.dart` imports them rather
-/// than keeping its own copy. They moved down here when notes and todos needed
-/// links too, because the alternative was a second regex, and two regexes are
-/// two answers to "is this a URL" that drift apart.
-///
-/// **Only http and https.** The terminal's rule, and it holds here for the same
-/// reason: a note's body is often text an agent wrote, so a click must not be
-/// able to reach an arbitrary scheme handler. A `file://` in a note is left as
-/// plain text; the terminal resolves one as a *path* because it has a pane's
-/// working directory and an environment to translate against, and a note has
-/// neither.
+/// **Only http and https**: a note's body is often text an agent wrote, so a
+/// click must not reach an arbitrary scheme handler. A `file://` stays plain
+/// text; only the terminal, which has a working directory, resolves one.
 library;
 
-/// What a URL is allowed to be made of.
-///
-/// Everything up to whitespace or a delimiter that cannot appear in one: angle
-/// brackets and quotes bracket URLs in prose, a backslash is a Windows path
-/// separator rather than a URL one, and the C0/C1 controls are what an unparsed
-/// escape sequence would leave behind.
+/// What a URL is allowed to be made of: everything up to whitespace or a
+/// delimiter that cannot appear in one — quotes and angle brackets bracket URLs
+/// in prose, and a backslash is a Windows path separator.
 final RegExp urlPattern = RegExp(
   r'(?:https?://|file://|www\.)[^\s<>"' "'" r'`\\]+',
   caseSensitive: false,
 );
 
-/// Characters a URL may not end with, because prose puts them there. The
-/// emphasis marks are here because agents write markdown into terminals and
-/// into notes alike.
+/// Characters a URL may not end with, because prose puts them there — emphasis
+/// marks included, since agents write markdown into terminals and notes alike.
 const _trailingPunctuation = '.,;:!?*_~';
 
-/// Closing brackets that only belong to the URL if it opened them, so
-/// `(https://example.com/a)` loses its bracket and
-/// `https://en.wikipedia.org/wiki/Foo_(bar)` keeps its own. Quotes and angle
-/// brackets are absent deliberately: [urlPattern] cannot match them, so one
-/// can never be the last character.
+/// Closing brackets that belong to the URL only if it opened them, so
+/// `(https://example.com/a)` loses its bracket and `…/Foo_(bar)` keeps its own.
 const _closers = {')': '(', ']': '[', '}': '{'};
 
 /// [raw] with the punctuation that belongs to the surrounding prose removed.
@@ -65,12 +50,9 @@ int _countOf(String text, String char, int end) {
   return count;
 }
 
-/// [text] if it is an absolute http(s) URL, and null otherwise.
-///
-/// A host is required, so a bare `http://` left over from a truncated line does
-/// not become a clickable nothing. A *dotted* host is not required, because
-/// `http://localhost:3000` is what half the dev servers an agent starts print,
-/// and so is a bare IP.
+/// [text] if it is an absolute http(s) URL, and null otherwise. A host is
+/// required so a truncated `http://` is not clickable; a *dotted* host is not,
+/// because `http://localhost:3000` and bare IPs are what dev servers print.
 String? httpUrlOf(String text) {
   final uri = Uri.tryParse(text);
   if (uri == null) return null;
@@ -80,8 +62,7 @@ String? httpUrlOf(String text) {
 }
 
 /// The absolute http(s) URL a scanned [text] means, or null when it is not one.
-///
-/// A bare `www.…` is what the scan may hand over, and it means https.
+/// A bare `www.…` from the scan means https.
 String? resolveHttpUrl(String text) => httpUrlOf(
   text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
 );
@@ -94,8 +75,7 @@ class TextLink {
   /// resolved to https on the way here.
   final String url;
 
-  /// Offsets into the string the link was found in, so a caller can style
-  /// exactly those characters and hit-test them.
+  /// Offsets into the string the link was found in, for styling and hit-testing.
   final int start;
   final int end;
 

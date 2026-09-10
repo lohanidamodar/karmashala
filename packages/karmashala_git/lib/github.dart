@@ -2,8 +2,7 @@
 /// a review strip is drawn from, the merge strategies a repository allows and
 /// the branch-protection rule behind a blocked merge.
 ///
-/// Values only — the `gh`-driven service that fills them lives with the
-/// application (docs/PACKAGE_SPLIT.md §2).
+/// Values only; the `gh`-driven service that fills them lives with the app.
 library;
 
 export 'src/github/domain/branch_protection.dart';

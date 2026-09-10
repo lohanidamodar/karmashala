@@ -1,9 +1,7 @@
-/// The host side of one pairing attempt.
-///
-/// The QR code is shown; the phone dials the pairing rendezvous over the relay
-/// or the LAN; both derive the device key; a sealed confirm/ack round-trip
-/// proves both hold it; only then is the device row persisted. The secret is
-/// single-use and expires with [PairingPayload]'s TTL.
+/// The host side of one pairing attempt: the phone dials the pairing
+/// rendezvous, both ends derive the device key, a sealed confirm/ack round-trip
+/// proves both hold it, and only then is the device row persisted. The secret
+/// is single-use and expires with [PairingPayload]'s TTL.
 library;
 
 import 'dart:async';
@@ -27,11 +25,9 @@ class PairingException implements Exception {
   String toString() => 'PairingException: $message';
 }
 
-/// One shown QR code, waiting for one phone.
-///
-/// Attach every transport the host is listening on for this rendezvous — the
-/// relay socket, and any LAN link whose hello named it. The first phone to
-/// complete the sealed round-trip wins; the secret is then spent.
+/// One shown QR code, waiting for one phone. Attach every transport the host
+/// is listening on for this rendezvous; the first phone to complete the sealed
+/// round-trip wins, and the secret is then spent.
 class HostPairingSession {
   HostPairingSession({
     required this.payload,

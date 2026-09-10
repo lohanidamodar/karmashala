@@ -72,10 +72,9 @@ class PairingPayload {
     );
   }
 
-  /// A fresh payload rooted in a typed code: 20 random bytes become the
-  /// typeable code, and the payload's 32-byte secret and its rendezvous are
-  /// both HKDF-derived from them — so a phone holding only the typed code can
-  /// reach the very same pairing session the QR names explicitly.
+  /// A fresh payload rooted in a typed code: the payload's secret and its
+  /// rendezvous are both HKDF-derived from the 20 typed bytes, so a phone with
+  /// only the code reaches the pairing session the QR names explicitly.
   static Future<PairingPayload> generateWithCode({
     required Uri relay,
     required DeviceId hostId,
@@ -105,11 +104,8 @@ class PairingPayload {
   final Uri relay;
 
   /// Every relay the host is serving right now, [relay] first. Additive on the
-  /// wire (`relays`): an older companion ignores the key and pairs on [relay],
-  /// while a newer one saves the whole set and can reach the desktop later
-  /// through whichever of them is up. A relay is only a meeting place — the
-  /// rendezvous and every key come from the device key, never from a URL — so
-  /// carrying several costs nothing in trust.
+  /// wire: an older companion ignores the key and pairs on [relay]. A relay is
+  /// only a meeting place, so carrying several costs nothing in trust.
   final List<Uri> relays;
 
   /// The relay path both ends meet on for the pairing conversation only.

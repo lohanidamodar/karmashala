@@ -1,11 +1,7 @@
 import 'package:agent_cli/process.dart';
 
-/// A deterministic [CommandRunner] test double.
-///
-/// The fields are those of the app's `test/support/fake_command_runner.dart`,
-/// so a suite reads the same either side of the split; [start] is not, because
-/// nothing in this package starts a long-lived process — a scan and an SDK
-/// probe both run to completion.
+/// A deterministic [CommandRunner] test double, field-for-field the app's own
+/// — minus [start], because nothing here runs a long-lived process.
 class FakeCommandRunner implements CommandRunner {
   FakeCommandRunner({this.environmentId = 'windows', this.responder, this.throwError});
 

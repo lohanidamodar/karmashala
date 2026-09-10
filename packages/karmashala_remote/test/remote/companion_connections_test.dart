@@ -103,10 +103,9 @@ void main() {
 
     test('a set that yields NO usable record still restores the mirrored '
         'desktop', () async {
-      // Valid JSON, so the "corrupt set" path above never fires — but not one
-      // record survives parsing. Before this was fixed the phone came up
-      // unpaired with its active record sitting readable under the legacy
-      // key: paired on disk, forgotten in the app.
+      // Valid JSON, so the "corrupt set" path never fires, and yet not one
+      // record survives parsing: the phone used to come up unpaired with its
+      // active record sitting readable under the legacy key.
       store.values[CompanionConnections.storeKey] = jsonEncode({
         'active': hostA,
         'records': [

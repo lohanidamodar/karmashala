@@ -1,11 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// A rectangle in **page** coordinates (CSS pixels, document origin, i.e.
-/// including scroll offset).
-///
-/// Page rather than viewport coordinates because that is what
-/// `Page.captureScreenshot`'s `clip` expects when capturing beyond the
+/// A rectangle in page coordinates (CSS pixels including the scroll offset) —
+/// what `Page.captureScreenshot`'s `clip` expects when capturing beyond the
 /// viewport, which is how an element taller than the window is captured whole.
 class ElementBox {
   const ElementBox({
@@ -47,11 +44,9 @@ class ElementBox {
       '${width.round()}x${height.round()} at (${x.round()}, ${y.round()})';
 }
 
-/// The computed properties worth putting in front of an agent.
-///
-/// `CSS.getComputedStyleForNode` returns every one of Chrome's ~340 longhand
-/// properties; pasting all of them buries the useful ones. The full map is
-/// still kept on [ElementCapture.computedStyles] for callers that want it.
+/// The computed properties worth putting in front of an agent: Chrome reports
+/// ~340 longhands and pasting all of them buries the useful ones. The full map
+/// is still on [ElementCapture.computedStyles].
 const List<String> kPromptStyleProperties = [
   'display',
   'position',
@@ -85,11 +80,7 @@ const List<String> kPromptStyleProperties = [
   'z-index',
 ];
 
-/// Everything captured about one element: what it is, how it is styled, and
-/// what it looks like.
-///
-/// This is the unit that goes into an agent prompt, and the unit an MCP tool
-/// will return once wiring lands.
+/// Everything captured about one element — the unit that goes into a prompt.
 class ElementCapture {
   const ElementCapture({
     required this.selector,
@@ -172,9 +163,7 @@ $styles
 $shot''';
   }
 
-  /// Structured form, for a future MCP tool result.
-  ///
-  /// The screenshot is base64 so the whole capture stays one JSON value.
+  /// Structured form; the screenshot is base64 so a capture stays one JSON value.
   Map<String, Object?> toJson({bool includeScreenshot = true}) => {
     'selector': selector,
     'tagName': tagName,

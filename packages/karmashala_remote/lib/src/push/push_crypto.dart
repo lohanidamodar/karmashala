@@ -1,16 +1,8 @@
 /// Sealing for push payloads, shared by the host (seals) and the companion
-/// (opens).
-///
-/// A push travels host → relay → FCM → phone, and every hop but the ends sees
-/// only ciphertext: the notification text lives inside an XChaCha20-Poly1305
-/// box under a key derived from the pairing's device key. The relay addresses
-/// the phone by a **push tag** derived from the same key — stable per pairing
-/// (the FCM token it maps to is stable anyway) but never a device id and
-/// never linkable to any rendezvous, because every derivation here uses its
-/// own HKDF info label.
-///
-/// No sequence numbers: a replayed push re-shows a notification whose id is
-/// stable per session, so it collapses into the one already shown.
+/// (opens): every hop but the ends sees only ciphertext, and the relay
+/// addresses the phone by a **push tag** derived from the device key — never a
+/// device id, and never linkable to a rendezvous. No sequence numbers: a
+/// replayed push collapses into the notification already shown.
 library;
 
 import 'dart:convert';

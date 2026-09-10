@@ -50,17 +50,10 @@ ExecutionEnvironment sshEnvFixture({
 /// One `git status --porcelain=v2 --branch` reply, which is what the app asks
 /// for and therefore the only status text a fixture should pin.
 ///
-/// Spelling v2 out by hand is nine fields per file, most of them shas nothing
-/// reads, so it is built here once. What the callers actually vary is on the
-/// signature: the branch, its upstream, the distance between them, and which
-/// files changed how.
-///
-/// [ahead] and [behind] default to zero rather than null because that is what
-/// having an upstream at parity means, and v2 says so out loud (`# branch.ab
-/// +0 -0`) where v1 said it by printing nothing. Pass null for either to leave
-/// the header out, which is what git does when it **cannot** compute the
-/// distance — a branch with no upstream, or an upstream that has gone from the
-/// remote.
+/// [ahead] and [behind] default to zero because that is what an upstream at
+/// parity means, and v2 says so out loud (`# branch.ab +0 -0`) where v1 said it
+/// by printing nothing. Pass null to leave the header out, which is what git does
+/// when it **cannot** compute the distance.
 String porcelainV2({
   String? branch = 'main',
   String? upstream,

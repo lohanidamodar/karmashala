@@ -1,11 +1,8 @@
 import 'dart:math';
 
-/// Generates unique identifiers for new domain entities.
-///
-/// Abstracted so the application layer can inject a deterministic generator in
-/// tests instead of relying on randomness.
+/// Generates unique identifiers, abstracted so a test can inject a
+/// deterministic one.
 abstract interface class IdGenerator {
-  /// Returns a new, unique identifier.
   String newId();
 }
 
@@ -18,7 +15,7 @@ class RandomIdGenerator implements IdGenerator {
   @override
   String newId() {
     final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
-    // Set version (4) and variant (10xx) bits per RFC 4122.
+    // Version (4) and variant (10xx) bits, per RFC 4122.
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 

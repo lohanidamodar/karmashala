@@ -5,16 +5,10 @@ part of 'remote_companion_gateway.dart';
 // working relay link to the LAN is heard here and handed to the promotion
 // beside it, which no longer ends anything to take it up.
 
-/// The most beacons a failed promotion may ask the next one to wait out.
-///
-/// The hold-off doubles — 1, 2, 4 … — and stops here, so a desktop that is
-/// audible and permanently undialable settles into one dial every sixty-odd
-/// beacons rather than into never again. At [kLanBeaconInterval] that is a
-/// couple of minutes, which is about what a dial costing nothing but a second
-/// transport is worth. The cap exists because "never again" was the previous
-/// answer's real failure: whatever made a dial fail is a thing that gets
-/// fixed, and a phone that has to be force-quit to use its own LAN is not a
-/// phone that works.
+/// The most beacons a failed promotion may ask the next one to wait out. The
+/// hold-off doubles and stops here, so a desktop that is audible and
+/// permanently undialable settles into one dial every sixty-odd beacons rather
+/// than into never again — whatever made a dial fail is a thing that gets fixed.
 const int kLanPromotionHoldOffCap = 64;
 
 extension _GatewayConnectLoop on RemoteCompanionGateway {
@@ -44,9 +38,7 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     if (_linkPath.value != CompanionLinkPath.relay) return;
     // The desktop IS the relay: the embedded local relay is served on the very
     // address the beacon arrives from, so a "direct" socket would reach the
-    // same machine over the same network, one hop shorter. It no longer costs
-    // a link to find that out, but it still costs a dial every two seconds
-    // for a hop nobody would notice.
+    // same machine one hop shorter, for a dial every two seconds.
     if (host.address.address == _activeRelay?.host) {
       return;
     }
@@ -65,14 +57,9 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
         _link.value = CompanionLinkState.connecting;
         final client = await _dialAnyPath();
         // A pass may adopt only the client it still OWNS. `_teardownClient`
-        // nulls `_client` the instant a pairing, a switch or an unpair picks
-        // a different desktop, and `CompanionClient.close()` cannot cancel a
-        // `connect()` that is already past the host's answer — so a dial can
-        // come back to a link that is nobody's any more. Adopting it would
-        // throw away the death that teardown raised, put the OLD host back in
-        // `_record`, bind a transport listener to nothing, declare `connected`
-        // and park on a completer nothing can ever fire: the phone reads
-        // "connected" with no client behind it, and every request fails.
+        // nulls `_client` the instant another desktop is picked, and a
+        // `connect()` already past the host's answer cannot be cancelled —
+        // adopting that link declares `connected` with no client behind it.
         if (client != null && !identical(_client, client)) {
           await _closeStrayClient(client);
         } else if (client != null && !_closed && _record != null) {

@@ -1,6 +1,5 @@
-/// How old a reading is, in words. Every reading the host reports travels with
-/// one of these: a claim refusal that does not say how long the holder has held
-/// the token is an assertion, not a measurement.
+/// How old a reading is, in words: a refusal that cannot say how long the
+/// holder has held the token is an assertion, not a measurement.
 String describeAge(Duration age) {
   if (age.isNegative) return 'just now';
   if (age.inSeconds < 1) return 'just now';

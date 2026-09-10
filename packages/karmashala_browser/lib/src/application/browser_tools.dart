@@ -12,18 +12,9 @@ import '../domain/element_capture.dart';
 import '../domain/found_element.dart';
 import '../domain/untrusted_content.dart';
 
-/// A tool failure whose text is the whole message.
-///
-/// The bridge renders a thrown error as `Error: $e`, so anything with a Dart
-/// prefix ("Bad state:", "Invalid argument(s):") wastes the first words of an
-/// actionable sentence. `features/browser` already writes messages worth
-/// reading — this carries them through unchanged.
-///
-/// [recovery] rides on [toString] rather than on [message] because those two
-/// have different readers. [message] is the sentence a person sees in the UI
-/// and the one other code asserts on; the trailer is for the agent, which only
-/// ever sees the rendered error. Appending it to [message] would put machine
-/// syntax into a human string for no gain.
+/// A tool failure whose text is the whole message: the bridge renders a thrown
+/// error as `Error: $e`, and [recovery] rides on [toString] rather than on
+/// [message] because only the agent ever sees that rendering.
 class BrowserToolException implements Exception {
   const BrowserToolException(
     this.message, {
@@ -32,38 +23,17 @@ class BrowserToolException implements Exception {
 
   final String message;
 
-  /// What to do next, in the fixed vocabulary of [BrowserRecovery]. Defaults to
-  /// "fix the arguments" because every failure this class raises *itself* — a
-  /// missing argument, an unknown key, an index past the end — is exactly that.
+  /// What to do next. Defaults to "fix the arguments": every failure this
+  /// class raises itself is one.
   final BrowserRecovery recovery;
 
   @override
   String toString() => '$message\n${recovery.line}';
 }
 
-/// The browser tools an agent sees, mapped onto [BrowserService].
-///
-/// Three rules shape every result here, the first two learnt the expensive way
-/// elsewhere in this project and the third the reason this file has a trust
-/// boundary at all:
-///
-/// * **One text block, not a JSON map.** The bridge pretty-prints a map, and
-///   one JSON object per element costs several times what one line per element
-///   does. Loop 34 measured a raw device dump at ~5 900 tokens and a pruned
-///   listing at ~370 for the same screen.
-/// * **Images are image blocks.** Base64 inside JSON is unreadable to the
-///   model and enormous on the wire.
-/// * **Nothing the page wrote appears outside a fence.** Every other tool in
-///   this app describes things the developer owns. These describe a document
-///   written by a stranger, and an element's label, a page title, a URL and an
-///   evaluated value are all chosen by whoever controls the site. So each
-///   result is our sentences first and then one
-///   [wrapUntrustedPageContent] block holding every page-derived string —
-///   never the two interleaved, because interleaved is exactly the shape a
-///   prompt injection needs to pass as narration.
-///
-/// The service is the app's single [BrowserService], so these tools and the
-/// browser pane drive the same page: what an agent clicks, the developer sees.
+/// The browser tools an agent sees, mapped onto [BrowserService]. Every result
+/// is our sentences first and then one [wrapUntrustedPageContent] block holding
+/// every page-derived string — interleaved is the shape a prompt injection needs.
 class BrowserTools {
   const BrowserTools(
     this._service, {
@@ -75,14 +45,8 @@ class BrowserTools {
   /// Fails closed when nothing wired one in — see [DeniedBrowserConsent].
   final BrowserConsent consent;
 
-  /// Whether [tool] belongs to this set.
   static bool handles(String tool) => tool.startsWith('browser_');
 
-  /// The tools that cannot run on consent alone being absent.
-  ///
-  /// A map rather than a check inside `_evaluate` so the policy is one table a
-  /// reader can hold against the tool list, and so a second gated tool is a row
-  /// here rather than a condition somewhere in a method body.
   static const Map<String, BrowserCapability> gatedTools =
       <String, BrowserCapability>{
         'browser_evaluate': BrowserCapability.evaluate,
@@ -141,10 +105,6 @@ class BrowserTools {
         throw BrowserToolException('Unknown browser tool: $tool');
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Connecting
-  // ---------------------------------------------------------------------------
 
   Future<Object?> _connect(Map<String, dynamic> args) async {
     final session = await _service.connect(
@@ -215,10 +175,6 @@ class BrowserTools {
   String _tabLine(BrowserTarget tab, bool current) =>
       '${current ? '* ' : '  '}${tab.id}  ${tab.title.isEmpty ? '(untitled)' : tab.title}  ${tab.url}';
 
-  // ---------------------------------------------------------------------------
-  // Reading the page
-  // ---------------------------------------------------------------------------
-
   Future<Object?> _evaluate(Map<String, dynamic> args) async {
     final value = await _service.evaluate(
       _requiredString(args, 'expression'),
@@ -241,8 +197,7 @@ class BrowserTools {
       limit: _int(args['limit']) ?? 25,
     );
     if (found.elements.isEmpty) {
-      // Nothing matched, so there is no page text to quote and no fence to
-      // pay for: the query is the caller's own and the counts are ours.
+      // Nothing matched: no page text to quote, so no fence to pay for.
       return _report([
         'Nothing matches ${found.query}.'
             '${found.hidden == 0 ? '' : ' ${found.hidden} match'
@@ -348,10 +303,8 @@ class BrowserTools {
     );
   }
 
-  /// A capture's body is markup and computed style straight out of the
-  /// document, so the whole of it goes inside the fence. Only [lead] — our own
-  /// framing — stays outside, which is also what keeps "the user pointed at
-  /// this element" readable as *our* claim rather than the page's.
+  /// The whole body is page-authored and goes inside the fence; only [lead]
+  /// stays outside, which keeps it readable as our claim rather than the page's.
   Object _captureContent(
     ElementCapture capture, {
     required bool full,
@@ -374,10 +327,6 @@ class BrowserTools {
       ),
     ]);
   }
-
-  // ---------------------------------------------------------------------------
-  // Driving the page
-  // ---------------------------------------------------------------------------
 
   Future<Object?> _click(Map<String, dynamic> args) async {
     final result = await _service.click(
@@ -430,13 +379,9 @@ class BrowserTools {
     );
   }
 
-  /// Our half of a type/fill report.
-  ///
-  /// The value that was *sent* is the caller's own string, so it stays out
-  /// here where it is legible. The value read *back* is the page's answer and
-  /// so is only referred to from here; it is quoted inside the fence by
-  /// [_typePageFacts]. That split is the reason the mismatch sentence says
-  /// "quoted below" instead of naming the value inline.
+  /// The value sent is the caller's own string and stays outside the fence; the
+  /// value read back is the page's, which is why the mismatch line says "quoted
+  /// below" rather than naming it.
   List<String> _typeReport(TypeResult result, {required String verb}) => [
     '$verb "${result.text}"'
         '${result.element == null ? ' into whatever had focus' : ' into the targeted field'}'
@@ -467,15 +412,8 @@ class BrowserTools {
     return _report(['Pressed $key.']);
   }
 
-  // ---------------------------------------------------------------------------
-  // Rendering
-  // ---------------------------------------------------------------------------
-
-  /// The page's own title and URL, or nulls when they cannot be read.
-  ///
-  /// Both in one call so a report costs two round trips rather than four, and
-  /// swallowing [BrowserException] here rather than letting it out because a
-  /// failure to read the title must not turn a successful click into an error.
+  /// The page's own title and URL, or nulls: failing to read them must not turn
+  /// a successful click into an error.
   Future<({String? title, String? url})> _pageFacts() async {
     try {
       return (
@@ -487,12 +425,8 @@ class BrowserTools {
     }
   }
 
-  /// Our lines, then one fence holding everything the page contributed.
-  ///
-  /// [page] appends the current title and URL to the fenced half, which is
-  /// wanted almost everywhere — "where am I" is the question after every verb —
-  /// and skipped where it would be a second, contradictory answer (a tab
-  /// listing) or a wasted round trip (a search that matched nothing).
+  /// Our lines, then one fence holding everything the page contributed. [page]
+  /// appends title and URL, skipped where that would contradict or cost a trip.
   Future<Object> _report(
     List<String> ours, {
     List<String> fromPage = const <String>[],
@@ -519,7 +453,6 @@ class BrowserTools {
     ].join('\n');
   }
 
-  /// A JavaScript result, compactly: a scalar as itself, a structure as JSON.
   static String _renderValue(Object? value) => switch (value) {
     null => 'null',
     final String s => s,

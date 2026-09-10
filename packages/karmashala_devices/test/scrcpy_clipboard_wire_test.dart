@@ -6,24 +6,10 @@ import 'package:karmashala_devices/src/data/scrcpy_control.dart';
 import 'package:karmashala_devices/src/data/scrcpy_device_message.dart';
 
 /// The expected encodings, spelled out independently of the implementation.
-///
-/// Every offset below comes from disassembling `assets/scrcpy/scrcpy-server`
-/// (scrcpy 7.27) with `dexdump -d`:
-///
-/// * `ControlMessage.TYPE_GET_CLIPBOARD` = 8, `TYPE_SET_CLIPBOARD` = 9.
-/// * `ControlMessageReader.parseGetClipboard`: one `readUnsignedByte`.
-/// * `ControlMessageReader.parseSetClipboard`: `readLong`, `readByte`,
-///   `parseString()` — which is `parseString(4)`, a four-byte length.
-/// * `DeviceMessage.TYPE_CLIPBOARD` = 0, `TYPE_ACK_CLIPBOARD` = 1,
-///   `TYPE_UHID_OUTPUT` = 2.
-/// * `DeviceMessageWriter.write`: `writeByte(type)`, then for the clipboard a
-///   `writeInt` length and the bytes; for the ack a `writeLong`; for UHID two
-///   `writeShort`s and the bytes.
-///
-/// A field in the wrong place does not fail loudly. The server reads a
-/// plausible value out of the wrong bytes, applies it, and the socket carries
-/// on — which is why these assert on the bytes rather than on a round trip
-/// through our own parser.
+/// Every offset comes from disassembling `assets/scrcpy/scrcpy-server` with
+/// `dexdump -d`. A field in the wrong place does not fail loudly — the server
+/// reads a plausible value out of the wrong bytes and carries on — which is why
+/// these assert on the bytes rather than on a round trip through our parser.
 int _u8(Uint8List b, int i) => ByteData.sublistView(b).getUint8(i);
 int _u32(Uint8List b, int i) => ByteData.sublistView(b).getUint32(i);
 int _i64(Uint8List b, int i) => ByteData.sublistView(b).getInt64(i);
@@ -80,8 +66,7 @@ void main() {
 
     test('the length counts UTF-8 bytes, not characters', () {
       // The device's own filenames and text are UTF-8; a length in characters
-      // makes the server readFully fewer bytes than were sent and then read
-      // the tail as the next message.
+      // makes the server readFully fewer bytes than were sent.
       const message = ScrcpySetClipboardMessage(
         sequence: 1,
         text: 'नेपाली',
@@ -117,9 +102,8 @@ void main() {
     });
 
     test('refuses text over the reader limit instead of truncating it', () {
-      // ControlMessageReader.CLIPBOARD_TEXT_MAX_LENGTH is 262130. The server
-      // refuses a longer message and the socket then desynchronises, so a
-      // truncating encoder would trade a visible error for a dead socket.
+      // The server refuses a longer message and the socket then desynchronises,
+      // so a truncating encoder trades a visible error for a dead socket.
       final tooLong = 'x' * (kScrcpyClipboardTextMaxBytes + 1);
       expect(
         () => ScrcpySetClipboardMessage(sequence: 1, text: tooLong).encode(),
@@ -192,9 +176,8 @@ void main() {
     });
 
     test('steps over a UHID output message', () {
-      // Nothing creates a UHID device yet. The point is measurable *length*:
-      // a message that cannot be measured cannot be stepped over, and the next
-      // one would be read out of the middle of it.
+      // Nothing creates a UHID device yet. The point is measurable *length*: a
+      // message that cannot be measured cannot be stepped over.
       final uhid = Uint8List.fromList([
         ScrcpyDeviceMessageType.uhidOutput,
         0x00, 0x02, // id
@@ -221,9 +204,8 @@ void main() {
     });
 
     test('a clipboard length is four bytes, not two', () {
-      // The one asymmetry with UHID, and the one that silently truncates: a
-      // 70 000-byte clipboard read as a short is 4464 bytes and the rest
-      // becomes the next "message".
+      // The one asymmetry with UHID: a 70 000-byte clipboard read as a short is
+      // 4464 bytes, and the rest becomes the next "message".
       final parser = ScrcpyDeviceMessageParser();
       final text = 'y' * 70000;
       final messages = parser.add(_deviceClipboard(text));

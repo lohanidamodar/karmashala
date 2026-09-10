@@ -5,9 +5,8 @@ import '../domain/session_registry.dart';
 import 'frame.dart';
 import 'wire.dart';
 
-/// Bumped whenever a frame's meaning changes. A mismatch is refused loudly on
-/// the first exchange rather than surfacing later as a corrupt pane: the host
-/// answers with [ProtocolErrorCode.protocolMismatch] and hangs up.
+/// Bumped whenever a frame's meaning changes; a mismatch is refused on the
+/// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
 const int kProtocolVersion = 1;
 
 enum ProtocolErrorCode {
@@ -31,14 +30,13 @@ enum ProtocolErrorCode {
 }
 
 /// Requests carry an id and every reply echoes it, so a client can have more
-/// than one in flight without matching on type. Output frames carry none —
-/// they are not answers to anything.
+/// than one in flight without matching on type. Output frames carry none.
 sealed class HostMessage {
   const HostMessage();
   Frame toFrame();
 }
 
-// ---------------------------------------------------------------- client → host
+// client → host
 
 class HelloMessage extends HostMessage {
   const HelloMessage({
@@ -244,7 +242,7 @@ class CloseMessage extends HostMessage {
   }
 }
 
-// ---------------------------------------------------------------- host → client
+// host → client
 
 class WelcomeMessage extends HostMessage {
   const WelcomeMessage({
@@ -394,9 +392,8 @@ class AttachedMessage extends HostMessage {
   final int columns;
   final int rows;
 
-  /// Where the replay actually starts. When the client asked for an offset the
-  /// ring had overwritten this is later than it asked for, and [droppedBytes]
-  /// says how much is gone — the pane says so rather than showing a seam.
+  /// Where the replay actually starts: later than asked for when the ring had
+  /// overwritten it, with [droppedBytes] saying how much is gone.
   final int replayFromOffset;
   final int droppedBytes;
   final int totalBytes;
@@ -600,8 +597,6 @@ class ErrorMessage extends HostMessage {
     return ErrorMessage(r.u32(), ProtocolErrorCode.fromCode(r.u32()), r.str());
   }
 }
-
-// ---------------------------------------------------------------- shared bits
 
 void _writeLifecycle(WireWriter w, SessionLifecycle lifecycle) {
   switch (lifecycle) {

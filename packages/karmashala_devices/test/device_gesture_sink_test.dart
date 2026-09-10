@@ -23,8 +23,7 @@ AndroidSdk _sdk() => const AndroidSdk(
 );
 
 /// A real loopback socket pair, so the connection under test is the shipped
-/// class rather than a stand-in — including how it behaves when the far end
-/// disappears, which is the case the fallback depends on.
+/// class — including how it behaves when the far end disappears.
 class _Wire {
   _Wire(this.server, this.client, this.received);
 
@@ -116,9 +115,8 @@ void main() {
     });
 
     test('positions are scaled into the video space, not the screen', () async {
-      // The distinction is load-bearing: `PositionMapper.map` compares the
-      // declared size against scrcpy's video size and silently drops the event
-      // when they differ, so sending device pixels does nothing at all.
+      // `PositionMapper.map` compares the declared size against scrcpy's video
+      // size and silently drops the event when they differ.
       sinkOver(() => _video).pointerDown(0, 0.5, 0.25);
       await settle();
       final touch = wire.touches.single;
@@ -255,8 +253,7 @@ void main() {
       sink.pointerUp(0, 0.5, 0.2, const Duration(milliseconds: 5));
       await settle();
       // Floored: below this Android reads an implausible velocity. The literal
-      // is the point — it is the argument `input swipe` is actually given, and
-      // asserting it against `kMinSwipeDuration` would survive a change to it.
+      // is the point — `kMinSwipeDuration` would survive a change to itself.
       expect(argv().last, '60');
     });
 

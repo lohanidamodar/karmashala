@@ -1,9 +1,6 @@
-/// A named key that can be pressed in the page.
-///
-/// `Input.dispatchKeyEvent` needs four agreeing fields — `key`, `code`,
-/// `windowsVirtualKeyCode` and (for printable keys) `text`. Getting one wrong
-/// produces an event the page's own handlers quietly ignore, so the table is
-/// kept in one place and unit-tested rather than spelled out at each call.
+/// A named key that can be pressed in the page. `Input.dispatchKeyEvent` needs
+/// four agreeing fields, and one wrong produces an event the page's handlers
+/// quietly ignore — hence one tested table rather than spelling it out per call.
 class BrowserKey {
   const BrowserKey({
     required this.name,

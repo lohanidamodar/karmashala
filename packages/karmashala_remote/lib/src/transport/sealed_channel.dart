@@ -1,10 +1,6 @@
-/// End-to-end sealing for the remote session API.
-///
-/// Every application frame is sealed with XChaCha20-Poly1305 under a
-/// per-direction key. The relay forwards the result and sees only its size.
-///
-/// Nothing here logs, and no exception message carries key material or
-/// plaintext — a decrypt failure says only that it failed.
+/// End-to-end sealing for the remote session API: every application frame is
+/// sealed with XChaCha20-Poly1305 under a per-direction key, and the relay sees
+/// only its size. Nothing here logs, and a decrypt failure says only that.
 library;
 
 import 'dart:math';
@@ -81,12 +77,10 @@ class SealedFrame {
   final Uint8List plaintext;
 }
 
-/// One device's sealed channel: seals in one direction, opens the other.
-///
-/// Its lifetime is the **rendezvous generation**, not the socket. Sequence
-/// numbers keep counting across a reconnect, which is what makes a replayed
-/// frame from the dropped connection detectable; callers re-attach the same
-/// channel to the new transport rather than building a fresh one.
+/// One device's sealed channel: seals in one direction, opens the other. Its
+/// lifetime is the **rendezvous generation**, not the socket — sequence numbers
+/// keep counting across a reconnect, which is what makes a replayed frame from
+/// the dropped connection detectable.
 class SealedChannel {
   SealedChannel._(
     this._cipher,
@@ -99,14 +93,10 @@ class SealedChannel {
     required this.maxForwardGap,
   });
 
-  /// Builds both directions from the device key Loop A derived at pairing.
-  ///
-  /// [generation] is the rendezvous counter this connection uses; it is bound
-  /// into both direction keys, so sequences safely restart at zero when the
-  /// rendezvous rotates and old frames cannot be replayed into a new one.
-  ///
-  /// [nonceSource] exists so test vectors can pin a nonce; production callers
-  /// leave it null and get `Random.secure()`.
+  /// Builds both directions from the device key derived at pairing. [generation]
+  /// is bound into both direction keys, so sequences safely restart at zero when
+  /// the rendezvous rotates. [nonceSource] exists so test vectors can pin a
+  /// nonce; production callers leave it null.
   static Future<SealedChannel> forDevice({
     required SecretKeyData deviceKey,
     required ChannelRole role,

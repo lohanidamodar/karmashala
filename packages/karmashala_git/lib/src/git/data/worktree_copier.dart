@@ -7,20 +7,14 @@ import '../domain/worktree_setup.dart';
 
 /// Copies one gitignored path from a checkout into a worktree beside it.
 ///
-/// **Both ends are always in the same environment.** `worktreePathFor` puts a
-/// worktree in a `.karmashala-worktrees` folder beside its checkout, in that
-/// checkout's own environment, so this is never a transfer between machines —
-/// which is what makes it possible at all. There is no environment-aware
-/// filesystem in this app (see `hostPathMapperFor`, and `RemoteFileBrowser`,
-/// which owns an SFTP client and only ever lists with it), and building one
-/// would have been the wrong answer anyway: a copy that runs *where the files
-/// are* is both simpler and enormously faster.
+/// **Both ends are always in the same environment** — a worktree sits beside its
+/// checkout — so this is never a transfer between machines, and a copy that runs
+/// where the files are needs no environment-aware filesystem.
 abstract interface class WorktreeCopier {
   /// Copies the checkout's [source] to the worktree's [destination].
   ///
-  /// [path] is the repository-relative spelling, used in the sentences. Never
-  /// throws: a copy that failed is a verdict, because the worktree exists
-  /// either way and the caller has more paths to try.
+  /// Never throws: a failed copy is a verdict, because the worktree exists either
+  /// way and the caller has more paths to try.
   Future<WorktreeCopyVerdict> copy({
     required String path,
     required String source,
@@ -32,12 +26,9 @@ abstract interface class WorktreeCopier {
 /// `windowsNative` and `localPosix`, exactly the two kinds `hostPathMapperFor`
 /// answers with the identity mapping.
 ///
-/// `dart:io` rather than a `cp`/`robocopy` process: there is no shell in the
-/// way, so no second parser to quote for, and a per-file failure can be
-/// reported as one. The cost is that a path longer than `MAX_PATH` fails on
-/// Windows where `robocopy` would not; `.dart_tool` and `macos/Vendor` are
-/// shallow, and a setting that hits it gets a named failure rather than a
-/// silent half-copy.
+/// `dart:io` rather than a `cp`/`robocopy` process: no shell to quote for, and a
+/// per-file failure is reported as one. The cost is that a path longer than
+/// `MAX_PATH` fails on Windows where `robocopy` would not.
 class HostWorktreeCopier implements WorktreeCopier {
   const HostWorktreeCopier();
 
@@ -53,10 +44,8 @@ class HostWorktreeCopier implements WorktreeCopier {
     final FileSystemEntityType sourceType;
     final FileSystemEntityType destinationType;
     try {
-      // Links followed on purpose: a checkout whose `node_modules` is a link
-      // is asking for what it points at, and this makes a copy of it. What is
-      // refused is *creating* a link at the destination — see the class doc on
-      // [WorktreeSetup].
+      // Links followed on purpose: a checkout whose `node_modules` is a link is
+      // asking for what it points at. *Creating* one at the destination is refused.
       sourceType = await FileSystemEntity.type(source);
       destinationType = await FileSystemEntity.type(destination);
     } on FileSystemException catch (e) {
@@ -136,18 +125,12 @@ class HostWorktreeCopier implements WorktreeCopier {
 /// distribution or an **SSH** host. It runs `cp` *there*, through the same
 /// [CommandRunner] the rest of the feature uses.
 ///
-/// The host could reach a WSL path as `\\wsl.localhost\<distro>\…`, and
-/// `hostPathMapperFor` does exactly that for the one-line reads a delivery row
-/// wants. It is the wrong tool here: §18 measures that share at 0.79 ms per
-/// listing warm, so a `.dart_tool` of a few thousand files would be minutes of
-/// 9p round trips to do what `cp -a` does inside the distribution in a second.
-/// For SSH there is no choice at all — nothing local names that filesystem.
+/// `\\wsl.localhost` is the wrong tool here: §18 measures that share at 0.79 ms
+/// per listing warm, so a `.dart_tool` would be minutes of 9p round trips to do
+/// what `cp -a` does inside the distribution in a second. SSH has no choice at all.
 ///
-/// **Three or four processes per path**, and that is deliberate. On WSL each
-/// `wsl.exe` costs ~300 ms (measured in `WslCommandRunner`), so the probes are
-/// real money — but they are paid once per worktree, against a copy that is
-/// orders of magnitude larger, and each one buys a refusal that would
-/// otherwise be a silent wrong answer.
+/// **Three or four processes per path**, at ~300 ms each on WSL, paid once per
+/// worktree: each buys a refusal that would otherwise be a silent wrong answer.
 class ShellWorktreeCopier implements WorktreeCopier {
   const ShellWorktreeCopier(this.runner);
 
@@ -260,10 +243,9 @@ class ShellWorktreeCopier implements WorktreeCopier {
 /// The copier for [environment], and the path context its paths are written
 /// in.
 ///
-/// The split is the one `hostPathMapperFor` already draws, and for the same
-/// reason: two of the four kinds *are* this process's filesystem and two are
-/// not. Nothing here checks `Platform.isWindows` — a `wsl` row only exists on
-/// a Windows host, and it is the row that decides, not the host.
+/// The split `hostPathMapperFor` already draws: two of the four kinds *are* this
+/// process's filesystem and two are not. Nothing checks `Platform.isWindows` —
+/// the row decides, not the host.
 ({WorktreeCopier copier, p.Context context}) worktreeCopierFor(
   ExecutionEnvironment environment,
   CommandRunner runner,

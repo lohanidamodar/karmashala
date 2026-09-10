@@ -136,8 +136,7 @@ void main() {
         outputPath: path,
       );
       // Enough frames that the worker isolate goes round its message loop many
-      // times — which is what would catch the encoder minding which thread it
-      // is called from.
+      // times, which is what would catch an encoder that minds its thread.
       for (var i = 0; i < 40; i++) {
         await sink.addFrame(_frame(value: i * 6));
       }

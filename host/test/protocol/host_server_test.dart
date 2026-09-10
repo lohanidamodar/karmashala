@@ -4,9 +4,8 @@ import 'dart:typed_data';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
-/// A connection with no operating system behind it, so the server's whole
-/// protocol path is exercised on Windows. It carries bytes exactly as a socket
-/// would — the test writes frames in and reads frames out.
+/// A connection with no operating system behind it, carrying bytes exactly as a
+/// socket would.
 class PipeConnection implements HostConnection {
   PipeConnection([this.description = 'test-client']);
 

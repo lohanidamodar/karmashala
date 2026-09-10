@@ -11,12 +11,9 @@ import 'cdp_connection.dart';
 import 'cdp_payloads.dart';
 import 'picker_script.dart';
 
-/// One attached page, driven over CDP.
-///
-/// Everything a caller (and, later, an MCP tool) needs: navigate, evaluate,
-/// query the DOM, screenshot, and read an element's HTML plus its computed
-/// styles. Nothing here reports success speculatively — every wait either
-/// observes the browser confirming the outcome or raises.
+/// One attached page, driven over CDP. Nothing here reports success
+/// speculatively: every wait either observes the browser confirming the
+/// outcome or raises.
 class CdpPage {
   CdpPage({required this.connection, required this.target});
 
@@ -28,7 +25,6 @@ class CdpPage {
 
   bool _domainsEnabled = false;
 
-  /// Whether the underlying connection is still alive.
   bool get isConnected => !connection.isClosed;
 
   /// Enables the domains every other call depends on. Idempotent.
@@ -41,11 +37,8 @@ class CdpPage {
     _domainsEnabled = true;
   }
 
-  /// Navigates to [url] and waits for the page's load event.
-  ///
-  /// Fails with [BrowserFailure.navigationTimeout] if the load event never
-  /// arrives — a page that never finishes loading is reported as exactly that,
-  /// not as a successful navigation.
+  /// Navigates to [url] and waits for the load event. A page that never
+  /// finishes loading is [BrowserFailure.navigationTimeout], not a success.
   Future<void> navigate(
     String url, {
     Duration timeout = const Duration(seconds: 30),
@@ -80,10 +73,8 @@ class CdpPage {
     await loaded;
   }
 
-  /// Evaluates [expression] in the page and returns its value.
-  ///
-  /// Uses `returnByValue`, so the result is plain JSON-compatible Dart. A
-  /// thrown JavaScript error becomes [BrowserFailure.evaluationFailed].
+  /// Evaluates [expression] with `returnByValue`, so the result is plain Dart.
+  /// A thrown JavaScript error becomes [BrowserFailure.evaluationFailed].
   Future<Object?> evaluate(
     String expression, {
     bool awaitPromise = false,
@@ -111,10 +102,8 @@ class CdpPage {
   Future<String> currentTitle() async =>
       (await evaluate('document.title'))?.toString() ?? '';
 
-  /// Resolves [selector] to a DOM node id.
-  ///
-  /// `DOM.getDocument` is re-issued each time: it is what makes node ids
-  /// valid, and a navigation invalidates every id handed out before it.
+  /// Resolves [selector] to a DOM node id. `DOM.getDocument` is re-issued each
+  /// time: it is what makes node ids valid, and a navigation invalidates them.
   Future<int> querySelectorNodeId(String selector) async {
     await enableDomains();
     final document = await connection.send(
@@ -161,7 +150,6 @@ class CdpPage {
     return nodeId;
   }
 
-  /// How many elements match [selector].
   Future<int> countMatches(String selector) async {
     final count = await evaluate(
       'document.querySelectorAll(${jsonEncode(selector)}).length',
@@ -169,7 +157,6 @@ class CdpPage {
     return count is num ? count.toInt() : 0;
   }
 
-  /// The element's `outerHTML`.
   Future<String> outerHtmlOfNode(int nodeId) async {
     final reply = await connection.send(
       'DOM.getOuterHTML',
@@ -241,10 +228,8 @@ class CdpPage {
     );
   }
 
-  /// Captures a PNG of the whole viewport, the whole page, or a [clip].
-  ///
-  /// [clip] is in page coordinates; `captureBeyondViewport` makes Chrome
-  /// interpret it that way and renders parts that are scrolled out of sight.
+  /// Captures a PNG of the viewport, the whole page, or a [clip] in page
+  /// coordinates — `captureBeyondViewport` is what makes them page coordinates.
   Future<Uint8List> screenshot({
     ElementBox? clip,
     bool fullPage = false,
@@ -323,10 +308,8 @@ class CdpPage {
   Future<ElementCapture> captureSelector(String selector) async =>
       captureElement(await describeSelector(selector));
 
-  /// Captures the full bundle for an already-described element.
-  ///
-  /// Resolves the node by selector when the page could verify one, and falls
-  /// back to hit-testing the click point when it could not.
+  /// Captures the full bundle for an already-described element, by selector when
+  /// the page verified one and by hit-testing the click point when it could not.
   Future<ElementCapture> captureElement(PickedElement element) async {
     final selector = element.selector;
     final int nodeId;
@@ -365,11 +348,8 @@ class CdpPage {
     );
   }
 
-  /// Waits for the next [method] event.
-  ///
-  /// If the connection dies first this fails with
-  /// [BrowserFailure.disconnected] rather than hanging until the timeout —
-  /// "the browser went away" must never look like "still working".
+  /// Waits for the next [method] event. A connection that dies first fails with
+  /// [BrowserFailure.disconnected] rather than hanging until the timeout.
   Future<CdpEvent> nextEvent(
     String method, {
     required Duration timeout,

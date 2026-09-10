@@ -2,8 +2,7 @@ import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:test/test.dart';
 
-/// The scripted gateway the whole companion UI is built against. These pin the
-/// contract the orchestrator wires Loop 70's real client behind: streams seed
+/// The scripted gateway the whole companion UI is built against: streams seed
 /// with the current value, actions are refused with a user-fit sentence when
 /// unpaired or unreachable, and pairing flips every derived state at once.
 void main() {

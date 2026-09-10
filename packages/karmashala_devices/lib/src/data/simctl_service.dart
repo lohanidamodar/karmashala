@@ -10,12 +10,7 @@ import 'adb_service.dart' show HostFileReader;
 import 'simctl_parsing.dart';
 
 /// The pid `simctl launch` printed, or null when it printed something else.
-///
-/// The success line is `com.example.app: 61324` — the bundle id, a colon, the
-/// pid. Anything else (a warning, an error, an empty stdout on a device that
-/// exited 0 anyway) yields null rather than a guess: the pid is used to attach
-/// a debugger or to kill the app, and a wrong number does both to some other
-/// process.
+/// A guess would attach a debugger to, or kill, some other process.
 int? parseSimctlLaunchPid(String output) {
   final pattern = RegExp(r':\s*(\d+)$');
   for (final line in output.split('\n')) {
@@ -25,18 +20,8 @@ int? parseSimctlLaunchPid(String output) {
   return null;
 }
 
-/// Every `simctl` interaction with the iOS Simulator on one host, routed
-/// through a [CommandRunner] so nothing in this feature touches `Process`
-/// directly (architecture constraint 6).
-///
-/// The counterpart of `AdbService`, deliberately the same shape: one service
-/// per execution environment, a mutable [actionSink] so a verification run
-/// watches the *same* instance the UI and the MCP tools use, and every
-/// user-visible verb reported through it.
-///
-/// Simulators only exist where Xcode does, so a [runner] pointed at anything
-/// but a macOS host will fail every call with a [CommandException] — see
-/// [listSimulators] for how that is absorbed.
+/// Every `simctl` interaction with the iOS Simulator on one host, routed through
+/// a [CommandRunner]. Off a macOS host every call throws; see [listSimulators].
 class SimctlService {
   SimctlService({
     required this.runner,
@@ -46,23 +31,17 @@ class SimctlService {
 
   final CommandRunner runner;
 
-  /// The launcher, not the tool. `xcrun` asks `xcode-select` where the active
-  /// developer directory is, so this keeps working across an Xcode upgrade, a
-  /// beta installed alongside the release, and an Xcodes-managed install —
-  /// none of which a hardcoded `/Applications/Xcode.app/…/simctl` survives.
+  /// The launcher, not the tool: `xcrun` asks `xcode-select` where the active
+  /// developer directory is, which a hardcoded Xcode path does not survive.
   final String executable;
 
   final HostFileReader _readHostFile;
 
-  /// Who is recording what this service does to simulators, or null for
-  /// nobody. Mirrors `AdbService.actionSink` down to the omissions: listing
-  /// simulators and asking for a screen size are how the app works, not things
-  /// somebody did to a device, so they are not reported.
+  /// Who is recording what this service does to simulators, or null for nobody.
+  /// Listing and asking a screen size are plumbing and are not reported.
   DeviceActionSink? actionSink;
 
   /// The shell used for the one command that needs a pipeline, [setClipboard].
-  /// `/bin/sh` is present on every macOS host, which is the only host `simctl`
-  /// runs on anyway.
   static const String _shell = '/bin/sh';
 
   static Future<Uint8List> _defaultReadHostFile(String path) =>
@@ -73,11 +52,8 @@ class SimctlService {
     arguments: ['simctl', ...arguments],
   );
 
-  /// Lists every simulator in the device set, including unavailable ones.
-  ///
-  /// Returns empty rather than throwing when `xcrun` is missing or refuses:
-  /// this app runs on Windows and Linux too, where "there are no simulators"
-  /// is the correct answer and not a failure worth surfacing to the user.
+  /// Lists every simulator in the device set, including unavailable ones. Empty
+  /// rather than throwing: on Windows "there are none" is the right answer.
   Future<List<IosSimulator>> listSimulators() async {
     try {
       final result = await runner.run(_simctl(const ['list', 'devices', '-j']));
@@ -88,11 +64,8 @@ class SimctlService {
     }
   }
 
-  /// The simulator's screen size in pixels — the coordinate space taps use.
-  ///
-  /// Null when `simctl` could not be asked or answered in an unfamiliar shape,
-  /// which reads as "ask something else" rather than as a plausible-looking
-  /// guess about a screen the caller is about to tap on.
+  /// The simulator's screen size in pixels, or null when `simctl` could not be
+  /// asked — which reads as "ask something else", not as a plausible guess.
   Future<DeviceScreenSize?> screenSize(String udid) async {
     try {
       final result = await runner.run(_simctl(['io', udid, 'enumerate']));
@@ -105,14 +78,8 @@ class SimctlService {
     }
   }
 
-  /// Captures the screen as PNG bytes.
-  ///
-  /// Always writes to a real file and reads it back, because
-  /// `simctl io <udid> screenshot -` does **not** write to stdout the way the
-  /// dash convention suggests: it creates a file literally named `-` in the
-  /// working directory and returns success, so a caller trusting stdout gets
-  /// zero bytes and a stray file. [hostPath] exists for tests and for callers
-  /// that want the file kept somewhere specific.
+  /// Captures the screen as PNG bytes. Always via a real file: `simctl io … -`
+  /// creates a file named `-` and exits 0 rather than writing to stdout.
   Future<Uint8List> screenshot(String udid, {String? hostPath}) async {
     final destination =
         hostPath ??
@@ -146,14 +113,8 @@ class SimctlService {
     return bytes;
   }
 
-  /// Boots a simulator. Returns as soon as `simctl` accepts the request, which
-  /// is well before the system is usable — use [bootAndWait] when the next
-  /// step actually needs a booted device.
-  ///
-  /// A simulator that is already booted is success, not failure: the caller
-  /// asked for a state and the device is in it. `simctl` disagrees and exits
-  /// non-zero with `Unable to boot device in current state: Booted`, which is
-  /// the only way to tell that case apart from a real refusal.
+  /// Boots a simulator, returning as soon as `simctl` accepts — use [bootAndWait]
+  /// when the next step needs it up. Already booted is success, not failure.
   Future<void> boot(String udid) => _act(
     udid,
     ['boot', udid],
@@ -163,17 +124,7 @@ class SimctlService {
   );
 
   /// Brings up Simulator.app so the booted device has a window of its own.
-  ///
-  /// Booting through `simctl` is **already headless**: it starts the device but
-  /// opens no UI, which is why this pane can mirror it without a second window
-  /// in the way. Showing one is therefore an extra step rather than something
-  /// to suppress — the opposite of the Android emulator, where a window is the
-  /// default and `-no-window` takes it away.
-  ///
-  /// `open -a Simulator` attaches to whatever is already booted, so this runs
-  /// after the boot rather than instead of it. Fire-and-forget: the window is a
-  /// convenience, and a device that is up and mirrored here is not less usable
-  /// because its window did not open.
+  /// Booting through `simctl` is already headless, so this is an extra step.
   Future<void> showSimulatorWindow(String udid) async {
     try {
       await runner.start(
@@ -185,30 +136,21 @@ class SimctlService {
   }
 
   /// Boots [udid] if needed and waits until the system has finished booting.
-  ///
-  /// Goes through [CommandRunner.start] rather than `run` so the wait can be
-  /// bounded: `run` cannot be cancelled, so a simulator that never comes up
-  /// would hang this call forever and leave the `bootstatus` process behind.
-  ///
-  /// `bootstatus` signals completion by **exiting**. Its last line is the odd
-  /// `Status=4294967295, isTerminal=YES`; that number is not an error code and
-  /// is deliberately not parsed.
+  /// `bootstatus` signals completion by **exiting**; its last line is not a code.
   Future<void> bootAndWait(
     String udid, {
     Duration timeout = const Duration(minutes: 3),
   }) async {
     const summary = 'Booted and waited';
     final handle = await runner.start(
-      // -b boots the device first when it is shut down, so this is one call
-      // rather than boot-then-poll, and it is race-free when something else
-      // booted the same simulator a moment ago.
+      // -b boots first when the device is shut down, so this is one race-free
+      // call rather than boot-then-poll.
       _simctl(['bootstatus', udid, '-b']),
     );
     final log = <String>[];
     void keepLastWords(Stream<String> lines) {
       // Both streams must be drained even though only the tail is wanted: an
-      // unread pipe fills and blocks the process it belongs to, and a wedged
-      // bootstatus looks exactly like a slow boot.
+      // unread pipe blocks the process, and that looks exactly like a slow boot.
       lines.listen(
         (line) {
           log.add(line);
@@ -261,11 +203,8 @@ class SimctlService {
     tolerate: 'current state: shutdown',
   );
 
-  /// Erases the simulator's contents and settings.
-  ///
-  /// Destructive and not undoable: apps, data and granted permissions all go.
-  /// `simctl` refuses on a booted device on older Xcodes, so callers that want
-  /// a clean device should [shutdown] first.
+  /// Erases the simulator's contents and settings. Not undoable, and refused on
+  /// a booted device by older Xcodes, so callers may need to [shutdown] first.
   Future<void> erase(String udid) =>
       _act(udid, ['erase', udid], verb: 'erase', summary: 'Erased $udid');
 
@@ -278,23 +217,8 @@ class SimctlService {
     summary: 'Installed $appPath',
   );
 
-  /// The `CFBundleIdentifier` an installed-or-about-to-be-installed `.app`
-  /// declares, or null when it could not be read.
-  ///
-  /// Not a `simctl` command, and it is here anyway. It belongs to the same job
-  /// — putting a build on a simulator and starting it — and without it the step
-  /// after an install is "now tell me the bundle id", which the caller usually
-  /// does not know: it is generated by the build, not typed by a person. Every
-  /// other identifier in this loop comes out of the previous step, and this
-  /// makes that one do the same.
-  ///
-  /// `plutil -extract … raw` rather than reading the file: an `Info.plist` in a
-  /// built bundle is **binary**, not XML, so a text parse finds nothing on a
-  /// real build and everything on the one hand-written fixture somebody tries
-  /// it against. Routed through the [CommandRunner] like everything else here
-  /// (architecture constraint 6). Null rather than throwing, because a missing
-  /// bundle id costs the caller one extra argument and is not a reason to fail
-  /// an install that worked.
+  /// The `CFBundleIdentifier` an `.app` declares, or null when it could not be
+  /// read. `plutil -extract`, not a text parse: a built `Info.plist` is binary.
   Future<String?> readAppBundleId(String appPath) async {
     try {
       final result = await runner.run(
@@ -325,13 +249,8 @@ class SimctlService {
     summary: 'Uninstalled $bundleId',
   );
 
-  /// Launches [bundleId] and returns its pid, or null when `simctl` did not
-  /// print one in the shape [parseSimctlLaunchPid] understands.
-  ///
-  /// [relaunch] passes `--terminate-running-process`, which is what makes
-  /// "run it again" mean a fresh process. Without it `simctl launch` on an
-  /// already-running app exits 0 and merely foregrounds it, so a test that
-  /// expects to see a cold start silently observes the old process instead.
+  /// Launches [bundleId] and returns its pid, or null when `simctl` printed none.
+  /// Without [relaunch] an already-running app is merely foregrounded, exit 0.
   Future<int?> launchApp(
     String udid,
     String bundleId, {
@@ -346,13 +265,8 @@ class SimctlService {
     return parseSimctlLaunchPid(result.stdout);
   }
 
-  /// Terminates an app, tolerating one that is not running.
-  ///
-  /// The same shape as [boot] and [shutdown]: asking for a state a device is
-  /// already in is not a failure. Terminating is a cleanup step — WebDriverAgent
-  /// detaches this way, including during the app's ordered shutdown — and the
-  /// runner having already exited is the ordinary case, not an error worth
-  /// aborting a teardown over.
+  /// Terminates an app, tolerating one that is not running: asking for a state a
+  /// device is already in is not a failure.
   Future<void> terminateApp(String udid, String bundleId) => _act(
     udid,
     ['terminate', udid, bundleId],
@@ -370,19 +284,8 @@ class SimctlService {
     summary: 'Opened $url',
   );
 
-  /// Switches between light and dark mode.
-  ///
-  /// Rejects anything else here rather than passing it on: `simctl ui` reports
-  /// an unknown appearance on stderr in a form that reads like a device fault,
-  /// and the caller ends up debugging the simulator instead of their typo.
-  /// Whether [udid] is currently in dark appearance, or null if it will not
-  /// say.
-  ///
-  /// Read rather than remembered. The toggle used to track this in the widget,
-  /// starting at light — so a simulator already dark was toggled *to* dark on
-  /// the first press (nothing visibly happened), and any rebuild of the control
-  /// reset the belief and stranded the device in dark with no way back. The
-  /// device knows; asking it costs one `simctl` call on a button press.
+  /// Whether [udid] is in dark appearance, or null if it will not say. Read
+  /// rather than remembered: a tracked belief strands the device on a rebuild.
   Future<bool?> isDarkAppearance(String udid) async {
     try {
       final result = await runner.run(_simctl(['ui', udid, 'appearance']));
@@ -413,17 +316,8 @@ class SimctlService {
     );
   }
 
-  /// Writes [text] to the simulator's pasteboard.
-  ///
-  /// The one command here that is not a bare `xcrun`: `simctl pbcopy` reads the
-  /// text from **stdin**, and [ProcessHandle] can write to stdin but cannot
-  /// close it, so `pbcopy` would wait for an EOF that never arrives. A shell
-  /// builds the pipeline instead — still through the [CommandRunner], so
-  /// constraint 6 holds and the test sees the exact command line.
-  ///
-  /// `printf %s` rather than `echo`: `echo` appends a newline and, on some
-  /// shells, interprets backslash escapes, both of which change what the user
-  /// pasted.
+  /// Writes [text] to the simulator's pasteboard. Needs a shell: `simctl pbcopy`
+  /// reads stdin and [ProcessHandle] cannot close it, so `pbcopy` never sees EOF.
   Future<void> setClipboard(String udid, String text) => _act(
     udid,
     null,
@@ -452,11 +346,8 @@ class SimctlService {
     return result.stdout;
   }
 
-  /// Sets the simulated GPS location.
-  ///
-  /// Applies to the whole device rather than to one app, and survives until
-  /// something clears it — including across app launches, which is what makes
-  /// it useful for testing a location-dependent flow.
+  /// Sets the simulated GPS location. Device-wide and survives app launches
+  /// until something clears it.
   Future<void> setLocation(String udid, double lat, double lon) => _act(
     udid,
     ['location', udid, 'set', '$lat,$lon'],
@@ -464,11 +355,8 @@ class SimctlService {
     summary: 'Set location to $lat, $lon',
   );
 
-  /// Delivers a push notification from a JSON payload file.
-  ///
-  /// The payload must name its target app in `Simulator Target Bundle`; this
-  /// signature has no bundle id to pass, and `simctl` fails with
-  /// `No appropriate bundle identifier` when the key is missing.
+  /// Delivers a push notification from a JSON payload file. The payload must
+  /// name its target in `Simulator Target Bundle`; this signature has no room.
   Future<void> push(String udid, String payloadPath) => _act(
     udid,
     ['push', udid, payloadPath],
@@ -484,12 +372,8 @@ class SimctlService {
     summary: 'Added $path to the photo library',
   );
 
-  /// A live device log. The process is owned by the subscription: cancelling
-  /// it kills `log stream`, so a closed log panel does not leave one running.
-  ///
-  /// `--style compact` because the default `log stream` format wraps each entry
-  /// over several lines with a metadata block, and a line-oriented consumer
-  /// then shows fragments instead of entries.
+  /// A live device log; cancelling the subscription kills `log stream`.
+  /// `--style compact` because the default format wraps one entry over lines.
   Stream<String> streamLog(String udid) {
     late final StreamController<String> controller;
     ProcessHandle? process;
@@ -531,30 +415,13 @@ class SimctlService {
     return controller.stream;
   }
 
-  /// Starts recording the simulator's display to [hostPath].
-  ///
-  /// The recording runs until the process is stopped, and it is stopped with
-  /// [ProcessHandle.interrupt] rather than [ProcessHandle.kill]: `recordVideo`
-  /// writes the QuickTime container's index on the interrupt, and a terminated
-  /// one leaves frames with no index behind them.
-  ///
-  /// No codec, display or mask flags. `simctl` picks its own defaults, this
-  /// app has no reason to disagree with them, and every flag added here is one
-  /// more spelling that can only be checked on a Mac.
-  ///
-  /// **Unverified against a real simulator.** This machine is Windows, where
-  /// [SimctlService] cannot run at all — the argv shape is the same
-  /// `io <udid> <verb> <file>` [screenshot] uses and is pinned by a test, but
-  /// nothing here has been watched producing a file.
+  /// Starts recording the display to [hostPath]. Stop it with
+  /// [ProcessHandle.interrupt]: a killed `recordVideo` writes no container index.
   Future<ProcessHandle> startRecording(String udid, String hostPath) =>
       runner.start(_simctl(['io', udid, 'recordVideo', hostPath]));
 
-  /// Recent log lines, newest last, capped at [lines].
-  ///
-  /// `log show` slices by **time**, not by line count — there is no `-t 200` —
-  /// so a window is asked for and the tail is taken here. A window that is too
-  /// wide costs seconds of `log show` work, which is why it is bounded rather
-  /// than "since boot".
+  /// Recent log lines, newest last, capped at [lines]. `log show` slices by
+  /// **time**, not line count, so a window is asked for and the tail taken here.
   Future<List<String>> readLog(
     String udid, {
     int lines = 200,
@@ -593,19 +460,15 @@ class SimctlService {
     return tail;
   }
 
-  /// `log show` prefaces its output with a filter note and a column header.
-  /// They are not log lines, and passing them on makes every read look like it
-  /// found two entries when it found none.
+  /// `log show` prefaces its output with a filter note and a column header;
+  /// passing them on makes an empty read look like two entries.
   static bool _isLogPreamble(String line) =>
       line.startsWith('Filtering the log data using') ||
       line.startsWith('Timestamp ') ||
       line.startsWith('Skipping info and debug messages');
 
-  /// Runs one simctl subcommand and reports it as [verb] either way.
-  ///
-  /// [tolerate] is a lowercase fragment of the failure message that means "the
-  /// device is already how you asked for it" — see [boot]. [request] overrides
-  /// the built request for the one command that needs a shell.
+  /// Runs one simctl subcommand and reports it as [verb] either way. [tolerate]
+  /// is the fragment that means "the device is already how you asked for it".
   Future<CommandResult> _act(
     String udid,
     List<String>? arguments, {
@@ -619,8 +482,7 @@ class SimctlService {
     try {
       result = await runner.run(request ?? _simctl(arguments!));
     } on CommandException catch (error) {
-      // Xcode is not installed, or this runner is not a Mac. Reported as a
-      // failed action so a recording shows what was attempted, then rethrown:
+      // Xcode is missing, or this runner is not a Mac. Reported then rethrown:
       // unlike a listing, a caller that asked for a launch cannot carry on.
       _report(
         DeviceAction(verb: verb, serial: udid, summary: summary).failed(error),
@@ -654,10 +516,8 @@ class SimctlService {
     return stderr.isEmpty ? result.stdout.trim() : stderr;
   }
 
-  /// Wraps [value] in single quotes for `/bin/sh`, ending and reopening the
-  /// quoting around any quote of its own. Without this a pasteboard string
-  /// containing an apostrophe would end the quoted section and hand the rest
-  /// of the text to the shell as commands.
+  /// Wraps [value] in single quotes for `/bin/sh`. Without it an apostrophe in a
+  /// pasteboard string hands the rest of the text to the shell as commands.
   static String _shellQuote(String value) =>
       "'${value.replaceAll("'", r"'\''")}'";
 

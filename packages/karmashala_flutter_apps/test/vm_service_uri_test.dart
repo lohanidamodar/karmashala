@@ -4,8 +4,7 @@ import 'package:karmashala_flutter_apps/flutter_apps.dart';
 void main() {
   group('normaliseVmServiceUri', () {
     test('keeps the address --vmservice-out-file writes, verbatim', () {
-      // Measured 2026-09-08: this is the exact file content for
-      // `flutter run -d windows --vmservice-out-file=C:\kw\vmsvc.uri`.
+      // Verbatim what `--vmservice-out-file` wrote, 2026-09-08.
       expect(
         normaliseVmServiceUri('ws://127.0.0.1:53119/bt32nsO63q8=/ws')
             .toString(),
@@ -14,8 +13,7 @@ void main() {
     });
 
     test('converts the address "flutter run" prints', () {
-      // The line is: A Dart VM Service on Windows is available at:
-      // http://127.0.0.1:53119/bt32nsO63q8=/
+      // The printed form of the same address.
       expect(
         normaliseVmServiceUri('http://127.0.0.1:53119/bt32nsO63q8=/')
             .toString(),

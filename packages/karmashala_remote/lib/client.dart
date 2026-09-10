@@ -1,9 +1,7 @@
 /// The phone's protocol client: the sealed session with a paired desktop, the
 /// pairing exchange that creates one, the record of it at rest, the LAN path
-/// and the relay candidates a dial works through.
-///
-/// [CompanionStore] is an interface on purpose — the record belongs in the
-/// platform keystore, which is the app's to reach, not this package's.
+/// and the relay candidates a dial works through. [CompanionStore] is an
+/// interface because the record belongs in the platform keystore.
 library;
 
 export 'src/client/companion_client.dart';

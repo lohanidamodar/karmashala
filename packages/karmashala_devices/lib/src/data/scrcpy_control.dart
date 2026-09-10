@@ -1,19 +1,7 @@
-// scrcpy's control protocol: the client→server half, and the socket that
-// carries it.
-//
-// Every constant and every field order below was read out of **the
-// scrcpy-server jar this app actually deploys** (`assets/scrcpy/scrcpy-server`)
-// by disassembling it, not from documentation. Loop 27 learned that lesson on
-// the video framing, where the wire and the docs disagreed; here the jar is
-// both. The methods that were read are
-// `ControlMessageReader.read`/`parseInjectTouchEvent`/`parsePosition`,
-// `Binary.u16FixedPointToFloat`, `Controller.injectTouch` and
-// `PositionMapper.map`.
-//
-// The one non-obvious rule, and the one that makes touches silently vanish if
-// broken: **the width/height in a touch message must equal scrcpy's *video*
-// size**, not the device's screen size. `PositionMapper.map` compares the two
-// and returns `null` — dropping the event without a word — when they differ.
+// scrcpy's control protocol: the client→server half, and the socket that carries
+// it. Every constant below was read out of the scrcpy-server jar this app
+// deploys, not from documentation. The width/height in a touch message must
+// equal scrcpy's *video* size, or `PositionMapper.map` drops it without a word.
 
 import 'dart:async';
 import 'dart:convert';
@@ -22,9 +10,8 @@ import 'dart:typed_data';
 
 import 'package:logging/logging.dart';
 
-/// Control-message type ids.
-///
-/// Read from `ControlMessageReader.read`'s packed-switch: 23 arms, first key 0.
+/// Control-message type ids, read from `ControlMessageReader.read`'s
+/// packed-switch in the deployed jar.
 abstract final class ScrcpyControlType {
   static const int injectKeycode = 0;
   static const int injectText = 1;
@@ -32,50 +19,27 @@ abstract final class ScrcpyControlType {
   static const int injectScrollEvent = 3;
   static const int backOrScreenOn = 4;
 
-  /// Ask the device for its clipboard. The reply is a `TYPE_CLIPBOARD` device
+  /// Ask the device for its clipboard; the reply is a `TYPE_CLIPBOARD` device
   /// message on the same socket — see `scrcpy_device_message.dart`.
-  ///
-  /// **8, read out of the jar this app deploys**, like every other id here:
-  /// `ControlMessage.TYPE_GET_CLIPBOARD` is 8 and `TYPE_SET_CLIPBOARD` is 9 in
-  /// `assets/scrcpy/scrcpy-server`'s `classes.dex`.
   static const int getClipboard = 8;
 
   /// Put text on the device's clipboard. Acknowledged by a `TYPE_ACK_CLIPBOARD`
   /// device message carrying the sequence that was sent.
   static const int setClipboard = 9;
 
-  /// Restart video capture: a fresh codec config and a fresh keyframe, with
-  /// nothing torn down.
-  ///
-  /// **17, read out of the jar this app deploys**, not from documentation: the
-  /// numbering has moved between scrcpy releases, and a wrong byte here is a
-  /// *valid* message meaning something else — 17 is `TYPE_START_APP` in some
-  /// versions and `TYPE_UHID_INPUT` in others. In
-  /// `assets/scrcpy/scrcpy-server`'s `classes.dex`,
-  /// `com.genymobile.scrcpy.control.ControlMessage` declares
-  /// `TYPE_RESET_VIDEO` with value 17, and `ControlMessageReader.read`'s
-  /// packed-switch (23 arms, first key 0) routes key 17 to
-  /// `ControlMessage.createEmpty(type)` — the arm shared by every message that
-  /// carries **no payload**. The server answers it in `Controller.resetVideo`:
-  /// `Ln.i("Video capture reset")` then
-  /// `surfaceCapture.getCaptureControl().reset(RESET_REASON_CLIENT_RESET /* 4 */)`.
+  /// Restart video capture: a fresh codec config and keyframe, nothing torn
+  /// down. 17 was read out of the deployed jar — the numbering has moved between
+  /// releases, and a wrong byte here is a valid message meaning something else.
   static const int resetVideo = 17;
 }
 
-/// The whole `RESET_VIDEO` message: the type byte and nothing else.
-///
-/// One byte because the server's reader consumes one — see
-/// [ScrcpyControlType.resetVideo]. Sending a payload after it would be read as
-/// the *next* message's type and desynchronise the control socket for good.
+/// The whole `RESET_VIDEO` message: the type byte and nothing else. A payload
+/// after it would be read as the next message's type and desync the socket.
 Uint8List encodeResetVideo() =>
     Uint8List.fromList(const [ScrcpyControlType.resetVideo]);
 
-/// The `MotionEvent.ACTION_*` values a touch message may carry.
-///
-/// Only these four are ever sent: `Controller.injectTouch` turns `down`/`up`
-/// into `ACTION_POINTER_DOWN`/`ACTION_POINTER_UP` itself, ORing in the pointer
-/// index, once more than one pointer is down. That is why multi-touch needs
-/// nothing here beyond distinct [ScrcpyTouchEvent.pointerId]s.
+/// The `MotionEvent.ACTION_*` values a touch message may carry. Only these four:
+/// `Controller.injectTouch` derives the pointer-index variants itself.
 abstract final class AndroidMotionAction {
   static const int down = 0;
   static const int up = 1;
@@ -83,11 +47,8 @@ abstract final class AndroidMotionAction {
   static const int cancel = 3;
 }
 
-/// Pointer ids scrcpy treats specially, listed so we can stay away from them.
-///
-/// `Controller.injectTouch` picks `SOURCE_MOUSE` (0x2002) instead of
-/// `SOURCE_TOUCHSCREEN` (0x1002) for these, and a mouse source does not produce
-/// the fling velocities a finger does. Our pointers are numbered from zero.
+/// Pointer ids scrcpy treats specially, listed so we can stay away from them:
+/// they get `SOURCE_MOUSE`, which does not produce a finger's fling velocities.
 abstract final class ScrcpyPointerId {
   static const int mouse = -1;
   static const int genericFinger = -2;
@@ -171,19 +132,12 @@ class ScrcpyTouchEvent {
 /// Wire length of an `INJECT_KEYCODE` message, including its type byte.
 const int kScrcpyKeycodeMessageLength = 14;
 
-/// The most UTF-8 bytes one `INJECT_TEXT` may carry.
-///
-/// `ControlMessageReader.INJECT_TEXT_MAX_LENGTH`, read out of the same jar.
-/// The server allocates the declared length and `readFully`s it, so a longer
-/// message is not truncated — it is refused, and the socket then desynchronises
-/// on the *next* message. Longer text is split by [splitForInjectText].
+/// The most UTF-8 bytes one `INJECT_TEXT` may carry. A longer message is refused
+/// and then desynchronises the socket; longer text goes through
+/// [splitForInjectText].
 const int kScrcpyInjectTextMaxBytes = 300;
 
 /// One `INJECT_KEYCODE` message: a real Android `KeyEvent` for the device.
-///
-/// `ControlMessageReader.parseInjectKeycode` reads an unsigned byte then three
-/// big-endian ints and hands them to `Controller.injectKeycode`, which builds
-/// the `KeyEvent` and injects it from `SOURCE_KEYBOARD`.
 ///
 /// ```
 /// u8  type = 0        u8  action          i32 keyCode
@@ -230,15 +184,8 @@ class ScrcpyKeycodeEvent {
 /// u8  type = 1        u32 utf8 length     u8[length] utf-8
 /// ```
 ///
-/// The length is four bytes: `parseInjectText` calls `parseString()`, which
-/// passes 4 to `parseBufferLength`.
-///
-/// On the device this is **not** an IME commit. `Controller.injectText` walks
-/// the string a character at a time through `KeyCharacterMap.getEvents`, so
-/// what arrives is ordinary hardware-keyboard `KeyEvent`s — which is precisely
-/// why it is the right transport for printable characters: the *device's* char
-/// map decides which key and which modifier produce `@`, rather than this side
-/// assuming the two keyboards share a layout.
+/// Not an IME commit: the *device's* char map decides which key produces `@`,
+/// rather than this side assuming the two keyboards share a layout.
 class ScrcpyTextEvent {
   const ScrcpyTextEvent(this.text);
 
@@ -266,11 +213,8 @@ class ScrcpyTextEvent {
   }
 }
 
-/// [text] cut into pieces each of which fits one `INJECT_TEXT`.
-///
-/// Cut on **character** boundaries, not byte ones: half a UTF-8 sequence
-/// decodes to a replacement character on the device, and the damage shows up as
-/// mojibake in the middle of a paste rather than as an error.
+/// [text] cut into pieces each of which fits one `INJECT_TEXT`. Cut on
+/// **character** boundaries: half a UTF-8 sequence pastes as mojibake.
 List<String> splitForInjectText(String text) {
   if (text.isEmpty) return const [];
   final chunks = <String>[];
@@ -291,13 +235,8 @@ List<String> splitForInjectText(String text) {
   return chunks;
 }
 
-/// The two-way half of scrcpy's control protocol, without the socket.
-///
-/// A seam rather than an abstraction for its own sake: [ScrcpyControlConnection]
-/// wraps a real `Socket`, which a unit test cannot build, while everything
-/// above it — the clipboard bridge's sequence matching and its timeout policy —
-/// is exactly the part worth testing and the part least in need of a network.
-/// No test may touch a real phone.
+/// The two-way half of scrcpy's control protocol, without the socket — a seam so
+/// the sequence matching and timeout policy can be tested off a real phone.
 abstract interface class ScrcpyControlChannel {
   /// Writes one control message. False when the socket is gone.
   bool send(Uint8List message);
@@ -309,12 +248,8 @@ abstract interface class ScrcpyControlChannel {
   bool get isOpen;
 }
 
-/// The scrcpy control socket, opened alongside the video socket on the same
-/// adb tunnel.
-///
-/// The server also *writes* on this socket (clipboard replies, UHID output), so
-/// the incoming side is drained and discarded rather than ignored — an unread
-/// socket eventually blocks the server's writer thread.
+/// The scrcpy control socket, opened alongside the video socket on the same adb
+/// tunnel. The incoming side is drained: an unread socket blocks the server.
 class ScrcpyControlConnection implements ScrcpyControlChannel {
   ScrcpyControlConnection(this._socket, {Logger? logger})
     : _logger = logger ?? Logger('scrcpy-control') {
@@ -340,9 +275,8 @@ class ScrcpyControlConnection implements ScrcpyControlChannel {
   final Completer<void> _closed = Completer<void>();
   bool _open = true;
 
-  /// Device messages coming back the other way (clipboard replies, UHID
-  /// output). Broadcast, so with nobody listening the bytes are simply dropped
-  /// — which is the normal case, and still drains the socket.
+  /// Device messages coming back the other way. Broadcast, so with nobody
+  /// listening the bytes are dropped — which still drains the socket.
   @override
   Stream<Uint8List> get replies => _replies.stream;
 
@@ -382,52 +316,26 @@ class ScrcpyControlConnection implements ScrcpyControlChannel {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Clipboard
-//
-// The device→host half is the interesting one, and the reason it works at all
-// is a *permission*, not a protocol: scrcpy-server runs as the shell uid and
-// identifies itself to the framework as `com.android.shell`
-// (`FakeContext.PACKAGE_NAME` in the deployed jar), and
-// `com.android.shell` holds `android.permission.READ_CLIPBOARD_IN_BACKGROUND`.
-// Measured 2026-09-07 on the cabled OnePlus CPH1989, Android 11 / API 30:
-//
-//     $ adb shell dumpsys package com.android.shell | grep -i clip
-//       android.permission.READ_CLIPBOARD_IN_BACKGROUND: granted=true
-//
-// That is what exempts it from the Android 10+ rule confining clipboard reads
-// to the foreground app or the active IME, and it is why there is a device→host
-// direction here at all. It is a fact about *the device*, so this build reports
-// what the device answered rather than assuming — see `DeviceClipboardRead`.
-// ---------------------------------------------------------------------------
+// The device→host direction works because of a *permission*, not a protocol:
+// scrcpy-server runs as the shell uid, and `com.android.shell` holds
+// READ_CLIPBOARD_IN_BACKGROUND. That is a fact about the device, so this build
+// reports what the device answered — see `DeviceClipboardRead`.
 
-/// What the server should do to the device's selection before reading it.
-///
-/// `ControlMessage.COPY_KEY_*` in the deployed jar. [none] just reads what is
-/// already on the clipboard, which is the only one this app sends: [copy] and
-/// [cut] inject a Ctrl+C / Ctrl+X first, and pressing keys in the foreground app
-/// to answer "what is on the clipboard" would change the user's document.
+/// What the server should do to the device's selection before reading it. Only
+/// [none] is sent: [copy] and [cut] inject Ctrl+C and would edit the document.
 abstract final class ScrcpyCopyKey {
   static const int none = 0;
   static const int copy = 1;
   static const int cut = 2;
 }
 
-/// The whole `GET_CLIPBOARD` message: the type byte and a copy-key byte.
-///
-/// `ControlMessageReader.parseGetClipboard` reads exactly one
-/// `readUnsignedByte` after the type, so this is two bytes and no more —
-/// the same trap [encodeResetVideo] documents: a spare byte is read as the
-/// *next* message's type and the socket never recovers.
+/// The whole `GET_CLIPBOARD` message: the type byte and a copy-key byte. A spare
+/// byte is read as the next message's type and the socket never recovers.
 Uint8List encodeGetClipboard({int copyKey = ScrcpyCopyKey.none}) =>
     Uint8List.fromList([ScrcpyControlType.getClipboard, copyKey]);
 
-/// The most UTF-8 bytes one `SET_CLIPBOARD` may carry.
-///
-/// `ControlMessageReader.CLIPBOARD_TEXT_MAX_LENGTH`, read out of the deployed
-/// jar. The reader allocates the declared length and `readFully`s it, so an
-/// over-long message is refused and then desynchronises the socket — which is
-/// why [ScrcpySetClipboardMessage.encode] throws rather than truncating.
+/// The most UTF-8 bytes one `SET_CLIPBOARD` may carry. An over-long message is
+/// refused and desyncs the socket, so [ScrcpySetClipboardMessage.encode] throws.
 const int kScrcpyClipboardTextMaxBytes = 262130;
 
 /// One `SET_CLIPBOARD` message: text for the device's clipboard.
@@ -436,10 +344,6 @@ const int kScrcpyClipboardTextMaxBytes = 262130;
 /// u8  type = 9        i64 sequence        u8  paste
 /// u32 utf8 length     u8[length] utf-8
 /// ```
-///
-/// Field order and widths from `ControlMessageReader.parseSetClipboard`:
-/// `readLong`, `readByte` (non-zero is true), then `parseString()` — which is
-/// `parseString(4)`, a **four**-byte length.
 class ScrcpySetClipboardMessage {
   const ScrcpySetClipboardMessage({
     required this.sequence,
@@ -447,18 +351,15 @@ class ScrcpySetClipboardMessage {
     this.paste = false,
   });
 
-  /// Echoed back verbatim in an `ACK_CLIPBOARD`, and the only way to tell
-  /// *this* write's acknowledgement from one for a write that has already
-  /// timed out. `ControlMessage.SEQUENCE_INVALID` is 0, which the server reads
-  /// as "do not acknowledge" — so a sequence of zero is a write whose outcome
-  /// can never be known, and [DeviceClipboardBridge] never sends one.
+  /// Echoed back in an `ACK_CLIPBOARD`, and the only way to tell this write's
+  /// acknowledgement from one for a write that already timed out. Never zero,
+  /// which the server reads as "do not acknowledge".
   final int sequence;
 
   final String text;
 
-  /// Whether the server should inject a paste into the foreground app after
-  /// setting the clipboard. False here: putting text on a phone's clipboard is
-  /// not permission to type it into whatever happens to be open.
+  /// Whether the server should paste after setting the clipboard. False: putting
+  /// text on a phone's clipboard is not permission to type it into what is open.
   final bool paste;
 
   Uint8List encode() {

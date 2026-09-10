@@ -1,12 +1,7 @@
-/// The companion's leg of the direct path: listen for the host's beacon,
-/// offer dial candidates, and remember which hosts just failed so the LAN
-/// attempt never holds the relay hostage.
-///
-/// The beacon is cleartext and carries no identity, so nothing here trusts it
-/// beyond "try dialling there": the sealed channel with the paired device key
-/// is the only proof a host is the right one. A hello that does not
-/// authenticate within the timeout is a stranger, and the caller falls back
-/// to the relay.
+/// The companion's leg of the direct path: listen for the host's beacon, offer
+/// dial candidates, and remember which hosts just failed so the LAN attempt
+/// never holds the relay hostage. The beacon is cleartext and carries no
+/// identity — the sealed channel is the only proof a host is the right one.
 library;
 
 import 'dart:async';
@@ -16,13 +11,9 @@ import '../transport/lan_beacon.dart';
 import '../transport/lan_transport.dart';
 import '../transport/remote_transport.dart';
 
-/// Holds the platform's multicast lock while discovery listens.
-///
-/// Android drops multicast datagrams unless a `WifiManager.MulticastLock` is
-/// held; desktop and tests need nothing. The default is [NoopMulticastLock] —
-/// best effort by design (loop 64's rule): a silent beacon costs nothing but
-/// the direct path, and must never crash or block the relay. A real
-/// plugin-backed holder is device-acceptance work, not this loop's.
+/// Holds the platform's multicast lock while discovery listens. Android drops
+/// multicast datagrams without one; the default [NoopMulticastLock] is best
+/// effort by design, because a silent beacon costs only the direct path.
 abstract interface class MulticastLockHolder {
   Future<void> acquire();
   Future<void> release();
@@ -51,9 +42,8 @@ const Duration kLanAttemptTimeout = Duration(seconds: 2);
 const Duration kLanRetryCooldown = Duration(minutes: 2);
 
 /// Watches the LAN for Karmashala hosts on behalf of the companion gateway.
-///
-/// Everything is best-effort: a platform where multicast cannot be joined
-/// leaves the scout inert ([isListening] false) and the gateway on the relay.
+/// Best-effort: a platform where multicast cannot be joined leaves the scout
+/// inert ([isListening] false) and the gateway on the relay.
 class LanPathScout {
   LanPathScout({
     InternetAddress? group,

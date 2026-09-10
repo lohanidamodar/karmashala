@@ -3,18 +3,9 @@ import 'package:test/test.dart';
 
 /// **What `.git` can be trusted to say, and what has to be handed back to git.**
 ///
-/// `git remote get-url origin` and `git rev-parse --abbrev-ref origin/HEAD` are
-/// two subprocesses answering two single lines of text, and on Windows a
-/// subprocess is never free however it is awaited — `CreateProcessW` runs on
-/// the calling thread before the future exists. So a delivery row reads the
-/// two lines instead.
-///
-/// The whole risk of that trade is a **confident wrong answer**: the URL
-/// decides whether a row looks for a pull request and what its commit links
-/// point at, and `origin/HEAD` is the base every ahead/behind count is measured
-/// against. So every case below is really the same question asked twice — is
-/// this an answer, or is it an admission — and the cases that end in
-/// `known: false` are as load-bearing as the ones that parse.
+/// Reading the two lines rather than spawning `git remote get-url` and `git
+/// rev-parse` trades a process for the risk of a **confident wrong answer**, so
+/// the cases ending in `known: false` are as load-bearing as the ones that parse.
 void main() {
   const repo = r'C:\src\app';
   const wt = r'C:\src\.karmashala-worktrees\wt-1';
@@ -52,9 +43,8 @@ void main() {
       expect(reading.url.value, 'https://github.com/acme/app.git');
       expect(reading.head.known, isTrue);
       expect(reading.head.value, 'origin/main');
-      // The point of the exercise: two reads, no `stat` in front of either.
-      // Asking *whether* a file exists costs the same as reading it on a
-      // `\\wsl.localhost` share, so the reader does not ask.
+      // The point of the exercise: two reads, no `stat` in front of either — on
+      // a `\\wsl.localhost` share asking whether a file exists costs as much.
       expect(files.reads, [
         r'C:\src\app\.git\config',
         r'C:\src\app\.git\refs\remotes\origin\HEAD',
@@ -72,10 +62,8 @@ void main() {
     });
 
     test('a WSL checkout is read over its UNC share', () async {
-      // The trap `storePathContextFor` documents, in this reader's words: a
-      // path *inside* WSL is POSIX, but the spelling this process can open is
-      // the `\\wsl.localhost\…` UNC form, which is a Windows path. Joining the
-      // UNC form the POSIX way would build something no `File` can open.
+      // A path *inside* WSL is POSIX, but the spelling this process can open is
+      // the `\\wsl.localhost\…` UNC form, which is a Windows path.
       final reading = await GitOriginReader(
         files: _MapFiles({
           r'\\wsl.localhost\arch\home\me\app\.git\config': originConfig,
@@ -92,9 +80,8 @@ void main() {
 
   group("a working tree whose `.git` is a file", () {
     test('follows the pointer and shares the clone answer', () async {
-      // What git writes for a worktree. The config and the remote refs live in
-      // the clone's git directory, one level above `worktrees/<name>`, which is
-      // exactly why two worktrees of one clone have one answer.
+      // What git writes for a worktree: the config and the remote refs live one
+      // level above `worktrees/<name>`, which is why two worktrees share one answer.
       final files = _MapFiles({
         wt + r'\.git': 'gitdir: C:\\src\\app\\.git\\worktrees\\wt-1\n',
         r'C:\src\app\.git\config': originConfig,
@@ -127,9 +114,8 @@ void main() {
     });
 
     test('a submodule gitdir is its own repository', () async {
-      // `<super>/.git/modules/<name>` is the submodule's *own* git directory,
-      // not a worktree of the superproject, so nothing is stripped from it —
-      // and its remote is its own, which is the whole reason it matters.
+      // `<super>/.git/modules/<name>` is the submodule's *own* git directory, so
+      // nothing is stripped from it and its remote is its own.
       final reading = await readerOver({
         r'C:\src\app\vendor\lib\.git':
             'gitdir: C:\\src\\app\\.git\\modules\\lib\n',
@@ -224,10 +210,8 @@ void main() {
     });
 
     test('a remote that does not look like a URL is unknown', () async {
-      // The catch-all for an `insteadOf` in the user's *global* config, which
-      // is invisible from here: a shorthand is by construction not URL-shaped.
-      // A local-path remote lands here too and pays one process, which is the
-      // right way round — only git can tell the two apart.
+      // The catch-all for an `insteadOf` in the user's *global* config: a
+      // shorthand is by construction not URL-shaped, and only git can expand it.
       expect((await urlFrom('[remote "origin"]\n\turl = gh:acme/app\n')).known,
           isFalse);
       expect(
@@ -241,9 +225,8 @@ void main() {
     });
 
     test('an unreadable URL makes the head unknown too', () async {
-      // The one genuinely wrong answer available here: the caller would ask
-      // git for the URL, get one, and then take this reader's word that the
-      // clone records no default branch.
+      // The one genuinely wrong answer available here: the caller would ask git
+      // for the URL, get one, and believe this reader about the default branch.
       final reading = await readerOver({
         r'C:\src\app\.git\config': '[include]\n\tpath = x\n',
         r'C:\src\app\.git\refs\remotes\origin\HEAD':
@@ -314,8 +297,7 @@ void main() {
 
     test('packed-refs naming origin/HEAD is unknown, not null', () async {
       // `git pack-refs` does not pack symbolic refs, so a line naming
-      // `origin/HEAD` is a shape this parse does not understand — and guessing
-      // null would be guessing.
+      // `origin/HEAD` is a shape this parse does not understand.
       final head = await headFrom({
         r'C:\src\app\.git\packed-refs':
             '9f1c0d2e5b4a37860f1d2c3b4a5968770e1f2d3c refs/remotes/origin/HEAD\n',
@@ -355,9 +337,8 @@ void main() {
 
 /// [GitFiles] over a map, recording every path read.
 ///
-/// A missing key is a null read, which is what the real one answers for an
-/// absent file, an unreadable one **and a directory** — see
-/// [GitFiles.readString] for why those are deliberately one answer.
+/// A missing key is a null read — what the real one answers for an absent file,
+/// an unreadable one **and a directory**.
 class _MapFiles implements GitFiles {
   _MapFiles(this.contents);
 

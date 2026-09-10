@@ -1,23 +1,10 @@
 /// Host-side push fan-out: attention-inbox news, sealed per device and handed
-/// to the relay for the phones that cannot hear it live.
+/// to the relay for the phones that cannot hear it live. Best-effort — a
+/// failure is logged without content and dropped.
 ///
-/// The routing rule, per device: `receive_notifications` granted AND a push
-/// token stored AND **the news is not already in front of its owner** — a
-/// connected phone whose app is on screen gets the same news as a
-/// `session.changed` event, never both, while a connected phone in a pocket
-/// gets the push its live link used to swallow. Everything is
-/// best-effort: any failure is logged (without content) and dropped, and
-/// nothing here can crash or block the host.
-///
-/// **This file is where presence is spent, and the only one.** Note the
-/// polarity, because it is the half that keeps the rule safe: presence
-/// SUPPRESSES a push for a phone that can already hear the news. It never
-/// enables a delivery, and nothing on the delivery path may spell it the other
-/// way round — a stale reading here costs a duplicate notification, and the
-/// same reading on the live stream would cost a turn nobody ever sees. Anything
-/// a future heartbeat adds (device type, visibility, a focused session) is more
-/// of this same value, consumed here, and is pinned by
-/// `presence_is_not_delivery_test.dart`.
+/// **This is where presence is spent, and the only place.** Presence only ever
+/// SUPPRESSES a push for a phone that can already hear the news; nothing on the
+/// delivery path may read it.
 library;
 
 import 'dart:convert';
@@ -87,11 +74,9 @@ class PushFanout {
     if (!device.capabilities.has(Capability.receiveNotifications)) return;
     final token = device.pushToken;
     if (token == null || token.isEmpty) return;
-    // A live link alone is no longer the answer: it only says the phone can
-    // *hear* the news, and a backgrounded app hears it into a window nobody
-    // can see — the reported failure. What is asked now is whether the news is
-    // in front of its owner, and every silence answers "assume it is", which
-    // is what an old companion did before it could say anything at all.
+    // A live link only says the phone can *hear* the news, and a backgrounded
+    // app hears it into a window nobody can see. What is asked now is whether
+    // the news is in front of its owner; every silence answers "assume it is".
     if (_hasLiveLink(device.id) &&
         presenceSuppressesPush(device.presence, sessionId)) {
       return;

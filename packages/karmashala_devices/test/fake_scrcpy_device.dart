@@ -1,11 +1,7 @@
-// A device that answers the way `adb forward` does, for tests that need the
-// real socket handling rather than a mock of it.
-//
-// The video arrives over a genuine loopback `ServerSocket` in scrcpy's wire
-// format, so the parser, the socket lifecycle and the watchdog are all live
-// code; only adb and the server process are faked. It also keeps the device's
-// side of the story — which servers it believes are running — so a test can ask
-// what was left behind rather than only what the app asked for.
+// A device that answers the way `adb forward` does, over a genuine loopback
+// `ServerSocket` in scrcpy's wire format: the parser, the socket lifecycle and
+// the watchdog are live code, and only adb and the server process are faked. It
+// also keeps the device's side of the story, so a test can ask what was left.
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -73,9 +69,8 @@ class FakeScrcpyDevice {
         onDone: closed,
         onError: (Object _) => closed(),
       );
-      // Each session opens video first and control second, so every odd
-      // arrival is a video socket — and a restart's new session must be fed
-      // too, or it never sees the bytes that prove the stream is up.
+      // Each session opens video first and control second, so every odd arrival
+      // is a video socket — and a restart's new session must be fed too.
       if (isVideo) {
         _videoSockets.add(socket);
         socket.add(scrcpyOpeningBytes());
@@ -119,15 +114,8 @@ class FakeScrcpyDevice {
       _until(() => socketsAccepted >= count);
 
   /// Completes once this device has *observed* [count] sockets closed by the
-  /// host — the socket's own `done`, never a timer.
-  ///
-  /// Both waits exist because the two counters are fed by events on the
-  /// device's side of a real loopback socket, and an event is not a moment. The
-  /// app connecting is not the device having accepted; `session.stop()`
-  /// destroying a socket is not the FIN having crossed and this end's `onDone`
-  /// having run. Reading either count straight after the call that caused it
-  /// asks the machine to have got there already, which a busy one does later —
-  /// never differently.
+  /// host — the socket's own `done`, never a timer. An event is not a moment:
+  /// reading the count straight after the call that caused it asks too early.
   Future<void> untilSocketsClosed(int count) =>
       _until(() => socketsClosedByHost >= count);
 
@@ -160,9 +148,8 @@ class FakeScrcpyDevice {
     await _server.close();
   }
 
-  /// [processList] overrides what `adb shell ps` answers. Left alone, the
-  /// device answers honestly: the servers it has been asked to start and not
-  /// yet asked to kill.
+  /// [processList] overrides what `adb shell ps` answers. Left alone, the device
+  /// answers honestly.
   FakeCommandRunner runner({String? processList}) => FakeCommandRunner(
     responder: (request) {
       final arguments = request.arguments;
@@ -217,9 +204,8 @@ DeviceStreamService fakeStreamService(
   Duration livenessProbeInterval = const Duration(seconds: 30),
   Duration inputAnswerGrace = const Duration(milliseconds: 200),
 }) {
-  // A staging directory of this test's own. The four dummy bytes below are the
-  // exact payload that must never reach the jar a live session is pushing to a
-  // phone, so they are not written where a live session stages.
+  // A staging directory of this test's own: the four dummy bytes below must
+  // never reach the jar a live session is pushing to a phone.
   final staging = Directory.systemTemp.createTempSync('cg_scrcpy_fake');
   addTearDown(() {
     if (staging.existsSync()) staging.deleteSync(recursive: true);

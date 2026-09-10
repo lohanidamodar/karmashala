@@ -1,22 +1,9 @@
-/// Same-network discovery for the direct path.
+/// Same-network discovery for the direct path: a minimal UDP multicast beacon,
+/// because `package:multicast_dns` is a client only and every plugin that can
+/// advertise would put native code in front of a headless test.
 ///
-/// The design asks for mDNS (`_karmashala._tcp`). `package:multicast_dns` —
-/// the Flutter team's — is a **client only**: `MDnsClient` queries and caches,
-/// and there is no responder in it, so the desktop host has nothing to
-/// advertise with. The alternatives that can advertise (`bonsoir`, `nsd`) are
-/// Flutter plugins with per-platform native code, which would put a plugin in
-/// the way of a headless unit test and in the way of the pure-Dart host.
-///
-/// So this is a minimal UDP multicast beacon instead: the host repeats a small
-/// datagram, the companion listens for it. The service name travels in the
-/// payload, so a real mDNS responder can take over later without changing
-/// anything above.
-///
-/// The beacon carries **no identity**: a per-boot random tag, never a device id
-/// and never a key, so anyone sniffing the LAN learns that a Karmashala host
-/// is here and nothing about who is paired with it. The sealed handshake is
-/// what proves a host is the right one; discovery is only a hint about where to
-/// dial.
+/// The beacon carries **no identity** — a per-boot random tag, never a device
+/// id and never a key. The sealed handshake proves a host is the right one.
 library;
 
 import 'dart:async';
@@ -29,17 +16,15 @@ import 'dart:typed_data';
 const String kLanServiceName = '_karmashala._tcp';
 
 /// The beacon's multicast group and port. Not 224.0.0.251:5353 — that is mDNS,
-/// and putting non-mDNS datagrams there would confuse every responder on the
-/// network.
+/// and non-mDNS datagrams there would confuse every responder on the network.
 final InternetAddress kLanBeaconGroup = InternetAddress('239.255.42.99');
 const int kLanBeaconPort = 47654;
 
 /// How often the host repeats itself.
 const Duration kLanBeaconInterval = Duration(seconds: 2);
 
-/// How long a discovered host stays in the list without being heard from —
-/// five [kLanBeaconInterval]s, so the patience is a count of missed beacons
-/// rather than a stopwatch reading.
+/// How long a discovered host stays listed without being heard from — five
+/// [kLanBeaconInterval]s, so the patience counts missed beacons, not seconds.
 const Duration kLanHostTimeout = Duration(seconds: 10);
 
 /// Longest datagram the beacon will parse, so a stray packet cannot be costly.
@@ -126,14 +111,9 @@ class DiscoveredHost {
 class LanBeacon {
   LanBeacon._(this._socket, this._timer);
 
-  /// Starts advertising [port] under [tag] until [stop].
-  ///
-  /// [bindAddress] is which interface the adverts leave by; the default —
-  /// every interface — is what the desktop wants. Tests pass the loopback
-  /// address so the suite never sprays datagrams onto the machine's real
-  /// network, and so it keeps working where the OS withholds permission to use
-  /// one (macOS 15+ denies multicast outright until the user grants Local
-  /// Network access, which no headless test run can do).
+  /// Starts advertising [port] under [tag] until [stop]. [bindAddress] is which
+  /// interface the adverts leave by; tests pass loopback, which also keeps them
+  /// working where the OS withholds multicast permission (macOS 15+).
   static Future<LanBeacon> advertise({
     required int port,
     required String tag,
@@ -190,28 +170,13 @@ class LanDiscovery {
     });
   }
 
-  /// Joins the beacon group and starts listening.
+  /// Joins the beacon group and starts listening. Android needs a multicast
+  /// lock held for this to receive anything, which is why it can look silent on
+  /// a phone while working on desktop.
   ///
-  /// Android needs a multicast lock held for this to receive anything; that is
-  /// the companion loop's job, and is why this can look silent on a phone while
-  /// working on desktop.
-  ///
-  /// The group is joined on **every** interface rather than on the default one.
-  /// A bare `joinMulticast(group)` leaves the choice to the OS, which picks one
-  /// — and the one it picks is routinely not the one the host is advertising
-  /// on. Every desktop this runs on is multi-homed: Windows carries the WSL and
-  /// Hyper-V switches, macOS carries `lo0`, `awdl0` and `llw0` beside the real
-  /// adapter, and a VPN adds another. Joining everywhere is what makes the
-  /// direct path find a host that is right there.
-  ///
-  /// A refusal on one interface is skipped rather than fatal: `awdl0` and
-  /// friends come and go, and one that will not take the join must not cost the
-  /// discovery the interfaces that would have.
-  ///
-  /// [now] is the clock both halves of the freshness judgement read — when a
-  /// host was heard and whether it has since gone quiet. It exists so a caller
-  /// can count missed beacons instead of waiting for them, and so a scout that
-  /// was given a clock has only the one. The default is the wall clock.
+  /// The group is joined on **every** interface: a bare `joinMulticast(group)`
+  /// lets the OS pick one, and on a multi-homed desktop it routinely picks the
+  /// wrong one. A refusal on one interface is skipped rather than fatal.
   static Future<LanDiscovery> start({
     InternetAddress? group,
     int beaconPort = kLanBeaconPort,
@@ -269,25 +234,10 @@ class LanDiscovery {
   }
 }
 
-/// Pins [socket]'s outgoing multicast to the interface holding [address].
-///
-/// Binding a datagram socket to an address sets where its packets say they are
-/// *from*; it does not decide which interface they leave by. That is chosen
-/// from the routing table, and for a multicast group the matching route is the
-/// blanket `224.0.0.0/4` one — which on this machine points at the Wi-Fi
-/// adapter no matter what the socket is bound to. The interface is also
-/// resolved on the socket's **first send** and cached, so a beacon that starts
-/// advertising before anything has joined the group keeps using that answer for
-/// its whole life.
-///
-/// That combination is what made a beacon bound to loopback undiscoverable: it
-/// sent its first datagram out of the Wi-Fi adapter, and every datagram after
-/// it, while the listener that joined a moment later was waiting on `lo0`.
-/// Reversing the order hid the bug — which is why it looked like a race.
-///
-/// `IP_MULTICAST_IF` says it outright. There is no `dart:io` accessor for it,
-/// so it goes through [RawSocketOption] with the platform's own option number,
-/// and a platform that refuses is left with the routing table it had.
+/// Pins [socket]'s outgoing multicast to the interface holding [address]:
+/// binding sets only the source address, and the outgoing interface is resolved
+/// from the routing table on the **first send** and then cached — which is what
+/// made a loopback-bound beacon leave by the Wi-Fi adapter and look like a race.
 void _sendMulticastFrom(RawDatagramSocket socket, InternetAddress address) {
   // IPPROTO_IP is 0 everywhere. IP_MULTICAST_IF is 9 on the BSDs (macOS
   // included) and on Winsock, and 32 on Linux.

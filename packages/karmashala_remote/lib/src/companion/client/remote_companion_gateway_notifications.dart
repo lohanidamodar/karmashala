@@ -2,13 +2,9 @@ part of 'remote_companion_gateway.dart';
 
 // Presence, and the `notifications.register` it rides on.
 //
-// **Presence is not delivery.** Nothing in this file, and nothing that reads
-// `_presence`, decides whether a row reaches a stream: presence is what the
-// host routes a *push* by, and the phone's own transcript and session paths
-// consult it nowhere. The polarity lives on the host, in `push_fanout.dart`,
-// where presence SUPPRESSES a push for a phone that can already hear the
-// news — and `test/features/remote/presence_is_not_delivery_test.dart` is
-// what stops it ever being spelled the other way round.
+// **Presence is not delivery.** Nothing here decides whether a row reaches a
+// stream: the host routes a *push* by it, in `push_fanout.dart`, where presence
+// SUPPRESSES a push for a phone that can already hear the news.
 
 extension _GatewayNotifications on RemoteCompanionGateway {
   /// One frame per change, and **never a tick**: an unchanged presence sends

@@ -23,9 +23,8 @@ void main() {
     });
 
     test('notRunning names both switches Chrome 136 now requires', () {
-      // Since Chrome 136 `--remote-debugging-port` is ignored on the default
-      // data directory, so the old remedy — the flag on its own — produces a
-      // Chrome that starts fine and never opens the port.
+      // Since Chrome 136 the flag alone gives a Chrome that starts fine on the
+      // default data directory and never opens the port.
       final message = describeBrowserFailure(
         BrowserFailure.notRunning,
         port: 9222,
@@ -36,10 +35,8 @@ void main() {
     });
 
     test('notRunning does not claim to know why the port is silent', () {
-      // We cannot tell "no Chrome is running" from "a Chrome is running on its
-      // default profile and ignored the flag": both are a refused connection
-      // on 9222. So there is no fifteenth failure kind for the second case,
-      // and this message names both rather than picking one.
+      // "No Chrome running" and "a Chrome that ignored the flag" are the same
+      // refused connection, so one message names both rather than picking one.
       final message = describeBrowserFailure(
         BrowserFailure.notRunning,
         port: 9222,

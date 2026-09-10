@@ -1,58 +1,16 @@
-/// A **review comment as a durable, addressable thread**: an anchor, an
-/// author, a body, a status, and replies — a row somebody can come back to,
-/// rather than a marker on whatever the diff happened to look like at the
-/// moment it was written.
+/// A **review comment as a durable, addressable thread**: an anchor, an author,
+/// a body, a status, and replies.
 ///
-/// ## What was here before, and why it was a bug
-///
-/// `DiffAnnotation` keyed a comment by `(repositoryId, path, diffIndex)`, where
-/// `diffIndex` was **the row number of a line inside the currently rendered
-/// unified diff**. That number is a property of a rendering, not of the code:
-/// it moves when a hunk grows, when a neighbouring hunk appears, when git
-/// merges two hunks that drift within three lines of each other, and when the
-/// file is staged. So the moment the agent edited the file a comment was
-/// attached to — which is the *whole point* of writing the comment — the
-/// comment went on pointing at row 47 of a diff that no longer had the same
-/// row 47. It did not report that. It just quietly meant something else.
-///
-/// A comment that points at the wrong lines is worse than one that is gone: the
-/// missing one is visibly missing, and the wrong one is read and believed. The
-/// annotations were also cleared on send, so in practice the bug was masked by
-/// a second bug. Fixing the persistence without fixing the key would have
-/// promoted the mis-anchoring from a transient to a stored one.
-///
-/// ## What an anchor is now
-///
-/// **Path plus blob sha plus an optional line range.** The blob sha is the git
-/// hash of the file's bytes as they stood when the comment was written, so the
-/// anchor names *the content the author was actually looking at* rather than a
-/// position in a view of it. A range with no lines is a file-level comment,
-/// which is a real thing a reviewer wants to say and not a degraded line
-/// comment.
-///
-/// ## What happens when the file changes
-///
-/// The thread **detaches, and says so.** Nothing re-anchors it: no fuzzy
-/// matching of the excerpt against the new content, no offset arithmetic, no
-/// "the line moved down three". Those techniques are right most of the time,
-/// and a re-anchor that is right most of the time is the same failure the
-/// `diffIndex` key had — the reader cannot tell which case they are holding, so
-/// they must distrust all of them, so the anchor is worth nothing. A detached
-/// thread keeps its excerpt and the sha it was written against, and the reader
-/// is told plainly that the file has moved on. That is less information than a
-/// correct re-anchor and strictly more than a wrong one.
-///
-/// The one thing that *does* re-attach a thread is the file's content coming
-/// back to the bytes it had — same content, same sha, same anchor. That is not
-/// a guess: it is the identity the sha exists to state.
+/// An anchor is path plus blob sha plus an optional line range, never a row of a
+/// rendered diff. When the file changes the thread detaches and says so; nothing
+/// re-anchors it, because a re-anchor that is right most of the time cannot be
+/// told from a wrong one, so none of them can be trusted.
 library;
 
 /// Where a review thread stands with the person triaging it.
 ///
-/// Four states, and the vocabulary matters because [shouldFix] is the one the
-/// send path reads. "Pending" is not a synonym for "unresolved": a thread
-/// nobody has looked at yet must not be handed to an agent as an instruction,
-/// because nobody has decided it is one.
+/// "Pending" is not a synonym for "unresolved": a thread nobody has triaged must
+/// not be handed to an agent as an instruction. [shouldFix] is the one that is.
 enum ReviewThreadStatus {
   /// Raised, and nobody has triaged it. The state a reviewer agent's finding
   /// starts in: it is a claim awaiting a human, not yet a request.
@@ -62,20 +20,15 @@ enum ReviewThreadStatus {
   /// a send gathers.
   shouldFix('Should fix'),
 
-  /// Read, and deliberately not acted on. Kept rather than deleted: "we looked
-  /// at this and decided no" is an answer, and a thread that vanished would be
-  /// raised again by the next reader.
+  /// Read, and deliberately not acted on. Kept rather than deleted, so the next
+  /// reader does not raise it again.
   dismissed('Dismissed'),
 
   /// The change was made.
   resolved('Resolved'),
 
-  /// A status this build does not know — a row from a newer schema, or a
-  /// hand-edited database.
-  ///
-  /// Never written, only read, exactly like `DecisionKind.unrecognised` and
-  /// `FileChangeType.unknown`. Its own state rather than folded into [open],
-  /// because reading an unknown status as "nobody has triaged this" would put a
+  /// A status this build does not know — a newer schema, or a hand-edited row.
+  /// Never written, only read; not folded into [open], which would put a
   /// resolved thread back in front of a human as new work.
   unrecognised('Status not recognised');
 
@@ -84,9 +37,7 @@ enum ReviewThreadStatus {
   /// Plain words for a reader.
   final String label;
 
-  /// Whether a thread in this state is something the author still owes.
-  ///
-  /// Only [shouldFix]. Deliberately not [open]: see the enum's own doc.
+  /// Whether the author still owes this. Only [shouldFix], deliberately not [open].
   bool get isPending => this == ReviewThreadStatus.shouldFix;
 
   static ReviewThreadStatus fromName(String? name) => values.firstWhere(
@@ -94,10 +45,7 @@ enum ReviewThreadStatus {
     orElse: () => ReviewThreadStatus.unrecognised,
   );
 
-  /// The statuses a caller may *set*, by name.
-  ///
-  /// [unrecognised] is absent because it is a read-time fallback and never a
-  /// thing anybody chose.
+  /// The statuses a caller may *set*. [unrecognised] is a read-time fallback only.
   static const Set<String> settable = <String>{
     'open',
     'shouldFix',
@@ -108,12 +56,8 @@ enum ReviewThreadStatus {
 
 /// Who wrote a comment.
 ///
-/// Two real kinds and a fallback, and the distinction earns its column: it is
-/// what decides the status a new thread starts in. A person writing on a diff
-/// has already triaged what they wrote — they are the triager — so their thread
-/// opens as [ReviewThreadStatus.shouldFix]. An agent's finding opens as
-/// [ReviewThreadStatus.open], because an agent asserting that something should
-/// be fixed is asserting exactly the thing a human review exists to decide.
+/// The kind decides the status a new thread starts in: a person has already
+/// triaged what they wrote, an agent's finding has not.
 enum ReviewAuthorKind {
   user('the user'),
   agent('an agent'),
@@ -131,8 +75,8 @@ enum ReviewAuthorKind {
 
 /// The content a thread is attached to, and where in it.
 ///
-/// Immutable and never rewritten. An anchor is a statement about a moment; the
-/// way to comment on the new content is a new thread, not an edited anchor.
+/// Immutable and never rewritten — the way to comment on the new content is a
+/// new thread, not an edited anchor.
 class ReviewAnchor {
   const ReviewAnchor({
     required this.path,
@@ -147,12 +91,8 @@ class ReviewAnchor {
 
   /// `git hash-object` of the file's bytes when the thread was opened.
   ///
-  /// A content fingerprint, and used as nothing else: it is never dereferenced
-  /// as an object, never compared against the `index` line of a diff, never
-  /// resolved through the object store. All that is ever asked of it is
-  /// "are these the same bytes", which is the one question a sha answers
-  /// without qualification — including across a checkout that put the old
-  /// content back.
+  /// A content fingerprint and nothing else: never dereferenced as an object,
+  /// never compared against a diff's `index` line. Only "are these the same bytes".
   final String blobSha;
 
   /// First line of the range, 1-based, **in the file as it stood at
@@ -165,10 +105,8 @@ class ReviewAnchor {
 
   /// The text the author was looking at, stored verbatim.
   ///
-  /// The evidence a detached thread is read by. It is deliberately **not** used
-  /// to find the line again — see the library doc — but a human holding "you
-  /// dropped the null check" next to the line it was written about can do in a
-  /// second what no amount of fuzzy matching should be trusted to do at all.
+  /// The evidence a detached thread is read by, and deliberately **not** used to
+  /// find the line again.
   final String? excerpt;
 
   /// Whether this thread is about the file rather than a place in it.
@@ -187,9 +125,7 @@ class ReviewAnchor {
   /// Whether [currentBlobSha] is the content this anchor was written against.
   ///
   /// Null — "git could not be asked" — is [ReviewThreadAttachment.unknown] and
-  /// never [ReviewThreadAttachment.attached]. The same rule `ReviewBrief`
-  /// applies to a missing file list: an unanswered question must not render as
-  /// the reassuring answer.
+  /// never [ReviewThreadAttachment.attached].
   ReviewThreadAttachment attachmentAgainst(String? currentBlobSha) {
     if (currentBlobSha == null) return ReviewThreadAttachment.unknown;
     return currentBlobSha == blobSha
@@ -209,8 +145,7 @@ enum ReviewThreadAttachment {
   detached,
 
   /// The file could not be read — deleted, unreadable, or git would not answer.
-  /// Not "attached", and not "detached" either: a thread whose file is missing
-  /// is a thread nobody can check.
+  /// Neither attached nor detached: nobody can check it.
   unknown;
 
   bool get isAttached => this == ReviewThreadAttachment.attached;
@@ -238,10 +173,8 @@ class ReviewComment {
   /// 1-based position within the thread, assigned on append.
   final int sequence;
 
-  /// Who wrote it, **in words a reader recognises** — "the user", an agent's
-  /// display name. Words rather than an id, for the reason
-  /// `DecisionRecord.decidedBy` gives: whoever reads this has no way to resolve
-  /// a key.
+  /// Who wrote it, **in words a reader recognises** rather than an id: whoever
+  /// reads this has no way to resolve a key.
   final String author;
 
   final ReviewAuthorKind authorKind;
@@ -277,18 +210,16 @@ class ReviewThread {
 
   final String id;
 
-  /// Which checkout's file the anchor is in. Threads are scoped to a
-  /// repository rather than to a session because the *code* is what is being
-  /// commented on, and it outlives every session that touches it.
+  /// Which checkout's file the anchor is in. Scoped to the repository, not the
+  /// session, because the code outlives every session that touches it.
   final String repositoryId;
 
   final ReviewAnchor anchor;
 
   final ReviewThreadStatus status;
 
-  /// The session the thread was raised in or about, when there was one. Null
-  /// for a comment somebody wrote with no session selected — which is a normal
-  /// thing to do while reading a diff.
+  /// The session the thread was raised in or about. Null is normal — somebody
+  /// reading a diff with no session selected.
   final String? sessionId;
 
   final DateTime createdAt;
@@ -330,9 +261,8 @@ class ReviewThread {
 
 /// A thread with its anchor already held against the file on disk.
 ///
-/// The pairing exists so that no renderer and no prompt builder can forget to
-/// ask. A bare [ReviewThread] carries line numbers that look authoritative;
-/// this type cannot be constructed without saying whether they still are.
+/// A bare [ReviewThread] carries line numbers that look authoritative; this type
+/// cannot be constructed without saying whether they still are.
 class AnchoredReviewThread {
   const AnchoredReviewThread(this.thread, this.attachment);
 
@@ -347,10 +277,8 @@ class AnchoredReviewThread {
 
 /// Every open thread in one repository, with each anchor already checked.
 ///
-/// Built once per read and shared by every widget that draws a line of the
-/// diff, which is the point: the previous implementation had each line tile
-/// scan the whole annotation list, and a DAO call per line would have been the
-/// same shape with a database behind it. See `review_thread_cost_test`.
+/// Built once per read and shared by every widget that draws a diff line; the
+/// alternative is a scan, or a DAO call, per line (`review_thread_cost_test`).
 class ReviewThreadIndex {
   ReviewThreadIndex(List<AnchoredReviewThread> threads)
     : all = List.unmodifiable(threads),
@@ -384,11 +312,8 @@ class ReviewThreadIndex {
 
   /// Threads whose anchor lands on [line] of [path], and which still attach.
   ///
-  /// A detached thread is deliberately **not** returned here: its line number
-  /// is a number about a file that no longer exists in that form, and drawing
-  /// it against the current line is the mis-anchoring this whole file is about.
-  /// Detached threads are surfaced [forPath] instead, where the reader is told
-  /// what happened to them.
+  /// A detached thread is deliberately **not** returned: its line number is
+  /// about a file that no longer exists in that form. [unplaced] surfaces it.
   List<AnchoredReviewThread> atLine(String path, int line) => [
     for (final entry in forPath(path))
       if (entry.isAttached &&
@@ -401,11 +326,8 @@ class ReviewThreadIndex {
   /// Threads on [path] that **no line of the diff can carry**: file-level
   /// anchors, and every thread whose file has moved on.
   ///
-  /// These are the ones a renderer would otherwise drop on the floor. A
-  /// detached thread has a line number that no longer locates anything, so
-  /// drawing it on that line would be a lie and drawing it nowhere would be a
-  /// disappearance — it goes in a strip above the diff instead, where there is
-  /// room to say what happened to it.
+  /// A renderer would otherwise drop them: on their old line would be a lie,
+  /// nowhere would be a disappearance. They go in a strip above the diff.
   List<AnchoredReviewThread> unplaced(String path) => [
     for (final entry in forPath(path))
       if (!entry.isAttached || entry.anchor.isFileLevel) entry,
@@ -414,10 +336,8 @@ class ReviewThreadIndex {
   /// The threads a send hands to an agent: the ones somebody triaged as
   /// [ReviewThreadStatus.shouldFix], attached or not.
   ///
-  /// Detached ones are included on purpose. "Fix the thing I asked about"
-  /// remains a request after the file moves; what the prompt owes the agent is
-  /// the truth that the line numbers are stale, and [buildReviewThreadPrompt]
-  /// says exactly that rather than dropping the request.
+  /// Detached ones are included on purpose; [buildReviewThreadPrompt] tells the
+  /// agent the line numbers are stale rather than dropping the request.
   List<AnchoredReviewThread> get pending => [
     for (final entry in all)
       if (entry.thread.status.isPending) entry,
@@ -426,25 +346,9 @@ class ReviewThreadIndex {
 
 /// The message a send puts in front of an agent.
 ///
-/// ## Why sending changes nothing
-///
-/// The old path cleared every annotation in the repository the moment it sent
-/// one prompt, so a review comment existed for exactly as long as it took to
-/// mention it once. Nothing survived to check the fix against, nothing could be
-/// replied to, and a comment the agent ignored was indistinguishable from one
-/// it addressed. Threads are not touched by sending: they stay
-/// [ReviewThreadStatus.shouldFix] until somebody decides they are resolved,
-/// which is a judgement about the code and not about whether a message went
-/// out.
-///
-/// ## Why a detached thread is still sent
-///
-/// Because it is still a request. What changes is what the prompt claims: an
-/// attached thread quotes a line and a number, a detached one says the file has
-/// changed since the comment was written, quotes the text it was written
-/// against, and asks the agent to find it. That is the honest version of the
-/// same instruction, and it is strictly better than the alternatives — dropping
-/// the request, or repeating a line number that now points somewhere else.
+/// Sending changes nothing: threads stay [ReviewThreadStatus.shouldFix] until
+/// somebody decides the code is right. A detached thread is still sent, with the
+/// prompt saying the file has changed rather than repeating a stale line number.
 String buildReviewThreadPrompt(List<AnchoredReviewThread> threads) {
   final buffer = StringBuffer(
     'Please address these review comments. Keep each requested change scoped '

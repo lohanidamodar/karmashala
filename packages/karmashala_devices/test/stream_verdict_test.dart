@@ -1,15 +1,8 @@
-// The whole rule for condemning a live view, in one table.
-//
-// 1.6.0 fixed a restart loop by keying the rule on the plumbing — socket open,
-// server alive, bytes and frames arriving — and traded it for the opposite
-// failure: "the live view goes stale after some time and doesn't update when i
-// interact". Every one of those signals stops at the socket. None of them knows
-// whether the picture the user is looking at is current, which is the only
-// thing the user can see.
-//
-// So the rule now reads a third clock — when a frame was last *delivered to the
-// player* — and one fact about the user: that they asked the device for
-// something. Silence is only consent while nobody is asking.
+// The whole rule for condemning a live view, in one table. Keying it on the
+// plumbing — socket open, server alive, bytes and frames arriving — traded a
+// restart loop for the opposite failure, because every one of those signals
+// stops at the socket. So the rule reads a third clock, when a frame was last
+// *delivered to the player*, and whether the user is asking for anything.
 import 'package:test/test.dart';
 import 'package:karmashala_devices/src/data/device_stream.dart';
 
@@ -71,10 +64,8 @@ void main() {
 
     test('frames the player never shows are a fault, though everything is '
         'connected', () {
-      // The failure with no signal at all in 1.6.0: the socket delivers, the
-      // parser decodes, `live` is reported — and the picture on screen has not
-      // moved since the player stopped taking frames. Nothing was on screen to
-      // say so, which is the one thing a held picture must never do.
+      // The failure with no signal at all in 1.6.0: the socket delivers, `live`
+      // is reported, and the picture has not moved since the player stopped.
       final verdict = _judge(
         sinceFrame: const Duration(milliseconds: 100),
         sinceByte: const Duration(milliseconds: 100),
@@ -99,9 +90,7 @@ void main() {
 
     test('a window nobody can see is not accused of being behind', () {
       // A minimised window may stop taking frames, which looks exactly like a
-      // player that has seized up. Restarting a stream nobody is looking at,
-      // over and over, would be the old loop somewhere it could not even be
-      // seen happening.
+      // player that has seized up.
       expect(
         _judge(
           sinceFrame: const Duration(milliseconds: 100),
@@ -157,10 +146,8 @@ void main() {
 
     test('an unanswered interaction stays a fault until the picture answers',
         () {
-      // Deliberately not aged out. Once automatic reconnection has given up,
-      // this verdict is the only thing holding the overlay — and its restart
-      // button — on screen; letting it lapse back to a chip would take the way
-      // out away from the one user who needs it.
+      // Deliberately not aged out: once reconnection has given up, this verdict
+      // is the only thing holding the restart button on screen.
       final verdict = _judge(
         sinceFrame: const Duration(hours: 1),
         sinceByte: const Duration(hours: 1),

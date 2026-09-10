@@ -7,17 +7,12 @@ const int kDefaultLogBufferCapacity = 5000;
 const int kMinLogBufferCapacity = 200;
 const int kMaxLogBufferCapacity = 50000;
 
-/// A bounded ring of the most recent [LogEntry]s.
+/// A bounded ring of the most recent [LogEntry]s, always filling — a buffer
+/// that starts recording when the panel opens is empty for the person who has
+/// just watched something fail.
 ///
-/// **Always filling, even with debug mode off.** A buffer that only starts
-/// recording when the user opens the panel shows an empty list to someone who
-/// has just watched something fail, and makes them reproduce the bug to see it.
-///
-/// **[add] never blocks and never allocates.** One array store, three integer
-/// updates, no I/O, no listener callbacks, no `await`. Anything that *can* be
-/// slow — writing a file, repainting a list — is somebody else's job on their
-/// own schedule; see [revision], which is how a UI notices new records without
-/// this class ever calling into it.
+/// [add] never blocks, allocates or calls a listener; a UI notices new records
+/// by watching [revision] instead.
 class LogRingBuffer {
   LogRingBuffer({int capacity = kDefaultLogBufferCapacity})
     : _capacity = capacity.clamp(kMinLogBufferCapacity, kMaxLogBufferCapacity),
@@ -38,10 +33,8 @@ class LogRingBuffer {
   /// How many records are held right now.
   int get length => _filled;
 
-  /// Total records ever offered this run. Bumping on every [add] makes it the
-  /// cheapest possible change signal: a UI that remembers the last value it
-  /// rendered knows whether a repaint is worth doing, and this class never has
-  /// to hold — or call — a listener on the log-writing thread.
+  /// Total records ever offered this run, so a UI that remembers the last value
+  /// it rendered knows whether a repaint is worth doing.
   int get revision => _written;
 
   /// How many records the bound has evicted.
@@ -59,8 +52,8 @@ class LogRingBuffer {
     _written++;
   }
 
-  /// Every held record, oldest first. A fresh list, so a caller can hold it
-  /// across frames without the ring mutating under them.
+  /// Every held record, oldest first, as a fresh list a caller can hold across
+  /// frames.
   List<LogEntry> snapshot() {
     final out = <LogEntry>[];
     var index = (_next - _filled) % _capacity;

@@ -7,25 +7,11 @@ import 'git_service.dart';
 
 /// **Is this folder under git? — answered with no process at all.**
 ///
-/// Git is not the slow part: `git status` in a non-repository answers in 132
-/// ms, while the spawn in front of it costs ~90 ms for `git.exe`, 208–439 ms
-/// through `wsl.exe`, and 17.8 s for a distribution that was not running. A
-/// `stat` costs none of that.
-///
-/// **The parent walk is the correctness of this file.** Git searches upwards,
-/// so a subfolder of a checkout is in a repository with no `.git` of its own; a
-/// reader that looked only where it was pointed would call most of a real
-/// project untracked. It climbs to the root, and concludes nothing from a walk
-/// that ran out on a filesystem that was not answering.
-///
-/// Environment-shaped, never platform-shaped (§18): [hostPathOf] comes from the
-/// checkout's `EnvironmentKind`, and the joining context off the host path's
-/// own shape — a WSL path is POSIX, its host spelling a Windows UNC.
-///
-/// Two stated blind spots: `GIT_DIR`/`GIT_WORK_TREE` in the app's environment
-/// would make git disagree with this walk, and neither reaches a WSL or SSH
-/// checkout at all. Unbounded, unlike `LocalCheckoutPresenceProbe`, because
-/// giving up early only adds the deadline in front of the spawn that follows.
+/// A `stat` walk, because the spawn in front of `git` costs far more than git
+/// does. **The parent walk is the correctness of this file**: git searches
+/// upwards, so a subfolder of a checkout has no `.git` of its own, and a walk
+/// that ran out on a filesystem that was not answering concludes nothing.
+/// `GIT_DIR`/`GIT_WORK_TREE` set here would make git disagree — the blind spot.
 class GitPresenceReader {
   GitPresenceReader({required this.files, required this.hostPathOf});
 
@@ -36,8 +22,7 @@ class GitPresenceReader {
   final HostPathOrNone hostPathOf;
 
   /// A termination guard, not a cost bound: the loop already stops when
-  /// `dirname` stops moving, and this is the second lock on a walk driven by
-  /// string manipulation of a path shape this process may never have seen.
+  /// `dirname` stops moving.
   static const maxAncestors = 64;
 
   /// One `stat` for an ordinary checkout, one per ancestor for a folder inside
@@ -51,8 +36,7 @@ class GitPresenceReader {
     for (var climbed = 0; climbed <= maxAncestors; climbed++) {
       switch (await files.typeOf(context.join(directory, '.git'))) {
         // A directory is a clone, a file is the `gitdir:` pointer git writes for
-        // a worktree. Neither is inspected further — deciding what the
-        // repository *is* belongs to git.
+        // a worktree. Deciding what the repository *is* belongs to git.
         case PathEntry.directory || PathEntry.file:
           return GitPresence.repository;
         case PathEntry.none:
@@ -80,13 +64,10 @@ class GitPresenceReader {
 
 /// **Which of the three states an error that reached a pane actually is.**
 ///
-/// The backstop that makes [GitPresenceReader] safe: the reader may answer
-/// `unknown` whenever it is unsure, and this reaches the same states from git's
-/// own refusal, so a pane words a folder identically either way.
-///
-/// [CommandException] needs no message matching — it is the runners' single
-/// vocabulary for "could not be started or reached", and a non-zero exit is
-/// deliberately not one of them.
+/// The backstop that makes [GitPresenceReader] safe: it reaches the same states
+/// from git's own refusal, so a pane words a folder identically either way.
+/// [CommandException] is the runners' single vocabulary for "could not be started
+/// or reached", and a non-zero exit is deliberately not one of them.
 GitTrouble gitTroubleOf(Object error) {
   if (error is NotAGitRepository) return GitTrouble.notARepository;
   if (error is CommandException) return GitTrouble.unreachable;

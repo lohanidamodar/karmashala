@@ -99,10 +99,9 @@ void main() {
     setUp(() => shifty = splitUnifiedDiff(fixture('shifting_hunks.diff')));
 
     test('one hunk on its own starts where the pre-image says', () {
-      // Hunk 3 comes after a hunk that adds two lines. On its own, nothing has
-      // shifted the file, so its post-image start is its pre-image start —
-      // 35, not the 37 git wrote for the whole patch. Verified against real
-      // `git apply --check`.
+      // Hunk 3 follows a hunk that adds two lines; on its own nothing has
+      // shifted, so its post-image start is 35, not the 37 git wrote for the
+      // whole patch. Verified against real `git apply --check`.
       final patch = patchForHunks(
         fixture('shifting_hunks.diff'),
         'shifty.txt',

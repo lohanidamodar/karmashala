@@ -647,10 +647,8 @@ void main() {
 
   group('with no session', () {
     test('every input verb fails the future, never synchronously', () async {
-      // The bug this guards against: a verb that threw before a Future
-      // existed, so `service.click(...).catchError(...)` blew up at the call
-      // site instead of taking the error path. Loop 35 fixed it once; the MCP
-      // wiring calls every one of these, so it is asserted for every verb.
+      // A verb that threw before a Future existed blew up at the call site
+      // instead of taking the error path; the MCP wiring calls every one.
       final fake = FakeBrowser();
       for (final call in <Future<Object?> Function()>[
         () => fake.service.findElements(selector: '#go'),

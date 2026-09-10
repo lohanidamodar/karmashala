@@ -1,12 +1,7 @@
 /// The human-typeable pairing code: 20 random bytes as 32 base32 characters,
-/// grouped for reading (`K7QM-3X2W-…`).
-///
-/// The code carries ONLY the secret. It is full entropy (160 bits), so — unlike
-/// croc's short PAKE codes — it cannot be brute-forced by whoever runs the
-/// relay and needs no SPAKE2 (which remains descoped: no vetted pure-Dart
-/// implementation). Everything else the QR payload carries is derived from the
-/// secret (rendezvous), configured on the phone (relay), or delivered in the
-/// host's sealed confirm (host id, name, granted capabilities).
+/// grouped for reading (`K7QM-3X2W-…`). It carries ONLY the secret, at full
+/// entropy (160 bits), so no PAKE is needed; everything else the QR payload
+/// carries is derived, configured on the phone, or in the host's confirm.
 library;
 
 import 'dart:typed_data';

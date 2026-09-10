@@ -1,7 +1,5 @@
 /// The direct path: a plain TCP socket on the same network, skipping the relay.
-///
-/// No TLS — the frames are already sealed end to end, and a certificate on a
-/// home LAN would be a pairing problem with nothing to gain.
+/// No TLS — the frames are already sealed end to end.
 library;
 
 import 'dart:async';
@@ -188,15 +186,10 @@ Future<void> _pump(Socket socket, ReconnectingTransport transport) async {
     cancelOnError: true,
   );
 
-  // The write half, which had no error handler at all while the read half
-  // above has had one all along. `_write` is `socket.add(...)`: fire and
-  // forget, so a write that fails does not throw at the call site — the error
-  // arrives later on `socket.done`, and with nobody listening it escaped as an
-  // unhandled async error. On a phone that is the ordinary case, not an exotic
-  // one: the desktop goes away, sleeps, or changes network between two frames,
-  // and the next write fails with "An existing connection was forcibly closed
-  // by the remote host". A link that dies has to end the same way whichever
-  // half noticed it.
+  // `_write` is `socket.add(...)`: a failed write does not throw at the call
+  // site, it arrives later on `socket.done`, and with nobody listening it
+  // escaped as an unhandled async error. A link that dies has to end the same
+  // way whichever half noticed it.
   unawaited(
     socket.done.then<void>(
       (_) {},

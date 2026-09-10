@@ -42,11 +42,8 @@ class CompanionPairingClient {
   /// What the host's device list will call this phone.
   final String deviceName;
 
-  /// Pairs against [payload].
-  ///
-  /// Dials the payload's relay unless [transport] supplies a link — the LAN
-  /// path when discovery found the host, or a loopback in tests. A transport
-  /// this method dialled it also closes; a supplied one stays the caller's.
+  /// Pairs against [payload]. Dials the payload's relay unless [transport]
+  /// supplies a link; a transport this method dialled it also closes.
   /// [onConfirm] fires when the host's sealed confirm opens — the moment the
   /// desktop is provably found — before the ack/done round-trip finishes.
   Future<CompanionPairing> pair(
@@ -124,14 +121,10 @@ class CompanionPairingClient {
     }
   }
 
-  /// Pairs from a typed code's secret alone (no payload).
-  ///
-  /// The pairing secret and rendezvous are HKDF-derived from [codeSecret];
-  /// [relay] is this phone's own configured relay (the code carries none) and
-  /// is what the stored pairing dials afterwards. The host's confirm arrives
-  /// sealed under a key derived from the secret alone and carries the host id
-  /// and grant; the ack/done round-trip under the id-bound device key then
-  /// proves both ends derived the same key before anything is persisted.
+  /// Pairs from a typed code's secret alone (no payload). The host's confirm
+  /// arrives sealed under a key derived from the secret alone; the ack/done
+  /// round-trip under the id-bound device key then proves both ends derived the
+  /// same key before anything is persisted.
   Future<CompanionPairing> pairWithTypedCode({
     required Uint8List codeSecret,
     required Uri relay,
@@ -202,10 +195,8 @@ class CompanionPairingClient {
       link.send(await channel.seal(PairingMessage.encodeAck()));
       await _awaitSealed(frames, channel, PairingMessage.done, timeout);
 
-      // A typed code carries no relay set — the code is the secret and
-      // nothing else — so this record starts with the one relay the phone
-      // dialled. The host's first `host.status` replaces it with the real
-      // set, so a typed pairing is multi-relay from its very first session.
+      // A typed code carries no relay set, so this record starts with the one
+      // relay the phone dialled; the host's first `host.status` replaces it.
       final pairing = CompanionPairing(
         hostId: hostId,
         deviceId: deviceId,

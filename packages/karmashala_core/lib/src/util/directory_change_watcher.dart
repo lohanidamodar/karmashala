@@ -3,39 +3,27 @@ import 'dart:io';
 
 /// How a root is being watched, which is not the same question on every OS.
 enum DirectoryWatchMode {
-  /// One OS handle covers the whole tree. On Windows that is
-  /// `ReadDirectoryChangesW`, which is genuinely recursive and costs one handle
-  /// per root however deep the tree is; on macOS it is FSEvents, likewise.
+  /// One OS handle covers the whole tree — `ReadDirectoryChangesW`, FSEvents.
   recursive,
 
-  /// No affordable recursive watch. Linux has only inotify, which has no
-  /// recursive mode at all: Dart emulates `recursive: true` by adding a watch
-  /// per directory, so a twenty-thousand-directory tree wants twenty thousand
-  /// inotify watches and usually hits `max_user_watches` instead. The caller
-  /// falls back to its own staleness interval.
+  /// No affordable recursive watch: Dart emulates one on inotify with a watch
+  /// per directory, which a large tree turns into `max_user_watches`. The
+  /// caller falls back to its own staleness interval.
   unsupported,
 }
 
-/// Opens the change stream for one root, as the paths that changed.
-///
-/// Paths rather than `FileSystemEvent`s for two reasons: the path is the only
-/// part of an event this class reads, and `FileSystemEvent` has no public
-/// constructor, so a typedef over it is one a test can never satisfy.
+/// Opens the change stream for one root, as the paths that changed. Paths
+/// rather than `FileSystemEvent`s, which have no public constructor and so
+/// cannot be produced by a test.
 typedef DirectoryChangeSource = Stream<String> Function(String root);
 
 /// Watches directory trees and reports, at most once per quiet period, that
-/// *something* under a root changed.
+/// *something* under a root changed — deliberately not what, since the consumer
+/// can only re-walk.
 ///
-/// **It deliberately says nothing about what changed.** The consumer here is an
-/// index that can only re-walk, so the useful signal is one debounced bit per
-/// root; delivering an event per file would just make the caller coalesce them
-/// again, having already paid to allocate them.
-///
-/// Two timers guard the callback. [debounce] restarts on every event, so a
-/// burst — a checkout, an agent writing twenty files — lands as one callback
-/// once it settles. [maxDebounce] caps the total wait from the *first* event of
-/// a burst, so a build that writes continuously for a minute still reports
-/// within a few seconds instead of never.
+/// [debounce] restarts on every event so a burst lands as one callback;
+/// [maxDebounce] caps the wait from the burst's *first* event, so a build that
+/// writes continuously still reports.
 class DirectoryChangeWatcher {
   DirectoryChangeWatcher({
     this.debounce = const Duration(milliseconds: 400),
@@ -69,15 +57,10 @@ class DirectoryChangeWatcher {
 
   /// Starts watching [root], calling [onChange] once per settled burst.
   ///
-  /// Returns whether a watch was established. `false` means this platform has
-  /// no affordable recursive watch, the path is not watchable, or the OS
-  /// refused — never an exception, because a repository that cannot be watched
-  /// is a repository that refreshes on its interval, not a broken app.
-  ///
-  /// [ignore] filters events by path before they count. Passing the index's own
-  /// skip list here matters more than it looks: a recursive watch over a
-  /// repository root reports every file a build writes into `build/` and
-  /// `.dart_tool/`, and re-walking on those is pure waste.
+  /// Returns whether a watch was established, and never throws: a root that
+  /// cannot be watched refreshes on its interval instead. [ignore] filters
+  /// events by path, which a repository root needs — a build writing into
+  /// `build/` and `.dart_tool/` would otherwise re-walk the tree constantly.
   bool watch(
     String root,
     void Function() onChange, {

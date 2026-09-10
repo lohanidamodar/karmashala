@@ -1,21 +1,10 @@
-// A structural validator for MPEG-TS, written to catch exactly what FFmpeg's
-// demuxer complains about.
+// A structural validator for MPEG-TS, mirroring `libavformat/mpegts.c`: the
+// continuity-counter test whose failure surfaces in mpv's log as
+// `mpegts: Packet corrupt`, the PES size-mismatch test, and the transport-error
+// indicator. It stands in for `ffprobe`, which is not installed here.
 //
-// The checks mirror `libavformat/mpegts.c`: the continuity-counter test whose
-// failure sets `AV_PKT_FLAG_CORRUPT` (which surfaces in mpv's log as
-// `mpegts: Packet corrupt`), the PES size-mismatch test in `new_pes_packet`,
-// and the transport-error indicator. The rest is ISO 13818-1 structure.
-//
-// It lives in the tests because it is a test oracle, not app behaviour — but it
-// is the thing standing in for `ffprobe`, which is not installed on this
-// machine.
-//
-// It is **not** fully independent of what it judges: it imports the muxer's own
-// `kTsPacketSize`, `kPmtPid` and `kVideoPid` rather than restating them, so a
-// change to one of those would move the muxer and this validator together. The
-// three are pinned to their literal wire values in `ts_muxer_test.dart` ("the
-// wire constants are the ones the format fixes"), which is what keeps that
-// shared import honest.
+// It imports the muxer's own `kTsPacketSize`, `kPmtPid` and `kVideoPid` rather
+// than restating them; `ts_muxer_test.dart` pins those to their wire values.
 import 'dart:typed_data';
 
 import 'package:karmashala_devices/src/data/ts_muxer.dart';

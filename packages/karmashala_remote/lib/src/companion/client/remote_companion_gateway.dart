@@ -1,18 +1,9 @@
-/// Loop 70's real protocol client behind Loop 71's [CompanionGateway] seam.
+/// The real protocol client behind the [CompanionGateway] seam: one adapter,
+/// no protocol logic of its own, adding the contract the phone UI pinned —
+/// streams that seed their current value, refusals worded for a reader.
 ///
-/// One adapter, no protocol logic of its own: pairing runs through
-/// [CompanionPairingClient], the session API through [CompanionClient], and
-/// reconnection through the transports' own backoff. What this file adds is
-/// the contract the phone UI pinned: streams that seed their current value,
-/// and every refusal rewritten as a sentence a user can read.
-///
-/// This file is the gateway's state and the [CompanionGateway] surface that
-/// reads it; each family lives in a `part` beside it. A moved private member
-/// is an `extension` on this class rather than a new library, because Dart
-/// finds an extension member by unqualified name from inside the class and
-/// from the other parts — so nothing was renamed to make the split. The
-/// surface itself cannot move: an extension member does not satisfy
-/// `implements`.
+/// Each family lives in a `part` beside this file. The surface itself cannot
+/// move out: an extension member does not satisfy `implements`.
 library;
 
 import 'dart:async';
@@ -92,9 +83,8 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// What the desktop's device list will call this phone.
   final String deviceName;
 
-  /// What kind of thing this companion runs on, as `notifications.register`
-  /// reports it. [CompanionDeviceKind.unknown] by default, because a build
-  /// that has not been told must not guess.
+  /// What this companion runs on, as `notifications.register` reports it.
+  /// [CompanionDeviceKind.unknown] by default: a build not told must not guess.
   final CompanionDeviceKind deviceKind;
 
   final Duration requestTimeout;
@@ -126,14 +116,11 @@ class RemoteCompanionGateway implements CompanionGateway {
   final Backoff _backoff;
 
   /// The same, for a desktop on this network. A schedule that climbs to half a
-  /// minute is the right answer for an internet relay that may be down for
-  /// good reasons; it is the wrong answer for a machine on the same table,
-  /// where the honest expectation is that the link comes back in a moment.
+  /// minute is the wrong answer for a machine on the same table.
   final Backoff _localBackoff;
 
-  /// Whether the connection that just ended ran over something local — the
-  /// LAN, or a relay at a private address. Decides which schedule the next
-  /// wait comes from.
+  /// Whether the connection that just ended ran over something local, which
+  /// decides which schedule the next wait comes from.
   bool _lastPathWasLocal = false;
 
   final DateTime Function() _now;
@@ -162,9 +149,8 @@ class RemoteCompanionGateway implements CompanionGateway {
   final _linkSince = _Watched<DateTime?>(null);
 
   /// The state [_linkSince] was written for. A transport reports the state it
-  /// is IN, not the one it moved to, so a redial reports `connecting` over and
-  /// over; a stamp that moved on every report would call an hour-old outage
-  /// fresh.
+  /// is IN, so a redial reports `connecting` over and over; a stamp that moved
+  /// on every report would call an hour-old outage fresh.
   CompanionLinkState? _stampedLink;
 
   void _stampLink() {
@@ -201,28 +187,19 @@ class RemoteCompanionGateway implements CompanionGateway {
   bool _loopRunning = false;
   bool _closed = false;
 
-  /// Set while a deliberate host switch is tearing the old link down, so the
-  /// loop dials the new desktop straight away instead of treating the drop as
-  /// an outage to back off from.
+  /// Set while a deliberate host switch tears the old link down, so the loop
+  /// dials the new desktop instead of backing off from the drop.
   bool _switching = false;
   Completer<void>? _died;
 
-  /// A death declared while the loop was between two of its own awaits, with
-  /// no [_died] in existence to complete.
-  ///
-  /// The loop creates [_died] only after the dial has returned AND two awaited
-  /// keystore writes have finished. Everything that can kill a link — a
-  /// re-proof that found nobody, the LAN heal, a beacon, a request the host
-  /// never answered, the user's own Retry — could land in that window and be
-  /// thrown away, leaving the loop parked on a completer nothing would ever
-  /// finish and the phone reading "Connecting…" until it was force-quit.
+  /// A death declared while the loop was between two of its own awaits, with no
+  /// [_died] in existence to complete. Thrown away, it parked the loop on a
+  /// completer nothing would finish and the phone on "Connecting…".
   bool _deathPending = false;
 
-  /// Set when the pass in flight has been overtaken: the user asked to retry,
-  /// or a pairing, a switch or an unpair has already chosen a different
-  /// desktop. Distinct from [_deathPending] on purpose — a request that found
-  /// the link down is news about the link, not a reason to abandon the dial
-  /// that is busy fixing it.
+  /// Set when the pass in flight has been overtaken by a retry, a pairing or a
+  /// switch. Distinct from [_deathPending]: a request that found the link down
+  /// is news about the link, not a reason to abandon the dial fixing it.
   bool _dialOvertaken = false;
   Completer<void>? _backoffWaiter;
   Future<void>? _refreshing;
@@ -232,8 +209,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   RemoteTransport? _ownedTransport;
 
   /// The relay carrying the link right now, or null on the LAN path and while
-  /// nothing is connected. Read by the settings screen, and stamped as the
-  /// last-known-good once the link comes up.
+  /// nothing is connected. Stamped as the last-known-good once the link is up.
   Uri? _activeRelay;
 
   /// The newest `host.status` this link carried, applied to the saved
@@ -244,39 +220,31 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// leave an older, slower handshake deciding the link's fate.
   int _reproveAttempt = 0;
 
-  /// The plainest true sentence about why the link is down, when there is one
-  /// worth adding to the banner's own words. Watched, because it changes
-  /// without the link state changing with it.
+  /// The plainest true sentence about why the link is down, when there is one.
+  /// Watched, because it changes without the link state changing with it.
   final _trouble = _Watched<String?>(null);
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
   /// Runs while a dropped transport is being given its chance to come back.
   Timer? _healTimer;
 
-  /// Beacons still to be heard before the LAN is probed again, and how many
-  /// the next failed promotion will ask for. See `_holdingOffPromotion`.
-  ///
-  /// Counted in beacons, never timed. The beacon is the event (§19), so a
-  /// clock here would be a second opinion about a world the beacon is already
-  /// reporting on — and a phone whose desktop has stopped beaconing stops
-  /// re-probing for it, which is the right answer and one no timer can give.
+  /// Beacons still to be heard before the LAN is probed again, and how many the
+  /// next failed promotion will ask for. Counted in beacons, never timed: a
+  /// phone whose desktop stopped beaconing stops re-probing for it.
   int _promotionHoldOff = 0;
   int _promotionPenalty = 0;
 
-  /// True while a second link is being dialled and adopted.
-  ///
-  /// Guards against two promotions at once, and tells the liveness watch that
-  /// a drop on the link being replaced is this promotion's own doing.
+  /// True while a second link is being dialled and adopted. Guards against two
+  /// promotions at once, and tells the liveness watch that a drop on the link
+  /// being replaced is this promotion's own doing.
   bool _promoting = false;
 
   /// A drop on the link being replaced, held while a promotion decides. See
   /// `_releaseDeferredDrop`.
   bool _dropDeferred = false;
 
-  /// What this phone last said about itself, resent whenever it changes.
-  ///
-  /// Held rather than derived so a report that arrives while the link is down
-  /// is not lost: the next connection's registration carries it.
+  /// What this phone last said about itself, resent whenever it changes. Held
+  /// rather than derived so a report made while the link is down is not lost.
   CompanionPresence _presence = CompanionPresence.unknown;
 
   /// Sessions with a gap recovery in flight, so two never race each other.
@@ -364,8 +332,7 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   /// The typed path: a grouped base32 code carrying only the secret, or a
   /// pasted full payload — sniffed apart here. Full entropy (160 bits), so no
-  /// PAKE is needed the way a short code would; SPAKE2 remains descoped (no
-  /// vetted pure-Dart implementation).
+  /// PAKE is needed; SPAKE2 stays descoped for want of a vetted Dart one.
   @override
   Future<CompanionPairing> pairWithCode(String shortCode) async {
     await _ready;
@@ -409,16 +376,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// rather than inside one, because it must outlive unpairing every host.
   static const String kDeviceIdStoreKey = 'karmashala.remote.device_id';
 
-  /// This phone's device id: minted once, then used by every pairing it ever
-  /// makes.
-  ///
-  /// A fresh id per pairing is what made the desktop list the same phone
-  /// again and again, each new row holding a key that would never be used
-  /// again. The id is not a secret and proves nothing — the sealed handshake
-  /// does that — it is only the name the desktop files this phone under, so
-  /// re-pairing lands on the row that is already there.
-  ///
-  /// Read at most once per gateway: two pairings racing must not mint two.
+  /// This phone's device id: minted once, then used by every pairing it makes.
+  /// A fresh id per pairing is what made the desktop list the same phone again
+  /// and again. Read at most once: two pairings racing must not mint two.
   Future<DeviceId> stableDeviceId() => _deviceIdOnce ??= _readOrMintDeviceId();
   Future<DeviceId>? _deviceIdOnce;
 
@@ -482,8 +442,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       });
     } on Object catch (error) {
       // The keystore can refuse, and since it gained a deadline it can also
-      // give up: an escaping `TimeoutException` is an unhandled async error
-      // that leaves the tap looking like it did nothing at all.
+      // give up; an escaping `TimeoutException` makes the tap look inert.
       onLog?.call('switchTo failed: $error');
       throw const GatewayException(
         "This phone could not record which desktop to use, so it stayed on "
@@ -533,12 +492,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<void> reconnect() async {
     await _ready;
     if (_closed || _record == null) return;
-    // **The schedule, not just the wait in front of it.** Every caller of this
-    // is a reason to believe the world changed — the app came back to the
-    // foreground, the user asked, a desktop was picked — and a schedule that
-    // kept its attempt count answered the very next failure with the delay it
-    // had climbed to while nobody was watching. Skipping one wait and then
-    // waiting sixteen seconds is not what "reconnect now" means.
+    // **The schedule, not just the wait in front of it.** Every caller is a
+    // reason to believe the world changed, and a schedule that kept its attempt
+    // count answered the very next failure with sixteen seconds.
     _resetBackoff();
     final waiter = _backoffWaiter;
     if (waiter != null && !waiter.isCompleted) {
@@ -550,18 +506,16 @@ class RemoteCompanionGateway implements CompanionGateway {
       _startLoop();
       return;
     }
-    // Mid-cycle: a link that does not look healthy is torn down and
-    // re-dialled — including one still dialling, which abandons the
-    // candidates it has left rather than making the user wait them out.
+    // Mid-cycle: a link that does not look healthy is torn down and re-dialled,
+    // including one still dialling, rather than making the user wait it out.
     if (_link.value != CompanionLinkState.connected) {
       _dialOvertaken = true;
       _declareDead();
       return;
     }
-    // The link SAYS it is up. After a resume that is a claim about a socket
-    // nobody watched while the app was frozen, so it is proved rather than
-    // taken: one hello, one `host.status`, and silence declares it dead. The
-    // alternative is waiting out the heartbeat with a corpse on screen.
+    // After a resume, "up" is a claim about a socket nobody watched while the
+    // app was frozen, so it is proved rather than taken: one hello, one
+    // `host.status`, and silence declares it dead.
     unawaited(_reproveLink());
   }
 
@@ -580,9 +534,8 @@ class RemoteCompanionGateway implements CompanionGateway {
         () => row.snapshot.attention,
       );
     }
-    // The host's order IS the order — it is the desktop's own sort, and the
-    // phone re-sorting it is what made the list jump. Archived rows are kept
-    // and labelled rather than dropped, so the two lists agree.
+    // The host's order IS the order — the phone re-sorting it is what made the
+    // list jump. Archived rows are kept and labelled rather than dropped.
     final list = [
       for (final row in rows) _summaryOf(row.snapshot, raw: row.json),
     ];
@@ -617,9 +570,8 @@ class RemoteCompanionGateway implements CompanionGateway {
         state.listeners.add(controller);
         controller.onCancel = () {
           state.listeners.remove(controller);
-          // Deliberately no session.unsubscribe: the session list keeps
-          // every listed session subscribed anyway, and a redial rebuilds
-          // the subscriptions from scratch.
+          // Deliberately no session.unsubscribe: the list keeps every session
+          // subscribed anyway, and a redial rebuilds them from scratch.
         };
         unawaited(_primeTranscript(sessionId, controller));
       });
@@ -635,8 +587,7 @@ class RemoteCompanionGateway implements CompanionGateway {
         final subscription = watched.stream.listen(controller.add);
         controller.onCancel = subscription.cancel;
         // Asked outright once, because the host states this unprompted and an
-        // unprompted frame cannot be replayed for a screen that opened after
-        // it. Everything after this arrives on its own.
+        // unprompted frame cannot be replayed for a screen that opened after it.
         unawaited(_primeActivity(sessionId));
       });
 
@@ -697,8 +648,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     );
     _ensureCurrentClient(client);
     // Relist before answering, so the screen the caller pushes next finds the
-    // new session's row and its transcript subscription already there rather
-    // than waiting out a poll on an empty view.
+    // new session's row and its transcript subscription already there.
     await _refreshSessionsNow();
     return started;
   }
@@ -737,8 +687,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       onProgress,
     );
     // The prompt is the commit: the host checks the length here, so a short
-    // upload takes the prompt with it rather than becoming a truncated file an
-    // agent is told to open.
+    // upload takes the prompt with it rather than becoming a truncated file.
     return _mapRefusals(
       () => client.sendPrompt(sessionId, text, attachmentId: uploadId),
     );

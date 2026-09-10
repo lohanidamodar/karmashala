@@ -26,10 +26,9 @@ void main() {
     previous = Diagnostics.instance;
   });
 
-  /// Makes the write fail on every host: the log file's own path is taken by a
-  /// directory, and no platform will open a directory for writing. Blocking the
-  /// *parent* is not portable — a hardcoded `/proc/...` is a perfectly
-  /// creatable `C:\proc\...` on Windows.
+  /// Makes the write fail on every host by taking the log file's own path with
+  /// a directory. Blocking the *parent* is not portable: `/proc/...` is a
+  /// perfectly creatable `C:\proc\...` on Windows.
   void blockTheLogFile() =>
       Directory(p.join(dir.path, 'karmashala.log')).createSync();
 
@@ -111,8 +110,7 @@ void main() {
       final sink = LogFileSink(
         directory: dir,
         maxPending: 10,
-        // Long enough that nothing is flushed: this is about the queue's bound,
-        // not about the disk.
+        // Long enough that nothing flushes: this is the queue's bound.
         flushInterval: const Duration(hours: 1),
       );
       for (var i = 0; i < 100; i++) {

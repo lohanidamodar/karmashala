@@ -171,8 +171,7 @@ void main() {
 
     test('a HOST:PORT id never puts a colon in a Windows path', () {
       // A colon here does not fail — it opens an alternate data stream, so the
-      // pull writes somewhere nothing reads back and every step reports
-      // success. This is the assertion that catches it.
+      // pull writes where nothing reads back and every step reports success.
       final path = deviceStagedFilePath(
         target: _target('192.168.1.24:37129'),
         temporaryDirectory: temp,

@@ -2,20 +2,12 @@ import '../domain/android_device.dart';
 import '../domain/device_input.dart';
 import '../domain/logcat_entry.dart';
 
-/// Pure parsers for the text that adb and the emulator print.
-///
-/// These are deliberately free of any process or I/O concern so the awkward
-/// real-world shapes (daemon chatter, unauthorized devices, short listings)
-/// can be covered by fast unit tests.
+/// Pure parsers for the text that adb and the emulator print, free of any
+/// process concern so the awkward real shapes can be unit-tested.
 
-/// Parses `adb devices -l` output.
-///
-/// Lines look like:
-/// `emulator-5554  device product:sdk_gphone64_x86_64 model:Pixel transport_id:7`
-/// but a plain `adb devices` prints only `<serial>\t<state>`, and the daemon may
-/// print startup chatter before the header. Devices that are not usable
-/// (`unauthorized`, `offline`) are **kept**, so the UI can explain why a device
-/// the user can see is not working.
+/// Parses `adb devices -l` output. A plain `adb devices` prints only
+/// `<serial>\t<state>`, and the daemon may print startup chatter first. Devices
+/// that are not usable are **kept**, so the UI can explain them.
 List<AndroidDevice> parseAdbDevices(
   String output, {
   required String environmentId,
@@ -74,10 +66,8 @@ List<String> parseAvdNames(String output) {
   return names;
 }
 
-/// Parses `adb shell wm size`.
-///
-/// An `Override size` wins when present: that is what the device is actually
-/// displaying, and therefore the coordinate space taps must use.
+/// Parses `adb shell wm size`. An `Override size` wins: that is what the device
+/// is actually displaying, and so the space taps must use.
 DeviceScreenSize? parseScreenSize(String output) {
   final pattern = RegExp(r'(Physical|Override) size:\s*(\d+)x(\d+)');
   DeviceScreenSize? physical;
@@ -101,9 +91,7 @@ final _logcatPattern = RegExp(
   r'(\d+)\s+(\d+)\s+([VDIWEF])\s+(.*?)\s*:\s(.*)$',
 );
 
-/// Parses one line of `logcat -v threadtime`.
-///
-/// Returns `null` for separator banners (`--------- beginning of main`) and any
+/// Parses one line of `logcat -v threadtime`. Null for separator banners and any
 /// line that does not match, so callers can simply drop them.
 LogcatEntry? parseLogcatLine(String line) {
   final match = _logcatPattern.firstMatch(line.trimRight());
@@ -127,10 +115,8 @@ List<int> parsePidsFromPidof(String output) => [
     if (token.isNotEmpty) int.tryParse(token) ?? -1,
 ].where((pid) => pid > 0).toList();
 
-/// First meaningful line of command output.
-///
-/// Skips blank lines and adb's `OK` acknowledgement, which `emu` subcommands
-/// append after their real answer.
+/// First meaningful line of command output. Skips blank lines and adb's `OK`
+/// acknowledgement, which `emu` subcommands append after their real answer.
 String? firstMeaningfulLine(String output) {
   for (final line in output.split(RegExp(r'[\r\n]+'))) {
     final trimmed = line.trim();
@@ -141,14 +127,9 @@ String? firstMeaningfulLine(String output) {
   return null;
 }
 
-/// Local ports of `adb forward` entries that point at a scrcpy socket on
-/// [serial].
-///
-/// A forward that outlives its server is worse than useless: `adb forward`
-/// accepts the host-side TCP connection *before* the device-side socket exists
-/// and then closes it, so a stale entry makes a reconnect look like it worked
-/// while delivering nothing. Every start therefore reaps the entries left by a
-/// previous run.
+/// Local ports of `adb forward` entries pointing at a scrcpy socket on [serial].
+/// A forward that outlives its server makes a reconnect look like it worked
+/// while delivering nothing, so every start reaps the previous run's.
 ///
 /// Lines look like `SERIAL tcp:56213 localabstract:scrcpy_c7a1b2c3`.
 List<int> parseScrcpyForwards(String output, {required String serial}) {
@@ -165,12 +146,9 @@ List<int> parseScrcpyForwards(String output, {required String serial}) {
 }
 
 /// Pids of scrcpy servers **this app** started, from `ps -A -o PID,ARGS`.
-///
-/// Identified by [jarPath] rather than by the scrcpy class name, so a scrcpy
-/// the developer is running themselves is never killed. That takes two steps:
-/// the jar only appears in the `CLASSPATH=` prefix of the wrapping
-/// `sh -c`, never in the `app_process` child's own arguments — the child is
-/// matched by the `scid=` its parent line carries.
+/// Identified by [jarPath], never the scrcpy class name, so a developer's own
+/// scrcpy is never killed. The jar only appears in the wrapping `sh -c`, so the
+/// `app_process` child is matched by the `scid=` its parent line carries.
 ///
 /// ```
 /// 11026 sh -c CLASSPATH=/data/local/tmp/karmashala-scrcpy-server.jar \
@@ -204,15 +182,9 @@ List<int> parseOwnedScrcpyPids(String output, {required String jarPath}) {
   return pids;
 }
 
-/// Reads `adb shell cmd uimode night`, which answers with one line:
-/// `Night mode: yes`.
-///
-/// Null for anything else. The alternatives all lie in one direction or the
-/// other: `custom_schedule` and `custom_bedtime` are answers a two-state toggle
-/// cannot represent, and `auto` means "whatever the sensor says", which is not
-/// a state this app set or can promise. Reporting "unknown" lets the caller
-/// leave the control alone instead of claiming the device is light when it is
-/// dark.
+/// Reads `adb shell cmd uimode night`, which answers `Night mode: yes`. Null for
+/// anything else: `custom_schedule` and `auto` are states a two-way toggle
+/// cannot represent, and "unknown" lets the caller leave the control alone.
 bool? parseNightMode(String output) {
   final match = RegExp(
     r'night\s+mode\s*:\s*(\w+)',

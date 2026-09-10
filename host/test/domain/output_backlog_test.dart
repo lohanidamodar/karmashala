@@ -99,9 +99,8 @@ void main() {
 
   group('restored from a record', () {
     test('keeps the absolute numbering the session really had', () {
-      // A session that produced 40_000 bytes and kept the last 10: the two
-      // numbers are separately true, and a restarted host that reset the total
-      // would hand every client an offset from a different numbering.
+      // 40_000 produced and the last 10 kept are separately true; resetting the
+      // total would renumber every offset a client holds.
       final backlog = OutputBacklog.restored(
         capacityBytes: 16,
         totalBytes: 40000,

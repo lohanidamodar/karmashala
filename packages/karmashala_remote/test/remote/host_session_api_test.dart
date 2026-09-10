@@ -1,6 +1,5 @@
-/// The host session api, driven directly: the capability matrix, the refusal
-/// codes, and the event dedupe — no sockets, no sealing, just envelopes in
-/// and frames out.
+/// The host session api driven directly: the capability matrix, the refusal
+/// codes and the event dedupe — envelopes in, frames out.
 library;
 
 import 'dart:async';
@@ -39,17 +38,14 @@ class Harness {
   late final HostSessionApi api;
   final List<SentFrame> sent = [];
 
-  /// Whether the transport takes what the api hands it. False is the state
-  /// the host really gets into: the link the phone last used is closed and
-  /// nothing else could carry the frame.
+  /// Whether the transport takes what the api hands it. False is the state the
+  /// host really gets into: the phone's last link is closed and nothing else can
+  /// carry the frame.
   bool delivers = true;
 
-  /// What the phone does when it opens a session: subscribe, then ask for the
-  /// history. `_reloadTranscript` in the gateway is exactly these two calls in
-  /// this order, and it is the second one that makes the session *watched* —
-  /// the host reads a transcript for the poll sweep only once it has served
-  /// one, because subscription alone means "keep this card live" and the phone
-  /// subscribes to every session it lists.
+  /// What the phone does on opening a session: subscribe, then ask for the
+  /// history. The second call is what makes the session *watched* — subscription
+  /// alone only means "keep this card live".
   Future<void> watch(String sessionId) async {
     await request(
       FrameType.sessionSubscribe,
@@ -440,10 +436,6 @@ void main() {
       },
     );
 
-    // **What the owner could not see from a pocket.** The desktop strip has
-    // answered "what is it doing right now" for a while; the wire carried
-    // nothing about it, so a phone had a card reading "working" and a
-    // transcript that had not moved.
     group('session.activity', () {
       RemoteSessionActivity running(
         String sessionId, {
@@ -469,9 +461,8 @@ void main() {
         await harness.watch('s1');
         final before = harness.sent.length;
 
-        // A real one: the two subagents launched from this repo on 2026-09-07
-        // reported 4,549,121 ms and 4,798,063 ms of runtime, and the longest
-        // unanswered tool window in the owner's store is 514.8 minutes.
+        // A real one: the longest unanswered tool window in the owner's store
+        // is 514.8 minutes.
         harness.fake.activities['s1'] = running(
           's1',
           summary: 'Agent(review the diff)',
@@ -493,9 +484,8 @@ void main() {
         );
       });
 
-      // A call *finishing* appends nothing — the reader attaches the result to
-      // the row already there — so every cursor check in the poll would have
-      // swallowed the one change the phone is waiting to see.
+      // A call *finishing* appends nothing, so a cursor check in the poll would
+      // swallow the one change the phone is waiting to see.
       test('...and again when it stops, though nothing was appended', () async {
         final harness = Harness();
         harness.fake.transcripts['s1'] = [
@@ -639,19 +629,8 @@ void main() {
     );
   });
 
-  // --- News the transport could not carry ----------------------------------
-  //
-  // `no transport could carry a frame` in the owner's log, ten times in five
-  // minutes, while the phone "showed retry time and again". A frame the
-  // transport refuses is gone: `RemoteTransport.send` only throws once it is
-  // CLOSED, which an accepted LAN link becomes for good the moment the phone
-  // hangs up — the host keeps it as the active transport until the next
-  // inbound frame reattaches, and drops everything sent in between.
-  //
-  // What made that unrecoverable rather than merely late is here: the api used
-  // to record what it had told the phone BEFORE handing the frame over, so a
-  // dropped update was never sent again. The phone reconnects and the desktop
-  // believes it is already up to date.
+  // A frame the transport refuses is gone: an accepted LAN link stays CLOSED
+  // until an inbound frame reattaches, so delivery is recorded after the send.
   group('a frame the transport could not carry', () {
     test('is sent again, not written off as delivered', () async {
       final harness = Harness();
@@ -707,15 +686,9 @@ void main() {
   });
 
   group('subscribing does not wait on the transcript', () {
-    // The owner's report, reproduced on a real phone: "connection is fine,
-    // sessions are listed, but opening a session fails". The link was up and
-    // `sessions.list` answered; `session.subscribe` timed out every time, and
-    // the desktop later logged a result frame it could no longer deliver.
-    //
-    // The cause was here: subscribe parsed the whole transcript to learn a
-    // *count* before replying. On a 115 MB store that is far past the phone's
-    // request timeout — and because a device's frames are handled on one
-    // serial chain, every request queued behind it timed out too.
+    // Subscribe used to parse the whole transcript to learn a *count* before
+    // replying, and every request queued behind it on the device's one serial
+    // chain timed out with it.
 
     test('the result arrives without reading the transcript at all', () async {
       final harness = Harness();
@@ -742,9 +715,7 @@ void main() {
 
     test('and answers even while a transcript read would never finish', () async {
       final harness = Harness();
-      // A read that never completes is the limit of a read that is merely far
-      // too slow, and it is the honest shape of the bug: the phone gave up
-      // first every time.
+      // A read that never completes is the limit of one merely far too slow.
       harness.fake.transcriptGate = Completer<void>();
       addTearDown(() => harness.fake.transcriptGate!.complete());
 
@@ -757,10 +728,8 @@ void main() {
     });
 
     test('a subscribed session nobody is reading is never polled', () async {
-      // The other half of the same bug, and the larger one. The phone
-      // subscribes to *every* session it lists, because subscription is what
-      // keeps the cards live — so polling on subscription alone meant a full
-      // transcript parse per listed session, every tick.
+      // The phone subscribes to *every* session it lists, so polling on
+      // subscription alone meant a transcript parse per session per tick.
       final harness = Harness()..fake.addSession('s2');
       await harness.request(
         FrameType.sessionSubscribe,
@@ -808,11 +777,8 @@ void main() {
   });
 
   group('a long transcript is sent as its tail', () {
-    // Reproduced on the device: opening this repo's own session — 53 MB of
-    // JSONL, 25,421 lines — returned every message in one sealed frame. The
-    // phone sat on a spinner and the desktop logged "no transport could carry
-    // a result frame" three times, because by the time the frame was built the
-    // phone had given up and redialled.
+    // Opening this repo's own session returned every message in one sealed
+    // frame; the phone gave up and redialled before it was built.
 
     List<RemoteTranscriptMessage> conversation(int count) => [
       for (var i = 0; i < count; i++)
@@ -905,10 +871,8 @@ void main() {
 
     test('but one that takes real time is not read again immediately',
         () async {
-      // The device case: a 53 MB transcript read on every two-second sweep,
-      // on the one chain the phone's own requests are queued behind. The read
-      // has to happen; happening *continuously* is what left nothing for the
-      // link.
+      // The device case: a 53 MB transcript read on every two-second sweep, on
+      // the one chain the phone's own requests queue behind.
       final harness = Harness();
       harness.fake.transcripts['s1'] = const [
         RemoteTranscriptMessage(role: 'user', text: 'hello'),
@@ -955,10 +919,7 @@ void main() {
 
   group('a task-notification envelope is folded down before it crosses', () {
     // Seen on the phone, 2026-09-02: a subagent completion landed as a turn
-    // whose text was the raw payload, so the chat read
-    // `</result><usage><subagent_tokens>295802</subagent_tokens>…` as
-    // conversation and it was most of the screen. This session's own store
-    // holds 199 of them.
+    // whose text was the raw payload, and it was most of the screen.
     String envelope({
       String? summary,
       String status = 'completed',
@@ -1007,11 +968,7 @@ void main() {
     });
 
     test('and the frame it sends is a fraction of the bytes', () async {
-      // Counted, not timed. Measured against this session's own store: 199
-      // envelopes, 691,852 bytes of them, folding to 27,305 — and the real
-      // 300-message tail page holds five, which is 189,609 bytes before and
-      // 128,805 after. This pins the shape of that with one worst-case
-      // envelope (the largest real one is 32,708 bytes, folding to 75).
+      // Counted, not timed, and pinned with one worst-case envelope.
       final raw = envelope(
         summary: 'Agent "Mobile chat scroll to latest" finished',
         body: List.filled(1200, 'a paragraph of the report').join('\n'),
@@ -1040,9 +997,8 @@ void main() {
     });
 
     test('and a store written with CRLF folds the same way', () async {
-      // The host runs on Windows, macOS and Linux. A transcript line's own
-      // content can carry \r\n, and a trailing \r would otherwise leave the
-      // envelope unrecognised — and the summary carrying one.
+      // A transcript line's own content can carry \r\n, and a trailing \r would
+      // otherwise leave the envelope unrecognised.
       final page = await pageOf([
         RemoteTranscriptMessage(
           role: 'user',
@@ -1097,9 +1053,8 @@ void main() {
       await harness.watch('s1');
       harness.sent.clear();
 
-      // What the owner actually hit: the subagent finished while the phone
-      // was already watching, so the envelope came through `transcript
-      // .appended` rather than the opening read.
+      // The subagent finished while the phone was already watching, so the
+      // envelope came through `transcript.appended` rather than the opening read.
       harness.fake.transcripts['s1']!.add(
         RemoteTranscriptMessage(
           role: 'user',
@@ -1143,10 +1098,8 @@ void main() {
     });
 
     test('the wire carries the store\'s own bytes, entities and all', () async {
-      // The phone's `&lt;explicit paths&gt;` was written that way by the agent
-      // CLI, inside a task-notification body — nothing here escapes, and
-      // nothing here unescapes either, because a message may genuinely be
-      // quoting an entity.
+      // The escaping is the agent CLI's: nothing here escapes and nothing here
+      // unescapes, because a message may genuinely be quoting an entity.
       const literal = 'a README badge with `?style=flat&amp;color=08C` in it';
       const angled = 'git commit -F msg -- <explicit paths>';
       final page = await pageOf(const [
@@ -1160,10 +1113,8 @@ void main() {
   });
 
   group('an approval that stops waiting is said so', () {
-    // Seen on the phone, 2026-09-02: a card below the chat still offering
-    // approve and deny for a decision the desktop had already made. The
-    // protocol told the phone when a request appeared and never when it went
-    // away, so answering it anywhere else left the card orphaned.
+    // Seen on the phone, 2026-09-02: a card still offering approve and deny for
+    // a decision the desktop had already made.
 
     Future<Harness> waiting() async {
       final harness = Harness();

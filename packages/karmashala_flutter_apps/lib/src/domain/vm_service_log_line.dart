@@ -1,24 +1,16 @@
 /// The Dart VM's own announcement of its service address, as it reaches a
-/// device log.
-///
-/// The address carries an auth token minted per run that nothing outside the
-/// app can recompute, so "connect to any running app" is bounded by where the
-/// token can be *read*. On Android it is read here: the VM writes the line to
-/// stdout and Android routes it to `logcat` under the `flutter` tag.
+/// device log. The per-run auth token cannot be recomputed, so this — logcat
+/// under the `flutter` tag — is where Android's is read.
 library;
 
-/// The same match `flutter attach` makes — `kVMServiceMessageRegExp` in
-/// `flutter_tools/lib/src/globals.dart`. The `//` alternative is not
+/// The same match `flutter attach` makes. The `//` alternative is not
 /// decoration: some builds omit the scheme.
 final RegExp _announcement = RegExp(
   r'The Dart VM service is listening on ((?:http|//)[a-zA-Z0-9:/=_\-.\[\]]+)',
 );
 
-/// The **device-side** address a Dart VM announced in [line], or null.
-///
-/// Matched anywhere in the line, so a logcat prefix needs no stripping. The
-/// port is a port on the phone: unreachable from here until an `adb forward`
-/// exists, which is [vmServiceUriOnHost]'s half.
+/// The **device-side** address a Dart VM announced in [line], or null. The
+/// port is the phone's, unreachable here until an `adb forward` exists.
 Uri? vmServiceUriInDeviceLogLine(String line) {
   final match = _announcement.firstMatch(line);
   if (match == null) return null;
@@ -41,11 +33,8 @@ Uri? vmServiceUriInDeviceLogLine(String line) {
   );
 }
 
-/// The same VM service reached through an `adb forward` on [hostPort].
-///
-/// Only the authority moves; the token is carried over because it is the half
-/// that cannot be re-derived. `buildVMServiceUri` in flutter_tools does the
-/// same.
+/// The same VM service reached through an `adb forward` on [hostPort]: only
+/// the authority moves, because the token cannot be re-derived.
 Uri vmServiceUriOnHost(Uri deviceUri, int hostPort) => Uri(
   scheme: 'http',
   host: '127.0.0.1',

@@ -1,11 +1,7 @@
 /// The little wire vocabulary underneath the session protocol: the cleartext
-/// link hello that routes a connection to its channel, the cleartext pairing
-/// hello that names the phone, and the sealed pairing messages that prove both
-/// ends hold the key before anything is persisted.
-///
-/// Cleartext here carries no secrets: a rendezvous id (already visible to the
-/// relay), a device id and a display name the user is in the middle of pairing
-/// anyway. Everything after the hellos is sealed.
+/// hellos that route a connection and name the phone, and the sealed pairing
+/// messages that prove both ends hold the key. Cleartext here carries no
+/// secrets; everything after the hellos is sealed.
 library;
 
 import 'dart:convert';
@@ -26,10 +22,9 @@ Map<String, Object?>? _decodeMap(List<int> frame) {
   }
 }
 
-/// The first frame a companion sends on any connection: which rendezvous —
-/// and therefore which sealed channel — this link belongs to. Required on the
-/// LAN path (a TCP listener has no URL); sent on the relay path too so the
-/// host learns a peer has actually arrived.
+/// The first frame a companion sends on any connection: which rendezvous — and
+/// therefore which sealed channel — this link belongs to. Required on the LAN
+/// path, where a TCP listener has no URL.
 class LinkHello {
   const LinkHello(this.rendezvous);
 

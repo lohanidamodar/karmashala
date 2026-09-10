@@ -1,9 +1,6 @@
-/// What a simulator is doing, as `simctl` reports it.
-///
-/// Deliberately not [DeviceConnectionState]: that enum decodes adb's words
-/// (`device` / `unauthorized` / `offline`), and a simulator has no notion of a
-/// device that is attached but refusing to talk. The two vocabularies are
-/// mapped where they meet, not merged.
+/// What a simulator is doing, as `simctl` reports it. Not
+/// [DeviceConnectionState]: that decodes adb's words, and a simulator has no
+/// notion of a device attached but refusing to talk.
 enum SimulatorState {
   /// Running and ready to be talked to.
   booted,
@@ -64,9 +61,8 @@ class IosSimulator {
   /// `com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro`.
   final String deviceTypeIdentifier;
 
-  /// Whether its runtime is installed. An unavailable simulator is listed by
-  /// `simctl` — it is still a row in the device set — but cannot be booted, and
-  /// offering it as though it could is how a user ends up staring at a spinner.
+  /// Whether its runtime is installed. An unavailable simulator is still a row
+  /// in the device set, but offering it as bootable ends in a spinner.
   final bool isAvailable;
 
   /// Bytes its data container occupies, when `simctl` reported one.

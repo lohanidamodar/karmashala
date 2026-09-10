@@ -1,30 +1,11 @@
 /// Pulling **what an agent wrote to a file** out of the record it keeps of its
 /// own run.
 ///
-/// ## What is actually in the transcripts
-///
-/// Both CLIs we can read already record the whole change, and one of them
-/// records a finished patch:
-///
-/// * **Claude Code** (`~/.claude/projects/<slug>/<id>.jsonl`) writes the tool
-///   call on the `assistant` line — `Edit` carries `old_string`/`new_string`,
-///   `Write` carries `content` — and then, on the following `user` line, a
-///   `toolUseResult` holding `filePath`, `originalFile`, and a
-///   **`structuredPatch`**: real unified-diff hunks with real line numbers,
-///   computed by the CLI itself. A created file is the trap: it is recorded
-///   with `type: create` and an **empty** `structuredPatch`, so a reader that
-///   only trusts the patch shows a new file as "nothing changed".
-/// * **Codex** (`~/.codex/sessions/**/rollout-*.jsonl`) writes one
-///   `patch_apply_end` payload per applied patch, whose `changes` map holds
-///   `{type: update, unified_diff}`, `{type: add, content}` or
-///   `{type: delete, content}`.
-///
-/// So the old and the new content are both available, and for the ordinary
-/// case the agent's own diff is too. Nothing here reads a file from disk; see
-/// [FileEditRecord] for why that is the point rather than a limitation.
-///
-/// `antigravity` uses Claude's shape, which is also the fallback for an agent
-/// we have no reader for — the same rule `readCliTranscript` follows.
+/// Claude Code records the call on the `assistant` line and the result, with a
+/// `structuredPatch`, on the `user` line after it; **a created file's
+/// `structuredPatch` is empty**, so trusting the patch alone shows a new file as
+/// "nothing changed". Codex writes one `patch_apply_end` per applied patch, and
+/// nothing here reads a file from disk.
 library;
 
 import 'package:agent_cli/descriptors.dart';
@@ -68,10 +49,9 @@ List<FileEditRecord> claudeFileEdits(Map<String, Object?> json) {
 
 /// The edits described by a Claude tool call's raw `input`.
 ///
-/// Split out because the engine's own `tool.call` event carries exactly this
-/// map and nothing else: a session hosted by the engine rather than a PTY has
-/// the input but never a result, and an in-flight write must still be
-/// showable.
+/// The engine's own `tool.call` event carries exactly this map: a session hosted
+/// by the engine has the input but never a result, and an in-flight write must
+/// still be showable.
 List<FileEditRecord> claudeToolInputEdits(String name, Object? input) {
   if (input is! Map) return const [];
   final path = input['file_path'];
@@ -81,9 +61,8 @@ List<FileEditRecord> claudeToolInputEdits(String name, Object? input) {
     case 'Write':
       final content = input['content'];
       if (content is! String) return const [];
-      // `modified`, not `created`: a Write overwrites just as readily as it
-      // creates, and the call alone cannot tell which. The weaker claim is the
-      // true one; the result line upgrades it when it arrives.
+      // `modified`, not `created`: a Write overwrites as readily as it creates,
+      // and the call alone cannot tell which. The result line upgrades it.
       return [
         FileEditRecord(
           path: path,
@@ -180,12 +159,9 @@ List<FileEditRecord> codexFileEdits(Map<String, Object?> json) {
 /// Every file edit in a transcript read line by line, with each tool call
 /// **collapsed onto its own result**.
 ///
-/// The correlation is the whole point. Claude records one write twice — the
-/// call on an `assistant` line, the result on the `user` line after it — so a
-/// consumer that renders every line's edits shows every change of every file
-/// twice, the second time better than the first. Feeding both lines to
-/// [add] replaces the call with the result in place, keeping the position the
-/// call had in the conversation.
+/// Claude records one write twice — the call on an `assistant` line, the result
+/// on the `user` line after it — so [add] replaces the call with the result in
+/// place, keeping the position the call had in the conversation.
 class FileEditCollector {
   final List<FileEditRecord> _edits = [];
 
@@ -208,8 +184,7 @@ class FileEditCollector {
       if (edit == null) return;
       final at = _byToolUseId[_claudeResultId(json) ?? ''];
       // A MultiEdit call left several rows behind and its result describes one
-      // file; replacing only the first would leave the rest as stale
-      // fragments, so an id we recorded more than once is left alone.
+      // file, so an id recorded more than once is left alone.
       if (at != null && at < _edits.length && _edits[at].path == edit.path) {
         _edits[at] = edit;
       } else {
@@ -232,8 +207,6 @@ class FileEditCollector {
     }
   }
 }
-
-// --- internals ---------------------------------------------------------------
 
 /// One edit out of a Claude `toolUseResult`, or null when the result is not a
 /// file write (a Bash result, a Read, …).

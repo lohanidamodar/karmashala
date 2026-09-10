@@ -5,10 +5,8 @@ import 'dart:typed_data';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
-/// The record beside the ring, on a real filesystem.
-///
-/// Everything here is counted: bytes written, bytes read back, offsets, and how
-/// many records survive the bound. Nothing waits.
+/// The record beside the ring, on a real filesystem. Everything is counted —
+/// bytes, offsets, records surviving the bound — and nothing waits.
 void main() {
   late Directory root;
   setUp(() => root = Directory.systemTemp.createTempSync('karmashala-store'));
@@ -16,8 +14,7 @@ void main() {
     try {
       root.deleteSync(recursive: true);
     } on FileSystemException {
-      // A handle can still be held on Windows; the temp dir is the OS's after
-      // that and nothing in the test depends on it going away.
+      // A handle can still be held on Windows; nothing here depends on it.
     }
   });
 
@@ -71,8 +68,7 @@ void main() {
 
     final session = storeOf().restore().single;
     expect(session.wasRunning, isTrue);
-    // Never an exit code, and never a zero — the process did not exit, it died
-    // with the host.
+    // Never a zero: the process did not exit, it died with the host.
     expect(session.lifecycle, isA<SessionEndedWithoutCode>());
     expect(session.lifecycle.exitCode, isNull);
     expect(
@@ -105,8 +101,7 @@ void main() {
     expect(session.backlog.heldBytes, lessThanOrEqualTo(1024));
     expect(session.backlog.firstAvailableOffset, 4000 - session.backlog.heldBytes);
 
-    // A client from before the rotation is told how much it lost rather than
-    // handed a stream that silently skips.
+    // A client from before the rotation is told how much it lost.
     final slice = session.backlog.since(0);
     expect(slice.droppedBytes, session.backlog.firstAvailableOffset);
     expect(slice.offset, session.backlog.firstAvailableOffset);
@@ -182,8 +177,8 @@ String _only(Directory directory) =>
         .where((s) => s.isNotEmpty)
         .last;
 
-/// The same FNV-1a the store names directories with, so the test can reach one
-/// on purpose without the store exposing its naming.
+/// The same FNV-1a the store names directories with, so a test can reach one
+/// without the store exposing its naming.
 String _hashOf(String id) {
   var hash = 0x811c9dc5;
   for (final unit in id.codeUnits) {

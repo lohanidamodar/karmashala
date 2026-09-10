@@ -2,21 +2,12 @@ import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 
-/// How deep below a session's root a `pubspec.yaml` may sit and still be one
-/// of *this* session's projects.
-///
-/// Two, from the backlog item. `app/pubspec.yaml` and
-/// `packages/mobile/pubspec.yaml` are both this checkout's work; a pubspec
-/// three levels down is nearly always a vendored copy or a package's own
-/// example, and offering to run it is offering the wrong project.
+/// How deep below a session's root a `pubspec.yaml` may sit and still be one of
+/// *this* session's projects; deeper is nearly always a vendored copy.
 const int kFlutterProjectMaxDepth = 2;
 
-/// Why a directory reads as a Flutter project.
-///
-/// Two independent signals, kept apart rather than collapsed into a boolean,
-/// because they answer different questions. A **runnable app** has both; a
-/// **plugin or package** usually has only [sdkDependency] and cannot be
-/// `flutter run`, which is exactly the difference a launch has to refuse on.
+/// Why a directory reads as a Flutter project. Two signals rather than a
+/// boolean: a plugin has only [sdkDependency] and cannot be `flutter run`.
 enum FlutterEvidence {
   /// A top-level `flutter:` section — assets, fonts, `uses-material-design`.
   flutterSection,
@@ -26,11 +17,7 @@ enum FlutterEvidence {
 }
 
 /// What one `pubspec.yaml` says, as far as anything here needs to know.
-///
-/// **Deliberately not a YAML parse.** The three facts wanted are all top-level
-/// or one level in, `package:yaml` is not a dependency of this app, and adding
-/// a parser for `name:` would be the "dependency for trivial helper logic"
-/// CLAUDE.md §3 forbids. What this costs is spelled out in [readPubspec].
+/// Deliberately not a YAML parse — `package:yaml` is not a dependency here.
 class PubspecReading {
   const PubspecReading({
     required this.name,
@@ -45,33 +32,22 @@ class PubspecReading {
   /// Whether this pubspec belongs to a Flutter project at all.
   bool get isFlutter => evidence.isNotEmpty;
 
-  /// Whether `flutter run` could be pointed at it.
-  ///
-  /// A package that merely depends on the Flutter SDK has no entrypoint and no
-  /// device to run on; `flutter run` in one answers *"this is not a Flutter
-  /// project"* after doing work. Knowing it here means the refusal is a
-  /// sentence instead.
+  /// Whether `flutter run` could be pointed at it: a package that merely
+  /// depends on the SDK has no entrypoint, and refusing here costs no work.
   bool get isRunnable => evidence.contains(FlutterEvidence.flutterSection);
 }
 
 /// Reads the three facts a Flutter loop needs out of a `pubspec.yaml`.
 ///
-/// **What this scan does and does not see.** It reads unindented `name:` and
-/// `flutter:` keys, and the one-level-in `flutter:` under `dependencies:` or
-/// `dev_dependencies:` whose block names the SDK. It ignores comments and
-/// blank lines. It does **not** understand flow mappings (`dependencies: {…}`),
-/// anchors, or a `name` inside a block scalar — all three are legal YAML and
-/// none of them occur in a pubspec `flutter create` or a human writes. A file
-/// it misreads reads as "not a Flutter project", which is the safe direction:
-/// the app then offers nothing rather than offering to run the wrong thing.
+/// Flow mappings, anchors and a `name` inside a block scalar are not
+/// understood; a file it misreads reads as "not a Flutter project", the safe
+/// direction.
 PubspecReading readPubspec(String contents) {
   String? name;
   final evidence = <FlutterEvidence>{};
-  // Which top-level block the cursor is in, so an indented `flutter:` is
-  // attributed to the section that contains it rather than to the file.
+  // So an indented `flutter:` is attributed to its section, not to the file.
   String? section;
-  // The indent of a `flutter:` key inside a dependency block, while its own
-  // sub-block is still being read.
+  // Set while a dependency block's own `flutter:` sub-block is being read.
   int? flutterDependencyIndent;
 
   for (final raw in const LineSplitter().convert(contents)) {
@@ -147,16 +123,8 @@ typedef PubspecCandidate = ({String path, String contents});
 
 /// The Flutter projects among [candidates], nearest the root first.
 ///
-/// **Pure, and that is the point.** Deciding what a checkout holds is a
-/// question about text; finding the text is a question about a filesystem that
-/// may be a distribution or another machine. Splitting them is what lets the
-/// decision be pinned by a test with no disk in it, and what keeps the walk on
-/// the side of the line where it happens *when someone asks* rather than on a
-/// tick.
-///
-/// [context] is the path flavour of the environment the candidates came from —
-/// `p.windows` for a Windows checkout, `p.posix` for a distribution — so a
-/// backslash path is not measured with a forward-slash ruler.
+/// [context] is the path flavour of the environment the candidates came from,
+/// so a backslash path is not measured with a forward-slash ruler.
 List<FlutterProject> flutterProjectsIn({
   required String root,
   required Iterable<PubspecCandidate> candidates,
@@ -183,9 +151,8 @@ List<FlutterProject> flutterProjectsIn({
       ),
     );
   }
-  // Shallowest first, then by name, then by directory — so the root project
-  // of a checkout is what a caller taking the first gets, and a monorepo whose
-  // packages share a name still comes back in one order every time.
+  // Shallowest first, then name, then directory: a caller taking the first
+  // gets the root project, and a monorepo's order is stable.
   found.sort((a, b) {
     final byDepth = a.depth.compareTo(b.depth);
     if (byDepth != 0) return byDepth;
@@ -213,9 +180,7 @@ int? flutterProjectDepth({
 String _withoutComment(String line) {
   final hash = line.indexOf('#');
   if (hash < 0) return line;
-  // A `#` inside a quoted value is not a comment. Nothing this reads has one,
-  // and cutting the line there would only lose a value it does not use — but
-  // the cheap guard costs one condition.
+  // A `#` inside a quoted value is not a comment.
   final before = line.substring(0, hash);
   final quotes = '"'.allMatches(before).length + "'".allMatches(before).length;
   return quotes.isEven ? before : line;

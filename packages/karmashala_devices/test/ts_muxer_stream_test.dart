@@ -1,10 +1,6 @@
-// The muxer judged as a whole stream rather than a packet at a time.
-//
-// These tests exist because the loop-27 muxer passed every packet-level test in
-// `ts_muxer_test.dart` and still produced a stream that made mpv log
-// `mpegts: Packet corrupt` and hold every frame back by an inter-frame gap. The
-// faults were only visible once the output was read the way a demuxer reads it,
-// which is what [validateTransportStream] does.
+// The muxer judged as a whole stream rather than a packet at a time: the
+// loop-27 muxer passed every packet-level test and still produced a stream that
+// made mpv log `mpegts: Packet corrupt` and hold every frame back.
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -27,9 +23,7 @@ void main() {
       final muxer = TsMuxer();
       final out = BytesBuilder();
       out.add(muxer.tables());
-      // Sizes chosen to cross every packetisation boundary: one packet exactly,
-      // one byte over, the point where the adaptation field must appear, and
-      // several packets.
+      // Sizes chosen to cross every packetisation boundary.
       final sizes = [for (var n = 1; n <= 400; n++) n, 1000, 5000, 65521];
       var pts = 0;
       for (final size in sizes) {
@@ -111,11 +105,8 @@ void main() {
     });
 
     test('a backwards step costs one frame, not the rest of the session', () {
-      // This case used to expect `[0, 9000, 9000]`, and that expectation was
-      // the bug: clamping to the highest timestamp seen does not clamp one
-      // frame, it latches. Every frame after it carried that same value, so
-      // PTS and PCR stopped advancing while bytes kept flowing — a stream whose
-      // clock has stopped, which is a frozen picture on a healthy socket.
+      // Clamping to the highest timestamp seen does not clamp one frame, it
+      // latches: PTS and PCR then stop advancing while bytes keep flowing.
       final muxer = TsMuxer();
       final out = BytesBuilder()
         ..add(muxer.frame(_unit(100), 1000000, keyframe: true))
@@ -129,9 +120,8 @@ void main() {
 
     test('an idle gap does not become a gap in the stream', () {
       // scrcpy encodes on change, so an untouched phone sends nothing for
-      // minutes; the cached keyframe a new viewer starts from can be older
-      // still. Measured before this: a viewer attaching after two minutes of
-      // idle got 120 seconds of PCR in one step, on its second frame.
+      // minutes: a viewer attaching after two minutes of idle got 120 seconds
+      // of PCR in one step, on its second frame.
       final muxer = TsMuxer();
       final out = BytesBuilder()
         ..add(muxer.frame(_unit(64), 5000000, keyframe: true))

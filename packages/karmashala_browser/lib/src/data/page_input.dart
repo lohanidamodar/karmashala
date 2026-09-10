@@ -4,29 +4,17 @@ import '../domain/found_element.dart';
 import 'cdp_page.dart';
 import 'input_script.dart';
 
-/// Drives a page the way a person does: find something, click it, type into
-/// it.
-///
-/// Everything here goes through `Input.dispatchMouseEvent` /
-/// `Input.dispatchKeyEvent`, which enter the browser's real input pipeline and
-/// fire the page's own listeners — the same event path a hand on a mouse
-/// produces. Nothing sets `.value` from JavaScript and calls it typing: a
-/// framework that listens for `keydown` would never see it, and the caller
-/// would be told the field was filled when the app disagrees.
-///
-/// Targets are addressed by **selector or visible text**, never by raw
-/// coordinates. A coordinate goes stale the moment the layout shifts and then
-/// fails silently by hitting the wrong thing; a selector either resolves or
-/// says it did not.
+/// Drives a page the way a person does, through `Input.dispatch*Event` so the
+/// page's own listeners fire — setting `.value` from JavaScript would report a
+/// filled field the app never saw — and by selector or visible text, never by
+/// coordinates, which go stale silently.
 class PageInput {
   PageInput(this._page);
 
   final CdpPage _page;
 
-  /// Elements matching a CSS [selector] or visible [text].
-  ///
-  /// Ranking and innermost-match selection happen in the page (see
-  /// [buildFindElementsScript]); this is the Dart side of the same contract.
+  /// Elements matching a CSS [selector] or visible [text]. Ranking and
+  /// innermost-match selection happen in the page ([buildFindElementsScript]).
   Future<FindResult> find({
     String? selector,
     String? text,
@@ -78,13 +66,9 @@ class PageInput {
     );
   }
 
-  /// Clicks the element matching [selector] or [text].
-  ///
-  /// Refuses rather than guessing when the query is ambiguous (pass [index]),
-  /// when the element is scrolled out of reach, or when something else covers
-  /// the point — in which case the covering element is named. A click that
-  /// lands on a cookie banner and reports success is the failure this whole
-  /// method is arranged to prevent.
+  /// Clicks the element matching [selector] or [text]. Refuses rather than
+  /// guessing when the query is ambiguous, the element is out of reach, or
+  /// something covers the point — in which case the covering element is named.
   Future<ClickResult> click({
     String? selector,
     String? text,
@@ -138,11 +122,8 @@ class PageInput {
     );
   }
 
-  /// Types [text] with real key events, optionally clicking a field first.
-  ///
-  /// Per-character `keyDown`/`keyUp` rather than one bulk insert: a page that
-  /// filters on `keydown` (a search box, a numeric-only field, an autocomplete)
-  /// behaves the same way for us as for a person.
+  /// Types [text] with per-character key events rather than one bulk insert, so
+  /// a page that filters on `keydown` behaves for us as it does for a person.
   Future<TypeResult> type(
     String text, {
     String? selector,
@@ -177,12 +158,8 @@ class PageInput {
     );
   }
 
-  /// Replaces a field's contents with [value].
-  ///
-  /// Focus, select everything already there, then insert — so the field ends
-  /// up holding exactly [value] and not [value] appended to a default. The
-  /// value is **read back afterwards**, and [TypeResult.matches] says whether
-  /// the page kept what we sent (a maxlength or an input mask may not).
+  /// Replaces a field's contents with [value] and reads it back:
+  /// [TypeResult.matches] says whether the page kept it (a maxlength may not).
   Future<TypeResult> fill({
     String? selector,
     String? text,
@@ -238,8 +215,7 @@ class PageInput {
     }
 
     if (value.isEmpty) {
-      // Nothing to insert; the selection has to be deleted explicitly or the
-      // old value survives and we would report an empty field that is not.
+      // The selection has to be deleted explicitly or the old value survives.
       await pressKey('delete');
     } else {
       await _page.connection.send('Input.insertText', params: {'text': value});
@@ -253,7 +229,6 @@ class PageInput {
     );
   }
 
-  /// Presses a named key — `enter`, `tab`, `escape`, `arrowDown`…
   Future<void> pressKey(String name) async {
     final key = parseBrowserKey(name);
     if (key == null) {
@@ -272,7 +247,6 @@ class PageInput {
     );
   }
 
-  /// Scrolls the page (or an element) by a wheel gesture.
   Future<void> scrollBy({double dx = 0, double dy = 0}) async {
     final metrics = await _page.evaluate(
       '({x: window.innerWidth / 2, y: window.innerHeight / 2})',
@@ -356,7 +330,6 @@ class PageInput {
     }
   }
 
-  /// Picks the one element a verb should act on, or explains why it will not.
   Future<_Target> _resolveOne({
     String? selector,
     String? text,
@@ -392,10 +365,8 @@ class PageInput {
       return _Target(found.elements[index], found.total, found.query);
     }
     if (found.elements.length > 1) {
-      // Several matches. A text query that produced exactly one *exact*,
-      // interactive match is still a decision we can make; anything else is a
-      // guess, and a wrong click is worse than an error because the caller
-      // cannot tell it happened.
+      // One exact interactive match is still a decision we can make; anything
+      // else is a guess, and a wrong click is invisible to the caller.
       final best = found.elements.first;
       final ambiguous = found.elements
           .skip(1)
@@ -469,7 +440,6 @@ class PageInput {
       : 'text ${exact ? 'exactly ' : ''}"$text"';
 }
 
-/// What a search found: the matches, plus what was left out.
 class FindResult {
   const FindResult({
     required this.total,
