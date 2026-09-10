@@ -202,6 +202,202 @@ void main() {
     });
   });
 
+  group('where a picker starts', () {
+    /// A disk with exactly these directories on it.
+    DirectoryProbe only(Set<String> live) => live.contains;
+
+    const env = {'USERPROFILE': r'C:\Users\someone', 'SystemDrive': 'C:'};
+
+    test("the caller's own folder wins when it is there", () {
+      expect(
+        pickerStartDirectory(
+          r'C:\src\karmashala',
+          probe: only({r'C:\src\karmashala', r'C:\Users\someone'}),
+          environment: env,
+        ),
+        r'C:\src\karmashala',
+      );
+    });
+
+    test('a file resolves to the folder holding it', () {
+      expect(
+        pickerStartDirectory(
+          r'C:\Tools\flutter\bin\flutter.bat',
+          probe: only({r'C:\Tools\flutter\bin', r'C:\Users\someone'}),
+          environment: env,
+        ),
+        r'C:\Tools\flutter\bin',
+      );
+    });
+
+    test('a trailing separator does not lose the folder', () {
+      expect(
+        pickerStartDirectory(
+          'C:\\src\\karmashala\\',
+          probe: only({r'C:\src\karmashala'}),
+          environment: env,
+        ),
+        r'C:\src\karmashala',
+      );
+    });
+
+    // The whole point: this is what the shell was restoring on its own, and
+    // drawing it costs 30 s because the dialog must enumerate Network first.
+    for (final refused in [
+      r'\\wsl.localhost\archlinux\home\dlohani\projects\appwrite-ai-workdir',
+      r'\\wsl$\archlinux\home\dlohani',
+      r'\\fileserver\share\builds',
+      '//fileserver/share/builds',
+    ]) {
+      test('refuses $refused even when it answers', () {
+        expect(
+          pickerStartDirectory(
+            refused,
+            // A probe that says yes to everything: refusal is by spelling,
+            // before anything stats it.
+            probe: (_) => true,
+            environment: env,
+          ),
+          r'C:\Users\someone',
+        );
+      });
+    }
+
+    test('a refused folder is not even stat-ed', () {
+      final asked = <String>[];
+      pickerStartDirectory(
+        r'\\wsl.localhost\archlinux\home\dlohani',
+        probe: (path) {
+          asked.add(path);
+          return true;
+        },
+        environment: env,
+      );
+      expect(
+        asked,
+        isNot(contains(anyOf(contains('wsl'), startsWith(r'\\')))),
+        reason: 'the stat is itself the thing that blocks',
+      );
+    });
+
+    test('a dead folder falls through to the profile', () {
+      expect(
+        pickerStartDirectory(
+          r'D:\gone',
+          probe: only({r'C:\Users\someone'}),
+          environment: env,
+        ),
+        r'C:\Users\someone',
+      );
+    });
+
+    test('a probe that throws is a refusal, not a crash', () {
+      expect(
+        pickerStartDirectory(
+          r'C:\junction',
+          probe: (path) {
+            if (path == r'C:\junction') throw const FileSystemException('448');
+            return path == r'C:\Users\someone';
+          },
+          environment: env,
+        ),
+        r'C:\Users\someone',
+      );
+    });
+
+    test('HOME answers when there is no USERPROFILE', () {
+      expect(
+        pickerStartDirectory(
+          null,
+          probe: only({'/home/someone'}),
+          environment: const {'HOME': '/home/someone'},
+        ),
+        '/home/someone',
+      );
+    });
+
+    test('with nothing live it still never answers null or a UNC', () {
+      final floor = pickerStartDirectory(
+        r'\\wsl.localhost\archlinux\home',
+        probe: (_) => false,
+        environment: env,
+      );
+      expect(floor, r'C:\');
+      expect(floor, isNot(startsWith(r'\\')));
+    });
+
+    test('a directory picker remembers where it landed', () async {
+      final home = Directory.systemTemp.createTempSync('karmashala-start');
+      addTearDown(() => home.deleteSync(recursive: true));
+
+      await pickOneDirectory(
+        what: 'a project folder',
+        show: ({String? confirmButtonText, String? initialDirectory}) async =>
+            home.path,
+      );
+      expect(lastPickedDirectory, home.path);
+
+      // The next picker has no idea of its own, and opens there rather than
+      // wherever the shell was last.
+      String? opened;
+      await pickOneDirectory(
+        what: 'somewhere else',
+        show: ({String? confirmButtonText, String? initialDirectory}) async {
+          opened = initialDirectory;
+          return null;
+        },
+      );
+      expect(opened, home.path);
+    });
+
+    test('a file picker remembers the folder, not the file', () async {
+      final home = Directory.systemTemp.createTempSync('karmashala-start');
+      final file = File('${home.path}${Platform.pathSeparator}chosen.exe')
+        ..writeAsStringSync('');
+      addTearDown(() => home.deleteSync(recursive: true));
+
+      await pickOneFile(
+        what: 'a terminal program',
+        show: ({
+          List<XTypeGroup> acceptedTypeGroups = const [],
+          String? confirmButtonText,
+          String? initialDirectory,
+        }) async => XFile(file.path),
+      );
+
+      expect(lastPickedDirectory, home.path);
+    });
+
+    test('the shell is always given a folder, and the log names it', () async {
+      String? opened;
+      await pickOneFile(
+        what: 'an agent executable',
+        startNear: r'\\wsl.localhost\archlinux\home\dlohani',
+        probe: only({r'C:\Users\someone'}),
+        environment: env,
+        show: ({
+          List<XTypeGroup> acceptedTypeGroups = const [],
+          String? confirmButtonText,
+          String? initialDirectory,
+        }) async {
+          opened = initialDirectory;
+          return null;
+        },
+      );
+      await Diagnostics.instance.flushFile();
+
+      expect(opened, r'C:\Users\someone');
+      // The log redacts the user's own name, so the line is asserted up to it.
+      expect(
+        logOnDisk(),
+        contains(
+          r'opening the file picker for an agent executable, '
+          r'starting at C:\Users\',
+        ),
+      );
+    });
+  });
+
   group('no picker in lib may leave the folder to the shell', () {
     /// `features/devices/**` was another agent's tree on 2026-09-10 and its
     /// three calls still omit `startNear:`. Checked as a subset, so an entry
