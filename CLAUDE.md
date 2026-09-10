@@ -1058,7 +1058,7 @@ Persisted and never re-validated, in rough order of how much it matters:
 | Location | Where | Why it is not covered here |
 | --- | --- | --- |
 | `customTerminalPath`, `customEditorPath` | `settings/domain/settings.dart` | Persisted **and spawned**, with no `exists` check at save or at use. The closest analogue to the agent case. Left alone because each already sits beside a browse-or-paste field the user owns, so the failure is one step from its own fix — but a check would belong here. |
-| `ssh_hosts.private_key_path` | `ssh/data/ssh_connection.dart` | Probed only at connect, with a bare `File.exists()` — so a key that is present but unreachable is reported *"Private key not found"*, which is the wrong reason. The same two-value collapse this section exists to correct. |
+| `ssh_hosts.private_key_path` | `karmashala_ssh/src/ssh_connection.dart` | Probed only at connect, with a bare `File.exists()` — so a key that is present but unreachable is reported *"Private key not found"*, which is the wrong reason. The same two-value collapse this section exists to correct. |
 | `imported_sessions.file_path`, `store_home` | `cli_detection/data/imported_session_dao.dart` | Written under `ON CONFLICT DO NOTHING` and never refreshed. The presence machinery beside it re-locates the *store* and validates a conversation id, never this path. |
 | `terminal_panes.working_directory`, `launch_command` | `terminal/application/terminal_sessions_controller.dart` | Restored verbatim; a bad one fails at the ConPTY spawn. |
 | `session_checkpoints.repository_path`, `verification_runs.artifact_directory`, `fanout_candidates.worktree_path` | various | Historical records of where work happened. Repairing them would rewrite history rather than fix anything. |

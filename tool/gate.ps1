@@ -26,8 +26,8 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the ten — `core`, `media`,
-  `agent_cli`, `browser`, `devices`, `mcp`, `remote`, `session`, `git`,
+  A key of the map below. Every one of the twelve — `core`, `media`,
+  `agent_cli`, `browser`, `devices`, `mcp`, `remote`, `session`, `ssh`, `git`,
   `flutter_apps` and `terminal_core` — is extracted and cut over: the app
   holds no copy of any of them.
 
@@ -209,6 +209,32 @@ $map = [ordered]@{
              'test/features/env_secrets/local_key_cipher_test.dart',
              'test/features/settings/agent_tools_section_test.dart')
     owns = @('lib/src/features/mcp', 'test/features/mcp')
+  }
+  ssh = @{
+    pkg  = 'packages/karmashala_ssh'
+    # `test/features/ssh` whole: what is left in it is the app's half — the
+    # three DAOs, the suites that bind the verifier, the connection and the
+    # runner to a real database, the providers, the sections and dialogs, and
+    # the two `live-ssh` suites (excluded by tag here as everywhere). Six
+    # suites outside the folder import the package: the host and SSH panes,
+    # the environments and session-host sections, the shutdown teardown and
+    # the two window matrices. No golden is listed: every one of the six
+    # reaches the package mechanically, through `command_runner_providers`,
+    # but not one pins a value the package owns — the `ssh` strings in the
+    # tool schemas, bound frames and session launches goldens are all
+    # `agent_cli`'s `ExecutionEnvironment` and `environmentLabel`.
+    app  = @('test/features/ssh',
+             'test/terminal/host_pane_test.dart',
+             'test/terminal/host_pane_link_test.dart',
+             'test/terminal/local_host_access_test.dart',
+             'test/terminal/ssh_host_pane_test.dart',
+             'test/terminal/ssh_pane_wiring_test.dart',
+             'test/features/environments/environments_section_test.dart',
+             'test/features/settings/session_host_status_test.dart',
+             'test/core/lifecycle/shutdown_teardown_test.dart',
+             'test/app/dialog_window_matrix_test.dart',
+             'test/app/minimum_window_matrix_test.dart')
+    owns = @('lib/src/features/ssh', 'test/features/ssh')
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
