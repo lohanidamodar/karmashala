@@ -1,7 +1,7 @@
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala_session/delivery.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// The stage machine: working → committed → pushed → pr-open →
 /// checks-passing/failing → merged → archived.

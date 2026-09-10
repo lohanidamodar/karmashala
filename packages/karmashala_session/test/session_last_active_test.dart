@@ -8,7 +8,7 @@
 library;
 
 import 'package:agent_cli/descriptors.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:karmashala_session/resume.dart';
 
 void main() {

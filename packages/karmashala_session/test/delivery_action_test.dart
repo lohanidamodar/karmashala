@@ -1,6 +1,6 @@
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala_session/delivery.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// What the delivery strip offers, and which one it highlights.
 ///

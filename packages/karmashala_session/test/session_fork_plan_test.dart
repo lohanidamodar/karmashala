@@ -1,6 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_session/launch.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 AgentDescriptor _agent(String id) => AgentRegistry.builtIn.byId(id)!;
 

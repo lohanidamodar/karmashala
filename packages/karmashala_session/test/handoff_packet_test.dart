@@ -1,5 +1,5 @@
 import 'package:karmashala_session/lineage.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 HandoffPacket _packet({
   List<HandoffTurn> recap = const [],
