@@ -26,10 +26,10 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the thirteen — `core`, `media`,
+  A key of the map below. Every one of the fourteen — `core`, `media`,
   `agent_cli`, `agent_reporting`, `browser`, `devices`, `mcp`, `remote`,
-  `session`, `ssh`, `git`, `flutter_apps` and `terminal_core` — is extracted
-  and cut over: the app holds no copy of any of them.
+  `session`, `ssh`, `git`, `flutter_apps`, `terminal_core` and `ui` — is
+  extracted and cut over: the app holds no copy of any of them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -70,7 +70,7 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# All thirteen are extracted and cut over, so every mapping here is a real seam:
+# All fourteen are extracted and cut over, so every mapping here is a real seam:
 # no key names a folder the app still keeps a second copy of. `flutter = $true`
 # marks a member whose own half needs `flutter test` rather than `dart test`.
 $map = [ordered]@{
@@ -261,6 +261,34 @@ $map = [ordered]@{
              'test/app/dialog_window_matrix_test.dart',
              'test/app/minimum_window_matrix_test.dart')
     owns = @('lib/src/features/ssh', 'test/features/ssh')
+  }
+  ui = @{
+    pkg  = 'packages/karmashala_ui'
+    # A Flutter package through and through: it is widgets, a `ThemeData` and
+    # the tokens under both, so its own half runs under `flutter test`.
+    flutter = $true
+    # Thirty units import the tokens and the glyph table, so "the suites that
+    # exercise it" would be the whole gate and prove nothing faster. Mapped
+    # instead: the two folders the app kept of what left — the token-debt
+    # sweep, which now reads the package's `lib/` as well as the app's, and
+    # the status dot, which stays for the window matrix it is pumped through
+    # — the four suites whose *subject* is a package widget (the pane header,
+    # the UI text scale, the matrix's own guard and the context-menu design),
+    # and the two goldens that pin a type name this package owns:
+    # `StatusDot` in the workbench tree, `DesktopMenuItem` and
+    # `DesktopMenuDivider` in the terminal panel. The device pane, tool
+    # schemas, bound frames and session launches goldens reach the package
+    # mechanically but record nothing of its.
+    app  = @('test/app/theme', 'test/app/widgets',
+             'test/app/ui_text_scale_test.dart',
+             'test/app/shell/pane_header_test.dart',
+             'test/app/shell/workbench_tree_golden_test.dart',
+             'test/support/window_matrix_test.dart',
+             'test/terminal/context_menu_design_test.dart',
+             'test/features/terminal/terminal_panel_tree_golden_test.dart')
+    # Nothing under `lib/` is this package's alone: `app/theme`, `app/widgets`
+    # and `core/widgets` left whole and the directories are gone.
+    owns = @('test/app/theme', 'test/app/widgets')
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
