@@ -26,6 +26,9 @@ installs claim the same version name.
 - **Install… in the device pane has a typed-path field**, and the file picker
   quiets the device stream while it is up. The stream was measured and is not
   what freezes the window; the field is the way out either way.
+- **The phone can search**, over the snapshot it already holds, and shows
+  running sessions in a group above the projects with the reading's age; each
+  session says when it was last active.
 
 ---
 
