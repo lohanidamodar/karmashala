@@ -1,8 +1,5 @@
-/// How a [PaneSplit] arranges its children.
-///
-/// Stated once so it is never re-derived: [horizontal] lays children out left to
-/// right (a `Row`, colloquially "split right"); [vertical] stacks them top to
-/// bottom (a `Column`, "split down").
+/// How a [PaneSplit] arranges its children: [horizontal] lays them out left to
+/// right (a `Row`, "split right"); [vertical] stacks them top to bottom.
 enum SplitAxis { horizontal, vertical }
 
 /// A direction to move pane focus in.
@@ -22,24 +19,20 @@ sealed class PaneNode {
 }
 
 /// One **region**: the panes stacked in one part of a tab, and which of them is
-/// on top.
-///
-/// A leaf used to be a single terminal, and that is what left a pane dragged
-/// into a split with nowhere to be dragged back from: there was no header, so
-/// there was no handle. A region is VS Code's editor group — it holds one or
-/// more panes, shows a tab for each, and only [activePaneId] is on screen.
+/// on top. VS Code's editor group — it holds one or more panes, shows a tab for
+/// each, and only [activePaneId] is on screen.
 ///
 /// [panes] is never empty; a region that loses its last pane is removed by
 /// [PaneLayout.close] and the split it was in collapses. An **empty region** —
-/// the room a split clears before anything is put in it — is still a region
-/// holding exactly one pane id that has no terminal behind it, which is the
-/// invariant `TerminalSessionsController.isEmptySlot` states.
+/// the room a split clears before anything is put in it — still holds exactly
+/// one pane id with no terminal behind it, which is the invariant
+/// `TerminalSessionsController.isEmptySlot` states.
 class PaneGroup extends PaneNode {
   PaneGroup(super.id, {required this.panes, String? activePaneId})
     : assert(panes.isNotEmpty, 'a region with no panes is not a region'),
       // Clamped here rather than at every call site: pruning, closing and
-      // restoring can all take the front pane away, and the answer is the same
-      // every time — whatever is left comes forward.
+      // restoring can all take the front pane away, and whatever is left comes
+      // forward.
       activePaneId = (activePaneId != null && panes.contains(activePaneId))
           ? activePaneId
           : panes.first;
@@ -58,17 +51,14 @@ class PaneGroup extends PaneNode {
   String toString() => 'PaneGroup($id, $panes, active: $activePaneId)';
 }
 
-/// The region id a lone pane gets when nobody supplies one.
-///
-/// Derived rather than generated so [PaneLayout.single] keeps its one-argument
-/// shape, and prefixed so a region id can never be mistaken for the pane id it
-/// was derived from.
+/// The region id a lone pane gets when nobody supplies one. Derived rather than
+/// generated so [PaneLayout.single] keeps its one-argument shape, and prefixed
+/// so a region id can never be mistaken for the pane id it came from.
 String regionIdFor(String paneId) => 'r:$paneId';
 
 /// Space divided along [axis] between [children] in proportion to [weights].
-///
-/// After normalization there are always at least two children, `weights` has the
-/// same length as `children`, and the weights sum to 1.
+/// After normalization there are always at least two children, and the weights
+/// have the same length as the children and sum to 1.
 class PaneSplit extends PaneNode {
   const PaneSplit(
     super.id, {
@@ -103,16 +93,12 @@ class PaneRect {
 }
 
 /// The immutable tree of regions inside one terminal tab, plus the operations
-/// the UI drives it with.
+/// the UI drives it with. Free of Flutter, Riverpod and the terminal itself, so
+/// splitting, closing, stacking and focus traversal are unit-testable; every
+/// operation returns a new layout and nothing here mutates.
 ///
-/// Deliberately free of Flutter, Riverpod and the terminal itself, so splitting,
-/// closing, stacking and focus traversal are unit-testable without a widget
-/// tree. Every operation returns a new layout; nothing here mutates.
-///
-/// **Everything is addressed by pane id.** A region has an id of its own, but it
-/// is only ever an identity for the widget that draws it — callers say "the
-/// region this pane is in", which is what let regions arrive without rewriting
-/// every caller that used to name a leaf.
+/// **Everything is addressed by pane id.** A region has an id of its own, but
+/// it is only an identity for the widget that draws it.
 class PaneLayout {
   PaneLayout(this.root);
 
@@ -128,13 +114,8 @@ class PaneLayout {
   /// Pane ids in depth-first, left-to-right order — every pane, including the
   /// ones stacked behind another in their region.
   ///
-  /// Walked once and kept. A layout is immutable — every operation returns a
-  /// new one — so the answer cannot go stale, and it is asked for constantly:
-  /// once per tab on every publish to set ingest tiers, and again inside every
-  /// [contains]. Rebuilding the list each time made "which tab holds this
-  /// pane?" allocate a list per tab per lookup.
-  ///
-  /// Treat as read-only.
+  /// Walked once and kept: a layout is immutable, and this is asked for once per
+  /// tab on every publish and again inside every [contains]. Read-only.
   late final List<String> panes = [
     for (final group in groups) ...group.panes,
   ];
@@ -156,11 +137,11 @@ class PaneLayout {
   PaneGroup? groupOf(String paneId) => _groupByPane[paneId];
 
   /// Divides the region holding [paneId] along [axis], putting a new region
-  /// holding [newPaneId] after (or before if [insertBefore] is true) it.
+  /// holding [newPaneId] after (or before, if [insertBefore]) it.
   ///
-  /// The new split is always created nested; normalization then flattens it into
-  /// the parent when the axes match, which is what turns a second "split right"
-  /// into a third equal column rather than a right-leaning spine.
+  /// Always created nested; normalization then flattens it into the parent when
+  /// the axes match, which is what turns a second "split right" into a third
+  /// equal column rather than a right-leaning spine.
   PaneLayout split(
     String paneId,
     SplitAxis axis,
@@ -198,11 +179,8 @@ class PaneLayout {
   }
 
   /// Puts [paneIds] into the region holding [targetPaneId] and brings the last
-  /// of them to the front.
-  ///
-  /// What dropping a tab onto a region's header is made of. The caller owns
-  /// uniqueness: nothing in [paneIds] may already be in this layout, or the
-  /// same pane would appear twice.
+  /// of them to the front — what dropping a tab onto a region's header is made
+  /// of. The caller owns uniqueness: nothing in [paneIds] may already be here.
   PaneLayout addPanes(String targetPaneId, List<String> paneIds) {
     if (paneIds.isEmpty || !contains(targetPaneId)) return this;
     return PaneLayout(
@@ -232,10 +210,8 @@ class PaneLayout {
   }
 
   /// Moves [paneId] to [toIndex] within its own region, leaving the tree's
-  /// shape and the front pane alone.
-  ///
-  /// What dragging a tab along the strip it is already in is made of. The tree
-  /// is untouched, so nothing is normalized.
+  /// shape and the front pane alone — dragging a tab along the strip it is
+  /// already in. The tree is untouched, so nothing is normalized.
   PaneLayout reorderInGroup(String paneId, int toIndex) {
     final group = groupOf(paneId);
     if (group == null || group.panes.length < 2) return this;
@@ -275,21 +251,13 @@ class PaneLayout {
   }
 
   /// Puts [node] where the region holding [paneId] is, keeping its position and
-  /// its share of the split.
+  /// its share of the split — what filling an *empty region* of a split is made
+  /// of.
   ///
-  /// What filling an *empty region* of a split is made of. Splitting no longer
-  /// starts anything (see `TerminalSessionsController.splitPane`), so the new
-  /// region is a region with nothing behind its one pane id until something
-  /// moves in — a new terminal, one pane, or the whole pane tree of a tab being
-  /// dragged in.
-  ///
-  /// Normalization then flattens a same-axis sub-tree into the parent, so
-  /// moving a side-by-side tab into a column gives three rows rather than a row
-  /// nested inside a column — the same rule that turns a second "split right"
-  /// into a third equal column.
-  ///
-  /// The caller owns uniqueness: [node] must not contain a pane this layout
-  /// already holds outside the region being replaced.
+  /// Normalization then flattens a same-axis sub-tree into the parent, so moving
+  /// a side-by-side tab into a column gives three rows rather than a row nested
+  /// inside a column. The caller owns uniqueness: [node] must not contain a pane
+  /// this layout already holds outside the region being replaced.
   PaneLayout replaceRegion(String paneId, PaneNode node) {
     final group = groupOf(paneId);
     if (group == null) return this;
@@ -342,8 +310,7 @@ class PaneLayout {
   ///
   /// Answered from geometry rather than tree structure: past two levels of
   /// nesting the tree sibling is frequently not the region the user sees next to
-  /// this one. The answer is always a region's **front** pane, because a pane
-  /// stacked behind another is not somewhere focus can travel *to* sideways.
+  /// this one. Always a region's **front** pane.
   String? paneInDirection(String from, PaneDirection direction) {
     final all = rects();
     final source = all[from];
@@ -655,9 +622,8 @@ PaneNode? _fromJson(Object? json) {
   if (id is! String || id.isEmpty) return null;
 
   switch (json['t']) {
-    // Written before regions existed: one leaf was one pane, and its id was
-    // the pane's. Read as a region of one rather than dropped, so upgrading
-    // does not throw a layout away.
+    // Written before regions existed: one leaf was one pane. Read as a region
+    // of one rather than dropped, so upgrading does not throw a layout away.
     case 'leaf':
       return PaneGroup.of(id);
     case 'group':

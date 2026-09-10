@@ -2,19 +2,15 @@ import 'package:xterm2/xterm.dart';
 
 import 'terminal_search_query.dart';
 
-/// Most matches highlighted at once.
-///
-/// `RenderTerminal._paintHighlights` walks every highlight on every frame, so
-/// the count is a per-frame cost. Beyond this the match total is still reported
-/// and navigation still works — only the painting is capped.
+/// Most matches highlighted at once. `RenderTerminal._paintHighlights` walks
+/// every highlight on every frame, so the count is a per-frame cost; beyond it
+/// the match total is still reported and navigation still works.
 const int kMaxSearchHighlights = 500;
 
 /// One buffer line flattened for searching, with the mapping back to cells.
-///
 /// `BufferLine.getText()` skips empty cells and the trailing half of a
 /// double-width glyph, so an index into it is *not* a cell column — a highlight
-/// drawn there would drift left by every gap and every wide glyph before it.
-/// [cellOfChar] and [widthOfChar] carry the mapping that fixes that.
+/// drawn there would drift left by every gap and wide glyph before it.
 class TerminalLineText {
   const TerminalLineText({
     required this.text,
@@ -38,12 +34,10 @@ class TerminalLineText {
   );
 }
 
-/// Flattens [line] into searchable text plus its cell mapping.
-///
-/// [trimTrailing] cuts the empty tail so a query cannot match into it. Link
-/// scanning turns it off for every row but the last of a wrapped run: joining
-/// two rows across a trimmed gap would splice the end of one word onto the
-/// start of the next and invent a token that is not on screen.
+/// Flattens [line] into searchable text plus its cell mapping. [trimTrailing]
+/// cuts the empty tail so a query cannot match into it; link scanning turns it
+/// off for every row but the last of a wrapped run, because joining two rows
+/// across a trimmed gap would invent a token that is not on screen.
 TerminalLineText lineTextOf(BufferLine line, {bool trimTrailing = true}) {
   final buffer = StringBuffer();
   final cells = <int>[];
@@ -92,15 +86,12 @@ class ScrollbackMatch {
 
 /// Reads lines from [firstLine] through [lineAt], reporting every hit.
 ///
-/// **This is the loop the terminal's find cost is measured in**, so it takes a
-/// line *accessor* rather than a list: a caller with 100 panes must not have to
-/// materialise 100 line lists to ask a question about one of them, and a cost
-/// test counts the reads by counting calls to [lineAt].
-///
-/// Returns the number of lines actually read — the unit
-/// `terminal_search_cost_test.dart` asserts on. [matchBudget] stops the scan as
-/// soon as that many hits have been reported, so a query like `.` over a full
-/// scrollback costs the budget rather than the buffer.
+/// A line *accessor* rather than a list, because this is the loop the terminal's
+/// find cost is measured in: a caller with 100 panes must not materialise 100
+/// line lists to ask a question about one. Returns the number of lines actually
+/// read — the unit `terminal_search_cost_test.dart` asserts on — and
+/// [matchBudget] stops the scan, so a query like `.` over a full scrollback
+/// costs the budget rather than the buffer.
 int scanLines({
   required TerminalSearchQuery query,
   required int lineCount,
@@ -134,10 +125,9 @@ int scanLines({
   return read;
 }
 
-/// Every occurrence of [query] in [lines], in reading order.
-///
-/// The list-shaped convenience over [scanLines], for a caller that already has
-/// its lines flattened and does not care what the scan cost.
+/// Every occurrence of [query] in [lines], in reading order — the list-shaped
+/// convenience over [scanLines], for a caller that already has its lines
+/// flattened and does not care what the scan cost.
 List<ScrollbackMatch> searchLines(
   List<TerminalLineText> lines,
   String query, {

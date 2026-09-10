@@ -14,17 +14,11 @@ import 'host_pane_link.dart';
 
 /// The session host on *this* machine, reached over its own socket.
 ///
-/// The counterpart of `SshHostSessionAccess`, and deliberately the same
-/// interface: the pane above it never learns which one it got, which is what
-/// the transport seam in `host/lib/src/transport/transport.dart` was written
-/// for. Two things are different, and both are because there is no network:
-///
-///  * **There is nothing to deploy.** The binary either ships beside this app
-///    or it does not, and finding it is a measurement taken per launch rather
-///    than a path stored once — the same rule §20 applies to agent executables.
-///  * **There is nothing to reconnect.** A unix socket does not drop and come
-///    back; if the host goes away the link ends and the pane says so. So
-///    [reconnected] never fires, rather than firing on a timer nobody asked for.
+/// The counterpart of `SshHostSessionAccess` and deliberately the same
+/// interface: the pane above it never learns which one it got. Two differences,
+/// both because there is no network — there is nothing to deploy (the binary
+/// either ships beside this app or it does not, measured per launch, §20), and
+/// nothing to reconnect, so [reconnected] never fires.
 class LocalHostSessionAccess implements HostSessionAccess {
   LocalHostSessionAccess({
     HostPaths? paths,
@@ -41,9 +35,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// executable beside the test runner.
   final LocalHostExecutable executable;
 
-  /// How `serve` is started. Injectable for the same reason and no other: a
-  /// test that starts a real daemon on the developer's own socket would take
-  /// their sessions with it.
+  /// How `serve` is started. Injectable so a test does not start a real daemon
+  /// on the developer's own socket and take their sessions with it.
   final Future<Process> Function(String path)? startServe;
 
   /// How long the handshake is given before the answer is called missing.
@@ -54,18 +47,15 @@ class LocalHostSessionAccess implements HostSessionAccess {
   Future<HostDeployment>? _reading;
   HostDeployment? _last;
 
-  /// The last reading taken, or null when nobody has looked.
-  ///
-  /// Null is *unknown* and never a negative answer (§19): Settings says nothing
-  /// has been checked rather than claiming the host is absent.
+  /// The last reading taken, or null when nobody has looked. Null is *unknown*
+  /// and never a negative answer (§19).
   HostDeployment? get lastReading => _last;
 
   @override
   String get address => 'this machine';
 
-  /// Never fires. See the class comment: a local socket has no reconnect to
-  /// hang on, and an empty stream is the honest way to say so — a pane that
-  /// listens to it simply never re-dials.
+  /// Never fires: a local socket has no reconnect to hang on, and an empty
+  /// stream is the honest way to say so.
   @override
   Stream<void> get reconnected => const Stream<void>.empty();
 
@@ -84,20 +74,16 @@ class LocalHostSessionAccess implements HostSessionAccess {
         return _last = reading;
       });
 
-  /// Forgets the reading, so the next pane measures again.
-  ///
-  /// Called when a dial fails: the host we spoke to a moment ago may have been
-  /// killed, and a remembered `ready` would send every later pane at a socket
+  /// Forgets the reading, so the next pane measures again. Called when a dial
+  /// fails: a remembered `ready` would send every later pane at a socket
   /// nothing is listening on.
   void forget() => _reading = null;
 
   /// Looks, and starts nothing.
   ///
-  /// [deployment] is allowed to start a host because a pane is about to need
-  /// one. A status row is not: somebody reading Settings with the setting off
-  /// must not thereby launch a daemon. So this asks the same question with the
-  /// same handshake and answers `unknown` when nothing is listening, carrying
-  /// the time it was asked.
+  /// [deployment] may start a host because a pane is about to need one; a
+  /// status row may not — reading Settings with the setting off must not launch
+  /// a daemon. Same question, same handshake, `unknown` when nothing answers.
   Future<HostDeployment> observe() async {
     final binary = executable.locate();
     final answered = await _sayHello();
@@ -148,8 +134,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
 
   /// Always false, and it is an observation rather than a stub: nothing on this
   /// machine's pane path has ever gone through tmux, so there is no session
-  /// here that could be taken away from one. The rule that reads this belongs
-  /// to the SSH pane and its tmux fallback.
+  /// here that could be taken away from one.
   @override
   Future<bool?> hasTmuxSession(String name) async => false;
 
@@ -189,10 +174,9 @@ class LocalHostSessionAccess implements HostSessionAccess {
 
     if (answered is _NoAnswer) {
       // The one thing this must not do. A refused connection is an EVENT —
-      // nobody is there, so start one. A handshake that ran out of bound is a
-      // reading of a loaded machine, and acting on it starts a second daemon
-      // over a live one: on 2026-09-09 that sent a test at a real
-      // `Process.start`, the only await on this path with no bound at all.
+      // nobody is there, so start one — but a handshake that ran out of bound
+      // is a reading of a loaded machine, and acting on it starts a second
+      // daemon over a live one.
       return HostDeployment(
         status: HostDeploymentStatus.unknown,
         observedAt: DateTime.now(),
@@ -261,11 +245,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
     observedAt: observedAt,
   );
 
-  /// Opens a link, reads the welcome, and hangs up.
-  ///
-  /// The same `HostPaneLink` a pane uses, so the version check a pane would get
-  /// is the version check the reading is made from — there is no second
-  /// handshake to drift.
+  /// Opens a link, reads the welcome, and hangs up. The same `HostPaneLink` a
+  /// pane uses, so there is no second handshake to drift.
   Future<_HelloOutcome> _sayHello() async {
     final Socket socket;
     try {
@@ -288,20 +269,17 @@ class LocalHostSessionAccess implements HostSessionAccess {
       return welcome == null ? const _Silent() : _Welcomed(welcome);
     } on HostLinkException catch (e) {
       await channel.close();
-      // Three different answers, and only one of them means the socket is
-      // empty. A host that answered and speaks another protocol, and one that
-      // took the connection and said nothing inside the bound, both mean a
-      // host IS there — this app must not start a second one over either.
+      // Three different answers, and only one means the socket is empty: a host
+      // that speaks another protocol and one that said nothing inside the bound
+      // both mean a host IS there, and a second must not be started over it.
       if (e.timedOut) return _NoAnswer(e.message);
       return e.message.contains('protocol') ? _Mismatched(e.message) : const _Silent();
     }
   }
 
-  /// Starts `serve`, detached, and waits for it to say where it bound.
-  ///
-  /// Waited on rather than slept for: the daemon prints one line when the
-  /// socket is up, and that line is the event. Returns null on success, or the
-  /// sentence to refuse with.
+  /// Starts `serve`, detached, and waits for it to say where it bound — the
+  /// daemon prints one line when the socket is up, and that line is the event.
+  /// Returns null on success, or the sentence to refuse with.
   Future<String?> _start(File binary) async {
     final Process process;
     try {
@@ -310,10 +288,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
               Process.start(
                 binary.path,
                 const ['serve'],
-                // Detached, so it outlives this app — which is the entire point
-                // — but with stdio, so the banner is readable. The host writes
-                // nothing more after it, so a broken pipe once this app quits
-                // costs nothing.
+                // Detached, so it outlives this app — which is the entire
+                // point — but with stdio, so the banner is readable.
                 mode: ProcessStartMode.detachedWithStdio,
               ));
     } on ProcessException catch (e) {
@@ -355,10 +331,9 @@ class LocalHostSessionAccess implements HostSessionAccess {
 
 /// Where `karmashala_host` is on this machine, asked every time.
 ///
-/// A stored path is state and whether it resolves is a measurement (§20): the
-/// executable is found relative to `Platform.resolvedExecutable` per call, the
-/// same discipline `karmashala_mcp` follows, so an app that moved or was
-/// reinstalled needs nothing repaired.
+/// A stored path is state and whether it resolves is a measurement (§20), so
+/// the executable is found relative to `Platform.resolvedExecutable` per call —
+/// an app that moved or was reinstalled needs nothing repaired.
 class LocalHostExecutable {
   const LocalHostExecutable({this.executableDirectory, this.repositoryRoot});
 
@@ -394,9 +369,8 @@ class LocalHostExecutable {
 
 /// A [RemoteChannel] over a plain socket.
 ///
-/// The local half of the transport seam: `karmashala_host attach` exists so an
-/// SSH exec channel can carry these bytes, and here there is no proxy at all —
-/// the frames are identical, which is what made `attach` a byte proxy rather
+/// The local half of the transport seam: the frames are identical to the ones
+/// an SSH exec channel carries, which is what made `attach` a byte proxy rather
 /// than a protocol participant.
 class SocketRemoteChannel implements RemoteChannel {
   SocketRemoteChannel(this._socket);

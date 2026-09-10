@@ -1,25 +1,16 @@
 /// OSC 133 shell integration: the marker vocabulary and the state machine that
-/// turns a stream of markers into command blocks.
-///
-/// Pure Dart on purpose — no Flutter, no xterm, no Riverpod — so the whole
-/// protocol is unit-testable without a terminal, a process or a widget tree.
+/// turns a stream of markers into command blocks. Pure Dart on purpose, so the
+/// whole protocol is unit-testable without a terminal or a widget tree.
 library;
 
-/// The four OSC 133 command boundaries.
-///
-/// * `A` — the prompt starts
-/// * `B` — the user's input starts (not every shell emits this)
-/// * `C` — the command's output starts, i.e. the command is now running
-/// * `D` — the command finished, optionally carrying its exit code
+/// The four OSC 133 command boundaries: `A` the prompt starts, `B` the user's
+/// input starts (not every shell emits it), `C` the command is now running,
+/// `D` it finished, optionally carrying its exit code.
 enum ShellMarker { promptStart, commandStart, outputStart, commandEnd }
 
 /// Reads an OSC dispatched by xterm's `onPrivateOSC` as a command boundary, or
-/// `null` when it is not one.
-///
-/// [code] is the OSC number as a string and [args] everything after it, so
-/// `OSC 133 ; D ; 1 ST` arrives as `('133', ['D', '1'])`. Anything that is not
-/// OSC 133, and any 133 sub-code we do not model (`E`, `L`, `P`, …), is ignored
-/// rather than guessed at.
+/// `null` when it is not one. `OSC 133 ; D ; 1 ST` arrives as
+/// `('133', ['D', '1'])`; a sub-code we do not model is ignored, not guessed.
 ShellMarker? shellMarkerFromOsc(String code, List<String> args) {
   if (code != '133' || args.isEmpty) return null;
   return switch (args.first) {
@@ -32,10 +23,8 @@ ShellMarker? shellMarkerFromOsc(String code, List<String> args) {
 }
 
 /// The exit code carried by an `OSC 133 ; D ; <code>`, or `null` when it is
-/// absent or unparseable.
-///
-/// `null` means *unknown*, never *failed* — a shell that reports no code must
-/// not have its commands drawn as failures.
+/// absent or unparseable. `null` means *unknown*, never *failed* — a shell that
+/// reports no code must not have its commands drawn as failures.
 int? exitCodeFromOsc(List<String> args) {
   if (args.length < 2) return null;
   return int.tryParse(args[1]);
@@ -44,9 +33,8 @@ int? exitCodeFromOsc(List<String> args) {
 /// A reference to a line in the terminal buffer that survives the buffer moving
 /// underneath it, and reports `null` once that line is evicted from scrollback.
 ///
-/// The model depends on this narrow interface rather than on xterm's
-/// `CellAnchor` so it stays pure; production supplies an anchor-backed
-/// implementation, tests supply a plain holder.
+/// A narrow interface rather than xterm's `CellAnchor`, so the model stays
+/// pure: production supplies an anchor-backed one, tests a plain holder.
 abstract class TerminalLineRef {
   /// The line's current absolute index, or `null` if it no longer exists.
   int? get line;
@@ -120,14 +108,11 @@ class CommandBlock {
 
 /// Consumes a stream of [ShellMarker]s and produces completed [CommandBlock]s.
 ///
-/// The rules that are not obvious, each of which is pinned by a test:
-///
-/// * A block is only real once `C` has been seen. Pressing Enter on an empty
-///   line emits `A … D` with no `C`, and that is not a command.
-/// * A `D` with nothing pending is dropped, because integration can begin
-///   part-way through a session.
-/// * A fresh `A` closes a block that had started running (the user interrupted
-///   it) with an unknown exit code, and discards one that never started.
+/// A block is only real once `C` has been seen — Enter on an empty line emits
+/// `A … D` with no `C`. A `D` with nothing pending is dropped, because
+/// integration can begin part-way through a session. A fresh `A` closes a block
+/// that had started running with an unknown exit code, and discards one that
+/// never started.
 class CommandBlockTracker {
   CommandBlockTracker({this.maxBlocks = 200});
 
@@ -150,12 +135,9 @@ class CommandBlockTracker {
   CommandBlock? get latest =>
       _pending ?? (_blocks.isEmpty ? null : _blocks.last);
 
-  /// Called with each block the moment it completes, in completion order.
-  ///
-  /// This is what lets `terminal_run` wait for a command instead of polling the
-  /// screen and guessing when a new prompt means "done" — the guesswork that
-  /// made an in-app pane worse than an agent's own shell. Listeners **observe**:
-  /// a block is the tracker's, and nothing here may edit one.
+  /// Called with each block the moment it completes, in completion order. This
+  /// is what lets `terminal_run` wait for a command instead of polling the
+  /// screen and guessing. Listeners **observe**: nothing here may edit a block.
   void addCompletionListener(void Function(CommandBlock block) listener) =>
       _completionListeners.add(listener);
 

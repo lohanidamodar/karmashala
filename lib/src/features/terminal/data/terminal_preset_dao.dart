@@ -8,9 +8,8 @@ import '../domain/terminal_preset.dart';
 /// codegen, the same shape as `CommandSnippetDao`.
 ///
 /// **A row, not a metadata key**, unlike the workspace tree beside it in
-/// `TerminalLayoutDao`. That tree is *the* layout and there is one; presets are
-/// a list the user names, adds to and deletes from, and a list that has to be
-/// ordered and looked up by name is what a table is for.
+/// `TerminalLayoutDao`: that tree is *the* layout and there is one, while
+/// presets are a list the user names, orders and looks up by name.
 class TerminalPresetDao {
   TerminalPresetDao(this._db);
 

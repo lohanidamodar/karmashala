@@ -1,16 +1,12 @@
-/// What a terminal tab is called.
-///
-/// Pure Dart on purpose — no xterm, no Flutter, no `Platform` — so the rules
-/// are unit-testable and the caller supplies the observations.
+/// What a terminal tab is called. Pure Dart on purpose, so the rules are
+/// unit-testable and the caller supplies the observations.
 library;
 
-/// A working directory, shortened for a tab chip.
-///
-/// `~` for the home directory itself, `~/x` for one level below it, and the
-/// last two segments otherwise: a tab is 220 pixels wide, so a full path is
-/// ellipsised into uselessness and the end of it is the part that identifies
-/// the shell. Both separators are accepted, because a Windows-first app runs
-/// WSL panes whose paths are POSIX.
+/// A working directory, shortened for a tab chip: `~` for the home directory
+/// itself, `~/x` for one level below it, the last two segments otherwise — a
+/// tab is 220 pixels wide, so a full path is ellipsised into uselessness and
+/// the end of it is the part that identifies the shell. Both separators are
+/// accepted, because a Windows-first app runs WSL panes.
 String directoryLabel(String path, {String? home}) {
   var normalized = _trimSlashes(path.replaceAll(r'\', '/'));
   if (normalized.isEmpty) return '/';
@@ -39,10 +35,9 @@ String _trimSlashes(String path) {
   return path.substring(0, end);
 }
 
-/// Windows paths are case-insensitive and POSIX ones are not; comparing
-/// case-insensitively everywhere is wrong only in the vanishingly rare case of
-/// two Linux directories differing by case, where the cost is a `~` that should
-/// have been a path.
+/// Windows paths are case-insensitive and POSIX ones are not; folding case
+/// everywhere is wrong only for two Linux directories differing by case, where
+/// the cost is a `~` that should have been a path.
 bool _sameDirectory(String a, String b) => a.toLowerCase() == b.toLowerCase();
 
 bool _isBelow(String path, String parent) =>
@@ -54,16 +49,11 @@ bool _isBelow(String path, String parent) =>
 /// saying anything about the work going on in it.
 ///
 /// ConPTY hands the child's image path through as a pane's window title, so a
-/// WSL pane opens announcing itself as `C:\Windows\System32\wsl.exe` — the
-/// wrapper this app put in front of the shell, and the one thing about the pane
-/// the user already knows.
-///
-/// Two conditions, and it takes both to stay narrow. The title has to be an
-/// absolute path *and nothing else*, which leaves `user@host: /home/me/src` and
-/// a bare `wsl` alone — those are real titles a real shell sends. And the file
-/// it names has to be one of [launchers] itself, so a pane naming some other
-/// path is still believed. Compared case-insensitively, because the path comes
-/// from Windows and its casing is not ours to predict.
+/// WSL pane opens announcing itself as the `wsl.exe` this app put in front of
+/// the shell. Two conditions keep it narrow: the title has to be an absolute
+/// path *and nothing else*, which leaves `user@host: /home/me/src` alone, and
+/// the file it names has to be one of [launchers]. Compared
+/// case-insensitively, because the casing comes from Windows.
 bool namesLauncher(String title, Set<String> launchers) {
   if (launchers.isEmpty || !_isAbsolutePath(title)) return false;
   return launchers.contains(_basename(title).toLowerCase());
@@ -72,13 +62,10 @@ bool namesLauncher(String title, Set<String> launchers) {
 /// Every image name a launch line names — [executable] itself and every `.exe`
 /// token inside [arguments] — lowercased and without its directory.
 ///
-/// **Every name, not just the first.** A WSL pane is spawned as
-/// `cmd.exe /c wsl.exe -d <distro> …`, so the image that announces itself is
-/// no longer the executable — and a filter that knew only the first name let
-/// `C:\Windows\System32\wsl.exe` through as a tab label. The arguments are
-/// searched rather than compared, because `throughCommandPrompt` joins the
-/// whole line into one `/c` argument: the `.exe` is a token inside it, not
-/// the end of it.
+/// **Every name, not just the first.** A WSL pane is spawned through
+/// `cmd.exe`, so the image that announces itself is no longer the executable;
+/// and the arguments are *searched* rather than compared, because
+/// `throughCommandPrompt` joins the whole line into one `/c` argument.
 Set<String> launcherNames(String executable, List<String> arguments) => {
   _basename(executable).toLowerCase(),
   for (final argument in arguments)
@@ -86,9 +73,9 @@ Set<String> launcherNames(String executable, List<String> arguments) => {
       _basename(match.group(0)!).toLowerCase(),
 };
 
-/// An image name inside a command line — `wsl.exe`, `C:\…\powershell.exe`.
-/// Quotes and whitespace end a token, which is what keeps a quoted path with a
-/// space in it from swallowing the flag after it.
+/// An image name inside a command line. Quotes and whitespace end a token,
+/// which keeps a quoted path with a space in it from swallowing the next
+/// flag.
 final RegExp _executableToken = RegExp(r'[^\s"]+\.exe', caseSensitive: false);
 
 /// Whether [path] is rooted — a drive (`C:\…`), a UNC share (`\\…`) or POSIX

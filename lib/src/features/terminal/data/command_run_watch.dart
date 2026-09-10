@@ -6,12 +6,9 @@ import '../domain/command_blocks.dart';
 import 'command_block_recorder.dart';
 import 'terminal_instance.dart';
 
-/// How many lines of one command's output are read back by default.
-///
-/// A cap rather than the whole region because a command can print a hundred
-/// thousand lines, and reading them costs main-isolate time in the middle of
-/// PTY ingest. The tail is what is kept: a build puts the thing that broke at
-/// the end.
+/// How many lines of one command's output are read back by default. A cap
+/// rather than the whole region because a command can print a hundred thousand
+/// lines; the tail is kept, since a build puts the thing that broke at the end.
 const int kDefaultCommandOutputLines = 200;
 
 /// Why a watched command stopped being watched.
@@ -42,11 +39,9 @@ class CommandOutputText {
 
   final List<String> lines;
 
-  /// Whether [lines] really is *this command's* output.
-  ///
-  /// False when the command never started, or when its output has already
-  /// scrolled out of the pane's history — in which case [lines] is empty rather
-  /// than a plausible-looking screenful of somebody else's output.
+  /// Whether [lines] really is *this command's* output. False when the command
+  /// never started, or when its output has already scrolled out of the pane's
+  /// history — in which case [lines] is empty rather than someone else's.
   final bool scoped;
 
   /// Lines dropped from the head to honour the cap.
@@ -66,24 +61,17 @@ class CommandRunOutcome {
   final CommandRunEnd end;
   final CommandOutputText output;
 
-  /// The exit code, or `null` when nobody reported one.
-  ///
-  /// Two things can report it, and the difference is in [end] rather than
-  /// here: the shell's own OSC 133 `D` marker for a command that
-  /// [CommandRunEnd.finished], and the **pane** for one whose process died
-  /// under it — a host-backed session is told what its session exited with.
-  ///
-  /// `null` means *unknown*, never *zero*: an interrupted command completes
-  /// with no code, and calling that success would be a lie a caller acts on.
+  /// The exit code, or `null` when nobody reported one. `null` means *unknown*,
+  /// never *zero*: an interrupted command completes with no code, and calling
+  /// that success would be a lie a caller acts on. Which of the two reporters
+  /// answered is in [end] rather than here.
   final int? exitCode;
 
   final Duration? duration;
 
-  /// Whether this pane has ever produced an OSC 133 marker.
-  ///
-  /// The honest answer to "why did nothing happen": a pane that has never
-  /// emitted one is probably not running the integration at all, which is a
-  /// different problem from a command that is genuinely slow.
+  /// Whether this pane has ever produced an OSC 133 marker — the honest answer
+  /// to "why did nothing happen", and a different problem from a command that
+  /// is genuinely slow.
   final bool markersSeen;
 
   bool get finished => end == CommandRunEnd.finished;
@@ -93,9 +81,9 @@ class CommandRunOutcome {
 ///
 /// Both ends matter. The `D` marker anchors to the line the **next prompt** is
 /// about to be drawn on, so taking whole lines would hand back that prompt and,
-/// a keystroke later, whatever the user typed next. And [CommandBlock.endRef]
-/// being absent is not an error — it is a command that is still running, and
-/// then the answer is everything printed so far.
+/// a keystroke later, whatever the user typed next. A missing
+/// [CommandBlock.endRef] is not an error — it is a command that is still
+/// running, and then the answer is everything printed so far.
 CommandOutputText readCommandOutput(
   Terminal terminal,
   CommandBlock block, {
@@ -160,11 +148,9 @@ bool _isBlankRow(Terminal terminal, int y, int? to) {
   return true;
 }
 
-/// One row as plain text, styling dropped.
-///
-/// A cell that was never written reads as 0; it becomes a space, the same way
-/// `terminalTailLines` renders it, so `terminal_run` and `terminal_output`
-/// never disagree about what a line says.
+/// One row as plain text, styling dropped. A cell that was never written reads
+/// as 0 and becomes a space, the same way `terminalTailLines` renders it, so
+/// `terminal_run` and `terminal_output` never disagree about what a line says.
 String _rowText(Terminal terminal, int y, {required int from, int? to}) {
   final line = terminal.buffer.lines[y];
   final end = to == null || to > line.length ? line.length : to;
@@ -179,13 +165,10 @@ String _rowText(Terminal terminal, int y, {required int from, int? to}) {
 /// Waits for the *one* command a caller is about to type into a pane.
 ///
 /// A PTY is a byte stream with no notion of "this command finished, here is its
-/// status", which is why typing into a pane and polling for a new prompt was
-/// all an agent could do. OSC 133 is that notion, and this is the seam that
-/// turns it into a single round trip: begin the watch, type, await.
-///
-/// It only ever **reads** the terminal — the pane owns its own state — and it
-/// never polls: the markers arrive on the PTY's own callback, so nothing here
-/// occupies a frame while a command runs.
+/// status"; OSC 133 is that notion, and this is the seam that turns it into a
+/// single round trip: begin the watch, type, await. It only ever **reads** the
+/// terminal, and it never polls — the markers arrive on the PTY's own
+/// callback.
 class CommandRunWatch {
   CommandRunWatch._(this._instance, this._recorder, this._maxOutputLines) {
     // Whatever is running *now* is not what the caller is about to type. Its
@@ -198,10 +181,9 @@ class CommandRunWatch {
   }
 
   /// Starts watching [instance], or returns `null` when it has no shell
-  /// integration and therefore no way to report an end.
-  ///
-  /// Call **before** typing: a fast command can finish inside the same turn the
-  /// keystroke was written in.
+  /// integration and therefore no way to report an end. Call **before** typing:
+  /// a fast command can finish inside the same turn the keystroke was written
+  /// in.
   static CommandRunWatch? begin(
     TerminalInstance instance, {
     int maxOutputLines = kDefaultCommandOutputLines,
@@ -227,10 +209,9 @@ class CommandRunWatch {
 
   CommandBlockTracker get _tracker => _recorder.tracker;
 
-  /// Waits up to [timeout] for the command to finish.
-  ///
-  /// Always answers: a command that never ends returns what it has printed so
-  /// far, marked [CommandRunEnd.timedOut], rather than hanging on `vim`.
+  /// Waits up to [timeout] for the command to finish. Always answers: a command
+  /// that never ends returns what it has printed so far, marked
+  /// [CommandRunEnd.timedOut], rather than hanging on `vim`.
   Future<CommandRunOutcome> awaitFinish(Duration timeout) async {
     try {
       final block = await _settled.future.timeout(
@@ -273,9 +254,8 @@ class CommandRunWatch {
     }
     if (_settled.isCompleted) return;
     // Read the output *here*, inside the `D` marker's own callback, while the
-    // buffer still ends at this command's last line: the next prompt is drawn
-    // a few bytes later, on the very line the marker anchored to, and the
-    // anchors themselves can be moved by any line editing that follows.
+    // buffer still ends at this command's last line: the next prompt is drawn a
+    // few bytes later, on the very line the marker anchored to.
     _captured = readCommandOutput(
       _instance.terminal,
       block,
@@ -305,9 +285,8 @@ class CommandRunWatch {
             )
           : CommandOutputText.unscoped,
       // No `D` marker is coming, but the pane itself may know what its process
-      // died with — a host-backed session carries the host's own code. Only
-      // for [CommandRunEnd.paneExited]: a timed-out command is still running,
-      // and its pane has no code to give. Null stays null.
+      // died with. Only for [CommandRunEnd.paneExited]: a timed-out command is
+      // still running and its pane has no code to give. Null stays null.
       exitCode: end == CommandRunEnd.paneExited ? _instance.exitCode : null,
       markersSeen: _tracker.latest != null,
     );

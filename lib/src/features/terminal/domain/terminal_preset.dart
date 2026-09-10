@@ -3,11 +3,9 @@
 import 'pane_layout.dart';
 
 /// One pane's declaration inside a preset: what to start there, and where.
-///
-/// [id] is the pane id the preset's own [PresetTab.layout] refers to. It is not
-/// a pane id in the app — opening a preset mints fresh ones — but the tree has
-/// to name its leaves somehow, and keeping the captured ids makes a saved
-/// preset readable next to the layout it came from.
+/// [id] is the pane id the preset's own [PresetTab.layout] refers to, not a
+/// pane id in the app — opening a preset mints fresh ones — but the tree has to
+/// name its leaves somehow.
 class PresetPane {
   const PresetPane({
     required this.id,
@@ -78,18 +76,12 @@ class PresetTab {
 
 /// A named workbench shape — **never a live process.**
 ///
-/// The distinction is the whole point of the feature. A preset that carried
-/// running sessions would be a second, worse copy of the layout the app already
-/// restores across a restart; what it carries instead is the *declaration* —
-/// which regions, split which way, each holding a profile and a directory — so
-/// opening one starts fresh panes rather than resurrecting old ones. Nothing
-/// here holds scrollback, liveness, an exit code or a pane id the app will use.
-///
-/// Its lazy half is inherited rather than invented: opening a preset goes
-/// through the same adoption a restart does, so only the tab that ends up in
-/// front starts anything and the rest wait until somebody looks at them. See
-/// `TerminalSessionsController.openPreset` and `shouldRestartOnActivate` —
-/// *"a preset that launches nine processes is worse than no preset."*
+/// A preset that carried running sessions would be a second, worse copy of the
+/// layout the app already restores across a restart; what it carries is the
+/// *declaration*, so opening one starts fresh panes and nothing here holds
+/// scrollback, liveness or a pane id the app will use. Opening goes through the
+/// same lazy adoption a restart does — *"a preset that launches nine processes
+/// is worse than no preset."*
 class TerminalPreset {
   const TerminalPreset({
     required this.id,
@@ -102,10 +94,9 @@ class TerminalPreset {
   final String name;
   final List<PresetTab> tabs;
 
-  /// Which tab was in front when this was captured, as an index into [tabs].
-  ///
-  /// An index rather than a tab id because a preset's tabs have no ids of their
-  /// own — they are shapes, and a shape is only ever addressed by its place.
+  /// Which tab was in front when this was captured, as an index into [tabs] —
+  /// a preset's tabs have no ids of their own, being shapes, and a shape is
+  /// only ever addressed by its place.
   final int activeTab;
 
   int get paneCount => tabs.fold(0, (sum, tab) => sum + tab.panes.length);
@@ -143,11 +134,10 @@ class TerminalPreset {
 
 /// What opening a preset actually managed to do.
 ///
-/// **The skipped list is the point.** A preset written on a machine with a WSL
-/// distribution that has since been removed names a profile nothing can start,
-/// and the app's restore path drops such a pane in silence — correct for a
-/// restart nobody asked for, wrong for a thing the user just chose by name. So
-/// opening reports what it left out, and the caller says so out loud.
+/// **The skipped list is the point.** A preset naming a profile nothing can
+/// start — a WSL distribution since removed — would be dropped in silence by
+/// the restore path, which is wrong for a thing the user just chose by name, so
+/// opening reports what it left out.
 class TerminalPresetOpening {
   const TerminalPresetOpening({
     required this.openedTabs,
@@ -165,12 +155,10 @@ class TerminalPresetOpening {
   bool get skippedAnything => skippedProfileIds.isNotEmpty;
 }
 
-/// Rebuilds [layout] with fresh ids, so one preset can be opened twice.
-///
-/// Pane ids come from [paneId] — the caller keeps the same map for the tab's
-/// declarations, so the tree and the panes agree — and every region and split
-/// gets a new id from [nodeId], because those are identities for the widgets
-/// that draw them and two tabs must never share one.
+/// Rebuilds [layout] with fresh ids, so one preset can be opened twice. Pane
+/// ids come from [paneId] — the caller keeps one map, so the tree and the panes
+/// agree — and every region and split gets a new id from [nodeId], because two
+/// tabs must never share a widget identity.
 PaneLayout remapPaneIds(
   PaneLayout layout,
   String Function(String) paneId,

@@ -15,13 +15,11 @@ enum TerminalShell {
   ssh,
 }
 
-/// A launchable terminal shell: a PowerShell/Command Prompt on the Windows host,
-/// an interactive shell in a specific WSL distribution (via `wsl.exe -d`),
-/// a shell on a macOS or Linux host, or an interactive session on an SSH host.
-///
-/// Identified by a stable [id] (`powershell`, `cmd`, `wsl:<distro>`,
-/// `posix:/bin/zsh`, `ssh:<hostId>`) so it can be stored as the user's
-/// default-terminal preference.
+/// A launchable terminal shell: a PowerShell or Command Prompt on the Windows
+/// host, a shell in a specific WSL distribution, a shell on macOS or Linux, or
+/// an interactive session on an SSH host. Identified by a stable [id]
+/// (`powershell`, `wsl:<distro>`, `posix:/bin/zsh`, `ssh:<hostId>`) so it can
+/// be stored as the user's default-terminal preference.
 class TerminalProfile {
   const TerminalProfile({
     required this.id,
@@ -104,15 +102,13 @@ class TerminalProfile {
   );
 }
 
-/// The terminal profiles available on this machine.
+/// The terminal profiles available on this machine: on Windows the two host
+/// shells plus one per discovered WSL distribution; on macOS and Linux the
+/// shells in [shells] with the login shell first — offering PowerShell anyway
+/// gave a Mac a settings page listing two shells it could not launch.
 ///
-/// On Windows: the two host shells plus one per discovered WSL distribution.
-/// On macOS and Linux: the shells in [shells], the login shell first — there is
-/// no PowerShell or Command Prompt to offer, and offering them anyway gave a
-/// Mac a settings page listing two shells it does not have and could not launch.
-///
-/// [hostIsWindows] is passed rather than read, so the pure function stays pure
-/// and the tests can ask for either host.
+/// [hostIsWindows] is passed rather than read, so this stays pure and the tests
+/// can ask for either host.
 List<TerminalProfile> terminalProfilesFor(
   List<ExecutionEnvironment> environments, {
   bool hostIsWindows = true,
@@ -164,9 +160,7 @@ List<TerminalProfile> terminalProfilesFor(
 }
 
 /// Rebuilds a profile from a stored [id] alone, or `null` when the id is not one
-/// this app writes.
-///
-/// Restoring a layout deliberately does *not* consult the discovered
+/// this app writes. Deliberately does *not* consult the discovered
 /// environments: a WSL distro that has since been removed should come back as a
 /// pane that fails to launch and says so, not silently as PowerShell.
 TerminalProfile? terminalProfileFromId(String id) {

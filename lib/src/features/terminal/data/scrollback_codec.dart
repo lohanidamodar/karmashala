@@ -4,30 +4,13 @@ import 'package:xterm2/xterm.dart';
 import '../domain/scrollback_limits.dart';
 
 /// Re-emits [terminal]'s scrollback as text plus SGR escape sequences, ready to
-/// be written back into a fresh `Terminal`.
+/// be written back into a fresh `Terminal`. Only the **main** buffer.
 ///
-/// What is stored is what was *on screen*, not what was typed, so a restore
-/// replays inert content and has no command to re-run. The deserializer is
-/// xterm's own VT parser — there is no second parser to keep correct.
-///
-/// Only the **main** buffer is encoded: the alternate buffer is a full-screen
-/// program's scratch space, not scrollback.
-///
-/// Every line is **self-contained** (it opens with `ESC[0m` and names every style
-/// it uses), so [maxBytes] can drop leading lines without a later line losing the
-/// colour an earlier one set.
-///
-/// Lines are encoded **newest first**, and encoding stops the moment one more
-/// line would breach [maxBytes]. That is what keeps the 20 s autosave off the
-/// critical path: the cost is proportional to what is *stored* rather than to
-/// what was considered. The obvious shape — encode all [maxLines], join, then
-/// drop one leading line and re-join until it fits — is quadratic in the
-/// overshoot, and every pane overshoots: 2 000 lines at 200 columns is ~400 KB
-/// of plain text against a 256 KB cap. Measured on the Loop 26 corpora at a full
-/// 10 000-line buffer, enforcing the cap that way cost **121 ms** (plain log),
-/// **281 ms** (colourised `ls`), **242 ms** (TUI frame) and **2 588 ms**
-/// (per-cell 24-bit colour) on top of a 3-197 ms encode — every 20 seconds, on
-/// the UI isolate, while the user types. See `tool/benchmark/scrollback_save_bench.dart`.
+/// Every line is **self-contained**, so [maxBytes] can drop leading lines
+/// without a later one losing an earlier one's colour, and lines are encoded
+/// **newest first** so a save costs what it *stores*: encoding everything and
+/// re-joining until it fits is quadratic in the overshoot, which measured
+/// 121-2 588 ms on top of a 3-197 ms encode at a full 10 000-line buffer.
 String encodeScrollback(
   Terminal terminal, {
   int maxLines = kDurableScrollbackMaxLines,
@@ -39,11 +22,9 @@ String encodeScrollback(
 ).encoded;
 
 /// [encodeScrollback], plus how many buffer lines it had to encode to get
-/// there.
-///
-/// The line count is the whole performance contract — a save must cost what it
-/// stores, not what it considered — so it is exposed rather than left to a wall
-/// clock, which cannot be asserted on honestly.
+/// there. The line count is the whole performance contract — a save must cost
+/// what it stores, not what it considered — so it is exposed rather than left
+/// to a wall clock, which cannot be asserted on honestly.
 @visibleForTesting
 ({String encoded, int linesEncoded}) encodeScrollbackWithStats(
   Terminal terminal, {
@@ -154,7 +135,6 @@ String _encodeLine(BufferLine line) {
 }
 
 /// The SGR sequence that sets exactly [foreground], [background] and [flags].
-///
 /// Every code emitted here is handled by the vendored parser's `_csiHandleSgr`,
 /// which is what closes the encode/write round-trip.
 String _sgr(int foreground, int background, int flags) {

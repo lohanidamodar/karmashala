@@ -12,10 +12,9 @@ import '../domain/terminal_cast.dart';
 /// on that.
 ///
 /// The chrome is what makes a recording presentable rather than a screenshot of
-/// a rectangle — but it is *fixed*, not configurable. Padding, corner radius and
-/// title-bar height are the three numbers a settings screen would offer and
-/// nobody would ever change; the theme and font are the app's own, so a
-/// recording looks like the terminal it was taken from.
+/// a rectangle, and it is *fixed*: padding, corner radius and title-bar height
+/// are the three numbers a settings screen would offer and nobody would ever
+/// change. The theme and font are the app's own.
 class CastFrameStyle {
   const CastFrameStyle({
     required this.width,
@@ -69,23 +68,19 @@ class CastFrameStyle {
   final double titleBarHeight;
 }
 
-/// The font size the grid is laid out at before it is scaled to fit.
-///
-/// Only the ratio matters: the canvas is scaled so the whole grid lands inside
-/// the window, and Skia rasterises the glyphs at the transformed size, so text
-/// stays crisp at any output resolution. Laying out at a middling size keeps
-/// that scale factor near one for an ordinary 80x24.
+/// The font size the grid is laid out at before it is scaled to fit. Only the
+/// ratio matters: Skia rasterises the glyphs at the transformed size, so text
+/// stays crisp at any resolution, and a middling size keeps that scale factor
+/// near one for an ordinary 80x24.
 const double _kLayoutFontSize = 14;
 
 /// Replays a cast into an offscreen terminal and paints each frame.
 ///
-/// **Runs on the isolate that owns the Flutter engine, and has to.**
+/// **Runs on the isolate that owns the Flutter engine, and has to**:
 /// `Picture.toImage` rasterises on the engine's raster thread and there is no
-/// second engine to hand this to. What that costs is bounded three ways: the
-/// painter and its 10 240-entry paragraph caches are built once and reused for
-/// every frame; each frame awaits `toImage`, which yields the event loop back
-/// to the app between frames; and everything after the pixels exist — the
-/// quantising, the LZW, the PNG deflate, which is where the real seconds are —
+/// second engine to hand this to. The cost is bounded three ways — the painter
+/// and its caches are built once and reused, each frame awaits `toImage` and so
+/// yields the event loop back to the app, and everything after the pixels exist
 /// happens behind [FrameSink] on a worker isolate.
 class CastFrameRenderer {
   CastFrameRenderer({
@@ -100,11 +95,10 @@ class CastFrameRenderer {
   final int frameRate;
   final Duration idleCap;
 
-  /// Renders every frame into [sink] and closes it.
-  ///
-  /// [onProgress] is called with `(rendered, total)` after each frame — the
-  /// only honest progress there is, because the number of frames is known
-  /// before the first one is drawn and how long each takes is not.
+  /// Renders every frame into [sink] and closes it. [onProgress] is called with
+  /// `(rendered, total)` after each frame — the only honest progress there is,
+  /// because the number of frames is known before the first one is drawn and
+  /// how long each takes is not.
   Future<FrameSinkResult> renderTo(
     FrameSink sink, {
     void Function(int rendered, int total)? onProgress,

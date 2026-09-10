@@ -28,8 +28,7 @@ import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
-/// UI renders. Implementations own whatever backs the buffer (a real PTY in
-/// production, nothing in tests).
+/// UI renders. Implementations own whatever backs the buffer.
 abstract class TerminalInstance {
   String get id;
   String get title;
@@ -39,53 +38,30 @@ abstract class TerminalInstance {
   /// can be recreated after a restart.
   String get profileId;
 
-  /// The directory the pane is in **now**: where it was launched until the
-  /// shell says it has moved (OSC 7), and where it has moved to after that.
-  ///
-  /// Live rather than fixed because everything that reads it wants the current
-  /// answer, not the launch one: relative-path link resolution joins onto it,
-  /// the tab label is derived from it, the layout record a pane is restored
-  /// from stores it, and the MCP terminal tools report it.
+  /// The directory the pane is in **now**: where it launched until the shell
+  /// says it has moved (OSC 7). Live, because every reader wants the current
+  /// answer rather than the launch one.
   String? get workingDirectory;
 
-  /// [workingDirectory] as something to listen to.
-  ///
-  /// Listenable for exactly the reason [liveness] is — so the tab label follows
-  /// a `cd` without anything polling for one. Notifies once per *change*: a
-  /// shell that re-emits OSC 7 on every prompt redraw says nothing new.
+  /// [workingDirectory] as something to listen to. Notifies once per *change* —
+  /// a shell that re-emits OSC 7 on every prompt redraw says nothing new.
   ValueListenable<String?> get directory;
 
-  /// The agent CLI this pane runs, or `null` for a plain shell.
-  ///
-  /// Recorded rather than derived because restoring the pane has to reproduce
-  /// the exact command line, and a profile id alone cannot: it does not know
-  /// which installation's executable was used, which permission flags applied,
-  /// or which session it belonged to.
+  /// The agent CLI this pane runs, or `null` for a plain shell. Recorded rather
+  /// than derived: a profile id cannot reproduce the exact command line.
   AgentPaneLaunch? get agentLaunch;
 
   /// Whether a process is running behind [terminal], and why not when there is
-  /// none. Listenable so a pane stops advertising itself as live the moment its
-  /// process exits, without the controller polling for it.
+  /// none. Listenable, so a pane stops advertising itself as live on exit.
   ValueListenable<PaneLiveness> get liveness;
 
-  /// The status the process exited with, once it has.
-  ///
-  /// Null while it is running, and null for a pane that never ran one — and
-  /// also for an instance that cannot know, which is why the default is here
-  /// rather than on every implementor. Read by the collapse-on-exit rule: a
-  /// clean exit is a shell being dismissed, a failure is output someone is
-  /// about to read.
+  /// The status the process exited with, once it has. Null while it runs, for a
+  /// pane that never ran one, and for an instance that cannot know.
   int? get exitCode => null;
 
-  /// Non-blank lines this shell had printed **before the user ran anything in
-  /// it** — its banner, its MOTD and its first prompt.
-  ///
-  /// Null until the user submits a line, and null forever for a pane nothing
-  /// was ever run in. Read by `shouldDetachOnClose`, which needs to tell a
-  /// shell's own greeting apart from history somebody would come back for; the
-  /// argument for measuring it rather than guessing is on
-  /// `kIdleShellHistoryLines`. Only a pane with a real process can have one,
-  /// which is why the default lives here.
+  /// Non-blank lines this shell printed **before the user ran anything in it** —
+  /// its banner, MOTD and first prompt. Null until the user submits a line;
+  /// `shouldDetachOnClose` uses it to tell a greeting from real history.
   int? get greetingLines => null;
 
   /// Drives selection/scroll for the view — read to copy the current selection.
@@ -96,10 +72,8 @@ abstract class TerminalInstance {
   FocusNode get focusNode;
   ScrollController get scrollController;
 
-  /// OSC 133 command boundaries for this pane, or `null` when the shell was
-  /// not integrated. Null — not an empty tracker — so the UI can tell "no
-  /// integration" from "integrated, but nothing run yet" and stay invisible in
-  /// the first case.
+  /// OSC 133 command boundaries, or `null` when the shell was not integrated.
+  /// Null rather than an empty tracker, so the UI can tell the two apart.
   CommandBlockRecorder? get commandBlocks;
 
   /// Tears down the backing process/streams. Safe to call more than once.
@@ -108,74 +82,30 @@ abstract class TerminalInstance {
 
 /// A [TerminalInstance] whose teardown outlives its `dispose()`.
 ///
-/// Deliberately a second, narrower interface: most panes have nothing to reap —
-/// an error pane never spawned anything and a dormant pane is replayed history,
-/// not a process — and only the ones that do should make a caller wait.
-///
 /// [dispose] stays synchronous because panes are closed from build callbacks,
-/// but ending a real pane on Windows means spawning `taskkill /PID <pid> /T /F`
-/// (see `killWindowsProcessTree`). Dropping that future is fine when a tab is
-/// closed and the app keeps running; on quit it meant `windowManager.destroy()`
-/// ended the process while the kill was still in flight, orphaning the dev
-/// server, build or ssh session the user had running inside the pane.
+/// but ending a real pane on Windows means spawning `taskkill /PID <pid> /T /F`;
+/// dropping that future on quit orphaned whatever ran inside the pane.
 abstract interface class ReapableTerminalInstance {
-  /// Completes once the process tree behind this pane is gone.
-  ///
-  /// A future that is already complete before [TerminalInstance.dispose] is
-  /// called, so awaiting it is always safe.
+  /// Completes once the process tree behind this pane is gone. Already complete
+  /// before [TerminalInstance.dispose] is called, so awaiting it is always safe.
   Future<void> get reaped;
 }
 
-/// A [TerminalInstance] holding a pseudoconsole of its own.
+/// A [TerminalInstance] holding a pseudoconsole of its own, for one property:
+/// whether tearing this pane down also releases the console behind it.
 ///
-/// A third narrow interface, for one property: whether tearing this pane down
-/// also releases the console behind it.
-///
-/// On Windows that release is `ClosePseudoConsole`, and it does not return
-/// until the console host behind the pane has gone — a host that is a child of
-/// *this* process rather than of the shell, so killing the pane's process tree
-/// does not settle it. The 2026-09-09 app soak measured it at 1-22 ms on a good
-/// quit and, on 1 cycle in 10, never:
-///
-/// ```txt
-///   PROBE taskkill done       15:10:58.953
-///   PROBE killed, releasing pty  15:10:58.957
-///   (nothing, for the remaining 60 s)
-/// ```
-///
-/// It **used to be synchronous**, and a synchronous call that never returns
-/// takes the isolate with it: no shutdown step's `timeout` can fire, because a
-/// `Duration` is a task for the isolate that is stuck. That is both of the two
-/// cycles in twenty that ignored `WM_CLOSE`, and on 2026-09-10 it is what a
-/// minidump caught the running app's main thread doing after a pane closed
-/// (BACKLOG 1). Since then `pty_destroy` hands the close to a detached native
-/// thread and returns immediately, so nothing in Dart waits for a console host
-/// any more — see `packages/flutter_pty/src/flutter_pty.h`.
-///
-/// This interface survives that fix, because the choice it exists for is not
-/// about blocking. The release is worth doing while the app keeps running: a
-/// long session otherwise accumulates a descriptor and a reader thread per
-/// closed pane, and profiling on 2026-09-03 measured 10 stranded descriptors
-/// after 6 closed panes against a macOS soft limit of 256. It is worth nothing
-/// at all when the process is ending, which is when the OS reclaims every
-/// handle for free and would kill the worker mid-close regardless — so the quit
-/// path says so, and the pane skips it.
+/// Worth doing while the app runs — a long session otherwise strands a
+/// descriptor and a reader thread per closed pane — and worth nothing when the
+/// process is ending, so the quit path says so and the pane skips it.
 abstract interface class PseudoConsoleOwner {
   /// Leave the pseudoconsole to the OS when this pane is disposed.
   ///
-  /// One-way, and per pane rather than global: it is set by the shutdown that
-  /// is about to end the process, and a pane closed in a running app is
-  /// untouched by it.
+  /// One-way, and per pane rather than global: set by the shutdown that is
+  /// about to end the process.
   void keepPseudoConsoleOnDispose();
 }
 
 /// A [TerminalInstance] whose output ingestion answers to how visible it is.
-///
-/// Deliberately a second, narrower interface, for the same reason
-/// [ReapableTerminalInstance] is one: most panes have nothing to throttle. An
-/// error pane never spawned anything, a dormant pane is replayed history, and a
-/// test fake produces output only when a test says so. Only a pane with a live
-/// pipe behind it has a tier worth setting.
 ///
 /// The controller sets this from the only thing that decides it — where the
 /// pane is in the layout. A pane never chooses its own tier.
@@ -189,16 +119,9 @@ abstract interface class TieredTerminalInstance {
 
 /// A [TerminalInstance] that gives its scrollback back while it is cold.
 ///
-/// The storage half of the ingest tiers, and a third narrow interface for the
-/// same reason as [ReapableTerminalInstance] and [TieredTerminalInstance]: only
-/// a pane with a live pipe behind it has a buffer worth parking. An error pane
-/// holds one line, a dormant pane *is* its stored text already, and a test fake
-/// has nothing to release.
-///
 /// While a pane is parked its parsed buffer holds only the screen, and the
-/// history above it lives here as encoded text. That makes this the pane's
-/// scrollback for as long as it lasts: the controller stores it verbatim rather
-/// than re-encoding a buffer that no longer has anything in it.
+/// history above it lives here as encoded text — so the controller stores this
+/// verbatim rather than re-encoding a buffer that no longer holds it.
 abstract interface class ParkableTerminalInstance {
   /// The encoded window held in place of a parsed buffer, or `null` when this
   /// pane's scrollback is live.
@@ -208,19 +131,9 @@ abstract interface class ParkableTerminalInstance {
 /// A [TerminalInstance] whose parsed buffer can be handed to the pane that
 /// replaces it.
 ///
-/// Starting a process in a pane that already has one's worth of history means
-/// building a new instance, because a dormant pane and a running one are
-/// different things. What it does *not* have to mean is rebuilding the history:
-/// the old pane's buffer already holds it, parsed, and the round trip through
-/// the codec — encode 256 KiB out, parse 256 KiB back in — is 10-25 ms of
-/// main-isolate work to arrive at the buffer we started with. Handing the
-/// buffer over instead costs nothing at all.
-///
-/// A fourth narrow interface for the same reason as the three above: `null` is
-/// the answer for every pane whose history is *text* rather than a buffer — a
-/// parked one gave its buffer up on purpose, and a dormant one that has never
-/// been looked at has not built its buffer yet, so adopting it would perform
-/// exactly the parse this exists to avoid.
+/// The old pane's buffer already holds that history, parsed; the round trip
+/// through the codec to rebuild it is 10-25 ms of main-isolate work. `null` for
+/// any pane whose history is text rather than a buffer.
 abstract interface class AdoptableTerminalInstance {
   /// The buffer holding this pane's history, or `null` when there is none to
   /// hand over.
@@ -229,16 +142,9 @@ abstract interface class AdoptableTerminalInstance {
 
 /// A [TerminalInstance] whose output can be taped for a recording.
 ///
-/// A fifth narrow interface for the same reason as the four above: only a pane
-/// with a live pipe behind it has anything to record. An error pane holds one
-/// line that never changes, and a dormant pane *is* history — replaying it into
-/// a recording would produce a video of a file being read.
-///
 /// The tap is on the bytes arriving from the process, upstream of
-/// [TieredTerminalInstance] — which is the whole point. A recording has to keep
-/// running when the user switches tab, and a cold pane's bytes never reach
-/// `terminal.write` at all. Recording downstream of that would produce a video
-/// that stops the moment somebody looks somewhere else.
+/// [TieredTerminalInstance]: a cold pane's bytes never reach `terminal.write`,
+/// so recording downstream would stop whenever the user looked elsewhere.
 abstract interface class RecordableTerminalInstance {
   /// Starts copying this pane's output into [recorder]. Replaces any recorder
   /// already attached.
@@ -254,9 +160,7 @@ abstract interface class RecordableTerminalInstance {
 /// A [ValueListenable] that holds one value and never notifies.
 ///
 /// What [TerminalInstance.directory] is for a pane whose shell can never report
-/// one: an error pane never started a process, and a dormant pane is replayed
-/// history. Allocated once per instance rather than per read, so adding and
-/// removing a listener reach the same object.
+/// one. Allocated once per instance, so add/removeListener reach one object.
 class UnchangingValue<T> implements ValueListenable<T> {
   const UnchangingValue(this.value);
 
@@ -274,17 +178,14 @@ class UnchangingValue<T> implements ValueListenable<T> {
 /// reports with OSC 7.
 ///
 /// A [ValueNotifier] on purpose — it drops a write of the value it already
-/// holds, which is the whole of the "one republish per `cd`" rule. A shell that
-/// emits OSC 7 from its prompt function emits it on every redraw, and that must
-/// cost nothing.
+/// holds, which is the whole of the "one republish per `cd`" rule.
 class WorkingDirectoryTracker {
   WorkingDirectoryTracker(String? launchedIn, {String? hostname})
     : _hostname = hostname ?? localHostname,
       _directory = ValueNotifier(launchedIn);
 
-  /// This machine's name, read once: a syscall, and it cannot change while the
-  /// app runs. Null when the host will not say, which makes every named host
-  /// foreign — see [workingDirectoryFromOsc].
+  /// This machine's name, read once. Null when the host will not say, which
+  /// makes every named host foreign — see [workingDirectoryFromOsc].
   static final String? localHostname = () {
     try {
       return Platform.localHostname;
@@ -301,10 +202,8 @@ class WorkingDirectoryTracker {
 
   String? get value => _directory.value;
 
-  /// One OSC from the pane's [OscRouter].
-  ///
-  /// A sequence we cannot read leaves the directory alone: `null` from the
-  /// parser means *no answer*, never *the pane has no directory*.
+  /// One OSC from the pane's [OscRouter]. `null` from the parser means *no
+  /// answer*, never *the pane has no directory*.
   void handleOsc(String code, List<String> args) {
     if (_disposed) return;
     final reported = workingDirectoryFromOsc(code, args, hostname: _hostname);
@@ -332,12 +231,10 @@ typedef TerminalInstanceFactory =
     });
 
 /// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
-/// [Terminal]: PTY output is decoded into the buffer, keystrokes are encoded
-/// back to the PTY, and terminal resizes are forwarded.
+/// [Terminal]: output is decoded into the buffer, keystrokes encoded back.
 ///
-/// This is the one deliberate exception to the `CommandRunner` rule
-/// (architecture constraint 6): an interactive terminal needs a pseudo-terminal,
-/// which the run-to-completion/stream abstraction does not model.
+/// The one deliberate exception to the `CommandRunner` rule (architecture
+/// constraint 6): an interactive terminal needs a pseudo-terminal.
 class PtyTerminalInstance
     implements
         TerminalInstance,
@@ -359,51 +256,36 @@ class PtyTerminalInstance
     TerminalIngestBudget? ingestBudget,
     Terminal? adoptTerminal,
   }) : _cwd = WorkingDirectoryTracker(workingDirectory) {
-    // The buffer the pane this one replaces was already holding, when there is
-    // one. Handlers are set either way rather than only on the fresh path: the
-    // two are the same values, and a branch here is a branch that can drift.
+    // Handlers are set on an adopted buffer as well as a fresh one: they are
+    // the same values, and a branch here is a branch that can drift.
     terminal = (adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines))
-      // The package's own mouse handler, which reports the wheel by the xterm
-      // spec's ids — see `mouse_wheel_wire_format_test.dart`. Stock xterm 4.0.0
-      // did not, and a handler of ours corrected it; xterm2 needs no correcting.
-      //
-      // `KarmashalaInputHandler` is still ours: the package encodes every
-      // modified Enter as a bare CR, so Shift+Enter is indistinguishable from
-      // submit.
+      // `KarmashalaInputHandler` is ours: the package encodes every modified
+      // Enter as a bare CR, so Shift+Enter is indistinguishable from submit.
       ..inputHandler = const KarmashalaInputHandler()
       // The pane owns xterm's single OSC slot for its whole life and fans it
-      // out, because two unrelated things read it — OSC 133 command blocks,
-      // which exist only with shell integration on, and the OSC 7 working
-      // directory, which must work either way.
+      // out: OSC 133 blocks need integration on, OSC 7 must work either way.
       ..onPrivateOSC = _osc.dispatch
-      // xterm2 consumes OSC 7 itself rather than passing it on as an unknown
-      // OSC, so the directory arrives here instead. Re-shaped into the pair the
-      // router already carries — the payload is what `_osc.sublist(1)` would
-      // have joined to — so nothing downstream has to know which door it came
-      // through. (`OSC 9 ; 9` lands here too, carrying a bare path rather than
-      // a `file:` URI; `workingDirectoryFromOsc` declines it, which leaves the
-      // directory as it was.)
+      // xterm2 consumes OSC 7 itself, so the directory arrives here instead,
+      // re-shaped into the pair the router carries. (`OSC 9 ; 9` lands here too
+      // with a bare path, which `workingDirectoryFromOsc` declines.)
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
     // Registered before the process starts, so no sequence can be missed. The
-    // directory listens unconditionally: plenty of shells emit OSC 7 with no
-    // help from us, and integration is about OSC 133.
+    // directory listens unconditionally: many shells emit OSC 7 unaided.
     _osc.add(_cwd.handleOsc);
     if (shellIntegration) {
       commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
     // Replay the previous session's scrollback *before* the shell starts, so
     // restored history sits above the new process's first output. An adopted
-    // buffer is that history already, so it needs only the marker that says
-    // where it ends.
+    // buffer is that history already and needs only the marker.
     if (adoptTerminal == null) {
       writeRestoredScrollback(terminal, restoredScrollback);
     } else {
       writeRestoreMarker(terminal);
     }
-    // flutter_pty only forwards a tiny allowlist of env vars to the child; pass
-    // the host environment so Windows shells get SystemRoot/WINDIR/etc. (without
-    // them powershell.exe/cmd.exe and wsl.exe fail to start) — sanitized so a
-    // POSIX env leaked from launching via WSL doesn't break wsl.exe.
+    // flutter_pty forwards only a tiny env allowlist; pass the host environment
+    // so Windows shells get SystemRoot/WINDIR (without them powershell.exe and
+    // wsl.exe fail to start), sanitized against a POSIX env leaked from WSL.
     final startIn =
         (launch.workingDirectory != null &&
             Directory(launch.workingDirectory!).existsSync())
@@ -416,10 +298,9 @@ class PtyTerminalInstance
       workingDirectory: startIn,
     );
 
-    // Buffer the raw PTY bytes and hand them to the terminal once per frame.
-    // flutter_pty reads 1 KB at a time, so without this a busy shell costs
-    // hundreds of decodes, parses and notifyListeners() a second on the UI
-    // isolate — which is what the streaming stutter was.
+    // Buffer the raw PTY bytes and hand them to the terminal once per frame:
+    // flutter_pty reads 1 KB at a time, so a busy shell otherwise costs hundreds
+    // of decodes, parses and notifyListeners() a second on the UI isolate.
     _coalescer = PtyOutputCoalescer(
       onData: terminal.write,
       budget: ingestBudget,
@@ -427,8 +308,7 @@ class PtyTerminalInstance
     _cold = ColdIngest(terminal: terminal, budget: ingestBudget);
     _outputSubscription = _pty.output.listen(_onPtyBytes);
 
-    // Captured while the process is certainly alive: `pid` is only safe to act
-    // on before the OS can recycle the number.
+    // Captured while the process is certainly alive: the OS can recycle a pid.
     _pid = _pty.pid;
 
     _pty.exitCode.then((code) {
@@ -436,8 +316,8 @@ class PtyTerminalInstance
       _exitCode = code;
       if (_disposed) return;
       _emit('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
-      // The buffer stays on screen, but the pane is no longer a terminal you
-      // can type into — say so, so the UI can stop drawing it as one.
+      // The buffer stays, but the pane is no longer a terminal you can type
+      // into — say so, so the UI can stop drawing it as one.
       _liveness.value = PaneLiveness.exited;
     });
 
@@ -466,8 +346,7 @@ class PtyTerminalInstance
   @override
   final String profileId;
 
-  /// Seeded with the directory the pane launched in, then kept current by the
-  /// shell's own OSC 7.
+  /// Seeded with the launch directory, then kept current by the shell's OSC 7.
   final WorkingDirectoryTracker _cwd;
 
   @override
@@ -508,19 +387,10 @@ class PtyTerminalInstance
 
   /// Records the greeting the first time the user **submits a line**.
   ///
-  /// Keyed on a carriage return rather than on the first byte out of the
-  /// terminal, because the terminal answers for itself: measured against a real
-  /// WSL ConPTY, `onOutput` fires 8 ms in with `ESC[I` — a focus report, with
-  /// the buffer still empty — and cursor-position and device-attribute replies
-  /// arrive the same way. None of those contain a `\r`, and none of them means
-  /// the user did anything.
-  ///
-  /// Counted *before* the bytes are forwarded, which is what makes a paste
-  /// harmless: whatever is being submitted has not been echoed yet, so the
-  /// buffer still holds only what the shell put there. Unbounded on purpose —
-  /// this runs once per pane, at a moment when the buffer is a banner and a
-  /// prompt, and a greeting that came back short would lower the bar for
-  /// keeping the session rather than raise it.
+  /// Keyed on a carriage return rather than the first byte out of the terminal,
+  /// because the terminal answers for itself: a focus report arrives ~8 ms in
+  /// with the buffer still empty. Counted before the bytes are forwarded, so a
+  /// paste has not been echoed yet.
   void _recordGreeting(String data) {
     if (_greetingLines != null || !data.contains('\r')) return;
     _greetingLines = nonBlankLineCount(terminal);
@@ -551,14 +421,9 @@ class PtyTerminalInstance
   /// This pane's buffer, once its process has gone and while the buffer really
   /// is the history.
   ///
-  /// Three conditions, and it takes all three. The process has to have
-  /// **exited**, because a running pane's buffer is not anybody else's to take.
-  /// The pane must not be **parked**, because a parked one gave its buffer up
-  /// and holds its history in [parkedScrollback] instead. And it must not be on
-  /// the **alternate buffer**, because that is a full-screen program's scratch
-  /// space rather than scrollback — the codec has always encoded only the main
-  /// buffer, and handing the alternate one over would restart the pane showing
-  /// a stale TUI frame.
+  /// Not while running (a live pane's buffer is not anybody else's to take),
+  /// not while parked, and not on the alternate buffer — a TUI's scratch space,
+  /// which would restart the pane showing a stale frame.
   @override
   Terminal? get adoptableBuffer =>
       _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
@@ -568,14 +433,12 @@ class PtyTerminalInstance
   @visibleForTesting
   int get spooledBytes => _cold.spooledBytes;
 
-  /// Reads the pipe. A pane nobody can see does not parse its output stream:
-  /// its bytes go to [ColdIngest], which keeps only the screen readable and
-  /// holds the rest undecoded. Something still has to *read* the pipe, or the
-  /// child blocks on a full OS buffer.
+  /// Reads the pipe. A pane nobody can see sends its bytes to [ColdIngest]
+  /// undecoded, but something must still read, or the child blocks on a full
+  /// OS buffer.
   void _onPtyBytes(Uint8List bytes) {
     if (_disposed) return;
-    // Before the tier split, so a recording keeps running while the pane is
-    // cold and its bytes are going to storage rather than to the buffer.
+    // Before the tier split, so a recording keeps running while the pane is cold.
     _recorder?.addOutput(bytes);
     if (_tier == IngestTier.cold) {
       _cold.add(bytes);
@@ -591,13 +454,10 @@ class PtyTerminalInstance
     _tier = tier;
     _coalescer.tier = tier;
     if (tier == IngestTier.cold) {
-      // Hand over what is already queued rather than parsing it on the way out:
-      // going cold must not cost a flush of the coalescer.
+      // Hand over what is already queued rather than parsing it on the way out.
       if (_cold.detach(_coalescer.takePending())) {
         // The blocks whose prompt line just went are what held those lines
-        // alive, through their anchors; dropping them is what actually releases
-        // the memory. A replayed window carries no OSC 133 markers anyway, so
-        // there is nothing left for them to point at when the pane comes back.
+        // alive through their anchors; dropping them releases the memory.
         commandBlocks?.tracker.pruneEvicted();
       }
     } else if (wasCold) {
@@ -634,8 +494,7 @@ class PtyTerminalInstance
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    // Tell the recording its subject has gone before anything else here can
-    // fail: a pane closed mid-recording has to hand over what it captured.
+    // Tell the recording its subject has gone before anything else can fail.
     _recorder?.sourceEnded();
     _recorder = null;
     // Set before disposing: a listener still attached deserves the final state,
@@ -649,24 +508,11 @@ class PtyTerminalInstance
     _coalescer.dispose();
     focusNode.dispose();
     scrollController.dispose();
-    // Ask the process to exit before destroying it. A bare kill is wrong for
-    // anything long-running — a build, a dev server, an ssh session, a database
-    // client mid-write — because the process never gets to flush or run its
-    // exit handlers. This runs on app quit as well as tab close.
-    //
-    // Kept rather than dropped: closing a tab does not have to wait for the
-    // kill, but quitting does — see [reaped].
-    //
-    // Release the pty itself once the process behind it is gone. Killing the
-    // child does not close the master descriptor — the pane's fd and its
-    // reader thread outlive it, and a long session accumulates one of each per
-    // pane until the app quits. Profiling on 2026-09-03 measured 10 stranded
-    // descriptors after 6 closed panes; macOS gives a Finder-launched app a
-    // soft limit of 256.
-    //
-    // After the reap rather than before, so the shutdown still has a live pty
-    // to ask for `exitCode` while it waits for the child to go quietly. And not
-    // at all when the process is ending: see [PseudoConsoleOwner].
+    // Ask the process to exit before destroying it: a bare kill never lets a
+    // build, dev server or ssh session flush or run its exit handlers. Kept
+    // rather than dropped because quitting has to wait for it (see [reaped]);
+    // the pty is released after the reap, so the shutdown still has a live pty
+    // to ask for `exitCode`, and not at all on quit (see [PseudoConsoleOwner]).
     _reap = closePaneProcess(
       kill: _pty.kill,
       exitCode: _pty.exitCode,
@@ -677,9 +523,8 @@ class PtyTerminalInstance
       keepPseudoConsole: () => _keepPseudoConsole,
       releasePseudoConsole: _pty.destroy,
     ).then((report) {
-      // The one line that says what a pane close actually did. Whether the tree
-      // was gone when the console was released is the whole question the
-      // 2026-09-10 hang turned on, and a dump was the only way to answer it.
+      // What a pane close actually did: the 2026-09-10 hang turned on whether
+      // the tree was gone when the console was released.
       _log.info('pane $id: ${report.summary}.');
     });
   }
@@ -708,8 +553,7 @@ void writeRestoredScrollback(Terminal terminal, String? scrollback) {
 /// process begins.
 ///
 /// Its own function because a pane that **adopted** the previous one's buffer
-/// has the history already and needs only this — see
-/// [AdoptableTerminalInstance].
+/// has the history already and needs only this.
 void writeRestoreMarker(Terminal terminal) {
   final at = DateTime.now();
   final stamp =
@@ -725,16 +569,13 @@ String _two(int value) => value.toString().padLeft(2, '0');
 
 /// Builds the environment for a Windows PTY child.
 ///
-/// Normally this is just the host environment. But when the app is launched from
-/// a WSL/Unix shell (e.g. `flutter run -d windows` from fish), a POSIX `PATH`
-/// (`/usr/bin:/bin:…`), `SHELL=/usr/bin/fish` and `WSL*` interop vars leak into
-/// the Windows process. Handing those to `wsl.exe`/`powershell.exe` breaks them,
-/// so we rebuild a clean Windows `Path` and drop the Unix leak.
+/// Normally just the host environment — but a launch from a WSL/Unix shell
+/// leaks a POSIX `PATH`, `SHELL` and `WSL*` vars that break `wsl.exe` and
+/// `powershell.exe`, so those are dropped and a clean Windows `Path` rebuilt.
 Map<String, String> _ptyEnvironment([Map<String, String> extra = const {}]) {
   final env = Map<String, String>.of(Platform.environment);
 
-  // WSL-interop / Unix-shell leaks (present only when launched from WSL); these
-  // confuse wsl.exe and the Windows shells. Harmless no-ops on a clean launch.
+  // WSL-interop / Unix-shell leaks; harmless no-ops on a clean launch.
   final shell = env['SHELL'];
   if (shell != null && shell.startsWith('/')) env.remove('SHELL');
   env
@@ -755,9 +596,8 @@ Map<String, String> _ptyEnvironment([Map<String, String> extra = const {}]) {
           '$sysRoot\\System32\\wbem';
   }
 
-  // Layered last so a caller's variables survive the WSL-leak scrubbing above —
-  // an agent pane sets WSLENV deliberately, and it must not be the one that was
-  // just removed.
+  // Layered last so a caller's variables survive the scrubbing above — an agent
+  // pane sets WSLENV deliberately, and it must not be the one just removed.
   env.addAll(extra);
   return env;
 }
@@ -775,10 +615,8 @@ class ErrorTerminalInstance implements TerminalInstance {
     String? restoredScrollback,
     Terminal? adoptTerminal,
   }) {
-    // A failed *restart* still has the history the pane it replaced was
-    // holding, and that history is the reason anyone would retry. Adopting the
-    // buffer here is what stops a spawn failure throwing it away — the pane
-    // that could not start is the one whose scrollback matters most.
+    // A failed *restart* still holds the history of the pane it replaced, and
+    // that history is the reason anyone would retry.
     terminal = adoptTerminal ?? Terminal(maxLines: kErrorPaneScrollbackMaxLines);
     if (adoptTerminal == null) {
       writeRestoredScrollback(terminal, restoredScrollback);
@@ -860,23 +698,10 @@ class _Constant<T> implements ValueListenable<T> {
 /// The grid the app last laid a restored pane out at, shared by all of them.
 ///
 /// Nothing stored says how wide a pane was, so without a hint a
-/// [DormantTerminalInstance] parses its stored scrollback at xterm's default
-/// 80 columns and the workbench then reflows every line of it to the pane's
-/// real width **in the same frame** — the text is wrapped on the way in and
-/// unwrapped again on the way out, and neither shape is ever drawn. Measured
-/// on this machine at a full durable window (256 KiB, 2 000 lines): 2.8-9.1 ms
-/// to parse plus 0.6-4.3 ms to reflow, against 2.5-6.3 ms to parse straight
-/// into the size it will be shown at.
-///
-/// So the panes tell each other. The first restored pane the user opens
-/// reports the grid the workbench laid it out at, and every one opened after
-/// that parses into it — and every pane of a workbench is within a split or
-/// two of the same size. Right, and the reflow does not happen at all, because
-/// `Terminal.resize` returns early on a size it already has. Wrong — a window
-/// resized in between, a much narrower split — and it costs exactly what
-/// having no hint costs. It cannot be wrong in a way that changes what is
-/// drawn: the view resizes the grid to the truth either way, before the first
-/// paint.
+/// [DormantTerminalInstance] parses at xterm's default 80 columns and the
+/// workbench reflows every line of it in the same frame. So the first restored
+/// pane laid out reports its grid and the rest parse into it; a wrong hint
+/// costs exactly what no hint costs and cannot change what is drawn.
 class TerminalGridHint {
   /// Null until the workbench has laid a restored pane out.
   ({int columns, int rows})? grid;
@@ -885,17 +710,9 @@ class TerminalGridHint {
 /// A [TerminalInstance] rebuilt from a stored record with **no process behind
 /// it**: the pane the user left, replayed, waiting to be started again.
 ///
-/// This is the restore path's whole point. Spawning a shell for every stored
-/// pane at launch would make dead history indistinguishable from a live
-/// terminal, and — once a pane records a launch command rather than just a
-/// profile — would re-execute it. A dormant pane re-executes nothing; the user
-/// starts it, or does not.
-///
-/// A launch does restart *some* panes now — the shells of the active tab that
-/// were running when the app closed. Those are built as live panes instead of
-/// this one, so nothing here changed: the argument above is still the reason
-/// every other stored pane arrives dormant. `shouldRestartOnLaunch` is where
-/// the line is drawn.
+/// Spawning a shell for every stored pane would make dead history
+/// indistinguishable from a live terminal and would re-execute its recorded
+/// launch command; `shouldRestartOnLaunch` picks the few that do restart.
 class DormantTerminalInstance
     implements TerminalInstance, AdoptableTerminalInstance {
   DormantTerminalInstance({
@@ -918,11 +735,8 @@ class DormantTerminalInstance
   @override
   final String? workingDirectory;
 
-  /// Whether this pane had a process behind it when the app last closed.
-  ///
-  /// Kept so a tab the user opens *later* can start what was running in it, the
-  /// way the active tab does at launch. Without it a dormant pane cannot tell
-  /// "the user left a shell here" from "this was already just history".
+  /// Whether this pane had a process behind it when the app last closed — kept
+  /// so a tab opened later can start what was running in it.
   final bool wasLive;
 
   /// Replayed history with nothing running behind it: the directory it holds is
@@ -935,47 +749,27 @@ class DormantTerminalInstance
   @override
   final AgentPaneLaunch? agentLaunch;
 
-  /// The stored scrollback exactly as it was read back.
-  ///
-  /// Kept as the original string rather than re-encoded from [terminal] so that
-  /// starting the pane replays precisely what was restored, with no second
-  /// round-trip through the codec and no duplicated restore marker.
+  /// The stored scrollback exactly as it was read back, so starting the pane
+  /// replays precisely that — no second codec round trip, no duplicate marker.
   final String restoredScrollback;
 
-  /// Where this pane reads — and reports — the size to parse at.
-  ///
-  /// Shared with every other restored pane, and read at parse time rather than
-  /// at construction: they are all built during the restore, long before the
-  /// workbench has laid any of them out. See [TerminalGridHint].
+  /// Where this pane reads — and reports — the size to parse at. Read at parse
+  /// time, not construction: every pane is built before the layout exists.
   final TerminalGridHint? gridHint;
 
-  /// Parsed only when something asks to see it.
-  ///
-  /// A restored layout can hold a hundred of these, and every one used to
-  /// parse its stored scrollback into a 10 000-line `Terminal` during startup,
-  /// for tabs the user may never open. `late final` makes that the first
-  /// reader's cost instead — and since [restoredScrollback] is what the
-  /// controller stores and what starting the pane replays, most of them are
-  /// never built at all.
+  /// Parsed only when something asks to see it: a restored layout can hold a
+  /// hundred panes, most of which are never opened and never built at all.
   @override
   late final Terminal terminal = _buildTerminal();
 
-  /// Whether anything has asked to see this pane yet.
-  ///
-  /// The restore path's own measurement: the point of the laziness is that most
-  /// panes of a restored layout are never looked at, and `late final` cannot
-  /// be asked whether it has run.
+  /// Whether anything has asked to see this pane yet — `late final` cannot be
+  /// asked whether it has run.
   @visibleForTesting
   bool get bufferBuilt => _bufferBuilt;
   bool _bufferBuilt = false;
 
-  /// The buffer, but only once something has already built it.
-  ///
-  /// A pane the workbench has shown has parsed its stored scrollback once, and
-  /// starting a process in it must not parse the same text a second time. A
-  /// pane nobody has looked at has no buffer to hand over, and building one to
-  /// hand over would *be* the parse — so it declines, and the pane replacing it
-  /// replays the text as before.
+  /// The buffer, but only once something has already built it: building one to
+  /// hand over would *be* the parse this exists to avoid.
   @override
   Terminal? get adoptableBuffer =>
       _bufferBuilt && restoredScrollback.isNotEmpty ? terminal : null;
@@ -991,9 +785,8 @@ class DormantTerminalInstance
       if (hint.grid case (:final columns, :final rows)?) {
         built.resize(columns, rows);
       }
-      // Nothing else claims `onResize` here — a dormant pane has no process to
-      // tell about a resize — so this pane can report what the workbench laid
-      // it out at, for the next one to parse into.
+      // Nothing else claims `onResize` here, so this pane can report what the
+      // workbench laid it out at, for the next one to parse into.
       built.onResize = (columns, rows, _, _) => hint.grid = (
         columns: columns,
         rows: rows,
@@ -1039,21 +832,9 @@ class DormantTerminalInstance
   }
 }
 
-/// Whether a pane launched this way gets an OSC 133 [CommandBlockRecorder].
-///
-/// Three conditions, all of them necessary:
-///
-/// * an agent pane runs the agent CLI directly, so there is no shell and no
-///   prompt hook to emit markers;
-/// * the user's setting has to be on;
-/// * and the shell has to be one this app can make emit them
-///   ([shellSupportsIntegration] — PowerShell and WSL; never `cmd.exe`).
-///
-/// `ptyLaunchFor` has always applied the third rule to the *launch*; until
-/// Loop 65 the factory did not apply it to the *recorder*, so every cmd.exe and
-/// WSL pane got a live recorder and a permanent `onPrivateOSC` listener that no
-/// marker could ever reach — and answered "yes" to *is this pane integrated?*,
-/// which is what [TerminalInstance.commandBlocks] being nullable exists to say.
+/// Whether a pane launched this way gets an OSC 133 [CommandBlockRecorder]: no
+/// agent pane (it runs the CLI directly, so there is no prompt hook), the
+/// user's setting on, and a shell that can emit markers — never `cmd.exe`.
 bool shellIntegrationApplies({
   required TerminalProfile profile,
   required bool shellIntegration,
@@ -1063,15 +844,12 @@ bool shellIntegrationApplies({
     shellIntegration &&
     shellSupportsIntegration(profile.shell);
 
-/// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the profile
-/// and spawns a [PtyTerminalInstance], degrading to an [ErrorTerminalInstance]
-/// (whose buffer shows the failure) if the PTY cannot be created.
+/// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the
+/// profile and spawns a [PtyTerminalInstance], degrading to an
+/// [ErrorTerminalInstance] whose buffer shows the failure.
 ///
 /// [environmentOverlay] is the user's own environment variables, resolved
-/// **once here** and never on the keystroke path. It is not part of
-/// [TerminalInstanceFactory] because a fake factory has no environment to
-/// resolve; `terminalInstanceFactoryProvider` closes over the resolver and
-/// passes it in.
+/// **once here** and never on the keystroke path.
 TerminalInstance createPtyTerminalInstance({
   required String id,
   required TerminalProfile profile,
@@ -1083,9 +861,7 @@ TerminalInstance createPtyTerminalInstance({
   Map<String, String> environmentOverlay = const {},
 }) {
   // An agent pane runs the agent CLI itself, so the shell profile is not
-  // consulted at all — the launch is built from the agent's registry descriptor
-  // and its installation. Shell integration is meaningless here: OSC 133 markers
-  // come from a shell's prompt hooks, and there is no shell.
+  // consulted and shell integration is meaningless: OSC 133 comes from a shell.
   final PtyLaunch launch;
   final String title;
   final String profileId;
@@ -1095,9 +871,8 @@ TerminalInstance createPtyTerminalInstance({
     agentLaunch: agentLaunch,
   );
   if (agentLaunch != null) {
-    // The one place `Platform.isWindows` is turned into a launch context: from
-    // here down the command is built for where it is going, not for where we
-    // are — so a WSL launch made from inside that distro is not re-wrapped.
+    // The one place `Platform.isWindows` becomes a launch context: from here
+    // down the command is built for where it is going, not for where we are.
     launch = agentPtyLaunchFor(
       agentLaunch,
       context: LaunchContext.forAgent(
@@ -1153,20 +928,11 @@ TerminalInstance createPtyTerminalInstance({
 }
 
 /// The longest an argument may be before it is summarised rather than printed.
-///
-/// Generous enough that an ordinary path, flag or prompt fragment survives
-/// whole: what this is for is the outliers.
 const int _maxArgumentInMessage = 120;
 
-/// [arguments] as one line, with anything unreadably long summarised.
-///
-/// A shell-integrated PowerShell pane is launched with `-EncodedCommand` and a
-/// base64 blob that runs to ~4,600 characters. Printed verbatim into a pane
-/// that failed to start, it pushed the one sentence that explains the failure —
-/// the exception, at the end — off the visible buffer, so the error message
-/// hid its own error message. The length is kept because "it was 4,612
-/// characters" is occasionally the diagnosis, and the flag before it is kept
-/// because that is what says which argument got elided.
+/// [arguments] as one line, with anything unreadably long summarised: a
+/// shell-integrated PowerShell pane's `-EncodedCommand` blob runs to ~4,600
+/// characters and pushed the exception that explains the failure off screen.
 String describeLaunchArguments(List<String> arguments) => [
   for (final argument in arguments)
     if (argument.length <= _maxArgumentInMessage)

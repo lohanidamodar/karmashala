@@ -2,20 +2,15 @@ import 'package:xterm2/xterm.dart';
 
 /// Plain text of the **bottom** [lines] rows of what is currently on screen.
 ///
-/// This is the input to the third status source. It reads the *active* buffer,
-/// so a full-screen TUI agent (Codex, and Claude Code outside `--no-alt-screen`)
-/// is read from the alternate buffer it is actually drawing into — unlike
-/// scrollback persistence, which deliberately only encodes the main buffer.
+/// The input to the third status source. It reads the *active* buffer, so a
+/// full-screen TUI agent is read from the alternate buffer it is actually
+/// drawing into — unlike scrollback persistence, which deliberately encodes
+/// only the main buffer.
 ///
-/// Only the bottom of the screen is returned, and that is a correctness
-/// decision rather than an optimisation: an approval prompt is a *live* control
-/// at the bottom of a TUI, while the same words scrolled up are history. Reading
-/// the whole buffer would make "do you want to proceed?" from ten minutes ago
-/// indistinguishable from the one waiting for an answer now.
-///
-/// Styling is dropped — matching runs on characters, not colours — and trailing
-/// blank rows are trimmed so a half-empty viewport does not push the real
-/// content out of the window.
+/// Only the bottom, and that is a correctness decision rather than an
+/// optimisation: an approval prompt is a *live* control at the bottom of a TUI,
+/// while the same words scrolled up are history. Styling is dropped and
+/// trailing blank rows are trimmed.
 List<String> terminalTailLines(Terminal terminal, {int lines = 12}) {
   final buffer = terminal.buffer;
   final all = buffer.lines;
@@ -49,15 +44,12 @@ String _plainText(BufferLine line) {
 /// How many lines of [terminal]'s buffer have anything on them.
 ///
 /// The measure behind `shouldDetachOnClose`'s guess at whether a shell has
-/// history worth keeping, and the one behind the greeting a pane records for it
-/// — one function so the two numbers are always counted the same way, because
-/// the rule compares them to each other.
+/// history worth keeping, and behind the greeting a pane records for it — one
+/// function, so the two numbers the rule compares are counted the same way.
 ///
-/// Counts the whole buffer, scrollback included: output that has scrolled off
-/// is still history. [stopAt] gives up once that many lines have been found,
-/// because callers only ever compare the answer against a threshold and a pane
-/// at the 10 000-line scrollback cap must not cost a full walk to close. Pass
-/// nothing to count without a bound.
+/// Counts the whole buffer, scrollback included. [stopAt] gives up once that
+/// many lines have been found, because callers only compare the answer against
+/// a threshold and a pane at the scrollback cap must not cost a full walk.
 int nonBlankLineCount(Terminal terminal, {int? stopAt}) {
   final lines = terminal.buffer.lines;
   var count = 0;

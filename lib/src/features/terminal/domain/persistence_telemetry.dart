@@ -2,14 +2,9 @@
 ///
 /// Diagnostics only: nothing in the app behaves differently because of these
 /// numbers. They exist because "the app feels like it is falling behind" was a
-/// report nobody could answer — the autosave's cadence, its budget and the
-/// dirty set were all internal, so whether writes were keeping up with output
-/// was invisible until a layout came back missing text.
-///
-/// The two numbers worth watching together are [dirtyPanes] and
-/// [oldestUnsaved]. A dirty count that rises and falls is an autosave doing its
-/// job; one that does not fall, or an age that keeps climbing, is the shape of
-/// work not being written.
+/// report nobody could answer. Watch [dirtyPanes] and [oldestUnsaved] together
+/// — a dirty count that rises and falls is an autosave doing its job; one that
+/// does not fall, or an age that keeps climbing, is work not being written.
 class PersistenceTelemetry {
   const PersistenceTelemetry({
     required this.dirtyPanes,

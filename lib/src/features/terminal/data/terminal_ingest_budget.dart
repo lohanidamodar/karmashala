@@ -1,19 +1,16 @@
 import '../domain/ingest_tier.dart';
 
-/// Bytes the **active** pane may decode per refill, all to itself.
-///
-/// Deliberately the old per-pane cap, so a single visible pane behaves exactly
-/// as it did before there was a budget at all: N = 1 is not a regression, it is
-/// the same code path with the same numbers.
+/// Bytes the **active** pane may decode per refill, all to itself. Deliberately
+/// the old per-pane cap, so a single visible pane behaves exactly as it did
+/// before there was a budget: N = 1 is the same code path, same numbers.
 const int kIngestHotReserveBytes = 256 * 1024;
 
 /// Bytes **every hidden pane put together** may decode per refill — warm panes
 /// draining their queues and cold panes redrawing their screens alike.
 ///
-/// This is the whole point. The old design gave each pane its own 256 KiB
-/// flush cap, so a synchronised round of a hundred panes could offer 25 MiB of
-/// VT parsing to one frame. One shared pool makes the cost of the background
-/// constant in the number of panes.
+/// The old design gave each pane its own 256 KiB flush cap, so a synchronised
+/// round of a hundred panes could offer 25 MiB of VT parsing to one frame. One
+/// shared pool makes the cost of the background constant in the number.
 const int kIngestWarmPoolBytes = 64 * 1024;
 
 /// How often the pool is refilled — one frame at 60 Hz.
@@ -25,16 +22,10 @@ typedef IngestClock = Duration Function();
 
 /// One frame's worth of VT parsing, shared by every pane in the app.
 ///
-/// **One global budget, not a watchdog per pane.** The audit's argument, which
-/// this implements: independent per-pane limits cannot provide fairness and
-/// cannot protect the active pane, because no pane knows what the others are
-/// doing. Here the active pane draws on a reserve nothing else can touch, and
-/// everything hidden shares a single pool.
-///
-/// The reserve is not taken from the pool. A visible pane and a hundred hidden
-/// ones are not competing for the same resource in any meaningful sense — the
-/// visible one is what the user is waiting on, and its cost is bounded anyway
-/// by there being one of it.
+/// **One global budget, not a watchdog per pane**: independent per-pane limits
+/// cannot provide fairness and cannot protect the active pane, because no pane
+/// knows what the others are doing. The reserve is not taken from the pool —
+/// the visible pane is what the user is waiting on, and there is one of it.
 class TerminalIngestBudget {
   TerminalIngestBudget({
     this.hotReserveBytes = kIngestHotReserveBytes,
@@ -75,11 +66,9 @@ class TerminalIngestBudget {
   /// Bytes still in the shared warm pool this interval.
   int get warmPoolRemaining => _pool;
 
-  /// How many of the [wanted] bytes a pane in [tier] may decode right now.
-  ///
-  /// Zero is a legitimate answer and means "not this interval" — the caller
-  /// keeps the bytes queued and asks again. It is never a signal to drop
-  /// anything; that decision belongs to the queue's own bound.
+  /// How many of the [wanted] bytes a pane in [tier] may decode right now. Zero
+  /// is a legitimate answer and means "not this interval" — the caller keeps the
+  /// bytes queued and asks again; it is never a signal to drop anything.
   int take(IngestTier tier, int wanted) {
     if (wanted <= 0) return 0;
     _maybeRefill();
@@ -91,8 +80,7 @@ class TerminalIngestBudget {
       // A cold pane parses only enough to keep its *screen* readable to the
       // status sources (see `ColdScreen`), at most once a second. That is
       // background work exactly as a warm pane's parse is, so it comes out of
-      // the same pool rather than a second one: what makes this budget global
-      // is that everything nobody is looking at shares one number.
+      // the same pool rather than a second one.
       IngestTier.cold => _takeFromPool(wanted),
     };
     granted[tier] = granted[tier]! + allowed;
@@ -121,8 +109,6 @@ final _elapsed = Stopwatch()..start();
 Duration _defaultClock() => _elapsed.elapsed;
 
 /// The budget every pane shares unless a test hands it another one.
-///
 /// Process-wide rather than a Riverpod provider because it *is* process-wide:
-/// there is one UI isolate, and the thing being rationed is its frame. The same
-/// reasoning (and the same shape) as the coalescer's monotonic clock above.
+/// there is one UI isolate, and the thing being rationed is its frame.
 final TerminalIngestBudget terminalIngestBudget = TerminalIngestBudget();
