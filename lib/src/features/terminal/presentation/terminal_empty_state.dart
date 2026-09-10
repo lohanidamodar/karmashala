@@ -1,20 +1,12 @@
 // **What the panel shows once the last terminal is closed** — a way back,
-// rather than a status.
-//
-// A part of `terminal_panel.dart` rather than a library of its own, twice
-// over: `_NoTerminalOpen` is private and the tree golden records that name,
-// and the chord in its button's label is spelt with `_chord`, which is
-// private to this library and lives beside the toolbar that also reads it.
+// rather than a status. A `part` because `_NoTerminalOpen` and the `_chord`
+// its label is spelt with are both private to this library.
 
 part of 'terminal_panel.dart';
 
-/// What the panel shows once the user has closed the last terminal.
-///
-/// A way back, rather than a status. The panel used to say "Opening terminal…"
-/// here, which is true for the one frame before the automatic open and a lie
-/// for as long as the layout stays closed — and it left the only route back
-/// to a terminal in the toolbar, which reads as chrome rather than as the
-/// answer to an empty layout.
+/// What the panel shows once the user has closed the last terminal: a way back,
+/// rather than a status. "Opening terminal…" is true for one frame and a lie
+/// for as long as the layout stays closed.
 class _NoTerminalOpen extends StatelessWidget {
   const _NoTerminalOpen({required this.onNewTerminal});
 

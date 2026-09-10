@@ -1,14 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
-/// **A pane's own process stopped**, and what it stopped with.
-///
-/// The whole of the seam out of `terminal/`, and it is deliberately a statement
-/// of fact rather than a conclusion: a pane exited, here is its id, the session
-/// it was running and the status it left. Nothing here knows what a follow-up
-/// is, or that anything at all subscribes — which is what keeps the terminal
-/// free of the features that read it, the same way `PaneLiveness` says only
-/// whether a process is running and leaves "so should this pane close?" to
-/// `shouldCollapseOnExit`.
+/// **A pane's own process stopped**, and what it stopped with — the whole seam
+/// out of `terminal/`, and a statement of fact rather than a conclusion.
+/// Nothing here knows what a follow-up is, or that anything subscribes.
 class PaneExit {
   const PaneExit({
     required this.paneId,
@@ -27,19 +21,13 @@ class PaneExit {
   final int? exitCode;
 }
 
-/// The last pane exit, for anything that wants to know one happened.
+/// The last pane exit. One immutable value read with `ref.listen`, so a
+/// subscriber hears about it at the write rather than at the next frame.
 ///
-/// A [Notifier] holding one immutable value, written by exactly one place and
-/// read with `ref.listen` — the shape `sessionSignalsProvider` and
-/// `quickOpenRequestProvider` already use, so a subscriber is notified the
-/// moment the write happens rather than at the next frame.
-///
-/// **Only a process that stopped by itself reaches here.** Closing a pane,
-/// ending a session and quitting the app all dispose the instance, and the
-/// controller drops each pane's liveness listener *before* disposing it — so
-/// the `exited` a disposal writes for the benefit of anyone still attached is
-/// announced to nobody. That is the exclusion, and it is structural rather than
-/// a flag: `pane_exit_ending_test.dart` holds it in place.
+/// **Only a process that stopped by itself reaches here**: closing, ending and
+/// quitting all dispose the instance, and the liveness listener is dropped
+/// first, so the `exited` a disposal writes is announced to nobody. Structural
+/// rather than a flag — `pane_exit_ending_test.dart` holds it in place.
 class PaneExitSignal extends Notifier<PaneExit?> {
   @override
   PaneExit? build() => null;

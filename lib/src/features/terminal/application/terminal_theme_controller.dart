@@ -20,11 +20,9 @@ final discoveredTerminalThemesProvider = Provider<List<DiscoveredTheme>>((ref) {
   ];
 });
 
-/// The imported theme, resolved from the stored id — or `null` when the user is
-/// on the built-in theme.
-///
-/// A [ThemeLoadError] here is the whole point of the design: the terminal keeps
-/// its current colours and Settings shows the reason. Nothing throws.
+/// The imported theme, resolved from the stored id, or null on the built-in
+/// one. Nothing throws — a [ThemeLoadError] leaves the terminal's colours alone
+/// and Settings shows the reason.
 final importedTerminalThemeProvider = Provider<ThemeLoadResult?>((ref) {
   final id = ref.watch(settingsControllerProvider).terminalThemeSource;
   if (id == null || id.isEmpty) return null;

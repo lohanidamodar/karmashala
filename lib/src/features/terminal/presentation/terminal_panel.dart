@@ -41,13 +41,9 @@ import 'terminal_search_bar.dart';
 import 'terminal_actions.dart';
 import 'terminal_theme_colors.dart';
 
-// The chip shape moved out so a region header could share it; re-exported so
-// this file is still the one import a tab chip needs.
+// Re-exported so this file is still the one import the panel's callers need.
 export '../../../app/shell/workbench_tab_chip.dart';
 
-// The families that carry no privacy of their own are libraries rather than
-// parts, and are re-exported here so this file is still the one import the
-// panel's callers need.
 export 'terminal_actions.dart';
 export 'terminal_tab_chip.dart';
 export 'terminal_theme_colors.dart';
@@ -61,18 +57,11 @@ part 'terminal_toolbar.dart';
 
 /// The terminal's panes: the search bar over the active tab's split tree.
 ///
-/// A **bounded** set of tabs stays mounted inside an [IndexedStack], which
-/// paints only its active child — so a mounted-but-hidden tab costs no painting
-/// (the property Loop 26's performance work depends on) and an unmounted tab
-/// costs nothing at all.
-///
-/// The bound is the point. `IndexedStack` is preservation, not virtualization:
-/// it was handed every open tab, and each one kept its render objects, layouts
-/// and controllers alive for a pane nobody could see — 5 291 render objects and
-/// a 65 ms tab switch at 100 tabs. Only the last [kMountedTabBudget] tabs the
-/// user touched are built now; the rest are rebuilt on demand, against the same
-/// live `TerminalInstance`, so an unmounted tab keeps its process, its buffer
-/// and its scrollback and comes back unchanged. See [MountedTabs].
+/// Only the last [kMountedTabBudget] tabs stay mounted in the [IndexedStack].
+/// The bound is the point — `IndexedStack` is preservation, not virtualization,
+/// and handing it every tab cost 5,291 render objects and a 65 ms tab switch at
+/// 100 tabs. An unmounted tab is rebuilt against the same live
+/// `TerminalInstance`, so it keeps its process, buffer and scrollback.
 class TerminalPaneStack extends ConsumerStatefulWidget {
   const TerminalPaneStack({
     this.groupId,
@@ -81,18 +70,17 @@ class TerminalPaneStack extends ConsumerStatefulWidget {
     super.key,
   });
 
-  /// The workspace group whose tabs these are, or null before the window has
-  /// a workspace at all — the one frame between launching and the first tab.
+  /// The workspace group whose tabs these are, or null for the one frame
+  /// between launching and the first tab.
   final String? groupId;
 
-  /// Whether the keyboard is in this group. Only the focused group draws a
-  /// pane as focused; every group still draws its own tab.
+  /// Only the focused group draws a pane as focused; every group still draws
+  /// its own tab.
   final bool groupFocused;
 
   /// Whether the workbench's one automatic open has had its turn. Owned up
-  /// there rather than here: this widget is rebuilt whenever the workspace
-  /// gains or loses its last tab, and a flag that resets with it would reopen
-  /// the terminal the user has just closed.
+  /// there: this widget rebuilds whenever the workspace loses its last tab, and
+  /// a flag resetting with it would reopen the terminal just closed.
   final bool autoOpenDone;
 
   @override
@@ -102,9 +90,8 @@ class TerminalPaneStack extends ConsumerStatefulWidget {
 class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   late final TerminalActions _actions = TerminalActions(ref);
 
-  /// The tabs with a mounted view. Widget-lifetime state, not layout state:
-  /// which tabs happen to be built is nobody else's business, and publishing it
-  /// would put a rebuild of every consumer behind every tab switch.
+  /// The tabs with a mounted view — widget-lifetime state, not layout state.
+  /// Publishing it would put a rebuild of every consumer behind every switch.
   final MountedTabs _mounted = MountedTabs();
 
   TerminalSessionsController get _sessions =>
@@ -121,8 +108,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     // Deliberately narrow: the topology and which tab is in front, not the
-    // whole layout. A process exiting changes neither, so it no longer
-    // rebuilds the stack — the pane's own status bar watches its liveness.
+    // whole layout. A process exiting changes neither, so it does not rebuild
+    // the stack — the pane's own status bar watches its liveness.
     final groupId = widget.groupId;
     final openTabs = groupId == null
         ? ref.watch(terminalTabsProvider)
@@ -130,8 +117,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     final activeTabId = groupId == null
         ? ref.watch(terminalActiveTabIdProvider)
         : ref.watch(workspaceGroupActiveTabProvider(groupId));
-    // One search bar, over the group the keyboard is in: the bar is bound to a
-    // pane, and a pane in a group nobody is typing into has nothing to find.
+    // One search bar, over the group the keyboard is in: it is bound to a pane,
+    // and a pane nobody is typing into has nothing to find.
     final search = ref.watch(terminalSearchControllerProvider);
     _mounted.sync(
       openTabIds: [for (final tab in openTabs) tab.id],
@@ -167,15 +154,13 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                       for (final tab in tabs)
                         PaneLayoutView(
                           // Keyed by tab, so evicting one does not hand its
-                          // element to whichever tab shifted into its slot.
+                          // element to whichever tab shifts into its slot.
                           key: ValueKey(tab.id),
                           layout: tab.layout,
                           // Already a share of the split it belongs to — see
-                          // [PaneResizeCallback]. It used to be pixels this
-                          // divided by the *panel's* longest side, which is
-                          // neither the split's axis nor its box: in a 1440x560
-                          // window a top/bottom divider moved 36 px for every
-                          // 100 the pointer did.
+                          // [PaneResizeCallback]. Pixels divided by the
+                          // *panel's* longest side moved a divider 36 px for
+                          // every 100 the pointer did, in a 1440x560 window.
                           onResize: (splitId, index, share) =>
                               _sessions.resizePane(tab.id, splitId, index, share),
                           regionBuilder: (group) => _buildRegion(
@@ -183,8 +168,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                             tab,
                             widget.groupFocused && tab.id == activeTabId,
                             // Focused is where typing goes; showing is which
-                            // of the mounted tabs the stack is painting. Only
-                            // a document reads the second — see [_buildPane].
+                            // mounted tab the stack paints. Only a document
+                            // reads the second — see [_buildPane].
                             showing: tab.id == activeTabId,
                           ),
                         ),

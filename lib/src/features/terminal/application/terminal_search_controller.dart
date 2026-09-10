@@ -11,12 +11,8 @@ import 'scrollback_autosave.dart';
 import 'terminal_scroll.dart';
 import 'terminal_sessions_controller.dart';
 
-/// How the cross-pane sweep is scheduled.
-///
-/// Injected for the same two reasons the autosave's scheduler is: a real
-/// `Timer` outlives the widget tree and trips `flutter_test`'s pending-timer
-/// check, and a cost assertion that had to wait for a real debounce would be a
-/// wall-clock assertion by the back door.
+/// How the cross-pane sweep is scheduled. Injected because a real `Timer`
+/// outlives the widget tree and trips `flutter_test`'s pending-timer check.
 class TerminalSearchScheduler {
   const TerminalSearchScheduler({
     this.schedule = _timer,
@@ -62,9 +58,8 @@ class TerminalSearchState {
 
   final bool visible;
 
-  /// The pane the bar was opened against — the one scanned on every keystroke,
-  /// and the one the caret is in. Not the same as [currentPaneId], which is
-  /// wherever the selected hit happens to be.
+  /// The pane the bar was opened against — scanned on every keystroke. Not
+  /// [currentPaneId], which is wherever the selected hit happens to be.
   final String? paneId;
 
   final String query;
@@ -97,35 +92,24 @@ class TerminalSearchState {
   /// owns the searched pane's screen.
   final bool onAlternateScreen;
 
-  /// Hits in the pane's scrollback that are *behind* that program.
-  ///
-  /// Counted rather than navigable: they live in the normal buffer, which is
-  /// not on screen and cannot be scrolled to without taking the screen away
-  /// from the program that owns it. Always 0 when [onAlternateScreen] is false,
-  /// because then the scrollback **is** what is being searched.
+  /// Hits *behind* that program: counted, not navigable — the normal buffer
+  /// cannot be scrolled to without taking the screen from its owner. Always 0
+  /// when [onAlternateScreen] is false, since then it is what is searched.
   final int hiddenScrollbackMatches;
 
-  /// How many panes these results came from, and how many are still to go.
-  ///
-  /// [panesPending] left above zero with [scanning] false means the sweep hit
-  /// [kCrossPaneMatchBudget] and stopped — which the bar says out loud rather
-  /// than quietly presenting a partial answer as the whole one.
+  /// [panesPending] above zero with [scanning] false means the sweep hit
+  /// [kCrossPaneMatchBudget] and stopped, which the bar says out loud.
   final int panesSearched;
   final int panesPending;
   final bool scanning;
 
-  /// Buffer lines read since the bar was opened.
-  ///
-  /// The search's cost, in the one unit that is worth counting, published
-  /// rather than hidden behind a debug flag: `terminal_search_cost_test.dart`
-  /// asserts on it, and it is what keeps "search every pane" from quietly
-  /// becoming a million line reads per keystroke at the 100-pane target.
+  /// Buffer lines read since the bar was opened. Published rather than hidden
+  /// behind a debug flag because `terminal_search_cost_test.dart` asserts on it.
   final int linesScanned;
 
   bool get hasMatches => matchCount > 0;
 
-  /// Whether the selected hit is somewhere other than the pane the bar is open
-  /// against — i.e. whether "go to it" means going anywhere.
+  /// Whether "go to it" would go anywhere.
   bool get currentIsElsewhere =>
       currentPaneId != null && currentPaneId != paneId;
 
@@ -183,35 +167,17 @@ class TerminalSearchState {
   }
 }
 
-/// Drives find for the pane the bar was opened against, and — when asked — for
+/// Drives find for the pane the bar was opened against and, when asked, for
 /// every other pane in the layout.
 ///
-/// Highlighting goes through xterm's own `TerminalController.highlight` and
-/// `Buffer.createAnchor`, so no vendored file changes: anchors ride along with
-/// buffer mutations and detach themselves when their line is evicted from
-/// scrollback, which means highlights follow the text and clean up after
-/// themselves.
-///
-/// **The cost shape**, which is the design and not an optimisation
-/// (`terminal_search_cost_test.dart` asserts every number in it):
-///
-/// * The open pane is scanned in full on **every keystroke**. One pane, which
-///   is what find has always cost.
-/// * Every other pane waits [kCrossPaneDebounce] for the typing to stop, and is
-///   then swept **one pane per slice** — one turn of the event loop each —
-///   capped at [kCrossPaneScanLines] lines per pane and [kCrossPaneMatchBudget]
-///   matches overall.
-///
-/// So the worst thing one turn of the event loop does is 2 000 line reads, at
-/// any number of open panes. Scanning 100 panes' full scrollback on every
-/// keypress would have been a million.
+/// The open pane is scanned in full on every keystroke; the rest are swept one
+/// pane per turn of the event loop, after a debounce, capped at
+/// [kCrossPaneScanLines] each — so no keystroke costs more than one pane's
+/// scan however many are open. `terminal_search_cost_test.dart` asserts it.
 class TerminalSearchController extends Notifier<TerminalSearchState> {
-  /// The controller currently holding this search's highlights, so they can be
-  /// dropped when the selection moves to another pane or the bar closes.
-  ///
-  /// One reference is the whole of the painting bookkeeping: xterm2 owns the
-  /// anchors, gives the current match its own colour from the theme, and
-  /// replaces the whole set in a single controller update.
+  /// The controller holding this search's highlights, so they can be dropped
+  /// when the selection moves to another pane or the bar closes. One reference
+  /// is the whole bookkeeping: xterm2 owns the anchors and replaces the set.
   TerminalController? _highlighted;
 
   /// Every hit, the open pane's first and each swept pane's appended after —
@@ -233,8 +199,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
 
   int _linesScanned = 0;
 
-  /// Read once, up front: `ref` is off limits inside `onDispose`, and disposal
-  /// is exactly when an armed sweep has to be cancelled.
+  /// Read up front: `ref` is off limits inside `onDispose`, which is exactly
+  /// when an armed sweep has to be cancelled.
   late final TerminalSearchScheduler _scheduler;
 
   @override
@@ -287,18 +253,14 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   }
 
   /// Switches between literal text and a regular expression, keeping the query.
-  ///
-  /// The case toggle keeps working either way — see [TerminalSearchQuery] for
-  /// why the two compose rather than one disabling the other.
+  /// The case toggle composes with it either way — see [TerminalSearchQuery].
   void toggleRegex() {
     state = state.copyWith(regex: !state.regex);
     _runSearch();
   }
 
-  /// Widens the search to every other open pane, or narrows it back.
-  ///
-  /// Off by default, deliberately: with it off the search costs exactly what it
-  /// has always cost, and the expensive answer is something the user asks for.
+  /// Widens the search to every other open pane. Off by default: the expensive
+  /// answer is something the user asks for.
   void toggleCrossPane() {
     state = state.copyWith(crossPane: !state.crossPane);
     _runSearch();
@@ -309,11 +271,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   void previous() => _step(-1);
 
   /// Brings the pane holding the selected match to the front and focuses it.
-  ///
-  /// Deliberately **not** what [next] does. Focusing a pane focuses its
-  /// terminal, which would take the caret out of the query field halfway
-  /// through typing a word; stepping paints and scrolls where the hit is, and
-  /// going there is a separate, deliberate act.
+  /// Deliberately not what [next] does: focusing a pane focuses its terminal,
+  /// which would take the caret out of the query field mid-word.
   void revealCurrent() {
     final match = _currentMatch();
     if (match == null) return;
@@ -323,8 +282,6 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _applyHighlights();
     _scrollToCurrent();
   }
-
-  // --- internals -------------------------------------------------------------
 
   void _reset() {
     _clearHighlights();
@@ -349,9 +306,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _scrollToCurrent();
   }
 
-  /// The three handles the search needs from pane [paneId], or null once it has
-  /// been closed. A **detached** pane still answers: its process is alive and
-  /// its scrollback is worth finding things in.
+  /// The three handles the search needs from pane [paneId], or null once it is
+  /// closed. A **detached** pane still answers: its process is alive.
   TerminalInstanceRef? _instanceFor(String? paneId) {
     if (paneId == null) return null;
     final instance = ref
@@ -400,8 +356,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _swept = 0;
     _pending = const [];
 
-    // Compiled once for the whole scan, and the only place a broken pattern is
-    // turned into something the bar can say out loud.
+    // Compiled once for the whole scan, and the only place a broken pattern
+    // becomes something the bar can say out loud.
     final query = _query();
     final target = _instanceFor(state.paneId);
     if (target == null || !query.isUsable) {
@@ -424,11 +380,9 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
       return;
     }
 
-    // The **active** buffer, which is the whole point: when a full-screen
-    // program owns the screen this is its screen, and when nothing does it is
-    // the scrollback. The other one is never searched — the alternate buffer
-    // keeps its last screen after `\e[?1049l`, so matching it once vim has
-    // gone would report hits for text that is on no screen at all.
+    // The **active** buffer only: the alternate one keeps its last screen after
+    // `\e[?1049l`, so searching it once vim has gone would report hits for text
+    // that is on no screen at all.
     final terminal = target.terminal;
     _watchedAlternate = terminal.isUsingAltBuffer;
     final paneId = state.paneId!;
@@ -463,9 +417,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   }
 
   /// Reads one pane's active buffer into [into], returning the lines it read.
-  ///
-  /// [window] bounds how far back it goes; null means all of it, which is what
-  /// the open pane gets.
+  /// [window] bounds how far back it goes; null — the open pane — means all.
   int _scanPane({
     required String paneId,
     required Terminal terminal,
@@ -489,12 +441,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     );
   }
 
-  // --- the cross-pane sweep --------------------------------------------------
-
-  /// Arms a sweep of every other pane, replacing whatever was armed.
-  ///
-  /// Re-arming on each keystroke is the debounce: six characters typed in a row
-  /// cancel five sweeps and pay for one.
+  /// Arms a sweep of every other pane, replacing whatever was armed. Re-arming
+  /// on each keystroke *is* the debounce: six characters pay for one sweep.
   void _armSweep() {
     if (!state.crossPane) return;
     _pending = _otherPanes();
@@ -510,10 +458,9 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _scheduler.cancel(handle);
   }
 
-  /// Every live pane but the one the bar is open against, in layout order.
-  ///
-  /// Empty split regions have a pane id and no terminal; they are dropped here
-  /// so they never count towards "searched 4 of 12 panes".
+  /// Every live pane but the one the bar is open against, in layout order. An
+  /// empty region has an id and no terminal, so it is dropped rather than
+  /// counted towards "searched 4 of 12 panes".
   List<String> _otherPanes() {
     final searched = state.paneId;
     final sessions = ref.read(terminalSessionsControllerProvider);
@@ -526,9 +473,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
         ids.add(paneId);
       }
     }
-    // A detached session is a pane with no tab and a process still running —
-    // a build or an agent left going in the background, which is exactly the
-    // thing worth finding.
+    // A detached session is a running process with no tab — a background build
+    // or agent, which is exactly the thing worth finding.
     for (final detached in sessions.detached) {
       if (detached.paneId == searched) continue;
       if (controller.instanceFor(detached.paneId) == null) continue;
@@ -537,10 +483,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     return ids;
   }
 
-  /// One pane's worth of sweep, then hands the turn back.
-  ///
-  /// The slice is the unit the cost gate asserts on: whatever else is open, one
-  /// turn of the event loop reads at most [kCrossPaneScanLines] lines.
+  /// One pane's worth of sweep, then hands the turn back — the unit the cost
+  /// gate asserts on: at most [kCrossPaneScanLines] lines per turn.
   void _sweepSlice() {
     _sweepHandle = null;
     if (!state.visible || !state.crossPane) return;
@@ -580,9 +524,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
       ),
       state.currentIndex,
     );
-    // Shown only when this slice found the *first* hit there is — the open pane
-    // had none. Any later slice repainting would fight a user who already has
-    // one selected.
+    // Only when this slice found the *first* hit there is; repainting later
+    // would fight a user who already has one selected.
     if (before == 0 && _matches.isNotEmpty) {
       _applyHighlights();
       _scrollToCurrent();
@@ -592,39 +535,26 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     }
   }
 
-  // --- painting --------------------------------------------------------------
-
   /// Paints up to [kMaxSearchHighlights] hits **in the pane holding the current
   /// match**, that one in its own colour.
   ///
-  /// The colours, the anchors and the "which one is current" are xterm2's:
-  /// `setSearchHighlights` takes plain ranges, anchors them to the buffer
-  /// itself, paints every hit in `searchHitBackground` with the selected one in
-  /// `searchHitBackgroundCurrent`, and repaints the text over both in
-  /// `searchHitForeground` so it stays readable. Nothing here has to be
-  /// disposed one hit at a time.
-  ///
-  /// What stays ours is which pane and which hits. Only the pane holding the
-  /// current match: `RenderTerminal` walks every search highlight on every
-  /// frame, so highlighting all 100 panes at once would put the whole result
-  /// set into every pane's frame budget. And only [kMaxSearchHighlights] of
-  /// them, in a window that **slides to keep the selected hit inside it** —
-  /// stepping past the cap must not leave the one hit the user is looking at
-  /// the only one with nothing on it.
+  /// Only that pane, because `RenderTerminal` walks every search highlight on
+  /// every frame; and only that many, in a window that slides to keep the
+  /// selected hit inside it. Colours and anchors are xterm2's.
   void _applyHighlights() {
     final match = _currentMatch();
     final target = match == null ? null : _instanceFor(match.paneId);
     if (match == null || target == null) return _clearHighlights();
 
     // A `CellAnchor` resolves its row against its own buffer, so a hit past the
-    // end of this one is dropped rather than anchored somewhere it is not.
+    // end of this one is dropped rather than anchored elsewhere.
     final buffer = target.terminal.buffer;
     bool paintable(PaneSearchMatch candidate) =>
         candidate.paneId == match.paneId &&
         candidate.at.line < buffer.lines.length;
 
-    // Where the selected hit sits among its own pane's paintable ones, and so
-    // how many the window has to skip to still reach it.
+    // Where the selected hit sits among its pane's paintable ones, and so how
+    // many the window must skip to still reach it.
     var before = 0;
     for (var i = 0; i < state.currentIndex; i++) {
       if (paintable(_matches[i])) before++;
@@ -647,8 +577,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
       if (ranges.length >= kMaxSearchHighlights) break;
     }
 
-    // Only when the last pane painted is a different one: `setSearchHighlights`
-    // already replaces what this controller holds, in one update.
+    // Only for a different pane: `setSearchHighlights` already replaces what
+    // this controller holds, in one update.
     if (!identical(_highlighted, target.controller)) _clearHighlights();
     _highlighted = target.controller;
     target.controller.setSearchHighlights(
@@ -658,15 +588,9 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     );
   }
 
-  /// How many hits are in the scrollback behind a full-screen program.
-  ///
-  /// One extra pass over the normal buffer, and only while something owns the
-  /// screen — the same scan the search does every keystroke when nothing does,
-  /// so the worst case is twice today's cost for the one pane being searched.
-  /// It counts into an `int` rather than collecting, so it allocates nothing.
-  ///
-  /// The alternative was to say "No results" and be confidently wrong: the text
-  /// the user is looking for really is in this pane, it is just behind vim.
+  /// How many hits are in the scrollback behind a full-screen program. One
+  /// extra pass, only while something owns the screen; the alternative was to
+  /// say "No results" and be confidently wrong.
   int _countHidden(Terminal terminal, TerminalSearchQuery query) {
     final lines = terminal.mainBuffer.lines;
     var hidden = 0;
@@ -689,13 +613,10 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     terminal?.addListener(_onPaneWrote);
   }
 
-  /// Runs on every coalesced write to the searched pane while the bar is open.
-  ///
-  /// Deliberately one bool comparison in the common case. It exists because a
-  /// highlight's row is resolved against **its own** buffer: anchors taken from
-  /// the scrollback would paint on unrelated rows of a program's UI the moment
-  /// that program takes the screen, so the search is re-run — which drops them
-  /// — rather than left pointing at a buffer nobody is looking at.
+  /// Runs on every coalesced write to the searched pane, so it is one bool
+  /// comparison in the common case. A highlight resolves its row against its
+  /// own buffer, so anchors from the scrollback would paint on unrelated rows
+  /// of a program's UI the moment that program takes the screen.
   void _onPaneWrote() {
     final terminal = _watched;
     if (terminal == null || terminal.isUsingAltBuffer == _watchedAlternate) {
@@ -709,8 +630,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _highlighted = null;
   }
 
-  /// Centres the current match in **its own** pane, using the same
-  /// line-to-offset helper command navigation uses.
+  /// Centres the current match in **its own** pane.
   void _scrollToCurrent() {
     final match = _currentMatch();
     if (match == null) return;

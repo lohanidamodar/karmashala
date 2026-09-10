@@ -1,11 +1,6 @@
-/// The terminal's colours: what a `TerminalTheme` is built from, and the one
-/// `copyWith` xterm2 does not ship.
-///
-/// A library of its own rather than a `part` of `terminal_panel.dart`, because
-/// the only private thing here is an unnamed extension that travels with the
-/// function using it, and [terminalThemeFor] is read from outside the panel —
-/// the recording dialog renders a cast with the same colours the pane had.
-/// `terminal_panel.dart` re-exports it, so that import did not have to move.
+/// The terminal's colours, and the one `copyWith` xterm2 does not ship. Read
+/// from outside the panel — the recording dialog renders a cast in the colours
+/// the pane had — and re-exported by `terminal_panel.dart`.
 library;
 
 import 'package:flutter/material.dart';
@@ -23,8 +18,7 @@ TerminalTheme terminalThemeFor(ThemeData theme, TerminalPalette? imported) {
     foreground: scheme.onSurface,
     cursor: scheme.primary,
   );
-  // The user picked those colours deliberately, so they win over the app
-  // surface.
+  // Picked deliberately, so they win over the app surface.
   return imported?.applyTo(base) ?? base;
 }
 

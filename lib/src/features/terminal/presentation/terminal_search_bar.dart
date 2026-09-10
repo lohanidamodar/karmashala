@@ -9,15 +9,9 @@ import '../domain/pane_search.dart';
 import '../domain/terminal_search.dart';
 
 /// Find bar: query field, case / regex / all-panes toggles, match count and
-/// next/previous navigation.
-///
-/// Enter and Shift+Enter step through matches and Escape closes, all bound here
-/// rather than in the terminal's own key handling — while this field has focus
-/// the terminal does not, so these never reach the shell.
-///
-/// Nothing here names a size: the theme's `iconButtonTheme`, `iconTheme` and
-/// text styles carry them, so the bar follows the app's text-size setting
-/// instead of pinning its own.
+/// next/previous. Enter, Shift+Enter and Escape are bound here rather than in
+/// the terminal's key handling, because this field has the focus while it is
+/// open. Nothing here names a size, so the bar follows the text-size setting.
 class TerminalSearchBar extends ConsumerStatefulWidget {
   const TerminalSearchBar({super.key});
 
@@ -58,7 +52,7 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: Insets.sm),
-            // Flexed against the jump button below so a long pane name cannot
+            // Flexed against the jump button below, so a long pane name cannot
             // push the controls off the end of the row.
             Expanded(
               flex: 3,
@@ -92,9 +86,8 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
             _CountLabel(state: state),
             const SizedBox(width: Insets.xs),
             if (state.currentIsElsewhere)
-              // Where the selected hit actually is, and the way to get there.
-              // Stepping deliberately does not jump — see
-              // `TerminalSearchController.revealCurrent`.
+              // Where the selected hit is, and the way there. Stepping
+              // deliberately does not jump — see `revealCurrent`.
               Flexible(
                 child: TextButton.icon(
                   onPressed: _search.revealCurrent,
@@ -115,9 +108,8 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
               onPressed: _search.toggleCaseSensitive,
             ),
             IconButton(
-              // Named for what it does rather than for the syntax: the tooltip
-              // is also where "the case toggle still applies" gets said, since
-              // Dart's RegExp has no inline `(?i)` to say it in the pattern.
+              // The tooltip is where "the case toggle still applies" gets
+              // said, since Dart's RegExp has no inline `(?i)`.
               tooltip: 'Use regular expression (Match case still applies)',
               isSelected: state.regex,
               visualDensity: VisualDensity.compact,
@@ -156,10 +148,9 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
   }
 }
 
-/// How far the cross-pane sweep got.
-///
-/// Panes left over with nothing still running means the sweep hit its match
-/// budget and stopped, which is a partial answer and has to look like one.
+/// How far the cross-pane sweep got. Panes left over with nothing still running
+/// means it hit its match budget — a partial answer, and it has to look like
+/// one.
 class _SweepLabel extends StatelessWidget {
   const _SweepLabel({required this.state});
 
@@ -210,9 +201,8 @@ class _CountLabel extends StatelessWidget {
     final theme = Theme.of(context);
     if (state.query.isEmpty) return const SizedBox.shrink();
 
-    // A pattern that does not compile says so instead of reporting "No
-    // results", which would read as "your pattern is fine, the text is not
-    // there" — the one wrong answer this feature must never give.
+    // A pattern that does not compile says so rather than "No results", which
+    // would read as "your pattern is fine, the text is not there".
     final error = state.patternError;
     if (error != null) {
       return Tooltip(
@@ -242,8 +232,8 @@ class _CountLabel extends StatelessWidget {
                 : theme.colorScheme.error,
           ),
         ),
-        // Says where the rest of the hits went. Without it a full-screen
-        // program turns a pane's whole history into "No results".
+        // Without this a full-screen program turns a pane's whole history into
+        // "No results".
         if (hidden > 0) ...[
           const SizedBox(width: Insets.xs),
           Tooltip(

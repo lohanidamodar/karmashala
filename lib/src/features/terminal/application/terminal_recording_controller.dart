@@ -15,12 +15,9 @@ import '../data/terminal_instance.dart';
 import '../domain/terminal_cast.dart';
 import 'terminal_sessions_controller.dart';
 
-/// Where recordings are written.
-///
-/// Under the application support directory, beside the database and the logs,
-/// for the same reason the media cache is: a recording has to survive a reboot's
-/// sweep of the temp directory, and the user is told the path and offered a way
-/// to open it.
+/// Where recordings are written: under the application support directory, not
+/// temp, because a recording has to survive a reboot's sweep and the user is
+/// told the path.
 final recordingsDirectoryProvider = FutureProvider<Directory>((ref) async {
   final support = await appSupportDirectory();
   final dir = Directory(p.join(support.path, 'recordings'));
@@ -40,8 +37,8 @@ class SavedRecording {
   final String paneId;
   final TerminalCast cast;
 
-  /// The `.cast` file. Written the moment recording stops, before anything is
-  /// rendered: the cast is the recording, and everything else is a view of it.
+  /// The `.cast` file, written the moment recording stops: the cast *is* the
+  /// recording, and every render is a view of it.
   final File file;
 
   /// Whether the pane went away rather than the user pressing stop.
@@ -66,8 +63,7 @@ class RecordingExport {
 
   bool get isRunning => result == null && error == null;
 
-  /// Null until the first frame is planned — a bar that guesses is a bar that
-  /// lies.
+  /// Null until the first frame is planned — a bar that guesses lies.
   double? get progress => total == 0 ? null : rendered / total;
 
   RecordingExport copyWith({
@@ -116,23 +112,12 @@ class TerminalRecordingState {
   );
 }
 
-/// Starts, stops and renders terminal recordings.
+/// Starts, stops and renders terminal recordings. Bound to the container, not a
+/// widget's `State`, so a recording survives its pane going cold.
 ///
-/// **Not disposed with any pane.** A recording is a long-lived side effect and
-/// must survive the pane being switched away from, stacked behind another tab
-/// or dropped to the cold ingest tier — so it lives here, in a provider bound to
-/// the container, and not in a widget's `State`. The device pane learned this
-/// the expensive way with `_liveSerial`.
-///
-/// **A cast is not redactable, and this does not pretend otherwise.**
-/// `LogRedactor` matches plain substrings; terminal output interleaves SGR
-/// escapes through the middle of words, so every one of its patterns can be
-/// defeated by the colour a shell puts on a token — and a redactor that rewrote
-/// bytes inside an escape sequence would corrupt the replay. A recording is
-/// exactly what was on the screen, and the only honest handling is to say so
-/// before the user shares it, which the save dialog does. What is *not* in a
-/// cast is anything the shell never echoed: only output is captured, so the
-/// password `read -s` is waiting for never enters the file.
+/// **A cast is not redactable**: SGR escapes interleave mid-word, so any
+/// substring pattern is defeated by a colour and rewriting inside an escape
+/// would corrupt the replay. The save dialog says so instead.
 class TerminalRecordingController extends Notifier<TerminalRecordingState> {
   @override
   TerminalRecordingState build() => const TerminalRecordingState();
@@ -150,9 +135,8 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
     // Promotion across two unrelated interfaces does not survive the null test.
     final recordable = instance as RecordableTerminalInstance;
 
-    // Resolved now, while there is certainly a container to resolve it in. A
-    // pane that ends during app quit still has to know where to write, and by
-    // then this provider is gone — see [_paneEnded].
+    // Resolved now, while there is certainly a container: a pane that ends
+    // during quit still has to know where to write. See [_paneEnded].
     final destination = ref.read(recordingsDirectoryProvider.future);
     final terminal = instance.terminal;
     late final CastRecorder recorder;
@@ -169,17 +153,13 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
 
   Future<SavedRecording?>? _pendingSave;
 
-  /// The write the last stop started, so a caller can wait for it.
-  ///
-  /// A pane that ends mid-recording does so from inside its own `dispose()`,
-  /// which cannot await anything — the write is still in flight when the pane
-  /// is already gone. Null before the first stop.
+  /// The write the last stop started, so a caller can wait for it: a pane
+  /// ending mid-recording does so from `dispose()`, which cannot await, so the
+  /// write is still in flight once the pane has gone. Null before the first.
   Future<SavedRecording?>? get pendingSave => _pendingSave;
 
-  /// Stops recording [paneId] and writes the cast.
-  ///
-  /// The pane is released synchronously, before the write: a user who pressed
-  /// stop must not see a banner that is still claiming to record while a file
+  /// Stops recording [paneId] and writes the cast. The pane is released
+  /// synchronously first, so the banner stops claiming to record while the file
   /// is written.
   Future<SavedRecording?> stop(String paneId) {
     final recorder = state.active[paneId];
@@ -195,13 +175,10 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
     return save;
   }
 
-  /// The pane went away rather than the user pressing stop.
-  ///
-  /// Deferred by a microtask, and that is not tidiness. This is called from a
-  /// pane's `dispose()`, which on quit runs inside the provider container's own
-  /// teardown — and Riverpod forbids reading or writing any provider's state
-  /// from inside a life-cycle. Everything here therefore waits for that to
-  /// unwind, and then checks whether there is still a container at all.
+  /// The pane went away rather than the user pressing stop. Deferred by a
+  /// microtask because it is called from a pane's `dispose()`, which on quit
+  /// runs inside the container's teardown, where Riverpod forbids touching any
+  /// provider's state — hence the `ref.mounted` check afterwards.
   void _paneEnded(
     String paneId,
     CastRecorder recorder,
@@ -248,19 +225,14 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
       endedWithPane: endedWithPane,
     );
     // The file is on disk either way; only the announcement needs a container
-    // still to announce into. Quitting mid-recording is exactly this path.
+    // to announce into. Quitting mid-recording is exactly this path.
     if (ref.mounted) state = state.copyWith(saved: saved, clearExport: true);
     return saved;
   }
 
-  /// Which resolution goes with which format.
-  ///
-  /// Here rather than in the dialog because the export dialog and the MCP tool
-  /// both need it, and two definitions would let an agent's MP4 come out a
-  /// different size from the user's.
-  ///
-  /// [theme] is the app's terminal colours when there is a widget to ask; the
-  /// default terminal theme otherwise, which is all an agent can honestly use.
+  /// Which resolution goes with which format. Here rather than in the dialog
+  /// because the MCP tool needs it too, and two definitions would let an
+  /// agent's MP4 come out a different size from the user's.
   static CastFrameStyle styleFor({
     required RecordingFormat format,
     required TerminalCast cast,
@@ -341,10 +313,9 @@ final terminalRecordingProvider =
       TerminalRecordingController.new,
     );
 
-/// `pwsh-20260908-143005.cast`, from the pane's title and when it started.
-///
-/// The title is squeezed to what a file name can hold on every platform this
-/// runs on, because a pane can be called anything a shell's OSC 0 says it is.
+/// `pwsh-20260908-143005.cast`, from the pane's title and when it started. The
+/// title is squeezed to what a file name can hold everywhere, because a shell's
+/// OSC 0 can call a pane anything.
 String recordingFileName(String? title, DateTime recordedAt) {
   final at = recordedAt.toLocal();
   String two(int value) => value.toString().padLeft(2, '0');

@@ -15,37 +15,9 @@ import '../domain/terminal_drag.dart';
 import 'session_status.dart';
 
 /// The header one region of a split draws for the panes stacked in it.
-///
-/// The report this exists for: *"tab moved to a split pane, doesn't have the
-/// tab header to move it away from etc, each split pane should show it's own
-/// tab header right?"*. A pane dragged into a split had no header, so it had no
-/// handle — nothing said what it was, and there was no way to close it or take
-/// it back out. This is that handle, and it is what lets a region hold more
-/// than one pane at all.
-///
-/// **It is deliberately not the tab strip.** It used to be — the same
-/// [Chrome.tabStrip] height, the same chip, the same everything — and the
-/// owner reported the result twice: *"when split, the same pane has two
-/// headers"*, and before that *"an extra tab that doesn't do anything"*. Two
-/// identical rows stacked one on the other read as one row drawn twice, at
-/// 2000px as much as at 720. So this row says what it is by its shape:
-///
-/// * **[Chrome.paneStrip], not [Chrome.tabStrip]** — 24px against 30, which
-///   also hands 6px back to the terminal rather than taking any.
-/// * **A leading split mark**, [AppIcons.squareSplitHorizontal] — the same
-///   glyph an empty region wears as its hero. A region already has a
-///   vocabulary of its own; this row joins it instead of the tab strip's.
-/// * **Dense chips** ([WorkbenchTabChip.dense]): the label a step down, and
-///   the selection rule under the chip, against the pane it names.
-///
-/// Shape and size rather than colour, for the reason `session_status.dart`
-/// gives about liveness — a hue is not a category, and this app's chrome is a
-/// neutral ramp with one accent that is already spoken for.
-///
-/// Vertical space in a terminal is the scarcest thing there is, which is why
-/// the header is not drawn at all while a tab has one region holding one pane:
-/// the workbench strip is already that pane's header, and a second copy of it
-/// would be a row saying nothing.
+/// **Deliberately not the tab strip**: it was, and two identical rows stacked
+/// read as one row drawn twice, so it differs by shape and never by colour.
+/// Skipped where the workbench strip is already the pane's header.
 class PaneGroupStrip extends ConsumerWidget {
   const PaneGroupStrip({
     required this.group,
@@ -55,8 +27,8 @@ class PaneGroupStrip extends ConsumerWidget {
 
   final PaneGroup group;
 
-  /// Whether the keyboard is in this region. Only the focused region's selected
-  /// tab draws the accent, so a split says where typing will go.
+  /// Only the focused region's selected tab draws the accent, so a split says
+  /// where typing will go.
   final bool focused;
 
   @override
@@ -74,14 +46,12 @@ class PaneGroupStrip extends ConsumerWidget {
         color: candidate.isEmpty
             ? scheme.surfaceContainerLow
             // The same wash the empty region uses, so "this will land here"
-            // looks the same wherever a drag is over.
+            // reads the same wherever a drag is over.
             : scheme.primary.withValues(alpha: 0.08),
         child: Row(
           children: [
-            // What the row is, said before the first name on it. Not a
-            // control: there is no verb here the chips and the region menu do
-            // not already carry, and a button that only explains itself is one
-            // more thing to click by mistake.
+            // What the row is, before the first name on it. Not a control:
+            // every verb here is already on the chips and the region menu.
             Tooltip(
               message: 'The panes in this region of the split',
               child: Padding(
@@ -114,11 +84,9 @@ class PaneGroupStrip extends ConsumerWidget {
                         ),
                       ),
                   ];
-                  // A region can be dragged down to `kMinPaneWeight` of the
-                  // tab, so even at the floor extent the chips may not fit.
-                  // Scrolling is the only honest answer there; the workbench
-                  // strip's picker is not, because these are the tabs of
-                  // *this* region.
+                  // A region shrinks to `kMinPaneWeight` of the tab, so the
+                  // chips may not fit. Scrolling rather than the workbench
+                  // strip's picker, because these are *this* region's tabs.
                   return metrics.overflowing
                       ? SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -141,9 +109,8 @@ bool _accepts(
   TerminalDrag drag,
   String anchorPaneId,
 ) => switch (drag) {
-  // Panes only. A region header names the panes stacked in one tab; a **tab**
-  // belongs in a workspace group's strip, where it keeps the status bar it
-  // owns. See `WorkspaceLayout` for the two words.
+  // Panes only: a **tab** belongs in a workspace group's strip, where it keeps
+  // the status bar it owns.
   TabDrag() => false,
   PaneDrag(:final paneId) =>
     sessions.canMovePaneIntoRegion(paneId, anchorPaneId),
@@ -159,11 +126,9 @@ void _drop(
     sessions.movePaneIntoRegion(paneId, anchorPaneId),
 };
 
-/// One pane's tab in a region header.
-///
-/// Drags as a [PaneDrag], which is what makes the move a two-way street: the
-/// same chip can be dropped on another region's header, on an empty region, or
-/// back on the workbench strip to become a tab of its own again.
+/// One pane's tab in a region header. Drags as a [PaneDrag], so the same chip
+/// can be dropped on another region, on an empty one, or back on the workbench
+/// strip to become a tab of its own again.
 class PaneTabChip extends ConsumerWidget {
   const PaneTabChip({
     required this.paneId,
@@ -172,8 +137,7 @@ class PaneTabChip extends ConsumerWidget {
     super.key,
   });
 
-  /// The key a test — or anything else that has to find one chip among several
-  /// — addresses this chip by. Stated here so nobody has to spell the string.
+  /// The key anything looking for one chip among several addresses it by.
   static Key keyFor(String paneId) => ValueKey('pane-tab/$paneId');
 
   final String paneId;
@@ -184,8 +148,8 @@ class PaneTabChip extends ConsumerWidget {
   /// Whether it is also the pane the keyboard is in.
   final bool accented;
 
-  /// How many of these have been built. The seam a cost test counts through:
-  /// a status change must redraw the one chip it is about, not the header.
+  /// The seam a cost test counts through: a status change must redraw the one
+  /// chip it is about, not the header.
   @visibleForTesting
   static int debugBuildCount = 0;
 
@@ -193,22 +157,19 @@ class PaneTabChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     debugBuildCount++;
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-    // Per pane, not per layout: a process dying redraws its own chip and
-    // leaves the rest of the header alone — the rule the workbench strip
-    // already follows.
+    // Per pane, not per layout: a process dying redraws its own chip and leaves
+    // the rest of the header alone.
     final liveness = ref.watch(terminalPaneLivenessProvider(paneId));
-    // The other half of the same per-pane rule: what the agent in this pane is
-    // doing, narrowed to the status word so a registry cycle that reconfirms it
-    // redraws nothing. Null for a pane with no live agent session, which is
-    // when the liveness marker takes the slot back.
+    // Narrowed to the status word, so a registry cycle that reconfirms it
+    // redraws nothing. Null when the liveness marker takes the slot back.
     final activity = ref.watch(paneAgentActivityProvider(paneId));
     final title = ref.watch(terminalPaneTitleProvider(paneId));
 
     final chip = WorkbenchTabChip(
       selected: selected,
       accented: accented,
-      // The pane variant: shorter, quieter, and ruled underneath — see
-      // [PaneGroupStrip] for why the two rows must not look alike.
+      // Shorter, quieter and ruled underneath — see [PaneGroupStrip] for why
+      // the two rows must not look alike.
       dense: true,
       onTap: () => sessions.focusPane(paneId),
       onSecondaryTapDown: (details) =>
@@ -229,7 +190,7 @@ class PaneTabChip extends ConsumerWidget {
         iconSize: Chrome.iconSmall,
         visualDensity: VisualDensity.compact,
         // A [Chrome.paneStrip] row with a 2px rule under it leaves 22px; the
-        // workbench strip's 20px box fits but leaves no gutter at all.
+        // workbench strip's 20px box fits with no gutter at all.
         constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
         padding: EdgeInsets.zero,
         icon: const Icon(AppIcons.x),
@@ -239,8 +200,8 @@ class PaneTabChip extends ConsumerWidget {
 
     return Draggable<TerminalDrag>(
       data: PaneDrag(paneId),
-      // See the tab chip: the split zone a pane lands in is read off this
-      // offset, so it has to be the pointer.
+      // The split zone a pane lands in is read off this offset, so it has to be
+      // the pointer.
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: PaneDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
@@ -258,9 +219,9 @@ class PaneTabChip extends ConsumerWidget {
     if (overlay == null) return;
     final choice = await showMenu<String>(
       context: context,
-      // `ContextMenuRegion._show`'s anchor. As in the workbench strip, the chip
-      // keeps `showMenu`: the right-click already comes from
-      // [WorkbenchTabChip]'s `InkWell`, and this chip is inside a `Draggable`.
+      // `ContextMenuRegion._show`'s anchor. The chip keeps `showMenu`: the
+      // right-click comes from [WorkbenchTabChip]'s `InkWell`, inside a
+      // `Draggable`.
       position: RelativeRect.fromRect(
         Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
@@ -296,12 +257,9 @@ class PaneTabChip extends ConsumerWidget {
   }
 }
 
-/// What a dragged pane looks like under the pointer — the same label-only
-/// treatment a dragged tab gets, and for the same reason: dragging a
-/// control that can still be clicked reads as a bug.
-///
-/// Shared with the grip a split pane is dragged out by, so a pane looks the
-/// same in flight whichever handle started it.
+/// What a dragged pane looks like under the pointer: label only, because
+/// dragging a control that can still be clicked reads as a bug. Shared with the
+/// grip a split pane is dragged out by.
 class PaneDragFeedback extends StatelessWidget {
   const PaneDragFeedback({required this.title, super.key});
 
@@ -348,16 +306,11 @@ class PaneDragFeedback extends StatelessWidget {
 }
 
 /// Where the pane [paneId] could go, as [TabPicker] lists it: every other
-/// region of its tab, and a tab of its own.
-///
-/// The keyboard's way to do what dragging a chip out of a header does. "A new
-/// tab" belongs in the *same* list rather than in a second command because it
-/// is an answer to the same question — where should this pane live — and
-/// splitting it out would make the way back out of a split the one destination
-/// you had to already know the name of.
+/// region of its tab, and a tab of its own — the keyboard's way to do what
+/// dragging a chip out of a header does. "A new tab" is in the *same* list
+/// because it answers the same question, where should this pane live.
 List<TabEntry> regionsMovableTo(WidgetRef ref, String paneId) {
-  // Watched, not read: the list has to be rebuilt when a move changes what is
-  // left to move to, the same way the tab picker's own list is.
+  // Watched, not read: a move changes what is left to move to.
   ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);
   final anchors = sessions.regionAnchorsBesides(paneId);

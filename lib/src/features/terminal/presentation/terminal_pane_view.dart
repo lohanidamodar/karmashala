@@ -18,118 +18,9 @@ import '../data/terminal_instance.dart';
 import '../domain/terminal_link_resolution.dart';
 import '../domain/terminal_links.dart';
 
-/// One pane's terminal grid, and the link affordance over it.
-///
-/// Split out of `TerminalPaneStack` for two reasons. It needs state of its own
-/// — a `GlobalKey` onto the view, and which link the pointer is over — and
-/// keying it by the instance keeps the "starting a pane swaps its instance in
-/// place" rule that `ObjectKey(instance)` was already carrying: a new instance
-/// is a new element, with a new focus node and no stale hover.
-///
-/// ## Links
-///
-/// The owner's report was "links are not clickable in karmashala's terminal",
-/// then "any link — file link, relative file link, http link". They are, on
-/// **Ctrl+click** (Cmd on macOS) — VS Code's and Windows Terminal's gesture,
-/// and the only safe one: a plain click in a terminal places a selection and,
-/// when the program has asked for mouse reporting, is an event the program
-/// itself receives. Opening something as a side effect of clicking anywhere
-/// would be wrong.
-///
-/// **Ctrl is the switch, not just the click.** Nothing is detected until the
-/// modifier is held. Hold it and the link under the pointer underlines itself
-/// and the cursor turns into a hand — every terminal's affordance, and the
-/// thing that says "this is clickable" before you commit to it. Release it, or
-/// move off, and the underline goes. With Ctrl up the pane behaves exactly as
-/// it did before any of this existed, selection drag included.
-///
-/// Four kinds of target, one code path:
-///
-/// * an http(s) URL, opened in the browser;
-/// * a directory, revealed in the host's file manager;
-/// * a file, opened in the configured code editor;
-/// * `path:12` / `path:12:7`, which resolves as the file and carries the
-///   location for an opener that can use it (none can yet).
-///
-/// A path that does not exist underlines nothing and does nothing: the pane
-/// asks what is at the resolved path once, for the one candidate under the
-/// pointer, and stays silent when the answer is "nothing".
-///
-/// ## `[Image #6]`
-///
-/// A fifth kind, on the same gesture. The owner's report: *"image link inside
-/// terminal still not wired, i should be able to ctrl click on the image
-/// `[Image #6]` and preview the image in dialog"*. When a picture is pasted
-/// into an agent CLI running in a pane, the CLI prints that reference as plain
-/// text — there is no `OSC 8` around it — so recognising it is a text scan like
-/// every other target here, and it opens [SessionImageDialog].
-///
-/// Two rules it does not share with a path:
-///
-/// * **Only a pane with a session offers one.** Media is per-session; a plain
-///   shell tab has nothing to resolve a number against and must not pretend the
-///   text is clickable.
-/// * **It underlines without resolving first, and refuses in words.** A path
-///   that is not there underlines nothing, because a path-shaped *word* is not
-///   evidence of anything. `[Image #6]` is evidence: the CLI wrote it. So it is
-///   offered on sight — hovering costs no transcript read at all — and if the
-///   number names a picture the session does not have, the click says so in a
-///   sentence. Opening nothing would look broken, and opening the nearest
-///   picture instead would be worse than either.
-///
-/// ## What this costs at 100 panes
-///
-/// Nothing, in every pane, until Ctrl goes down. With the modifier up
-/// [_onHover] stores the pointer position and returns — no cell lookup, no line
-/// flattening, no regex, no `stat`. There is no per-write, per-line or
-/// per-frame work anywhere here and the output path is untouched; the keyboard
-/// handler that watches for Ctrl is registered only while the pointer is inside
-/// a pane, so at most one exists no matter how many panes are open.
-///
-/// With Ctrl held, the hovered pane pays — only when the pointer crosses into a
-/// different cell — one read of the cell's own hyperlink id, and then, only if
-/// that came back empty, one flatten of the hovered row (plus its wrapped
-/// continuation rows, at most [kMaxWrappedRows] either side), two regex passes
-/// over that text, and at most one `FileSystemEntity.type` per distinct
-/// candidate, memoised until the pointer leaves the pane. The `[Image #6]` scan
-/// adds a third pass over the *same* flattened text, and only on the cells the
-/// first two found nothing on — so a line of paths costs exactly what it did
-/// before — behind a `contains('[Image #')` that rejects an ordinary line
-/// without running a regex at all. Reading the transcript is a *click's* cost;
-/// no hover ever pays it.
-///
-/// The underline itself is xterm's own [TerminalController.underline]: it is
-/// anchored to the buffer, so it stays on its text as output scrolls, and there
-/// is at most one of them.
-///
-/// ## OSC 8
-///
-/// A program can also say outright that a run of cells is a link, rather than
-/// leaving it to be recognised: `OSC 8` puts a URI on the cells themselves, and
-/// the label over them can be anything — `docs`, an issue title, a filename.
-/// The text scan cannot find those, because there is nothing link-shaped to
-/// find.
-///
-/// It is **not a second mechanism**. [_resolveAt] asks the buffer first — one
-/// attribute read, cheaper than the flatten and the two regex passes it stands
-/// in front of — and what comes back is the same [TerminalLink] with a
-/// [UrlTarget] the scan would have produced, so the hint, the cursor, the click
-/// slop and `openUrl` are all reached by exactly one path. Only http and https
-/// are offered, the same rule the scan follows and for the same reason: the URI
-/// is written by whatever the program was piping.
-///
-/// The one thing it does differently is the affordance. A cell carrying a
-/// hyperlink id is already underlined by xterm2's own painter while Ctrl is
-/// held, so this draws no [TerminalController.underline] over it — a second
-/// rule on the same text, anchored by hand, for something the package is
-/// already drawing exactly.
-///
-/// That underline is the package's and does not know about the scheme rule, so
-/// a `vscode://` hyperlink is still underlined and still shows a hand while
-/// Ctrl is down, and a click on it does nothing. Left as it is on purpose:
-/// suppressing it means either teaching the terminal package this app's trust
-/// policy, or drawing our own rule and doubling it up on every link that *is*
-/// accepted. Opening the thing would be the actual bug.
+/// One pane's terminal grid, plus the Ctrl+click (Cmd on macOS) affordance over
+/// URLs, paths, `path:12:7` and `[Image #6]`. Nothing is detected until the
+/// modifier is down; a plain click stays a selection.
 class TerminalPaneView extends ConsumerStatefulWidget {
   const TerminalPaneView({
     required this.instance,
@@ -151,15 +42,10 @@ class TerminalPaneView extends ConsumerStatefulWidget {
   final FocusOnKeyEventCallback onKeyEvent;
   final void Function(Offset globalPosition) onSecondaryTapDown;
 
-  /// Reaches the browser, the file manager, the editor and the filesystem.
   /// Injected, so a test records what a Ctrl+click would have done instead of
-  /// starting any of them on the machine running it.
+  /// starting a browser or an editor on the machine running it.
   final TerminalLinkActions linkActions;
 
-  /// A `ConsumerStatefulWidget` rather than one more injected callback: the
-  /// image lookup is the pane's own business and reaching it through `ref`
-  /// leaves `TerminalPaneStack`'s call site — and every other caller — exactly
-  /// as it was.
   @override
   ConsumerState<TerminalPaneView> createState() => _TerminalPaneViewState();
 }
@@ -168,12 +54,9 @@ class TerminalPaneView extends ConsumerStatefulWidget {
 /// rather than the start of a selection drag.
 const double _clickSlop = 4;
 
-/// A `[Image #6]` and where it sits on the buffer.
-///
-/// In **buffer rows and cell columns**, for the same reason [TerminalLink] is:
-/// `BufferLine.getText()` skips empty cells and the trailing half of a
-/// double-width glyph, so character indices and cells do not agree and an
-/// underline computed from the former lands beside its text.
+/// A `[Image #6]` in buffer rows and cell columns: `BufferLine.getText()` skips
+/// empty cells and double-width tails, so an underline computed from character
+/// indices lands beside its text.
 class _ImageRefSpan {
   const _ImageRefSpan({
     required this.reference,
@@ -223,20 +106,15 @@ class _Resolved {
 const int _maxProbeCache = 64;
 
 class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
-  /// Reaches `TerminalViewState.renderTerminal`, which is the only thing that
-  /// can turn a pointer position into a buffer cell — it owns the cell metrics
-  /// and the scroll offset.
+  /// Reaches `TerminalViewState.renderTerminal`, the only thing that can turn a
+  /// pointer position into a buffer cell.
   final _viewKey = GlobalKey<TerminalViewState>();
 
   TerminalLink? _link;
   _Resolved? _resolved;
 
-  /// The `[Image #6]` under the pointer, when that is what is under it. Kept
-  /// beside [_link] rather than folded into it because `TerminalTarget` is a
-  /// sealed type in `terminal_links.dart` and a fifth case cannot be added
-  /// from here — and because the two resolve on opposite terms: a path
-  /// underlines only once the filesystem has confirmed it, a reference
-  /// underlines on sight.
+  /// The `[Image #6]` under the pointer. Kept beside [_link], not folded in: a
+  /// path underlines only once the filesystem confirms it, a reference on sight.
   _ImageRefSpan? _imageRef;
 
   CellOffset? _lastCell;
@@ -249,9 +127,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   /// still lights up what is under it.
   Offset? _pointer;
 
-  /// Whether the keyboard handler is registered. It is added when the pointer
-  /// enters this pane and removed when it leaves, so exactly one pane is ever
-  /// listening — the cost does not grow with the number of open panes.
+  /// Registered on pointer enter and dropped on exit, so exactly one pane ever
+  /// listens no matter how many are open.
   bool _listening = false;
 
   /// Answers from [TerminalLinkActions.kindOf], so sliding along one path does
@@ -261,9 +138,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   /// Discards the answer to a probe that is no longer the one being asked for.
   int _epoch = 0;
 
-  /// The session this pane belongs to, or null for a plain shell. Media is
-  /// per-session, so this is what decides whether a `[Image #6]` printed here
-  /// is resolvable at all.
+  /// The session this pane belongs to, or null for a plain shell — media is
+  /// per-session, so a plain tab can never resolve a `[Image #6]`.
   String? get _sessionId => widget.instance.agentLaunch?.sessionId;
 
   @override
@@ -286,9 +162,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   }
 
   /// Watches the modifier so the underline appears the moment Ctrl goes down,
-  /// rather than on the next mouse movement. Never handles anything: it only
-  /// reads the keyboard's state, which is already updated by the time handlers
-  /// run.
+  /// not on the next mouse move. Never handles the event.
   bool _onKeyboardChanged(KeyEvent event) {
     final keyboard = HardwareKeyboard.instance;
     final down = keyboard.isControlPressed || keyboard.isMetaPressed;
@@ -302,15 +176,9 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     return false;
   }
 
-  /// The buffer cell under a **screen** position.
-  ///
-  /// Screen, not local: `TerminalView` hands its tap callbacks a `CellOffset`
-  /// derived from `TapUpDetails.localPosition`, which is local to the gesture
-  /// detector — a widget that sits *outside* the padded `Container` the grid is
-  /// drawn in, while `getCellOffset` only subtracts the `MediaQuery` padding.
-  /// The two disagree by the pane's own padding, so a tap and a hover would
-  /// land on different cells. Going through `globalToLocal` gives the render
-  /// object's own coordinates and makes both paths agree.
+  /// The buffer cell under a **screen** position. Via `globalToLocal`, because
+  /// `getCellOffset` subtracts only the MediaQuery padding: a local position
+  /// from the gesture detector outside the padded grid lands on another cell.
   CellOffset? _cellAt(Offset globalPosition) {
     final state = _viewKey.currentState;
     if (state == null) return null;
@@ -318,8 +186,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
       final render = state.renderTerminal;
       return render.getCellOffset(render.globalToLocal(globalPosition));
     } catch (_) {
-      // The viewport is between builds; there is nothing under the pointer to
-      // report yet, and the next move will ask again.
+      // The viewport is between builds; the next move will ask again.
       return null;
     }
   }
@@ -347,11 +214,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     _forget();
   }
 
-  /// Works out what is under [position] and lights it up, or clears.
-  ///
-  /// Only ever reached with the modifier held. The `stat` at the end is the one
-  /// filesystem call on this path: detection above it is pure text, so a line
-  /// full of path-shaped words costs regex, not I/O.
+  /// Works out what is under [position] and lights it up, or clears. The `stat`
+  /// at the end is the only filesystem call; detection above it is pure text.
   Future<void> _resolveAt(Offset? position) async {
     if (position == null) return;
     final cell = _cellAt(position);
@@ -363,9 +227,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     final terminal = widget.instance.terminal;
     final buffer = terminal.buffer;
     if (cell.y >= buffer.lines.length) return _clearLink();
-    // Asked first, and answered from the cell's own attributes: a program that
-    // said "this is a link" outranks a guess about what the text looks like,
-    // and saying so costs less than the scan below.
+    // A program that said "this is a link" outranks a guess about the text,
+    // and the attribute read is cheaper than the scan below.
     final hyperlink = osc8LinkAt(terminal, cell.y, cell.x);
     if (hyperlink != null) {
       if (hyperlink == _link) return;
@@ -374,9 +237,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     final line = linkLineAt(buffer, cell.y);
     final link = linkAt(line, cell.y, cell.x);
     if (link == null) {
-      // Not a path and not a URL — but it may be the `[Image #6]` an agent CLI
-      // printed, which is the owner's request. Looked for only here, so a cell
-      // that already resolved to a path costs nothing new.
+      // Not a path or a URL — but it may be an `[Image #6]`. Looked for only
+      // here, so a cell that already resolved to a path costs nothing new.
       final reference = _imageRefAt(line, cell.y, cell.x);
       if (reference == null) return _clearLink();
       // Still the same reference, one cell along: already underlined.
@@ -400,23 +262,18 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     final kind = await _kindOf(hostPath);
     // The pointer moved, or Ctrl came up, while we were asking.
     if (!mounted || epoch != _epoch) return;
-    // Nothing is there. Nothing visible happens — a wrong thing opened is far
-    // worse than a word that turns out not to be a link.
+    // Nothing there — opening the wrong thing is worse than a dead word.
     if (kind == null) return _clearLink();
     _show(link, _Resolved(hostPath, kind));
   }
 
-  /// The `[Image #6]` covering cell ([row], [column]) of [line], or null.
-  ///
-  /// Returns null outright for a pane with no session: a reference it could
-  /// never resolve must not underline, and checking first also means the scan
-  /// never runs in a plain shell tab.
+  /// The `[Image #6]` covering cell ([row], [column]) of [line], or null — and
+  /// always null in a pane with no session, which could never resolve one.
   _ImageRefSpan? _imageRefAt(TerminalLinkLine line, int row, int column) {
     if (_sessionId == null) return null;
     for (final reference in imageReferencesIn(line.text)) {
-      // Character indices back onto buffer cells, the same mapping `linksIn`
-      // makes: `getText()` skips empty cells and double-width tails, so the two
-      // do not agree and the underline would land beside the text.
+      // Character indices back onto cells: `getText()` skips empty cells and
+      // double-width tails, so the underline would otherwise land beside them.
       final last = reference.end - 1;
       final span = _ImageRefSpan(
         reference: reference,
@@ -446,10 +303,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     });
   }
 
-  /// Opens the picture a reference names, or says why it cannot.
-  ///
-  /// The lookup reads the session's transcript, so it happens here — on a
-  /// deliberate click — and never on the hover path.
+  /// Opens the picture a reference names, or says why it cannot. The lookup
+  /// reads the transcript, so it runs on a click and never on the hover path.
   Future<void> _openImageRef(SessionImageReference reference) async {
     final sessionId = _sessionId;
     if (sessionId == null) return;
@@ -471,8 +326,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
           ),
         );
       case SessionImageUnavailable(:final reason):
-        // In words. A click that did nothing would be indistinguishable from a
-        // broken link, and the nearest picture would be the wrong one.
+        // In words: a silent click is indistinguishable from a broken link.
         ScaffoldMessenger.maybeOf(
           context,
         )?.showSnackBar(SnackBar(content: Text(reason)));
@@ -502,12 +356,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     });
   }
 
-  /// Offers an `OSC 8` hyperlink, without drawing a rule under it.
-  ///
-  /// The cells carry the id, so xterm2's painter is already underlining them
-  /// and already showing a hand — see the class doc. All that is left for this
-  /// side is the hint and what a Ctrl+click reaches, which is the same path
-  /// every other target takes.
+  /// Offers an `OSC 8` hyperlink without drawing a rule under it: the cells
+  /// carry the id, so xterm2's own painter already underlines them.
   void _showHyperlink(TerminalLink link) {
     _dropUnderline();
     setState(() {
@@ -521,10 +371,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   void _highlightSpan(int startRow, int startColumn, int endRow, int endColumn) {
     _dropUnderline();
     final buffer = widget.instance.terminal.buffer;
-    // A rule under the text, not a wash over it: the link has to stay as
-    // readable as the output around it. `underline` is xterm2's own API for
-    // exactly that; the vendored fork got there by bolting a flag onto
-    // `highlight`.
+    // A rule under the text, not a wash over it — the link stays readable.
     _highlight = widget.instance.controller.underline(
       p1: buffer.createAnchor(startColumn, startRow),
       p2: buffer.createAnchor(endColumn, endRow),
@@ -556,21 +403,9 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     _clearLink();
   }
 
-  /// `Ctrl+C` copies when there is a selection, and interrupts when there is
-  /// not — Windows Terminal's and VS Code's rule, and the one every user who
-  /// has ever pressed it in a terminal already has.
-  ///
-  /// This cannot live in the static chord map beside `Ctrl+V`, because the
-  /// answer is not a setting: it depends on whether a selection exists *right
-  /// now*, in *this* pane. So it is the pane's own key path, ahead of
-  /// `onPaneKey`.
-  ///
-  /// Copying clears the selection, which is what makes the pair usable: the
-  /// second `Ctrl+C` — the one you press because the first did not stop the
-  /// program — interrupts. With no selection nothing here runs at all, so the
-  /// bytes a pane sends are unchanged from before.
-  ///
-  /// Returns null when this is not that chord, meaning "not mine".
+  /// `Ctrl+C` copies when there is a selection and interrupts when there is
+  /// not; the answer depends on this pane right now, so it cannot live in the
+  /// static chord map. Returns null when this is not that chord.
   KeyEventResult? _handleCopyOrInterrupt(KeyEvent event) {
     if (event.logicalKey != LogicalKeyboardKey.keyC) return null;
     final keyboard = HardwareKeyboard.instance;
@@ -646,14 +481,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     )?.showSnackBar(SnackBar(content: Text(error)));
   }
 
-  /// What the hint says the click will do, and to what, or null when there is
-  /// nothing under the pointer.
-  ///
-  /// The *resolved* path, not the printed one: `Ctrl+click to open
-  /// C:\src\app\lib\main.dart` is the useful sentence when the output said
-  /// `lib/main.dart`. A reference has nothing to resolve until it is clicked,
-  /// so it names itself — which is also what tells the user the app read the
-  /// number the same way they did.
+  /// What the hint says the click will do, or null. The *resolved* path, not
+  /// the printed one; a reference names itself, having nothing to resolve yet.
   (String, String)? get _hint {
     final reference = _imageRef;
     if (reference != null) return ('preview', reference.reference.label);
@@ -678,11 +507,8 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   @override
   Widget build(BuildContext context) {
     final view = Actions(
-      // The app's own paste, above `TerminalView` and so above xterm's
-      // text-only one. `TerminalPasteIntent` is a type xterm has no entry for,
-      // which is what lets an ancestor handle a chord dispatched from inside
-      // the view — see the intent's own doc, and `pasteIntoTerminal` for what
-      // the handler does that xterm's could not.
+      // The app's own paste, above xterm's text-only one: `TerminalPasteIntent`
+      // is a type xterm has no entry for, so an ancestor gets the chord.
       actions: {
         TerminalPasteIntent: CallbackAction<TerminalPasteIntent>(
           onInvoke: (_) => pasteIntoTerminal(
@@ -707,23 +533,13 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
       textScaler: TextScaler.noScaling,
       padding: const EdgeInsets.all(Insets.sm),
       autofocus: widget.focused,
-      // **The text-input client is what dictation talks to.** `true` here swaps
-      // `CustomTextEdit` for `CustomKeyboardListener`, which never calls
-      // `TextInput.attach` — so a hardware key still arrives and anything
-      // injected through the platform's text input service silently does not.
-      // Every dictation and IME tool is the second kind, which is why one could
-      // type into quick open but not into a pane.
-      //
-      // It was `true` to dodge "Could not set client, view ID is null", which
-      // blanked the terminal on Windows. xterm2 fixed that at the source by
-      // passing an explicit `viewId` from `PlatformDispatcher.implicitView`, so
-      // the workaround now costs more than the bug it avoided.
+      // `true` swaps in `CustomKeyboardListener`, which never calls
+      // `TextInput.attach` — dictation and IMEs then silently cannot type into a
+      // pane. It was `true` to dodge a "view ID is null" bug xterm2 has fixed.
       hardwareKeyboardOnly: false,
       onKeyEvent: _onKeyEvent,
-      // xterm's own shortcut manager runs after `onKeyEvent` and before
-      // `Terminal.keyInput`; its Windows defaults quietly took Ctrl+A and
-      // Ctrl+V from the shell. Ctrl+V is paste again, but declared — and so
-      // switchable in Settings, which is what the overrides are doing here.
+      // xterm's Windows defaults quietly took Ctrl+A and Ctrl+V from the shell;
+      // the overrides declare them so Settings can switch them back.
       shortcuts: terminalPaneShortcutsFor(widget.chordOverrides),
       // Over a link the pointer says so; everywhere else the grid is text.
       mouseCursor: _link == null && _imageRef == null
@@ -743,13 +559,9 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
       onHover: _onHover,
       onExit: _onExit,
       child: Listener(
-        // Raw pointer events rather than `TerminalView.onTapUp`, for two
-        // reasons. The package never calls that callback — its gesture
-        // detector only ever invokes `onSingleTapUp`, which `TerminalView`
-        // does not pass on, so the parameter is dead upstream. And a modified
-        // click must not enter the gesture arena at all: the pane's own tap
-        // recognisers own selection, and competing with them for the same tap
-        // is how you get a link that opens only sometimes.
+        // `TerminalView.onTapUp` is dead upstream — the package never calls it
+        // — and a modified click must stay out of the gesture arena, or it
+        // competes with the pane's own selection recognisers.
         onPointerDown: _onPointerDown,
         onPointerUp: _onPointerUp,
         child: Stack(
@@ -765,9 +577,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
 }
 
 /// The browser-style hint along the bottom of a pane with a link under the
-/// pointer. Names the gesture and the target — the *resolved* target, which for
-/// a relative path is the one useful thing the pane knows and the output does
-/// not say.
+/// pointer. Names the gesture and the *resolved* target.
 class _LinkHint extends StatelessWidget {
   const _LinkHint({required this.verb, required this.target});
 
@@ -798,8 +608,7 @@ class _LinkHint extends StatelessWidget {
               border: Border.all(color: scheme.outlineVariant),
             ),
             child: Text(
-              // Ctrl on Windows and Linux, Cmd on macOS — both are accepted,
-              // and the one named is the one the platform's users expect.
+              // Both are accepted; name the one the platform's users expect.
               '${_modifierLabel()}+click to $verb  $target',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

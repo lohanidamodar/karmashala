@@ -1,17 +1,12 @@
 part of 'terminal_sessions_controller.dart';
 
-// `Notifier.ref` is `@protected`, which covers a subclass and not an
-// extension — even one splitting that subclass's own body inside its own
-// library, which is all any part of this file is.
+// `Notifier.ref` is `@protected`, which covers a subclass and not an extension
+// splitting that subclass's own body inside its own library.
 // ignore_for_file: invalid_use_of_protected_member
 
-/// The **workspace groups**: dividing the middle workspace, moving the
-/// keyboard between the rooms it makes, moving whole tabs between their
-/// strips, and bringing the tree back in step with the tab list.
-///
-/// A group is a tab strip, a surface and a status bar — the unit a split
-/// makes. The tree it forms lives in `WorkspaceLayout`, which is pure; what
-/// is here is everything that also has to touch `_tabs` and publish.
+/// The **workspace groups**: a group is a tab strip, a surface and a status bar
+/// — the unit a split makes. The tree itself is `WorkspaceLayout`, which is
+/// pure; here is everything that also has to touch `_tabs` and publish.
 extension TerminalWorkspaceGroups on TerminalSessionsController {
   /// The group the keyboard is in, or null before anything is open.
   WorkspaceGroup? get _focusedGroup =>
@@ -44,17 +39,11 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
   }
 
   /// Divides the focused group along [axis], leaving the new group **empty**
-  /// and focused. Returns its id, or null when there is nothing to divide.
+  /// and focused; null when there is nothing to divide.
   ///
-  /// The unit of splitting is the whole middle workspace, not the terminal area
-  /// inside one tab: the new group gets a tab strip, a surface and a status bar
-  /// of its own. The report: *"not like only split the terminal space. split
-  /// the whole middle workspace"*.
-  ///
-  /// **A split still starts nothing**, for the reason `splitPane` gives one
-  /// level down. The room is empty until a tab is dragged in or a terminal is
-  /// opened in it, and while the empty group has focus there is no active tab —
-  /// which is the honest answer to "what am I typing into", not a gap.
+  /// The unit is the whole middle workspace, not one tab's terminal area. **A
+  /// split still starts nothing**, and while the empty group has focus there is
+  /// no active tab — the honest answer to "what am I typing into".
   String? splitWorkspace(SplitAxis axis) {
     final tree = _workspace;
     final group = _focusedGroup;
@@ -81,12 +70,9 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     _focusActivePane();
   }
 
-  /// Moves the keyboard to the group next to the focused one in [direction].
-  ///
-  /// Answered off the tree's geometry, which is what
-  /// [PaneLayout.paneInDirection] already does for panes: the id it hands back
-  /// is a tab (or an empty group's slot), so the group holding it is the one on
-  /// that side.
+  /// Moves the keyboard to the group next to the focused one in [direction],
+  /// answered off the tree's geometry: the id [PaneLayout.paneInDirection]
+  /// hands back is a tab, so the group holding it is the one on that side.
   bool moveGroupFocus(PaneDirection direction) {
     final tree = _workspace;
     final group = _focusedGroup;
@@ -98,10 +84,8 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     return true;
   }
 
-  /// Whether [tabId] could be dropped on group [groupId]'s strip.
-  ///
-  /// A tab already in that group is refused: moving it there would change
-  /// nothing, and its position along the strip is [reorderTab]'s business.
+  /// Whether [tabId] could be dropped on group [groupId]'s strip. A tab already
+  /// there is refused — its position along the strip is [reorderTab]'s business.
   bool canMoveTabToGroup(String tabId, String groupId) {
     final group = _workspace?.groupById(groupId);
     return group != null &&
@@ -109,13 +93,9 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
         !group.panes.contains(tabId);
   }
 
-  /// Moves [tabId] into group [groupId], at [index] along its strip when one is
-  /// given, and shows it there.
-  ///
-  /// Nothing is closed, detached or relaunched: the tab keeps its panes, its
-  /// processes and its scrollback and only changes which strip it hangs in. The
-  /// group it leaves collapses when it was its last tab, which is what VS Code
-  /// does to an emptied editor group.
+  /// Moves [tabId] into group [groupId], at [index] along its strip when given.
+  /// Nothing is closed, detached or relaunched — only which strip it hangs in
+  /// changes; the group it leaves collapses if that was its last tab.
   bool moveTabToGroup(String tabId, String groupId, {int? index}) {
     if (!canMoveTabToGroup(tabId, groupId)) return false;
     final tree = _workspace!;
@@ -125,9 +105,8 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     // target group could not have existed to move it into.
     if (without == null) return false;
 
-    // The group keeps its id when the tab fills it: filling a group is not
-    // making a new one, and everything on screen — the strip, the bar, the
-    // widget's own element — is addressed by that id.
+    // The group keeps its id: filling a group is not making a new one, and the
+    // strip, the bar and the element are all addressed by that id.
     final landed = isEmptyGroupSlot(anchor)
         ? without.replaceRegion(anchor, PaneGroup(groupId, panes: [tabId]))
         : without.addPane(anchor, tabId);
@@ -144,21 +123,15 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
   bool canMoveTabBesideGroup(String tabId, String groupId) {
     final group = _workspace?.groupById(groupId);
     if (group == null || _tabById(tabId) == null) return false;
-    // A group made only of the tab that is leaving it would be the group it
-    // left, one divider later.
+    // A group made only of the tab leaving it is the group it left, one
+    // divider later.
     return !(group.panes.length == 1 && group.panes.first == tabId);
   }
 
-  /// Divides group [groupId] along [axis] and puts [tabId] in the new group.
-  ///
-  /// **What dropping a tab on the edge of a pane does.** It used to divide the
-  /// *tab* — `splitPaneWithTab` — which left the dropped tab in a bare region
-  /// with no strip and no status bar of its own. That is the shape the owner
-  /// reported surviving: *"the previous one without the header/status bar
-  /// survived while dragging a tab and dropping it below"*. A tab owns a
-  /// session, a view and a status strip as one thing, and only a group can host
-  /// that, so a tab can never land in a region again. Panes still can — that is
-  /// what a region is for, and `splitPaneWithPane` still does it.
+  /// Divides group [groupId] along [axis] and puts [tabId] in the new group —
+  /// what dropping a tab on the edge of a pane does. A tab owns a session, a
+  /// view and a status strip as one thing and only a group can host that, so a
+  /// tab never lands in a bare region; a *pane* still can.
   bool moveTabBesideGroup(
     String tabId,
     String groupId,
@@ -168,7 +141,7 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     if (!canMoveTabBesideGroup(tabId, groupId)) return false;
     final tree = _workspace!;
     final without = tree.close(tabId);
-    // Unreachable: the tab cannot be the only thing in the tree and also leave
+    // Unreachable: the tab cannot be the only thing in the tree and still leave
     // a group behind to divide.
     if (without == null) return false;
     final anchor = without.groupById(groupId)?.activePaneId;
@@ -196,7 +169,7 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     if (tree == null || group == null || tree.groups.length < 2) return false;
 
     if (!_isEmptyGroup(group)) {
-      // The tabs are what the group is; taking them out empties it and
+      // The tabs are what the group is: taking them out empties it, and
       // reconciliation collapses what is left.
       closeTabs(List.of(group.panes), detach: detach);
       return true;
@@ -225,11 +198,9 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     _publish();
   }
 
-  /// A tab left in the focused group once [closing] has gone.
-  ///
-  /// Closing a tab must not hand the keyboard to whichever group happens to
-  /// hold the last tab in the window; it stays where the user was working until
-  /// that group runs out of tabs altogether.
+  /// A tab left in the focused group once [closing] has gone. Closing a tab
+  /// must not hand the keyboard to whichever group holds the last tab in the
+  /// window; it stays where the user was working.
   String? _survivorInFocusedGroup(Set<String> closing) {
     final group = _focusedGroup;
     if (group == null) return null;
@@ -239,18 +210,11 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     return null;
   }
 
-  /// Brings the workspace tree back in step with [_tabs].
+  /// Brings the workspace tree back in step with [_tabs], so a dozen tab verbs
+  /// need know nothing about groups: a lost tab leaves its group, an unseen one
+  /// joins the focused group, and a group left with nothing collapses.
   ///
-  /// Tabs are opened, closed, merged and pulled apart by a dozen verbs, and
-  /// every one of them ends at the tab list. Rather than teach each of them
-  /// about groups, the tree is reconciled from the list here, on the way to
-  /// every published snapshot: a tab the list has lost leaves its group, a tab
-  /// the tree has never seen joins the focused one, and a group left with
-  /// nothing collapses.
-  ///
-  /// The tree is only ever *replaced* when it actually changed — consumers
-  /// compare it by identity, so rebuilding an equal tree every publish would
-  /// wake all of them.
+  /// Replaced only when it actually changed — consumers compare by identity.
   void _reconcileWorkspace() {
     final live = {for (final tab in _tabs) tab.id};
     var tree = _workspace;
@@ -271,15 +235,15 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     if (!identical(tree, _workspace)) _workspace = tree;
     _repairFocusedGroup();
     _syncTabOrder();
-    // A collapsed group takes its face with it, or the map would grow by one
-    // entry per split for the life of the app.
+    // A collapsed group takes its face with it, or the map grows by one entry
+    // per split for the life of the app.
     ref
         .read(terminalFacesProvider.notifier)
         .forget({for (final group in _workspace?.groups ?? const []) group.id});
   }
 
-  /// [tree] with [tabId] in the focused group — filling it when it was the
-  /// empty room a split cleared, joining its strip otherwise.
+  /// [tree] with [tabId] in the focused group — filling the empty room a split
+  /// cleared, or joining its strip.
   WorkspaceLayout _withTabPlaced(WorkspaceLayout? tree, String tabId) {
     if (tree == null) return PaneLayout.single(tabId);
     final group = tree.groupById(_focusedGroupId ?? '') ?? tree.groups.last;
@@ -290,9 +254,9 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
         : tree.addPane(anchor, tabId);
   }
 
-  /// Restates the invariant tying [_activeTabId], [_focusedGroupId] and the
-  /// tree together: the active tab is the focused group's, and it is null
-  /// exactly when that group is empty.
+  /// Restores the invariant tying [_activeTabId], [_focusedGroupId] and the
+  /// tree: the active tab is the focused group's, and null exactly when that
+  /// group is empty.
   void _repairFocusedGroup() {
     final tree = _workspace;
     if (tree == null) {
