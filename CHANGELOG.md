@@ -32,6 +32,10 @@ installs claim the same version name.
 - **Sessions are ordered by when they were last active** in the sidebar, Quick
   Open and on the phone, each saying "active 3m ago". A session nothing has
   seen sorts last rather than claiming a time.
+- **Closing a terminal pane can no longer hang the app.** Releasing the pane's
+  console waited on a child that had not died; it now happens off the UI thread,
+  after a bounded kill. Measured against a child that ignores being closed:
+  5,005 ms before, 1.4 ms after.
 
 ---
 
