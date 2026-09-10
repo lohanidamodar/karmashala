@@ -1,14 +1,7 @@
 import 'dart:convert';
 
-/// Lines added and removed in a unified diff.
-///
-/// Counted here rather than asked of git: `--numstat` would mean a new method on
-/// `GitService`, and the fan-out already has the diff text in hand for the
-/// side-by-side view. Pure, so it is testable without a repository.
-///
-/// The *file* count deliberately does not live here — `git status` knows it
-/// without double-counting a file that is both staged and modified, and it sees
-/// untracked files that no `git diff` will ever mention.
+/// Lines added and removed in a unified diff, counted here rather than asked
+/// of git. The *file* count is `git status`'s — it sees untracked files.
 class DiffLineCounts {
   const DiffLineCounts({required this.insertions, required this.deletions});
 
@@ -35,11 +28,8 @@ class DiffLineCounts {
   String toString() => 'DiffLineCounts(+$insertions, -$deletions)';
 }
 
-/// Counts changed lines in a unified diff.
-///
-/// Only lines inside a hunk count: `+++ b/file` and `--- a/file` are headers,
-/// `\ No newline at end of file` is neither, and miscounting those is the whole
-/// difficulty here.
+/// Counts changed lines in a unified diff. Only lines inside a hunk count:
+/// the `+++`/`---` headers and the no-newline marker are the difficulty.
 DiffLineCounts parseDiffLineCounts(String diff) {
   if (diff.trim().isEmpty) return DiffLineCounts.none;
   var insertions = 0;

@@ -40,11 +40,8 @@ import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
 import 'terminal_profiles.dart';
 
-// The controller's own body, split into one file per family. They are `part`s
-// rather than libraries of their own because privacy in Dart is per library:
-// every verb below writes the fields declared in this file, so anywhere else
-// would mean handing the state around. What stays here is the notifier —
-// the fields, `build`, the publish path and the projections it invalidates.
+// `part`s rather than libraries because privacy in Dart is per library: every
+// verb below writes the fields declared here.
 part 'terminal_sessions_state.dart';
 part 'terminal_instance_factory.dart';
 part 'terminal_sessions_providers.dart';
@@ -58,18 +55,8 @@ part 'terminal_sessions_lifetime.dart';
 part 'terminal_sessions_persistence.dart';
 part 'terminal_sessions_restore.dart';
 
-/// Manages open terminal tabs, the split tree inside each, which pane has focus,
-/// and persisting the whole layout so it survives a restart.
-///
-/// The tab list and live instances are the controller's **own fields**, with
-/// [state] published from them. Riverpod forbids reading `state` inside `build`
-/// and `onDispose`, and both restore (which runs during build) and the final
-/// snapshot (which runs during dispose) need the tabs.
-///
-/// **Only the notifier is here.** Each family of verbs is an extension in a
-/// `part` of this library, listed above the class: tabs, workspace groups,
-/// regions inside a tab, presets, pane lifetime, titles, session lifetime,
-/// and the two halves of persistence.
+/// Manages open terminal tabs, the split tree in each, focus, and persisting
+/// the layout. Tabs are **fields**, not [state] — `build`/`onDispose` need them.
 class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   final List<TerminalTab> _tabs = [];
   String? _activeTabId;
@@ -91,14 +78,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Sessions with a running process and no tab, oldest first.
   final List<DetachedSession> _detached = [];
 
-  /// The published projections of [_tabs], [_detached] and the instances'
-  /// liveness, plus the two id indexes derived from the tab list.
-  ///
-  /// All null until asked for, and nulled only by the thing they are derived
-  /// from changing — so a publish that moved one pane's liveness hands the
-  /// *same* tab list back to consumers, and "which tab holds this pane?" is a
-  /// map lookup rather than a scan over every tab that allocated a pane list
-  /// per tab as it went.
+  /// Published projections, each nulled only by the thing it derives from — so
+  /// a publish that moved one pane's liveness hands back the *same* tab list.
   List<TerminalTab>? _tabsView;
   List<DetachedSession>? _detachedView;
   Map<String, PaneLiveness>? _livenessView;
@@ -109,12 +90,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Panes whose buffer changed since their last snapshot.
   final Set<String> _dirty = {};
 
-  /// When each dirty pane *became* dirty, on [_uptime]'s monotonic scale.
-  ///
-  /// Written only on the clean→dirty transition, which `Set.add`'s return value
-  /// already reports for free: `markDirty` runs on every terminal notification
-  /// of every pane, so reading a clock there would be a per-frame,
-  /// per-pane cost for a number nobody reads more than once a second.
+  /// When each dirty pane *became* dirty. Written only on the clean→dirty
+  /// transition: `markDirty` runs on every notification of every pane, so a
+  /// clock read there would be a per-frame per-pane cost.
   final Map<String, Duration> _dirtySince = {};
 
   /// Monotonic, so an unsaved age cannot be distorted by the wall clock moving.
@@ -124,28 +102,18 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// has run — reported as "not recorded" rather than as zero.
   ScrollbackWrite? _lastWrite;
 
-  /// Shared by every restored pane so they can tell each other how wide the
-  /// workbench draws a pane, rather than each parsing its history at xterm's
-  /// default 80 columns and being reflowed. See [TerminalGridHint].
-  ///
-  /// Seeded from the store, because the panes that most need it are the ones a
-  /// restore builds: the launch frame parses every mounted tab's history during
-  /// `build`, before the layout pass that would have measured the first pane.
+  /// How wide the workbench draws a pane, shared so a restored pane does not
+  /// parse its history at xterm's default 80 columns and get reflowed. Seeded
+  /// from the store: restore parses history in `build`, before any layout pass.
   final TerminalGridHint _gridHint = TerminalGridHint();
 
   /// The grid last written to the store, so a save that would write the same
   /// value writes nothing.
   ({int columns, int rows})? _writtenGrid;
 
-  /// The last encoding written for each pane.
-  ///
-  /// A pane that is not in [_dirty] has not touched its buffer since this was
-  /// produced, so re-running the encoder on it can only produce the same string.
-  /// Keeping it turns a layout save from "re-encode every pane" into "encode
-  /// the ones that changed" — which is what makes a save on every structural
-  /// change (open, split, close, detach) affordable, and what makes the save on
-  /// quit a delta over the last autosave tick rather than a full re-encode of
-  /// every open pane.
+  /// The last encoding written for each pane. A pane not in [_dirty] can only
+  /// re-encode to the same string, which is what makes a save on every
+  /// structural change — and the save on quit — affordable.
   final Map<String, String> _encoded = {};
 
   /// Per-pane buffer listeners, kept so they can be removed on close.
@@ -157,43 +125,20 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Per-pane working-directory listeners, kept for the same reason.
   final Map<String, void Function()> _directoryListeners = {};
 
-  /// Titles panes have set for themselves with OSC 0/2, by pane id.
-  ///
-  /// A shell (or a TUI) naming its own window is the strongest signal there is
-  /// about what a plain terminal is doing, which is why it outranks the
-  /// directory. Agent panes are the exception — see [_titleForPane], and so is
-  /// a pane merely reciting the launcher we started it with — see
-  /// [_namesLauncher], which is why titles are filtered on the way *in* rather
-  /// than on the way out.
+  /// Titles panes set for themselves with OSC 0/2. Outranks the directory, but
+  /// not an agent pane's own name ([_titleForPane]); a title merely reciting
+  /// the launcher is filtered on the way *in* ([_namesLauncher]).
   final Map<String, String> _oscTitles = {};
 
-  /// Resolved tab labels, cleared on every publish.
-  ///
-  /// A label can cost a database read (an agent pane resolves its session's
-  /// *current* name), and the tab strip asks for one per tab per build. Without
-  /// this, a hundred tabs would be a hundred queries a frame.
+  /// Resolved tab labels, cleared on every publish. A label can cost a database
+  /// read, and the tab strip asks for one per tab per build.
   final Map<String, String> _titles = {};
 
   /// Monotonically increasing revision number incremented on every publish.
   int _titleRevision = 0;
 
-  /// Whether the user has closed a tab, a pane or a session since the layout
-  /// was restored.
-  ///
-  /// An empty layout has two causes that the store cannot tell apart, and
-  /// only one of them is a fact worth writing down. *The user closed everything*
-  /// is a decision, and clearing the store is the correct outcome — Loop 29's
-  /// behaviour, and tested. *We momentarily have nothing* is a bug, and a save
-  /// deletes every tab the layout no longer holds, so writing it destroys
-  /// the user's layout outright; Loop 48 watched that happen once in ten
-  /// real runs and never found the trigger. (A save writes only the rows that
-  /// changed now, but "every tab vanished" changes every row — incremental
-  /// writing narrows the cost of this failure, not its reach.)
-  ///
-  /// So the controller keeps the one piece of information the database cannot
-  /// reconstruct: whether anything the *user* did could account for the
-  /// emptiness. Nothing else sets this flag — a pane exiting on its own does
-  /// not, because a dead pane still has a row worth restoring.
+  /// Whether the user closed a tab, pane or session since the restore — the only
+  /// licence to write an empty layout. A pane exiting on its own does not set it.
   bool _userClosedSinceRestore = false;
 
   late final ScrollbackAutosave _autosave =
@@ -206,20 +151,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   final _log = AppLogger.named('terminal');
 
-  /// Whether [shutdownProcesses] has already run.
-  ///
-  /// It empties [_tabs], so the container's own teardown must not persist
-  /// afterwards: it would write that emptiness over the layout the user
-  /// expects back.
+  /// Whether [shutdownProcesses] has run. It empties [_tabs], so the
+  /// container's teardown must not then persist that emptiness.
   bool _processesShutDown = false;
 
   /// Set on teardown, so a post-frame callback that outlives the container
   /// cannot touch a disposed pane. See [_afterFrame].
   bool _disposed = false;
 
-  /// How many [withOneLayoutSave] calls are in flight, and whether anything
-  /// inside them has asked for a structural save. Counted rather than a flag so
-  /// a bulk verb calling another still writes once, at the outermost end.
+  /// Counted rather than a flag, so a bulk verb calling another still writes
+  /// once, at the outermost end.
   int _heldLayoutSaves = 0;
   bool _layoutSaveOwed = false;
 
@@ -230,59 +171,42 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _autosave.stop();
       if (_processesShutDown) return;
       persistLayout();
-      // `forExit` here too. This provider is not auto-disposed, so the only
-      // thing that reaches this line is the container going away — and the
-      // container goes away exactly once, in the shutdown that is about to end
-      // the process. It matters because [shutdownProcesses] can be *skipped*
-      // when the budget is already spent, and that is the case where a
-      // pseudoconsole release would still be reached.
+      // `forExit` here too: this provider is not auto-disposed, so the only way
+      // in is the container going away as the process ends — and
+      // [shutdownProcesses] can be skipped when the budget is already spent.
       _disposeAll(forExit: true);
     });
-    // A rename happens in the sessions feature and never touches a terminal, so
-    // nothing here would republish and the tab strip would keep the old name.
-    // `listen` rather than `watch`: re-running `build` would restore the
-    // layout again.
+    // A rename never touches a terminal, so nothing here would republish and
+    // the strip would keep the old name. `listen`, not `watch`: re-running
+    // `build` would restore the layout again.
     ref.listen(sessionsRevisionProvider, (_, _) {
       if (!_disposed) _publish();
     });
     _restoreLayout();
-    // Once, here: a restore rebuilds the tab list from the store, and the tree
-    // has to be in step with it before the first snapshot goes out.
+    // The tree has to be in step with the restored tab list before the first
+    // snapshot goes out.
     _reconcileWorkspace();
     _autosave.start();
     return _snapshot();
   }
 
-  /// Ends every pane's process and completes when the kills have landed.
-  ///
-  /// The teardown `ref.onDispose` runs is synchronous: it asks each pane to
-  /// dispose and moves on. On Windows disposing a pane spawns a
-  /// `taskkill /PID <pid> /T /F`, so on quit those spawns were still in flight
-  /// when `windowManager.destroy()` ended the process — and everything running
-  /// inside the panes (a dev server holding a port, a build holding a file
-  /// lock) was orphaned. This is the same teardown, awaitable, so the shutdown
-  /// sequence can wait for it inside its budget.
-  ///
-  /// Idempotent, and the container's own teardown stands down once it has run.
+  /// Ends every pane's process and awaits the kills: `ref.onDispose` is
+  /// synchronous, so `taskkill` was still in flight when the process ended.
   Future<void> shutdownProcesses() async {
     if (_processesShutDown) return;
     _processesShutDown = true;
     _autosave.stop();
     persistLayout();
-    // Counted at both ends, because this is the step that spends most of the
-    // shutdown budget and the log had nothing to say about why. `N` is what
-    // makes the cap readable: one pane reaching 1500 ms and eleven panes
-    // reaching it are different findings, and neither is visible from the
-    // `did not finish` line alone.
+    // Counted at both ends: this step spends most of the shutdown budget, and
+    // one pane reaching the cap and eleven reaching it are different findings.
     final reaping = _disposeAll(forExit: true);
     _log.info('terminal: reaping ${reaping.length} pane process tree(s).');
     await Future.wait(reaping);
     _log.info('terminal: ${reaping.length} pane process tree(s) reaped.');
   }
 
-  /// A projection of the controller's fields, and **nothing else**. Called from
-  /// `build()` as well as from every publish, so anything with a side effect
-  /// would be a write on a read path — see [_publish].
+  /// A projection of the controller's fields and **nothing else**: `build()`
+  /// calls it too, so a side effect here would be a write on a read path.
   TerminalSessionsState _snapshot() {
     return TerminalSessionsState(
       tabs: _tabsView ??= List.unmodifiable(_tabs),
@@ -304,11 +228,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   void _publish() {
     _warnIfPublishingDuringBuild();
-    // Every tab verb ends at the tab list, and the group tree is brought back
-    // in step with it here — on the way *out*, in a write, rather than inside
-    // [_snapshot], which `build()` also calls. A reconciler reachable from a
-    // read is one that can write at a moment the framework cannot let anybody
-    // see, which Riverpod refuses in debug and swallows in release.
+    // Here, on the way out, rather than in [_snapshot], which `build()` also
+    // calls: a reconciler reachable from a read writes at a moment Riverpod
+    // refuses in debug and swallows in release.
     _reconcileWorkspace();
     _titleRevision++;
     _titles.clear();
@@ -316,17 +238,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     state = _snapshot();
   }
 
-  /// Says **where** a publish landed inside a build, in debug only.
-  ///
-  /// Riverpod's own "tried to modify a provider while the widget tree was
-  /// building" names no location, which makes it a bug that has to be hunted
-  /// rather than read. This controller is the busiest writer in the app, so it
-  /// carries the sign: inside an `assert`, so a release build pays nothing.
+  /// Says **where** a publish landed inside a build, in debug only: Riverpod's
+  /// own "tried to modify a provider while the widget tree was building" names
+  /// no location. Inside an `assert`, so a release build pays nothing.
   void _warnIfPublishingDuringBuild() {
     assert(() {
-      // The controller is deliberately usable without a widget tree — most of
-      // its own tests drive it that way — and asking for the binding there
-      // throws rather than answering.
       final binding = _bindingOrNull();
       if (binding?.schedulerPhase == SchedulerPhase.persistentCallbacks) {
         _log.warning(
@@ -349,11 +265,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     state = _snapshot();
   }
 
-  /// Drops the projections and indexes derived from [_tabs].
-  ///
-  /// Called at every one of the seven places the tab list changes shape. It is
-  /// deliberately one method rather than incremental maintenance: an index that
-  /// is rebuilt wholesale cannot drift, and the rebuild is O(tabs) on a
+  /// Drops everything derived from [_tabs]. Wholesale rather than incremental:
+  /// an index rebuilt from scratch cannot drift, and it costs O(tabs) on a
   /// structural change rather than on every publish.
   void _tabsMutated() {
     _tabsView = null;
@@ -367,8 +280,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// process changed state.
   void _livenessMutated() => _livenessView = null;
 
-  /// Drops the directory projection — a pane was adopted, released, or its
-  /// shell said it moved. Exactly as narrow as [_livenessMutated]: a `cd`
+  /// Drops the directory projection. As narrow as [_livenessMutated]: a `cd`
   /// leaves the tab list, the detached list and every pane's liveness alone.
   void _directoriesMutated() => _directoriesView = null;
 
@@ -380,26 +292,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       for (final paneId in tab.layout.panes) paneId: tab.id,
   };
 
-  /// Tells every pane how visible it is, so ingestion can cost what the pane is
-  /// worth rather than the same for all of them.
-  ///
-  /// The layout is the only thing that knows this, which is why it lives
-  /// here and not in the pane: a pane cannot see which tab is in front. Called
-  /// from [_publish], so every open, close, split, activate, detach and
-  /// reattach re-derives it from one place — there is no second path that could
-  /// leave a pane at the wrong tier.
-  ///
-  /// * **hot** — every pane the active tab is actually *showing*: the front
-  ///   pane of each of its regions, focused or not. A pane stacked behind
-  ///   another in a region is not on screen, however close to the front it is.
-  /// * **warm** — panes of every other open tab, and the ones stacked out of
-  ///   sight in this one. Correct, but not watched.
-  /// * **cold** — anything still tracked with no tab at all, which is a
-  ///   detached session. Not parsed; its output spools.
-  ///
-  /// Cost is O(panes) per publish plus one set of the regions on screen, and
-  /// every pane whose tier did not change returns immediately, which is nearly
-  /// all of them nearly always.
+  /// Tells every pane how visible it is — hot, warm, cold. Here because a pane
+  /// cannot see which tab is in front, and from [_publish] so no path skips it.
   void _applyIngestTiers() {
     final owner = _paneOwner;
     final onScreen = _activeTab?.layout.visiblePanes.toSet() ?? const <String>{};
@@ -417,12 +311,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Disposes every pane, returning the reaps still in flight — one per pane
-  /// that owns a process. Callers that can wait should; `ref.onDispose` cannot.
-  /// [forExit] is the process ending rather than a pane closing, and the one
-  /// thing it changes is that a pane keeps its pseudoconsole — the OS reclaims
-  /// it for free when the process ends, and the native worker that would close
-  /// it is killed mid-close anyway. See [PseudoConsoleOwner].
+  /// Disposes every pane, returning the reaps still in flight. [forExit] means
+  /// the process is ending, and its one effect is that a pane keeps its
+  /// pseudoconsole for the OS to reclaim. See [PseudoConsoleOwner].
   List<Future<void>> _disposeAll({bool forExit = false}) {
     final reaping = <Future<void>>[];
     for (final entry in _instances.entries) {
@@ -471,40 +362,24 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// that are already open.
   bool get _restoreLivePanes => ref.read(restoreLivePanesProvider);
 
-  /// Gives the active tab's focused pane the keyboard, so a pane that has just
-  /// become the active one is typable without a click.
-  ///
-  /// **Deferred to after the frame, and that is the whole point.** The panes
-  /// live in an [IndexedStack], which wraps every child but the selected one in
-  /// an `ExcludeFocus` (`packages/flutter/lib/src/widgets/indexed_stack.dart:108`).
-  /// Publishing a new active tab only marks the widget tree dirty, so at the
-  /// moment these callers run, the pane being switched *to* is still inside
-  /// that `ExcludeFocus` and `requestFocus()` is silently dropped. Waiting for
-  /// the rebuild that selects it is what makes the request stick.
-  ///
-  /// The pane is re-resolved inside the callback, so a burst of tab switches
-  /// leaves the keyboard on the tab the user actually landed on.
+  /// Gives the active tab's focused pane the keyboard, a frame late:
+  /// [IndexedStack] excludes focus from unselected children until the rebuild.
   void _focusActivePane() {
     _afterFrame(() {
       final tab = _activeTab;
       if (tab == null) return;
       final node = _instances[tab.focusedPaneId]?.focusNode;
       if (node == null || node.hasFocus) return;
-      // Never out of somewhere the keyboard is already spoken for — a text
-      // field the user is typing in, or a device mirror that is forwarding
-      // every keystroke to a phone. Opening or closing a terminal tab is not
-      // worth taking the keyboard away from either of them.
+      // Never out of a text field being typed in, or a device mirror
+      // forwarding keystrokes to a phone.
       if (keyboardIsSpokenFor()) return;
       node.requestFocus();
     });
   }
 
-  /// Runs [action] once the pending rebuild has been laid out.
-  ///
-  /// A no-op with no binding at all, which is what a controller-only test is:
-  /// there is no widget tree, so there is no focus to move. A post-frame
-  /// callback, unlike a timer, does not trip `flutter_test`'s pending-work
-  /// checks when no frame ever comes.
+  /// Runs [action] once the pending rebuild has been laid out; a no-op with no
+  /// binding. A post-frame callback, unlike a timer, does not trip
+  /// `flutter_test`'s pending-work checks when no frame ever comes.
   void _afterFrame(void Function() action) {
     final binding = _bindingOrNull();
     if (binding == null) return;
@@ -514,11 +389,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     });
   }
 
-  /// The widget binding, or null when there is none.
-  ///
-  /// `WidgetsBinding.instance` throws rather than returning null, and the
-  /// controller is deliberately usable without a widget tree — most of its own
-  /// tests drive it that way — so the throw is the check.
+  /// The widget binding, or null. `WidgetsBinding.instance` throws rather than
+  /// returning null, and the controller must work without a widget tree.
   static WidgetsBinding? _bindingOrNull() {
     try {
       return WidgetsBinding.instance;

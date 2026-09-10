@@ -16,12 +16,8 @@ import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/session_lineage.dart';
 import '../domain/review_brief.dart';
 
-/// One installation that could check another session's work.
-///
-/// Shaped like `HandoffTarget` on purpose: the two answer the same question
-/// about the same rows, and a second shape for "an agent you could send this
-/// to" would drift from the first the moment either gained a refusal the other
-/// did not.
+/// One installation that could check another session's work. Shaped like
+/// `HandoffTarget` so two answers about the same rows cannot drift apart.
 class ReviewTarget {
   const ReviewTarget({
     required this.installation,
@@ -36,17 +32,11 @@ class ReviewTarget {
   final AgentDescriptor? descriptor;
   final String agentName;
 
-  /// What this review will actually be launched under — capped, never carried
-  /// up from the session being reviewed.
+  /// What this review launches under — capped, never carried up.
   final ReviewCarry permission;
 
-  /// Whether this is a second installation of the *same* agent as the one that
-  /// did the work.
-  ///
-  /// Still a real review — a different process, a different session, and
-  /// therefore an [VerdictAttribution.independent] verdict — but it is the same
-  /// model reading its own kind of mistake, and a surface that offered it
-  /// without saying so would oversell what was bought.
+  /// A second installation of the *same* agent: still an
+  /// [VerdictAttribution.independent] verdict, but the same model's blind spots.
   final bool isSameAgent;
 
   /// Why this agent cannot be handed a review, or null when it can.
@@ -59,23 +49,16 @@ class ReviewTarget {
 class ReviewOffer {
   const ReviewOffer({required this.targets, this.refusal});
 
-  /// Every installation that is not the one that did the work, in registry
-  /// order, including any that cannot receive a brief and say why.
+  /// Every installation but the one that did the work, refusals included.
   final List<ReviewTarget> targets;
 
-  /// Why no review can be started at all. Null when one can.
-  ///
-  /// Always a sentence naming the actual state — "only Claude Code is
-  /// installed here" — because the affordance this backs is disabled far more
-  /// often than it is pressed, and a greyed-out button with no reason reads as
-  /// a broken feature rather than as a machine with one agent on it.
+  /// Why no review can be started, null when one can — always a sentence: a
+  /// greyed-out button with no reason reads as a broken feature.
   final String? refusal;
 
   bool get isPossible => refusal == null && targets.any((t) => t.canReview);
 
-  /// The reviewer to offer first: a different agent where there is one,
-  /// because a second opinion from a different model is worth more than a
-  /// second opinion from the same one.
+  /// The reviewer to offer first: a different agent where there is one.
   ReviewTarget? get preferred {
     ReviewTarget? sameAgent;
     for (final target in targets) {
@@ -87,22 +70,13 @@ class ReviewOffer {
   }
 }
 
-/// Starts sessions whose job is to check another session's work.
-///
-/// Everything here ends at [SessionLauncher.launch], which is the whole point:
-/// a review session is an **ordinary session row** — it resumes, renames,
-/// forks, hands off and draws in the side panel like any other — and the only
-/// things that make it a review are the brief in `firstMessage` and the capped
-/// permission it launches under. That is the lesson `SessionHandoffService`
-/// already learned and the reason there is no `SessionLink.review`: a new link
-/// kind would be a new session kind wearing a smaller name, and every surface
-/// that switches on the kind would have to learn about it.
+/// Starts sessions whose job is to check another session's work. Everything
+/// ends at [SessionLauncher.launch]: a review is an ordinary session row, made
+/// one by its brief and its cap alone.
 class ReviewSessionService {
   ReviewSessionService(this._ref);
 
   final Ref _ref;
-
-  // --- what can be offered ---------------------------------------------------
 
   /// Who could review [sessionId]'s work, or why nobody can.
   ReviewOffer offerFor(String sessionId) {
@@ -123,9 +97,7 @@ class ReviewSessionService {
       );
     }
 
-    // The same cap that governs a spawn, checked *before* the affordance is
-    // offered rather than at launch: a review is a spawn, and a button that
-    // fails on press has already cost the user the press.
+    // The spawn cap, checked before the button is offered, not on press.
     final depth = _ref.read(sessionLauncherProvider).depthForChildOf(sessionId);
     if (!depth.isAllowed) {
       return ReviewOffer(targets: const [], refusal: depth.refusal);
@@ -140,8 +112,7 @@ class ReviewSessionService {
     final effective = _ref
         .read(sessionLauncherProvider)
         .effectivePermissionFor(sessionId);
-    // How permissive the reviewed session is, on the one scale every agent
-    // shares. Its own vocabulary cannot cross to another CLI; the rung can.
+    // The one scale every agent shares: a mode's vocabulary cannot cross.
     final risk = effective?.descriptor?.launch.permission.riskOf(
       effective.selection,
     );
@@ -150,10 +121,8 @@ class ReviewSessionService {
     for (final installation in installations.getByEnvironment(
       repo.path.environmentId,
     )) {
-      // The one hard rule: a session cannot grade itself. Compared by
-      // *installation*, not by agent, because two installations of one agent
-      // are two processes and two sessions — which is what
-      // `VerdictAttribution` actually measures.
+      // A session cannot grade itself. By installation, not agent: two
+      // installations are two processes, which is what attribution means.
       if (installation.id == session.agentInstallationId) continue;
       final descriptor = registry.byId(installation.agentId);
       final name = registry.displayNameFor(installation.agentId);
@@ -194,13 +163,8 @@ class ReviewSessionService {
     return ReviewOffer(targets: targets);
   }
 
-  /// Why [descriptor] cannot be handed a brief, or null.
-  ///
-  /// The same single requirement a handoff has, for the same reason: the brief
-  /// is delivered as the agent's **opening prompt argument**, so an agent that
-  /// takes none would be launched into the right directory having been told
-  /// nothing — a blank session wearing a review's name, whose silence would
-  /// then read as "nothing found".
+  /// Why [descriptor] cannot be handed a brief, or null. The brief is the
+  /// agent's opening prompt, so one that takes none would launch blank.
   String? _refusalFor(AgentDescriptor? descriptor, String name) {
     if (descriptor == null) {
       return 'Karmashala has no descriptor for this agent, so it cannot be '
@@ -213,14 +177,8 @@ class ReviewSessionService {
     return null;
   }
 
-  // --- the brief -------------------------------------------------------------
-
-  /// Assembles what the reviewer will be told about [sessionId].
-  ///
-  /// Separate from the launch so a caller can render it, and so it can be
-  /// tested without starting a process. Every input is gathered best-effort and
-  /// a failure becomes the null the brief renders as an admission — nothing
-  /// here throws for a git that would not answer.
+  /// What the reviewer is told about [sessionId], apart from the launch so it
+  /// can be rendered and tested. Nothing throws; a failure becomes null.
   Future<ReviewBrief> buildBrief({
     required String sessionId,
     required String targetAgentName,
@@ -266,18 +224,9 @@ class ReviewSessionService {
     );
   }
 
-  // --- starting the review ---------------------------------------------------
-
   /// Starts a session whose job is to check [sessionId]'s work and record a
-  /// verdict against it.
-  ///
-  /// The reviewer runs in the **same directory** as the work — that is what
-  /// makes `git diff` and the tests mean anything — and under
-  /// [carryReviewPermission], which can only ever be less permissive than the
-  /// session it is checking.
-  ///
-  /// The old session is not touched: not ended, not marked, not told. A review
-  /// is an observation, and an observation that changes its subject is not one.
+  /// verdict. It runs in the same directory, under [carryReviewPermission],
+  /// which is never more permissive; the reviewed session is not touched.
   Future<SessionLaunchResult> startReview({
     required String sessionId,
     required String targetInstallationId,
@@ -339,20 +288,16 @@ class ReviewSessionService {
             purpose: SessionPurpose.newSession,
             firstMessage: brief.render(),
             parentSessionId: sessionId,
-            // An existing link kind, not a new one. A review is a session one
-            // session caused another to exist for, which is exactly what
-            // `spawn` has always meant.
+            // An existing link kind: one session causing another to exist
+            // is what `spawn` has always meant.
             parentLink: SessionLink.spawn,
-            // Never a new worktree: a review of a different checkout is a
-            // review of different code.
+            // Never a new worktree: a different checkout is different code.
             existingWorktree: session.worktree,
             workingDirectory: session.workingDirectory,
             permissionOverride: permission.selection,
           ),
         );
   }
-
-  // --- reading the work ------------------------------------------------------
 
   EnvironmentPath? _directoryOf(Session session) {
     final recorded = session.workingDirectory ?? session.worktree;
@@ -402,18 +347,12 @@ class ReviewSessionService {
           ),
       ];
     } on Object {
-      // Null, not empty: "git could not be asked" and "the tree is clean" are
-      // opposite answers to a reviewer, and only one of them is a reason to
-      // stop reading.
+      // Null, not empty: "could not be asked" is not "the tree is clean".
       return null;
     }
   }
 
-  /// The staged and unstaged diffs together.
-  ///
-  /// Both, because an agent that ran `git add` and stopped there has an empty
-  /// unstaged diff and a full change in the index — and a review that read only
-  /// the unstaged half would report on a diff nobody wrote.
+  /// Both diffs — an agent that ran `git add` has an empty unstaged one.
   Future<String?> _diffIn(EnvironmentPath directory) async {
     final changes = _ref.read(changesServiceProvider);
     try {
@@ -441,14 +380,12 @@ class ReviewSessionService {
       FileChangeType.renamed => 'renamed',
       FileChangeType.copied => 'copied',
       FileChangeType.untracked => 'untracked',
-      // Named, because it is the one state that is not the user's own
-      // edit: a merge stopped here and both sides are still in the index.
+      // The one state that is not the user's own edit: a stopped merge.
       FileChangeType.conflicted =>
         'conflicted (${(change.conflict ?? MergeConflict.unrecorded).words})',
       FileChangeType.unknown => 'changed (unrecognised git status)',
     };
-    // A conflict is never described as staged: both sides sit in the index
-    // because git put them there, and "staged" would read as work the user did.
+    // Never "staged": git put both sides in the index, not the user.
     if (change.type == FileChangeType.conflicted) return kind;
     if (change.staged && change.unstaged) return '$kind, staged and unstaged';
     if (change.staged) return '$kind, staged';
@@ -460,16 +397,11 @@ final reviewSessionServiceProvider = Provider<ReviewSessionService>(
   (ref) => ReviewSessionService(ref),
 );
 
-/// Who could review one session's work.
-///
-/// A provider rather than a service call in `build`, for the same reason
-/// `sessionContinuationProvider` is one: the answer comes from three rows the
-/// widget would otherwise re-read on every rebuild.
+/// Who could review one session's work. A provider, not a call in `build`: it
+/// reads three rows a widget would otherwise re-read every rebuild.
 final sessionReviewOfferProvider = Provider.autoDispose
     .family<ReviewOffer, String>((ref, sessionId) {
-      // The session's row and the installed agents both move under this.
-      // Narrowed to the row, for the reason `sessionContinuationProvider`
-      // gives: an untargeted bump still reaches it.
+      // Narrowed to the row; an untargeted bump still reaches it.
       ref.watchSession(sessionId);
       return ref.watch(reviewSessionServiceProvider).offerFor(sessionId);
     });

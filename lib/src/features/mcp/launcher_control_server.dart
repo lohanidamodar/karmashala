@@ -52,117 +52,15 @@ import 'worktree_tools.dart';
 import 'wsl_host_address.dart';
 import '../../core/paths/app_support_directory.dart';
 
-/// The port the control server asks for before falling back to an ephemeral one.
-///
-/// WSL2 reaches the host over a Hyper-V virtual switch, and that traffic is
-/// governed by a **separate** firewall from the ordinary one — on this machine
-/// `Get-NetFirewallHyperVVMSetting` reports `DefaultInboundAction: Block`. An
-/// agent in a distribution therefore cannot reach this server at all unless a
-/// Hyper-V rule names it, which is why hooks failed on every prompt with
-/// `curl: (52) Empty reply from server` while the very same request from
-/// Windows got a clean `401`: nothing was wrong with the server, and no
-/// ordinary firewall rule could have helped.
-///
-/// Those rules are scoped to **ports, never to programs**, so an ephemeral
-/// port cannot be allowed: it moves every launch and the installer has no way
-/// to name it in advance. Hence one stable port, chosen below Windows'
-/// ephemeral range (49152+) so it is unlikely to be taken, and written into
-/// the installer's rule.
+/// The port asked for before falling back to an ephemeral one. Fixed because a
+/// Hyper-V firewall rule can name a port, never a program.
 const int preferredControlPort = 47821;
 
 /// How often to look again for the WSL switch while it is missing.
-/// Cheap — one interface enumeration — and it stops at the first success.
 const Duration wslRetryInterval = Duration(seconds: 30);
 
-/// A loopback HTTP server that exposes karmashala's data and actions to the
-/// launcher agent's MCP bridge (see `--mcp-serve`).
-///
-/// The bridge process (spawned by the agent CLI) is a thin translator with no
-/// database or plugin dependencies; it forwards each MCP `tools/call` here as a
-/// `POST /rpc` and the real work runs against the live Riverpod container.
-///
-/// It also hosts `POST /agent-hook`, the callback endpoint agents' installed
-/// hooks post status events to. That route needs exactly this transport —
-/// loopback, ephemeral port, bearer token, handshake file — so it lives here
-/// rather than in a second [HttpServer] of its own. All of its decision-making
-/// stays in the transport-free [AgentHookReceiver].
-///
-/// ## Threat model
-///
-/// **What the boundary actually is: the bearer tokens, and the file permissions
-/// on the handshake file that publishes them.** Nothing else.
-///
-/// The server binds `127.0.0.1` on an ephemeral port. That keeps it off the
-/// network — no other *machine* can reach it — but it is worth being precise
-/// about what loopback does *not* buy, because it is easy to read "127.0.0.1"
-/// as if it were an access-control decision:
-///
-/// * **Any local process may connect.** Loopback TCP has no peer credentials and
-///   no owner. Every process on the machine, running as any user, can open a
-///   socket to the port and attempt auth. The ephemeral port is not a secret
-///   either — `netstat -ano` lists it, along with the owning pid.
-/// * **So the tokens are the whole boundary**, and the handshake file
-///   (`mcp_bridge.json`, in the application-support directory) is the only thing
-///   keeping them from any account on the box. That file is explicitly restricted
-///   at write time — see [restrictHandshakeFileToCurrentUser], which also records
-///   what the audited default ACL was and why an inherited one was not enough.
-/// * **The `/agent-hook` token is deliberately weaker, and is not confidential
-///   against local processes.** It is pasted verbatim into a `curl` command in
-///   the agent's own config file, so it appears in that file *and* in the command
-///   line of every hook invocation — readable by anything that can enumerate
-///   processes. That is why it is a second, separate token: `/agent-hook` can
-///   only report status, while the `/rpc` token opens sessions, launches
-///   terminals and drives attached devices. Treat the hook token as public to
-///   anything running as this user; treat the `/rpc` token as a real secret.
-/// * **A process running as this user is inside the boundary, by construction.**
-///   It can read the handshake file, and it could already do everything the API
-///   offers by running the same commands directly. Local-user isolation is not a
-///   goal here and cannot be one.
-///
-/// ## Split transport
-///
-/// Privileged `/rpc` calls use a **unix domain socket**, on all three
-/// platforms, living in a directory restricted to the current user
-/// ([restrictDirectoryToCurrentUser]). Unlike loopback TCP that is a real
-/// access-control decision: a process running as another unprivileged user
-/// cannot traverse to the socket at all, so it never gets as far as presenting
-/// a token. `/rpc` over HTTP is disabled whenever the socket is up, and stays
-/// disabled if the socket could not be bound — failing closed rather than
-/// silently downgrading privileged RPC to a transport every local process can
-/// reach.
-///
-/// **Every step of that hardening is a prerequisite, not a best effort.** The
-/// directory ACL, the socket bind and the handshake file's ACL each have to
-/// succeed before a privileged token exists at all; if any of them does not,
-/// nothing privileged is bound, no privileged credential is minted or
-/// published, and [ControlServerStatus] says why. Loop 61 wrote that down after
-/// an audit found the ACL results were being read and then ignored: the
-/// promise was in this comment and nowhere in the code, because no test could
-/// reach the branch. See `start`.
-///
-/// This replaced a Windows-only named pipe. The pipe's DACL gave the same
-/// boundary, but it left Linux and macOS on loopback TCP, and its blocking-FFI
-/// serving isolate could not be shut down: Loop 48 measured a build with the
-/// pipe running failing to exit at all on quit (>120 s), against 322 ms for the
-/// same build without it.
-///
-/// Agent hooks remain on HTTP **for the agents that share this loopback**,
-/// deliberately. The hook command runs a generated script that `curl`s
-/// `/agent-hook`, written into third-party agents' own config files and run by
-/// whatever `curl` those agents find, for which a Windows socket path is not a
-/// reachable name at all. Their token is separate and low-privilege (status
-/// reports only), and is already public to anything that can list process
-/// command lines; that is the threat model above, and moving the route would
-/// not improve it.
-///
-/// **An agent inside a WSL distribution does not use this route at all.** It
-/// cannot dial loopback — that is the distribution's own — and the switch
-/// address this server also binds resets every byte on the owner's machine, for
-/// a bare PowerShell listener as readily as for this app. So those hooks report
-/// by writing a file into their own store home, which the app reads over
-/// `\\wsl.localhost`; see `AgentHookEndpoint` and `AgentHookSpoolDrainer`. The
-/// second listener in [_bindWslInterface] stays for `/mcp`, which has no such
-/// alternative today.
+/// A loopback HTTP server serving the MCP bridge (`POST /rpc`) and agents' own
+/// hooks (`POST /agent-hook`). The tokens are the whole boundary.
 class LauncherControlServer implements SessionMcp {
   LauncherControlServer(
     this._container, {
@@ -179,16 +77,12 @@ class LauncherControlServer implements SessionMcp {
   final ProviderContainer _container;
   final AppLogger _logger;
 
-  /// Resolves the stdio bridge that ships beside the app, or `null` when it is
-  /// not there. Injectable because whether that file exists is what decides a
-  /// WSL session's whole transport, and a test cannot put an executable next to
-  /// the test runner.
+  /// Resolves the stdio bridge shipped beside the app, or null. Injectable
+  /// because that file's existence decides a WSL session's whole transport.
   final File? Function() _bridgeExecutable;
 
-  /// How a published path is taken back off disk. **Synchronous on purpose**
-  /// — see [stop] — and injectable so a test can *count* the removals rather
-  /// than time them, which is the only way to state that a shutdown step
-  /// abandoned on its budget leaves no filesystem work running behind it.
+  /// How a published path is taken back off disk. Synchronous on purpose — see
+  /// [stop] — and injectable so a test can count removals rather than time them.
   final void Function(String path) _unpublish;
 
   static void _deleteIfPresent(String path) {
@@ -196,37 +90,32 @@ class LauncherControlServer implements SessionMcp {
       final file = File(path);
       if (file.existsSync()) file.deleteSync();
     } on FileSystemException {
-      // Held by something, or already gone. `stop` logs neither: the caller
-      // observes the file, and a warning here fires on every clean quit.
+      // Held by something, or already gone; a warning here would fire on
+      // every clean quit.
     }
   }
 
-  /// How the owner-only boundary is applied. Injectable because the failure
-  /// path *is* the security contract: `icacls` cannot be made to fail on
-  /// demand, so without a seam the fail-closed branch below is untestable — and
-  /// it was, which is how it came to be ignored in the first place.
+  /// How the owner-only boundary is applied. Injectable because `icacls` cannot
+  /// be made to fail on demand, and the fail-closed branch has to be testable.
   final HandshakePermissions _permissions;
 
   HttpServer? _server;
 
-  /// A second listener on the WSL virtual switch's host address, serving
-  /// `/mcp` and nothing else. Null on a machine with no such switch, and on
-  /// every run where no MCP credential was minted. See [_bindWslInterface].
+  /// A second listener on the WSL switch's host address, serving `/mcp` alone.
+  /// Null with no such switch, and on runs where no MCP credential was minted.
   HttpServer? _wslServer;
   InternetAddress? _wslHost;
 
-  /// Pending re-attempt at binding the WSL switch, or null when there is none
-  /// outstanding — which is also how the log line above stays a one-off rather
-  /// than a message every retry.
+  /// Pending re-attempt at binding the WSL switch; also what keeps the log line
+  /// above a one-off rather than a message every retry.
   Timer? _wslRetry;
 
-  /// How long to wait before looking for the switch again. A field rather than
-  /// the constant directly so a test can prove the retry without sleeping.
+  /// A field rather than [wslRetryInterval] itself, so a test can prove the
+  /// retry without sleeping.
   Duration _wslRetryEvery = wslRetryInterval;
 
-  /// Called the first time the switch is bound *after* the initial attempt
-  /// failed, so hooks skipped at startup can be installed now that a WSL agent
-  /// has an address to post to.
+  /// Called the first time the switch binds *after* the initial attempt failed,
+  /// so hooks skipped at startup can be installed now.
   void Function()? onWslInterfaceBound;
   LocalRpcServer? _socketServer;
   bool _httpRpcEnabled = false;
@@ -240,15 +129,8 @@ class LauncherControlServer implements SessionMcp {
   /// could not be locked to this user and so nothing is written at all.
   SessionMcpConfigs? _sessionConfigs;
 
-  /// Set by [stop], and read by [start] wherever it is about to publish
-  /// something.
-  ///
-  /// A quit can land in the middle of a start: the handshake goes out while the
-  /// WSL listener and the session-config directory are still to come, and the
-  /// soak's `CloseMainWindow` arrives ~300 ms after that file appears. Without
-  /// this, `stop()` would remove what had been published and the rest of
-  /// `start()` would then calmly publish the rest — a stale handshake and an
-  /// `mcp` directory created *after* the app decided to quit.
+  /// Set by [stop] and read by [start] before each publish: a quit can land
+  /// mid-start, and the rest of `start()` would otherwise publish behind it.
   bool _stopped = false;
 
   /// Which session each per-session MCP credential names. Survives the endpoint
@@ -267,13 +149,8 @@ class LauncherControlServer implements SessionMcp {
     logger: _logger,
   );
 
-  /// One agent per request, however many times the request arrives.
-  ///
-  /// A launch outlives the MCP client's own patience: on a repository under
-  /// `/mnt/c`, creating a worktree alone takes longer than the 60s Claude Code
-  /// waits, so it timed out and re-sent `open_new_session` verbatim — and a
-  /// second real agent started. Nothing in that retry marks it as one, so the
-  /// request itself is the key. See [LaunchDedupe].
+  /// One agent per request, however often it arrives: a worktree under `/mnt/c`
+  /// outlives the 60s Claude Code waits, and its retry started a second agent.
   late final LaunchDedupe _launches = LaunchDedupe(
     clock: _container.read(clockProvider),
     onCollapsed: (tool) => _logger.warning(
@@ -295,24 +172,8 @@ class LauncherControlServer implements SessionMcp {
   /// it does not. Read by tests and by [mcpUrlFor]; nothing else needs it.
   InternetAddress? get wslHost => _wslHost;
 
-  /// The MCP endpoint URL that says the caller **is** [sessionId], written for
-  /// an agent running in [environment] — or null when no address this server
-  /// listens on can be reached from there.
-  ///
-  /// This is the whole identity mechanism on the HTTP side: the app mints an
-  /// opaque token for one session, writes this URL into that session's MCP
-  /// config, and the endpoint maps the token back. The agent never has to be
-  /// told its own id and cannot claim a different one, which is the same
-  /// property `KARMASHALA_SESSION_ID` gives the stdio bridge — the app stamps
-  /// identity on the process, the model does not declare it.
-  ///
-  /// **The environment is required, and the answer genuinely differs.** A WSL2
-  /// distribution has its own network namespace, so the loopback URL that is
-  /// right for a Windows-native pane is refused from inside one — see
-  /// [wslHostAddressAmong] for the measurement. An agent over SSH is on another
-  /// machine entirely and gets nothing, because the only way to reach it would
-  /// be to bind an interface the network can see, and the token in this URL
-  /// opens the app's whole tool surface.
+  /// The MCP endpoint URL that says the caller **is** [sessionId] from
+  /// [environment], or null — a WSL distro refuses loopback, SSH gets nothing.
   String? mcpUrlFor(String sessionId, {required EnvironmentKind environment}) {
     final host = _mcpHostFor(environment);
     if (host == null) return null;
@@ -327,8 +188,8 @@ class LauncherControlServer implements SessionMcp {
     required bool withConfigFile,
   }) {
     final url = mcpUrlFor(sessionId, environment: environment.kind);
-    // An agent whose convention is the URL itself has nothing else to be
-    // given: there is no file for it to read a `command` out of.
+    // An agent whose convention is the URL itself has no file to read a
+    // `command` out of.
     if (!withConfigFile) {
       return url == null ? null : SessionMcpAccess(url: url);
     }
@@ -343,11 +204,8 @@ class LauncherControlServer implements SessionMcp {
     // A file the agent cannot name is a flag pointing at nothing, which is a
     // worse launch than the one that passes no flag at all.
     if (agentPath == null) return null;
-    // The address is reported only when the file actually names one. A session
-    // whose config spawns the bridge is not dialling anything, and handing its
-    // URL onward would invite a caller to build a flag pointing at an address
-    // that this session does not use and, on the owner's machine, that nothing
-    // answers on.
+    // Reported only when the file actually names one: a config that spawns the
+    // bridge is not dialling anything, so its URL would point at nothing.
     final describesUrl = entry['url'] != null;
     return SessionMcpAccess(
       url: describesUrl ? url : null,
@@ -355,31 +213,16 @@ class LauncherControlServer implements SessionMcp {
     );
   }
 
-  /// The `mcpServers.karmashala` entry for an agent in [environment], or `null`
-  /// when there is nothing truthful to write.
-  ///
-  /// **Only [EnvironmentKind.wsl] is treated differently, and only downwards
-  /// into a fallback.** A distribution has no address of ours it can dial —
-  /// `127.0.0.1` there is its own, and the switch address is reset for data on
-  /// the owner's machine — so it is pointed at the stdio bridge, which is a
-  /// *Windows* program launched over WSL interop and therefore reaches this
-  /// process the way any local one does. Everything else keeps the loopback URL
-  /// byte for byte, which is what makes this change invisible to a Windows
-  /// pane, to a macOS host and to a Linux one.
-  ///
-  /// The fallback matters because the bridge is a separate executable that may
-  /// simply not be beside the app. When it is missing the answer is the switch
-  /// URL — today's behaviour, which works on a machine whose switch is open and
-  /// is honestly reported as broken on one whose switch is not.
+  /// The `mcpServers.karmashala` entry for an agent in [environment], or `null`.
+  /// Only [EnvironmentKind.wsl] differs: it is given the stdio bridge.
   Map<String, Object?>? _serverEntryFor(
     EnvironmentKind environment,
     String? url,
   ) {
     if (environment == EnvironmentKind.wsl) {
       final bridge = _bridgeExecutable()?.path;
-      // Spelled the way the agent names it. `null` here is a UNC install
-      // directory, which has no `/mnt/` form — the same reason
-      // `agentConfigPathFor` can answer null for the config file itself.
+      // Spelled the way the agent names it. `null` is a UNC install directory,
+      // which has no `/mnt/` form.
       final agentPath = bridge == null
           ? null
           : agentConfigPathFor(bridge, environment);
@@ -422,8 +265,7 @@ class LauncherControlServer implements SessionMcp {
       'has not measured is reported as "not recorded" rather than guessed.';
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
-  /// `null` before that. The hook installer writes this into the agent's own
-  /// config file.
+  /// `null` before that.
   AgentHookEndpoint? get hookEndpoint => _hookEndpoint;
 
   /// Where the bridge reads the port + token from.
@@ -432,41 +274,8 @@ class LauncherControlServer implements SessionMcp {
     return p.join(dir.path, 'mcp_bridge.json');
   }
 
-  /// Binds the server and writes the handshake file. Pass [bridgeFilePath] to
-  /// control where that file goes (tests do); by default it is
-  /// `mcp_bridge.json` in the application-support directory.
-  ///
-  /// [useLocalSocket] is the owner-only `/rpc` transport. Tests turn it off to
-  /// exercise the HTTP fallback; nothing in the app does.
-  ///
-  /// [wslHostAddress] is where the second `/mcp` listener goes. It defaults to
-  /// the real machine's WSL switch; tests inject a stand-in so two-interface
-  /// behaviour is provable on a host that has no WSL at all.
-  ///
-  /// [hostCanHaveWsl] gates that second listener on the host being able to run
-  /// WSL at all. Off Windows there is no switch to wait for, so looking is not
-  /// a temporary miss to be retried but a permanent no — without this a macOS
-  /// or Linux launch logged a Windows-shaped warning and then re-ran the
-  /// interface scan every 30 seconds, for the life of the process, to
-  /// rediscover that it is not Windows. Tests that exercise the WSL path pass
-  /// `true` alongside their stand-in [wslHostAddress].
-  ///
-  /// [sessionConfigDirectory] is where per-session MCP configs are written; by
-  /// default `mcp` beside the handshake file, which puts it in the
-  /// application-support directory in the app and in the test's temp directory
-  /// in a test.
-  ///
-  /// ## Fail closed
-  ///
-  /// Every privileged step is a **prerequisite**, not a best effort. Applying
-  /// the owner-only ACL to the socket directory, binding the socket inside it,
-  /// and applying the owner-only ACL to the handshake file all have to succeed
-  /// before a privileged token is minted and published. If any of them does
-  /// not, this method still returns — the deliberately low-privilege
-  /// `/agent-hook` route stays up, because an agent that cannot report status
-  /// is a worse outcome than one that cannot drive a device — but no privileged
-  /// transport is listening and no privileged credential exists to be leaked.
-  /// The reason goes to the log and to [controlServerStatusProvider].
+  /// Binds the server and writes the handshake file. Fails closed: if an ACL or
+  /// the socket bind does not apply, no privileged token is minted or published.
   Future<void> start({
     String? bridgeFilePath,
     bool useLocalSocket = true,
@@ -483,10 +292,8 @@ class LauncherControlServer implements SessionMcp {
     final server = await _bindControlPort(preferredPort);
     _server = server;
     if (await _abandonedMidStart()) return;
-    // A *separate* token for /agent-hook. It is pasted verbatim into a curl
-    // command in the agent's own config file, so it also shows up in process
-    // command lines; the /rpc token opens sessions and drives devices, and must
-    // not be exposed that widely.
+    // A *separate* token for /agent-hook: it is pasted verbatim into a curl
+    // command in the agent's own config, so it shows up in command lines too.
     _hookEndpoint = AgentHookEndpoint(
       port: server.port,
       token: _generateToken(),
@@ -518,7 +325,6 @@ class LauncherControlServer implements SessionMcp {
       } on Object catch (error, stack) {
         stage = ControlServerFailureStage.socketBind;
         detail = '$error';
-        // The stack, here; the structured one-liner comes from _publishStatus.
         _logger.warning('Owner-only RPC socket failed to bind.', error, stack);
       }
     } else {
@@ -526,23 +332,17 @@ class LauncherControlServer implements SessionMcp {
       _httpRpcEnabled = true;
     }
 
-    // A privileged credential is minted only where a privileged transport
-    // actually came up — there is nothing for it to authenticate to otherwise,
-    // and an unpublishable secret on disk is pure downside.
+    // A privileged credential is minted only where a privileged transport came
+    // up: an unpublishable secret on disk is pure downside.
     if (_socketServer != null || _httpRpcEnabled) {
       _token = _generateToken();
-      // `/mcp` is gated on the *same* prerequisite, and deliberately so. It is
-      // served over loopback, which the threat model above calls the weaker
-      // boundary; making it available when the owner-only channel could not be
-      // established would turn that weaker boundary into the only one, which is
-      // exactly the silent downgrade `_withholdPrivilegedRpc` exists to
-      // prevent. If nothing here can be hardened, nothing here is served.
+      // `/mcp` is gated on the same prerequisite: serving it when the
+      // owner-only channel failed is the silent downgrade to avoid.
       _mcpEndpoint!.token = _generateToken();
     }
 
-    // Restrict the (still empty) handshake file before deciding what goes in
-    // it, so a privileged token is never written under an ACL that was not
-    // applied — not even for the instant before a follow-up `icacls`.
+    // Restrict the (still empty) file before deciding what goes in it, so a
+    // token is never written under an ACL that was not applied.
     final file = await _prepareBridgeFile(bridgeFilePath);
     var restricted = false;
     try {
@@ -553,10 +353,8 @@ class LauncherControlServer implements SessionMcp {
       _logger.warning('Handshake file could not be restricted.', error, stack);
     }
     if (!restricted && _token != null) {
-      // The handshake is the only way the token reaches the bridge. If it
-      // cannot be locked to this account the token does not go in it — and a
-      // privileged transport no legitimate caller can authenticate to is not
-      // worth listening on, so it comes down too.
+      // The handshake is the only way the token reaches the bridge; if it
+      // cannot be locked to this account, the token and the transport both go.
       stage ??= ControlServerFailureStage.handshakePermissions;
       detail ??= 'the handshake file ACL was not applied';
       await _withholdPrivilegedRpc();
@@ -580,15 +378,11 @@ class LauncherControlServer implements SessionMcp {
     if (hostCanHaveWsl ?? Platform.isWindows) {
       await _bindWslInterface(server.port, wslHostAddress);
     }
-    // The last checkpoint, and the one the soak needed: looking for the WSL
-    // switch is a subprocess and a bind, and the directory below is created
-    // *after* it — so without this a quit asked for while the lookup was
-    // outstanding left an `mcp` directory the app created on its way out.
+    // The last checkpoint: looking for the WSL switch is a subprocess and a
+    // bind, and the directory below is created after it.
     if (await _abandonedMidStart()) return;
-    // Beside the handshake file rather than resolved separately: they belong in
-    // the same application-support directory, and a second
-    // `appSupportDirectory()` would be a platform-channel call on a
-    // path every caller has already told us about.
+    // Beside the handshake file: a second `appSupportDirectory()` would be a
+    // platform-channel call for a path every caller has already given us.
     await _prepareSessionConfigs(
       sessionConfigDirectory ?? p.join(p.dirname(file.path), 'mcp'),
     );
@@ -599,14 +393,7 @@ class LauncherControlServer implements SessionMcp {
   }
 
   /// Whether a [stop] landed while [start] was suspended — and if it did,
-  /// unwinds through [stop] again so whatever the last step published goes back
-  /// off disk.
-  ///
-  /// Calling [stop] a second time is what makes this cheap to place: it is
-  /// idempotent by construction (every field it clears is nulled, every removal
-  /// checks for the file first), so each checkpoint costs one boolean on the
-  /// path that matters and one extra pass over already-empty state on the path
-  /// that does not.
+  /// unwinds through [stop] again, which is idempotent by construction.
   Future<bool> _abandonedMidStart() async {
     if (!_stopped) return false;
     _logger.info('Control server start abandoned: the app is quitting.');
@@ -614,47 +401,8 @@ class LauncherControlServer implements SessionMcp {
     return true;
   }
 
-  /// Also listens on the WSL virtual switch's host address, so an agent inside
-  /// a WSL distribution can dial `/mcp` at all.
-  ///
-  /// Most of this owner's agent sessions run in WSL, and until this existed
-  /// every one of them was handed — or would have been handed — a URL its own
-  /// network namespace refuses. [wslHostAddressAmong] records the measurement
-  /// and why this address rather than `0.0.0.0`.
-  ///
-  /// Two rules hold it to the narrowest thing that works:
-  ///
-  /// * **Only what an agent in a distribution needs**, which is `/mcp` and
-  ///   `/agent-hook`: [_handleWslInterface], not [_handle], so the privileged
-  ///   `/rpc` envelope is not part of this decision and stays where it was.
-  ///   The hook route belongs here for exactly the reason `/mcp` does — a hook
-  ///   installed in a distro posting to `127.0.0.1` never arrives — and it is
-  ///   the deliberately low-privilege half: it can report status and nothing
-  ///   else, behind its own separate bearer token.
-  ///
-  ///   **It is now a compatibility door rather than the live path.** The
-  ///   installer no longer writes this address into a distribution's endpoint
-  ///   file — those hooks report by spool, because this address is reset for
-  ///   data on the owner's machine — but an endpoint file an earlier build
-  ///   left behind still names it, and answering `401`/`200` there is what
-  ///   keeps such a hook cheap and honest instead of 404ing it.
-  ///
-  ///   That is also why this is bound whether or not an MCP credential exists.
-  ///   `/agent-hook` fails *open* when hardening fails — the rest of `start`
-  ///   says why: an agent that cannot report status is a worse outcome than one
-  ///   that cannot drive a device — and it would be a strange reading of that
-  ///   rule to honour it for Windows panes and quietly drop it for the
-  ///   environment most sessions run in. `/mcp` is unaffected: with no
-  ///   credential it answers `401` here exactly as it does on loopback, so a
-  ///   withheld credential stays withheld on both doors.
-  /// * **Never fatal.** The port is already taken on that address, the switch
-  ///   went away between the lookup and the bind, a future Windows renames the
-  ///   adapter — each of those costs WSL sessions their tools and costs nothing
-  ///   else. The app starts exactly as it did before.
-  /// Binds the control port, preferring [preferredControlPort].
-  ///
-  /// Falling back is not a failure: everything on Windows works on any port.
-  /// What is lost is WSL, and that loss is logged rather than left silent.
+  /// Binds the control port, preferring [preferredControlPort]. Falling back
+  /// costs only reachability from WSL, so it is logged rather than left silent.
   Future<HttpServer> _bindControlPort(int preferred) async {
     try {
       return await HttpServer.bind(InternetAddress.loopbackIPv4, preferred);
@@ -670,6 +418,8 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
+  /// Also listens on the WSL switch's host address, so an agent inside a
+  /// distribution can dial `/mcp` at all. Never fatal.
   Future<void> _bindWslInterface(
     int port,
     Future<InternetAddress?> Function() lookup,
@@ -677,13 +427,8 @@ class LauncherControlServer implements SessionMcp {
     try {
       final host = await lookup();
       if (host == null) {
-        // Silently giving up here disabled WSL tools and WSL hooks for the
-        // whole run. The owner hit exactly that: the app started at 11:25, the
-        // switch was not enumerable at that instant, nothing was logged, and
-        // every WSL session that day launched without its tools while the
-        // adapter sat there the rest of the morning. The app looked once, at
-        // the one moment it was least likely to be true — an app that starts
-        // with Windows starts before WSL does.
+        // Giving up silently here disabled WSL tools and hooks for a whole
+        // run: an app that starts with Windows starts before WSL does.
         if (_wslRetry == null) {
           _logger.info(
             'No WSL switch adapter yet (looking for one named '
@@ -698,13 +443,8 @@ class LauncherControlServer implements SessionMcp {
       final server = await HttpServer.bind(host, port);
       _wslServer = server;
       _wslHost = host;
-      // [_hookEndpoint] is deliberately *not* republished here any more. Hooks
-      // in a distribution no longer dial this address: they write into a spool
-      // directory this app reads over `\\wsl.localhost`, because on the owner's
-      // machine this listener completes the handshake and then resets every
-      // byte — a bare PowerShell `TcpListener` on the same address does too, so
-      // it is the switch and not the server. See `AgentHookEndpoint`. This
-      // second door still serves `/mcp`, which has no other way in.
+      // [_hookEndpoint] is deliberately not republished: this listener completes
+      // the handshake and then resets every byte, so those hooks use the spool.
       server.listen(
         _handleWslInterface,
         onError: (Object e) => _logger.warning('$e'),
@@ -712,11 +452,8 @@ class LauncherControlServer implements SessionMcp {
       _logger.info('MCP also on ${host.address}:$port, for WSL sessions.');
       final wasRetrying = _wslRetry != null;
       _cancelWslRetry();
-      // Kept for the same reason it was added — a launch that started before
-      // WSL did has already run its install sweep — even though the sweep no
-      // longer needs this address to install a WSL store. A distribution that
-      // appears late is a distribution whose stores the first sweep could not
-      // find either.
+      // A distribution that appears late is one whose stores the first install
+      // sweep could not find either.
       if (wasRetrying) onWslInterfaceBound?.call();
     } on Object catch (error, stack) {
       _logger.warning(
@@ -745,11 +482,8 @@ class LauncherControlServer implements SessionMcp {
     _wslRetry = null;
   }
 
-  /// Creates the owner-only directory per-session MCP configs go in, empty.
-  ///
-  /// Gated on a credential existing for the same reason [_bindWslInterface] is:
-  /// a config naming an endpoint that answers `401` is a file with a secret in
-  /// it and no use for it.
+  /// Creates the owner-only directory per-session MCP configs go in, empty, and
+  /// only where a credential exists — a config for a `401` is a leaked secret.
   Future<void> _prepareSessionConfigs(String dirPath) async {
     if (_mcpEndpoint?.token == null) return;
     _sessionConfigs = await SessionMcpConfigs.prepare(
@@ -757,9 +491,8 @@ class LauncherControlServer implements SessionMcp {
       (dir) => _permissions.restrictDirectory(dir, logger: _logger),
     );
     if (_sessionConfigs == null) {
-      // Not fatal, and deliberately not: an agent that takes the URL on its
-      // command line is unaffected, and one that needs a file launches without
-      // it rather than with a credential nothing is guarding.
+      // Not fatal: an agent that takes the URL on its command line is
+      // unaffected, and one that needs a file launches without it.
       _logger.warning(
         'MCP session configs are off: $dirPath could not be locked to this '
         'user. Agents that need a config file will launch without one.',
@@ -808,13 +541,8 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
-  /// Brings the per-turn checkpoint recorder to life.
-  ///
-  /// It has to be *read* by something or Riverpod never builds it, and it has no
-  /// UI of its own to do the reading. This is the earliest thing in the app that
-  /// runs once, holds the container, and is not in the widget tree. When the
-  /// transcript grows its own checkpoint strip, that widget becomes the natural
-  /// owner and this line goes away.
+  /// Brings the per-turn checkpoint recorder to life: Riverpod never builds it
+  /// unless something reads it, and it has no UI of its own to do the reading.
   void _startCheckpointRecorder() {
     try {
       _container.read(sessionCheckpointRecorderProvider);
@@ -823,13 +551,8 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
-  /// Creates the owner-only directory and binds the RPC socket inside it.
-  ///
-  /// The directory is restricted **before** the socket is created, so there is
-  /// no window in which the socket exists under a permissive ACL — and if the
-  /// restriction does not apply, the socket is never created at all. A unix
-  /// domain socket carries no permissions of its own, so a directory whose ACL
-  /// was not applied is the whole boundary missing, not a degraded one.
+  /// Creates the owner-only directory and binds the RPC socket inside it: a unix
+  /// socket carries no permissions, so the directory ACL is the whole boundary.
   Future<LocalRpcServer> _bindLocalSocket(String? overrideDirectory) async {
     final dirPath =
         overrideDirectory ??
@@ -848,46 +571,18 @@ class LauncherControlServer implements SessionMcp {
     return socket;
   }
 
-  /// **The two published files go first, and synchronously**, before this
-  /// method suspends for the first time.
-  ///
-  /// The handshake delete used to sit *last*, behind three awaited socket
-  /// closes, and that is where a real defect lived. `AppLifecycle._step` bounds
-  /// the **wait**, not the work — a Dart future cannot be cancelled — and the
-  /// control-server step's slice is 100 ms. On a loaded machine
-  /// `HttpServer.close(force: true)` alone can spend it, so `shutdown()`
-  /// returned with `mcp_bridge.json` still on disk and the deletes landed later
-  /// at a moment nothing owned. That is exactly the failure `AppLifecycle`
-  /// exists to prevent: a stale handshake advertising a port nothing is
-  /// listening on, at precisely the time it is most likely — quitting a busy
-  /// machine.
-  ///
-  /// Ordering is the whole fix. Removing a file is one syscall and a bounded
-  /// wait cannot preempt a synchronous prefix, so after this the only thing an
-  /// abandoned step can still be doing is closing sockets — which touches
-  /// nothing on disk. `local_rpc_socket_test` and the lifecycle's own
-  /// `no filesystem work outlives shutdown` case count that rather than waiting
-  /// for it.
-  ///
-  /// **It also stops a [start] that has not finished yet**, which is the half
-  /// the 2026-09-09 soak found missing. The handshake appears well before
-  /// `start()` returns, and a quit asked for in that window used to leave the
-  /// rest of the start to publish the session-config directory afterwards. See
-  /// [_stopped].
+  /// Stops the server, removing the published files **first and synchronously**:
+  /// the lifecycle bounds the wait, not the work, and its slice is 100 ms.
   Future<void> stop() async {
-    // First of all, and synchronously: a `start()` suspended somewhere above
-    // reads this at its next checkpoint and unwinds rather than republishing.
+    // A `start()` suspended above reads this at its next checkpoint.
     _stopped = true;
     _cancelWslRetry();
     _tokenReaper.stop();
     if (_publishedBridgePath case final published?) _unpublish(published);
-    // The socket node too: unlinking a *bound* one is allowed and immediate,
-    // so `LocalRpcServer.close` below finds nothing left to delete after its
-    // own await. See `LocalRpcServer.unlink`.
+    // The socket node too: unlinking a *bound* one is immediate, so
+    // `LocalRpcServer.close` finds nothing left to delete after its own await.
     if (_socketServer case final socket?) _unpublish(socket.path);
-    // And the per-session MCP configs, which are a whole directory tree —
-    // `SessionMcpConfigs.dispose` is a recursive delete, and it was the third
-    // thing on the far side of those awaits.
+    // And the per-session MCP configs, which are a whole directory tree.
     _sessionConfigs?.dispose();
     _sessionConfigs = null;
 
@@ -910,12 +605,8 @@ class LauncherControlServer implements SessionMcp {
     _publishStatus(ControlServerStatus.notStarted);
   }
 
-  /// Creates the handshake file **empty**, ready to be restricted.
-  ///
-  /// Nothing is written until the ACL has been applied and the caller has
-  /// decided what may go in it, so the tokens never touch the disk under a
-  /// permissive ACL. Any pre-existing file is removed first rather than
-  /// overwritten, because a write preserves the DACL a file already carries.
+  /// Creates the handshake file **empty**, ready to be restricted. A pre-existing
+  /// one is removed, not overwritten: a write preserves the DACL it carries.
   Future<File> _prepareBridgeFile(String? overridePath) async {
     final file = File(overridePath ?? await bridgeFilePath());
     _publishedBridgePath = file.path;
@@ -930,12 +621,8 @@ class LauncherControlServer implements SessionMcp {
     return file;
   }
 
-  /// Publishes the port, the pid and whichever credentials survived hardening.
-  ///
-  /// `token` and `socketPath` appear only when a privileged transport is
-  /// actually up: a bridge that finds neither is told, by their absence, that
-  /// privileged RPC is not on offer. The hook port and token are always
-  /// published — they are the low-privilege half that fails *open* by design.
+  /// Publishes the port, the pid and whichever credentials survived hardening:
+  /// `token` and `socketPath` only when a privileged transport is up.
   Future<void> _publishHandshake(File file, int port) async {
     await file.writeAsString(
       jsonEncode({
@@ -944,8 +631,7 @@ class LauncherControlServer implements SessionMcp {
         'hookToken': _hookEndpoint!.token,
         'token': ?_token,
         if (_socketServer case final socket?) 'socketPath': socket.path,
-        // The Streamable HTTP endpoint. Published under the same rule as the
-        // rest: present only when a credential for it actually exists.
+        // Present only when a credential for it actually exists.
         'mcpToken': ?_mcpEndpoint?.token,
         if (_mcpEndpoint?.token != null)
           'mcpUrl': 'http://127.0.0.1:$port${McpHttpEndpoint.path}',
@@ -954,14 +640,8 @@ class LauncherControlServer implements SessionMcp {
     );
   }
 
-  /// 24 bytes (192 bits) from the platform CSPRNG, base64url-encoded.
-  ///
-  /// [Random.secure] and not [Random]: these are the entire access-control
-  /// boundary (see the class doc), and a predictable token would let any local
-  /// process skip needing to read the handshake file at all. 192 bits is far
-  /// past what an unauthenticated attacker could search against a local HTTP
-  /// server, and leaves room to spare against the birthday bound over the
-  /// lifetime of a machine.
+  /// 24 bytes from the platform CSPRNG, base64url-encoded. [Random.secure] and
+  /// not [Random]: these tokens are the entire access-control boundary.
   String _generateToken() {
     final random = Random.secure();
     final bytes = List<int>.generate(24, (_) => random.nextInt(256));
@@ -988,9 +668,8 @@ class LauncherControlServer implements SessionMcp {
       await _handleAgentHook(request);
       return;
     }
-    // MCP proper, on its own single endpoint. It authenticates itself — with a
-    // different credential and a different rule about who the caller is — so it
-    // is routed before the `/rpc` bearer check rather than through it.
+    // MCP authenticates itself, with a different credential and a different
+    // rule about who the caller is, so it is routed before the bearer check.
     if (McpHttpEndpoint.handles(request.uri)) {
       await _mcpEndpoint!.handle(request);
       return;
@@ -1025,13 +704,8 @@ class LauncherControlServer implements SessionMcp {
       final args =
           (payload['arguments'] as Map?)?.cast<String, dynamic>() ??
           const <String, dynamic>{};
-      // Which of *our* sessions is calling, when one is.
-      //
-      // The bridge reads it from its own environment, which Karmashala stamped
-      // on the agent process when it opened the pane, so it describes the actual
-      // process tree rather than something the model chose to say. That is what
-      // makes the spawn-depth cap worth having: a tool argument would be a
-      // number the caller could simply omit.
+      // Which of *our* sessions is calling: read from the environment Karmashala
+      // stamped on the process, not from the model.
       final callerSessionId = payload['callerSessionId'] as String?;
       final result = await _dispatch(tool, args, callerSessionId);
       response.headers.contentType = ContentType.json;
@@ -1044,13 +718,8 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
-  /// One `/rpc` call arriving over the owner-only socket.
-  ///
-  /// The directory ACL is the boundary, and the token is the second lock behind
-  /// it: it costs a caller nothing that already reads the restricted handshake
-  /// file, and it means a directory whose permissions were never applied — an
-  /// `icacls` that failed, a filesystem that does not carry them — is not
-  /// instantly an open door.
+  /// One `/rpc` call over the owner-only socket. The directory ACL is the
+  /// boundary; the token is a second lock behind it.
   Future<String> _handleSocketRpc(String body) async {
     try {
       final payload = jsonDecode(body) as Map<String, dynamic>;
@@ -1092,9 +761,8 @@ class LauncherControlServer implements SessionMcp {
         return;
       }
       final body = await _readBoundedBody(request);
-      // The same three steps a spooled payload goes through — see
-      // [applyAgentHookCallback], which exists so the two transports cannot
-      // come to disagree about what "a hook arrived" means.
+      // The same three steps a spooled payload goes through, so the two
+      // transports cannot disagree about what "a hook arrived" means.
       final report = applyAgentHookCallback(
         _container,
         agentId: request.uri.queryParameters['agent'],
@@ -1131,11 +799,8 @@ class LauncherControlServer implements SessionMcp {
   bool _constantTimeEquals(String? actual, String expected) =>
       constantTimeEquals(actual, expected);
 
-  /// One RPC, guarded against being made twice.
-  ///
-  /// Only the tools that start something go through the ledger — everything
-  /// else is a read, or a write already safe to repeat, and collapsing those
-  /// would answer a genuine second call with a stale result.
+  /// One RPC, guarded against being made twice. Only the tools that *start*
+  /// something go through the ledger; a read must not be collapsed.
   Future<Object?> _dispatch(
     String? tool,
     Map<String, dynamic> args, [
@@ -1158,122 +823,73 @@ class LauncherControlServer implements SessionMcp {
     String? callerSessionId,
   ]) async {
     switch (tool) {
-      // Meta-call: the MCP bridge fetches tool schemas from here so there is a
-      // single source of truth for the tool list.
       case '__list_tools__':
         return toolSchemas;
-      // What exists: the projects, the sessions in them, and the agents
-      // installed to run one. The three reads an agent starts from, and the
-      // only ones here that answer before anything has been started.
       case final String name when InventoryTools.handles(name):
         return InventoryTools(_container).call(name, args);
-      // Starting a session, and continuing one somewhere else. Needs the
-      // caller's identity like the families below: a session started here is
-      // recorded as its child, which is what the spawn-depth cap counts.
+      // The caller's identity matters: a session started here is recorded as
+      // its child, which is what the spawn-depth cap counts.
       case final String name when SessionLaunchTools.handles(name):
         return SessionLaunchTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // The fan-out comparisons: one prompt run on several agents in parallel
-      // worktrees, and what each of them produced.
       case final String name when FanOutTools.handles(name):
         return FanOutTools(_container).call(name, args);
-      // Several sessions opened together as tmux windows in one terminal tab.
       case final String name when TmuxControlTools.handles(name):
         return TmuxControlTools(_container).call(name, args);
-      // The per-turn record of a working tree. Like the session tools below,
-      // these default to the session that called them.
       case final String name when CheckpointControlTools.handles(name):
         return CheckpointControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // Operating a session that already exists. Split out because these are
-      // the half that needs the caller's own identity: every one of them
-      // defaults to the session that called it.
       case final String name when SessionControlTools.handles(name):
         return SessionControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // What is written down, and what is waiting on somebody.
       case final String name when AttentionControlTools.handles(name):
         return AttentionControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // The list a person and an agent both write to. Separate from the notes
-      // above because a todo is ticked off rather than sent back, and because
-      // an unfiled one has to stay as easy to write as a filed one.
       case final String name when TodoControlTools.handles(name):
         return TodoControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // What was decided, as opposed to what was said. The one write path into
-      // the decision record that is not attached to some other act.
       case final String name when DecisionControlTools.handles(name):
         return DecisionControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // Review comments as threads a human triages: the reviewer files
-      // findings here instead of into a transcript, and the author answers in
-      // the same place the request was made.
       case final String name when ReviewThreadTools.handles(name):
         return ReviewThreadTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // Where the work is: checkouts, and what one of them owes.
       case final String name when WorkspaceControlTools.handles(name):
         return WorkspaceControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // Making a checkout and taking one away. Separate from the workspace
-      // tools above because those only read and select, and these are the two
-      // verbs that change what is on disk — one of them irreversibly.
       case final String name when WorktreeControlTools.handles(name):
         return WorktreeControlTools(_container).call(name, args);
-      // An attached phone or emulator, through the same AdbService the device
-      // pane uses — so an agent and the person beside it drive one device.
       case final String name when DeviceControlTools.handles(name):
         return DeviceControlTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // The terminal layout, through the same controller the tab bar uses,
-      // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
         return TerminalControlTools(_container).call(name, args);
-      // Recording a pane or a device. Beside those two rather than inside
-      // either because it is the same pair of verbs over both, and the format
-      // question — which one this machine can actually write — is one answer
-      // for both surfaces.
       case final String name when RecordingControlTools.handles(name):
         return RecordingControlTools(_container).call(name, args);
-      // The commands the user keeps. Beside the terminal tools because that is
-      // where they land — and separate from them because typing a line for
-      // somebody to read is a different act from running one.
       case final String name when SnippetControlTools.handles(name):
         return SnippetControlTools(_container).call(name, args);
-      // The guides. Reads a table compiled into this binary, so it needs
-      // neither the container nor the caller's identity — and answers even
-      // when everything it describes is unavailable, which is exactly when an
-      // agent is most likely to ask.
       case final String name when InstructionsTools.handles(name):
         return const InstructionsTools().call(name, args);
-      // The browser tools live in features/browser and share the app's single
-      // BrowserService with the browser pane, so an agent and the developer
-      // drive the same page.
-      //
-      // The consent gate is resolved here rather than inside the feature
-      // because "which project is this call for" is a question about sessions
-      // and checkouts, and `features/browser` has no business reading those
-      // tables. Passing it per dispatch also means a grant taken back in
-      // Settings is in force on the very next call — there is nothing cached.
+      // Consent is resolved here, not in features/browser: which project a call
+      // is for is a sessions question, and nothing about it is cached.
       case final String name when BrowserTools.handles(name):
         return BrowserTools(
           _container.read(browserServiceProvider),
@@ -1282,45 +898,27 @@ class LauncherControlServer implements SessionMcp {
             callerSessionId: callerSessionId,
           ),
         ).call(name, args);
-      // The Flutter app the developer is running right now, through the same
-      // registry the pane reads — so an agent asks the app it just edited
-      // whether the edit compiled, instead of asking over their shoulder.
       case final String name when FlutterAppTools.handles(name):
         return FlutterAppTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // And the half that *starts* one. The caller's session is what the
-      // device claim is taken in the name of, so a second agent's refusal can
-      // name who is holding the phone.
       case final String name when FlutterRunTools.handles(name):
         return FlutterRunTools(
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
-      // What a checkout *is*, and the artifact its own toolchain builds — for
-      // every kind, Flutter included. It stops at the artifact path and the
-      // application id on purpose: installing and launching them is the
-      // `device_*` family above, which is framework-agnostic already.
       case final String name when ProjectBuildTools.handles(name):
         return ProjectBuildTools(_container).call(name, args);
-      // Verification runs record what the browser and device tools above do,
-      // so they share those same services rather than driving anything of their
-      // own. The artifact root is resolved here because it is the first thing
-      // that needs it and the app may not have asked for it yet.
       case final String name when VerificationTools.handles(name):
         await resolveVerificationRoot();
         final verification = _container.read(verificationServiceProvider);
-        // The run being closed, noted *before* the call because finishing it
-        // clears the service's active run. `verification_finish` is one of the
-        // four explicit acts that write to a session's decision record (G1),
-        // and this is the seam where it does — the verification feature is
-        // another owner's and does not need to know the record exists.
+        // Noted *before* the call, because finishing clears the active run: the
+        // seam where verification writes to the decision record.
         final finishing = name == 'verification_finish'
             ? verification.activeRun?.id
             : null;
-        // The caller is the producer of every verdict recorded here (G3): the
-        // one thing a self-graded run could never say about itself.
+        // The caller is the producer of every verdict recorded here (G3).
         final answer = await VerificationTools(
           verification,
           callerSessionId: callerSessionId,
@@ -1374,18 +972,8 @@ class _HardeningFailure implements Exception {
   String toString() => detail;
 }
 
-/// What to log when the fixed control port is taken and an ephemeral one is
-/// used instead.
-///
-/// Falling back is not a failure — everything works on any port. What is lost
-/// is reachability from inside WSL, because the fixed port exists so the
-/// Hyper-V firewall rule the installer writes can name it.
-///
-/// That consequence is Windows-only, and [hostIsWindows] is why this is a
-/// function rather than a string: a WSL environment is only ever created when
-/// the host is Windows, so on a Mac the sentence pointed its owner at
-/// machinery that cannot exist there. Found while converting the "run this on
-/// a Mac" backlog items.
+/// What to log when the fixed control port is taken. [hostIsWindows] because
+/// what is lost is WSL's reachability, which cannot exist on a Mac.
 String controlPortFallbackMessage(
   int port,
   Object error, {

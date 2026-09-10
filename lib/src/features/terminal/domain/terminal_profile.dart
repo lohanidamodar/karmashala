@@ -15,13 +15,8 @@ enum TerminalShell {
   ssh,
 }
 
-/// A launchable terminal shell: a PowerShell/Command Prompt on the Windows host,
-/// an interactive shell in a specific WSL distribution (via `wsl.exe -d`),
-/// a shell on a macOS or Linux host, or an interactive session on an SSH host.
-///
-/// Identified by a stable [id] (`powershell`, `cmd`, `wsl:<distro>`,
-/// `posix:/bin/zsh`, `ssh:<hostId>`) so it can be stored as the user's
-/// default-terminal preference.
+/// A launchable terminal shell, identified by a stable [id] (`powershell`,
+/// `wsl:<distro>`, `posix:/bin/zsh`, `ssh:<hostId>`) so it can be stored.
 class TerminalProfile {
   const TerminalProfile({
     required this.id,
@@ -104,15 +99,8 @@ class TerminalProfile {
   );
 }
 
-/// The terminal profiles available on this machine.
-///
-/// On Windows: the two host shells plus one per discovered WSL distribution.
-/// On macOS and Linux: the shells in [shells], the login shell first — there is
-/// no PowerShell or Command Prompt to offer, and offering them anyway gave a
-/// Mac a settings page listing two shells it does not have and could not launch.
-///
-/// [hostIsWindows] is passed rather than read, so the pure function stays pure
-/// and the tests can ask for either host.
+/// The terminal profiles available on this machine. [hostIsWindows] is passed
+/// rather than read — offering PowerShell on a Mac listed unlaunchable shells.
 List<TerminalProfile> terminalProfilesFor(
   List<ExecutionEnvironment> environments, {
   bool hostIsWindows = true,
@@ -163,12 +151,8 @@ List<TerminalProfile> terminalProfilesFor(
   return profiles;
 }
 
-/// Rebuilds a profile from a stored [id] alone, or `null` when the id is not one
-/// this app writes.
-///
-/// Restoring a layout deliberately does *not* consult the discovered
-/// environments: a WSL distro that has since been removed should come back as a
-/// pane that fails to launch and says so, not silently as PowerShell.
+/// Rebuilds a profile from a stored [id] alone, or `null`. It does not consult
+/// discovered environments: a removed distro must fail, not become PowerShell.
 TerminalProfile? terminalProfileFromId(String id) {
   if (id == TerminalProfile.powerShellId) return TerminalProfile.powerShell;
   if (id == TerminalProfile.commandPromptId) {

@@ -35,12 +35,8 @@ class FanOutResult {
   final ComparisonCandidate? candidate;
 }
 
-/// One agent that never got started, and why.
-///
-/// Named rather than swallowed because the whole point of a fan-out is that
-/// several agents run the *same* prompt: "three of five started" is a different
-/// comparison from the one the user asked for, and they have to be told which
-/// two are missing before they read the diffs.
+/// One agent that never got started, and why. Named rather than swallowed:
+/// "three of five started" is a different comparison from the one asked for.
 class FanOutFailure {
   const FanOutFailure({
     required this.installation,
@@ -58,14 +54,8 @@ class FanOutFailure {
   String get agentId => installation.agentId;
 }
 
-/// The outcome of a fan-out: what is running, what refused to start, and the
-/// durable [Comparison] that records both.
-///
-/// `Future.wait` used to be the whole of [FanOutService.launch], which meant a
-/// single failing agent threw and **discarded every successful launch with it**
-/// — sessions that were already running, with worktrees already created, now
-/// unreferenced by anything the UI could see. Returning both halves is what
-/// makes the successes survive their unlucky sibling.
+/// The outcome of a fan-out: what is running, what refused, and the durable
+/// [Comparison]. Both halves, so successes survive an unlucky sibling.
 class FanOutLaunch {
   const FanOutLaunch({
     required this.started,
@@ -155,13 +145,8 @@ class FanOutService {
   FanOutService(this.ref);
   final Ref ref;
 
-  /// Starts [prompt] on every installation in [installations], each in its own
-  /// worktree, and records the whole thing as a [Comparison].
-  ///
-  /// Every agent is launched; one that throws becomes a [FanOutFailure] rather
-  /// than cancelling the others' results. Only the *inputs* are rejected
-  /// outright, before anything is created — and therefore before any comparison
-  /// row is written.
+  /// Starts [prompt] on every installation, each in its own worktree. One that
+  /// throws becomes a [FanOutFailure]; only the *inputs* are rejected outright.
   Future<FanOutLaunch> launch({
     required Repository repository,
     required List<AgentInstallation> installations,
@@ -290,13 +275,8 @@ class FanOutService {
     }
   }
 
-  /// Rebuilds the live handles for a stored [comparison].
-  ///
-  /// This is what makes a comparison a place you come back to: after a restart
-  /// nothing is in memory, and the session rows plus the candidate records are
-  /// enough to act again. A candidate whose session row is gone is skipped —
-  /// its *record* still reads in the view, there is simply nothing left to
-  /// merge or discard.
+  /// Rebuilds the live handles for a stored [comparison], which is what makes it
+  /// a place you come back to. A candidate with no session row is skipped.
   List<FanOutResult> resultsFor(Comparison comparison) {
     final repository = ref
         .read(repositoryDaoProvider)
@@ -327,11 +307,8 @@ class FanOutService {
     return null;
   }
 
-  /// Reads [result]'s current diff **and records what it showed**.
-  ///
-  /// The recording is the point: `git diff` needs a directory, and the whole
-  /// promise of a persistent comparison is that it still says what each agent
-  /// did after that directory has been removed.
+  /// Reads [result]'s current diff **and records what it showed** — the whole
+  /// promise is that it still reads after the directory is gone.
   Future<String> diff(FanOutResult result) async {
     final worktree = result.session.worktree;
     if (worktree == null) return '';
@@ -365,13 +342,7 @@ class FanOutService {
   }
 
   /// Counts what a worktree currently holds and stores it on the candidate.
-  ///
-  /// Files come from `git status` — it dedupes a file that is both staged and
-  /// modified, and it is the only one of the three that sees an untracked file.
-  /// Lines come from the staged and unstaged diffs together, because an agent
-  /// that ran `git add` and stopped there has an empty unstaged diff and a full
-  /// day's work in the index. Commits come from `rev-list`, and are the only
-  /// number left once an agent commits and the working tree goes clean.
+  /// Files from `git status`, lines from both diffs, commits from `rev-list`.
   Future<CandidateDiffStat> _recordDiff({
     required ComparisonCandidate candidate,
     required EnvironmentPath worktree,
@@ -416,13 +387,8 @@ class FanOutService {
     ref.read(comparisonsProvider.notifier).reload();
   }
 
-  /// Merges [result]'s session branch into the repository's current branch, and
-  /// records the winner and the commit it landed on.
-  ///
-  /// Merging is all this does. Removing the worktrees of the agents that did
-  /// not win is [discardLosers] — a second, deliberate action, because a merge
-  /// that also deleted four other agents' work as a side effect would be a
-  /// destructive operation the user never asked for and could not decline.
+  /// Merges [result]'s branch and records the winner. Merging is all it does:
+  /// removing the losers' worktrees is [discardLosers], a second, named action.
   Future<void> mergeWinner(FanOutResult result) async {
     final worktree = result.session.worktree;
     if (worktree == null) throw StateError('This result has no worktree.');
@@ -474,30 +440,8 @@ class FanOutService {
     ref.read(comparisonsProvider.notifier).reload();
   }
 
-  /// Removes the worktrees of every result in [results] except [winner].
-  ///
-  /// A fan-out leaves one worktree per agent behind, and nothing used to take
-  /// them away: five agents compared meant four `.karmashala-worktrees/…`
-  /// directories and four checked-out branches sitting there indefinitely.
-  ///
-  /// It refuses, rather than asks forgiveness, in two cases:
-  ///
-  /// * **The session is still running.** Deleting the directory a live agent is
-  ///   working in is not cleanup.
-  /// * **The worktree has uncommitted changes.** That is work no branch holds;
-  ///   removing it destroys the only copy. Pass the session's id in
-  ///   [discardUncommittedFor] to say, for that specific session, that it may
-  ///   go anyway — a per-session confirmation, not a global `force` flag,
-  ///   because the user confirms one dialog about one agent's work.
-  ///
-  /// Branches are deliberately left alone. A branch is recoverable and cheap; a
-  /// worktree directory is the thing that accumulates. Removal itself goes
-  /// through [WorktreeService], so this is the same lifecycle Loop 5 built and
-  /// not a second way to unmake a worktree.
-  ///
-  /// The candidate record is *not* removed with the directory. It is marked
-  /// `worktreeRemoved` and keeps the last diff stat read from it, which is the
-  /// only account of that agent's work that survives.
+  /// Removes the worktrees of every result except [winner]. It refuses a running
+  /// session and an uncommitted tree; branches, being cheap, are left alone.
   Future<FanOutDiscard> discardLosers(
     List<FanOutResult> results, {
     required FanOutResult winner,

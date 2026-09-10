@@ -24,14 +24,7 @@ import 'automation_scheduler.dart';
 import 'unattended_preflight.dart';
 
 /// Firing an automation: the gate again, a checkpoint of the base, a session.
-///
-/// **The gate runs twice, and the second time is the one that matters.**
-/// Arming-time preconditions lapse — a check is deleted, an agent uninstalled,
-/// an SSH host stops answering — and the fire is when the agent would actually
-/// start. A refusal here is a recorded `failed` run carrying the refusal's own
-/// words, never a silent skip: the scheduler's floor is the newest occurrence
-/// it has a row for, so a fire that recorded nothing would come round again on
-/// every tick, forever.
+/// A refusal is a recorded `failed` run — a silent skip would repeat forever.
 class AutomationRunner implements AutomationFiring {
   const AutomationRunner(this._ref);
 
@@ -48,8 +41,7 @@ class AutomationRunner implements AutomationFiring {
     final now = _ref.read(clockProvider).nowUtc();
 
     // The row exists before anything can fail, so every outcome has somewhere
-    // to be written. A drained queue entry *is* this run and is updated in
-    // place rather than joined by a second row for the same occurrence.
+    // to be written. A drained queue entry *is* this run, updated in place.
     var run = queued == null
         ? AutomationRun(
             id: _ref.read(idGeneratorProvider).newId(),
@@ -97,10 +89,8 @@ class AutomationRunner implements AutomationFiring {
       return;
     }
 
-    // The base, before the agent touches anything. `evenIfUnchanged` because
-    // undo needs a point to restore to whether or not the tree happened to
-    // match the last checkpoint — a run with no base is a run that cannot be
-    // taken back. Keyed by the run's own id: this chain is not a session's.
+    // `evenIfUnchanged` because undo needs a point to restore to either way.
+    // Keyed by the run's id, not a session's.
     Checkpoint? base;
     try {
       base = await _ref
@@ -133,9 +123,8 @@ class AutomationRunner implements AutomationFiring {
               title: automation.name,
               purpose: SessionPurpose.newSession,
               firstMessage: automation.prompt,
-              // The mode the person armed. Null means they chose nothing and
-              // the agent's declared default stands — which the gate has
-              // already read the rung of, so it is not an unchecked path.
+              // Null means they chose nothing and the agent's declared default
+              // stands — whose rung the gate has already read.
               permissionOverride: automation.permissionMode,
             ),
           );
@@ -152,18 +141,8 @@ final automationRunnerProvider = Provider<AutomationRunner>(
   AutomationRunner.new,
 );
 
-/// Turns "the automation's session ended" into the run's own verdict.
-///
-/// **It hangs on the signals the app already has** rather than inventing one:
-/// the session row's own status, which is durable and survives a restart, and
-/// `paneExitProvider`, which is the only one that ever says a pane-hosted agent
-/// simply *finished* — `SessionEndingObserver` reads exactly this pair and this
-/// deliberately copies it rather than adding a second seam.
-///
-/// **Watched, not read.** Riverpod 3 pauses a provider's own subscriptions
-/// while nothing listens to it, so an observer nobody watches would hear no
-/// session end at all — silently, which is the worst failure for a thing whose
-/// whole job is noticing. `AppShell` watches it.
+/// Turns "the automation's session ended" into the run's verdict. Must be
+/// watched: Riverpod 3 pauses an unwatched provider, so it would hear nothing.
 class AutomationRunObserver extends Notifier<int> {
   int _revision = 0;
   bool _disposed = false;
@@ -179,14 +158,12 @@ class AutomationRunObserver extends Notifier<int> {
       SessionChangeKind.status,
     });
 
-    // **The clean finish**, which neither other signal carries: the row never
-    // says `completed` for a pane-hosted session and the status pipeline never
-    // settles on it.
+    // The clean finish, which neither other signal carries: the row never says
+    // `completed` for a pane-hosted session.
     ref.listen(paneExitProvider, (_, exit) {
       if (exit == null) return;
-      // Read first, because a project check's pane is not a session's and the
-      // rows behind it have to be taken in the exit's own moment. This is the
-      // whole of the check sequence's clock: nothing polls.
+      // Read first, because a project check's pane is not a session's and its
+      // rows have to be taken in the exit's own moment. Nothing polls.
       ref.read(automationCheckRunnerProvider).noteExit(exit.paneId, exit.exitCode);
       final sessionId = exit.sessionId;
       if (sessionId == null) return;
@@ -195,8 +172,8 @@ class AutomationRunObserver extends Notifier<int> {
       _settle(sessionId, ending);
     });
 
-    // **The live one**, which is the only thing that ever reports a crash for
-    // a pane-hosted agent. Subscribing is not a write, so it happens here.
+    // The live one, the only thing that ever reports a crash for a pane-hosted
+    // agent. Subscribing is not a write, so it happens here.
     final sessions = ref.read(sessionDaoProvider);
     for (final run in ref.read(automationDaoProvider).liveRuns()) {
       if (run.state != AutomationRunState.running) continue;
@@ -214,9 +191,8 @@ class AutomationRunObserver extends Notifier<int> {
       });
     }
 
-    // **The durable half**, deferred: it writes, and a provider must not
-    // change another one while it is building. A row that already says how it
-    // ended settles its run even if the app was not running when it happened.
+    // The durable half, deferred: it writes, and a provider must not change
+    // another while it is building.
     unawaited(
       Future<void>.microtask(() {
         if (!_disposed) _sweep();
@@ -254,16 +230,14 @@ class AutomationRunObserver extends Notifier<int> {
 
   void _settleWith(AutomationRun run, SessionEnding ending) {
     final state = _stateOf(ending);
-    // Losing sight of a session is not an ending. The run stays `running`
-    // until something is actually observed — saying "finished" here would be
-    // the confident false statement §19 exists to remove, and it would free
-    // the checkout for a queued run while an agent is possibly still editing.
+    // Losing sight of a session is not an ending (§19): saying "finished" here
+    // would free the checkout while an agent may still be editing.
     if (state == null) return;
     _finish(run, state, _reasonOf(ending));
   }
 
-  /// Records the verdict, counts what the run left on the branch, runs the
-  /// checkout's checks, and lets the next waiting run in this checkout start.
+  /// Records the verdict, runs the checkout's checks, and lets the next waiting
+  /// run in this checkout start.
   void _finish(AutomationRun run, AutomationRunState state, String reason) {
     final dao = ref.read(automationDaoProvider);
     final finished = run.copyWith(
@@ -275,10 +249,8 @@ class AutomationRunObserver extends Notifier<int> {
     _revision++;
     ref.read(automationsRevisionProvider.notifier).bump();
 
-    // **The agent stopping is not evidence the work stands**, whichever way it
-    // stopped — which is why a failed ending gets its checks run too. Started
-    // and not awaited: a checkout's test suite takes minutes, and this is a
-    // pane exit rather than a call anybody made.
+    // The agent stopping is not evidence the work stands, whichever way it
+    // stopped — so a failed ending gets its checks run too, started not awaited.
     ref.read(automationCheckRunnerProvider).start(finished);
 
     final automation = dao.getById(run.automationId);

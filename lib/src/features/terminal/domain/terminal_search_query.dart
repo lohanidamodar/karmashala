@@ -1,15 +1,5 @@
-/// What the find bar is looking for: literal text or a regular expression,
-/// folded or not.
-///
-/// Compiled **once** per query rather than per line. A `RegExp` built inside the
-/// scan loop would recompile the pattern for every line of a 10 000-line
-/// scrollback, which is the whole cost of the search.
-///
-/// The two toggles **compose**: `caseSensitive` becomes `RegExp`'s own
-/// `caseSensitive`, so `.*` and `Aa` are independent and either order of
-/// pressing them gives the same result. Dart's `RegExp` has no inline `(?i)`
-/// flag, so the toggle is the only way to fold a pattern's case — which is why
-/// it stays enabled while regex is on rather than being greyed out.
+/// What the find bar is looking for. Compiled **once** per query: a `RegExp`
+/// built in the scan loop would recompile for every line of the scrollback.
 class TerminalSearchQuery {
   TerminalSearchQuery._({
     required this.text,
@@ -21,10 +11,9 @@ class TerminalSearchQuery {
   }) : _pattern = compiled,
        _needle = folded;
 
-  /// Compiles [text]. An invalid pattern is **not** an exception and **not** a
-  /// silent downgrade to literal matching: it comes back as a query that
-  /// carries [error] and matches nothing, so the bar can say what is wrong
-  /// while the user is still typing the rest of it.
+  /// Compiles [text]. An invalid pattern is neither an exception nor a silent
+  /// downgrade to literal matching: it comes back carrying [error] and matching
+  /// nothing, so the bar can say what is wrong while the user is still typing.
   factory TerminalSearchQuery.parse(
     String text, {
     bool caseSensitive = false,
@@ -72,11 +61,9 @@ class TerminalSearchQuery {
   /// pattern are both "no", for the same reason: there is nothing to look for.
   bool get isUsable => text.isNotEmpty && error == null;
 
-  /// Reports every hit in [haystack] as a half-open `[start, end)` range of
-  /// **character** indices, in reading order.
-  ///
-  /// Callers map those to cell columns; see [TerminalLineText]. A hit never
-  /// spans a line break, so `^` and `$` anchor to one buffer line.
+  /// Every hit in [haystack] as a half-open `[start, end)` range of
+  /// **character** indices. A hit never spans a line break, so `^` anchors to
+  /// one line.
   void forEachMatch(String haystack, void Function(int start, int end) onHit) {
     if (!isUsable || haystack.isEmpty) return;
 

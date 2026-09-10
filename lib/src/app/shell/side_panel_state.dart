@@ -1,11 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
 /// The surfaces the right-hand side panel can show.
-///
-/// These used to switch through a bare `int` on a shared provider, which is how
-/// four unrelated tools (git changes, GitHub, a device mirror and a browser)
-/// ended up behind one index. Naming them makes it obvious when something new is
-/// being added to a grab-bag instead of given its own home.
 enum SidePanelSurface {
   /// First on the rail because it is the thing you check first: everything
   /// pending, in one list, whichever pane owns the thing that is waiting.
@@ -18,66 +13,39 @@ enum SidePanelSurface {
 
   /// The Flutter app the developer is running: its debug console, hot reload
   /// and a widget picker.
-  ///
-  /// Beside Device and Browser because all three are *something running that
-  /// this app is driving*, and it is the one of the three whose subject is the
-  /// project's own code.
   flutterApp('Flutter app'),
   verification('Verification'),
 
   /// Every picture the session on screen has produced or been shown, newest
-  /// first. The owner's ask — *"where can i see this image preview in the
-  /// terminal? i can't see it"* — because a picture pasted into a terminal is
-  /// recorded as bytes with no path, and there was nowhere in the app that
-  /// showed it.
+  /// first — a picture pasted into a terminal is recorded as bytes with no path.
   media('Media'),
 
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
   /// the branch and worktree list nobody could find lives in here.
   repository('Repository', scopedToRepository: true),
 
-  /// **The agent's own plan**, read out of the record it writes for itself.
-  ///
-  /// Directly above Todos because the pair is the same shape and different
-  /// authorship — this one is the agent's intent and is read-only, that one is
-  /// the user's list and is written here. Two agents of the three publish one;
-  /// the third says so in words rather than drawing an empty list.
+  /// **The agent's own plan**, read out of the record it writes for itself, and
+  /// read-only. Two agents of the three publish one; the third says so.
   plan('Plan'),
 
   /// **The way back from a turn.** One entry per turn an agent finished, plus
-  /// the safety captures taken before a restore.
-  ///
-  /// Directly under Plan because the pair answers the two halves of "what has
-  /// this agent been doing to my checkout" — what it says it intends, and what
-  /// it has already written. It is also the only undo in the app for an
-  /// agent's edits, which is why it is on the rail rather than behind a menu.
+  /// the safety captures taken before a restore — the only undo for its edits.
   checkpoints('Checkpoints', drawsOwnHeader: true),
 
-  /// **What the session has settled**, in the words it was settled in.
-  ///
-  /// Third of the trio, because Plan / Checkpoints / Decisions is what the
-  /// agent intends, what it has written, and what is now fixed. It is also the
-  /// only one of the three a handoff carries *ahead* of the transcript, so it
-  /// is the one a person most needs to be able to read before handing work
-  /// over — and the one they could not read at all until it was put here.
+  /// **What the session has settled**, in the words it was settled in — the one
+  /// of the trio a handoff carries *ahead* of the transcript.
   decisions('Decisions', drawsOwnHeader: true),
 
-  /// The user's own list: a line of text, done or not, filed under a project
-  /// or under nothing.
-  ///
-  /// Next to Notes because both are the user's writing rather than the app's
-  /// observations, and **not gated** the way Notes is: the Notes switch exists
-  /// to take the capture affordance out of the transcript, and a todo list
-  /// that disappeared because somebody turned that off would be broken.
+  /// The user's own list: a line of text, done or not, filed under a project or
+  /// under nothing. **Not gated** on Notes — that switch is about capture.
   todos('Todos', drawsOwnHeader: true),
 
   /// Ideas kept out of a conversation instead of acted on, and sent back to an
   /// agent when the user is ready for them. Hidden when Notes is switched off.
   notes('Notes', drawsOwnHeader: true, requiresNotes: true),
 
-  /// The app's own log tail. Hidden unless debug mode is on: it is a
-  /// diagnostic, not a tool, and a rail glyph nobody needs is a rail glyph in
-  /// the way of the seven that are used every day.
+  /// The app's own log tail. Hidden unless debug mode is on: a diagnostic, not
+  /// a tool, and a rail glyph nobody needs is in the way of the daily ones.
   logs('Logs', requiresDebugMode: true);
 
   const SidePanelSurface(
@@ -90,16 +58,12 @@ enum SidePanelSurface {
 
   final String label;
 
-  /// Whether the surface already titles itself. Three of them do, with their
-  /// own actions in the same row, and stacking the panel's header on top of
-  /// that was two rows of chrome saying one word.
+  /// Whether the surface already titles itself. Stacking the panel's header on
+  /// one that does is two rows of chrome saying one word.
   final bool drawsOwnHeader;
 
-  /// Whether the surface describes **one checkout** — the diff, the branch and
-  /// worktree list, the forge links, the file tree. All four read the same
-  /// selection, and since Loop 85 that selection moves on its own when the
-  /// active terminal tab changes, so these are the surfaces that have to say
-  /// which checkout they are describing.
+  /// Whether the surface describes **one checkout**. That selection moves on
+  /// its own when the active terminal tab changes, so these have to say which.
   final bool scopedToRepository;
 
   /// Whether the surface only exists while debug mode is on.
@@ -108,15 +72,13 @@ enum SidePanelSurface {
   /// Whether the surface only exists while the Notes feature is on.
   final bool requiresNotes;
 
-  /// Whether this surface exists for the settings given. The one answer, so
-  /// the rail, the menus and the "close what is open" check in [SidePanel]
-  /// cannot disagree about whether a surface is there.
+  /// Whether this surface exists for the settings given. The one answer, so the
+  /// rail, the menus and [SidePanel]'s own check cannot disagree.
   bool isOffered({required bool debugMode, bool notesEnabled = true}) =>
       (debugMode || !requiresDebugMode) && (notesEnabled || !requiresNotes);
 
   /// The surfaces to offer — on the rail, in the View menu and in quick open.
-  /// One list, so a surface cannot be hidden from the rail and still reachable
-  /// from a menu.
+  /// One list, so a surface cannot be hidden and still reachable from a menu.
   static List<SidePanelSurface> offered({
     required bool debugMode,
     bool notesEnabled = true,
@@ -127,12 +89,8 @@ enum SidePanelSurface {
   ];
 }
 
-/// Which side-panel surface is open, or `null` when the panel is collapsed.
-///
-/// The panel *remembers* the surface it was last showing, so collapsing and
-/// re-opening returns to what the user was doing rather than resetting to the
-/// first tab. Collapsed means collapsed: the shell gives the panel body no
-/// width at all, only the icon rail stays.
+/// Which side-panel surface is open, or `null` when collapsed — and collapsed
+/// means collapsed: the body gets no width at all, only the rail stays.
 class SidePanelController extends Notifier<SidePanelSurface?> {
   /// What re-opening the panel should show. Never null, so the panel always has
   /// somewhere to go back to.

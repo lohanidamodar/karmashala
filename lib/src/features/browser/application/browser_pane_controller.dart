@@ -43,10 +43,8 @@ class BrowserPaneState {
 
   final BrowserPaneStatus status;
 
-  /// How we got hold of the browser — "Attached to the browser already
-  /// listening on port 9222" or "Launched …". Shown verbatim: whether we are
-  /// driving the user's own window or a throwaway one is the difference
-  /// between this feature working and this feature lying.
+  /// How we got hold of the browser, shown verbatim: whether we drive the user's
+  /// own window or a throwaway one is the difference between working and lying.
   final String? connection;
   final int port;
   final String url;
@@ -103,12 +101,8 @@ class BrowserPaneState {
   );
 }
 
-/// Drives [BrowserService] for the pane.
-///
-/// Every action funnels through [_run], which is the only place a failure can
-/// be turned into state: a [BrowserException]'s message goes onto the pane
-/// unchanged, because those messages were written to be read by a person and
-/// flattening them to "something went wrong" throws away the whole taxonomy.
+/// Drives [BrowserService] for the pane. Every action funnels through [_run],
+/// which puts a [BrowserException]'s own message onto the pane unchanged.
 class BrowserPaneController extends Notifier<BrowserPaneState> {
   StreamSubscription<void>? _watch;
 
@@ -187,14 +181,7 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
   }
 
   /// Hands the page over to the user to point at an element, and takes the
-  /// window back when they have.
-  ///
-  /// The raise lives here rather than in `ElementPicker`, which is `data/` and
-  /// speaks CDP to a browser: raising *this* app is a shell concern, and the
-  /// picker would need a seam it has no other use for. It lives here rather
-  /// than in the pane widget because only this method knows which way the pick
-  /// went — a cancelled, timed-out or disconnected one arrives in the `catch`
-  /// below, where there is nothing to come back to.
+  /// window back. Raising is a shell concern, and only this knows how it went.
   Future<void> pickElement() async {
     if (!_service.isConnected) return;
     state = state.copyWith(
@@ -363,11 +350,8 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
     _ => '$error',
   };
 
-  /// Lets the user type `localhost:3000` instead of a full URL.
-  ///
-  /// Note the `//`: a bare scheme test would read `localhost:3000` as the
-  /// scheme `localhost`, and the browser would refuse it. Only the schemes
-  /// that legitimately have no authority are listed separately.
+  /// Lets the user type `localhost:3000` instead of a full URL. Note the `//`:
+  /// a bare scheme test reads `localhost:3000` as the scheme `localhost`.
   static String _normalizeUrl(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return trimmed;

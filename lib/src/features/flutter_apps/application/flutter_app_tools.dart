@@ -3,27 +3,15 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 
-/// The `flutter_*` tools: what an agent can ask about, and do to, the app the
-/// developer is running right now.
-///
-/// **Why an agent surface and not only a panel.** The agent is the one that
-/// edited the file. It is already holding the change and the intent, and the
-/// two questions it cannot answer from the repository are "did that compile
-/// into the running app" and "what did the app say when it did". Making it
-/// read a panel over the developer's shoulder is the version of this feature
-/// that does not work.
-///
-/// Nothing here dispatches to a session. An error is *reported* when it is
-/// asked for; the panel's own "send to session" offers it to a composer the
-/// way `ComposerDrafts` offers a note, and neither path sends anything.
+/// The `flutter_*` tools: what an agent can ask about, and do to, the running
+/// app. Nothing dispatches to a session; an error is reported when asked for.
 class FlutterAppTools {
   FlutterAppTools(this._container, {this.callerSessionId});
 
   final ProviderContainer _container;
 
-  /// Which session is calling, when one is. Unused today and carried because
-  /// every other tool group carries it, so a per-project rule about which app
-  /// a session means has somewhere to be read from later.
+  /// Which session is calling, when one is. Unused today, carried so a rule
+  /// about which app a session means has somewhere to be read from.
   final String? callerSessionId;
 
   static const Set<String> _names = <String>{
@@ -61,8 +49,8 @@ class FlutterAppTools {
       if (registry.discoveryFailure != null)
         'couldNotLook': registry.discoveryFailure,
       'apps': <Object?>[for (final app in registry.apps) app.toJson()],
-      // The remedy travels with the empty answer, because an agent that
-      // cannot see an app needs the flag, not the news.
+      // The remedy travels with the empty answer: an agent that cannot see an
+      // app needs the flag, not the news.
       if (registry.attached.isEmpty) 'howToMakeOneVisible': _apps.attachHint,
     };
   }
@@ -91,10 +79,8 @@ class FlutterAppTools {
     } else {
       await _apps.hotReload(app.id);
     }
-    // What a success here does *not* mean: the reload landed in the VM. It
-    // says nothing about the app's new state being correct, and a widget that
-    // failed to rebuild reports itself on the Extension stream — which is
-    // `flutter_logs`, not this reply.
+    // What a success here does *not* mean: only that the reload reached the VM.
+    // A widget that failed to rebuild reports itself on `flutter_logs`.
     return <String, Object?>{
       'appId': app.id,
       'kind': fullRestart ? 'hotRestart' : 'hotReload',
@@ -198,11 +184,8 @@ class FlutterAppTools {
       .map((entry) => '${entry.key}=${entry.value}')
       .join(', ');
 
-  /// Prose, as a content block.
-  ///
-  /// A console tail JSON-encoded into one string is unreadable and costs
-  /// several times the tokens; `InstructionsTools` uses the same escape hatch
-  /// for the same reason.
+  /// Prose, as a content block: a console tail JSON-encoded into one string is
+  /// unreadable and costs several times the tokens.
   static Map<String, Object?> _text(String body) => <String, Object?>{
     '_mcpContent': <Object?>[
       <String, Object?>{'type': 'text', 'text': body},

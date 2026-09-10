@@ -8,20 +8,11 @@ import '../../verification/presentation/attribution_mark.dart';
 import '../application/comparison_providers.dart';
 import '../domain/comparison.dart';
 
-/// Small shared pieces of the comparison surface.
-///
-/// Neutral by decision (the design note):
-/// the ramp carries the chrome and the only colour is [SemanticColors] — diff
-/// add/remove, a failed launch, a verdict. Nothing here is branded.
+/// Small shared pieces of the comparison surface. Neutral by decision: the
+/// only colour is [SemanticColors] — diff add/remove, a failure, a verdict.
 
-/// What state a candidate is in — as a glyph and a word, then a colour.
-///
-/// This was a bare 7px coloured circle carrying all four states: no glyph, no
-/// tooltip, nothing in the semantics tree, so "did not start" and "winner"
-/// differed by hue alone and a screen reader was told nothing at all. The agent
-/// id sitting beside it names the agent, not the state. [SessionVerdictMark],
-/// two files away, states the rule this broke: *a glyph as well as a colour …
-/// state is never carried by colour alone.*
+/// What state a candidate is in — as a glyph and a word, then a colour. State
+/// is never carried by colour alone; a bare dot told a screen reader nothing.
 class CandidateStateMark extends StatelessWidget {
   const CandidateStateMark({
     required this.candidate,
@@ -32,10 +23,8 @@ class CandidateStateMark extends StatelessWidget {
   final ComparisonCandidate candidate;
   final bool isWinner;
 
-  /// Decided in this order, and the order is the point: a candidate that never
-  /// ran has nothing else worth saying about it, and a winner's worktree is
-  /// usually gone by the time it is one — "winner" is the more useful of those
-  /// two facts.
+  /// Decided in this order, and the order is the point: a winner's worktree is
+  /// usually gone by the time it is one, and "winner" is the more useful fact.
   CandidateState get state {
     if (!candidate.started) return CandidateState.didNotStart;
     if (isWinner) return CandidateState.winner;
@@ -90,13 +79,8 @@ class CandidateStateMark extends StatelessWidget {
   }
 }
 
-/// The four things a candidate can be, in the words a reader sees.
-///
-/// Chosen rather than borrowed from the enum underneath: "did not start" rather
-/// than "failed", because a launch that never happened is not a run that went
-/// wrong; "started" rather than "running", because nothing on this surface can
-/// see whether the session is still going, and a mark that says "running" about
-/// a finished agent is worse than one that says less.
+/// The four things a candidate can be, in the words a reader sees: "did not
+/// start", not "failed"; "started", not "running", which nothing here can see.
 enum CandidateState {
   didNotStart('Did not start'),
   winner('Winner'),
@@ -168,11 +152,8 @@ class DiffStatLine extends StatelessWidget {
   }
 }
 
-/// A verification verdict beside the diff stat. Absent when nothing has one.
-///
-/// [attribution] is required rather than optional: a verdict rendered without
-/// saying who produced it is the self-graded exam G3 names, and an optional
-/// parameter is how a caller quietly stops saying.
+/// A verification verdict beside the diff stat. [attribution] is required, not
+/// optional: an optional parameter is how a caller quietly stops saying.
 class VerdictChip extends StatelessWidget {
   const VerdictChip({
     required this.evidence,
@@ -234,13 +215,8 @@ class OutcomeLabel extends ConsumerWidget {
         semantic.attention,
       ),
     };
-    // Who graded the winner, on the outcome itself. The comparisons list shows
-    // an outcome without any candidate's verdict chip, so without this a merge
-    // that rested on the candidate's own account of itself is indistinguishable
-    // from one that was independently checked. It states; it blocks nothing.
-    // Resolved live, through the same helper the candidate's chip uses: the
-    // list saying `self` beside a card saying `independent` would be worse
-    // than saying nothing.
+    // Who graded the winner, on the outcome itself — the list shows no candidate
+    // chip. Resolved live through the same helper, so the two cannot disagree.
     final winner = comparison.winner;
     final attribution = winner == null
         ? null

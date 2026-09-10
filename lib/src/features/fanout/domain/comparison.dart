@@ -19,11 +19,8 @@ enum CandidateLaunchState { started, failed }
 /// A verification verdict, as far as this comparison is concerned.
 enum EvidenceVerdict { passed, failed, inconclusive }
 
-/// What a candidate's worktree showed the last time anyone looked.
-///
-/// Recorded rather than recomputed because the point of a persisted comparison
-/// is that it still reads after the worktree has been removed: the directory is
-/// gone, the number is not.
+/// What a candidate's worktree showed the last time anyone looked. Recorded
+/// rather than recomputed: the directory goes, the number does not.
 class CandidateDiffStat {
   const CandidateDiffStat({
     required this.filesChanged,
@@ -46,11 +43,8 @@ class CandidateDiffStat {
 
   bool get isEmpty => filesChanged == 0 && (commits ?? 0) == 0;
 
-  /// One line for a card: `3 files +42 −7 · 2 commits`.
-  ///
-  /// Lines are shown even when no file is counted: an agent that committed and
-  /// left a clean tree has files 0 and commits 2, and one whose status could
-  /// not be read still has the lines its diff showed.
+  /// One line for a card: `3 files +42 -7 · 2 commits`. Lines show even with no
+  /// file counted — a committed clean tree has files 0 and commits 2.
   String get summary {
     final changed = <String>[
       if (filesChanged > 0) '$filesChanged file${filesChanged == 1 ? '' : 's'}',
@@ -88,11 +82,8 @@ class CandidateDiffStat {
   String toString() => 'CandidateDiffStat($summary)';
 }
 
-/// A verification result attached to a candidate.
-///
-/// The seam Loop 51's `features/verification/` fills: fan-out stores the verdict
-/// and a human label, never the run itself, so the two features stay separable
-/// and an old comparison keeps its verdict after the run is pruned.
+/// A verification result attached to a candidate: the verdict and a label,
+/// never the run, so an old comparison keeps it after the run is pruned.
 class CandidateEvidence {
   const CandidateEvidence({
     required this.verdict,
@@ -110,16 +101,11 @@ class CandidateEvidence {
   final String? runId;
 
   /// The session that produced the verdict, or null when nobody recorded one.
-  ///
-  /// Copied alongside the verdict for the same reason the verdict itself is
-  /// copied: the run behind it can be pruned, and a verdict that outlives its
-  /// attribution is exactly the self-graded pass this records against.
+  /// Copied with the verdict: one that outlives its attribution is the failure.
   final String? producerSessionId;
 
-  /// Whether the candidate's own session produced this verdict.
-  ///
-  /// Takes the subject rather than storing it, because the candidate already
-  /// holds it — see [ComparisonCandidate.evidenceAttribution].
+  /// Whether the candidate's own session produced this verdict. Takes the
+  /// subject rather than storing it — the candidate already holds it.
   VerdictAttribution attributionFor(String? subjectSessionId) =>
       VerdictAttribution.of(
         producerSessionId: producerSessionId,
@@ -141,12 +127,8 @@ class CandidateEvidence {
   String toString() => 'CandidateEvidence(${verdict.name}, $label)';
 }
 
-/// One agent's attempt at the shared prompt, as a durable record.
-///
-/// [sessionId] is deliberately not a foreign key and [worktree] deliberately
-/// outlives the directory it names: a candidate whose worktree was discarded is
-/// still part of the comparison, and its last diff stat is the only remaining
-/// account of what it did.
+/// One agent's attempt at the shared prompt, as a durable record. [sessionId]
+/// is no foreign key and [worktree] outlives the directory it names.
 class ComparisonCandidate {
   const ComparisonCandidate({
     required this.id,

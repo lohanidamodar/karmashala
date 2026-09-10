@@ -29,10 +29,8 @@ class NoteDao {
     );
   }
 
-  /// Rewrites what the user changed. The origin columns are never touched: a
-  /// note may be edited into something new, but where it was taken from is a
-  /// fact about the past and stays what it was. Its *filing* is not — that is
-  /// the user's, so it is here.
+  /// Rewrites what the user changed. The origin columns are never touched —
+  /// where a note came from is a fact about the past. Its *filing* is not.
   void update(
     String id, {
     required String body,
@@ -47,10 +45,8 @@ class NoteDao {
     );
   }
 
-  /// Files [id] under [projectId], or unfiles it when that is null.
-  ///
-  /// Its own statement rather than a read-modify-[update], for `ProjectDao`'s
-  /// reason: re-filing a note must not be able to rewrite its text on the way.
+  /// Files [id] under [projectId], or unfiles it when null. Its own statement,
+  /// so re-filing a note cannot rewrite its text on the way.
   void setProject(String id, String? projectId) => _db.execute(
     'UPDATE notes SET project_id = ? WHERE id = ?;',
     [projectId, id],

@@ -21,13 +21,8 @@ import '../domain/explorer_section.dart';
 import 'checkout.dart';
 import 'explorer_agent_filter.dart';
 
-/// The saved sections, in sidebar order, and every write to them.
-///
-/// A `Notifier` over the DAO rather than a provider that re-reads on a
-/// revision: sections change only when the user changes them, and there is
-/// exactly one writer. Every mutator writes first and publishes second, so a
-/// failed write never leaves the sidebar showing something the database does
-/// not hold.
+/// The saved sections, in sidebar order, and every write to them. Every
+/// mutator writes to the DAO first and publishes second.
 class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
   @override
   List<ExplorerSection> build() =>
@@ -35,13 +30,8 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
 
   ExplorerSectionDao get _dao => ref.read(explorerSectionDaoProvider);
 
-  /// Adds a section at the bottom of the list.
-  ///
-  /// The bottom, not the top, and that is a priority decision as much as a
-  /// layout one: position is priority (see [assignSections]), so a new section
-  /// that landed at the top would silently take rows away from every section
-  /// the user already had. Arriving last, it claims only what nothing else
-  /// wanted, and the user promotes it by dragging.
+  /// Adds a section at the *bottom*: position is priority (see
+  /// [assignSections]), so arriving last it takes rows from nothing.
   ExplorerSection add({required String name, required SectionRule rule}) {
     final section = ExplorerSection(
       id: ref.read(idGeneratorProvider).newId(),
@@ -85,11 +75,8 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
     if (section != null) setCollapsed(id, !section.collapsed);
   }
 
-  /// Moves the section at [from] to index [to], renumbering the rest.
-  ///
-  /// Pinned never moves and nothing may move above it: it is the top of the
-  /// priority order by definition, and a Pinned section at position 3 would
-  /// mean a pinned session appearing somewhere else.
+  /// Moves the section at [from] to index [to], renumbering the rest. Pinned
+  /// never moves and nothing may move above it — it is the top of the order.
   void move(int from, int to) {
     if (from < 0 || from >= state.length) return;
     final moving = state[from];
@@ -104,11 +91,8 @@ class ExplorerSectionsController extends Notifier<List<ExplorerSection>> {
     ]);
   }
 
-  /// Puts [sessionId] in a hand-filled group.
-  ///
-  /// Pinning is not routed through here: the Pinned section's membership is
-  /// `Settings.pinnedSessionIds`, which the pin glyph on every row already
-  /// writes. See [PinnedRule].
+  /// Puts [sessionId] in a hand-filled group. Pinning is not routed here: the
+  /// Pinned section's membership is `Settings.pinnedSessionIds`.
   void addMember(String sectionId, String sessionId) {
     final section = _byId(sectionId);
     if (section == null || section.rule.kind != SectionRuleKind.manual) return;
@@ -149,21 +133,9 @@ final explorerSectionsProvider =
       ExplorerSectionsController.new,
     );
 
-/// Whether any section is open, and therefore whether a section has rows on
-/// screen.
-///
-/// The gate the scale claim rests on. With [Settings.hideEmptySections] off,
-/// everything below this line — the candidate sweep, the fact table, the
-/// assignment — is `autoDispose` and reachable only from an expanded section's
-/// body, so a sidebar whose sections are all folded shut runs none of it. It is
-/// the same bargain the Explorer already makes with a collapsed project, and
-/// `explorer_panel_scale_test.dart` holds it to the same standard.
-///
-/// With the filter on, [explorerSectionLayoutProvider] mounts that graph to ask
-/// which sections are empty — and this is then what keeps the *heartbeat* out
-/// of it. See [explorerSectionFactsProvider]: matching to draw rows refreshes
-/// on the delivery poll; matching to decide whether a folded header is worth a
-/// row does not.
+/// Whether any section is open. Everything below this line is `autoDispose`
+/// and reachable only from an expanded section's body, so a folded sidebar
+/// runs none of it.
 final anySectionExpandedProvider = Provider<bool>(
   (ref) => ref.watch(
     explorerSectionsProvider.select(
@@ -173,13 +145,8 @@ final anySectionExpandedProvider = Provider<bool>(
 );
 
 /// One session, reduced to the facts that cannot change without the session
-/// *list* changing.
-///
-/// Everything volatile — the branch, the pull request, whether an agent is
-/// waiting — is read elsewhere, from caches, and folded in by
-/// [explorerSectionFactsProvider]. This is the half that legitimately comes
-/// from the database, and it is read once per change to the list rather than
-/// once per section, once per row or once per frame.
+/// *list* changing; the volatile half is folded in by
+/// [explorerSectionFactsProvider].
 class SectionCandidate {
   const SectionCandidate({
     required this.id,
@@ -196,12 +163,8 @@ class SectionCandidate {
   final String id;
   final String title;
 
-  /// The workspace row itself, carried rather than looked up again.
-  ///
-  /// The sweep below reads every session anyway; handing the object on costs
-  /// nothing, and the alternative — the sidebar re-reading a row by id to draw
-  /// it — would be exactly the per-item database read this feature is not
-  /// allowed to make. `SessionLocation` carries them for the same reason.
+  /// The workspace row itself, carried rather than looked up again — the
+  /// sidebar re-reading a row by id would be a per-item database read.
   final Session? native;
   final ImportedSession? imported;
 
@@ -212,9 +175,8 @@ class SectionCandidate {
   /// a cross-project list and therefore have to say *where*.
   final String? projectId;
 
-  /// Where the session's repository is, when the workspace still has a row for
-  /// it. Null means the repository was retired under the session, which is a
-  /// session with nothing to say about a branch rather than an error.
+  /// Where the session's repository is. Null means the repository was retired
+  /// under the session, not an error.
   final EnvironmentPath? repositoryPath;
 
   /// The worktree the session works in, when it has one.
@@ -222,23 +184,14 @@ class SectionCandidate {
 
   bool get isImported => imported != null;
 
-  /// The directory whose pull request describes this session — the same
-  /// spelling `sessionDeliveryProvider` uses, so the two land on the same
-  /// family entry and share one `gh` answer rather than starting a second.
+  /// The directory whose pull request describes this session — the spelling
+  /// `sessionDeliveryProvider` uses, so the two share one `gh` answer.
   EnvironmentPath? get directory => worktree ?? repositoryPath;
 }
 
 /// Every session in the workspace, in the terms a rule can be applied to.
-///
-/// **Three statements, on change only.** Exactly the shape
-/// `sessionProjectIdsProvider` already has, and narrowed to the same concerns:
-/// a row appearing, going away, moving or changing status can change what is
-/// in a section; a permission mode cannot. `title` is on the list because a
-/// section draws the row's name.
-///
-/// It is `autoDispose` and nothing reaches it while every section is
-/// collapsed, so the three statements are not merely rare — on a sidebar
-/// nobody has opened they never run at all.
+/// Three statements, on change only, and none at all while every section is
+/// collapsed.
 final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
   ref,
 ) {
@@ -276,28 +229,9 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
   ]);
 });
 
-/// The same sweep, narrowed to the agents the Explorer is showing.
-///
-/// **Where the agent filter meets sections, and the only place it does.**
-/// Applied to the candidates rather than to each section's members, because
-/// [assignSections] is a per-row question — which group claims *this* row — so
-/// filtering its input is the same answer as filtering each of its outputs,
-/// computed once. Everything downstream then agrees without being told: a
-/// section's header count, its rows, and [explorerSectionLayoutProvider]'s
-/// verdict on whether it is empty enough to fold away are all one list.
-///
-/// **So a section and the filter never argue.** The section decides which rows
-/// belong together; the filter decides which of those you are looking at. They
-/// intersect — "Checks failing, among my Codex sessions" is one section and one
-/// filter — and a section whose every row is filtered out reads as empty, which
-/// with [Settings.hideEmptySections] on means it folds away and is counted in
-/// the funnel's own "N empty sections" like any other. One funnel, one story
-/// about what the sidebar is holding back.
-///
-/// **The unfiltered path is the identity.** It hands back the very list
-/// [sectionCandidatesProvider] built — no copy, and no mount of
-/// [sessionAgentsProvider] — so an Explorer nobody has narrowed pays this
-/// nothing at all.
+/// The same sweep, narrowed to the agents the Explorer is showing — the one
+/// place the agent filter meets sections. The unfiltered path is the identity:
+/// it hands back [sectionCandidatesProvider]'s own list, mounting nothing.
 final visibleSectionCandidatesProvider =
     Provider.autoDispose<List<SectionCandidate>>((ref) {
       final candidates = ref.watch(sectionCandidatesProvider);
@@ -318,68 +252,15 @@ final visibleSectionCandidatesProvider =
     });
 
 /// Every session, with everything a rule may ask about it — **read, never
-/// measured**.
-///
-/// This is the provider the whole feature's cost claim lives in, so what it is
-/// allowed to do is worth stating flatly: it may look in caches other surfaces
-/// filled, and it may not fill one. The three volatile facts and where each
-/// comes from:
-///
-/// * **the branch, and how far the work has travelled** — from
-///   `checkoutDeliveryProvider` / `worktreeDeliveryProvider`, guarded by
-///   `ref.exists`. That guard is not a nicety. `ref.watch` on an `autoDispose`
-///   family does not *read* a provider, it **creates** one — which is how
-///   `projectSummaryProvider` once ran 345 git subprocesses to draw a header
-///   nobody had expanded. A section over five hundred sessions would have been
-///   the same mistake at three times the size.
-/// * **the pull request and its checks** — from `checkoutPullRequestProvider`
-///   under the same guard, and from `deliveryAttentionProvider`, which is the
-///   last full reading the delivery strip took and is already in memory. Keyed
-///   by *checkout*, so twenty sessions in one repository read one answer.
-/// * **whether an agent is waiting** — from `sessionAttentionProvider`, the
-///   ambient waiting list the one status watcher publishes. Not the attention
-///   inbox: the inbox retires an item when its session is looked at, and a
-///   group you can empty by glancing at it is not a work list.
-///
-/// **What that honestly costs the user.** A section can only report what the
-/// app has already had reason to measure. A pull request nobody has opened the
-/// strip for has not been fetched, so its session sits outside "Checks
-/// failing" until something asks — the same limit `DeliveryAttentionController`
-/// states for delivery news, for the same reason, and the alternative is a
-/// second `gh` poller running over every row in the workspace. The sidebar
-/// says what is known; it never goes and finds out. It is the same bargain
-/// `projectSummaryProvider` struck when it stopped starting 345 git
-/// subprocesses to fill in a header nobody had expanded, and it is stated here
-/// in the same words because it is the same trade.
-///
-/// **And the one place that bargain has an edge.** `ref.exists` is a question,
-/// not a subscription: a checkout measured *after* this provider was built is
-/// invisible to it until something rebuilds it. So a section with rows on
-/// screen also watches [deliveryPollProvider] — the app's existing delivery
-/// heartbeat, one timer for the whole app, two minutes while the window has
-/// focus and a bump when focus comes back. Not a timer of this feature's own,
-/// and the right cadence by construction: it is exactly how often the facts
-/// underneath a section can change at all.
-///
-/// **Only for a section with rows on screen**, though, and that gate matters
-/// now that [explorerSectionLayoutProvider] reaches this to ask whether a
-/// *folded* section is empty. Merely having the Explorer open must not start
-/// the app's delivery heartbeat — it never has, and a widget test that pumps
-/// the panel would be left holding a two-minute periodic timer. Emptiness
-/// stays fresh without it: [deliveryAttentionProvider] is a notifier that every
-/// delivery strip writes its reading into (see `sessionDeliveryProvider`), so
-/// a checkout going red wakes this whether or not the heartbeat is running.
-/// What the folded case gives up is the re-read of a `_warm` entry that
-/// changed with nothing to announce it — a staler answer to "is this empty",
-/// corrected the moment anything else moves.
+/// measured**: it may look in caches other surfaces filled and may not fill
+/// one, so a section reports only what the app already had reason to measure.
 final explorerSectionFactsProvider = Provider.autoDispose<List<SectionFacts>>((
   ref,
 ) {
   if (ref.watch(anySectionExpandedProvider)) ref.watch(deliveryPollProvider);
   final candidates = ref.watch(visibleSectionCandidatesProvider);
-  // One read of each ambient map, outside the loop: these are whole-app state,
-  // not per-session state, and reading them per candidate would turn a fold
-  // into a quadratic one.
+  // One read of each ambient map, outside the loop: reading whole-app state
+  // per candidate would turn a fold into a quadratic one.
   final observed = ref.watch(deliveryAttentionProvider);
   final waiting = <String>{
     for (final attention in ref.watch(sessionAttentionProvider))
@@ -398,9 +279,8 @@ SectionFacts _factsFor(
   required Map<String, SessionDelivery> observed,
   required Set<String> waiting,
 }) {
-  // The strip's own last reading first: it is the only source that carries the
-  // pull request *and* the branch together, so where it exists there is nothing
-  // to reconcile.
+  // The strip's own last reading first: it is the only source carrying the
+  // pull request *and* the branch together, so there is nothing to reconcile.
   final strip = observed[candidate.id];
   final local = strip ?? _localDelivery(ref, candidate);
   final directory = candidate.directory;
@@ -420,9 +300,8 @@ SectionFacts _factsFor(
     status: candidate.status,
     archived: candidate.archived,
     branch: local?.branch,
-    // The stage only when a reading exists. `SessionDelivery.unknown.stage`
-    // answers `working` for everything, and a section drawn from that would
-    // claim a fact about every unopened session in the workspace.
+    // The stage only when a reading exists: `SessionDelivery.unknown.stage`
+    // answers `working` for every unopened session in the workspace.
     stage: local?.stage,
     pullRequestState: pullRequest?.state,
     checks: pullRequest?.checks.state,
@@ -437,18 +316,14 @@ SessionDelivery? _localDelivery(Ref ref, SectionCandidate candidate) {
   if (repository == null) return null;
   final worktree = candidate.worktree;
   // A worktree session's branch is its worktree's, not its repository's, and
-  // these are two different family entries. Asking the wrong one would file
-  // every worktree session under the repository's branch, which on a workspace
-  // built out of `wt-*` folders is every session in it.
+  // these are two different family entries.
   if (worktree != null) {
     return _warm(
           ref,
           worktreeDeliveryProvider((repo: repository, worktree: worktree)),
         ) ??
-        // Named with its repository, the same way `worktreeDeliveryProvider`
-        // names it: the key is the worktree either way, and the repository is
-        // what lets `repositoryOriginProvider` answer once for a clone rather
-        // than once per `wt-*` folder under it.
+        // Named with its repository, as `worktreeDeliveryProvider` does, so
+        // `repositoryOriginProvider` answers once per clone not per `wt-*`.
         _warm(
           ref,
           checkoutDeliveryProvider(
@@ -460,37 +335,22 @@ SessionDelivery? _localDelivery(Ref ref, SectionCandidate candidate) {
 }
 
 /// The value [provider] already holds, or null when nothing has mounted it.
-///
-/// `ref.exists` before `ref.watch`, always: watching creates. And `.value`
-/// rather than `.asData?.value`, for the reason `sessionDeliveryActionsProvider`
-/// gives — a refresh is an `AsyncLoading` carrying the previous value, and
-/// reading it as null would empty every section for as long as a `gh` call
-/// takes.
+/// `ref.exists` before `ref.watch`, always — watching *creates* — and `.value`
+/// rather than `.asData?.value`, since a refresh carries the previous value.
 T? _warm<T>(Ref ref, FutureProvider<T>? provider) {
   if (provider == null || !ref.exists(provider)) return null;
   return ref.watch(provider).value;
 }
 
-/// Which section claims each session, resolved once for the whole sidebar.
-///
-/// One pass, shared: every expanded section reads *this* and selects its own
-/// list, because priority is a question about all the sections at once — you
-/// cannot know whether "Checks failing" takes a row without knowing whether
-/// Pinned took it first. Computing it per section would be that same pass once
-/// per group.
-///
-/// `autoDispose`, and reached only from an expanded section's body: with the
-/// sidebar folded shut this provider does not exist, [sectionCandidatesProvider]
-/// does not exist, and no rule runs.
+/// Which section claims each session, resolved once for the whole sidebar:
+/// priority is a question about all the sections at once, so it cannot be
+/// answered per section.
 final explorerSectionAssignmentProvider =
     Provider.autoDispose<Map<String, List<SectionFacts>>>((ref) {
       final sections = ref.watch(explorerSectionsProvider);
-      // The pin set is the built-in Pinned section's membership, selected
-      // rather than watched whole so an unrelated settings change — a theme, a
-      // pane width — does not re-file the sidebar. The `toSet()` is *outside*
-      // the selector on purpose: `select` compares with `==`, a fresh
-      // `LinkedHashSet` is never equal to the last one, and building it inside
-      // would rebuild this on every settings write instead of none of them.
+      // Selected rather than watched whole so an unrelated settings write does
+      // not re-file the sidebar. `toSet()` is *outside* the selector on
+      // purpose: `select` compares with `==`, and a fresh set never is.
       final pinned = ref
           .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
           .toSet();
@@ -503,10 +363,8 @@ final explorerSectionAssignmentProvider =
       );
     });
 
-/// What one section holds right now.
-///
-/// Selected out of the shared assignment, so a section whose contents did not
-/// move does not rebuild when a neighbour's did.
+/// What one section holds right now, selected out of the shared assignment so
+/// a section does not rebuild when a neighbour's contents move.
 final explorerSectionMembersProvider = Provider.autoDispose
     .family<List<SectionFacts>, String>(
       (ref, sectionId) => ref.watch(
@@ -516,20 +374,9 @@ final explorerSectionMembersProvider = Provider.autoDispose
       ),
     );
 
-/// **What the sidebar actually draws, and what it is holding back.**
-///
-/// A section that matches nothing still costs a full row, and a row that says
-/// "Checks failing" beside no failing checks is the sidebar spending the user's
-/// vertical space to tell them nothing. So an empty section folds away — and
-/// [ExplorerSectionLayout.hidden] is what the header's filter toggle counts, so
-/// the feature says out loud that it is holding something back rather than
-/// vanishing silently.
-///
-/// **Only a *collapsed* empty section is hidden.** An open one is a section the
-/// user is looking at, and [emptySectionMessage] is the answer to the question
-/// they opened it to ask — "nothing matches" and "nothing has been measured
-/// yet" are different situations, and a group that disappeared mid-glance would
-/// answer neither.
+/// What the sidebar draws, and how many it folded away — the count the
+/// header's filter reports, so nothing vanishes silently. Only a *collapsed*
+/// empty section hides: an open one shows [emptySectionMessage] instead.
 class ExplorerSectionLayout {
   const ExplorerSectionLayout({required this.shown, required this.hidden});
 
@@ -539,10 +386,8 @@ class ExplorerSectionLayout {
   /// How many were folded away for being empty.
   final int hidden;
 
-  /// Value equality, and it is the point of this class rather than a record:
-  /// the assignment underneath is rebuilt on every delivery heartbeat, and a
-  /// layout that was never equal to the last one would rebuild the whole
-  /// Explorer every two minutes to draw the same sidebar.
+  /// Value equality is the point of this class rather than a record: the
+  /// assignment underneath is rebuilt on every delivery heartbeat.
   @override
   bool operator ==(Object other) {
     if (other is! ExplorerSectionLayout) return false;
@@ -559,23 +404,9 @@ class ExplorerSectionLayout {
   int get hashCode => Object.hash(hidden, Object.hashAll(shown));
 }
 
-/// Which sections survive the empty filter.
-///
-/// **The one place the cost of this filter is paid.** Asking whether a section
-/// is empty *is* matching it — there is no cheaper question, which is why a
-/// collapsed header has never shown a count — so with
-/// [Settings.hideEmptySections] on, [explorerSectionAssignmentProvider] and the
-/// graph under it are mounted for as long as the Explorer is on screen. What
-/// that costs is pinned by `explorer_sections_cost_test.dart` and is the same
-/// bill an open section already paid: three unfiltered sweeps on a change to
-/// the session list, none per rebuild, and no subprocess ever.
-///
-/// With the setting **off** the provider never reads the assignment, so the
-/// original bargain is intact and unchanged: a sidebar folded shut mounts none
-/// of the matching graph.
-///
-/// `autoDispose`, so a workspace whose Explorer pane is closed pays nothing at
-/// all.
+/// Which sections survive the empty filter, and the one place its cost is
+/// paid: asking whether a section is empty *is* matching it, so the setting on
+/// keeps the matching graph mounted (`explorer_sections_cost_test.dart`).
 final explorerSectionLayoutProvider =
     Provider.autoDispose<ExplorerSectionLayout>((ref) {
       final sections = ref.watch(explorerSectionsProvider);

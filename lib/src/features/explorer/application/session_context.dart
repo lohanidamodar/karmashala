@@ -10,33 +10,18 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import 'checkout_default.dart';
 import 'picked_checkouts.dart';
 
-/// The session running in the pane the terminal is showing, or null.
-///
-/// Keyed off the *tab on screen*, not off the Explorer's selection: switching
-/// terminal tabs changes which agent you are looking at, and anything that
-/// followed the tree instead would describe a session the user is not in. A
-/// plain shell tab has no session row pointing at any of its panes and answers
-/// null, which is what leaves the Explorer's own selection in charge.
-///
-/// **The focused pane first, then the rest of its tab.** Splitting focuses the
-/// new pane, and a new plain shell has no session — so keying this on the
-/// focused pane alone meant that splitting an agent's tab made the session's
-/// whole bottom bar disappear, which is what the owner reported as "once split,
-/// bottom statusbar is gone". A shell opened *beside* a session is still a
-/// shell opened beside that session, and the tab is still the session's
-/// workspace.
+/// The session running in the pane the terminal is showing, or null. Keyed off
+/// the *tab on screen*: the focused pane first, then the rest of its tab, since
+/// splitting focuses a new shell and emptied the session's whole bottom bar.
 final activePaneSessionIdProvider = Provider<String?>((ref) {
-  // Which tab is active and what is in it — deliberately not the whole state.
-  // This answers by walking every session row, and it was recomputed whenever
-  // any pane's liveness moved: measured at ten scans over a thousand rows for
-  // ten background processes exiting, for an answer that cannot have changed.
-  // Liveness says nothing about which pane is focused.
+  // Which tab is active and what is in it, not the whole state: this walks
+  // every session row, and was re-running on any pane's liveness moving —
+  // ten scans over a thousand rows for ten background processes exiting.
   final tab = ref.watch(
     terminalSessionsControllerProvider.select((s) => s.activeTab),
   );
-  // Adopting a pane, or launching into one, rewrites `pane_id` on the row —
-  // and that is the only session fact this reads. A title sync used to make
-  // every tab switch re-answer a question no title can change.
+  // Adopting a pane, or launching into one, rewrites `pane_id`, and that is the
+  // only session fact this reads — a title sync must not re-answer it.
   ref.watchSessionKinds(const {
     SessionChangeKind.membership,
     SessionChangeKind.placement,
@@ -44,17 +29,9 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   return sessionInTab(ref, tab);
 });
 
-/// The session running in the pane workspace group [groupId] is showing.
-///
-/// The per-group form of [activePaneSessionIdProvider], and what every group's
-/// own chrome reads — its tab strip, its surface and its status bar. A bar that
-/// asked instead for "the focused session" would look right with one group and
-/// describe somebody else's session the instant there were two: every group
-/// would show the same repository state, the same model and the same usage, all
-/// following whichever pane was clicked last.
-///
-/// Null while the group is still the empty room a split cleared, and for a
-/// plain shell tab that runs no session of ours.
+/// The session workspace group [groupId] is showing — the per-group form of
+/// [activePaneSessionIdProvider]. "The focused session" would make every group
+/// describe the same one. Null for the empty room a split cleared.
 final workspaceGroupSessionIdProvider = Provider.autoDispose
     .family<String?, String>((ref, groupId) {
       final tabs = ref.watch(
@@ -71,19 +48,9 @@ final workspaceGroupSessionIdProvider = Provider.autoDispose
       return null;
     });
 
-/// The workspace group the Explorer's selection was opened into.
-///
-/// A selection that has a pane of ours *is* a tab, and the tab machinery
-/// already puts it in a group. This is for the ones that are not — an imported
-/// conversation, a session whose pane has ended — which have no tab anywhere
-/// and were drawn by whichever group happened to hold the keyboard, so they
-/// followed the focus around the window and took over each group they landed
-/// on. A tap in the tree means "show me this **here**", and here is one group.
-///
-/// Null until something has been opened, and null again once the selection is
-/// let go of; [WorkbenchView] is the only writer. A group that has since
-/// collapsed leaves a stale id behind, which matches no group and so draws
-/// nothing — nothing to prune.
+/// The workspace group the Explorer's selection was opened into — for the rows
+/// with no tab of their own, which otherwise followed the keyboard focus around
+/// the window. [WorkbenchView] is the only writer; a stale id draws nothing.
 class SelectionHostGroupController extends Notifier<String?> {
   @override
   String? build() => null;
@@ -96,10 +63,8 @@ final selectionHostGroupProvider =
     );
 
 /// The session [tab] is running: the focused pane's, and failing that the
-/// oldest pane in the tab that has one.
-///
-/// A shell opened *beside* a session is still a shell opened beside that
-/// session — see [activePaneSessionIdProvider] for why the fallback exists.
+/// oldest pane in the tab that has one — a shell opened *beside* a session is
+/// still beside it.
 String? sessionInTab(Ref ref, TerminalTab? tab) {
   if (tab == null) return null;
   final siblings = tab.layout.panes.toSet();
@@ -115,68 +80,36 @@ String? sessionInTab(Ref ref, TerminalTab? tab) {
   return fallback;
 }
 
-/// The session the window is about: the one selected in the Explorer, or — when
-/// nothing is selected — whatever the terminal tab on screen is running.
-///
-/// The fallback is the whole point. Selection is dropped on purpose in two
-/// places (`_releaseHijackedSelection` when a selected session has no pane left,
-/// `_releaseEndedPane` when a pane ends under the terminal), so a user who has
-/// touched neither the tree nor anything else can end up looking straight at a
-/// running agent while the selection is null. Anything keyed on selection alone
-/// then draws nothing — which is how the status bar's quota and model chips
-/// vanished off a window with an agent plainly running in it.
-///
-/// The pane bar under the terminal already resolved it this way. Two different
-/// answers to "which session is this window about" is one too many.
+/// The session the window is about: the one selected in the Explorer, or what
+/// the terminal tab on screen is running. The fallback is the point — selection
+/// is dropped on purpose, and anything keyed on it alone then draws nothing.
 final focusedSessionIdProvider = Provider<String?>(
   (ref) =>
       ref.watch(selectedSessionIdProvider) ??
       ref.watch(activePaneSessionIdProvider),
 );
 
-/// The repository whose checkout contains [sessionId]'s work, in the absence of
-/// a pick.
-///
-/// The rule itself is [inferredCheckoutFor] — which location of a session the
-/// app has the strongest record of, resolved to the deepest registered checkout
-/// containing it. It lives next door because it is a statement about *sessions
-/// and checkouts* that the picker and the tree both want, not about following.
+/// The repository whose checkout contains [sessionId]'s work, absent a pick.
+/// The rule itself is [inferredCheckoutFor], which the picker and tree share.
 Repository? repositoryForSession(Ref ref, String sessionId) {
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return null;
   return inferredCheckoutFor(ref, session);
 }
 
-/// Moves the workspace's context to the session the user is working in.
-///
-/// The side panel's whole family — changes and diffs, repository info and
-/// worktrees, GitHub and its remote links — reads one provider,
-/// [selectedRepositoryIdProvider], and until now only the Explorer ever wrote
-/// it. So the panel described whatever row was last clicked, which for a hub
-/// project is the hub, while the user was typing into an agent three folders
-/// down. This is the missing writer.
-///
-/// **Who wins.** The active session writes the context whenever it *changes* —
-/// activating another terminal tab, or the workbench revealing a session. An
-/// explicit Explorer click writes it too and then holds, because nothing
-/// overwrites it until the active session changes again. A tab with no session
-/// writes nothing at all, so the Explorer's selection stays in charge.
+/// Moves the workspace's context to the session the user is working in — the
+/// missing writer of [selectedRepositoryIdProvider]. The active session writes
+/// on *change*; an Explorer click writes and holds; a shell writes nothing.
 class SessionContext {
   const SessionContext(this._ref);
 
   final Ref _ref;
 
-  /// Points the Explorer and the side panel at [sessionId]'s repository, and at
-  /// the project above it — selecting a repository whose project is not the
-  /// selected one leaves the tree pointing elsewhere, which is the same walk
-  /// `focusWatchedSession` does for the attention inbox.
-  ///
-  /// Returns the repository it landed on, or null when the session names none.
+  /// Points the Explorer and the side panel at [sessionId]'s repository *and*
+  /// the project above it, or returns null when the session names none.
   Repository? follow(String sessionId) {
     // A checkout picked while working in this session outranks the one its
-    // launch directory computes to: the user has already said where the work
-    // is, and recomputing it on every tab switch is how a pick stopped meaning
-    // anything. See [PickedCheckouts].
+    // launch directory computes to — see [PickedCheckouts].
     final picked = _ref
         .read(pickedCheckoutsProvider.notifier)
         .forSession(sessionId);
@@ -192,13 +125,8 @@ class SessionContext {
     return repository;
   }
 
-  /// Nothing is being followed — the pane on screen runs no session of ours.
-  ///
-  /// Without this a pick made while a plain shell tab is up was filed against
-  /// whichever session was followed *last*, and stuck there: the Changes and
-  /// GitHub panels then described an unrelated checkout every time that session
-  /// came back on screen, for the rest of the run. A pick made with nothing
-  /// followed belongs to nothing.
+  /// Nothing is being followed. Without it, a pick made under a plain shell tab
+  /// was filed against the session followed *last*, and stuck there.
   void stopFollowing() => _ref.read(followedSessionProvider.notifier).set(null);
 }
 

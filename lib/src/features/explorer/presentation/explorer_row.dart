@@ -4,11 +4,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/row_menu.dart';
 import '../../../core/widgets/reveal_on_focus.dart';
 
-/// What a row stands for, and therefore how strongly it is drawn.
-///
-/// Three kinds, one per level of the tree the Explorer builds: the project
-/// header, the checkouts under it (repository, worktree, unscanned folder) and
-/// the session cards under those.
+/// What a row stands for, and therefore how strongly it is drawn — one kind
+/// per level of the tree: project, checkout, session.
 enum ExplorerRowKind {
   project,
   checkout,
@@ -31,32 +28,9 @@ enum ExplorerRowKind {
   };
 }
 
-/// The shell every Explorer row draws itself into.
-///
-/// Before this existed each row kind carried its own copy of the chrome — its
-/// own padding, its own selection tint, its own idea of how big a row button
-/// is — and the three had drifted apart: 4px of padding on a project against 6
-/// on a session, a 20px menu button on a folder row against 22 on a project.
-/// The owner's report was that the cards "are not separated properly and the
-/// menu button is not aligned properly"; both are the same bug, which is that
-/// nothing owned a row's shape.
-///
-/// What this owns:
-///
-/// * **Separation.** A row is a tile one step up the neutral ramp from the
-///   pane, with a gap of pane colour under it. The gap is taken *out of* the
-///   old internal padding rather than added to it, so a list of sessions keeps
-///   the pitch it always had and the rows now have edges.
-/// * **Hierarchy.** [ExplorerRowKind.surface] steps the tone down with depth,
-///   and the tile is indented one [indent] per level, so a session reads as
-///   sitting inside its repository rather than merely after it.
-/// * **State.** Selected, hovered and focused are one function of the fill,
-///   shared by every row kind, so they cannot disagree — see
-///   [_ExplorerRowFill], which is the only part of a row a hover rebuilds.
-/// * **The menu.** Right-click, `Shift+F10`, the Menu key and a screen
-///   reader's action all open the same one, and the `⋮` that duplicates them
-///   is drawn only when it can be wanted. All of that is [RowContextMenu] now:
-///   the Explorer wrote it, and every pane in the app shares it.
+/// The shell every Explorer row draws itself into: separation, hierarchy, the
+/// one selected/hovered/focused fill, and the menu. Before it each row kind
+/// carried its own padding and button size, and the three had drifted.
 class ExplorerRow extends StatelessWidget {
   const ExplorerRow({
     required this.kind,
@@ -82,13 +56,9 @@ class ExplorerRow extends StatelessWidget {
 
   final ValueChanged<String>? onMenu;
 
-  /// The row's content.
-  ///
-  /// It is built when the row's *data* changes and not when a pointer crosses
-  /// it: the `⋮` reads the hover state through [RowInteractionScope] rather
-  /// than being handed a flag through here. The row still has to *reserve* the
-  /// button's slot when it is not drawn — see [RowMenuButton] — or the text
-  /// reflows the moment a pointer arrives.
+  /// The row's content, built when the row's *data* changes and not when a
+  /// pointer crosses it. It must still *reserve* the `⋮` slot when the button
+  /// is not drawn (see [RowMenuButton]) or the text reflows on hover.
   final WidgetBuilder builder;
 
   /// One step of the tree, per level of depth.
@@ -102,12 +72,8 @@ class ExplorerRow extends StatelessWidget {
 
   static const _radius = BorderRadius.all(Radius.circular(Radii.sm));
 
-  /// The square a row-level button occupies — the menu, the `+`, the pin.
-  ///
-  /// One number for every row kind: a button that is 20px on one row and 22 on
-  /// the next cannot sit on a shared centre-line, which is what "not aligned
-  /// properly" was. Deferred to [RowMenuButton] so the verbs beside the menu
-  /// cannot drift away from it.
+  /// The square a row-level button occupies — the menu, the `+`, the pin. One
+  /// number for every row kind, or they cannot share a centre-line.
   static double slotOf(UiDensity density) => RowMenuButton.slotOf(density);
 
   /// The glyph inside that slot.
@@ -152,10 +118,8 @@ class ExplorerRow extends StatelessWidget {
       children: [
         InkWell(
           onTap: onTap,
-          // The ink itself is invisible — it paints on the pane's Material,
-          // under this tile's own fill — so hover, focus and selection are
-          // painted by [_ExplorerRowFill] instead. The well is still what
-          // carries the tap, the focus node and Enter-activates-the-row.
+          // The ink is invisible — it paints on the pane's Material, under this
+          // tile's fill — so [_ExplorerRowFill] paints the states instead.
           borderRadius: ExplorerRow._radius,
           child: content,
         ),
@@ -190,9 +154,7 @@ class ExplorerRow extends StatelessWidget {
           bottom: ExplorerRow.gap,
         ),
         // Right-click, `Shift+F10`, the Menu key and the screen-reader action
-        // all come from here, along with the hover state the fill and the `⋮`
-        // listen to. The Explorer wrote all of that first; it is shared now so
-        // that every pane answers a row the same way.
+        // all come from here, with the hover state the fill and the `⋮` read.
         child: RowContextMenu(
           menuLabel: kind.menuLabel,
           itemBuilder: _hasMenu ? menuItemsBuilder : null,
@@ -205,12 +167,9 @@ class ExplorerRow extends StatelessWidget {
   }
 }
 
-/// The tone a row rests at, and the two states that tint it.
-///
-/// Its own widget because it is the *only* part of a row a hover changes: as a
-/// dependent of [RowInteractionScope] it is what a pointer rebuilds, and
-/// [child] — the whole card — travels through it untouched. See
-/// [RowInteraction] for the lag this shape exists to fix.
+/// The tone a row rests at, and the two states that tint it. Its own widget
+/// because it is the *only* part of a row a hover changes: [child] — the whole
+/// card — travels through it untouched.
 class _ExplorerRowFill extends StatelessWidget {
   const _ExplorerRowFill({
     required this.kind,
@@ -249,11 +208,8 @@ class _ExplorerRowFill extends StatelessWidget {
 }
 
 /// A row-level verb — "new session here", "unpin", "rescan" — in the same slot
-/// as [ExplorerRowMenuButton].
-///
-/// A verb stays visible where the overflow does not: the `+` is what a row is
-/// *for*, and hiding the one affordance that starts work would trade clutter
-/// for a worse problem.
+/// as [ExplorerRowMenuButton]. A verb stays visible where the overflow does
+/// not: hiding the one affordance that starts work is the worse trade.
 class ExplorerRowAction extends StatelessWidget {
   const ExplorerRowAction({
     required this.tooltip,

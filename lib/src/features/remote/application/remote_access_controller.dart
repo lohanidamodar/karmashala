@@ -1,14 +1,5 @@
-/// Starts and stops [RemoteHostService] to match the settings, and owns the
-/// event wiring from the desktop's providers into the fan-out.
-///
-/// The two relays are independent (Loop 80): the embedded local relay and the
-/// hosted one are separate switches, and the host serves the devices of both
-/// at once. Turning one off *parks* its devices rather than restarting
-/// anything — they come back when it does.
-///
-/// Remote access is OFF by default: nothing here runs until the settings
-/// toggle turns it on. `AppLifecycle` calls [shutdown] inside its budget
-/// slice, so quitting never waits on a socket.
+/// Starts and stops [RemoteHostService] to match the settings. The two relays
+/// are independent: turning one off *parks* its devices, restarting nothing.
 library;
 
 import 'dart:async';
@@ -87,9 +78,8 @@ class RemoteAccessController {
 
     final service = _service;
     if (service != null && service.relay == hosted) {
-      // Same hosted relay: the running service just re-points at the relays
-      // that are up, parking and unparking devices — no restart, no dropped
-      // generation, no re-pairing.
+      // Same hosted relay: the service just re-points at the relays that are up
+      // — no restart, no dropped generation, no re-pairing.
       await service.updateRelays(
         localRelayUrl: localUrl,
         hostedEnabled: prefs.hostedEnabled,
@@ -104,12 +94,8 @@ class RemoteAccessController {
           hostId: _ref.read(hostDeviceIdProvider),
           bindings: _ref.read(remoteHostBindingsProvider),
           relay: hosted,
-          // Without this the host kept its whole side of the story to itself.
-          // The embedded relay logs (it is handed the same logger), so a log
-          // full of "a socket is waiting" and nothing else read as "the two
-          // ends never meet" — while the desktop was in fact refusing every
-          // frame the phone sent, and could not say so. Lifecycle only: the
-          // service never logs a rendezvous id, a payload or a key.
+          // The embedded relay logs, so without this a waiting socket read as
+          // "they never meet". Lifecycle only — never a rendezvous id or key.
           onLog: AppLogger.named('remote').info,
           onDevicesChanged: () =>
               _ref.read(pairedDevicesRevisionProvider.notifier).bump(),
@@ -122,9 +108,8 @@ class RemoteAccessController {
     await started.start();
   }
 
-  /// Starts or stops the embedded relay to match the prefs, and answers where
-  /// it can be dialled — its primary LAN URL, loopback when it is up with no
-  /// LAN address, null when it is off or failed to bind.
+  /// Starts or stops the embedded relay to match the prefs, answering where it
+  /// can be dialled; null when it is off or failed to bind.
   Future<Uri?> _syncLocalRelay(Settings settings, RelayPrefs prefs) async {
     final localRelay = _ref.read(localRelayServiceProvider);
     if (!prefs.localEnabled) {
@@ -151,11 +136,8 @@ class RemoteAccessController {
 
   Future<void> _stopLocalRelay() => _ref.read(localRelayServiceProvider).stop();
 
-  /// Shows a new pairing code. Throws [StateError] while remote access is
-  /// off — the dialog says so instead of pretending. [relay] carries the
-  /// dialog's endpoint choice; null keeps the service's configured relay.
-  /// [relayIsLocal] says that choice was the embedded relay, which is what
-  /// the device row remembers so the host keeps serving it there.
+  /// Shows a new pairing code; throws [StateError] while remote access is off.
+  /// [relayIsLocal] is what the device row remembers.
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
@@ -194,8 +176,6 @@ class RemoteAccessController {
     return _chain;
   }
 
-  // --- Event fan-out, wired by the provider below ---------------------------
-
   void onSessionsMoved() {
     final service = _service;
     if (service == null) return;
@@ -222,9 +202,8 @@ class RemoteAccessController {
     }
   }
 
-  /// New attention-inbox items — the same finished / needs-you / failed
-  /// policy the tray reads — become sealed pushes for paired phones with no
-  /// live link. Connected phones already heard it as `session.changed`.
+  /// New attention-inbox items become sealed pushes for paired phones with no
+  /// live link; connected phones already heard it as `session.changed`.
   void onInboxChanged(AttentionInbox? previous, AttentionInbox next) {
     final service = _service;
     if (service == null) return;
@@ -238,9 +217,8 @@ class RemoteAccessController {
         InboxItemKind.finished => 'finished',
         InboxItemKind.needsApproval => 'needs_approval',
         InboxItemKind.failed => 'failed',
-        // Delivery news (checks, reviews, merges) stays on the desktop in v1,
-        // and so does a follow-up: what a session left behind is something to
-        // sit down with, not a buzz in a pocket.
+        // Delivery news and follow-ups stay on the desktop in v1: what a
+        // session left behind is to sit down with, not a buzz in a pocket.
         InboxItemKind.checksFailed ||
         InboxItemKind.changesRequested ||
         InboxItemKind.readyToMerge ||

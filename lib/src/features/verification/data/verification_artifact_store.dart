@@ -6,12 +6,9 @@ import 'package:path/path.dart' as p;
 
 import '../domain/verification_artifact.dart';
 
-/// Where a run's evidence is written.
-///
-/// One directory per run, under a root the app owns. The store is deliberately
-/// the only thing that knows the layout: the database records a relative path
-/// inside the run directory, so the whole folder can be zipped, copied into a
-/// PR, or handed to somebody else and the report's image links still resolve.
+/// Where a run's evidence is written: one directory per run, and the only
+/// place that knows the layout — the database stores paths relative to it, so
+/// the folder can be zipped with its image links intact.
 class VerificationArtifactStore {
   VerificationArtifactStore(this.root);
 
@@ -26,10 +23,7 @@ class VerificationArtifactStore {
     return dir;
   }
 
-  /// Writes [bytes] into the run's directory and returns the artifact row.
-  ///
-  /// [name] is the file name without an extension; the kind supplies the
-  /// extension so a screenshot is always `.png` and a log always `.txt`.
+  /// Writes [bytes] into the run's directory; [name] carries no extension.
   Future<VerificationArtifact> write({
     required String runId,
     required VerificationArtifactKind kind,
@@ -77,9 +71,8 @@ class VerificationArtifactStore {
     overwrite: overwrite,
   );
 
-  /// The bytes of an artifact, or null when the file has gone. A missing file
-  /// is a normal outcome — the user may have cleaned the folder out — and must
-  /// not take the pane or a tool call down with it.
+  /// The bytes of an artifact, or null when the file has gone — a normal
+  /// outcome that must not take a pane or a tool call down with it.
   Future<Uint8List?> read(VerificationArtifact artifact) async {
     final file = File(
       p.join(directoryFor(artifact.runId).path, artifact.relativePath),
@@ -91,8 +84,8 @@ class VerificationArtifactStore {
   String pathOf(VerificationArtifact artifact) =>
       p.join(directoryFor(artifact.runId).path, artifact.relativePath);
 
-  /// Removes a run's whole directory. Best effort: a file held open by a viewer
-  /// must not stop the database row from going away.
+  /// Removes a run's directory. Best effort: a held-open file must not stop
+  /// the database row from going away.
   Future<void> deleteRun(String runId) async {
     final dir = directoryFor(runId);
     if (!dir.existsSync()) return;
@@ -115,8 +108,7 @@ class VerificationArtifactStore {
     return '$base-${DateTime.now().microsecondsSinceEpoch}$ext';
   }
 
-  /// A file name that is safe on Windows: no separators, no reserved
-  /// characters, and never empty.
+  /// A file name safe on Windows: no separators, no reserved names, non-empty.
   static String _slug(String value) {
     final cleaned = value
         .toLowerCase()

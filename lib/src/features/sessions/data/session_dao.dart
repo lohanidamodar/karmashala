@@ -65,13 +65,8 @@ class SessionDao {
     );
   }
 
-  /// Records the directory this session's agent runs in.
-  ///
-  /// Its own statement, like [updatePaneId], and for the same reason: where a
-  /// session runs is learned once — at launch, or when a hand-started agent is
-  /// adopted out of a pane — and must never be able to carry another edit with
-  /// it. In particular it must never touch `worktree`, which drives
-  /// `use_worktree` and the archive service's `git worktree remove`.
+  /// Records the directory this session's agent runs in. Its own statement so
+  /// it can never touch `worktree`, which drives the archive service's remove.
   void updateWorkingDirectory(String id, EnvironmentPath? directory) {
     _db.execute(
       'UPDATE sessions SET working_directory_environment_id = ?, '
@@ -80,12 +75,8 @@ class SessionDao {
     );
   }
 
-  /// Updates only the [title] of session [id].
-  /// Renames session [id].
-  ///
-  /// [byUser] records that the *user* chose this name, which is what stops the
-  /// CLI rename sync ever replacing it. The sync itself passes false: a title it
-  /// copied in stays the CLI's to change, so a second `/rename` still lands.
+  /// Renames session [id]. [byUser] records that the *user* chose this name,
+  /// which is what stops the CLI rename sync ever replacing it.
   void updateTitle(String id, String title, {bool byUser = false}) {
     _db.execute(
       'UPDATE sessions SET title = ?, title_by_user = ? WHERE id = ?;',
@@ -113,12 +104,8 @@ class SessionDao {
     _db.execute('UPDATE sessions SET view = ? WHERE id = ?;', [view.name, id]);
   }
 
-  /// Records that this session's worktree has been archived away.
-  ///
-  /// Its own statement, and deliberately an `UPDATE` of one column: archiving
-  /// must not be able to carry any other edit with it, and nothing here deletes
-  /// anything. The transcript, review notes and checkpoints keep pointing at
-  /// this row.
+  /// Records that this session's worktree has been archived away. One column,
+  /// and nothing here deletes: the transcript still points at this row.
   void markArchived(String id, DateTime at) {
     _db.execute('UPDATE sessions SET archived_at = ? WHERE id = ?;', [
       isoFromDate(at),
@@ -126,16 +113,8 @@ class SessionDao {
     ]);
   }
 
-  /// Records the permission mode chosen for this session, or with `null` that
-  /// no mode is chosen for it and it follows the global default.
-  ///
-  /// Its own statement, like [updateView], and for the same reason: changing a
-  /// session's safety policy must not be able to carry any other edit with it.
-  ///
-  /// Nullable because null is a *value* here and not a missing argument: "I
-  /// never chose one for this session" is the state the owner's request turns
-  /// on ("it should be highest priority to sessions own permission"), and a
-  /// user who picks a mode must be able to go back to it.
+  /// Records the permission mode chosen for this session. Null is a *value*
+  /// here, not a missing argument: a user must be able to go back to it.
   void updatePermissionMode(String id, String? mode) {
     _db.execute('UPDATE sessions SET permission_mode = ? WHERE id = ?;', [
       mode,
@@ -143,12 +122,8 @@ class SessionDao {
     ]);
   }
 
-  /// Records the model chosen for this session, or with `null` that no model is
-  /// chosen for it and it follows the default.
-  ///
-  /// Its own statement for [updatePermissionMode]'s reason, and the empty
-  /// string is normalised to null on the way in: "" and null would be two
-  /// spellings of "nobody chose", and only one of them reads back as one.
+  /// Records the model chosen for this session, or `null` to follow the
+  /// default. `''` normalises to null — only one of them reads back as "none".
   void updateModel(String id, String? modelId) {
     _db.execute('UPDATE sessions SET model_id = ? WHERE id = ?;', [
       modelId == null || modelId.isEmpty ? null : modelId,
@@ -156,10 +131,8 @@ class SessionDao {
     ]);
   }
 
-  /// The parent of [id], or `null` for a root session or an unknown id.
-  ///
-  /// One column, one row — this is the read `SessionDepth` walks, so it must
-  /// stay this cheap.
+  /// The parent of [id], or `null` for a root session or an unknown id. One
+  /// column, one row — this is the read `SessionDepth` walks, so it stays cheap.
   String? parentOf(String id) {
     final rows = _db.query(
       'SELECT parent_session_id FROM sessions WHERE id = ?;',
@@ -169,8 +142,7 @@ class SessionDao {
   }
 
   /// Sessions naming [id] as their parent, oldest first — spawned, handed off
-  /// and forked alike. The caller reads [Session.parentLink] to tell them apart;
-  /// filtering here would need one query per kind for no benefit.
+  /// and forked alike; the caller reads [Session.parentLink] to tell them apart.
   List<Session> childrenOf(String id) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE parent_session_id = ? '
@@ -192,10 +164,8 @@ class SessionDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  /// Sessions hosted by any of [paneIds], oldest first.
-  ///
-  /// The pane index keeps the active-tab lookup proportional to the handful of
-  /// panes in that tab, rather than to every session the user has ever opened.
+  /// Sessions hosted by any of [paneIds], oldest first. The pane index keeps
+  /// this proportional to that tab's panes, not to every session ever opened.
   List<Session> getByPaneIds(Iterable<String> paneIds) {
     final ids = paneIds.toSet().toList();
     if (ids.isEmpty) return const [];
@@ -208,16 +178,8 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// paneId → the session standing in it, for every placed row at once.
-  ///
-  /// One statement over the pane index for the whole workspace rather than one
-  /// indexed lookup per drawn chip: the tab strip asks this question once per
-  /// tab, and a map plus a `select` on one key is what keeps an answer that
-  /// changed for one pane from waking the others. Only two columns are read —
-  /// nothing here decodes a session.
-  ///
-  /// Oldest wins where two rows name one pane, which is the row
-  /// [getByPaneIds]'s callers already take.
+  /// paneId → the session standing in it, for every placed row at once: one
+  /// statement over the pane index, so one pane's answer cannot wake the others.
   Map<String, String> paneSessionIds() {
     final rows = _db.query(
       'SELECT id, pane_id FROM sessions WHERE pane_id IS NOT NULL '
@@ -230,17 +192,8 @@ class SessionDao {
     return byPane;
   }
 
-  /// sessionId → the repository it targets, for every row at once.
-  ///
-  /// The narrow read [paneSessionIds] is, for the other map the Explorer keeps:
-  /// [sessionProjectIdsProvider] wants a session's *placement* and nothing
-  /// else, and it used to get it by calling [getAll] and reading two fields off
-  /// each decoded [Session]. That built a twenty-one entry map and parsed an
-  /// ISO timestamp per row — and `dateFromIso`'s own comment records that
-  /// parsing was profiled at 8% of the app's CPU during a terminal flood — to
-  /// answer a question about two columns.
-  ///
-  /// Unordered, because a map is: nothing downstream reads it in sequence.
+  /// sessionId → the repository it targets, for every row at once. Taken off
+  /// [getAll] it decoded twenty-one columns and an ISO date to read two.
   Map<String, String> repositoryIdsById() {
     final rows = _db.query('SELECT id, repository_id FROM sessions;');
     return {
@@ -250,15 +203,7 @@ class SessionDao {
   }
 
   /// Every row whose status still claims something is running, oldest first.
-  ///
-  /// What `SessionLivenessReconciler` sweeps. Filtered in SQL rather than by
-  /// reading the table and discarding most of it: this runs on launch, when a
-  /// workspace with hundreds of finished sessions normally has none of these,
-  /// and the whole point is that the answer is usually empty.
-  ///
-  /// The words are taken from [SessionStatus.claimsLive] rather than spelled
-  /// into the SQL, so a seventh status that claims to be live is swept without
-  /// anybody remembering this query exists.
+  /// The words come from [SessionStatus.claimsLive], so a seventh is swept too.
   List<Session> getClaimingLive() {
     final names = [
       for (final status in SessionStatus.values)
@@ -274,15 +219,7 @@ class SessionDao {
   }
 
   /// Every row recording the CLI conversation [externalSessionId], **newest
-  /// first**.
-  ///
-  /// The column is a plain `TEXT` with no `UNIQUE` constraint
-  /// (`migrations.dart:171`), unlike `imported_sessions`, so more than one row
-  /// can name the same conversation — and one did, every time a stopped session
-  /// was resumed. A caller that has to choose between them must be able to
-  /// choose the same one twice, hence the total order: most recently started
-  /// wins, and rows minted in the same instant fall back to the id so a fixed
-  /// clock cannot make the answer arbitrary either.
+  /// first**: the column has no `UNIQUE` constraint, so duplicates are real.
   List<Session> getAllByExternalSessionId(String externalSessionId) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE external_session_id = ? '
@@ -292,12 +229,8 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// The most recently started row for [externalSessionId], or `null`.
-  ///
-  /// Ordered rather than `LIMIT 1` on an unordered scan: see
-  /// [getAllByExternalSessionId]. Callers that care whether the conversation is
-  /// *running* must scan all of them — one row of several may be the live one —
-  /// which is what `SessionLauncher.runningSessionWithExternalId` does.
+  /// The most recently started row for [externalSessionId], or `null`. A caller
+  /// that needs the *running* one must scan them all — any of them may be it.
   Session? getByExternalSessionId(String externalSessionId) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE external_session_id = ? '
@@ -312,9 +245,8 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// All external session IDs currently held by active sessions.
-  ///
-  /// Projects one column instead of deserializing full session objects.
+  /// All external session IDs currently held by active sessions. Projects one
+  /// column instead of deserializing full session objects.
   Set<String> heldExternalSessionIds({String? excludingSessionId}) {
     final results = excludingSessionId == null
         ? _db.query(
@@ -355,14 +287,8 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// The rows named by [ids], oldest first, in one indexed query.
-  ///
-  /// For the callers that already know which handful of sessions they are
-  /// describing — the follow-up inbox names one row per open follow-up — and
-  /// were reaching for [getAll] only to build a lookup map out of it. The
-  /// difference is the whole point of `session_signal_cost_test.dart`: a scan
-  /// costs the user every session they have ever opened, and this costs the
-  /// ones actually on screen.
+  /// The rows named by [ids], oldest first, in one indexed query. For callers
+  /// reaching for [getAll] only to build a lookup map; a scan costs every row.
   List<Session> getByIds(Iterable<String> ids) {
     final unique = ids.toSet().toList();
     if (unique.isEmpty) return const [];
@@ -375,24 +301,8 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// How many sessions sit under [repositoryIds], and how many of those are
-  /// running — in **one statement that decodes no session at all**.
-  ///
-  /// What a project header asks. It used to ask by calling [getByRepository]
-  /// once per repository and counting the answers, which is two wastes at
-  /// once: one statement per checkout (the owner has a project rescanned into
-  /// 69 of them), and a whole [Session] built out of twenty-one columns —
-  /// including two ISO date parses — for every row, to read one word off it
-  /// and drop the rest.
-  ///
-  /// A header never *names* a session, so nothing here returns one. The
-  /// counting happens in SQLite, over the repository index, and what comes
-  /// back is two integers however many sessions the project holds.
-  ///
-  /// The running word is taken from [SessionStatus.running] rather than
-  /// spelled into the SQL, the way [getClaimingLive] takes its words from
-  /// [SessionStatus.claimsLive]: renaming the enum value must not silently
-  /// make every header read zero.
+  /// How many sessions sit under [repositoryIds], and how many are running, in
+  /// **one statement that decodes no session at all**. A header never names one.
   ({int sessions, int running}) countsByRepositories(
     Iterable<String> repositoryIds,
   ) {
@@ -439,15 +349,7 @@ class SessionDao {
   }
 
   /// The row's lifecycle word, or [SessionStatus.unknown] for one this build
-  /// cannot read.
-  ///
-  /// The last `values.byName` in [_fromRow], and the last place a single
-  /// unreadable word could throw a whole `SELECT * FROM sessions` away — the
-  /// Loop 30 failure its neighbours were hardened against. The fallback is not
-  /// a guess: a status we cannot read is exactly the state
-  /// [SessionStatus.unknown] names, so an older build's row, a newer build's
-  /// row and a hand-edited one all land on the same honest answer instead of on
-  /// an exception.
+  /// cannot read — rather than one bad word throwing the whole `SELECT` away.
   static SessionStatus _statusFrom(String? value) {
     for (final status in SessionStatus.values) {
       if (status.name == value) return status;
@@ -480,16 +382,12 @@ class SessionDao {
       parentSessionId: row['parent_session_id'] as String?,
       parentLink: SessionLink.parse(row['parent_link_kind'] as String?),
       paneId: row['pane_id'] as String?,
-      // Parsed by name with a fallback rather than `values.byName`, which throws
-      // on anything it does not recognise — the failure mode that used to make a
-      // fourth agent's rows unreadable (Loop 30).
+      // Parsed by name with a fallback rather than `values.byName`, which
+      // throws and used to make a fourth agent's rows unreadable (Loop 30).
       surface: _surfaceFrom(row['surface'] as String?),
       view: _viewFrom(row['view'] as String?),
-      // Kept verbatim rather than parsed against a fixed set. Since v35 this
-      // is a selection in the agent's own vocabulary, and only the agent's
-      // descriptor can say what it means — a DAO that "validated" it would
-      // have to know every agent, and would answer an unrecognised value by
-      // throwing the row away.
+      // Kept verbatim rather than parsed: since v35 this is the agent's own
+      // vocabulary, and a DAO that "validated" it would throw the row away.
       permissionMode: row['permission_mode'] as String?,
       modelId: row['model_id'] as String?,
       archivedAt: row['archived_at'] == null

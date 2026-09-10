@@ -1,11 +1,7 @@
 import 'dart:convert';
 
-/// Why a directory reads as a React Native project.
-///
-/// Two independent signals, kept apart rather than collapsed into a boolean,
-/// the way `FlutterEvidence` keeps a Flutter app apart from a Flutter package.
-/// A bare React Native app and an Expo app are built by different commands,
-/// and the day either is measured the difference is already recorded.
+/// Why a directory reads as a React Native project — two signals kept apart,
+/// because a bare React Native app and an Expo app build differently.
 enum ReactNativeEvidence {
   /// `react-native` among the dependencies.
   reactNative,
@@ -27,22 +23,15 @@ class PackageJsonReading {
 
   final Set<ReactNativeEvidence> evidence;
 
-  /// Whether this is a React Native or Expo project at all.
-  ///
-  /// A `metro.config.js` alone is not enough — it corroborates, it does not
-  /// decide — so the answer turns on a dependency being declared.
+  /// Whether this is a React Native or Expo project at all. A `metro.config.js`
+  /// alone corroborates; the answer turns on a dependency being declared.
   bool get isReactNative =>
       evidence.contains(ReactNativeEvidence.reactNative) ||
       evidence.contains(ReactNativeEvidence.expo);
 }
 
-/// Reads the two facts a React Native detection needs out of a `package.json`.
-///
-/// **A real parse, unlike the pubspec reading.** A pubspec is YAML and adding
-/// a parser for `name:` would be a dependency for trivial logic; a
-/// `package.json` is JSON and `dart:convert` is already here. A file this
-/// cannot parse reads as "not a React Native project", which is the safe
-/// direction.
+/// Reads the two facts a React Native detection needs out of a `package.json`;
+/// a file it cannot parse reads as "not React Native", the safe direction.
 PackageJsonReading readPackageJson(String contents) {
   final Object? decoded;
   try {

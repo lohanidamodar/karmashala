@@ -1,9 +1,5 @@
-/// Identifies one agent session the way the status pipeline does: the agent's
-/// registry id plus the CLI's own session id.
-///
-/// Deliberately not the workspace database id — a status report is keyed by
-/// what the agent itself announces, and the same CLI session can be reached
-/// through more than one workspace row.
+/// Identifies one agent session as the status pipeline does: the agent's
+/// registry id plus the CLI's own session id, never the workspace row id.
 class AgentSessionKey {
   const AgentSessionKey(this.agentId, this.sessionId);
 

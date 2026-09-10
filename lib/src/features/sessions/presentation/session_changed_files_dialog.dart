@@ -9,16 +9,8 @@ import '../application/session_changed_files_providers.dart';
 import '../domain/session_changed_files.dart';
 import '../domain/session_resume.dart' show describeAge;
 
-/// What one session changed, on demand.
-///
-/// **Nothing polls it.** The reading is taken when this opens and again when
-/// Re-read is pressed, which is §19's third rule: a Codex answer costs a call
-/// on the shared app-server connection and a Claude answer costs a pass over a
-/// transcript, and neither is a thing to do on a timer.
-///
-/// The reading's age is on screen for the same reason: what a session changed
-/// is a statement about a moment, and a stale one that looks live is the
-/// confident false statement the health panel exists to delete.
+/// What one session changed, on demand. **Nothing polls it** — a reading costs
+/// a call or a transcript pass — and its age is on screen for the same reason.
 class SessionChangedFilesDialog extends ConsumerWidget {
   const SessionChangedFilesDialog({required this.sessionId, super.key});
 

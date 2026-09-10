@@ -1,33 +1,19 @@
 part of 'terminal_sessions_controller.dart';
 
-/// Whether new panes get OSC 133 shell integration.
-///
-/// A provider of its own rather than an inline settings read, so a test that
-/// only wants a terminal does not have to stand up a database to get one —
-/// the same seam `terminalInstanceFactoryProvider` already provides.
+/// Whether new panes get OSC 133 shell integration. Its own provider so a test
+/// that only wants a terminal need not stand up a database.
 final shellIntegrationEnabledProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).shellIntegrationEnabled,
 );
 
-/// Whether a restore puts a process back into the panes that had one.
-///
-/// The same seam and the same reason as [shellIntegrationEnabledProvider]: the
-/// restore runs in `build`, and reading the setting directly would make every
-/// terminal test stand up a settings store to open a pane.
+/// Whether a restore puts a process back into the panes that had one. Its own
+/// provider for [shellIntegrationEnabledProvider]'s reason.
 final restoreLivePanesProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).restoreLivePanes,
 );
 
-/// The production factory: each pane is backed by a real ConPTY, carrying the
-/// user's environment variables.
-///
-/// The overlay is `ref.read` **inside** the closure rather than watched outside
-/// it, which is what makes "a changed variable applies to the next pane, not to
-/// the ones already running" true — and it is resolved once per launch, so the
-/// per-keystroke path is untouched.
-///
-/// Every one of the five call sites goes through this provider, so this is the
-/// only place the overlay has to be introduced.
+/// The production factory: a real ConPTY per pane, carrying the user's
+/// variables. The overlay is read *inside* the closure, so a change is next-pane.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
   (ref) =>
       ({
@@ -50,10 +36,8 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
               profileId: profile.id,
               host: host,
               connection: pool.forHostId(host.id),
-              // Deployed or verified once per host per connection and shared by
-              // every pane on it; null only when this app cannot reach SSH at
-              // all, in which case the pane says nothing about a session host
-              // it never asked about.
+              // Deployed or verified once per host per connection and shared
+              // by every pane on it; null only when SSH is unreachable.
               hostAccess: ref.read(hostSessionAccessLookupProvider)(host),
               workingDirectory:
                   workingDirectory ?? agentLaunch?.workingDirectory,
@@ -75,10 +59,9 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
           );
         }
 
-        // Read here, per launch, for the same reason the environment overlay
-        // is: a setting changed now applies to the next pane and not to the
-        // ones already running, because an instance is built once and a running
-        // shell cannot change which process owns it.
+        // Per launch, like the environment overlay: a running shell cannot
+        // change which process owns it, so a setting changed now applies to the
+        // next pane only.
         final hostAccess = ref.read(hostBackedLocalPanesProvider)
             ? ref.read(localHostSessionAccessProvider)
             : null;

@@ -6,19 +6,8 @@ import '../../settings/application/settings_controller.dart';
 import '../application/device_providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// What an Android emulator starts with, and what gets switched off inside it.
-///
-/// A dialog rather than a settings page because it is a decision about the
-/// Start button three rows below it, and because two of its three groups are
-/// **not** a preference at all: they are changes written into the emulator that
-/// stay there. Every layer says so above its own tick boxes, and Restore is on
-/// the same screen rather than somewhere a user has to go looking for it after
-/// their Firebase build stops working.
-///
-/// The tick boxes read the opposite way round from the iOS Simulator page:
-/// there a tick *spares* a category, here it *applies* one. Android's risky
-/// layer is opt-in, so "ticked means something happens" is the honest polarity,
-/// and it is why the feature-loss warnings show while a box is ticked.
+/// What an Android emulator starts with, and what is switched off inside it.
+/// A tick *applies* a category here; on the iOS page a tick *spares* one.
 class AndroidSlimmingDialog extends ConsumerWidget {
   const AndroidSlimmingDialog({super.key});
 
@@ -184,9 +173,8 @@ class _LayerSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // A Wrap rather than a Row: "Disabled packages" beside the chip is
-          // already within a few pixels of the dialog's width, so at a larger
-          // text scale the heading overflowed rather than moving the chip down.
+          // A Wrap rather than a Row: at a larger text scale the heading
+          // overflowed instead of moving the chip down.
           Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: Insets.sm,
@@ -277,12 +265,8 @@ class _CategoryTile extends StatelessWidget {
   }
 }
 
-/// Puts a running emulator back the way it was.
-///
-/// Only offered for a running emulator, because both durable layers are `adb`
-/// calls and there is nothing to talk to otherwise. A physical device is never
-/// offered: nothing here has ever touched one, so there would be nothing to
-/// restore.
+/// Puts a running emulator back the way it was. Only a running one: both
+/// durable layers are `adb` calls, and a physical device is never offered.
 class _RestoreRow extends ConsumerWidget {
   const _RestoreRow();
 
@@ -322,14 +306,7 @@ class _RestoreRow extends ConsumerWidget {
 }
 
 /// One running emulator, what this build has on it, and — only if that is
-/// something — a Restore button.
-///
-/// The dialog used to offer Restore for every running emulator unconditionally,
-/// which made the safe case indistinguishable from the one that matters: an
-/// emulator that was never slimmed and one whose Play services are disabled
-/// looked exactly alike, so the button was either pressed for nothing or not
-/// trusted. [AndroidSlimmingService.status] was written and tested for this and
-/// then never asked.
+/// something — a Restore button, so a never-slimmed emulator offers none.
 class _RestoreTarget extends ConsumerWidget {
   const _RestoreTarget({required this.emulator});
 
@@ -342,10 +319,8 @@ class _RestoreTarget extends ConsumerWidget {
     final status = ref.watch(androidSlimmingStatusProvider(emulator.serial));
     final carried = status.asData?.value;
 
-    // Unknown is not "nothing". While the device is still being asked there is
-    // no button; if the ask failed there is one anyway, because a restore the
-    // user cannot reach is worse than one they did not need — and a device
-    // that was never slimmed costs a single `pm list` to restore.
+    // Unknown is not "nothing": no button while the device is still being
+    // asked, but one anyway if the ask failed — a restore costs one `pm list`.
     final offerRestore = carried?.isSlimmed ?? status.hasError;
     final detail = carried?.summary ??
         (status.hasError
@@ -383,9 +358,7 @@ class _RestoreTarget extends ConsumerWidget {
                           .read(androidSlimmingProvider.notifier)
                           .restore(emulator.serial);
                       // Mounted first: `ref` belongs to this element, and a
-                      // dialog closed while the restore ran has no element to
-                      // invalidate through. The provider is auto-disposed, so
-                      // there is nothing stale left behind either way.
+                      // dialog closed mid-restore has no element left.
                       if (!context.mounted) return;
                       // What is on the device is exactly what just changed.
                       ref.invalidate(

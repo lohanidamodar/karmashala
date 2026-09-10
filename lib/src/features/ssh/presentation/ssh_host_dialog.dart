@@ -16,12 +16,8 @@ import '../data/environment_key_reader.dart';
 import '../domain/ssh_host.dart';
 import 'host_key_changed_alert.dart';
 
-/// Adds or edits one remote host.
-///
-/// The form stores *where* a key is, never a key, a password or a passphrase:
-/// `ssh_hosts` has no column that could hold one, and a test asserts it. The
-/// secrets for a connection are asked for when the connection is made and kept
-/// in memory only.
+/// Adds or edits one remote host. The form stores *where* a key is, never a key
+/// or a password: `ssh_hosts` has no column for one, and a test asserts it.
 class SshHostDialog extends ConsumerStatefulWidget {
   const SshHostDialog({this.existing, super.key});
 
@@ -150,8 +146,7 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
       return;
     }
     // Through the pool's `create`, which does not register the connection: the
-    // settings being tested are not saved yet, and nothing else should inherit
-    // a session opened from a draft.
+    // settings tested are not saved, and nothing inherits a draft session.
     final probe = await probeSshHost(
       ref.read(sshConnectionPoolProvider),
       draft,

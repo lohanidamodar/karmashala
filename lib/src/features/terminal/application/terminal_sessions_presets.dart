@@ -1,23 +1,16 @@
 part of 'terminal_sessions_controller.dart';
 
-// `Notifier.ref` is `@protected`, which covers a subclass and not an
-// extension — even one splitting that subclass's own body inside its own
-// library, which is all any part of this file is.
+// `Notifier.ref` is `@protected`, which covers a subclass and not an extension
+// splitting that subclass's own body inside its own library.
 // ignore_for_file: invalid_use_of_protected_member
 
 /// **Presets**: capturing the workbench's shape under a name, and opening one
-/// back up.
-///
-/// The whole feature turns on one distinction, which [openPreset] states: the
-/// tab that ends up in front starts, and the rest declare.
+/// back up. The distinction it turns on is [openPreset]'s: the tab that ends up
+/// in front starts, and the rest declare.
 extension TerminalPresetVerbs on TerminalSessionsController {
-  /// Captures the workbench's shape under [name] — its tabs, their regions and
-  /// splits, and what each pane is running — and **nothing that is running**.
-  ///
-  /// The pane's *current* directory, not the one it was launched in. A pane
-  /// somebody has `cd`-ed is a pane whose useful place is where it is now, and
-  /// OSC 7 is the reason the app can tell. An empty region declares nothing and
-  /// is left out, which is the rule the layout store already follows.
+  /// Captures the workbench's shape under [name] — and **nothing that is
+  /// running**. The pane's *current* directory (OSC 7), not its launch one; an
+  /// empty region declares nothing and is left out.
   TerminalPreset capturePreset({required String id, required String name}) {
     final tabs = <PresetTab>[];
     var active = 0;
@@ -51,28 +44,8 @@ extension TerminalPresetVerbs on TerminalSessionsController {
     return TerminalPreset(id: id, name: name, tabs: tabs, activeTab: active);
   }
 
-  /// Opens [preset] as fresh tabs, and reports what it could not open.
-  ///
-  /// **The tab that ends up in front starts; the rest declare.** That is the
-  /// distinction the feature turns on — a preset that launched nine processes
-  /// would be worse than no preset — and it costs nothing new: a tab nobody is
-  /// looking at is filled with [DormantTerminalInstance]s marked `wasLive`,
-  /// which is exactly the state a restored tab sits in, so [activateTab] starts
-  /// them when the user opens them and nothing else has to know that presets
-  /// exist.
-  ///
-  /// The front tab is started outright rather than through
-  /// [shouldRestartOnLaunch], because that rule answers a different question.
-  /// Restoring asks *"may this app spawn processes nobody asked for"*; opening
-  /// a preset is being asked, by name.
-  ///
-  /// **A profile is judged against the ones this machine has**, which is where
-  /// this deliberately parts company with [_adoptRestored]. A restore rebuilds
-  /// `wsl:Gone` into a pane that fails to launch and says so, on the reasoning
-  /// that silently substituting PowerShell would be worse. For a thing the user
-  /// has just chosen by name, "the Ubuntu pane is not in this one, that
-  /// distribution is gone" is more use than a pane that will not start — so the
-  /// rest of the preset opens and the skipped profiles are named.
+  /// Opens [preset] as fresh tabs, and reports what it could not open. **The
+  /// front tab starts; the rest declare** — nine processes would be worse.
   TerminalPresetOpening openPreset(TerminalPreset preset) {
     final available = {
       for (final profile in ref.read(terminalProfilesProvider)) profile.id,
@@ -117,8 +90,8 @@ extension TerminalPresetVerbs on TerminalSessionsController {
       _tabsMutated();
       openedTabs++;
       openedPanes += ids.length;
-      // The preset's own front tab wins; the first one that opened is the
-      // fallback for a preset whose front tab was entirely skipped.
+      // The preset's own front tab wins; the first opened is the fallback for
+      // a preset whose front tab was entirely skipped.
       if (eager || activate == null) activate = tabId;
     }
 

@@ -8,18 +8,7 @@ import 'clock_provider.dart';
 import 'id_generator_provider.dart';
 
 /// The app's `Clock`, `IdGenerator` and `PathProbe`, spelled the way
-/// `package:agent_cli` spells them.
-///
-/// `agent_cli` is published and must stay so, which is why it depends on no
-/// local package and carries verbatim copies of these three helpers instead of
-/// importing `karmashala_core` for them (docs/PACKAGE_SPLIT.md §2). The two
-/// copies are identical line for line and are still two types, so the app —
-/// which keeps a single clock, a single id generator and a single path probe
-/// for everything else it does — hands them across at this one seam rather than
-/// growing a second set.
-///
-/// Three interfaces, three methods each; the cost of the rule is these thirty
-/// lines and no more.
+/// `package:agent_cli` spells them — it carries its own copies (PACKAGE_SPLIT §2).
 class _BridgedClock implements agent_cli.Clock {
   const _BridgedClock(this._clock);
 
@@ -63,11 +52,8 @@ agent_cli.IdGenerator agentCliIds(IdGenerator ids) => _BridgedIdGenerator(ids);
 agent_cli.PathProbe agentCliPathProbe(PathProbe probe) =>
     _BridgedPathProbe(probe);
 
-/// The workspace's one clock, for the package's services.
-///
-/// A provider of its own so a test that overrides [clockProvider] — which is
-/// every test that pins a timestamp — still controls the time the package's
-/// discovery, usage and auth services read.
+/// The workspace's one clock, for the package's services. A provider of its
+/// own, so a test overriding [clockProvider] also pins the package's time.
 final agentCliClockProvider = Provider<agent_cli.Clock>(
   (ref) => agentCliClock(ref.watch(clockProvider)),
 );

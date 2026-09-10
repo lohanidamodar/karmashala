@@ -17,20 +17,8 @@ class _RescanChoice {
   const _RescanChoice();
 }
 
-/// Which checkout the panel is describing, and the picker that moves it.
-///
-/// The selection moves on its own — it follows the terminal tab — so the
-/// surfaces have to name it; making that same line open the list of checkouts
-/// costs no extra chrome.
-///
-/// **The menu is offered even when the project has one checkout**, and that is
-/// the fix for the complaint made three times from the shipped app: "github
-/// panel only shows popupbits/popupbits even though this session is also
-/// working on the sub folder". The project had exactly one recorded checkout —
-/// its own root, written the day it was added — so this line drew no caret and
-/// no menu, and there was nothing to click and nothing to say why. A list of
-/// one is still worth opening when the thing you actually need is the
-/// **Rescan** under it.
+/// Which checkout the panel is describing, and the picker that moves it. The
+/// menu is offered even for a single checkout, for the **Rescan** under it.
 class SidePanelContextLine extends ConsumerStatefulWidget {
   const SidePanelContextLine({super.key});
 
@@ -91,9 +79,8 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
           'Switch to another checkout in this project, or rescan for new ones',
       position: PopupMenuPosition.under,
       padding: EdgeInsets.zero,
-      // The last result belongs to the last rescan. Kept until the menu is
-      // opened again — without this the item is permanently labelled "No new
-      // checkouts found" and the word Rescan is never seen twice.
+      // The last result belongs to the last rescan, and is kept until the menu
+      // is opened again, or the word Rescan is never seen twice.
       onOpened: () {
         if (_rescanResult != null) setState(() => _rescanResult = null);
       },
@@ -195,8 +182,7 @@ class _ContextLineBody extends StatelessWidget {
 }
 
 /// One checkout in the open picker. The second line is what stops `wt-relay`
-/// and the clone it was cut from reading as two folder names; its worktree and
-/// branch halves arrive after the menu is drawn, so the row height is fixed.
+/// and the clone it was cut from reading as two folder names.
 class _CheckoutMenuRow extends ConsumerWidget {
   const _CheckoutMenuRow({
     required this.repository,
@@ -229,19 +215,8 @@ class _CheckoutMenuRow extends ConsumerWidget {
   }
 }
 
-/// Level two of the picker: the worktrees of the checkout the panel is on.
-///
-/// The owner's shape, in their words — *"show the worktrees after selecting the
-/// parent repo in the details"*. The line above answers "which repository";
-/// this answers "and which of its worktrees", which is a different question and
-/// was drowning the first one when both were poured into one 69-entry menu.
-///
-/// A worktree the workspace has a row for is selectable, because pointing the
-/// scoped surfaces at it means naming a `repositories` row. One it has never
-/// recorded is still *listed* — it exists, and saying so is better than
-/// pretending the repository has no worktrees — but it is not offered as a
-/// destination, because there is nothing to point at. Rescan is what turns the
-/// second kind into the first.
+/// Level two of the picker: the worktrees of this checkout. One the workspace
+/// has never recorded is listed but is not a destination; Rescan changes that.
 class SidePanelWorktrees extends ConsumerWidget {
   const SidePanelWorktrees({super.key});
 

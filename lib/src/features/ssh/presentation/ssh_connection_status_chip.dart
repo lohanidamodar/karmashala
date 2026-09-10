@@ -6,11 +6,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/ssh_connection_providers.dart';
 import '../domain/ssh_connection_state.dart';
 
-/// How a connection state reads to a user, in one line.
-///
-/// Split out and pure so the wording is testable without a widget tree, and so
-/// there is exactly one place that decides what "disconnected with a retry
-/// scheduled" is called.
+/// How a connection state reads to a user, in one line. Pure, so the wording is
+/// testable and one place decides what "retry scheduled" is called.
 ({String label, IconData icon}) describeSshStatus(SshConnectionState state) =>
     switch (state.status) {
       SshConnectionStatus.idle => (
@@ -40,12 +37,8 @@ String _seconds(Duration d) => d.inMilliseconds < 1000
     ? '${d.inMilliseconds} ms'
     : '${(d.inMilliseconds / 1000).toStringAsFixed(1)} s';
 
-/// The connection state of one saved host, live.
-///
-/// Deliberately never renders "not connected" for a failure: an idle row and a
-/// row whose last attempt was refused mean opposite things to a user, and
-/// collapsing them is how a broken host comes to look like one nobody has tried
-/// yet. The reason is shown next to the chip, not hidden in a log.
+/// The connection state of one saved host, live. Never renders "not connected"
+/// for a failure: a broken host must not look like one nobody has tried.
 class SshConnectionStatusChip extends ConsumerWidget {
   const SshConnectionStatusChip({
     required this.hostId,

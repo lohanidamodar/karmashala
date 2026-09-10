@@ -28,18 +28,16 @@ class CompanionSettingsScreen extends ConsumerWidget {
         ref.watch(companionLinkProvider).asData?.value ??
         CompanionLinkState.disconnected;
     final path = ref.watch(companionLinkPathProvider).asData?.value;
-    // A phone now keeps several relays and picks one per reconnect, so
-    // "Relay" alone stopped being an answer — name the one in use.
+    // A phone keeps several relays and picks one per reconnect, so "Relay"
+    // alone is not an answer.
     final relayHost = ref.read(companionGatewayProvider).activeRelay?.host;
     final since = ref.watch(companionLinkSinceProvider).asData?.value;
     final age = since == null
         ? null
         : ref.read(clockProvider).nowUtc().difference(since);
 
-    // §19: every reading carries its age. Worded for the state it belongs to —
-    // a link that is up has held for that long, one that is down broke that
-    // long ago — and a state nothing has stamped yet admits it rather than
-    // reading "just now", which is what an unaged sentence looked like.
+    // §19: every reading carries its age, worded for its state, and a state
+    // nothing has stamped admits that rather than reading "just now".
     String withAge(String label) {
       if (age == null) return '$label · age unknown';
       return link == CompanionLinkState.disconnected
@@ -48,9 +46,8 @@ class CompanionSettingsScreen extends ConsumerWidget {
     }
 
     if (pairing == null) {
-      // The shell shows the pairing flow before the tabs exist, so this is
-      // only reachable in the moment after an unpair — exactly when a relay
-      // may need changing before typing the next code.
+      // Only reachable in the moment after an unpair, which is exactly when a
+      // relay may need changing before the next code is typed.
       return ListView(
         padding: companionListInsets(
           context,
@@ -67,8 +64,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
     }
 
     final (linkIcon, linkLabel, linkColour) = switch (link) {
-      // Which path carries the link matters at home: the direct socket skips
-      // the relay entirely, and the user deserves to see that it did.
+      // The direct socket skips the relay entirely, and that is worth seeing.
       CompanionLinkState.connected => (
         AppIcons.linkSimple,
         withAge(switch ((path, relayHost)) {
@@ -91,12 +87,12 @@ class CompanionSettingsScreen extends ConsumerWidget {
     };
 
     return ListView(
-      // Capped at a phone's measure past the compact breakpoint: a tablet
-      // stretched these cards and this paragraph edge to edge (CLAUDE.md §6).
+      // Capped at a phone's measure past the compact breakpoint, or a tablet
+      // stretches these cards edge to edge (CLAUDE.md §6).
       padding: companionListInsets(context, EdgeInsets.all(density.padX)),
       children: [
-        // The saved desktops first: which one this phone is on is the fact
-        // every other row here is about.
+        // The saved desktops first: every other row here is about which one
+        // this phone is on.
         const ConnectionsSection(),
         const SizedBox(height: Insets.lg),
         const CompanionSectionHeader('THIS CONNECTION'),
@@ -131,9 +127,8 @@ class CompanionSettingsScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: Insets.xs),
-              // Its own line: "Connected · Direct (LAN)" is a sentence, and
-              // squeezing it beside the machine's name is what overflowed the
-              // card at phone width.
+              // Its own line: beside the machine's name it overflowed the card
+              // at phone width.
               Row(
                 children: [
                   Icon(linkIcon, size: density.iconSmall, color: linkColour),
@@ -287,13 +282,9 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
   }
 }
 
-/// The way into the phone's own log.
-///
-/// Here rather than behind a gesture because the moment it is wanted is the
-/// moment the link is not working, and this screen is where someone already
-/// goes to find out why. It says the build's version too: on a phone that can
-/// be several releases behind the desktop it is talking to, that is the first
-/// thing a mismatch shows up as.
+/// The way into the phone's own log, on this screen because it is wanted
+/// exactly when the link is not working. Says the build version too: a phone
+/// can be several releases behind the desktop it is talking to.
 class _DiagnosticsRow extends StatelessWidget {
   const _DiagnosticsRow();
 

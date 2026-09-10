@@ -1,10 +1,5 @@
-/// User preferences for agent status notifications.
-///
-/// Stored separately from `Settings` under its own metadata key, following the
-/// same repository-over-`app_metadata` pattern. The defaults are deliberately
-/// restrained: notifications are on, but only ever fire while the window is
-/// unfocused, so a first run cannot interrupt someone who is already looking at
-/// the app.
+/// User preferences for agent status notifications. The defaults are restrained
+/// on purpose: on, but only while the window is unfocused.
 class NotificationSettings {
   const NotificationSettings({
     this.enabled = true,

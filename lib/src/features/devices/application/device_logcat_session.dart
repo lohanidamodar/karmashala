@@ -10,31 +10,8 @@ import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'device_providers.dart';
 
-/// **A live `logcat` for one device**, over the same `AdbService` the
-/// `device_logcat` tool reads through.
-///
-/// The tool takes a *snapshot* — `logcat -d -t N` — because a tool call has to
-/// answer and stop. A person watching a device wants the next line, so this
-/// takes the other method the service already had and nothing used:
-/// [AdbService.streamLogcat], which is `logcat` without `-d`. One service, two
-/// readings of it; there is no second path to a device here.
-///
-/// Three things it must not get wrong:
-///
-/// * **Nothing polls.** Lines arrive because the process emits them. The only
-///   timer is [_flushWindow], and it is armed by a line and disarmed by the
-///   flush — a repaint window, not a question asked on a tick. At rest there is
-///   no timer at all.
-/// * **The tail is bounded and says so.** [LogcatTail] keeps the newest lines
-///   and counts what it dropped, and the view prints that count.
-/// * **An empty view is never silently empty.** A package filter that matches
-///   no running process is reported in words — the same distinction
-///   `AdbDeviceDriver.readLog` draws with its `note`, because "not running" and
-///   "running quietly" look identical on screen and need opposite responses.
-///
-/// Reading a device is never claimed. `DeviceClaims` blocks the acting verbs
-/// and lets `device_logcat` through while somebody else is driving; a view that
-/// took a claim to watch a log would be stricter than the tool it mirrors.
+/// A live `logcat` for one device, over the same `AdbService` the
+/// `device_logcat` tool snapshots through — `streamLogcat`, without `-d`.
 class DeviceLogcatSession extends ChangeNotifier {
   DeviceLogcatSession({
     required this.serial,
@@ -50,8 +27,7 @@ class DeviceLogcatSession extends ChangeNotifier {
        _tail = LogcatTail(capacity: capacity);
 
   /// How long lines are collected before one repaint. Not a poll: it exists
-  /// only between a line arriving and the frame that draws it, and a device
-  /// under load emits far faster than a person reads.
+  /// only between a line arriving and the frame that draws it.
   static const Duration flushWindow = Duration(milliseconds: 100);
 
   final String serial;
@@ -87,9 +63,8 @@ class DeviceLogcatSession extends ChangeNotifier {
   /// timestamp: an unstarted stream has no age, and zero would be a lie.
   DateTime? get startedAt => _startedAt;
 
-  /// When the last line arrived, or null when none has. The number that
-  /// distinguishes a quiet device from a dead stream, and the reason a bare
-  /// "streaming" badge would not be enough.
+  /// When the last line arrived, or null when none has: the number that
+  /// tells a quiet device from a dead stream.
   DateTime? get lastLineAt => _lastLineAt;
 
   /// Why there is nothing to read, in words, or null when there is no problem
@@ -164,11 +139,8 @@ class DeviceLogcatSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Pins the stream to one package's processes, or to none.
-  ///
-  /// Restarts, because `--pid` is chosen when `logcat` is spawned. The lines
-  /// already collected are cleared with it: keeping another package's lines
-  /// under a filter that says this one would misattribute every one of them.
+  /// Pins the stream to one package's processes, or none. Restarts, since
+  /// `--pid` is fixed at spawn; the collected lines go with it, unattributed.
   Future<void> filterByPackage(String? package) async {
     final trimmed = package?.trim();
     _package = trimmed == null || trimmed.isEmpty ? null : trimmed;
@@ -216,13 +188,8 @@ class DeviceLogcatSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Drops the stream and the process, **synchronously**.
-  ///
-  /// Nothing here is awaited on purpose. A restart and a dispose both have to
-  /// leave the old process dead the instant they are asked, and awaiting a
-  /// subscription's cancellation put the kill behind an event-loop turn — long
-  /// enough for a closing panel to be gone with its `logcat` still running.
-  /// Ordering is the generation counter's job, not the await's.
+  /// Drops the stream and the process, **synchronously**: awaiting the
+  /// cancellation put the kill a turn late, outliving the panel that closed.
   void _detach() {
     _flush?.cancel();
     _flush = null;
@@ -244,10 +211,7 @@ class DeviceLogcatSession extends ChangeNotifier {
 }
 
 /// One session per device, disposed with the last widget watching it.
-///
-/// `autoDispose` is the whole bound on cost: a collapsed logcat view holds no
-/// subscription, so the provider is disposed, so the `logcat` process is
-/// killed. Nothing keeps a device talking to a panel nobody has open.
+/// `autoDispose` is the whole bound on cost: no watcher, no `logcat`.
 final deviceLogcatSessionProvider = Provider.autoDispose
     .family<DeviceLogcatSession, String>((ref, serial) {
       final session = DeviceLogcatSession(

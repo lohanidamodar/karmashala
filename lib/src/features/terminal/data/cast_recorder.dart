@@ -3,22 +3,12 @@ import 'dart:typed_data';
 
 import '../domain/terminal_cast.dart';
 
-/// Most a single recording may hold in memory.
-///
-/// A pane left recording through a `yes` or a verbose build is otherwise
-/// unbounded, and this feature's whole premise is that a recording is
-/// kilobytes. 8 MB is minutes of a chatty shell and still a fraction of one
-/// second of video; past it the recorder stops adding events and says so, which
-/// makes the recording short rather than wrong.
+/// Most a single recording may hold in memory. Past it the recorder stops
+/// adding events and says so, which makes the recording short, not wrong.
 const int kCastMaxBytes = 8 * 1024 * 1024;
 
-/// Turns a pane's output into a [TerminalCast] while it happens.
-///
-/// Deliberately not a widget, not a provider and not attached to a screen: this
-/// holds the recording, so the recording survives the pane being scrolled off,
-/// switched away from, or dropped to the cold ingest tier. The tap is on the
-/// bytes arriving from the process, which is the one place upstream of all of
-/// that.
+/// Turns a pane's output into a [TerminalCast] while it happens. Not a widget:
+/// the recording survives the pane going cold or being switched away from.
 class CastRecorder {
   CastRecorder({
     required this.columns,
@@ -49,19 +39,17 @@ class CastRecorder {
   final int maxBytes;
   final DateTime recordedAt;
 
-  /// Called once when the pane being recorded goes away — closed, or its
-  /// process reaped — so a recording is never left running against nothing.
-  /// Without it, closing a tab mid-recording would leave the button saying
-  /// "Stop recording" over a pane that no longer exists.
+  /// Called once when the pane being recorded goes away, so a recording is
+  /// never left running against nothing — without it, closing a tab mid-recording
+  /// left the button saying "Stop recording" over a pane that no longer exists.
   final void Function()? onSourceEnded;
 
   final Duration Function() _clock;
   final List<CastEvent> _events = [];
 
   /// Decoded text is accumulated here by [_sink], which holds back a multi-byte
-  /// sequence split across two reads instead of turning it into two replacement
-  /// characters. flutter_pty reads 1 KB at a time, so that split is ordinary
-  /// rather than theoretical.
+  /// sequence split across two reads. flutter_pty reads 1 KB at a time, so that
+  /// split is ordinary rather than theoretical.
   final StringBuffer _decoded = StringBuffer();
   late final ByteConversionSink _sink = const Utf8Decoder(allowMalformed: true)
       .startChunkedConversion(StringConversionSink.fromStringSink(_decoded));
@@ -98,21 +86,16 @@ class CastRecorder {
   }
 
   /// Records text the app itself put on screen — the `[process exited with
-  /// code 1]` line, an SSH connection banner.
-  ///
-  /// In the cast because it was on the screen. It arrives as text rather than
-  /// bytes because that is how the pane emits it, and a round trip through
-  /// UTF-8 to prove a point would only be able to lose information.
+  /// code 1]` line, an SSH connection banner. In the cast because it was on the
+  /// screen; it arrives as text because that is how the pane emits it.
   void addText(String text) {
     if (_stopped || _truncated || text.isEmpty) return;
     _add(CastEvent.output(_clock(), text), text.length);
   }
 
-  /// Records the grid changing to [columns]x[rows].
-  ///
-  /// The bytes a reflow produces arrive through [addOutput] like any other
-  /// output, so this event is only the geometry: without it a replay keeps
-  /// wrapping at the old width and every line after the resize lands wrong.
+  /// Records the grid changing to [columns]x[rows]. The bytes a reflow produces
+  /// arrive through [addOutput] like any other output, so this event is only
+  /// the geometry — without it a replay keeps wrapping at the old width.
   void addResize(int columns, int rows) {
     if (_stopped || _truncated) return;
     if (columns <= 0 || rows <= 0) return;
@@ -132,9 +115,9 @@ class CastRecorder {
     _events.add(event);
   }
 
-  /// Ends the recording and returns it. Later calls to [addOutput] and
-  /// [addResize] do nothing, so a byte still in flight when the user hits stop
-  /// cannot extend a recording that has already been handed over.
+  /// Ends the recording and returns it. Later [addOutput] and [addResize] calls
+  /// do nothing, so a byte still in flight when the user hits stop cannot extend
+  /// a recording that has already been handed over.
   TerminalCast stop() {
     _stopped = true;
     return snapshot();

@@ -36,11 +36,8 @@ import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
-/// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6).
-///
-/// Branching on width rather than platform, and naming the classes here rather
-/// than scattering `constraints.maxWidth > 760` through the panes, is what keeps
-/// "responsive" a property of the shell instead of a per-widget afterthought.
+/// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6):
+/// branching on width, never platform, is what keeps "responsive" a property.
 enum ShellWidth {
   /// One pane at a time, chosen with a selector. The side panel's rail stays —
   /// it is 34px and it is the only way back to the tools.
@@ -63,11 +60,7 @@ enum ShellWidth {
 }
 
 /// The desktop shell: Explorer · Workbench · side panel, over a status bar.
-///
-/// The terminal is not a dock any more. Karmashala is terminal-primary (see
-/// the design note), so the
-/// terminal and its tabs live in the middle of the window and the navigation
-/// stays on the left — the shape Orca, cmux, Warp and Ghostty all converge on.
+/// Terminal-primary, so the terminal is the middle of the window, not a dock.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -95,39 +88,28 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final shell = ref.watch(shellControllerProvider);
     // Watched, not read: Riverpod 3 pauses a provider's own subscriptions while
-    // nothing listens to it, so a reconciler nobody watches would never hear a
-    // pane stop. Its value is `void` and never changes, so this costs the shell
-    // one build and nothing after it. See [sessionLivenessReconcilerProvider].
+    // nothing listens, so a reconciler nobody watches never hears a pane stop.
     ref.watch(sessionLivenessReconcilerProvider);
-    // Same reason, same cost: a worktree setup command runs in its own pane
-    // and nothing waits for it, so the only way its exit code becomes a
-    // recorded verdict is an observer that is actually listening.
+    // Same reason: a worktree setup command runs in its own pane, and only a
+    // listening observer turns its exit code into a recorded verdict.
     ref.watch(worktreeSetupExitObserverProvider);
-    // And again for the Flutter gates: `flutter analyze` and `flutter test`
-    // run in their own panes, and the only way their exit code becomes a
-    // recorded verdict is an observer that is actually listening.
+    // And again for the Flutter gates, which run in their own panes too.
     ref.watch(flutterGateObserverProvider);
-    // And the same again for scheduled automations, twice over: a scheduler
-    // nobody watches arms no timer, and an observer nobody watches never turns
-    // a finished session into the run's verdict — both silently. Neither polls;
-    // the scheduler arms one timer for the next occurrence and re-arms it.
+    // And again, twice, for scheduled automations: an unwatched scheduler arms
+    // no timer and an unwatched observer records no verdict, both silently.
     ref.watch(automationSchedulerProvider);
     ref.watch(automationRunObserverProvider);
-    // Focus mode: the workbench takes the window. The provider is the old
-    // "maximize the dock" flag, which is the same intent now that the dock is
-    // gone — everything but the work gets out of the way.
+    // Focus mode: the workbench takes the window.
     final zen = ref.watch(terminalMaximizedProvider);
-    // The global hotkey summons the window with quick open already up; the
-    // service that registers it lives outside the tree, so it bumps a counter
-    // and the shell — which has a Navigator above it — opens the dialog.
+    // The global hotkey summons the window with quick open up; the service that
+    // registers it lives outside the tree, so it bumps a counter for the shell.
     ref.listen(quickOpenRequestProvider, (_, _) {
       if (mounted) QuickOpen.show(context);
     });
     return ShellShortcuts(
       child: Scaffold(
         // The bar's height follows the text scale (menus must not clip at
-        // 125%+), and `preferredSize` cannot read a context — so the shell
-        // measures and passes it down.
+        // 125%+), and `preferredSize` cannot read a context.
         appBar: ShellTitleBar(height: Chrome.titleBarOf(context)),
         body: SafeArea(
           child: LayoutBuilder(
@@ -249,22 +231,8 @@ class _ExplorerColumnState extends ConsumerState<_ExplorerColumn> {
   }
 }
 
-/// The window's one chrome row: the menus, the command field and the toggles
-/// for the two panes that can be hidden.
-///
-/// It used to be a Material `AppBar` 32px tall, against the 30px of every other
-/// chrome row in the window, in the same colour and with no rule under it — so
-/// the top-left of the window read as one 62px slab with `Workspace View Tools`
-/// sitting over `EXPLORER`. Six controls were parked at the right (a chat
-/// drawer, a mini launcher, settings, a divider and two toggles), which is
-/// where things go when nowhere else has claimed them.
-///
-/// Now it *is* the tab strip's row: the same height, the same
-/// `surfaceContainerLow`, the same hairline underneath, and the menus at the
-/// tab chips' size and weight instead of a step larger and brighter. Each pane
-/// toggle moved to the side of the window it controls, and it is drawn like a
-/// rail button, because that is the other place in the chrome where a glyph
-/// means "show me this".
+/// The window's one chrome row: the menus, the command field and the pane
+/// toggles. Built as the tab strip's row, because it is chrome, not a heading.
 class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
   const ShellTitleBar({this.height = Chrome.titleBar, super.key});
 
@@ -308,16 +276,12 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
             const _DesktopMenuBar(),
             const SizedBox(width: Insets.sm),
             // Expanded, not Flexible-then-Spacer: the field takes its own
-            // width and the rest of the row is empty space the toggles are
-            // pushed to the far edge by.
+            // width and the toggles are pushed to the far edge by the rest.
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) => constraints.maxWidth < 64
-                    // Below its own leading glyph there is nothing to draw but
-                    // an overflow. The field is a convenience — `Ctrl+K` and
-                    // Workspace > Go to… are the same command — so it is the
-                    // last thing in this row to take space and the first to
-                    // give it all back.
+                    // Below its own leading glyph there is nothing to draw. The
+                    // field is a convenience — `Ctrl+K` is the same command.
                     ? const SizedBox.shrink()
                     : const Align(
                         alignment: Alignment.centerLeft,
@@ -325,16 +289,8 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
                       ),
               ),
             ),
-            // The terminal's own verbs, acting on the pane the keyboard is in.
-            // Not per group: none of them needs to know *which* group, and
-            // seven of them repeated in every strip is what made a split group
-            // narrower than its own status bar.
-            //
-            // Down to the `+` alone at compact widths, where the menus and
-            // the command field need the row more than six glyphs do. Every one
-            // of the rest is a chord and a palette command, and the two splits
-            // are on the pane's own menu too — but the way to make a terminal
-            // stays visible at every width.
+            // The terminal's own verbs, on the pane the keyboard is in. Not per
+            // group: seven in every strip made a split narrower than its bar.
             TerminalToolbar(compact: width.isCompact),
             const _WindowSessionBadges(),
             _ChromeToggle(
@@ -366,14 +322,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
 }
 
 /// What is running that no group's strip can show: sessions a restart left
-/// dormant, and sessions kept alive with no tab.
-///
-/// Both are facts about the **window**, which is what brought them up here.
-/// They used to sit at the right end of the one tab strip there was; every
-/// workspace group has a strip of its own now, and a question about the app
-/// answered in three places at once is three answers.
-///
-/// Its own widget, so the counts it watches wake this row and nothing else.
+/// dormant, and sessions kept alive with no tab. Both are about the **window**.
 class _WindowSessionBadges extends ConsumerWidget {
   const _WindowSessionBadges();
 
@@ -485,10 +434,8 @@ class _ChromeToggle extends StatelessWidget {
 class _DesktopMenuBar extends ConsumerWidget {
   const _DesktopMenuBar();
 
-  /// The menu titles sit at the tab chips' size, weight and colour, and only
-  /// come up to full contrast under the pointer. They are chrome, not a
-  /// heading over the chrome: at `onSurface` they were the brightest thing in
-  /// the window's top-left corner, above the pane header they belong beside.
+  /// The menu titles sit at the tab chips' size, weight and colour: they are
+  /// chrome, not a heading over it, so full contrast only under the pointer.
   static ButtonStyle _titleStyle(ColorScheme scheme) => ButtonStyle(
     foregroundColor: WidgetStateProperty.resolveWith(
       (states) =>
@@ -608,41 +555,23 @@ class _DesktopMenuBar extends ConsumerWidget {
               // `globe` is the Browser surface; scanning the CLI stores for
               // sessions is a search, not the web.
               leadingIcon: const Icon(AppIcons.listMagnifyingGlass),
-              // No chord, deliberately: this is the scan you run after working
-              // in the CLI somewhere else, which is a handful of times in a
-              // workspace's life. Every chord left is one a shell can use, and
-              // spending one here would buy a key nobody's fingers would ever
-              // learn.
+              // No chord: this is the scan you run a handful of times in a
+              // workspace's life, and every chord left is one a shell can use.
               onPressed: () => _showDetected(context, ref),
               child: const Text('Detect CLI sessions'),
             ),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.arrowsClockwise),
-              // Unbound on purpose, and not for the reason above: this drops
-              // the workspace's projects and builds them again from the CLI
-              // stores. Rare *and* half destructive is exactly the shape of
-              // thing that should cost a deliberate trip through a menu rather
-              // than be one slip of a finger away.
+              // Unbound on purpose: rare *and* half destructive is the shape of
+              // thing that should cost a deliberate trip through a menu.
               onPressed: () => _clearAndReimport(context, ref),
               child: const Text('Clear projects and re-import'),
             ),
             const Divider(height: 1),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.power),
-              // ⌘Q on macOS only, and written out rather than reached through
-              // `commandActivator`, because this is the one chord that must
-              // *not* become Ctrl+Q off a Mac: Ctrl+Q is XON, the key that
-              // resumes output after Ctrl+S paused it. Binding it would take it
-              // from every shell in the app and quit at the moment somebody was
-              // unsticking a paused pane.
-              //
-              // The Mac keystroke already works, and not from Dart:
-              // `MainFlutterWindow.performKeyEquivalent` catches ⌘Q ahead of
-              // the Flutter view, because a terminal pane keeps a hidden text
-              // field focused and the engine's text-input plugin would
-              // otherwise answer for the whole window. So this is a label for
-              // something the platform genuinely does, which is why it is shown
-              // there and shown nowhere else.
+              // ⌘Q on macOS only, written out rather than reached through
+              // `commandActivator`: off a Mac that becomes Ctrl+Q, which is XON.
               shortcut: commandKeyIsMeta
                   ? const SingleActivator(LogicalKeyboardKey.keyQ, meta: true)
                   : null,
@@ -690,16 +619,8 @@ class _DesktopMenuBar extends ConsumerWidget {
             ))
               MenuItemButton(
                 leadingIcon: Icon(SidePanel.iconFor(surface)),
-                // The inbox already had this chord; the menu simply never said
-                // so. `OpenAttentionInboxIntent` invokes the same `select` this
-                // item does, so nothing new is claimed here — a keystroke that
-                // worked and was undiscoverable is now drawn where people look
-                // for it.
-                //
-                // The other surfaces stay bare on purpose. There are a dozen of
-                // them, and a dozen more chords is a dozen more keys taken from
-                // every shell in the app for a panel the rail already switches
-                // with one click.
+                // The inbox already had this chord and the menu never said so.
+                // The others stay bare: more chords is more keys taken.
                 shortcut: surface == SidePanelSurface.inbox
                     ? commandActivator(LogicalKeyboardKey.keyA, shift: true)
                     : null,
@@ -724,9 +645,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.gearSix),
               // `Ctrl+,` / `⌘,` is the settings chord on every platform, and
-              // unlike most Ctrl keys it is not one a shell claims — see
-              // `commandActivator`'s comment on why Ctrl+C and Ctrl+V had to
-              // change shape instead of swapping a modifier.
+              // unlike most Ctrl keys it is not one a shell claims.
               shortcut: commandActivator(LogicalKeyboardKey.comma),
               onPressed: () => openSettingsTab(ref),
               child: const Text('Settings'),
@@ -734,9 +653,8 @@ class _DesktopMenuBar extends ConsumerWidget {
             const Divider(height: 1),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.info),
-              // No chord: this is a dialog you open once, to copy a build line
-              // into a bug report. A key nobody presses twice is not worth one
-              // a shell could be using.
+              // No chord: a dialog you open once, to copy a build line into a
+              // bug report.
               onPressed: () => KarmashalaAboutDialog.show(context),
               child: const Text('About Karmashala'),
             ),

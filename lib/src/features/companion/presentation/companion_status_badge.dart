@@ -5,10 +5,8 @@ import 'package:agent_cli/descriptors.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The desktop's status vocabulary for a session the host described.
-///
-/// Same glyphs, same words, same semantic colours as [agentStatusAppearance] —
-/// the phone must not invent a second visual language for the same fact.
+/// The desktop's status vocabulary for a session the host described — same
+/// glyphs, words and semantic colours as [agentStatusAppearance].
 AgentActivityStatus agentStatusOf(CompanionSessionStatus status) =>
     switch (status) {
       CompanionSessionStatus.working => AgentActivityStatus.working,
@@ -36,9 +34,8 @@ class CompanionStatusBadge extends StatelessWidget {
     final appearance = agentStatusAppearance(agentStatusOf(status));
     final semantic = SemanticColors.of(context);
     final colour = appearance.colour(semantic);
-    // `neutral` is the one semantic colour that cannot hold 4.5:1 as small
-    // text on a light card (3.9:1 measured), so the word borrows the text
-    // ramp. The glyph keeps the semantic grey — icons need 3:1, and it has it.
+    // `neutral` measures 3.9:1 as small text on a light card, so the word
+    // borrows the text ramp; the glyph keeps it, since icons need only 3:1.
     final wordColour = colour == semantic.neutral
         ? theme.colorScheme.onSurfaceVariant
         : colour;
@@ -50,9 +47,8 @@ class CompanionStatusBadge extends StatelessWidget {
         children: [
           Icon(
             appearance.icon,
-            // The pointer step is Chrome's, not UiDensity's 11: this glyph
-            // sits beside `labelSmall`, where a toolbar-sized mark is wrong
-            // and an 11px one disappears.
+            // Chrome's pointer step, not UiDensity's 11: beside `labelSmall` an
+            // 11px mark disappears.
             size: density.isTouch ? Touch.iconSmall : Chrome.iconSmall,
             color: colour,
           ),

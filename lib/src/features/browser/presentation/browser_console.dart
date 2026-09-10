@@ -30,12 +30,8 @@ class BrowserConsoleAnswer {
   final bool failed;
 }
 
-/// Which question the console is asking.
-///
-/// `browser_find`'s two ways of naming an element are **two modes here, not one
-/// field and a guess**. A single box would have to decide whether `Submit` is a
-/// tag name or the word on a button, and it would be wrong often enough that a
-/// search returning nothing would not tell you which half had failed.
+/// Which question the console is asking. `browser_find`'s two ways of naming
+/// an element are two modes, not one box that guesses which you meant.
 enum BrowserConsoleMode {
   /// `browser_evaluate` — an expression, in the attached page.
   evaluate('Evaluate', 'document.title'),
@@ -52,30 +48,8 @@ enum BrowserConsoleMode {
   final String hint;
 }
 
-/// **A console for the attached page**, over the same [BrowserService] the
-/// `browser_evaluate` and `browser_find` tools call.
-///
-/// The pane could already click, type and pick, and could not answer the two
-/// questions a person actually asks a page they are debugging: *what is this
-/// value* and *where is that element*. Both existed as tools and neither had a
-/// surface.
-///
-/// **Bounded, like the tools' own replies.** `browser_find` lists at most a
-/// handful of matches and says how many it did not list; this does the same,
-/// from the same [FindResult], so the pane and an agent's transcript cannot
-/// disagree about what the page contains.
-///
-/// ## Why this is not behind the evaluate consent gate
-///
-/// `BrowserCapability.evaluate` exists because an *agent* running arbitrary
-/// JavaScript in an authenticated origin is unbounded and **invisible** — the
-/// call, its expression and its result are things the person never sees. Every
-/// word of that argument is about somebody else acting. Here the person is
-/// typing the expression themselves, into their own window, and reading the
-/// answer on the next line. A prompt asking them to grant themselves permission
-/// to do what they are in the middle of doing is the prompt-nobody-reads that
-/// the one-grant-per-project rule was written to avoid, and it would make the
-/// recorded grant mean something weaker than it does today.
+/// A console for the attached page, over the same [BrowserService] the tools
+/// call. Not behind the evaluate gate: the person is typing it themselves.
 class BrowserConsole extends ConsumerStatefulWidget {
   const BrowserConsole({required this.state, super.key});
 

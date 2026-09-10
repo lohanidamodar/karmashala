@@ -6,15 +6,8 @@ import '../../../core/util/file_picking.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The phone's message box: a prompt, and at most one file to go with it.
-///
-/// **The picker is only offered when the host has said what it would take.**
-/// [attachments] comes straight off the session row, so the button is absent
-/// for a session whose agent cannot be handed a file and the host's own
-/// sentence says why — rather than the phone letting somebody pick a 4 MB
-/// photo and learning after it has crossed. One file at a time: an attachment
-/// means something on its own, and a queue would be a second mechanism for
-/// nothing.
+/// The phone's message box: a prompt, and at most one file. The picker appears
+/// only when the host has said what it would take.
 class CompanionComposer extends StatefulWidget {
   const CompanionComposer({
     required this.onSend,
@@ -27,11 +20,8 @@ class CompanionComposer extends StatefulWidget {
   });
 
   /// Sends the prompt and whatever is attached; awaited so the box can show a
-  /// busy state and keep both for retry when the host refuses.
-  ///
-  /// [onProgress] is handed on so the slice count can be shown: a photo is
-  /// dozens of round trips over somebody's mobile data, and a silent spinner
-  /// for that long is the "did that go?" this box is built against.
+  /// busy state and keep both for retry when the host refuses. [onProgress]
+  /// carries the slice count — a photo is dozens of round trips.
   final Future<void> Function(
     String text, {
     CompanionOutgoingAttachment? attachment,
@@ -46,9 +36,8 @@ class CompanionComposer extends StatefulWidget {
   /// What the host said this session would take, or null when it said nothing.
   final RemoteAttachmentSupport? attachments;
 
-  /// The picker, so a test can stand where the platform dialog would.
-  /// Production leaves it null and goes through `pickOneFile`, which announces
-  /// the call to the log before it blocks the isolate.
+  /// The picker, so a test can stand where the platform dialog would; null in
+  /// production.
   @visibleForTesting
   final Future<XFile?> Function(List<XTypeGroup> accepted)? pickFile;
 
@@ -59,9 +48,8 @@ class CompanionComposer extends StatefulWidget {
 class _CompanionComposerState extends State<CompanionComposer> {
   late TextEditingController _input;
 
-  /// Held so the box can be focused again after a send. `TextInputAction.send`
-  /// unfocuses on its way through `EditableText`, which closes the keyboard
-  /// after every message — the phone's version of "did that go?".
+  /// Held so the box can be focused again after a send: `TextInputAction.send`
+  /// unfocuses inside `EditableText`, closing the keyboard after every message.
   final _focus = FocusNode();
   bool _busy = false;
 
@@ -103,10 +91,8 @@ class _CompanionComposerState extends State<CompanionComposer> {
     super.dispose();
   }
 
-  /// What the picker offers, and what a chosen file is called on the wire.
-  ///
-  /// Derived from the host's list rather than from a list of our own, so a
-  /// desktop that narrows what it takes narrows this without a phone release.
+  /// What the picker offers, and what a chosen file is called on the wire —
+  /// intersected with the host's list, so narrowing it needs no phone release.
   static const Map<String, String> _extensionsByType = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -150,8 +136,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
       return;
     }
     final bytes = await file.readAsBytes();
-    // Checked here so a file too big is refused before a byte leaves the
-    // phone, on the number the host itself named.
+    // Refused before a byte leaves the phone, on the host's own number.
     if (bytes.length > support.maxBytes) {
       messenger.showSnackBar(
         SnackBar(
@@ -197,15 +182,13 @@ class _CompanionComposerState extends State<CompanionComposer> {
           _attachment = null;
           _progress = null;
         });
-        // Straight into the next message, the way every other chat box
-        // behaves: `TextInputAction.send` took the focus away on its way
-        // through, and a keyboard that shuts itself after each turn reads as
-        // the session having ended.
+        // `TextInputAction.send` took the focus away on its way through, and a
+        // keyboard that shuts after each turn reads as the session ending.
         _focus.requestFocus();
       }
     } catch (e) {
-      // Keep the text and the file so the user can retry once the host is
-      // back — an upload that failed halfway is not a file the desktop has.
+      // Keep the text and the file for a retry: an upload that failed halfway
+      // is not a file the desktop has.
       messenger.showSnackBar(
         SnackBar(content: Text(e is GatewayException ? e.message : '$e')),
       );
@@ -235,8 +218,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
             name: attachment.name,
             detail: progress == null
                 ? _megabytes(attachment.bytes.length)
-                // Counted slices, not a guessed percentage: this is the number
-                // the host has actually acknowledged.
+                // Counted slices the host acknowledged, not a guessed percent.
                 : 'Sending ${progress.$1} of ${progress.$2}…',
             onRemove: canType ? () => setState(() => _attachment = null) : null,
           ),
@@ -250,9 +232,8 @@ class _CompanionComposerState extends State<CompanionComposer> {
           child: Container(
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLow,
-              // A capsule the height of the target floor, derived from it
-              // rather than picked: the pill stays a capsule at one line and
-              // reads as a rounded card once the text grows past it.
+              // Derived from the target floor, so the pill stays a capsule at
+              // one line and becomes a rounded card as the text grows.
               borderRadius: BorderRadius.circular(Touch.target / 2),
               border: Border.all(
                 color: scheme.outlineVariant.withValues(alpha: 0.6),
@@ -285,59 +266,33 @@ class _CompanionComposerState extends State<CompanionComposer> {
                     enabled: canType,
                     minLines: 1,
                     maxLines: 5,
-                    // The keyboard's own key has to submit, and on Android
-                    // the *input type* is what decides that: an IME reads
-                    // `multiline` as "this field takes newlines" and draws
-                    // Return instead of the action key, so `onSubmitted` is
-                    // never called and the send lands as a line break —
-                    // "it only types the message but don't send".
-                    // `TextField` picks that type for itself for any
-                    // `maxLines != 1`, so the single-line type is named
-                    // here: the box still grows to [maxLines], and Enter is
-                    // Send. The desktop composer answers the same problem
-                    // the other way, intercepting a hardware Enter, which
-                    // is a key a soft keyboard does not deliver.
+                    // Named, not inherited: `maxLines != 1` picks a multiline
+                    // type, whose Android IME draws Return, not Send.
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.send,
                     focusNode: _focus,
                     onSubmitted: (_) => _send(),
-                    // Named rather than inherited, because the hint has to
-                    // match it: the box's default is `bodyLarge` (16) and
-                    // the hint was `bodyMedium` (14), so the field's text
-                    // changed size the moment anything was typed into it.
+                    // Named so the hint below can match it; the two defaults
+                    // differ (16 vs 14) and the text resized as it was typed.
                     style: theme.textTheme.bodyLarge,
                     decoration: InputDecoration(
                       border: InputBorder.none,
-                      // `filled: true` in the app's `inputDecorationTheme`
-                      // still paints with `border: InputBorder.none` — the
-                      // none-border's outer path is a plain rect — so a
-                      // hard-edged `surfaceContainerLowest` box was sitting
-                      // inside the rounded pill. The pill is the surface.
+                      // The theme's `filled: true` still paints under
+                      // `InputBorder.none`, whose outer path is a plain rect,
+                      // putting a hard-edged box inside the rounded pill.
                       filled: false,
                       isDense: true,
-                      // Measured at 390x844: `EdgeInsets.zero` here made the
-                      // field **24px** tall inside an 83px bar — half the
-                      // touch floor, on the one control the whole screen
-                      // exists for, and the "prompt field is very small"
-                      // report. A 16px line plus this padding is exactly
-                      // [Touch.target], so the box is a target by
-                      // construction rather than by whatever the text
-                      // happened to measure.
+                      // `EdgeInsets.zero` made the field 24px tall at 390x844;
+                      // a 16px line plus this padding is exactly [Touch.target].
                       contentPadding: const EdgeInsets.symmetric(
                         vertical: Insets.md,
                       ),
-                      // Short enough to be one line at 16px on a 390px
-                      // phone: 'Message the agent…' measures 297 against the
-                      // 276 the field gets there, so it wrapped, and a
-                      // two-line placeholder made the bar 24px taller than
-                      // the box it was labelling. A refusal is a sentence and
-                      // still wraps, which is right — that one has to be read
-                      // rather than glanced at.
+                      // Keep it one line at 16px on a 390px phone: the field
+                      // gets 276px there, and a wrapped hint grows the bar.
                       hintText: widget.hintText,
-                      // No alpha on the muted grey: `onSurfaceVariant` at
-                      // 70% on `surfaceContainerLow` measures about 3:1,
-                      // under the 4.5:1 body-text floor, and this hint is
-                      // the field's only label.
+                      // No alpha: `onSurfaceVariant` at 70% on
+                      // `surfaceContainerLow` is about 3:1, under the 4.5:1
+                      // floor, and this hint is the field's only label.
                       hintStyle: theme.textTheme.bodyLarge?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -376,11 +331,8 @@ class _CompanionComposerState extends State<CompanionComposer> {
   }
 }
 
-/// The one file waiting to go, above the box, with a way to take it back.
-///
-/// A row rather than a thumbnail: the phone has already shown the user their
-/// own photo in the picker, and decoding it again to draw a preview is work
-/// that buys nothing the name and the size do not already say.
+/// The one file waiting to go, above the box, with a way to take it back. A row
+/// and not a thumbnail: the picker already showed the user their own photo.
 class _AttachedRow extends StatelessWidget {
   const _AttachedRow({
     required this.name,

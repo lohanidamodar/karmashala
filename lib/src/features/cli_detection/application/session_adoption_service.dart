@@ -19,28 +19,16 @@ import 'package:agent_cli/launch.dart';
 import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
 
-/// How many store sweeps one armed pane is worth before adoption gives up on
-/// it.
-///
-/// A CLI writes its session file within a second or two of starting, so the
-/// first sweep after a pane is armed normally answers. The cap is what stops a
-/// pane running something that merely *looks* like an agent — or an agent whose
-/// store we cannot read — from buying a store scan every ten seconds forever.
+/// How many store sweeps one armed pane is worth before adoption gives up — a
+/// pane that only *looks* like an agent must not buy a scan every 10s forever.
 const int kAdoptionSweepAttempts = 6;
 
-/// How far before a pane was armed a session file may have been written and
-/// still count as the session that pane just started.
-///
-/// Small on purpose. The window is the whole defence against adopting a
-/// conversation that was already running somewhere else in the same directory.
+/// How far before a pane was armed a session file may still count as its
+/// session — the defence against adopting a conversation already running there.
 const Duration kAdoptionMtimeSlack = Duration(seconds: 10);
 
-/// One terminal pane, as adoption sees it.
-///
-/// Deliberately a plain value rather than a `TerminalInstance`: adoption reads
-/// pane state through the existing providers and never holds a pane, so it can
-/// be driven at a hundred panes in a test with no terminal, no PTY and no
-/// widget tree.
+/// One terminal pane, as adoption sees it. A plain value rather than a
+/// `TerminalInstance`, so adoption is drivable in a test with no PTY.
 class AdoptablePane {
   const AdoptablePane({
     required this.paneId,
@@ -68,59 +56,18 @@ class AdoptablePane {
   /// has no integration (`cmd.exe`, WSL bash today) or has run nothing yet.
   final String? lastCommandId;
 
-  /// What that block's command line was, once the shell said the command is
-  /// running. `null` while it is still being typed, and for a shell that emits
-  /// no `B` marker and so cannot have its input read back.
+  /// What that block's command line was, once the shell said it is running.
+  /// `null` while still being typed, or for a shell that emits no `B` marker.
   final String? lastCommandLine;
 
-  /// Whether that block is still running.
-  ///
-  /// `CommandBlockTracker.latest` goes on reporting a finished block — same id,
-  /// same text — until the shell draws its next prompt, so this flag is the
-  /// only thing separating `claude --help`, which has printed its usage and
-  /// exited, from a `claude` sitting at its prompt. Defaults to true because a
-  /// shell that never emits the end marker has told us nothing.
+  /// Whether that block is still running — the only thing separating an exited
+  /// `claude --help` from a `claude` at its prompt. True when the shell is mute.
   final bool lastCommandRunning;
 }
 
-/// Adopts an agent session the user started **by hand** in one of our own
-/// terminal panes, so it lands in the Explorer beside the ones the app
-/// launched.
-///
-/// ## The signals, in precedence order
-///
-/// 1. **A hook callback** (`/agent-hook`) — authoritative and free: it names
-///    the agent and the CLI's own session id, which is the only identifier that
-///    can make adoption idempotent. Event-driven, so adoption is immediate.
-/// 2. **An OSC 133 command line** — free, because the pane has already parsed
-///    it. `claude` at a prompt *arms* the pane: it says which agent is running
-///    and where, but not which conversation, so it cannot adopt on its own.
-/// 3. **The agent's own screen** — cheap. A pane whose bottom rows match a
-///    registry [AgentGridRules] is running that agent, which arms panes whose
-///    shell has no OSC 133 at all. Read on the rationed slot, not every cycle.
-/// 4. **A CLI-store scan** — the disk, and the fallback. It turns an armed pane
-///    into a conversation id for an agent with no hooks. It
-///    runs on `SessionStatusRegistry`'s store slot, at most once per ten
-///    seconds, and only while some pane is armed and unresolved.
-///
-/// ## What makes it idempotent
-///
-/// The key is the **CLI's own session id**, never ours, and it is checked
-/// against `sessions.external_session_id` before anything is written — so a
-/// hook, an OSC arming and a store sweep all naming one conversation produce
-/// one row, and a restart (which loses every in-memory signal) re-reads the row
-/// from the database rather than minting a second. A pane is bound at most
-/// once, and a bound pane stops being a candidate, so two signals about one
-/// pane cannot become two sessions either.
-///
-/// ## What it will not do
-///
-/// **Adoption always needs one of our panes.** A hook from a Claude Code
-/// running in somebody else's terminal names a real conversation, and adopting
-/// it would put a row in the Explorer for a process we do not host and cannot
-/// show. So a signal with no candidate pane is dropped, and the existing
-/// `SessionAutoImportService` remains the way such a session enters the
-/// workspace — as history.
+/// Adopts an agent session the user started by hand in one of our own terminal
+/// panes. Keyed on the CLI's own session id, never ours, so a hook, an OSC
+/// arming and a store sweep naming one conversation produce a single row.
 class SessionAdoptionService {
   SessionAdoptionService({
     required this.sessionDao,
@@ -178,13 +125,8 @@ class SessionAdoptionService {
   /// record comparison per cycle and nothing else.
   final Map<String, (String, String?, bool)> _seenCommand = {};
 
-  /// paneId → the session row standing in that pane, or `null` for a pane bound
-  /// to a row that names a *different* pane. Never candidates again until the
-  /// shell returns to a prompt and runs something else.
-  ///
-  /// The value is what lets a pane give the row back when its agent leaves: a
-  /// bare set could tell that the pane had moved on but not which row was still
-  /// claiming it.
+  /// paneId → the row standing in that pane, `null` when the row names another.
+  /// The value is what lets a pane give the row back when its agent leaves.
   final Map<String, String?> _bound = {};
 
   /// `<agentId>/<sessionId>` we have already decided about, so the flood of
@@ -217,11 +159,8 @@ class SessionAdoptionService {
         candidate,
   ];
 
-  /// One cycle's free work: notice what each pane's shell just ran.
-  ///
-  /// O(panes), all in memory — a map lookup and one record comparison per pane,
-  /// against state the pane parsed for its own command history. Nothing here
-  /// touches the disk, so it is safe to run on every status cycle.
+  /// One cycle's free work: notice what each pane's shell just ran. All in
+  /// memory — no disk — so it is safe to run on every status cycle.
   void observePanes() {
     final panes = readPanes();
     final present = <String>{};
@@ -233,22 +172,17 @@ class SessionAdoptionService {
       }
       final commandId = pane.lastCommandId;
       if (commandId == null) continue;
-      // Keyed by the block *and* its text: the id appears at the prompt, and
-      // the command line only arrives once the shell says it is running.
-      // Keyed by the block, its text *and* whether it is still running: the id
-      // appears at the prompt, the command line only once the shell says it is
-      // running, and the end marker changes neither of the first two.
+      // Keyed by the block, its text *and* whether it is running: the id
+      // appears at the prompt, the text only once running, the end marker neither.
       final seen = (commandId, pane.lastCommandLine, pane.lastCommandRunning);
       if (_seenCommand[pane.paneId] == seen) continue;
       _seenCommand[pane.paneId] = seen;
-      // Whatever was running here before has either exited or been replaced, so
-      // the pane is free again — and any row standing in it has to be told,
-      // because the pane itself lives on as a shell.
+      // Whatever ran here has exited or been replaced, so the pane is free —
+      // and any row standing in it must be told, since the shell lives on.
       _releasePane(pane.paneId);
       _forget(pane.paneId, keepSeen: true);
-      // A command the shell has reported finished starts no agent. Arming on
-      // one would let `claude --help` collect a passing hook meant for an agent
-      // running somewhere else entirely.
+      // A finished command starts no agent: arming on one would let
+      // `claude --help` collect a hook meant for an agent running elsewhere.
       if (!pane.lastCommandRunning) continue;
       final agentId = agentIdForCommandLine(pane.lastCommandLine ?? '', agents);
       if (agentId == null) continue;
@@ -256,17 +190,13 @@ class SessionAdoptionService {
     }
     _armed.removeWhere((paneId, _) => !present.contains(paneId));
     _seenCommand.removeWhere((paneId, _) => !present.contains(paneId));
-    // A pane that has gone away keeps its row's `paneId`, exactly as a launched
-    // session's does: the row records where the session ran, and the terminal
-    // controller answers with no instance for it. Only a pane that is still
-    // there running something else is a lie worth correcting.
+    // A pane that has gone away keeps its row's `paneId`: the row records where
+    // the session ran. Only a live pane running something else is a lie.
     _bound.removeWhere((paneId, _) => !present.contains(paneId));
   }
 
-  /// One hook callback for a session we may not know about.
-  ///
-  /// Synchronous and cheap by design: the endpoint that calls it must never be
-  /// slowed down, and a busy agent fires these several times a second.
+  /// One hook callback for a session we may not know about. Synchronous and
+  /// cheap: a busy agent fires these several times a second.
   void onHook({
     required String agentId,
     required String sessionId,
@@ -281,12 +211,8 @@ class SessionAdoptionService {
     _adopt(candidate: candidate, externalSessionId: sessionId);
   }
 
-  /// One hook callback, still in the shape the agent posted it.
-  ///
-  /// The transport hands over the raw body rather than a parsed one because the
-  /// only extra field adoption wants — the directory the agent is working in —
-  /// is declared per agent on [AgentHookSpec.cwdPath], and the endpoint has no
-  /// business knowing that.
+  /// One hook callback, raw: the one field adoption wants is declared per agent
+  /// on [AgentHookSpec.cwdPath], so the endpoint has no business parsing it.
   void onHookPayload({
     required String agentId,
     required String sessionId,
@@ -329,11 +255,8 @@ class SessionAdoptionService {
     return '';
   }
 
-  /// The rationed half: look at pane screens, then at the CLI stores.
-  ///
-  /// Returns how many sessions were adopted. Runs only on
-  /// `SessionStatusRegistry`'s store slot, and returns immediately when nothing
-  /// is waiting on it, so an idle workspace pays nothing.
+  /// The rationed half — pane screens, then the CLI stores. Returns how many
+  /// were adopted; runs only on `SessionStatusRegistry`'s store slot.
   Future<int> sweep() async {
     _armFromScreens();
     final waiting = _sweepable;
@@ -369,12 +292,8 @@ class SessionAdoptionService {
     return adopted;
   }
 
-  /// Arms panes whose screen shows an agent's own TUI.
-  ///
-  /// The signal for a shell with no OSC 133 — `cmd.exe` always, and anything
-  /// with the setting off. Only unarmed, unbound, live plain panes are read,
-  /// so the cost
-  /// falls as panes are adopted and is zero once every pane is accounted for.
+  /// Arms panes whose screen shows an agent's own TUI — the signal for a shell
+  /// with no OSC 133 (`cmd.exe` always). Only unarmed, unbound live panes.
   void _armFromScreens() {
     final read = readPaneTail;
     if (read == null) return;
@@ -389,18 +308,8 @@ class SessionAdoptionService {
     }
   }
 
-  /// The agent whose screen [pane] is showing, or `null`.
-  ///
-  /// One read of the pane, sliced per descriptor: each agent states how far up
-  /// its own prompt reaches, and reading the deepest once is what keeps this a
-  /// single screen read per pane rather than one per agent in the registry.
-  ///
-  /// **Only an unambiguous screen arms a pane.** Claude Code and Codex both
-  /// draw `esc to interrupt` while they work, so a busy screen names no
-  /// particular agent — and arming it as the first match would send the store
-  /// sweep looking through the wrong CLI's store. Two matches is therefore the
-  /// same answer as none: this pane stays invisible until a signal that can
-  /// tell them apart arrives.
+  /// The agent whose screen [pane] is showing, or `null`. Two matches is the
+  /// same answer as none: Claude Code and Codex both draw `esc to interrupt`.
   String? _agentOnScreen(AdoptablePane pane) {
     final read = readPaneTail!;
     final now = clock.nowUtc();
@@ -446,13 +355,8 @@ class SessionAdoptionService {
     if (!keepSeen) _seenCommand.remove(paneId);
   }
 
-  /// The pane a signal for [agentId] belongs to, or `null`.
-  ///
-  /// [cwd] narrows when the agent's hooks carry one and it actually matches a
-  /// candidate; a directory in a form we cannot compare (a WSL path against a
-  /// Windows pane) simply does not narrow, rather than rejecting everything.
-  /// Among what is left the **oldest arming wins**, because the first pane to
-  /// start an agent is the first to reach a turn worth reporting.
+  /// The pane a signal for [agentId] belongs to; oldest arming wins. A [cwd] we
+  /// cannot compare (WSL vs Windows) narrows nothing rather than rejecting all.
   _Candidate? _claim(String agentId, String cwd) {
     final candidates = [
       for (final candidate in _armed.values)
@@ -472,11 +376,8 @@ class SessionAdoptionService {
     return candidates.first;
   }
 
-  /// The store session [candidate]'s pane most likely just started.
-  ///
-  /// Ordered cheapest test first — agent, then age, then directory — so the one
-  /// database lookup per store session is paid only by the handful that could
-  /// still be it.
+  /// The store session [candidate]'s pane most likely just started. Cheapest
+  /// test first, so the database lookup is paid only by plausible matches.
   DetectedSession? _bestMatch(
     _Candidate candidate,
     List<DetectedSession> detected,
@@ -511,12 +412,8 @@ class SessionAdoptionService {
     return key;
   }
 
-  /// Every canonical key [directory] could carry, one per environment it might
-  /// belong to, plus its flattened form for a path we cannot place.
-  ///
-  /// A pane records a directory string and not the environment it came from, so
-  /// this asks the question from the other end: which environment would make
-  /// this path mean the folder a store session names.
+  /// Every canonical key [directory] could carry — one per environment, plus a
+  /// flattened form — because a pane records a path but not its environment.
   Set<String> _directoryKeys(String? directory) {
     if (directory == null || directory.isEmpty) return const {};
     final keys = <String>{_flatten(directory)};
@@ -558,11 +455,7 @@ class SessionAdoptionService {
       agentInstallationId: installation.id,
       title: _titleFor(title, candidate.agentId),
       useWorktree: false,
-      // Where the user actually started the agent, which until now was known
-      // here and thrown away. Bound to the repository's environment because
-      // that is the environment `_repositoryFor` made the match under, so the
-      // path means the same folder it meant when it was compared. Never
-      // `worktree`: that field would make this session claim a git worktree
+      // Never `worktree`: that field would make this session claim a git worktree
       // and put the user's own checkout in reach of `WorktreeService.remove`.
       workingDirectory: _directoryOf(candidate, repository),
       status: SessionStatus.running,
@@ -571,10 +464,8 @@ class SessionAdoptionService {
       paneId: candidate.paneId,
       surface: SessionSurface.pane,
       view: defaultViewFor(descriptor),
-      // Deliberately null. The user typed the command line themselves, so we
-      // did not choose a mode and have no way to read the one they chose;
+      // Permission deliberately null: the user chose the mode by typing it, and
       // stamping a default would claim a policy this session may not be under.
-      // `SessionLauncher.permissionFor` reads the per-agent setting instead.
     );
     sessionDao.insert(session);
     linkDao.link(
@@ -582,11 +473,8 @@ class SessionAdoptionService {
       repository.id,
       role: SessionRepositoryRole.primary,
     );
-    // The same conversation may already be in the workspace as read-only
-    // history. Nothing is deleted for that: the row above now *supersedes* it,
-    // which `ImportedSessionDao` resolves for every reader — so the Explorer
-    // shows one card, and the history is still there if this row is ever
-    // removed. See that class's doc for why the tie is broken there.
+    // A read-only history row for the same conversation is not deleted: this
+    // row supersedes it, and `ImportedSessionDao` resolves that for readers.
     _bound[candidate.paneId] = session.id;
     _settled.add(key);
     adoptions++;
@@ -594,13 +482,8 @@ class SessionAdoptionService {
     return session.id;
   }
 
-  /// A conversation we already have a row for, met again in a pane.
-  ///
-  /// Only a row with **no pane at all** is joined. One that names a pane is
-  /// either the live session (in which case there is nothing to do) or a
-  /// record of where it used to run, and overwriting that would move a session
-  /// on evidence this weak. A joined row goes back to running, because a
-  /// resumed conversation is running whatever its last recorded state was.
+  /// A conversation we already have a row for, met again in a pane. Only a row
+  /// with no pane at all is joined; overwriting one would move a live session.
   void _rejoin(Session session, _Candidate candidate) {
     // Bound either way, so the pane is not offered again — but only the row we
     // actually place here is ours to take back.
@@ -613,11 +496,8 @@ class SessionAdoptionService {
     if (session.status != SessionStatus.running) {
       sessionDao.updateStatus(session.id, SessionStatus.running);
     }
-    // Only a row that recorded nothing. A row written before schema v22 has an
-    // unknown directory and this pane is a real answer for it; a row that
-    // already names one was told by whoever launched it, and this evidence —
-    // a pane running an agent with the same conversation id — is not stronger
-    // than that.
+    // Only a row that recorded no directory (pre-schema-v22). One that names
+    // one was told by its launcher, and this evidence is not stronger.
     var updated = session.copyWith(
       paneId: candidate.paneId,
       status: SessionStatus.running,
@@ -646,21 +526,14 @@ class SessionAdoptionService {
     );
   }
 
-  /// Hands the pane back from the row adoption placed in it.
-  ///
-  /// Called when a bound pane's shell moves on to something else. The pane
-  /// outlives the agent — it is a shell, not the agent's own process — so
-  /// without this the row goes on reporting itself as hosted live in a pane
-  /// showing a prompt, and its status badge is read off whatever runs there
-  /// next. The status is deliberately left alone: the conversation still
-  /// exists and can be resumed, and only its whereabouts have changed.
+  /// Hands the pane back from the row adoption placed in it. The pane outlives
+  /// the agent, so without this a row reads its badge off whatever runs next.
   void _releasePane(String paneId) {
     final sessionId = _bound[paneId];
     if (sessionId == null) return;
     final session = sessionDao.getById(sessionId);
-    // Only a row still naming this pane is released. A resume may have moved
-    // the conversation into a pane of its own since, and that placement is
-    // newer than ours.
+    // Only a row still naming this pane is released: a resume may have moved
+    // the conversation into a pane of its own since, which is newer than ours.
     if (session == null || session.paneId != paneId) return;
     sessionDao.updatePaneId(sessionId, null);
     final updated = sessionDao.getById(sessionId);
@@ -674,10 +547,8 @@ class SessionAdoptionService {
     return trimmed.isEmpty ? agents.displayNameFor(agentId) : trimmed;
   }
 
-  /// The deepest repository containing [directory], or `null`.
-  ///
-  /// Deepest rather than first, so a pane opened inside a nested repository is
-  /// adopted into that one rather than into its parent.
+  /// The deepest repository containing [directory], or `null` — deepest so a
+  /// nested repository wins over its parent.
   Repository? _repositoryFor(String? directory) {
     if (directory == null || directory.isEmpty) return null;
     _loadEnvironments();
@@ -710,10 +581,8 @@ class SessionAdoptionService {
     return best;
   }
 
-  /// The installation of [agentId] in [repository]'s environment, or `null`.
-  ///
-  /// A session row has to name one, and guessing at an agent the workspace has
-  /// never discovered would produce a row whose resume command cannot be built.
+  /// The installation of [agentId] in [repository]'s environment, or `null` —
+  /// guessing would produce a row whose resume command cannot be built.
   AgentInstallation? _installationFor(Repository repository, String agentId) {
     for (final installation in installationDao.getByEnvironment(
       repository.path.environmentId,

@@ -1,33 +1,12 @@
-/// This computer's clipboard, behind a seam.
-///
-/// Two reasons it is not `Clipboard` called directly:
-///
-/// 1. **A clipboard read fails on Windows and it is not exceptional.**
-///    `OpenClipboard` refuses while another process holds it — a clipboard
-///    manager, a browser mid-copy, an RDP session — and Flutter turns that into
-///    a `PlatformException`. `terminal/application/terminal_paste.dart` learned
-///    this the hard way: unhandled, the paste chord did nothing at all. Every
-///    read here is guarded once, in one place.
-/// 2. **Nothing in a test may reach the platform channel.** The device
-///    clipboard bridge and the device file browser both move user data through
-///    this, and both are tested.
-///
-/// The *file* half exists because a file clipboard is a different thing from a
-/// text clipboard on every desktop: Explorer puts `CF_HDROP` on the board, not
-/// a list of paths as text. `pasteboard` is already a dependency and
-/// `pasteboard_plugin.dll` already ships in the installer, so this is a seam
-/// over something the app can already do rather than a new capability.
+/// This computer's clipboard, behind a seam: a Windows clipboard read fails
+/// unexceptionally, and nothing in a test may reach the platform channel.
 library;
 
 import 'package:flutter/services.dart';
 import 'package:pasteboard/pasteboard.dart';
 
 /// What a clipboard read produced, keeping "nothing there" apart from "could
-/// not look".
-///
-/// The same three-valued shape as `DeviceClipboardRead`, and for the same
-/// reason (§19): a clipboard that refused to open is not an empty clipboard,
-/// and telling the user to copy something again is the wrong instruction.
+/// not look" (§19): telling the user to copy again is the wrong instruction.
 enum HostClipboardOutcome { text, empty, unavailable }
 
 /// One reading of this computer's clipboard.
@@ -62,12 +41,8 @@ abstract interface class HostClipboard {
 
   Future<void> writeText(String text);
 
-  /// Paths of the files on the clipboard, empty when there are none.
-  ///
-  /// Empty and "could not look" are **not** separated here, deliberately: this
-  /// one is only ever read in answer to the user pressing Paste, so an empty
-  /// answer is reported as "no files on the clipboard" at the call site, which
-  /// is a true statement either way. Nothing decides anything else from it.
+  /// Paths of the files on the clipboard, empty when there are none. Empty and
+  /// "could not look" are deliberately not separated: only Paste reads this.
   Future<List<String>> readFiles();
 
   /// Puts [paths] on the clipboard as files, so they can be pasted into a file

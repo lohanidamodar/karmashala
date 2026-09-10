@@ -30,11 +30,8 @@ abstract class RemoteChannel {
   Future<void> close();
 }
 
-/// The three things deploying a host needs from a machine.
-///
-/// A narrow interface on purpose: the deployer's logic is then testable against
-/// a fake, and the only untested part is the twenty lines below it that call
-/// dartssh2.
+/// The three things deploying a host needs from a machine. A narrow interface
+/// on purpose: the deployer's logic is then testable against a fake.
 abstract class HostDeployTarget {
   String get address;
 
@@ -46,11 +43,8 @@ abstract class HostDeployTarget {
   Future<RemoteChannel> exec(String command);
 }
 
-/// [HostDeployTarget] over the app's existing [SshConnection].
-///
-/// **Untested.** Nothing in the suite exercises this class: it needs a real
-/// sshd, and the stand-in WSL distribution does not run one. The deployer above
-/// it is tested against a fake; this is the seam where that stops.
+/// [HostDeployTarget] over the app's [SshConnection]. **Untested**: it needs a
+/// real sshd, and the stand-in WSL distribution does not run one.
 class SshHostDeployTarget implements HostDeployTarget {
   SshHostDeployTarget(this._connection);
 
@@ -109,9 +103,8 @@ class SshHostDeployTarget implements HostDeployTarget {
         }
       });
 
-  /// Not run through [SshConnection.runOnChannel]: this channel lives for the
-  /// life of a pane, and queuing it behind the command slots would deadlock the
-  /// probes that share them.
+  /// Not run through [SshConnection.runOnChannel]: this channel lives as long
+  /// as its pane, and queuing it behind the command slots would deadlock them.
   @override
   Future<RemoteChannel> exec(String command) async {
     final client = await _connection.client();

@@ -3,13 +3,8 @@ import 'package:flutter/widgets.dart';
 /// The UI text sizes Settings offers, as multipliers of the design size.
 const List<double> uiTextScaleOptions = [0.9, 1.0, 1.1, 1.25, 1.5];
 
-/// Applies the user's UI text scale on top of whatever the OS asked for.
-///
-/// Installed by the app root's `MaterialApp.builder`, which sits *above* the
-/// Navigator and every overlay — so menus, context menus, dialogs, tooltips
-/// and snackbars all inherit it, not just the routes. A widget that reads its
-/// size from a theme text style follows automatically; the terminal grid opts
-/// out deliberately (it has its own font-size setting).
+/// Applies the user's UI text scale on top of the OS's. Installed above the
+/// Navigator, so menus, dialogs, tooltips and snackbars inherit it too.
 class UiTextScale extends StatelessWidget {
   const UiTextScale({required this.scale, required this.child, super.key});
 
@@ -30,12 +25,8 @@ class UiTextScale extends StatelessWidget {
   }
 }
 
-/// The [system] scaler with [uiScale] multiplied on.
-///
-/// Windows' "make text bigger" and the app's own setting compound rather than
-/// fight: turning the app up must not silently discard what the OS asked for.
-/// The system factor is recovered at the body size; desktop scalers are
-/// linear, so this is exact there and a close approximation anywhere else.
+/// The [system] scaler with [uiScale] multiplied on, so Windows' "make text
+/// bigger" and the app's own setting compound rather than fight.
 TextScaler composeTextScaler(TextScaler system, double uiScale) {
   final systemFactor = system.scale(14.0) / 14.0;
   final combined = systemFactor * uiScale;

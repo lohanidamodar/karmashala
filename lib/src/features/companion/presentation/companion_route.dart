@@ -1,12 +1,6 @@
-/// The companion's one page transition.
-///
-/// A fade with 4% of a slide, in the app's own [Motion.base] — enough to say
-/// the new screen came from the right, short enough that nobody waits for it.
-/// Material's platform default on Android is closer to 300ms and zooms the
-/// whole page; drilling from a project into its sessions should feel like
-/// stepping down a level, not like launching an app.
-///
-/// Collapses to an instant swap when the platform asks for reduced motion.
+/// The companion's one page transition: a fade with 4% of a slide at
+/// [Motion.base], against Material's ~300ms whole-page zoom. Collapses to an
+/// instant swap when the platform asks for reduced motion.
 library;
 
 import 'package:flutter/material.dart';

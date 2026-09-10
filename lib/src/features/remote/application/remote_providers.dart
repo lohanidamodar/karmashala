@@ -55,20 +55,15 @@ final hostDeviceIdProvider = Provider<DeviceId>(
   (ref) => hostDeviceIdFor(ref.watch(databaseProvider)),
 );
 
-/// Where a file the phone sends lands.
-///
-/// `<temp>/karmashala/attachments` — the same directory the desktop composer
-/// already writes its own attachments to, resolved here rather than stored,
-/// because a stored absolute path is state that rots (§20). One instance for
-/// the app, so "one upload in flight per device" is a fact rather than a hope.
+/// Where a file the phone sends lands: `<temp>/karmashala/attachments`,
+/// resolved rather than stored because a stored absolute path rots (§20).
 final companionAttachmentStoreProvider =
     FutureProvider<CompanionAttachmentStore>((ref) async {
       final store = CompanionAttachmentStore(
         Directory('${Directory.systemTemp.path}/karmashala/attachments'),
       );
       // The one moment there is provably nothing in flight: no link has been
-      // made yet, so every `.part` in there belongs to a run that is over.
-      // Once, on demand — nothing polls.
+      // made yet. Once, on demand — nothing polls.
       await store.sweep();
       return store;
     });

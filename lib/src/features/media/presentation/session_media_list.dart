@@ -6,26 +6,12 @@ import '../../explorer/presentation/session_card.dart' show compactAge;
 import '../../sessions/presentation/transcript_image_preview.dart';
 import '../domain/session_media_item.dart';
 
-/// How tall a thumbnail draws in the panel.
-///
-/// Not the transcript's 220: the panel is a 240px column whose whole job is to
-/// let someone scan back through a session, and at 220 a screenshot and a half
-/// fill it. 132 shows four, which is the difference between a list and a
-/// slideshow. The picture itself is one click away at full size.
+/// How tall a thumbnail draws in the panel. Not the transcript's 220: in a
+/// 240px column that shows one and a half, where 132 shows four.
 const double kMediaThumbnailHeight = 132;
 
-/// Every picture the session has, newest first.
-///
-/// The owner's ask, verbatim: *"may be we can create a media sidebar that shows
-/// all the media from current session in descending order?"* — asked because
-/// they had **pasted** an image into the terminal and could not find it
-/// anywhere. A paste carries bytes and no path, so the transcript's own
-/// preview, which draws from a path, had nothing to point at.
-///
-/// A plain widget over plain items on purpose: the scan that produces them
-/// touches the disk, and none of that may happen in a `build()` — this app
-/// freezes when work lands on the UI thread. By the time the list sees an item
-/// it is a path, a name and a time.
+/// Every picture the session has, newest first. Plain items only: the scan that
+/// produces them touches the disk, which may not happen in a `build()`.
 class SessionMediaList extends StatelessWidget {
   const SessionMediaList({
     required this.items,
@@ -34,18 +20,14 @@ class SessionMediaList extends StatelessWidget {
     super.key,
   });
 
-  /// Newest first — the order the panel was asked for, and the order the scan
-  /// hands them over in.
+  /// Newest first — the order the panel was asked for.
   final List<SessionMediaItem> items;
 
-  /// Translates a path the *agent* wrote into one this process can open.
-  /// Applied only to [SessionMediaItem.fromAgentEnvironment] paths: the copies
-  /// the scan extracted are already host paths, and translating one of those
-  /// would corrupt a path that is already right.
+  /// Translates an agent-written path into one this process can open — only for
+  /// [SessionMediaItem.fromAgentEnvironment]; the scan's copies are host paths.
   final String? Function(String path)? resolveHostPath;
 
-  /// The instant ages are measured against. Injected so the list is
-  /// deterministic in tests; the panel passes the app clock.
+  /// The instant ages are measured against. Injected so tests are deterministic.
   final DateTime? now;
 
   @override
@@ -63,7 +45,6 @@ class SessionMediaList extends StatelessWidget {
   }
 }
 
-/// One picture: the thumbnail, what to call it, and when it arrived.
 class SessionMediaTile extends StatelessWidget {
   const SessionMediaTile({
     required this.item,
@@ -96,11 +77,8 @@ class SessionMediaTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // The thumbnail is the control — tapping it opens the viewer — so it
-          // is the transcript's own preview, not a second one. Everything that
-          // can go wrong with a picture (deleted, unreachable across WSL, too
-          // big, not an image) is already handled in there, and handled by
-          // degrading to a line of text rather than by throwing.
+          // The thumbnail is the control, and it is the transcript's own
+          // preview: every way a picture can fail already degrades to text.
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: kMediaThumbnailHeight),
             child: path == null
@@ -119,8 +97,8 @@ class SessionMediaTile extends StatelessWidget {
             children: [
               Expanded(
                 child: Tooltip(
-                  // The path, where there is one — the name alone cannot tell
-                  // two `screenshot.png`s apart.
+                  // The path — the name alone cannot tell two
+                  // `screenshot.png`s apart.
                   message: path ?? item.label,
                   child: Text(
                     item.label,
@@ -157,8 +135,7 @@ class SessionMediaTile extends StatelessWidget {
   }
 
   /// Where the picture came from, without saying the same word twice: a
-  /// captured screenshot is already *named* by its tool, and a `Read` of an
-  /// image is already named "Read".
+  /// captured screenshot is already named by its tool.
   static String _detail(SessionMediaItem item) {
     final tool = item.shortToolName;
     if (item.origin != SessionMediaOrigin.read) return item.origin.label;
@@ -168,11 +145,8 @@ class SessionMediaTile extends StatelessWidget {
   }
 }
 
-/// A picture the scan could not put on disk — an oversize paste, a block whose
-/// bytes the transcript never carried.
-///
-/// Listed rather than hidden: it is still something the session had, and a
-/// list that silently drops what it cannot draw is a list nobody can trust.
+/// A picture the scan could not put on disk. Listed rather than hidden: it is
+/// still something the session had.
 class _Problem extends StatelessWidget {
   const _Problem({required this.text});
   final String text;

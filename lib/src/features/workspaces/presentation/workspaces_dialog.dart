@@ -10,24 +10,8 @@ import '../../projects/domain/project.dart';
 import '../application/workspaces_controller.dart';
 import '../domain/workspace.dart';
 
-/// Create, rename, describe, delete and assign — the verbs a context has, and
-/// nothing else.
-///
-/// Deliberately *not* a management page. There is no navigation to a context,
-/// no per-context screen and no ordering: a context is a filter over the
-/// project list, so the only things worth doing to one are saying what it is
-/// and which projects are in it.
-///
-/// Both destructive-ish steps confirm **in place** rather than in a second
-/// dialog: a dialog over a dialog at 720x560 covers the list you were reading,
-/// and the confirmation here is one sentence long.
-///
-/// **Why the project list is a `const` child.** The owner reported that
-/// creating a context lagged, and the measurement said why: adding a context
-/// rebuilt all 31 project rows, none of which had changed. A `const` widget is
-/// `identical` across the parent's rebuilds, so the framework skips its subtree
-/// entirely — the contexts half and the projects half of this dialog now redraw
-/// independently. See `workspace_write_cost_test.dart`.
+/// Create, rename, describe, delete and assign — the verbs a context has.
+/// The project list is a `const` child: a new context rebuilt all 31 rows.
 class WorkspacesDialog extends ConsumerStatefulWidget {
   const WorkspacesDialog({super.key});
 
@@ -104,13 +88,7 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
       ),
       content: SizedBox(
         // **Tight**, not a max: `AlertDialog` asks its content for an intrinsic
-        // width, and the scrolling list below cannot answer — a viewport would
-        // have to build every child to do it. A tight constraint is answered by
-        // the box itself and the question never reaches the list.
-        //
-        // Sized against the window rather than fixed, because the 720x560
-        // minimum with text at 1.3x is the case where a constant would push the
-        // buttons off the bottom.
+        // width, and the scrolling list below cannot answer without building it all.
         width: _contentWidth(context),
         height: _contentHeight(context),
         child: Column(
@@ -154,11 +132,8 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
                         style: theme.textTheme.bodySmall,
                       ),
                     )
-                  // Every row built, rather than a lazy `ListView`: a few
-                  // contexts and ~31 projects is nothing to lay out, and a
-                  // viewport that disposes the rows it scrolls past breaks Tab
-                  // — the traversal ring stops closing, which is the one thing
-                  // in a dialog you cannot work around with the mouse.
+                  // Every row built rather than a lazy `ListView`: a viewport that disposes
+                  // rows it scrolls past breaks Tab, and the ring stops closing.
                   : SingleChildScrollView(
                       primary: false,
                       child: Column(
@@ -174,10 +149,8 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
                               style: theme.textTheme.labelLarge,
                             ),
                           ),
-                          // `const`, and that is the fix for the reported lag:
-                          // a new context leaves this instance identical, so
-                          // the framework never asks the project rows to
-                          // rebuild.
+                          // `const`, and that is the fix for the reported lag: a new context leaves
+                          // this instance identical, so the project rows are never asked to rebuild.
                           const _ProjectsSection(),
                         ],
                       ),
@@ -195,9 +168,8 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
     );
   }
 
-  /// The dialog's own insets take 80 of the width; the title, actions and
-  /// their padding take about 260 of the height at 1.0x and more as text
-  /// scales, which is what the divisor allows for.
+  /// The dialog's own insets take 80 of the width; the title and actions take
+  /// about 260 of the height at 1.0x, and more as text scales.
   static double _contentWidth(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     return width - 96 < 460 ? (width - 96).clamp(200.0, 460.0) : 460.0;
@@ -212,9 +184,8 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
   Widget _workspaceRow(Workspace workspace, Map<String, int> counts) {
     final theme = Theme.of(context);
     if (_editingId == workspace.id) {
-      // Name and description stacked rather than side by side: at the 200px
-      // this dialog can be squeezed to, two fields on one row are two fields
-      // nobody can read.
+      // Name and description stacked rather than side by side: at the 200px this
+      // dialog squeezes to, two fields on one row are two nobody can read.
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: Insets.xs),
         child: Column(
@@ -353,13 +324,8 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
   }
 }
 
-/// Every project, and the context it is in.
-///
-/// Its own widget, with no fields and a `const` constructor, so the dialog
-/// above can rebuild — a new context, an error banner, an inline editor — with
-/// this subtree untouched. It watches the *project* list and nothing else; a
-/// row's dependency on the context list is one name, narrowed per row in
-/// [_ProjectRow].
+/// Every project, and the context it is in. Its own `const` widget, so the
+/// dialog above can rebuild with this subtree untouched.
 class _ProjectsSection extends ConsumerWidget {
   const _ProjectsSection();
 
@@ -383,10 +349,8 @@ class _ProjectRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    // The *name of this project's own context*, and nothing else about the
-    // list. Creating, renaming or deleting some other context leaves this
-    // value alone, so this row is not rebuilt — which is what makes the
-    // section above it genuinely free.
+    // The *name of this project's own context*, and nothing else: another
+    // context changing leaves this value alone, so this row is not rebuilt.
     final current = ref.watch(
       workspacesControllerProvider.select(
         (workspaces) => workspaces
@@ -411,9 +375,8 @@ class _ProjectRow extends ConsumerWidget {
           PopupMenuButton<String>(
             tooltip: 'Context for ${project.name}',
             position: PopupMenuPosition.under,
-            // Read when the menu opens, not when the row is drawn: the row
-            // must not subscribe to the whole context list to offer a picker
-            // nobody has clicked yet.
+            // Read when the menu opens, not when the row is drawn: the row must not
+            // subscribe to the whole context list for a picker nobody has clicked.
             itemBuilder: (context) => [
               DesktopMenuItem(
                 value: '',

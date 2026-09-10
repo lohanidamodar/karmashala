@@ -5,25 +5,15 @@ import 'package:karmashala_git/git.dart';
 import '../data/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
 
-/// **The half of an undo this app cannot do, said where the decision is made.**
-///
-/// A checkpoint is a git tree. We keep no cursor into any of the three CLIs'
-/// conversations, so an agent whose edits have just been rolled back still
-/// believes it made them and carries on from there — which is how a restore
-/// quietly becomes a second way to lose work. It is structural, and that is
-/// precisely why it has to be on screen rather than discovered afterwards.
+/// **The half of an undo this app cannot do.** A checkpoint is a git tree; we
+/// keep no cursor into any CLI's conversation, so the agent carries on.
 const String kRestoreLeavesTheConversation =
     'Files only: the agent’s conversation is not rewound. It still believes it '
     'made these edits and will carry on from there, so tell it what you rolled '
     'back.';
 
-/// Why restoring would be refused, or `null` when it would not.
-///
-/// **One function, and the write path asserts on it.**
-/// [CheckpointService.restore] refuses on what this returns and the dialog
-/// shows the same string verbatim, so the reason on screen and the rule that
-/// was applied cannot drift apart. The MCP tool re-throws it for the same
-/// reason.
+/// Why restoring would be refused, or `null`. One function: [restore] refuses
+/// on what this returns and the dialog shows the same string verbatim.
 String? checkpointRestoreRefusal({
   required bool treeMovedSinceLastCheckpoint,
   required int? safetySequence,
@@ -40,12 +30,8 @@ String? checkpointRestoreRefusal({
       '$kRestoreLeavesTheConversation';
 }
 
-/// What a restore just did, in the vocabulary the refusal is written in.
-///
-/// [kRestoreLeavesTheConversation] again, because it is true of a restore that
-/// nobody had to confirm as much as of one that was refused first. The one
-/// case it is left off is the restore that wrote nothing: there is no rollback
-/// to tell the agent about.
+/// What a restore just did, in the vocabulary the refusal is written in —
+/// left off only for the restore that wrote nothing.
 String restoreOutcomeMessage(RestoreOutcome outcome) {
   if (outcome.alreadyThere) {
     return 'The working tree already matched that checkpoint. Nothing changed.';
@@ -60,9 +46,7 @@ String restoreOutcomeMessage(RestoreOutcome outcome) {
 }
 
 /// Raised when a restore would throw away work the user has not seen recorded.
-///
-/// Carries what would be lost so the caller can say so before asking again with
-/// `confirm`.
+/// Carries what would be lost, so the caller can say so before asking again.
 class CheckpointConflict implements Exception {
   CheckpointConflict(this.message, {this.safetyCheckpoint});
   final String message;
@@ -99,23 +83,7 @@ class RestoreOutcome {
 }
 
 /// Capturing and restoring per-turn snapshots of a repository's working tree.
-///
-/// **How a checkpoint is made, and why this way.** `git stash create` was the
-/// obvious candidate and is wrong: it silently ignores untracked files, and a
-/// turn's new files are most of what an agent produces (`git stash create -u` is
-/// not a thing — git parses the `-u` as the stash message, which is how that
-/// mistake survives review). So a checkpoint is a `git write-tree` over a
-/// **private index**: a directory inside the repository's own git directory
-/// holding nothing but `commondir`, `HEAD` and an index of its own. A `git
-/// add -A` scoped to that directory stages the whole working tree,
-/// untracked files included, into an index the user does not own, and
-/// `write-tree` turns it into a tree object in the repository's real object
-/// store.
-///
-/// Nothing touches the user's index, `HEAD`, working tree, branches, stash or
-/// remotes. The repository gains objects — which is what a snapshot *is* — and
-/// one ref per session under `refs/karmashala/`, which keeps them from being
-/// garbage collected and stays out of `git branch`, `git log` and `git status`.
+/// A `git write-tree` over a **private index**, so nothing the user owns moves.
 class CheckpointService {
   CheckpointService({
     required this.runnerFactory,
@@ -138,12 +106,8 @@ class CheckpointService {
 
   // --- capture ---------------------------------------------------------------
 
-  /// Records what [repo] looks like now as a checkpoint of [sessionId].
-  ///
-  /// Returns `null` when the working tree is byte-for-byte what the previous
-  /// checkpoint already holds — a turn that changed nothing is not a thing to
-  /// undo, and a chain of identical trees makes the ones that matter harder to
-  /// find.
+  /// Records what [repo] looks like now as a checkpoint of [sessionId]. `null`
+  /// when the tree is byte-for-byte the previous checkpoint.
   Future<Checkpoint?> capture(
     EnvironmentPath repo, {
     required String sessionId,
@@ -235,21 +199,8 @@ class CheckpointService {
 
   // --- restore ---------------------------------------------------------------
 
-  /// Puts [repo]'s working tree back to what [checkpoint] holds.
-  ///
-  /// Two protections, both deliberate:
-  ///
-  /// * A **safety checkpoint** of the tree as it is right now is recorded first,
-  ///   whenever the tree has moved since the last checkpoint. Undo is therefore
-  ///   itself undoable, which is the difference between a recovery feature and a
-  ///   second way to lose work.
-  /// * If the tree has moved since the latest checkpoint — the agent, or the
-  ///   user, has been working since — the restore is **refused** unless
-  ///   [confirm] is set. The safety checkpoint is still taken before the
-  ///   refusal, so nothing is riding on the user answering correctly.
-  ///
-  /// The index is not touched. Whatever the user had staged stays staged; only
-  /// the working tree moves.
+  /// Puts [repo]'s working tree back to what [checkpoint] holds. A safety
+  /// checkpoint is taken first, and a moved tree is refused without [confirm].
   Future<RestoreOutcome> restore(
     Checkpoint checkpoint, {
     bool confirm = false,
@@ -309,10 +260,8 @@ class CheckpointService {
       );
     }
 
-    // The patch describes checkpoint -> now, so applying it backwards is what
-    // turns now into the checkpoint. Reversing git's own diff is what makes a
-    // file that appeared since disappear again, and one that was deleted come
-    // back, without this code ever writing to the working tree itself.
+    // The patch describes checkpoint -> now, so applying it backwards turns now
+    // into the checkpoint, without this code writing to the working tree itself.
     await git.applyPatch(repo, dirs, wanted, reverse: true);
 
     final changed = await git.diffNameStatus(
@@ -320,10 +269,8 @@ class CheckpointService {
       from: checkpoint.treeSha,
       to: current,
     );
-    // What was *written*, not what differs. A per-path restore applied only
-    // the paths it was given, and an outcome naming every file that moved
-    // would overstate it to the panel that counts it and to the agent that
-    // reads it back through `checkpoint_restore`.
+    // What was *written*, not what differs: a per-path restore applied only the
+    // paths it was given, and naming every file that moved would overstate it.
     final restoredPaths = {for (final choice in selection) choice.path};
     return RestoreOutcome(
       restored: checkpoint,
@@ -384,10 +331,8 @@ class CheckpointService {
     );
   }
 
-  /// Throws [selection] away from the working tree.
-  ///
-  /// Takes a checkpoint first when [sessionId] is given, because reverting a
-  /// hunk destroys work exactly as thoroughly as restoring does.
+  /// Throws [selection] away from the working tree, taking a checkpoint first
+  /// when [sessionId] is given — reverting a hunk destroys work just as well.
   Future<void> revert(
     EnvironmentPath repo,
     List<HunkSelection> selection, {
@@ -435,12 +380,8 @@ class CheckpointService {
     );
   }
 
-  /// How a path inside [env] is spelled for this process.
-  ///
-  /// Only two things are ever opened directly: the private index's directory
-  /// and the scratch patch, both inside the repository's git directory. A
-  /// remote repository has neither within reach, so SSH fails with a sentence
-  /// rather than a `FileSystemException` from three layers down.
+  /// How a path inside [env] is spelled for this process. A remote repository
+  /// has neither file within reach, so SSH fails with a sentence.
   HostPathOf _hostPathFor(ExecutionEnvironment env) => switch (env.kind) {
     // Already this process's own filesystem, whichever local OS it is.
     EnvironmentKind.windowsNative ||

@@ -10,30 +10,18 @@ import '../../git/application/remote_links.dart';
 /// What is at a resolved path.
 enum TerminalPathKind { file, directory }
 
-/// Everything a Ctrl+click in a terminal pane needs from outside the widget.
-///
-/// One injected seam rather than three providers read in a `State`, so a test
-/// records what a click *would* have done instead of starting a browser, an
-/// editor or Explorer on the machine running the suite — and so [kindOf], the
-/// only filesystem call anywhere on this path, can be answered without a real
-/// directory tree.
+/// Everything a Ctrl+click in a pane needs from outside the widget. One seam,
+/// so a test records what a click would do and [kindOf] needs no real tree.
 abstract interface class TerminalLinkActions {
   /// Opens a URL outside the app.
   Future<void> openUrl(String url);
 
-  /// What is at [hostPath], or null when nothing is.
-  ///
-  /// Asked once per candidate, after detection has already decided the text is
-  /// path-shaped, and never while scanning a line.
+  /// What is at [hostPath], or null when nothing is. Asked once per candidate,
+  /// after detection decided the text is path-shaped, never while scanning.
   Future<TerminalPathKind?> kindOf(String hostPath);
 
-  /// Opens [hostPath]. Returns a message to put in front of the user, or null
-  /// when it worked.
-  ///
-  /// [line] and [column] are the `path:12:7` the output carried. Nothing
-  /// honours them yet — `EditorActions.openPath` takes a path and nothing else
-  /// — but they are threaded this far so that honouring them later is a change
-  /// to one method rather than to the whole path.
+  /// Opens [hostPath], returning a message to show or null when it worked.
+  /// [line] and [column] are threaded but not honoured yet.
   Future<String?> open(
     String hostPath,
     TerminalPathKind kind, {
@@ -42,12 +30,9 @@ abstract interface class TerminalLinkActions {
   });
 }
 
-/// The app's [TerminalLinkActions]: the same openers every other surface uses.
-///
-/// A directory reveals in the host's file manager ([RevealInFileManager], which
-/// the Explorer and the Files panel also use); a file opens in the configured
-/// code editor ([EditorActions], which is what "open in editor" means
-/// everywhere else); a URL keeps the browser behaviour that already shipped.
+/// The app's [TerminalLinkActions]: a directory reveals through
+/// [RevealInFileManager], a file opens through [EditorActions], a URL goes to
+/// the browser — the same openers every other surface uses.
 class AppTerminalLinkActions implements TerminalLinkActions {
   AppTerminalLinkActions(this._ref);
 
@@ -60,9 +45,9 @@ class AppTerminalLinkActions implements TerminalLinkActions {
 
   @override
   Future<TerminalPathKind?> kindOf(String hostPath) async {
-    // Follows links, so a symlinked directory is a directory. A path we cannot
-    // even stat (a permission error, a dead UNC host) is "nothing there",
-    // which is the same answer as missing and the same silence.
+    // Follows links, so a symlinked directory is a directory. A path that
+    // cannot even be stat-ed — a permission error, a dead UNC host — is
+    // "nothing there", the same answer and the same silence as missing.
     try {
       return switch (await FileSystemEntity.type(hostPath)) {
         FileSystemEntityType.notFound => null,

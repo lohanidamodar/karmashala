@@ -10,11 +10,8 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/domain/session.dart';
 
-/// The rows one bulk delete is about, already resolved to the two kinds.
-///
-/// Resolved **before** the confirmation is shown, so the dialog can name what
-/// it is about to remove, and held as objects rather than ids so that deleting
-/// the workspace rows cannot take the purge's inputs with them.
+/// The rows one bulk delete is about, resolved *before* the confirmation so it
+/// can name them, and held as objects so deleting the rows keeps the inputs.
 class BulkDeleteTargets {
   const BulkDeleteTargets({this.natives = const [], this.imported = const []});
 
@@ -32,30 +29,9 @@ class BulkDeleteTargets {
   ];
 }
 
-/// **Deleting a ticked set of sessions: two halves, in this order and no
-/// other.**
-///
-/// The workspace rows go first and synchronously — no store, no filesystem, no
-/// await between the confirmation and the rows leaving the tree — and the CLI
-/// store purge runs behind them. That ordering is the safety argument, not a
-/// performance one: taking a session out of the workspace is undone by
-/// re-importing it, while deleting an agent's own transcript is undone by
-/// nothing. So the reversible half happens where the user can see it, and the
-/// irreversible half reports what actually happened rather than what was
-/// attempted.
-///
-/// **Nothing here re-implements the batch.** Resolving native rows to their
-/// store files and removing every transcript in one index pass per store is
-/// [SessionActions.purgeSessionsFromCliStore] over
-/// [CliSessionMutator.deleteAll]; the rows are removed by the same
-/// [SessionActions.deleteNative] and [SessionActions.deleteImported] a single
-/// delete uses, told not to touch the store. What is left here is the ordering
-/// and the report.
-///
-/// **This is the second copy of `CliStorePurgeRunner`'s shape and should not
-/// stay one.** That runner takes `List<ImportedSession>`, which cannot express
-/// a native row's transcript; folding this in wants one generalisation there —
-/// see the note on [start].
+/// Deleting a ticked set of sessions: the workspace rows go first and
+/// synchronously, the store purge behind them — a removed row is undone by
+/// re-importing, a deleted transcript by nothing. Nothing here is a new batch.
 class SessionBulkDelete {
   SessionBulkDelete(this._ref);
 
@@ -81,11 +57,8 @@ class SessionBulkDelete {
     }
   }
 
-  /// The rows behind [ids], each looked up in the table that owns it.
-  ///
-  /// An id that matches neither is dropped rather than carried as a phantom —
-  /// the selection prunes itself on membership changes, and this is the second
-  /// guard for the window between a poll and a click.
+  /// The rows behind [ids], each looked up in the table that owns it. An id
+  /// matching neither is dropped rather than carried as a phantom.
   BulkDeleteTargets resolve(Iterable<String> ids) {
     final sessionDao = _ref.read(sessionDaoProvider);
     final importedDao = _ref.read(importedSessionDaoProvider);
@@ -103,14 +76,9 @@ class SessionBulkDelete {
     return BulkDeleteTargets(natives: natives, imported: imported);
   }
 
-  /// Removes every row in [targets] from the workspace, and — when
-  /// [deleteFromCli] — starts the transcript purge behind it.
-  ///
-  /// **Synchronous, and returns before the purge does.** There is no await
-  /// between the user's confirmation and the rows leaving the tree: each kind
-  /// goes through its own removal, so a native row still clears the open
-  /// transcript and an imported one still clears the imported selection, and
-  /// the whole set publishes once.
+  /// Removes every row in [targets], and starts the transcript purge behind it
+  /// when [deleteFromCli]. Returns before the purge does: there is no await
+  /// between the confirmation and the rows leaving the tree.
   void run(BulkDeleteTargets targets, {required bool deleteFromCli}) {
     if (targets.isEmpty) return;
     _ref
@@ -122,14 +90,9 @@ class SessionBulkDelete {
     if (deleteFromCli) start(targets);
   }
 
-  /// Starts the purge for [targets] and returns immediately.
-  ///
-  /// The generalisation `CliStorePurgeRunner` would need to own this too: its
-  /// `start` takes `List<ImportedSession>`, and a native row's transcript is
-  /// not one — it is a `DetectedSession` resolved out of the CLI stores. Giving
-  /// that runner a `startSessions` taking both lists — calling
-  /// `purgeSessionsFromCliStore` where it now calls `purgeFromCliStore` —
-  /// would let this class go away entirely.
+  /// Starts the purge for [targets] and returns immediately. `CliStorePurgeRunner`
+  /// would need a `startSessions` taking both lists to own this — a native row's
+  /// transcript is a `DetectedSession`, not an [ImportedSession].
   void start(BulkDeleteTargets targets) {
     if (targets.isEmpty || _stopped) return;
     late final Future<void> task;

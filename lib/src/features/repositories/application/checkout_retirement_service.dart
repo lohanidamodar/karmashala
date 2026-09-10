@@ -3,42 +3,8 @@ import '../../explorer/application/checkout.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../data/repository_dao.dart';
 
-/// Retires the checkouts a project recorded whose directories have genuinely
-/// gone away.
-///
-/// **Why this exists.** Discovery only ever added. A workspace that deletes
-/// twenty-one merged worktrees in an afternoon keeps twenty-one rows pointing
-/// at nothing, and each of them is charged for: six `git` subprocesses per
-/// recorded checkout on every refresh, on WSL paths over 9p where a single
-/// `stat` costs a millisecond, plus a card in the Explorer for a folder that is
-/// not there. Rescan was the obvious place to notice, and the only thing it
-/// could not do.
-///
-/// **Why it is careful.** Deleting a `repositories` row cascades into
-/// `sessions`, `session_repositories`, `imported_sessions` and
-/// `fanout_comparisons`. The cost of being wrong is therefore not a missing
-/// row in a picker — it is the user's session history, deleted by a
-/// housekeeping pass they did not ask for. So the pass gives away nothing it
-/// cannot prove:
-///
-/// 1. **absence is proved, not inferred.** A checkout is retired only when a
-///    filesystem that answered said the directory is not there
-///    ([CheckoutPresence.absent]); anything the probe could not reach is kept.
-///    Not being in the scan result means nothing on its own — discovery skips
-///    unreadable directories, skips symlinks, stops at `maxDepth` and ignores
-///    `node_modules` and friends, so "not found" and "not there" are different
-///    facts and only the second one is here.
-/// 2. **the root is the witness.** Every child of a stopped distro or an
-///    unmounted drive reads as absent, and no per-path check can tell that
-///    apart from a deletion. So nothing is retired at all unless the project
-///    root itself answered *present* — the one directory we know was there,
-///    since the scan that leads here begins by reading it.
-/// 3. **history outranks tidiness.** A checkout that is genuinely gone but
-///    still referenced is kept and *named*, so the user is told rather than
-///    finding transcripts missing later.
-/// 4. **it minds its own scan.** Only rows under the root being rescanned are
-///    candidates, compared within one environment — `/src/demo` in a distro is
-///    not `C:\src\demo`, however the strings look.
+/// Retires the checkouts whose directories are *provably* gone. Deleting a row
+/// cascades into session history, so absence is proved and the root is witness.
 class CheckoutRetirementService {
   const CheckoutRetirementService({
     required this.repositories,
@@ -50,11 +16,6 @@ class CheckoutRetirementService {
 
   /// Retires every checkout of [projectId] beneath [root] whose directory is
   /// provably gone, and reports what it did and what it left alone.
-  ///
-  /// [environment] is the environment [root] and the project's rows are written
-  /// in; [windows] is the host the check actually runs on, as in
-  /// `ProjectService.rediscover`, which scans on the host and records in the
-  /// project's environment.
   Future<CheckoutRetirementReport> retireMissingCheckouts({
     required String projectId,
     required EnvironmentPath root,

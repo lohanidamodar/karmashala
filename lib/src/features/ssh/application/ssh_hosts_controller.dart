@@ -8,12 +8,8 @@ import 'package:agent_cli/process.dart';
 import '../domain/ssh_host.dart';
 import 'ssh_providers.dart';
 
-/// The saved remote hosts, and the execution environments they own.
-///
-/// Adding a host is what *creates* an SSH execution environment: unlike Windows
-/// and WSL, remote hosts are configured rather than discovered, so there is no
-/// probe that could find them. The two rows are written together so an
-/// environment never dangles without the host that says how to reach it.
+/// The saved remote hosts and the environments they own. Adding a host is what
+/// *creates* an SSH environment — the two rows are written together.
 class SshHostsController extends Notifier<List<SshHost>> {
   @override
   List<SshHost> build() => ref.watch(sshHostDaoProvider).getAll();
@@ -48,30 +44,21 @@ class SshHostsController extends Notifier<List<SshHost>> {
     return save(record);
   }
 
-  /// Inserts or updates [host] together with its environment row.
-  ///
-  /// Any open connection to it is dropped first. An edited address, port, user
-  /// or key must take effect on the next connection — a pooled session opened
-  /// under the old settings would otherwise keep answering, and the user would
-  /// be looking at a machine they thought they had stopped talking to.
+  /// Inserts or updates [host] with its environment row, dropping any open
+  /// connection: a pooled session under the old settings would keep answering.
   Future<SshHost> save(SshHost host) async {
     await ref.read(sshConnectionPoolProvider).evict(host.id);
     ref.read(sshHostDaoProvider).upsert(host);
     ref.read(executionEnvironmentDaoProvider).upsert(sshEnvironment(host));
-    // The environments list is built from the same table and would otherwise
-    // keep showing the world as it was before this host existed — a remote
-    // environment you have just created but cannot see is not created as far
-    // as the user is concerned.
+    // The environments list is built from the same table: an environment you
+    // have just created but cannot see is not created, as far as the user goes.
     ref.invalidate(environmentsControllerProvider);
     state = ref.read(sshHostDaoProvider).getAll();
     return host;
   }
 
-  /// Removes a host, its environment, and any open connection to it.
-  ///
-  /// The trusted host key is deliberately kept: forgetting a machine's identity
-  /// because its bookmark was deleted would turn a later re-add into a silent
-  /// re-trust.
+  /// Removes a host, its environment and any open connection. The trusted host
+  /// key is kept: dropping it would make a later re-add a silent re-trust.
   Future<void> remove(String hostId) async {
     await ref.read(sshConnectionPoolProvider).evict(hostId);
     ref.read(executionEnvironmentDaoProvider).delete(sshEnvironmentId(hostId));

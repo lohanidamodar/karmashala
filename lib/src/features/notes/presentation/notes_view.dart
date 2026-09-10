@@ -16,12 +16,8 @@ import '../domain/note.dart';
 import 'note_edit_dialog.dart';
 import '../../../core/widgets/linkable_text.dart';
 
-/// The Notes surface: everything the user kept instead of acting on it.
-///
-/// A note is a **deferred instruction**, not a scrapbook entry, and this list
-/// is arranged around the one action that makes it so: sending a note back to
-/// an agent's composer. Everything else here — the origin line, the edit, the
-/// delete — exists to let the user decide whether they still mean it.
+/// The Notes surface. A note is a **deferred instruction**, so the list is
+/// arranged around sending one back to an agent's composer.
 class NotesView extends ConsumerWidget {
   const NotesView({super.key});
 
@@ -32,12 +28,8 @@ class NotesView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The notes and nothing else. No card here reads a session provider — a
-    // Send resolves its target on the click — so nothing in this panel sits on
-    // the terminal's active-tab signal.
-    //
-    // The scope is watched **here and not in a card**: it decides which cards
-    // exist, not what any card says.
+    // No card here reads a session provider — a Send resolves its target on the
+    // click — so nothing in this panel sits on the terminal's active-tab signal.
     final scope = ref.watch(noteScopeProvider);
     final notes = [
       for (final note in ref.watch(notesProvider))
@@ -85,11 +77,8 @@ class NotesView extends ConsumerWidget {
 
 }
 
-/// What an empty Notes panel says.
-///
-/// The feature is invisible until someone taps a glyph they have no reason to
-/// try, so the empty state is where it is taught: what a note is for, how one
-/// is made, and what happens to it afterwards.
+/// What an empty Notes panel says. The feature is invisible until someone taps
+/// a glyph they have no reason to try, so this is where it is taught.
 class _EmptyNotes extends ConsumerWidget {
   const _EmptyNotes({required this.filtered});
 
@@ -147,11 +136,8 @@ class _EmptyNotes extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: Insets.md),
-            // The way out of the empty state, named. The panel had only an
-            // icon-only **+** in its header and three paragraphs pointing at a
-            // glyph somewhere else, which is how the owner ended up asking
-            // "how to add notes, where can we add notes?" while looking at
-            // the feature.
+            // The way out of the empty state, named. An icon-only **+** is how the owner
+            // ended up asking "where can we add notes?" while looking at the feature.
             FilledButton.icon(
               onPressed: () => showNewNoteDialog(context, ref),
               icon: const Icon(AppIcons.notePencil, size: Chrome.icon),
@@ -164,18 +150,8 @@ class _EmptyNotes extends ConsumerWidget {
   }
 }
 
-/// One note: what it says, where it came from, and the one verb it is for.
-///
-/// **Send stays on the card; edit and delete moved to the row's menu.** A note
-/// exists to be handed back to an agent, so the verb that does it is drawn
-/// always — the same trade `ExplorerRowAction` makes for the `+` that starts
-/// work. The other two are housekeeping, and housekeeping belongs behind the
-/// `⋮` that [RowContextMenu] reveals under a pointer, opens on a right-click,
-/// and hands to `Shift+F10` and to a screen reader.
-///
-/// The card body is a tap target because of that menu, not only for
-/// convenience: it is the card's focus stop, and the way the keyboard reaches
-/// actions that live behind `⋮`.
+/// One note. **Send stays on the card; edit and delete are in the row's menu.**
+/// The body is a tap target because it is the card's focus stop for that menu.
 class _NoteCard extends ConsumerWidget {
   const _NoteCard({required this.note});
 
@@ -224,13 +200,8 @@ class _NoteCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  // Clipped, never rewritten: a long note shows its opening and says
-                  // nothing about the rest. The whole text is one tap away in the
-                  // editor, and is what gets sent.
-                  // A URL in the body is clickable; anything else still opens
-                  // the editor, which is what a tap on this card has always
-                  // meant. The clip is passed to the hit test too — see
-                  // [LinkableText].
+                  // Clipped, never rewritten: a long note shows its opening and the whole text
+                  // is one tap away. The clip is passed to the hit test too — see [LinkableText].
                   LinkableText(
                     note.body,
                     maxLines: 4,
@@ -278,32 +249,14 @@ class _NoteCard extends ConsumerWidget {
     );
   }
 
-  /// What Send offers, in the only terms the card can honestly use.
-  ///
-  /// A note captured from a session names it. A note written here says *the
-  /// active session* rather than naming one: it is not subscribed to the
-  /// selection, so at build time it does not know — and it is never disabled,
-  /// because refusing to watch the state is also refusing to gate on it. The
-  /// click resolves, and says where it went.
-  ///
-  /// It names *who*, never where. Send follows the face the session is already
-  /// showing — typed at the prompt when its terminal is up, queued for the
-  /// composer when its chat is — and a label that cannot watch the state cannot
-  /// name the destination either. The snackbar does, once the click has
-  /// resolved it.
+  /// What Send offers, in the only terms the card can honestly use: it is not
+  /// subscribed to the selection, so it names *who*, never where.
   String _sendLabel(String? sourceTitle) => sourceTitle == null
       ? 'Send to the active session'
       : 'Send to $sourceTitle';
 
-  /// The card's actions, in the one vocabulary every path to them shares.
-  ///
-  /// Built fresh per call: the same entries cannot be mounted by the `⋮` and by
-  /// a right-click at once, and a menu is only ever built as it opens.
-  ///
-  /// Send is worded exactly as the always-drawn button beside it, rather than
-  /// resolving on open the way the Todos row does: the menu pops next to that
-  /// button, and one verb on one card reading two different ways is worse than
-  /// the naming the menu could have afforded.
+  /// The card's actions, built fresh per call — the same entries cannot be
+  /// mounted by the `⋮` and by a right-click at once.
   List<PopupMenuEntry<String>> _menuItems(String? sourceTitle) => [
     DesktopMenuItem(
       value: 'send',
@@ -336,13 +289,7 @@ class _NoteCard extends ConsumerWidget {
   }
 
   /// Where the note is filed and where it came from, in the words of what is
-  /// still true. A session that has since been deleted is said to be gone
-  /// rather than quietly dropped — "what were we discussing?" has an honest
-  /// answer either way.
-  ///
-  /// The project leads because it is what the header's filter acts on, and a
-  /// note whose project no longer resolves simply does not name one: the
-  /// column is `ON DELETE SET NULL`, so it is about to be unfiled anyway.
+  /// still true: a deleted session is said to be gone rather than dropped.
   String _origin(String? sessionTitle, String? projectName) => <String>[
     ?projectName,
     _provenance(sessionTitle),
@@ -359,17 +306,8 @@ class _NoteCard extends ConsumerWidget {
     return 'From $sessionTitle  ·  $role';
   }
 
-  /// Offers the note to a session, deciding *which* — and *where in it* —
-  /// only now.
-  ///
-  /// A note goes back to the session it came from. One written here goes to
-  /// [focusedSessionIdProvider] — the Explorer's selection, else the focused
-  /// group's active tab — the same single answer the Todos row sends to.
-  ///
-  /// **Read, never watched.** Send is drawn on every card always, so watching
-  /// would put the whole panel on the active-tab signal; reading costs one
-  /// lookup per click. The price is that a card cannot gate itself on a target
-  /// it refuses to observe, so the empty case is answered here instead.
+  /// Offers the note to a session, deciding which — and where in it — only now.
+  /// **Read, never watched**: Send is on every card, so watching costs the panel.
   void _sendBack(BuildContext context, WidgetRef ref) {
     final sessions = ref.read(sessionDaoProvider);
     final source = note.sourceSessionId == null

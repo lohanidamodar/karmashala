@@ -1,14 +1,10 @@
-/// What became of one occurrence of an automation.
-///
-/// Five values because there are five different things to tell a person, and
-/// the one this feature exists for is [missed]: a closed laptop must not leave
-/// the page reading "next run in 18 hours".
+/// What became of one occurrence of an automation. Five values because there
+/// are five things to tell a person; [missed] is the one this feature is for.
 enum AutomationRunState {
   /// The checkout was busy, so this fire is waiting its turn. **Not a race
   /// lost** — one unattended owner per workspace, and this is the queue.
   queued,
 
-  /// An agent is running for this occurrence.
   running,
 
   /// Its session ended without an error.
@@ -35,7 +31,6 @@ enum AutomationRunState {
   bool get isLive =>
       this == AutomationRunState.queued || this == AutomationRunState.running;
 
-  /// What the run list says, in plain words.
   String get label => switch (this) {
     AutomationRunState.queued => 'Queued',
     AutomationRunState.running => 'Running',
@@ -69,8 +64,7 @@ class AutomationRun {
   /// row is not when it was recorded.
   final DateTime scheduledFor;
 
-  /// When this row was written. Rendered with `describeAge`, because a verdict
-  /// with no age is a confident statement about a moment nobody can identify.
+  /// When this row was written; a verdict with no age names no moment.
   final DateTime firedAt;
 
   final AutomationRunState state;
@@ -89,14 +83,11 @@ class AutomationRun {
   final DateTime? finishedAt;
 
   /// How many commits the run's session left on the branch, counted when it
-  /// settled. **Null means not counted, never zero** — an unread number and a
-  /// run that committed nothing are different facts.
+  /// settled. Null means not counted, never zero.
   final int? commitsMade;
 
-  /// When this run's project checks were looked at, or **null when nothing has
-  /// looked yet**. Not the same fact as having no verdicts: a run whose
-  /// checkout configures no check is observed and has none, which is a
-  /// different sentence from one nothing has re-run (§19).
+  /// When this run's project checks were looked at, or null when nothing has
+  /// looked yet — a different fact from a checkout that configures none (§19).
   final DateTime? checksObservedAt;
 
   Duration? get duration => finishedAt?.difference(firedAt);

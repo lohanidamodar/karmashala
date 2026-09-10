@@ -27,27 +27,8 @@ import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
 
-/// A pane whose process belongs to the **session host** rather than to this
-/// app, on this machine.
-///
-/// The point of it, and the reason it is a separate class from
-/// [PtyTerminalInstance] rather than a flag on it: a `flutter_pty` child is
-/// this process's child, so an app crash takes every agent with it. A session
-/// the host owns outlives the app, the pane and the window, and a reopened pane
-/// resumes it from the exact byte it last rendered.
-///
-/// It is the same conversation `SshTerminalInstance` has over an SSH exec
-/// channel — the same [HostPaneLink], the same frames, the same offsets — with
-/// two things absent because there is no network: no deploy (the binary is
-/// beside the app or it is not) and no reconnect (a unix socket does not drop
-/// and come back).
-///
-/// **There is no fallback here on purpose.** The SSH pane falls back to tmux
-/// because tmux is what was there before it; the local pane's "before" is
-/// `flutter_pty`, and choosing between them is the *setting's* job, decided
-/// once at launch by `terminalInstanceFactoryProvider`. A pane that got here
-/// and cannot reach the host says so and stays dead, rather than silently
-/// becoming the thing the user turned off.
+/// A pane whose process belongs to the **session host**, so it outlives the app
+/// a `flutter_pty` child would die with. No fallback: it says so and stays dead.
 class HostTerminalInstance
     implements
         TerminalInstance,
@@ -111,8 +92,7 @@ class HostTerminalInstance
   final String profileId;
 
   /// This machine's session host: the reading and the channel. The same
-  /// interface an SSH pane is handed, which is what lets one pane class serve
-  /// two transports.
+  /// interface an SSH pane is handed, so one pane class serves two transports.
   final HostSessionAccess access;
 
   /// What to run, already built for where it is going by `ptyLaunchFor` /
@@ -137,10 +117,9 @@ class HostTerminalInstance
   @override
   final ScrollController scrollController = ScrollController();
 
-  /// Null, always: OSC 133 markers come from a shell's prompt hooks, and the
-  /// host path does not install them. Said here rather than left to a reader of
-  /// the base class, because it is what makes `terminal_run` refuse to claim an
-  /// exit code for a command in this pane.
+  /// Null, always: OSC 133 markers come from a shell's prompt hooks and the
+  /// host path does not install them, which is what makes `terminal_run` refuse
+  /// to claim an exit code for a command in this pane.
   @override
   CommandBlockRecorder? commandBlocks;
 
@@ -157,11 +136,9 @@ class HostTerminalInstance
 
   int? _exitCode;
 
-  /// What the *session* exited with, as the host reported it.
-  ///
-  /// Null is a real answer and never a zero: a session whose host was restarted
-  /// under it ended with no code at all, and the host says which of the two it
-  /// was rather than inventing one.
+  /// What the *session* exited with, as the host reported it. Null is a real
+  /// answer and never a zero: a session whose host was restarted under it ended
+  /// with no code at all, and the host says which of the two it was.
   @override
   int? get exitCode => _exitCode;
 
@@ -185,11 +162,9 @@ class HostTerminalInstance
   /// a re-dial neither repeats a byte nor drops one.
   int _lastOffset = 0;
 
-  /// Whether this pane opened holding the app's own record of its history.
-  ///
-  /// It matters because on the host path there are two records of the same
-  /// output — the text the app stored when it last closed, and the host's ring
-  /// — and showing both would print the session twice. See [_dial].
+  /// Whether this pane opened holding the app's own record of its history: on
+  /// the host path there are two records of the same output, and showing both
+  /// would print the session twice. See [_dial].
   var _hasStoredHistory = false;
 
   @override
@@ -298,12 +273,8 @@ class HostTerminalInstance
 
       final attachment = await _attachOrOpen(link, width, height, resumeFrom);
       if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
-        // Two records of one session: the text this app stored when it last
-        // closed, and the ring the host kept. The replay about to arrive is the
-        // more accurate of the two — it is the session's own bytes rather than
-        // a re-encoding of a buffer — so the stored copy goes rather than being
-        // printed above an identical one. Erase display *and* scrollback: a
-        // plain clear leaves the history one scroll away.
+        // The replay is the more accurate record, so the stored copy goes.
+        // Erase scrollback as well: a plain clear leaves it one scroll away.
         terminal.write('\x1b[H\x1b[2J\x1b[3J');
         _hasStoredHistory = false;
       }
@@ -323,15 +294,8 @@ class HostTerminalInstance
     }
   }
 
-  /// Reattaches from the last offset this pane rendered; opens only when there
-  /// is no such session yet.
-  ///
-  /// The order matters after a host restart: the session id is stable across
-  /// pane replacement, so `attach` finds the *record* of a session whose
-  /// process died with the host. That is the right thing to show — it is the
-  /// scrollback the user was reading — and [_onSessionEnded] closes it once it
-  /// has been shown, so the next start of this pane opens a live one rather
-  /// than replaying a dead one for ever.
+  /// Reattaches from the last offset this pane rendered, opening only when
+  /// there is no session. A dead record is shown once, then closed.
   Future<HostAttachment> _attachOrOpen(
     HostPaneLink link,
     int width,
@@ -359,16 +323,14 @@ class HostTerminalInstance
     }
   }
 
-  /// Whether this pane attached to a session that already existed, rather than
-  /// opening one. It decides what an immediate end means: a session we opened
-  /// and that ended is a command that finished, and one we merely found is a
-  /// leftover to clear away.
+  /// Whether this pane attached to a session that already existed. It decides
+  /// what an immediate end means: one we opened and that ended is a command
+  /// that finished, one we merely found is a leftover to clear away.
   var _resumed = false;
 
   /// The app's own id, not one the host invents: the same pane must find the
   /// same session after the app restarts, and an agent must keep its session
-  /// across pane replacement — the rule the SSH pane and the tmux session name
-  /// both follow.
+  /// across pane replacement.
   @visibleForTesting
   String get hostSessionId {
     final raw = agentLaunch?.sessionId != null
@@ -439,8 +401,7 @@ class HostTerminalInstance
     final reap = Completer<void>();
     _reap = reap;
     // Closing the link is a *disconnect*, never a kill: the host frees the
-    // write token and the session keeps running for the next pane. That is the
-    // whole reason this class exists.
+    // write token and the session keeps running for the next pane.
     unawaited(
       link.close().whenComplete(() {
         if (!reap.isCompleted) reap.complete();
@@ -449,19 +410,8 @@ class HostTerminalInstance
   }
 }
 
-/// Builds the launch for [profile] and hands it to the session host.
-///
-/// The launch is built by exactly the same functions `createPtyTerminalInstance`
-/// uses, so a host-backed pane starts the same command line a `flutter_pty`
-/// pane would have — the difference is only whose child it is.
-///
-/// **Shell integration is never asked for here**, and that is the honest
-/// version rather than an oversight: OSC 133 comes from a bootstrap this app
-/// injects into a PowerShell launch, and the marker stream would arrive through
-/// the host unchanged — but nothing above this has been measured against it, so
-/// offering it would be claiming something nobody has checked. A host-backed
-/// pane reports no command blocks and `terminal_run` therefore refuses to name
-/// an exit code for a command typed into one, which is the truthful answer.
+/// Builds the launch for [profile] and hands it to the session host: the same
+/// command line, minus shell integration, which nothing here has measured.
 TerminalInstance createHostTerminalInstance({
   required String id,
   required TerminalProfile profile,

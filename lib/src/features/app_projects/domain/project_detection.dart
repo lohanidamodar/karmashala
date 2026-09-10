@@ -5,25 +5,16 @@ import 'package_json.dart';
 import 'project_descriptor.dart';
 import 'project_kind.dart';
 
-/// Reads one file inside the project, or answers null when it is not there or
-/// could not be read.
-///
-/// [relativePath] is always forward-slash separated and relative to the
-/// project directory. The caller joins it with its own environment's path
-/// context, so a Windows checkout and a distribution hand the same decision
-/// the same strings.
+/// Reads one file inside the project, or null. [relativePath] is always
+/// forward-slash separated, so every environment decides on the same strings.
 typedef ProjectFileReader = String? Function(String relativePath);
 
 /// The entry names directly inside [relativeDirectory] — files and
 /// directories both, no paths. Empty when the directory is not there.
 typedef ProjectEntryLister = List<String> Function(String relativeDirectory);
 
-/// What a directory turned out to be, and why.
-///
-/// **Pure, and that is the point** — the same reason `flutterProjectsIn` is.
-/// Deciding what a checkout holds is a question about text; finding the text
-/// is a question about a filesystem that may be a distribution or another
-/// machine.
+/// What a directory turned out to be, and why. Pure: deciding what a checkout
+/// holds is a question about text, not about a filesystem.
 class ProjectReading {
   const ProjectReading({
     required this.kind,
@@ -38,8 +29,7 @@ class ProjectReading {
   /// The project's own name where it declares one, else the directory's.
   final String name;
 
-  /// The files and lines that said so, in the order they were read. What a
-  /// person needs to disagree with the verdict.
+  /// The files and lines that said so — what a person needs to disagree.
   final List<String> evidence;
 
   /// The Gradle module that carries `com.android.application`, as Gradle
@@ -49,8 +39,8 @@ class ProjectReading {
   /// The first shared Xcode scheme. Null for every kind but native iOS.
   final String? iosScheme;
 
-  /// What is known about this kind beyond how to spot it, **or null**: a kind
-  /// with no descriptor gets detection and nothing else.
+  /// What is known about this kind beyond how to spot it, or null when a kind
+  /// gets detection and nothing else.
   ProjectDescriptor? get descriptor => descriptorFor(kind);
 
   /// The module directory, relative to the project: `:app` is `app/`.
@@ -73,14 +63,8 @@ class ProjectReading {
   };
 }
 
-/// What kind of app project sits at a directory, or **null when none does** —
-/// which is not "an empty project" (§19).
-///
-/// The order below is the whole subtlety. A Flutter app and a React Native app
-/// each carry an `android/` whose module applies `com.android.application`, so
-/// asked in the wrong order every one of them would answer to the native
-/// Android markers. Narrowest first, and each later kind refuses what an
-/// earlier one claimed.
+/// What kind of app project sits at a directory, or null when none does (§19).
+/// Narrowest first: Flutter and React Native both carry an `android/` too.
 ProjectReading? detectProject({
   required String directoryName,
   required ProjectFileReader read,
@@ -95,11 +79,8 @@ ProjectReading? detectProject({
   return _readNativeIos(directoryName: directoryName, read: read, list: list);
 }
 
-/// The files [detectProject] reads before it knows what it is looking at.
-///
-/// Named so the scanner fetches exactly these and no more: a detection is a
-/// bounded handful of reads, not a walk. The module scripts are a second round
-/// — which ones to read is a question only the settings script can answer.
+/// The files [detectProject] reads before it knows what it is looking at —
+/// named so the scanner fetches exactly these: a bounded handful, not a walk.
 const List<String> kProjectRootFiles = <String>[
   'pubspec.yaml',
   'package.json',
@@ -109,21 +90,15 @@ const List<String> kProjectRootFiles = <String>[
   '../pubspec.yaml',
 ];
 
-/// The build scripts to read for [modules], both spellings, in the order they
-/// are preferred.
+/// The build scripts for [modules], both spellings, in preference order.
 List<String> gradleModuleScriptPaths(List<String> modules) => <String>[
   for (final module in modules)
     for (final name in const <String>['build.gradle.kts', 'build.gradle'])
       '${module.replaceFirst(':', '').replaceAll(':', '/')}/$name',
 ];
 
-/// Why a directory that carries Gradle is still not a project we build, when
-/// there is something specific to say. Null when there is not.
-///
-/// This exists because the generic "no marker Karmashala knows" is *wrong* for
-/// the most likely case on a Flutter machine: pointing at `android/` inside a
-/// Flutter checkout. That directory has every native Android marker and is the
-/// Android half of the app one level up, so the refusal has to say which.
+/// Why a Gradle directory is still not a project we build, or null: `android/`
+/// in a Flutter checkout has every native marker and needs its own answer.
 String? notAProjectNote({required ProjectFileReader read}) {
   final settings = read('settings.gradle.kts') ?? read('settings.gradle');
   if (settings == null) return null;
@@ -140,19 +115,13 @@ String? notAProjectNote({required ProjectFileReader read}) {
 }
 
 /// Native Android: a Gradle build with an application module, and no Flutter
-/// or React Native above or around it.
-///
-/// The two exclusions are not decoration. Every Android project on the
-/// machine this was written for is a Flutter host module, and a React Native
-/// project carries an `android/` that looks exactly like this one.
+/// or React Native above or around it — both of those carry one too.
 ProjectReading? _readNativeAndroid({
   required String directoryName,
   required ProjectFileReader read,
 }) {
-  // The item's own rule: `settings.gradle` with an app module, **no
-  // pubspec.yaml**. A pubspec here would already have been answered above
-  // unless it is a plain Dart package, and a plain Dart package that also
-  // holds an Android app is not a shape worth guessing at.
+  // No pubspec.yaml: one here would already have been answered above unless it
+  // is a plain Dart package, which is not a shape worth guessing at.
   if (read('pubspec.yaml') != null) return null;
   final settings = read('settings.gradle.kts') ?? read('settings.gradle');
   if (settings == null) return null;
@@ -193,12 +162,8 @@ ProjectReading? _readNativeAndroid({
   return null;
 }
 
-/// React Native or Expo, read out of the `package.json` dependencies.
-///
-/// Asked **before** native Android, because a React Native project carries an
-/// `android/` whose module applies `com.android.application` and would answer
-/// to every one of those markers — and building it as a bare Gradle project
-/// would leave the JavaScript bundle out of the APK.
+/// React Native or Expo, from `package.json`. Asked before native Android: its
+/// `android/` answers those markers, and a bare build drops the JS bundle.
 ProjectReading? _readReactNative({
   required String directoryName,
   required ProjectFileReader read,
@@ -218,10 +183,7 @@ ProjectReading? _readReactNative({
 }
 
 /// Native iOS: an Xcode project with, where there is one, a shared scheme.
-///
-/// Asked last, and refused for anything that belongs to somebody else. A
-/// Flutter checkout's `ios/` holds a `Runner.xcodeproj` with a shared
-/// `Runner.xcscheme` and would otherwise read as native.
+/// Asked last — a Flutter `ios/` has a `Runner.xcodeproj` and shared scheme.
 ProjectReading? _readNativeIos({
   required String directoryName,
   required ProjectFileReader read,
@@ -229,15 +191,13 @@ ProjectReading? _readNativeIos({
 }) {
   if (read('pubspec.yaml') != null || read('package.json') != null) return null;
   if (_parentIsFlutter(read)) return null;
-  // No listing, no answer. An Xcode project is a *directory*, and its schemes
-  // are files inside it, so there is nothing here a file read alone can see —
-  // and guessing would be the confident false statement §19 deletes.
+  // No listing, no answer: an Xcode project is a directory and its schemes are
+  // files inside it, so a file read alone cannot see them (§19).
   if (list == null) return null;
 
   final entries = list('');
-  // `Flutter/` beside the project is what `flutter create` puts in `ios/`, and
-  // it holds the generated xcconfigs the scheme depends on. A directory with
-  // it is the iOS half of somebody's Flutter app.
+  // `Flutter/` beside the project is what `flutter create` puts in `ios/`, so a
+  // directory with it is the iOS half of somebody's Flutter app.
   if (entries.contains('Flutter')) return null;
 
   final projects = <String>[
@@ -247,8 +207,7 @@ ProjectReading? _readNativeIos({
   if (projects.isEmpty) return null;
   final project = projects.first;
 
-  // Sorted, so "the first shared scheme" is the same answer every time rather
-  // than whatever order the filesystem handed back.
+  // Sorted, so "the first shared scheme" is the same answer every time.
   final schemes =
       <String>[
         for (final entry in list('$project/xcshareddata/xcschemes'))
@@ -274,25 +233,15 @@ ProjectReading? _readNativeIos({
   );
 }
 
-/// Whether the directory **above** this one is a Flutter project.
-///
-/// The second, independent signal that an `android/` belongs to somebody. It
-/// catches a host module whose settings script has been rewritten and no
-/// longer names Flutter — which `flutter create` does not produce, but a
-/// person editing one can.
+/// Whether the directory above is a Flutter project — the second signal, for a
+/// host module whose settings script no longer names Flutter.
 bool _parentIsFlutter(ProjectFileReader read) {
   final parent = read('../pubspec.yaml');
   return parent != null && readPubspec(parent).isFlutter;
 }
 
-/// Flutter, read through `readPubspec` rather than beside it.
-///
-/// **The seam is only real if this is not a second copy.** Everything about
-/// what makes a pubspec a Flutter project — the two independent signals, the
-/// deliberate refusal to parse YAML, what the scan does not see — is already
-/// decided in `flutter_project.dart` and pinned by its own tests. This calls
-/// it. If the two ever disagreed, one of them would be wrong and nobody would
-/// know which.
+/// Flutter, read through `readPubspec` rather than beside it: a second copy of
+/// that decision could disagree with it and nobody would know which was wrong.
 ProjectReading? _readFlutter({
   required String directoryName,
   required ProjectFileReader read,

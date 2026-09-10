@@ -10,12 +10,8 @@ import 'package:agent_cli/stream.dart';
 import 'markdown_message.dart';
 import 'tool_activity_row.dart';
 
-/// The one row the transcript view writes itself: the line that says a
-/// compaction happened here and how much of the conversation is behind it.
-///
-/// A role of its own rather than `agent`, because nobody said it. The rest of
-/// the file treats an unknown role as the agent's, which would have put the
-/// app's own words in the model's mouth.
+/// The row the transcript view writes itself, saying a compaction happened
+/// here. Its own role, because an unknown role is read as the agent's.
 const String kCompactionNoticeRole = 'compaction';
 
 /// A normalized chat message for the transcript view, independent of whether it
@@ -33,40 +29,27 @@ class ChatMessage {
   final String role;
   final String text;
 
-  /// The structured call behind a `tool` row, when the source carried one.
-  ///
-  /// Null for a tool line we only have prose for — a CLI whose record we can
-  /// only read as text, or the engine's own `Session ended.` marker. Those keep
-  /// rendering exactly as they did.
+  /// The structured call behind a `tool` row, when the source carried one. Null
+  /// for a tool line we only have prose for; those render exactly as before.
   final ToolActivity? tool;
 
-  /// Optional model reasoning or thinking process.
   final String? thinking;
 
   /// When the message was written.
   final DateTime? at;
 }
 
-/// Called when the user keeps a message as a note: the message itself, and its
-/// index in the whole transcript (not in the visible window), which is what the
-/// note records as where it came from.
+/// Called when the user keeps a message as a note: the message, and its index
+/// in the whole transcript — not the visible window — which the note records.
 typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
 
-/// An extra widget to hang under one message's body, given the message and its
-/// index in the whole transcript. Null — the answer for almost every row —
-/// leaves that row exactly as it was.
-///
-/// The one caller is the subagent a `Task` call spawned. It is a builder rather
-/// than a field on [ChatMessage] because what hangs there is a *widget* with
-/// its own state and its own reads, and the transcript's message type is shared
-/// with the remote and companion payloads, which have no widgets at all.
+/// An extra widget to hang under one message's body. A builder rather than a
+/// field on [ChatMessage], which the remote payloads carry and have no widgets.
 typedef MessageDetailBuilder =
     Widget? Function(ChatMessage message, int ordinal);
 
-/// A CLI-style conversation list: user turns, agent replies and tool lines,
-/// rendered close to how Claude Code / Codex print them. Long transcripts start
-/// anchored at the newest message and load earlier turns on demand (a header
-/// button plus auto-load when scrolled to the top).
+/// A CLI-style conversation list. Long transcripts start anchored at the newest
+/// message and load earlier turns on demand.
 class ChatTranscriptView extends StatefulWidget {
   const ChatTranscriptView({
     required this.messages,
@@ -84,22 +67,15 @@ class ChatTranscriptView extends StatefulWidget {
   final String emptyHint;
 
   /// Turns a path an agent wrote into one this process can open — a WSL
-  /// `/mnt/c/…` into its Windows form. Supplied by whoever knows the session's
-  /// environment; omitted means the paths are already host paths.
-  ///
-  /// The translation is explicit and passed in rather than guessed at here,
-  /// which is the rule the whole codebase follows (`PathTranslator`,
-  /// `EditorActions.windowsPathFor`).
+  /// `/mnt/c/…` into its Windows form. Omitted means they are already host paths.
   final String? Function(String path)? resolveHostPath;
 
   /// Where a file path a reader clicked goes — see [MarkdownMessage.onPathTap].
-  /// Null leaves every path as plain text, which is what a caller with no
-  /// session to resolve against should do.
+  /// Null leaves every path as plain text.
   final PathLinkCallback? onPathTap;
 
   /// Keeps a message as a note. Null hides the affordance entirely — the view
-  /// knows nothing about the Notes feature or the setting behind it, only
-  /// whether it was given somewhere to send one.
+  /// knows nothing about the Notes feature, only where it may send one.
   final SaveNoteCallback? onSaveNote;
 
   /// What, if anything, hangs under a given row — see [MessageDetailBuilder].
@@ -164,14 +140,8 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
     return Column(
       children: [
-        // The scrolling conversation is its own traversal group so that its
-        // stops cannot interleave with the footer's. Reading order sorts by
-        // rect, and tabbing to a row below the fold scrolls the list under the
-        // policy's feet: every remaining row moves up past footer stops it had
-        // already handed out, and the next Tab returns one of them. The group
-        // collapses the whole list to a single sort key in the parent, so a
-        // scroll can only reorder the list against itself — which it never
-        // does, because it moves every row by the same amount.
+        // Its own traversal group so its stops cannot interleave with the
+        // footer's: tabbing below the fold scrolls the list under the policy.
         Expanded(
           child: FocusTraversalGroup(
             child: total == 0
@@ -368,49 +338,15 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
   }
 }
 
-/// What the conversation says when it has nothing to say yet: one glyph, one
-/// heading, and the sentence explaining which kind of nothing this is.
-///
-/// **It used to also offer four prompt cards** — *Explain project
-/// architecture*, *Run tests and inspect failures*, and two more — which
-/// filled the composer with a hardcoded English sentence. They are gone from
-/// the pointer surface, for reasons that are about this surface rather than
-/// about the idea:
-///
-/// - **They did not fit.** Measured at the 390x844 CLAUDE.md §11 pins, all
-///   four overflowed their row — by 53, 78, 16 and 16 logical pixels, with no
-///   clip, which Flutter reports as unreachable content. A card needs ~393px
-///   and a chat pane narrowed by a split routinely has less. They were also
-///   the only reason this state needed a scroll view to fit a short pane.
-/// - **The affordance is already focused.** The composer is directly below
-///   with a caret in it, and the cards only *typed* into it — the user still
-///   had to press send. On a phone, where typing is expensive and there is no
-///   palette, that trade is worth it, and `companion_transcript_view.dart`
-///   keeps them for exactly that reason. Here Ctrl+P and Snippets are the
-///   surface for a phrase you reuse, and unlike four frozen strings they are
-///   the user's own.
-///
-/// What stayed is the part that teaches the screen: the old empty state was a
-/// bare centred line of `bodySmall`, and a session pane with nothing in it now
-/// says so with a mark, a heading and a reason.
+/// What the conversation says when it has nothing to say yet. The four prompt
+/// cards that sat here overflowed their row at phone width and are gone.
 class _ChatEmptyState extends StatelessWidget {
   const _ChatEmptyState({required this.hint});
 
   final String hint;
 
-  /// Centred while it fits, scrollable the moment it does not.
-  ///
-  /// The welcome state is a `Column` of a glyph, a heading, prose and a wrap of
-  /// suggestion chips, and it does not fit a short transcript pane: at the
-  /// 260px this gets in `workbench_test.dart` it overflowed by 37 logical
-  /// pixels, which Flutter treats as an error because the content cannot be
-  /// reached. A pane is short whenever the window is, whenever a split halves
-  /// it, and whenever the composer grows — so this is the ordinary case rather
-  /// than an edge one, and clipping it would hide the chips that are the point.
-  ///
-  /// `minHeight` is what keeps the centring: the scroll view hands its child
-  /// unbounded height, so a bare `Center` inside one collapses onto the content
-  /// and centres nothing.
+  /// Centred while it fits, scrollable the moment it does not. `minHeight` is
+  /// what keeps the centring: a scroll view hands its child unbounded height.
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => SingleChildScrollView(
@@ -426,8 +362,7 @@ class _ChatEmptyState extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     // A session whose agent keeps no readable transcript is not an empty
-    // conversation, it is a surface that will never have one — so it gets the
-    // terminal's mark and no heading promising an answer.
+    // conversation but a surface that will never have one.
     final isTerminalNotice =
         hint.contains('terminal is the session') ||
         hint.contains('no chat view') ||
@@ -435,19 +370,16 @@ class _ChatEmptyState extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        // One measure for both branches. They had 520 and 580, which is a
-        // difference no reader can see and two numbers a maintainer has to
-        // keep in step.
+        // One measure for both branches: they had 520 and 580, a difference no
+        // reader can see and two numbers a maintainer has to keep in step.
         constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: const EdgeInsets.all(Insets.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // `Chrome.iconHero` is the token for exactly this glyph, and the
-              // bordered circle each branch drew around its own invented 52/26
-              // and 44/22 pair is chrome around the one picture on a surface
-              // that has nothing else on it.
+              // `Chrome.iconHero` is the token for exactly this glyph; the
+              // bordered circle each branch invented was chrome around it.
               Icon(
                 isTerminalNotice ? AppIcons.terminal : AppIcons.robot,
                 size: Chrome.iconHero,
@@ -493,17 +425,8 @@ class _ChatMessageTile extends StatelessWidget {
   /// Hung under the body, indented with it: the subagent this row spawned.
   final Widget? detail;
 
-  /// **One rhythm for every role.** Two adjacent messages are always
-  /// `Insets.sm` apart — 4 above and 4 below, meeting in the middle.
-  ///
-  /// It was `Insets.xs` on a user, tool and error row and `Insets.sm` on an
-  /// agent one, so the space between two messages depended on which pair they
-  /// were: measured at 1440x900, the gap from the last line of one message to
-  /// the first line of the next came to 41, 44, 46 and 49 logical pixels
-  /// across four consecutive boundaries. That variation encoded nothing a
-  /// reader could use — a transcript's messages are all items in one list, and
-  /// what marks the start of a turn is the user card's raised fill, not extra
-  /// air. The turn boundary is already drawn; it does not also need spacing.
+  /// **One rhythm for every role**: two adjacent messages are always
+  /// `Insets.sm` apart. What marks a turn is the user card's fill, not air.
   static const _tileMargin = EdgeInsets.symmetric(vertical: Insets.xs);
 
   @override
@@ -527,9 +450,7 @@ class _ChatMessageTile extends StatelessWidget {
     final isError = message.role == 'error';
 
     // A tool row's reasoning is only ever the field, never a scan of its text:
-    // 425 of Antigravity's 435 thinking blocks sit on a record whose only other
-    // payload is the call, and a tool row's text is a command that means
-    // `<thinking>` literally when it contains one.
+    // a tool row's text means `<thinking>` literally when it contains one.
     final (thinking, cleanText) = isAgent
         ? _resolveThinking(message.text, message.thinking)
         : (message.role == 'tool' ? message.thinking?.trim() : null,
@@ -542,13 +463,8 @@ class _ChatMessageTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(Radii.md),
-            // **No border.** `surfaceContainerHigh` is two steps up the ramp
-            // from the page in both brightnesses (0x2C2C33 on 0x17171B dark,
-            // 0xE4E4E8 on 0xF7F7F8 light), so the fill already separates the
-            // card — and a fill *and* a hairline is two grouping mechanisms
-            // doing one job, plus 2px of height per turn. The tool card keeps
-            // its border because its fill is barely a step from the page and
-            // inverts direction between light and dark.
+            // **No border.** `surfaceContainerHigh` already separates the card;
+            // the tool card keeps its border because its fill barely differs.
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: Insets.md,
@@ -567,10 +483,8 @@ class _ChatMessageTile extends StatelessWidget {
                   const SizedBox(width: Insets.xs),
                   Text(
                     'YOU',
-                    // `labelSmall` is the chrome eyebrow, and the theme spaces
-                    // it at 0.8 on purpose; the 0.5 this used to override it
-                    // with made the transcript's eyebrows the only ones in the
-                    // app set differently.
+                    // `labelSmall` is the chrome eyebrow and the theme spaces
+                    // it at 0.8 on purpose; the 0.5 override made these unique.
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w700,
@@ -607,10 +521,7 @@ class _ChatMessageTile extends StatelessWidget {
             Row(
               children: [
                 // A bare glyph, sized and spaced exactly like the user row's.
-                // It was a 20px bordered circle around a 12px robot — the
-                // same rank as the user's eyebrow, given a different and
-                // heavier treatment, and 4px taller than the line of text it
-                // sits in for the sake of the decoration.
+                // The 20px bordered circle it replaced outranked its own row.
                 Icon(
                   AppIcons.robot,
                   size: Chrome.iconSmall,
@@ -643,9 +554,8 @@ class _ChatMessageTile extends StatelessWidget {
               ThinkingAccordion(thinking: thinking),
               const SizedBox(height: Insets.xs),
             ],
-            // Flush with the eyebrow above it. The 2px indent this had was
-            // too small to read as an indent and enough to stop the body
-            // lining up with the glyph naming it.
+            // Flush with the eyebrow above it: the 2px indent was too small to
+            // read as one and enough to stop the body lining up with the glyph.
             MarkdownMessage(cleanText, onPathTap: onPathTap),
             ?detail,
           ],
@@ -716,13 +626,8 @@ class _ChatMessageTile extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(Radii.md),
           child: Padding(
-            // Tighter vertically than the other roles, because a tool row is
-            // the densest and by far the most repeated thing in a transcript
-            // — one real 265-message session holds 23 pairs of adjacent ones,
-            // so 4px here is 4px multiplied by every call the agent made. It
-            // is what brought a tool-to-tool boundary into line with the rest:
-            // 46 logical pixels between two of them against 36 everywhere
-            // else, measured at 1440x900.
+            // Tighter vertically than the other roles: a tool row is the most
+            // repeated thing in a transcript, so 4px multiplies by every call.
             padding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
               vertical: Insets.xs,
@@ -758,9 +663,7 @@ class _ChatMessageTile extends StatelessWidget {
                         child: Text(
                           'FAILED',
                           // The theme's smallest label rather than a 9pt
-                          // literal: this badge says a tool call failed, and
-                          // text that ignores the type scale also ignores the
-                          // reader who scaled it up.
+                          // literal, which ignores a reader who scaled text up.
                           style: theme.textTheme.labelSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: failure,
@@ -800,14 +703,8 @@ class _ChatMessageTile extends StatelessWidget {
   }
 }
 
-/// Keeps this message as a note, in one tap.
-///
-/// It sits beside Copy because it is the same gesture with a different
-/// destination, and it does the whole job on the first click: **the message's
-/// own words become the note**. Nothing is summarised on the way — the point of
-/// the feature is that you were mid-thought and did not want to stop, and a
-/// dialog asking you to title it would be the interruption you were avoiding.
-/// Titling and editing live in the Notes panel, afterwards.
+/// Keeps this message as a note, in one tap: its own words, nothing summarised
+/// and no dialog — you were mid-thought. Titling lives in the Notes panel.
 class _SaveNoteButton extends StatefulWidget {
   const _SaveNoteButton({required this.onSave});
   final VoidCallback onSave;

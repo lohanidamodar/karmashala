@@ -1,10 +1,5 @@
-/// Which app this binary is: the desktop, or the mobile companion.
-///
-/// Companion mode is chosen at **build time** —
-/// `--dart-define=KARMASHALA_MODE=companion` — and read here and nowhere
-/// else. The const lets the compiler drop the desktop bootstrap (PTYs,
-/// discovery, control server, tray, window chrome) from a companion build
-/// entirely, and vice versa.
+/// Which app this binary is. Chosen at **build time** —
+/// `--dart-define=KARMASHALA_MODE=companion` — so the compiler drops the other.
 class CompanionMode {
   const CompanionMode._();
 

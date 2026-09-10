@@ -11,12 +11,8 @@ import '../application/fanout_service.dart';
 import '../domain/comparison.dart';
 import 'comparison_chrome.dart';
 
-/// One comparison, side by side — the place you come back to.
-///
-/// Everything drawn here comes from the stored [Comparison], never from what a
-/// launch happened to leave in memory, so a comparison opened three days later
-/// looks the same as one opened three seconds after it started. The live
-/// handles ([FanOutService.resultsFor]) only decide which *actions* are offered.
+/// One comparison, side by side. Everything drawn comes from the stored
+/// [Comparison]; the live handles only decide which *actions* are offered.
 class ComparisonView extends ConsumerStatefulWidget {
   const ComparisonView({
     required this.comparisonId,
@@ -219,10 +215,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
     final result = results[candidate.id];
     if (result == null) return;
     // The merge is the moment a verdict is acted on, so it is the moment worth
-    // naming the verifier: a pass the candidate awarded itself and a pass
-    // another session gave it are worth different amounts. Said, never
-    // enforced — G3 step 2 is where a self-graded verdict changes what is
-    // allowed, and blocking here would hide the fact behind a refusal.
+    // naming the verifier. Said, never enforced — a refusal would hide the fact.
     final confirmed = await _confirm(
       title: 'Merge ${candidate.agentId}?',
       body:
@@ -245,11 +238,8 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
     }
   }
 
-  /// Discard, then ask about exactly what it refused to delete.
-  ///
-  /// The service keeps a dirty worktree unless the caller names that session
-  /// (Loop 48). That per-session confirmation had no dialog: this is it, and it
-  /// lists the files that are in the way rather than asking for a blanket force.
+  /// Discard, then ask about exactly what it refused to delete: the service
+  /// keeps a dirty worktree unless the caller names that session.
   Future<void> _discardLosers(
     Comparison comparison,
     Map<String, FanOutResult> results,
@@ -512,11 +502,8 @@ class _CandidateColumn extends ConsumerWidget {
           icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
           label: const Text('Open'),
         ),
-        // The upgrade G3 names: N agents answer, and one of them checks
-        // another. The comparison's own prompt is the claim being checked —
-        // it is what every candidate was asked to do, in the words it was
-        // asked in — and the verdict comes back onto this column's chip
-        // because it is filed against this candidate's session.
+        // N agents answer, and one of them checks another. The comparison's own
+        // prompt is the claim being checked, in the words every candidate was asked in.
         if (candidate.sessionId case final sessionId?)
           ReviewAction(
             sessionId: sessionId,

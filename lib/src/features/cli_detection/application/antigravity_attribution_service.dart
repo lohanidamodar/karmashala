@@ -8,41 +8,11 @@ import '../../sessions/data/session_dao.dart';
 import '../../sessions/domain/session.dart';
 
 /// How many lines of a pane's scrollback to read looking for `agy`'s own resume
-/// hint.
-///
-/// The hint is printed as the CLI exits — `Resume with -c (or command below):`
-/// then `agy --conversation=<uuid>` — so it is at the very bottom of a pane
-/// whose agent has left. Generous rather than exact: a shell prompt and a line
-/// or two of shutdown noise follow it, and the pattern is specific enough that
-/// a wider window cannot match anything else.
+/// hint — printed as the CLI exits, so it sits at the bottom of a dead pane.
 const int kAntigravityAnnouncementLines = 40;
 
 /// Writes the Antigravity conversation id onto the session row that is on it.
-///
-/// **Why this exists at all.** Claude Code takes `--session-id` and is told its
-/// id at launch; Codex's id is discovered by scanning its store for a rollout
-/// written in the right directory at the right time. `agy` allows neither — it
-/// mints its own id and every conversation file looks alike from outside — so an
-/// app-launched Antigravity session had no CLI id at all. That is the phantom
-/// the owner hit: a row nothing could resume ("no CLI session id found"), rename
-/// from the store, or find again. See
-/// the design note and §6.2.
-///
-/// The rules for *which* conversation belong to `AntigravitySessionAttributor`
-/// (`features/agents/data/`), where the evidence for each of them is written
-/// down. This service is only the part that has to know about session rows:
-/// which of them are still waiting for an id, what directory each ran in, whose
-/// pane to read, and which conversations are already spoken for.
-///
-/// ## Cost
-///
-/// A JSON file per store and one `stat` per candidate — not a store scan. It
-/// runs on the status registry's store slot beside adoption, and only while
-/// [wantsStoreSweep]: a workspace with no unattributed Antigravity session pays
-/// nothing. There is deliberately **no attempt cap**, unlike adoption's: a pane
-/// can sit at its prompt for an hour before the user types the first message,
-/// and `agy` writes nothing until they do, so giving up after six sweeps would
-/// abandon exactly the sessions this exists for.
+/// `agy` takes no id and mints its own, so without this the row is a phantom.
 class AntigravitySessionAttributionService {
   AntigravitySessionAttributionService({
     required this.sessionDao,
@@ -77,11 +47,8 @@ class AntigravitySessionAttributionService {
   /// Called with each row that gained an id, so the workspace can redraw.
   final void Function(Session session, String conversationId)? onAttributed;
 
-  /// sessionId → why nothing was learned, in the attributor's own words.
-  ///
-  /// Diagnostics. The words a *user* sees come from `planAntigravityResume` at
-  /// the moment they ask to resume, so they describe the store as it is then
-  /// rather than as it was on some earlier sweep.
+  /// sessionId → why nothing was learned. Diagnostics only: what a user sees
+  /// comes from `planAntigravityResume`, which re-reads the store when asked.
   final Map<String, String> _refusals = {};
 
   /// Rows given an id, over all sweeps.
@@ -112,10 +79,8 @@ class AntigravitySessionAttributionService {
     }
     if (homes.isEmpty) return 0;
 
-    // The app's existing idempotence rule, borrowed from
-    // `SessionAdoptionService`: the CLI's id is the key, one conversation is
-    // one row. Grown as rows are written, so two candidates cannot both be
-    // given the same conversation inside one sweep.
+    // The CLI's id is the key, one conversation one row. Grown as rows are
+    // written, so two candidates cannot both take one conversation in a sweep.
     final held = sessionDao.heldExternalSessionIds();
 
     var learned = 0;
@@ -123,11 +88,8 @@ class AntigravitySessionAttributionService {
       final home = homes[candidate.directory.environmentId];
       if (home == null) continue;
 
-      // One entry, two candidates, and nothing to tell them apart: the store
-      // records the *directory*, not the process. Attributing it to either
-      // would be a coin toss whose losing side resumes the other session's
-      // conversation, so both refuse — the announcement route is unaffected,
-      // because a pane that stated its own id is not an inference.
+      // The store records the directory, not the process, so two candidates in
+      // one directory are a coin toss. A pane that stated its own id is not.
       if (candidate.sharesDirectory && candidate.paneOutput.isEmpty) {
         _refusals[candidate.session.id] =
             'More than one session with no Antigravity conversation id is '
@@ -176,9 +138,8 @@ class AntigravitySessionAttributionService {
     final perDirectory = <String, int>{};
     final candidates = <_Candidate>[];
     for (final row in rows) {
-      // The order of decreasing certainty `sessionWorkingDirectoryOf` uses:
-      // where the process was started, then its worktree, then the repository
-      // root — which is where a row written before schema v22 would have run.
+      // Decreasing certainty, as `sessionWorkingDirectoryOf` does: where the
+      // process started, then its worktree, then the repository root.
       final directory =
           row.workingDirectory ??
           row.worktree ??
@@ -207,10 +168,8 @@ class AntigravitySessionAttributionService {
   }
 }
 
-/// The registry's Antigravity descriptor, found by the fact that makes this
-/// service applicable rather than by its id: it is the agent whose store this
-/// reads. An agent added tomorrow with the same store layout is answered by the
-/// same rule.
+/// The registry's Antigravity descriptor, found by store format rather than by
+/// id, so an agent with the same store layout is answered by the same rule.
 AgentDescriptor? _antigravityIn(AgentRegistry agents) {
   for (final descriptor in agents.descriptors) {
     if (descriptor.store?.format == AgentStoreFormat.antigravityStore) {

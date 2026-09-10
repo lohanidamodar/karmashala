@@ -1,9 +1,5 @@
-/// The kinds of action a run records.
-///
-/// Parsed by name with an [other] fallback rather than `values.byName`, which
-/// throws on anything it does not recognise — the failure mode that made a
-/// fourth agent's session rows unreadable in Loop 30. A step written by a newer
-/// build must still be readable by an older one.
+/// The kinds of action a run records. Parsed by name with an [other] fallback,
+/// never `values.byName`, which throws on a kind a newer build wrote.
 enum VerificationStepKind {
   navigate('Navigate'),
   click('Click'),
@@ -34,11 +30,8 @@ enum VerificationStepKind {
   }
 }
 
-/// One recorded action, in the order it happened.
-///
-/// [ordinal] is the run-local sequence number and doubles as the step's
-/// identity: artifacts point back at a step by ordinal, so a screenshot always
-/// knows which click produced it.
+/// One recorded action, in the order it happened. [ordinal] is the run-local
+/// sequence number and the step's identity — artifacts point back by ordinal.
 class VerificationStep {
   const VerificationStep({
     required this.ordinal,

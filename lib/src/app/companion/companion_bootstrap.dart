@@ -25,51 +25,28 @@ import 'multicast_lock_channel.dart';
 Future<void> runCompanionApp() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // The companion had no logging at all: it never installed the root handler,
-  // so nothing reached the ring buffer or the file, and its own diagnostics
-  // went to `debugPrint` — visible under `flutter run`, and in a release APK
-  // only to whoever has the phone on a cable running `adb logcat`. That is
-  // exactly the build whose failures need evidence, and "it just sits on
-  // connecting" was the whole of more than one bug report as a result.
+  // The companion installed no root handler at all, so its diagnostics went to
+  // `debugPrint` — visible only on a cable, in the build that most needs evidence.
   AppLogger.initialize();
   final logger = AppLogger.named('companion.bootstrap');
   logger.info(buildIdentity());
-  // Not awaited before the identity line above: that line is what a backfill
-  // replays into the file first, so the log opens by saying which build wrote
-  // it even though the file itself arrives later.
+  // Not awaited before the identity line above: a backfill replays that line
+  // into the file first, so the log opens by saying which build wrote it.
   await attachDefaultLogFile(Diagnostics.instance);
 
-  // The real protocol client behind the gateway seam, its pairing record in
-  // the platform keystore. Only this bootstrap wires it, so tests — and the
-  // desktop build, which never runs this file — keep the fake and never
-  // touch secure storage.
+  // The real protocol client behind the gateway seam. Only this bootstrap wires
+  // it, so tests and the desktop build keep the fake and never touch storage.
   final container = ProviderContainer(
     overrides: [
       companionGatewayProvider.overrideWith((ref) {
-        // The LAN scout dials the desktop directly when its beacon is heard,
-        // relay otherwise. Android drops multicast without a real
-        // WifiManager.MulticastLock, held via the runner's own channel; on
-        // networks that still drop it the scout stays inert and the relay
-        // carries everything — best effort by design.
-        //
-        // `onLog` is wired here and nowhere else. Every diagnostic line the
-        // gateway, the protocol client and the transports already write went
-        // nowhere in a release build, so a phone that would not connect
-        // offered no evidence at all — which is how "it just says connecting"
-        // became the whole of a bug report. Lifecycle only: none of these
-        // calls is ever handed a payload, a key or a rendezvous.
-        //
-        // `info`, not `debug`: `AppLogger.debug` is `Level.FINE`, below the
-        // default root level, so these would be filtered out before any sink
-        // saw them and the file would be empty in the one build that has no
-        // other way to be inspected. They are low-frequency lifecycle lines.
+        // The LAN scout dials the desktop when its beacon is heard, relay otherwise.
+        // `onLog` is `info`, not `debug`, or a release build's file stays empty.
         final lanLog = AppLogger.named('companion.lan');
         final gatewayLog = AppLogger.named('companion.gateway');
         final gateway = RemoteCompanionGateway(
           store: SecureCompanionStore(),
-          // What this build actually runs on. Reported so a push can be routed
-          // by it later; nothing spends it yet, and a guess would be worse
-          // than the honest `unknown` every other build sends.
+          // What this build actually runs on, reported so a push can be routed by it.
+          // Nothing spends it yet; a guess would be worse than the honest `unknown`.
           deviceKind: !kIsWeb && (Platform.isAndroid || Platform.isIOS)
               ? CompanionDeviceKind.phone
               : CompanionDeviceKind.desktop,
@@ -108,10 +85,8 @@ Future<void> runCompanionApp() async {
           .attentionEvents
           .listen((event) => notifier.show(notificationFor(event)));
     } catch (error, stackTrace) {
-      // Notifications are a convenience; the app must still run without them.
-      // Logged rather than swallowed: a phone that silently never notifies is
-      // indistinguishable from a desktop that never raised an attention event,
-      // and the two have entirely different fixes.
+      // Logged rather than swallowed: a phone that silently never notifies looks
+      // exactly like a desktop that never raised an attention event.
       logger.warning('Local notifications unavailable.', error, stackTrace);
     }
   }

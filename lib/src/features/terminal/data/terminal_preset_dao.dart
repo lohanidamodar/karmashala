@@ -4,13 +4,8 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/terminal_preset.dart';
 
-/// Data-access for the `terminal_presets` table (v44). Hand-written SQL, no
-/// codegen, the same shape as `CommandSnippetDao`.
-///
-/// **A row, not a metadata key**, unlike the workspace tree beside it in
-/// `TerminalLayoutDao`. That tree is *the* layout and there is one; presets are
-/// a list the user names, adds to and deletes from, and a list that has to be
-/// ordered and looked up by name is what a table is for.
+/// Data-access for the `terminal_presets` table (v44), hand-written SQL. A row
+/// rather than a metadata key, because presets are a list ordered by name.
 class TerminalPresetDao {
   TerminalPresetDao(this._db);
 
@@ -33,10 +28,8 @@ class TerminalPresetDao {
       .nonNulls
       .firstOrNull;
 
-  /// Writes [preset] under its id, replacing whatever was there.
-  ///
-  /// Upsert rather than insert-or-replace: re-saving a preset under the same
-  /// name keeps its id, which is what anything referring to it holds.
+  /// Writes [preset] under its id. Upsert rather than insert-or-replace, so
+  /// re-saving under the same name keeps the id others hold.
   void save(TerminalPreset preset, DateTime now) {
     _db.execute(
       'INSERT INTO terminal_presets (id, name, shape, created_at, updated_at) '

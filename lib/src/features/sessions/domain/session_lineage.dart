@@ -1,29 +1,15 @@
 /// Why one session has a parent, and what a chain of them looks like.
 library;
 
-/// The reason a session names another as its parent.
-///
-/// `parent_session_id` has existed since Loop 41, but it only ever recorded
-/// *that* there was a parent, and there was exactly one way to acquire one: an
-/// agent calling `open_new_session` through MCP. Two more ways arrive here, and
-/// they mean genuinely different things to a reader — "an agent delegated this",
-/// "the user moved this conversation to another provider", "the user branched
-/// this conversation" — so the link says which.
-///
-/// **Stored, unlike depth.** `SessionDepth` is walked from the chain precisely
-/// because a stored number is a second source of truth that can disagree with
-/// the chain it summarises. A link kind is not a summary of anything: it is a
-/// fact about the moment of creation that nothing else records and nothing can
-/// re-derive later. The two are different in kind, and the argument against one
-/// is not an argument against the other.
+/// The reason a session names another as its parent. **Stored, unlike depth**:
+/// a link kind is a fact about creation that nothing can re-derive later.
 enum SessionLink {
   /// An agent asked for this session through MCP. The original meaning of
   /// `parent_session_id`, and the only one before schema v13.
   spawn('spawned by'),
 
-  /// The user moved the work to a different agent. The child was launched with
-  /// a handoff packet as its first message and shares **no** agent-level
-  /// history with the parent — only the text of the packet.
+  /// The user moved the work to a different agent. The child shares **no**
+  /// agent-level history with the parent — only the text of the packet.
   handoff('handed off from'),
 
   /// The user branched the conversation. The child starts from the parent's own
@@ -36,11 +22,8 @@ enum SessionLink {
   /// from *Fix the parser*".
   final String phrase;
 
-  /// Parses a stored value, or `null` for anything unrecognised — including the
-  /// null written by a row created before schema v13.
-  ///
-  /// Deliberately not `values.byName`, which throws on an unknown string and is
-  /// the failure mode that made a fourth agent's rows unreadable in Loop 30.
+  /// Parses a stored value, or `null` for anything unrecognised. Not
+  /// `values.byName`, which throws and made a fourth agent's rows unreadable.
   static SessionLink? parse(String? value) {
     if (value == null) return null;
     for (final link in SessionLink.values) {
@@ -63,9 +46,8 @@ class SessionLineageNode {
   final String sessionId;
   final String title;
 
-  /// Why *this* session points at its parent. Null for a root session, and also
-  /// null for a parented row written before schema v13 — the two are told apart
-  /// by whether the node has a parent above it in [SessionLineage.ancestors].
+  /// Why *this* session points at its parent. Null for a root and for a pre-v13
+  /// row; [SessionLineage.ancestors] tells the two apart.
   final SessionLink? link;
 
   /// The agent that ran it, when it is still resolvable. Null is "we cannot
@@ -88,11 +70,7 @@ class SessionLineageNode {
 }
 
 /// Where one session sits among the sessions it came from and the ones that
-/// came from it.
-///
-/// The explorer renders this; nothing here knows that. It is a read model over
-/// the parent chain, built with the same cycle guard [SessionDepth] uses and for
-/// the same reason: a cycle would hang the caller's turn rather than fail it.
+/// came from it, guarded like [SessionDepth]: a cycle would hang the turn.
 class SessionLineage {
   const SessionLineage({
     required this.self,
@@ -123,11 +101,8 @@ class SessionLineage {
   /// number as [SessionDepth.maxWalk], and for the same reason.
   static const int maxWalk = 64;
 
-  /// Builds a lineage for [sessionId] from two lookups: one node by id, and one
-  /// list of children.
-  ///
-  /// Pure, so the walk and its guard are testable without a database. Returns
-  /// null when [sessionId] names nothing.
+  /// Builds a lineage for [sessionId] from two lookups. Pure, so the walk and
+  /// its guard are testable without a database; null when nothing is named.
   static SessionLineage? build(
     String sessionId, {
     required ({SessionLineageNode node, String? parentId})? Function(String id)
@@ -148,9 +123,7 @@ class SessionLineage {
       }
       final found = lookup(parentId);
       // A parent id that names nothing is an *orphan*, not a broken chain:
-      // deleting a parent deliberately orphans its children rather than
-      // cascading (see the v10 migration), so this is an expected shape and the
-      // lineage simply stops here.
+      // deleting a parent orphans its children rather than cascading.
       if (found == null) break;
       ancestors.insert(0, found.node);
       parentId = found.parentId;

@@ -27,28 +27,8 @@ class EnvVaultRefusal implements Exception {
   String toString() => message;
 }
 
-/// The environment variables on disk: one JSON file, in a directory restricted
-/// to this account.
-///
-/// **Why a file and not the database.** Three reasons, and none of them is
-/// taste:
-///
-///  1. `karmashala.sqlite` carries no asserted ACL — it inherits whatever
-///     `%APPDATA%` has. `restrictHandshakeFileToCurrentUser` documents at
-///     length why inherited is not the same as applied.
-///  2. SQLite does not erase deleted rows. Without `PRAGMA secure_delete` (off
-///     by default here) a removed secret stays in freelist pages, and in the
-///     `-wal` sidecar, indefinitely — "Remove" would not remove.
-///  3. The database is the app's shareable state. A separate file with its own
-///     ACL cannot be swept into an export by accident.
-///
-/// **What the permissions buy, and what they do not.** The same boundary the
-/// MCP handshake file establishes: no *other* unprivileged account on this
-/// machine can read it. A local administrator can, because an administrator can
-/// take ownership of anything. And **any process running as this user can**,
-/// because the app itself must read the values with no prompt in order to hand
-/// them to a child process — there is no arrangement that gives a terminal its
-/// variables and withholds them from everything else running as you.
+/// The environment variables on disk: one JSON file in a directory restricted
+/// to this account, deliberately not the database — see docs/SETTLED.md.
 class EnvVault {
   EnvVault({
     required Directory directory,
@@ -61,14 +41,7 @@ class EnvVault {
        _logger = logger;
 
   /// A vault with nowhere to write: reports empty, stores nothing, refuses
-  /// secrets.
-  ///
-  /// This is the **default** for `envVaultProvider`, and deliberately not a
-  /// throwing stub the way `databaseProvider` is. An absent vault is a
-  /// legitimate state — "no variables configured" — and the one thing this
-  /// feature must never do is stop a terminal opening. A test that does not
-  /// care about environment variables gets this and never notices the feature
-  /// exists.
+  /// secrets. The **default**, because this feature must never stop a terminal.
   EnvVault.unavailable()
     : _directory = null,
       _cipher = const PlaintextEnvValueCipher(),
@@ -82,14 +55,8 @@ class EnvVault {
 
   EnvVaultData _data = EnvVaultData.empty;
 
-  /// Set when the vault on disk could not be fully understood — unparseable,
-  /// written by a cipher this build does not have, or holding records this
-  /// build's key cannot open.
-  ///
-  /// While it is set, [save] refuses. Without it, a vault whose key was lost
-  /// would load as "no variables", and the very next edit would write that
-  /// emptiness over values that were merely unreadable — turning a recoverable
-  /// problem into a destroyed one.
+  /// Set when the vault on disk could not be fully understood. While it is set
+  /// [save] refuses, so the next edit cannot overwrite merely unreadable values.
   bool _readOnly = false;
 
   /// Whether the vault is refusing writes because what is on disk could not be
@@ -107,17 +74,8 @@ class EnvVault {
   /// The directory the vault lives in, under application support.
   static const String directoryName = 'secrets';
 
-  /// The real vault: `<application support>/secrets/env.json`, hardened, with
-  /// its values encrypted under a key kept in the local (non-roaming)
-  /// directory.
-  ///
-  /// The cipher is chosen here rather than passed in, because the choice is not
-  /// a preference: it is whichever protection this machine can actually
-  /// provide. If the key cannot be created or read — a read-only cache
-  /// directory, a filesystem with no ACLs — the vault falls back to file
-  /// permissions only and **says so** through [EnvVaultData.protection], which
-  /// the settings page renders. A silent downgrade would be the one thing worse
-  /// than no encryption.
+  /// The real vault, hardened, values encrypted under a key in the local
+  /// directory. A machine that cannot hold a key falls back and **says so**.
   static Future<EnvVault> open({AppLogger? logger}) async {
     final support = await appSupportDirectory();
     EnvValueCipher cipher;
@@ -138,10 +96,8 @@ class EnvVault {
 
   File get _file => File(p.join(_directory!.path, fileName));
 
-  /// Creates and hardens the directory, then reads what is in it.
-  ///
-  /// Never throws. Every failure becomes an [EnvVaultData] that says what is
-  /// wrong and injects nothing.
+  /// Creates and hardens the directory, then reads what is in it. Never throws:
+  /// every failure becomes an [EnvVaultData] that says what is wrong.
   Future<EnvVaultData> load() async {
     _readOnly = false;
     if (_directory == null) return _data = EnvVaultData.empty;
@@ -208,10 +164,8 @@ class EnvVault {
     final rows = json['variables'];
     final variables = <EnvVariable>[];
     var skipped = 0;
-    // Counted apart from [skipped] because the two mean opposite things. A
-    // malformed record is one bad row to drop; a record that will not decrypt
-    // means the *key* is gone, every value is still there on disk, and the one
-    // thing that must not happen is writing over them.
+    // Counted apart from [skipped] because they mean opposite things: a malformed
+    // record is one bad row; one that will not decrypt means the *key* is gone.
     var undecryptable = 0;
     if (rows is List) {
       for (final row in rows) {
@@ -272,14 +226,8 @@ class EnvVault {
       ? EnvProtection.filePermissions
       : EnvProtection.localKey;
 
-  /// Writes [next] and returns what is now in force.
-  ///
-  /// **Fail-closed on secrets.** If the directory ACL could not be applied,
-  /// saving a secret variable is refused outright rather than written under
-  /// permissions that were not applied — the same call
-  /// `LauncherControlServer` makes about its privileged token, for the same
-  /// reason. Plain variables are unaffected: they are not claiming a protection
-  /// they do not have.
+  /// Writes [next] and returns what is now in force. **Fail-closed on secrets**:
+  /// if the ACL could not be applied, saving a secret is refused outright.
   Future<EnvVaultData> save(EnvVaultData next) async {
     if (_directory == null) {
       throw const EnvVaultRefusal(
@@ -314,11 +262,7 @@ class EnvVault {
     });
 
     // Written to a sibling and renamed over the target, so a crash mid-write
-    // leaves the previous vault intact rather than a truncated one. The
-    // directory's ACL is inheritable (`(OI)(CI)` on Windows, `0700` on POSIX),
-    // so the temp file is born restricted; it is restricted again explicitly
-    // because being born right is a property of the directory, and this file
-    // must not depend on that staying true.
+    // leaves the previous vault intact. Restricted explicitly, not by inheritance.
     final target = _file;
     final temp = File('${target.path}.tmp');
     try {

@@ -13,39 +13,29 @@ import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';
 import '../data/file_listing_service.dart';
 
-/// How far in a row at [depth] starts. One expression, used by the rows and by
-/// the "Empty"/"Loading…" placeholders alike, because the two drifting apart is
-/// exactly what a reader sees as a ragged tree.
+/// How far in a row at [depth] starts. One expression for the rows and the
+/// placeholders alike, because the two drifting apart reads as a ragged tree.
 double _indentFor(int depth) => Insets.md + depth * Chrome.treeIndent;
 
 /// A tree row is tighter than [Insets.xs]: at [Chrome.row] density the padding
 /// is what stops two file names touching, not what separates sections.
 const double _rowPadY = 3;
 
-/// How many rows have been drawn. Test-only, and the only way to pin the claim
-/// that a reveal target rebuilds the rows *on the way to it* and no others: the
-/// panel routinely holds hundreds of rows, and rebuilding all of them because
-/// one is selected is the cost this feature must not add.
+/// How many rows have been drawn. Test-only: the only way to pin that a reveal
+/// target rebuilds the rows on the way to it and no others.
 @visibleForTesting
 int debugFileRowBuilds = 0;
 
-/// A lazy file/folder tree for the selected repository. Folders expand in place;
-/// tapping a file opens it in the configured code editor. Listing runs on the
-/// Windows host (WSL folders via their `\\wsl.localhost\…` form).
-///
-/// Every row — file and folder alike — right-clicks to a menu that reveals it in
-/// the system file manager or copies its path. The reveal is
-/// [RevealInFileManager]'s, the same one the Explorer, the repository info view
-/// and the comparison view use; nothing here starts a process of its own.
+/// A lazy file/folder tree for the selected repository, listed on the Windows
+/// host. Every row right-clicks to reveal or copy; nothing starts a process.
 class FileExplorerView extends ConsumerWidget {
   const FileExplorerView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final root = ref.watch(selectedRepoWindowsRootProvider);
-    // The header stays in the empty state. This surface tells the side panel it
-    // draws its own (`drawsOwnHeader`), so returning a bare placeholder left the
-    // panel with no title and no way out of it but the rail glyph.
+    // The header stays in the empty state: this surface draws its own, so a bare
+    // placeholder left the panel with no title and no way out but the rail glyph.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -137,12 +127,8 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
   /// Scrolling once is a reveal; scrolling on every rebuild fights the reader.
   bool _scrolled = false;
 
-  /// The row's path as the rest of the app spells one.
-  ///
-  /// `DirEntry.windowsPath` is already a host path — the listing runs on the
-  /// Windows host through `dart:io` — so this only puts the owning environment
-  /// back on it, which is what [RevealInFileManager] needs to answer
-  /// "can this be shown?" without guessing.
+  /// The row's path as the rest of the app spells one — `DirEntry.windowsPath`
+  /// with its owning environment put back, which is what reveal needs.
   EnvironmentPath get _path => EnvironmentPath(
     environmentId: localHostEnvironmentId,
     path: widget.entry.windowsPath,
@@ -170,13 +156,7 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
   }
 
   /// Shows the row in the host's file manager, and says why when it cannot.
-  ///
-  /// A file is *selected* inside its folder and a folder is *opened* — the same
-  /// distinction [RevealInFileManager.reveal] draws. Failure comes back as a
-  /// [RevealOutcome] rather than a throw, so a `catch` here would never fire and
-  /// the click would be silent; the menu entry is already withheld where the
-  /// path has no host spelling, and this covers what fails anyway, such as a
-  /// file manager that will not start.
+  /// Failure is a [RevealOutcome], not a throw, so a `catch` would never fire.
   Future<void> _reveal() async {
     final outcome = await ref
         .read(revealInFileManagerProvider)
@@ -189,10 +169,8 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
     _say('Path copied to clipboard');
   }
 
-  /// Right-click items. Reveal is offered only where the host can actually
-  /// reach the row — an entry that always fails is worse than no entry, and
-  /// [RevealInFileManager.canReveal] starts no process, so asking while
-  /// building the menu is free. "Copy path" always works: it is text.
+  /// Right-click items. Reveal is offered only where the host can reach the row;
+  /// `canReveal` starts no process, so asking while building is free.
   List<PopupMenuEntry<String>> _menuItems() => [
     if (ref.read(revealInFileManagerProvider).canReveal(_path))
       DesktopMenuItem(
@@ -218,13 +196,8 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
     }
   }
 
-  /// Opens on the way down, and puts the target on screen once it exists.
-  ///
-  /// After the frame rather than during it, and deliberately without any
-  /// sequencing of its own: expanding mounts a `_DirChildren` whose listing is
-  /// async, and the rows that listing produces ask this same question in turn.
-  /// The tree therefore walks itself down one listing at a time, whether the
-  /// target arrived while the panel was open, closed, or halfway expanded.
+  /// Opens on the way down, and puts the target on screen once it exists. After
+  /// the frame and with no sequencing: each new listing asks the same question.
   void _followReveal(FileRevealRole role) {
     if (role == FileRevealRole.none) {
       _scrolled = false;
@@ -317,13 +290,8 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
         ),
       ),
     );
-    // [RowContextMenu] rather than a bare right-click: this row had the
-    // gesture and nothing else, so a keyboard could reach every file in the
-    // tree and none of their actions. It now answers `Shift+F10`, the Menu key
-    // and a screen reader's named action too — the row's own `InkWell` is the
-    // focus stop that makes those work. No `⋮`: nothing here is hidden behind
-    // one, and a glyph on every line of a file tree is the clutter this pane
-    // has always done without.
+    // [RowContextMenu] rather than a bare right-click: with the gesture alone a
+    // keyboard could reach every file and none of their actions. No `⋮` here.
     final menu = Semantics(
       selected: selected,
       child: RowContextMenu(

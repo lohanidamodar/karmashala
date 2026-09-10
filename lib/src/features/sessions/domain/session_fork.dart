@@ -1,28 +1,13 @@
 import 'package:agent_cli/descriptors.dart';
 
-/// What forking *this* session would actually do.
-///
-/// The registry says what an **agent** can do ([AgentForkSupport]); this says
-/// what can be done for one **session**, which is a different question with one
-/// extra input: whether we know the CLI's own id for the conversation.
-///
-/// That input is not a detail. Codex will not accept a session id at launch, so
-/// a native Codex row's `external_session_id` is null until something discovers
-/// it — the gap Loop 46 §6 investigated and deliberately left open rather than
-/// closing it with a guess. A fork needs to name the conversation being forked,
-/// and `codex fork` with no id opens an interactive picker that chooses by
-/// recency in a directory. Passing that off as "the fork worked" would forge the
-/// one thing the user cares about: *which* conversation they branched.
-///
-/// So a capability of `native` is necessary and not sufficient, and the
-/// degraded case is not an error — it is a handoff, named as one.
+/// What forking *this* session would actually do. `native` is necessary and not
+/// sufficient: `codex fork` with no id picks by recency, which forges the id.
 enum SessionForkKind {
   /// The CLI forks it, from its own record. History is shared exactly.
   native,
 
-  /// The CLI cannot (or cannot be told which conversation), so a handoff packet
-  /// carries a quoted recap instead. **A weaker thing**, and the UI says so
-  /// before it happens.
+  /// The CLI cannot, or cannot be told which conversation, so a packet carries
+  /// a quoted recap instead. **A weaker thing**, and the UI says so first.
   handoff,
 
   /// Neither is possible.
@@ -46,9 +31,8 @@ class SessionForkPlan {
   bool get isNative => kind == SessionForkKind.native;
   bool get isRefused => kind == SessionForkKind.refused;
 
-  /// Decides for a session of [agentName] running under [descriptor], whose
-  /// CLI-side conversation id is [externalSessionId] (null when we never
-  /// learned one).
+  /// Decides for a session of [agentName] under [descriptor], whose CLI-side
+  /// conversation id is [externalSessionId] — null when we never learned one.
   static SessionForkPlan decide({
     required AgentDescriptor? descriptor,
     required String agentName,
@@ -72,14 +56,8 @@ class SessionForkPlan {
         }
         return SessionForkPlan._(
           SessionForkKind.native,
-          // The second sentence is the weaker of two paths, named. A CLI's own
-          // in-session branch switches the *running process* into a copy and
-          // takes everything that process is holding with it; this starts a
-          // second process from outside and can only hand it the
-          // conversation. Deliberately says what is true of any CLI by
-          // construction rather than listing one CLI's grants, subagents and
-          // links — that list is a claim about a particular agent, and this
-          // sentence is shown for all of them.
+          // The weaker of two paths, named: a CLI's own branch takes the
+          // running process with it; this can only hand over the conversation.
           '$agentName forks this itself. The new session starts with the whole '
           'conversation and then diverges; this one is left exactly as it '
           'is.\n\n'
@@ -100,12 +78,8 @@ class SessionForkPlan {
           'saying it.',
         );
       case AgentForkStyle.unsupported:
-        // The default, and therefore also the answer for an agent nobody has
-        // checked. It is deliberately a refusal rather than an inferred
-        // handoff: whether a packet can be built and delivered depends on
-        // whether the agent has a readable store *and* takes an opening prompt,
-        // and quietly assuming both for an unexamined CLI is how a fork ends up
-        // launching a blank session that has been told nothing.
+        // The default, and the answer for an agent nobody has checked. A
+        // refusal, not an inferred handoff: assuming both would launch a blank.
         return SessionForkPlan._(
           SessionForkKind.refused,
           'Karmashala has no verified way to fork a $agentName conversation, '

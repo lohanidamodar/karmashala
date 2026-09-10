@@ -9,14 +9,8 @@ import '../application/device_providers.dart';
 import '../application/device_recording_controller.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// The one thing on screen that says a recording is running.
-///
-/// A recording is a long-lived side effect with a file at the end of it, so it
-/// cannot be represented by a button that looks pressed: the pane it was
-/// started from is unmounted every time the side panel switches surface. This
-/// reads [deviceRecordingProvider], which outlives that, and it is also where
-/// the outcome is read — a recording that ended while the user was elsewhere is
-/// still waiting to be told about when they come back.
+/// The one thing on screen that says a recording is running: it reads
+/// [deviceRecordingProvider], which outlives the pane a switch unmounts.
 class DeviceRecordingBanner extends ConsumerWidget {
   const DeviceRecordingBanner({super.key});
 
@@ -36,12 +30,8 @@ class _Running extends ConsumerWidget {
 
   final DeviceRecordingActive recording;
 
-  /// Why nothing is being captured, in the terms the user can act on.
-  ///
-  /// Two different situations wearing the same missing frame stream: a pane
-  /// they switched away from, which comes back by itself, and a device that has
-  /// gone, which does not. Naming the wrong one would either invite them to
-  /// wait for nothing or throw away a recording that was about to resume.
+  /// Why nothing is being captured, in terms the user can act on: a pane they
+  /// switched away from comes back by itself, a device that went does not.
   String? _paused(WidgetRef ref) {
     if (recording.receiving) return null;
     if (recording.target.platform != DevicePlatform.android) {
@@ -71,10 +61,8 @@ class _Running extends ConsumerWidget {
     final paused = _paused(ref);
     return _Surface(
       icon: paused == null ? AppIcons.circle : AppIcons.pauseCircle,
-      // The one place in this app that paints a dot to mean "recording", and it
-      // is the attention colour rather than the error colour: a recording in
-      // progress is something the user is being asked to remember, not
-      // something that went wrong.
+      // The attention colour rather than the error colour: a recording in
+      // progress is something to remember, not something that went wrong.
       iconColour: paused == null
           ? SemanticColors.of(context).attention
           : theme.colorScheme.onSurfaceVariant,
@@ -205,9 +193,7 @@ class _Surface extends StatelessWidget {
               children: [
                 Text(title, style: theme.textTheme.labelLarge),
                 const SizedBox(height: 2),
-                // Selectable, because the whole point of the sentence is a
-                // path the user may want to paste into a player or an ffmpeg
-                // command.
+                // Selectable: the point of the sentence is a path to paste.
                 SelectableText(
                   detail,
                   style: theme.textTheme.bodySmall?.copyWith(

@@ -1,14 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 
-/// Caps how many SSH channels are opened on one connection at a time.
-///
-/// An SSH server bounds the sessions a single connection may hold open —
-/// OpenSSH's `MaxSessions` defaults to **10** — and asking for one past the
-/// limit fails with "open failed" rather than waiting. Karmashala fans probes
-/// out on purpose, so without a cap a wide enough fan-out turns into spurious
-/// command failures. Waiting a few milliseconds for a slot is the right answer;
-/// a failed `git status` is not.
+/// Caps the channels one connection opens at once: OpenSSH's `MaxSessions`
+/// defaults to 10, and a channel past the limit fails rather than waiting.
 class ChannelLimiter {
   ChannelLimiter(this.limit) : assert(limit > 0), _available = limit;
 

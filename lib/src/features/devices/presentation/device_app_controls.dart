@@ -8,34 +8,8 @@ import '../../../core/util/file_picking.dart';
 import '../application/device_app_actions.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// **Put a build on the device, start it, stop it** — beside the live view.
-///
-/// The three verbs a manual test needs between two attempts, and the reason
-/// they were worth surfacing: an agent could cold-restart the app under the
-/// picture and the person watching it could not.
-///
-/// Everything goes through [DeviceAppActions], which is the layer
-/// `DeviceControlTools` itself sits on — the same fleet, the same capability
-/// check, the same [DeviceClaims]. So a device another session is driving
-/// refuses these buttons exactly as it refuses the tools, **naming the holder**
-/// rather than failing quietly or, worse, succeeding and breaking somebody's
-/// run.
-///
-/// The answer line under the row carries its age (§19). "Installed" was true
-/// when the driver said it and is not a standing claim about the device now.
-///
-/// **Install takes a typed path as well as a picker**, and that is a rule
-/// rather than a convenience: `core/util/file_picking.dart` records that on
-/// Windows the host's dialog is built on this isolate's own thread, so a picker
-/// that never appears leaves the window Not Responding with nothing to press.
-/// Every Browse surface in this app therefore has a field beside it — this one
-/// was the last that did not, which is why the freeze reported on 2026-09-09
-/// had no way out. With a path in the field the button does not open a dialog
-/// at all, and says so by dropping its ellipsis.
-///
-/// **What it cannot offer is a drop from Explorer.** That needs a native
-/// `IDropTarget`, which is not in this app's dependencies — the same limit
-/// `DeviceFilesDialog` states for dragging a file to or from the device.
+/// **Put a build on the device, start it, stop it** — beside the live view,
+/// through [DeviceAppActions]: the same claim the tools take, naming holders.
 class DeviceAppControls extends ConsumerStatefulWidget {
   const DeviceAppControls({required this.device, this.pickFile, super.key});
 
@@ -43,21 +17,15 @@ class DeviceAppControls extends ConsumerStatefulWidget {
   final AndroidDevice? device;
 
   /// A seam for the host's file dialog. On Windows the picker runs on the
-  /// isolate's own thread — see `file_picking.dart` — so a test must never
-  /// reach the real one.
+  /// isolate's own thread — see `file_picking.dart` — so a test never opens it.
   final Future<XFile?> Function()? pickFile;
 
   @override
   ConsumerState<DeviceAppControls> createState() => _DeviceAppControlsState();
 }
 
-/// A path as the host hands it over.
-///
-/// Explorer's **Copy as path** wraps what it puts on the clipboard in double
-/// quotes, and PowerShell's `Resolve-Path` prints them too. A field that
-/// refused those would fail at the one job it has — being the way out when the
-/// picker is not available — so they come off here rather than being a rule the
-/// user has to know.
+/// A path as the host hands it over — Explorer's *Copy as path* and PowerShell
+/// wrap it in double quotes, taken off here rather than left as a user's rule.
 String unquotePath(String value) {
   final trimmed = value.trim();
   return trimmed.length >= 2 &&
@@ -103,10 +71,8 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
   }
 
   Future<void> _install() async {
-    // The field wins when it has something in it. Falling back to the picker
-    // would put a dialog in front of a user who has already said which file
-    // they mean — and, on a frozen window, in front of the only control that
-    // still works.
+    // The field wins when it has something in it: falling back to the picker
+    // would put a dialog in front of a frozen window's only working control.
     final path = _typedPath ?? (await (widget.pickFile ?? _browse)())?.path;
     if (path == null) return;
     await _run(

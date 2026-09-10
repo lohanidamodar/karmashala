@@ -3,12 +3,8 @@ import 'package:agent_cli/process.dart';
 /// What kind of thing a remote directory entry is.
 enum RemoteEntryKind { directory, file, symlink, other }
 
-/// One entry in a remote directory listing.
-///
-/// [path] is a full [EnvironmentPath] in the remote environment, never a bare
-/// string: a listing of `/home/me/src` on `build-box` and the same text on the
-/// local machine are different places, and the type keeps them apart
-/// (principle 2).
+/// One entry in a remote directory listing. [path] is a full [EnvironmentPath],
+/// never a bare string: the same text names different places (principle 2).
 class RemoteDirectoryEntry {
   const RemoteDirectoryEntry({
     required this.name,
@@ -33,9 +29,8 @@ class RemoteDirectoryEntry {
   String toString() => 'RemoteDirectoryEntry(${path.path}, ${kind.name})';
 }
 
-/// Joins a POSIX [directory] and [name]. Remote paths are always POSIX, so this
-/// never consults the host platform's separator — doing so is how a Windows
-/// backslash ends up in a remote path.
+/// Joins a POSIX [directory] and [name], never consulting the host separator —
+/// that is how a Windows backslash ends up in a remote path.
 String joinRemotePath(String directory, String name) {
   if (directory.isEmpty || directory == '/') return '/$name';
   final base = directory.endsWith('/')
@@ -44,10 +39,8 @@ String joinRemotePath(String directory, String name) {
   return '$base/$name';
 }
 
-/// The parent of a POSIX [directory], or null at the root.
-///
-/// Returning null rather than `/` for the root is what lets a browser disable
-/// "up" instead of offering a step that goes nowhere.
+/// The parent of a POSIX [directory], or null at the root: null is what lets a
+/// browser disable "up" rather than offer a step that goes nowhere.
 String? parentRemotePath(String directory) {
   if (directory.isEmpty || directory == '/') return null;
   final trimmed = directory.endsWith('/')

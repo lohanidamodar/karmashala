@@ -64,11 +64,7 @@ PullRequestSnapshot? parseGhPullRequestView(String json) {
 }
 
 /// Sorts a `statusCheckRollup` array into passed / failed / pending / skipped.
-///
-/// Two shapes arrive in the same array: GitHub Actions and other apps report
-/// `CheckRun` (a `status` plus, once complete, a `conclusion`), while older
-/// integrations report `StatusContext` (a single `state`). Reading only one of
-/// them would silently call a repository "no checks".
+/// Two shapes arrive: `CheckRun` and the older `StatusContext`.
 ChecksSummary parseCheckRollup(Object? rollup) {
   if (rollup is! List) return ChecksSummary.none;
   var passed = 0;
@@ -110,13 +106,8 @@ ChecksSummary parseCheckRollup(Object? rollup) {
   );
 }
 
-/// What one pull request's review conversations and its repository's merge
-/// settings say — the two facts the delivery strip needs that `gh pr view
-/// --json` cannot give it.
-///
-/// A record rather than a class because it is a return shape and nothing keeps
-/// one: both halves are unpacked into [PullRequestSnapshot] and
-/// `SessionDelivery` the moment they arrive.
+/// One pull request's review conversations and its repository's merge
+/// settings — the two facts `gh pr view --json` cannot give the delivery strip.
 typedef ForgePolicy = ({
   MergeStrategies strategies,
 
@@ -131,21 +122,8 @@ const ForgePolicy kUnknownForgePolicy = (
   unresolvedReviewThreads: null,
 );
 
-/// The one query in this file that is not `gh <noun> <verb> --json`.
-///
-/// **Both halves come back in one process on purpose.** Unresolved review
-/// threads are not in `gh pr view`'s field set at all (checked on 2026-09-02:
-/// the nearest fields, `comments` and `reviews`, carry bodies with no
-/// resolution flag), and the merge settings are on the repository rather than
-/// the pull request, so they would otherwise be a `gh pr view` *plus* a `gh
-/// repo view`. GraphQL will return a repository and one of its pull requests in
-/// the same document, which turns two extra processes into one — and this call
-/// is already the expensive half of the delivery poll.
-///
-/// `{owner}` and `{repo}` are `gh`'s own placeholders, filled from the working
-/// directory, so this stays repo-relative like every other call here and needs
-/// no parsing of the remote URL. Verified against `lohanidamodar/karmashala-app`
-/// and `cli/cli` on 2026-09-02.
+/// Both halves in one process: unresolved review threads are not in `gh pr
+/// view`'s field set, and the merge settings live on the repository.
 const String kForgePolicyQuery =
     r'query($owner:String!,$name:String!,$number:Int!){'
     r'repository(owner:$owner,name:$name){'
@@ -153,14 +131,8 @@ const String kForgePolicyQuery =
     r'pullRequest(number:$number){'
     r'reviewThreads(first:100){totalCount nodes{isResolved}}}}}';
 
-/// Parses [kForgePolicyQuery]'s response.
-///
-/// **Every missing piece degrades to null rather than to a zero.** A GraphQL
-/// response that carries `errors` alongside a partial `data` is normal — a
-/// token that can read a repository's pull requests but not its settings gets
-/// exactly that — and reading an absent `mergeCommitAllowed` as `false` would
-/// disable a merge the repository actually allows. Likewise an absent
-/// `reviewThreads` is "did not ask", not "nothing is open".
+/// Parses [kForgePolicyQuery]'s response. Every missing piece degrades to null
+/// rather than a zero — a partial `data` beside `errors` is normal.
 ForgePolicy parseForgePolicy(String json) {
   const empty = kUnknownForgePolicy;
   final trimmed = json.trim();
@@ -194,19 +166,13 @@ ForgePolicy parseForgePolicy(String json) {
   for (final node in nodes) {
     if (node is Map && node['isResolved'] == false) unresolved++;
   }
-  // The page is 100 threads. A pull request with more than that has bigger
-  // problems than this count's precision, and undercounting is the harmless
-  // direction: the strip only asks whether the number is above zero, and the
-  // unresolved threads on a conversation that long are not all on page two.
+  // The page is 100 threads; the strip only asks whether the number is above
+  // zero, and undercounting is the harmless direction.
   return (strategies: strategies, unresolvedReviewThreads: unresolved);
 }
 
-/// Parses one `/branches/{b}/protection` body into the rules it names.
-///
-/// Every field is read positively: a missing `required_pull_request_reviews`
-/// leaves [BranchProtection.requiredApprovals] null rather than zero, because
-/// "the body did not carry it" and "no review is required" would send the
-/// strip to name the wrong rule — or to stop naming the right one.
+/// Parses one `/branches/{b}/protection` body. Every field is read positively:
+/// "the body did not carry it" and "no review is required" are different.
 BranchProtection parseBranchProtection(String json, {String? branch}) {
   final trimmed = json.trim();
   if (trimmed.isEmpty) return BranchProtection.unknown;
@@ -251,12 +217,8 @@ BranchProtection parseBranchProtection(String json, {String? branch}) {
   );
 }
 
-/// Whether this failure was GitHub refusing the *reader*, not the branch
-/// having nothing to say.
-///
-/// `gh api` prints the response body on stdout and its own line on stderr, so
-/// both are searched: `{"message":"Must have admin rights to Repository.",
-/// "status":"403"}` and `gh: Must have admin rights to Repository. (HTTP 403)`.
+/// Whether this failure was GitHub refusing the *reader*. Both streams are
+/// searched: `gh api` prints the body on stdout and its own line on stderr.
 bool mentionsForbidden(String text) =>
     text.contains('HTTP 403') || text.contains('"403"');
 
@@ -312,9 +274,8 @@ List<dynamic> _decodeList(String json) {
   return decoded is List ? decoded : const [];
 }
 
-/// GitHub operations via the `gh` CLI, executed through a [CommandRunner] in the
-/// repository's environment. `gh` uses the working directory to identify the
-/// repository, so commands are run with the repo as the working directory.
+/// GitHub operations via the `gh` CLI, run through a [CommandRunner] with the
+/// repo as the working directory — that is how `gh` identifies it.
 class GitHubService {
   GitHubService(this.runner);
 
@@ -360,17 +321,8 @@ class GitHubService {
     return parseGhPullRequests(result.stdout);
   }
 
-  /// The pull request for [branch] together with its checks, or `null` when
-  /// the branch definitely has none.
-  ///
-  /// **One process for both.** `gh pr checks` would be a second invocation for
-  /// data `statusCheckRollup` already carries, and the delivery strip draws the
-  /// PR and its checks in the same row — so it asks once.
-  ///
-  /// The two failures are told apart deliberately: "no pull requests found" is
-  /// a fact about the branch and returns `null`, while `gh` missing, logged
-  /// out, or pointed at a non-GitHub remote throws, so a caller can keep saying
-  /// "could not tell" instead of "there is no PR".
+  /// The pull request for [branch] with its checks in one process, or `null`
+  /// when the branch definitely has none. A `gh` that could not answer throws.
   Future<PullRequestSnapshot?> pullRequestFor(
     EnvironmentPath repo, {
     required String branch,
@@ -380,14 +332,8 @@ class GitHubService {
       'view',
       branch,
       '--json',
-      // `mergeStateStatus` rides along in the call that was already being
-      // made. It is the only field here that costs GitHub extra work — it is
-      // computed lazily, the same computation behind `mergeable` — and asking
-      // for it beside `mergeable` costs nothing more, because requesting
-      // either one is what triggers the computation in the first place.
-      // `baseRefName` rides along too: branch protection is a property of the
-      // base, so naming a BLOCKED merge's rule needs it, and asking for it
-      // here costs nothing over asking for the rest.
+      // `mergeStateStatus` and `baseRefName` ride along in a call already being
+      // made; requesting `mergeable` is what triggers the same computation anyway.
       'number,title,state,url,isDraft,mergeable,mergeStateStatus,'
           'reviewDecision,statusCheckRollup,headRefName,baseRefName',
     ]);
@@ -414,14 +360,8 @@ class GitHubService {
     return parseGhIssues(result.stdout);
   }
 
-  /// The repository's merge settings and the pull request's open review
-  /// conversations, in one `gh api graphql` call. See [kForgePolicyQuery].
-  ///
-  /// Never throws for a policy reason: a token without settings access, a
-  /// GraphQL error, or a repository `gh` cannot resolve all come back as
-  /// [MergeStrategies.unknown] with a null thread count, which is the reading
-  /// that changes nothing about what the strip offers. Only a failed process
-  /// throws, and the delivery provider already turns that into null.
+  /// The repository's merge settings and open review conversations, in one `gh
+  /// api graphql` call. Never throws for a policy reason — only a failed process.
   Future<ForgePolicy> forgePolicyFor(
     EnvironmentPath repo, {
     required int number,
@@ -439,28 +379,12 @@ class GitHubService {
       'number=$number',
     ]);
     // `gh api graphql` exits non-zero on a GraphQL error but still prints the
-    // document, so the body is parsed either way: a partial answer is worth
-    // more than none, and a body that carries nothing usable degrades to
-    // "could not tell" inside the parser.
+    // document, so the body is parsed either way.
     return parseForgePolicy(result.stdout);
   }
 
-  /// The branch-protection rules on [branch], for naming what a `BLOCKED`
-  /// merge is waiting on.
-  ///
-  /// **The third `gh` process, and the only one paid for by a reading rather
-  /// than by a row.** `mergeStateStatus: BLOCKED` is the common state of every
-  /// open pull request in a protected repository, so this is asked only once
-  /// something has already read that status — see
-  /// `checkoutMergeProtectionProvider`, which short-circuits before the
-  /// process for every other state.
-  ///
-  /// **Never throws for a policy reason.** A 403 is the ordinary answer for a
-  /// non-admin and comes back as [BranchProtectionRead.forbidden]; a 404 (the
-  /// branch is guarded by a ruleset rather than by classic protection, or by
-  /// nothing at all), a logged-out `gh` and an unparseable body all come back
-  /// as [BranchProtection.unknown], which leaves the caller's own sentence
-  /// exactly as it was.
+  /// The branch-protection rules on [branch], for naming what a `BLOCKED` merge
+  /// waits on. Never throws for a policy reason: a 403 is the non-admin answer.
   Future<BranchProtection> branchProtectionFor(
     EnvironmentPath repo, {
     required String branch,
@@ -479,13 +403,8 @@ class GitHubService {
     return parseBranchProtection(result.stdout, branch: branch);
   }
 
-  /// Takes a pull request out of draft (`gh pr ready`).
-  ///
-  /// **One of the app's own operations, not a prompt.** There is nothing here
-  /// for a model to compose: it is a boolean on the forge, and the only way to
-  /// get it wrong is to flip it on the wrong pull request — which is why the
-  /// number is passed explicitly rather than left to `gh` to infer from
-  /// whatever branch happens to be checked out.
+  /// Takes a pull request out of draft (`gh pr ready`). The number is passed
+  /// explicitly rather than inferred from whatever branch is checked out.
   Future<void> markPullRequestReady(
     EnvironmentPath repo, {
     required int number,

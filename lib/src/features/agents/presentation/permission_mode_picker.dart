@@ -5,29 +5,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import 'package:agent_cli/descriptors.dart';
 
-/// A menu of the permission modes one agent really has, in that agent's own
-/// words.
-///
-/// The composer's `PermissionModeChip` is this same control bound to a running
-/// session. Both build their rows from [permissionAxisOptionsFor], so what is
-/// offered — and what each mode is said to do — cannot differ between them.
-///
-/// Two properties carried over from the shared-enum design, both still doing
-/// work:
-///
-/// * **A row the user cannot pick is shown, disabled, and says why.** What puts
-///   a row there has changed: a mode the agent cannot express is no longer
-///   possible, because every row *is* one of the agent's own modes. The live
-///   case is an axis another axis has superseded — choose Codex's bypass and
-///   its approval picker greys out, because that flag replaces it.
-/// * **An agent whose modes have never been established says so**, in one
-///   disabled row, rather than showing an empty menu or a set of guesses.
-///
-/// **Codex gets two pickers**, in one menu with a heading each. That is the
-/// point of the change rather than an accident of it: a sandbox and an approval
-/// policy are separate questions with separate answers, and the flattened cross
-/// product would be both dishonest and longer (7 rows in two groups against 10
-/// in one list).
+/// A menu of the permission modes one agent really has. Rows come from
+/// [permissionAxisOptionsFor]; a superseded axis is shown but disabled.
 class PermissionModePicker extends StatelessWidget {
   const PermissionModePicker({
     required this.descriptor,
@@ -141,11 +120,8 @@ class PermissionModePicker extends StatelessWidget {
   }
 }
 
-/// One menu row's answer: which axis, and which value on it.
-///
-/// A pair rather than a bare value id, because two axes may name values alike
-/// and `PopupMenuButton` hands back only what the row carried. Public so a test
-/// can name the menu row's type, the way `PermissionChoice` is.
+/// One menu row's answer: which axis, and which value on it. A pair, since two
+/// axes may name values alike and `PopupMenuButton` returns only the row's.
 @immutable
 class PermissionAxisChoice {
   const PermissionAxisChoice(this.axisId, this.valueId);
@@ -163,12 +139,8 @@ class PermissionAxisChoice {
   int get hashCode => Object.hash(axisId, valueId);
 }
 
-/// How a carried rung reaches the target, as a colour. Only the two worth
-/// noticing are tinted; an exact carry is a fact, not a warning.
-///
-/// Shared with `PermissionModeChip` so the two controls are one control on two
-/// surfaces, rather than a fit that is amber in the composer and grey in the
-/// launcher.
+/// How a carried rung reaches the target, as a colour; an exact carry is a
+/// fact, not a warning. Shared with `PermissionModeChip` so the two agree.
 Color permissionFitColour(ColorScheme scheme, PermissionModeFit fit) =>
     switch (fit) {
       PermissionModeFit.exact => scheme.onSurfaceVariant,

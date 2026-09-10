@@ -12,36 +12,16 @@ import '../application/session_plan_providers.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_resume.dart' show describeAge;
 
-/// Which session's plan the panel is describing.
-///
-/// The session **on screen**, not the one last clicked in the Explorer — the
-/// same rule [mediaPanelSessionIdProvider] follows, and for the same reason:
-/// switching terminal tabs changes which agent you are looking at.
-///
-/// **One session, not four.** The panel answers "which of my agents is stuck"
-/// by being one tab-switch from each of them, rather than by subscribing to
-/// every pane's transcript at once — that would be four whole-transcript
-/// parses on the UI isolate per tick, which is the cost
-/// [chatTranscriptPollingProvider] exists to have stopped paying.
+/// Which session's plan the panel describes: the one **on screen**. One
+/// session, not four — every pane at once is four transcript parses per tick.
 final planPanelSessionIdProvider = Provider<String?>(
   (ref) =>
       ref.watch(activePaneSessionIdProvider) ??
       ref.watch(selectedSessionIdProvider),
 );
 
-/// **The agent's own plan, beside its pane.**
-///
-/// Not the user's todo list — that is [TodosView], one glyph up the rail, and
-/// the two are deliberately different surfaces. This one is read-only by
-/// construction: it is a record of what the agent said it intended, and an
-/// editable copy of somebody else's plan would be a third list to keep in step.
-///
-/// Everything expensive is upstream: [sessionAgentPlanProvider] folds a list
-/// the conversation's own poll already produced, so opening this adds no read,
-/// no parse and no timer. The consequence is that the reading can be old, and
-/// **every state below says how old** — a plan that has been overtaken looks
-/// exactly like a current one, and that is the failure this panel would
-/// otherwise be.
+/// **The agent's own plan, beside its pane** — not the user's todo list, which
+/// is [TodosView]. The reading can be old, so every state says how old.
 class AgentPlanPanel extends ConsumerWidget {
   const AgentPlanPanel({super.key});
 
@@ -122,9 +102,8 @@ class _PlanSummary extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Insets.xs),
-          // **§19, at the line the reading is on.** An unknown reading time is
-          // not a reading time, so a plan whose transcript line carried no
-          // timestamp says that rather than borrowing "just now".
+          // An unknown reading time is not a reading time, so a plan whose
+          // line carried no timestamp says so rather than borrow "just now".
           Text(
             age == null
                 ? 'Written at an unknown time'
@@ -137,9 +116,8 @@ class _PlanSummary extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: Insets.xs),
               child: Text(
-                // Not "this agent is stuck". The reading is that the plan has
-                // not moved, which is a fact; being stuck is a diagnosis this
-                // app has no evidence for.
+                // Not "this agent is stuck". That the plan has not moved is a
+                // fact; being stuck is a diagnosis with no evidence here.
                 'Unchanged for over '
                 '${kPlanGoesStaleAfter.inMinutes} minutes',
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -195,9 +173,8 @@ class _PlanRow extends StatelessWidget {
       AgentPlanItemState.completed => (AppIcons.checkCircle, semantic.idle),
       AgentPlanItemState.inProgress => (AppIcons.circleHalf, semantic.working),
       AgentPlanItemState.pending => (AppIcons.circle, scheme.onSurfaceVariant),
-      // A word the CLI has started using that we have not been taught. Shown,
-      // and shown as unknown — never folded into "pending", which would be a
-      // guess, and never dropped, which would lose real work.
+      // A word the CLI has started using that we have not been taught. Shown as
+      // unknown — never folded into "pending", never dropped.
       AgentPlanItemState.unrecorded => (AppIcons.question, semantic.neutral),
     };
     final done = item.state == AgentPlanItemState.completed;
@@ -252,16 +229,14 @@ class _Absence extends ConsumerWidget {
             : 'This agent does not publish a plan.\n\n${reading.refusal}',
       AgentPlanAbsence.noneYet =>
         'This agent has not written a plan in this conversation yet.',
-      // Why, in the reading's own words: an agent whose store nothing here
-      // opens is a different sentence from a session whose transcript file is
-      // simply not on this disk, and the hedge used to cover both.
+      // Why, in the reading's own words: a store nothing here opens is a
+      // different sentence from a transcript file not on this disk.
       AgentPlanAbsence.noRecord =>
         reading.refusal.isEmpty
             ? 'No record of this session we can read.'
             : 'No record of this session we can read.\n\n${reading.refusal}',
-      // The one that has a remedy, and the honest name for the gap: nothing
-      // here polls, so the transcript is only re-read while a conversation is
-      // the surface in front.
+      // The one that has a remedy: nothing here polls, so the transcript is
+      // only re-read while a conversation is the surface in front.
       AgentPlanAbsence.notRead || null => ref.watch(chatTranscriptPollingProvider)
           ? 'Reading this session’s record…'
           : 'Not read yet — the transcript is re-read only while a '

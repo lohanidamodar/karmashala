@@ -1,9 +1,5 @@
-/// The projects a phone can see, and the one write that adds another.
-///
-/// `workspace.list`, `projects.list` and `project.add` are one family because
-/// they all read or write the project table and nothing else. Like
-/// `sessions.list`, the reads report only what the desktop already holds: the
-/// branch comes from the cached checkout stat and no git is started.
+/// The projects a phone can see, and the one write that adds another. Like
+/// `sessions.list`, the reads report only what the desktop already holds.
 library;
 
 import 'dart:io';
@@ -23,14 +19,8 @@ import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';
 import 'remote_session_start_bindings.dart';
 
-/// What could be started here, in the Explorer's own order: projects as the
-/// tree sorts them, checkouts by path, and under each checkout the agents
-/// installed in the environment it lives in.
-///
-/// A project with no checkout is omitted — there is nowhere in it to start
-/// anything, and listing it would offer a choice that does not exist. Like
-/// `sessions.list`, this reads only what the desktop already holds: the
-/// branch comes from the cached checkout stat and no git is started.
+/// What could be started here, in the Explorer's own order. A project with no
+/// checkout is omitted: there is nowhere in it to start anything.
 List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
   final installations = ref.read(agentInstallationDaoProvider);
   final byEnvironment = <String, List<RemoteAgentOption>>{};
@@ -43,16 +33,14 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
       ];
 
   // Read once and looked up per row: a workspace is mostly two or three
-  // environments spread over many checkouts, and this runs on every
-  // `workspace.list`.
+  // environments over many checkouts, and this runs on every `workspace.list`.
   final environments = {
     for (final environment
         in ref.read(executionEnvironmentDaoProvider).getAll())
       environment.id: environment,
   };
-  // The desktop's own name for where a folder lives. Null for an
-  // environment row the desktop no longer holds — the phone then falls back
-  // to the path rather than inventing a name for it.
+  // The desktop's own name for where a folder lives; null for an environment
+  // row it no longer holds, so the phone falls back to the path.
   String? nameOf(String environmentId) {
     final environment = environments[environmentId];
     return environment == null ? null : environmentLabel(environment);
@@ -191,9 +179,8 @@ Future<String> canonicalRemoteProjectPath(String path) async {
     throw const RemoteApiRefusal(ErrorCode.notFound, 'that desktop folder does not exist');
   }
   final canonical = (await directory.resolveSymbolicLinks()).trim();
-  // A local-looking junction can resolve onto a UNC/network target. Refuse
-  // after resolution as well as before it, so the service never imports a
-  // path outside the desktop's local filesystem contract.
+  // A local-looking junction can resolve onto a UNC/network target, so the
+  // refusal is repeated after resolution as well as before it.
   if (canonical.startsWith(r'\\') || canonical.startsWith('//')) {
     throw const RemoteApiRefusal(
       ErrorCode.badRequest,

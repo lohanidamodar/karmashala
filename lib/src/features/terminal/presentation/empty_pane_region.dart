@@ -9,17 +9,9 @@ import '../application/terminal_sessions_controller.dart';
 import '../domain/terminal_drag.dart';
 import '../domain/workspace_layout.dart';
 
-/// A region of a split with nothing in it yet.
-///
-/// Splitting divides space and starts nothing (see
-/// [TerminalSessionsController.splitPane]), so the new region needs a face and
-/// a way to be filled. This is both: it says what it is, offers the two honest
-/// ways to fill it — a new terminal, or a tab moved in — and offers to go away
-/// again.
-///
-/// **Not a blank rectangle.** A split that opened onto nothing at all would
-/// look like a bug rather than a choice, and there would be nothing to click,
-/// tab to, or read out.
+/// A region of a split with nothing in it yet: what it is, the two ways to fill
+/// it, and the way to close it again. **Not a blank rectangle** — that would
+/// read as a bug, with nothing to click, tab to or read out.
 class EmptyPaneRegion extends ConsumerWidget {
   const EmptyPaneRegion({
     required this.paneId,
@@ -36,12 +28,9 @@ class EmptyPaneRegion extends ConsumerWidget {
     super.key,
   });
 
-  /// The empty region's own pane id, which is also the drop target's address.
-  ///
-  /// An empty **workspace group** uses the same face and passes its own slot
-  /// id here, with [accepts] and [onDrop] supplied: the room reads the same to
-  /// a user either way, and the only real difference is what the drop is
-  /// addressed to.
+  /// The empty region's own pane id, and the drop target's address. An empty
+  /// **workspace group** passes its own slot id here with [accepts]/[onDrop]:
+  /// the room reads the same either way, only the drop is addressed elsewhere.
   final String paneId;
 
   /// What the room is called, in its own words.
@@ -55,9 +44,8 @@ class EmptyPaneRegion extends ConsumerWidget {
   final bool Function(TerminalDrag drag)? accepts;
   final void Function(TerminalDrag drag)? onDrop;
 
-  /// Whether this is the pane the active tab has focus in. Drives the focus
-  /// ring, and hands the keyboard to the primary action so a split made from a
-  /// chord can be filled from one.
+  /// Drives the focus ring, and hands the keyboard to the primary action so a
+  /// split made from a chord can be filled from one.
   final bool focused;
 
   final VoidCallback? onNewTerminal;
@@ -68,7 +56,7 @@ class EmptyPaneRegion extends ConsumerWidget {
   /// nothing to move.
   final VoidCallback? onMoveTabHere;
 
-  /// What that button says. A region takes panes and a group takes tabs, and
+  /// What that button says: a region takes panes and a group takes tabs, so
   /// the word has to be the right one — see [WorkspaceLayout].
   final String moveLabel;
 
@@ -79,16 +67,11 @@ class EmptyPaneRegion extends ConsumerWidget {
 
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     return DragTarget<TerminalDrag>(
-      // A whole tab, or one pane out of a region's header. A tab cannot be
-      // dropped into a region of itself: the tab would have to contain the very
-      // region it is being put inside.
       onWillAcceptWithDetails: (details) =>
           accepts?.call(details.data) ??
           switch (details.data) {
-            // A region takes **panes**. A tab carries a session, a view and a
-            // status strip together and only a workspace group can host that,
-            // so a tab dropped here would land in a room with no strip and no
-            // bar — the shape this restructure exists to remove.
+            // A region takes **panes**: a tab carries a session, a view and a
+            // status strip together, and only a workspace group hosts that.
             TabDrag() => false,
             PaneDrag(paneId: final moved) => sessions.canMovePaneIntoRegion(
               moved,
@@ -124,12 +107,9 @@ class EmptyPaneRegion extends ConsumerWidget {
               ),
             ),
             child: Center(
-              // A divider can be dragged until a region is a sliver of the
-              // window (`kMinPaneWeight` is 5%), and buttons have a width they
-              // cannot go below. So the invitation is laid out at its natural
-              // width — capped, so it wraps on a wide region rather than
-              // stretching — and *scrolls* on a region too small to hold it,
-              // in both directions. It can then never overflow at any size.
+              // A region shrinks to 5% of the window (`kMinPaneWeight`) and
+              // buttons have a floor width, so the invitation is capped and
+              // scrolls both ways rather than overflowing at any size.
               child: SingleChildScrollView(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -166,8 +146,8 @@ class EmptyPaneRegion extends ConsumerWidget {
                           runSpacing: Insets.xs,
                           children: [
                             FilledButton.icon(
-                              // The keyboard follows the split, so a region made
-                              // with Ctrl+Shift+D can be filled with Enter.
+                              // So a region made with Ctrl+Shift+D can be
+                              // filled with Enter.
                               autofocus: focused,
                               onPressed: onNewTerminal,
                               icon: const Icon(
@@ -182,14 +162,13 @@ class EmptyPaneRegion extends ConsumerWidget {
                                 AppIcons.chatCircleDots,
                                 size: Chrome.icon,
                               ),
-                              // Distinct from the default title of an agent
-                              // pane beside it. A fresh split must not print
-                              // "New session" as both content and an action.
+                              // Distinct from an agent pane's default title: a
+                              // fresh split must not print "New session" as
+                              // both content and action.
                               label: const Text('New agent session'),
                             ),
-                            // The keyboard-reachable half of the drag. A feature
-                            // you can only reach by dragging is one some people
-                            // cannot reach at all.
+                            // The keyboard half of the drag: a feature only
+                            // reachable by dragging is unreachable for some.
                             TextButton.icon(
                               onPressed: onMoveTabHere,
                               icon: const Icon(
@@ -218,11 +197,8 @@ class EmptyPaneRegion extends ConsumerWidget {
 }
 
 /// The **panes** that can be moved into the empty region [slotPaneId], as
-/// [TabPicker] lists them.
-///
-/// The keyboard's way to do what a drag does. Panes rather than tabs: a region
-/// is a division inside one tab and holds panes, and a tab belongs in a
-/// workspace group's strip — see [WorkspaceLayout] for the two words.
+/// [TabPicker] lists them — the keyboard's way to do what a drag does. Panes,
+/// not tabs: a tab belongs in a workspace group's strip.
 List<TabEntry> panesMovableInto(WidgetRef ref, String slotPaneId) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);
@@ -235,8 +211,8 @@ List<TabEntry> panesMovableInto(WidgetRef ref, String slotPaneId) {
               id: 'move-pane/$paneId',
               group: QuickOpenGroup.tabs,
               title: sessions.titleForPane(paneId),
-              // The directory tells two `zsh` panes apart, which is the whole
-              // reason the picker exists rather than a menu.
+              // The directory tells two `zsh` panes apart, which is why this
+              // is a picker rather than a menu.
               subtitle: sessions.instanceFor(paneId)?.workingDirectory,
               icon: AppIcons.terminal,
               onSelect: () => sessions.movePaneIntoRegion(paneId, slotPaneId),

@@ -1,11 +1,9 @@
 import 'agent_pane_launch.dart';
 import 'terminal_profile.dart';
 
-/// The kind of shell a command is being handed to.
-///
-/// This is about the *destination*, not about the platform the app happens to
-/// be running on: `Platform.isWindows` says where we are, [ShellContextKind]
-/// says where the command is going.
+/// The kind of shell a command is being handed to — the *destination*, not the
+/// platform the app happens to run on: `Platform.isWindows` says where we are,
+/// [ShellContextKind] says where the command is going.
 enum ShellContextKind {
   /// A Windows executable started directly from a Windows host.
   windowsNative,
@@ -20,17 +18,14 @@ enum ShellContextKind {
   /// `wsl.exe` in front of the command.
   wsl,
 
-  /// A POSIX shell we are **already inside**. Reached either because the app
-  /// itself runs on Linux/macOS, or because it runs inside the very WSL
-  /// distribution the command targets. Nothing to cross, so nothing to wrap.
+  /// A POSIX shell we are **already inside** — the app on Linux/macOS, or the
+  /// very WSL distribution the command targets. Nothing to cross or wrap.
   posix,
 }
 
 /// Where a command will actually run, and therefore how it has to be spelled.
-///
-/// Every builder that turns an agent or a shell into a real command line takes
-/// one of these instead of a bare `Platform.isWindows`: the boolean answers
-/// "where is the app?" when the question is "what will parse this line?".
+/// Every builder takes one of these instead of a bare `Platform.isWindows`: the
+/// boolean answers "where is the app?" when the question is "what parses it?".
 class LaunchContext {
   const LaunchContext._(this.kind, {this.wslDistribution, this.posixShell});
 
@@ -79,12 +74,8 @@ class LaunchContext {
   /// Whether a command handed to this context needs a wrapper in front of it.
   bool get needsWrapper => kind != ShellContextKind.posix;
 
-  /// The context an agent pane's command is going into.
-  ///
-  /// [hostIsWindows] is `Platform.isWindows` at the one place it is read. When
-  /// the app is not on Windows it is already inside a POSIX shell — inside the
-  /// named distribution itself when the launch names one — so the `wsl.exe`
-  /// wrapper is neither available nor wanted.
+  /// The context an agent pane's command is going into. Off Windows we are
+  /// already inside a POSIX shell, so no `wsl.exe` wrapper is available.
   factory LaunchContext.forAgent(
     AgentPaneLaunch launch, {
     required bool hostIsWindows,
@@ -169,15 +160,8 @@ class LaunchContext {
       '${wslDistribution == null ? '' : ', $wslDistribution'})';
 }
 
-/// A command in the words of the environment it will run in: the executable,
-/// its arguments and its working directory exactly as the *destination* shell
-/// sees them, before any wrapper.
-///
-/// This type is half of what makes wrapping structurally single. The wrapping
-/// functions consume a [ShellCommand] and produce something else — a `PtyLaunch`
-/// or a plain argv — and there is no constructor anywhere that turns either of
-/// those back into a [ShellCommand]. Wrapping twice is therefore not a mistake
-/// you can make and still compile.
+/// A command in the words of the environment it will run in, before any
+/// wrapper. Wrapping consumes one and returns something with no route back.
 class ShellCommand {
   const ShellCommand({
     required this.executable,

@@ -16,12 +16,7 @@ import 'quick_open_sources.dart';
 import 'repo_file_index.dart';
 
 /// Bumped when something outside the widget tree asks for quick open — today
-/// the global hotkey, which summons the window with the palette already up.
-///
-/// A provider rather than a direct call because `SystemIntegrationService` lives
-/// outside the tree and has no `BuildContext`; the shell listens and opens the
-/// dialog with one it actually has. Same shape as `windowRaiseRequestProvider`:
-/// the counter's value means nothing, only that it moved.
+/// the global hotkey. The counter's value means nothing, only that it moved.
 class QuickOpenRequest extends Notifier<int> {
   @override
   int build() => 0;
@@ -37,23 +32,8 @@ final quickOpenRequestProvider = NotifierProvider<QuickOpenRequest, int>(
 /// shared with every other filtered list in the shell.
 const _headerHeight = 24.0;
 
-/// One search box over the whole workspace: projects, repositories, sessions,
-/// **what was said inside them**, the selected repository's files, its
-/// branches, the GitHub work already loaded, agents, and the commands the
-/// palette always had.
-///
-/// **Three rules it is built around.**
-///
-/// 1. *Nothing here fetches.* Opening quick open must never start a `gh` call,
-///    a `git status` or a PTY. Branches, pull requests and issues come from
-///    [QuickOpenCache] — data some other surface already loaded — and the file
-///    index is a bounded local walk that starts only once the user types. The
-///    conversation search reads an index this app already built on its own
-///    triggers (`ConversationIndexer`); it opens no transcript and walks no
-///    store, which is the difference between a search and a grep.
-/// 2. *Ranked across kinds, grouped for reading.* Sections are ordered by their
-///    best match, so the group you meant is at the top; see [rankQuickOpen].
-/// 3. *Enter opens the exact thing*, through whatever already owns that jump.
+/// One search box over the whole workspace. *Nothing here fetches*: the file
+/// index is a bounded local walk that begins only once the user types.
 class QuickOpen extends ConsumerStatefulWidget {
   const QuickOpen({super.key, this.initialQuery = ''});
 
@@ -79,11 +59,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   List<QuickOpenItem> _items = const [];
 
-  /// The conversation rows for the query as typed, and the query they were
-  /// built for.
-  ///
-  /// Held apart from [_items] because they are the only source that depends on
-  /// the query: everything else is built once and re-ranked.
+  /// The conversation rows for the query as typed, and the query they were built
+  /// for — kept apart from [_items] as the only query-dependent source.
   List<QuickOpenItem> _conversationItems = const [];
   String _conversationQuery = '';
 
@@ -96,8 +73,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   late final RepoFileIndex _index;
 
   /// The root of the walk currently being waited on, or `null`. Also what
-  /// [dispose] cancels: a walk nobody is looking at any more should not go on
-  /// spending the UI isolate.
+  /// [dispose] cancels.
   String? _walking;
 
   StreamSubscription<String>? _indexChanges;
@@ -146,8 +122,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     return QuickOpenSources(
       ref: ref,
       // The navigator's own context, not this dialog's: an item's action runs
-      // *after* quick open has popped itself, and a route on its way out is
-      // not somewhere to open the next dialog or show a snack bar from.
+      // *after* quick open has popped, and a route on its way out is no host.
       context: navigator.context,
       dismiss: (action) {
         navigator.pop();
@@ -165,14 +140,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     _rerank();
   }
 
-  /// Runs the conversation search for the query as typed.
-  ///
-  /// One indexed FTS5 statement, bounded by `kConversationSearchLimit`, on the
-  /// synchronous connection like every other read in this app — and skipped
-  /// entirely for a query it has already run, and for a sigil that means
-  /// another group. No debounce: the palette's other sources re-rank on the
-  /// keystroke, and a search lagging the list it shares a window with would
-  /// read as a bug.
+  /// Runs the conversation search for the query as typed: one indexed FTS5
+  /// statement, and no debounce — lagging the list would read as a bug.
   void _searchConversations() {
     final query = _query;
     final only = query.only;
@@ -201,9 +170,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     if (_selected >= _flat.length) _selected = _flat.isEmpty ? 0 : 0;
   }
 
-  /// Starts the repository walk the first time the user types, and again
-  /// whenever what is cached has gone stale. Never awaited by the UI: the
-  /// cached list is already on screen and the walk refreshes it in place.
+  /// Starts the repository walk the first time the user types, and again when
+  /// what is cached is stale. Never awaited: the cached list is already up.
   void _ensureFileIndex() {
     final root = ref.read(quickOpenFileRootProvider);
     final walking = _walking;
@@ -242,9 +210,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   void _move(int delta) => _selectRow(_selected + delta);
 
-  /// Moves the highlight to [index], clamped. Deliberately does **not** wrap:
-  /// a list that jumps from its last row to its first on one more press is a
-  /// list you cannot hold the arrow key down on.
+  /// Moves the highlight to [index], clamped. Deliberately does **not** wrap: a
+  /// list that jumps to its first row is one you cannot hold the key down on.
   void _selectRow(int index) {
     if (_flat.isEmpty) return;
     setState(() => _selected = index.clamp(0, _flat.length - 1));
@@ -267,12 +234,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     return offset;
   }
 
-  /// Scrolls the highlighted row into view.
-  ///
-  /// Deferred to after the frame when the list itself has just changed: the
-  /// scroll position's extents still describe the *previous* list until it has
-  /// been laid out, and clamping a target against those is how a keyboard-
-  /// driven list ends up scrolled somewhere nobody asked for.
+  /// Scrolls the highlighted row into view, after the frame when the list has
+  /// just changed: until layout the extents describe the *previous* list.
   void _revealSelectedAfterLayout() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _revealSelected();
@@ -321,9 +284,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       _move(-8);
       return KeyEventResult.handled;
     }
-    // Home/End drive the list, not the caret. The query is a short phrase in a
-    // single-line box — there is nothing in it worth jumping to — and the ends
-    // of a result list are somewhere people genuinely want to reach.
+    // Home/End drive the list, not the caret: the query is a short phrase in a
+    // single-line box, and the ends of a result list are worth reaching.
     if (key == LogicalKeyboardKey.home) {
       _selectRow(0);
       return KeyEventResult.handled;
@@ -344,12 +306,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // 72 is a desktop-sized gap, and this palette opens in a window that can be
-    // 560 tall — where it is an eighth of the height held empty above a list
-    // that is the whole point. At 720x560 with text at 1.3x the fixed rows
-    // (field, two dividers, footer) then no longer fit and the column
-    // overflowed by 5px. Scaled to the window it keeps the same look on a
-    // desktop and gives the list back the room on a small one.
+    // Scaled to the window, not fixed: at 720x560 with text at 1.3x, a 72px
+    // desktop inset overflowed the column.
     final height = MediaQuery.sizeOf(context).height;
     final topInset = (height * 0.09).clamp(16.0, 72.0);
     return Dialog(
@@ -427,12 +385,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 }
 
-/// The mouse's way in to [QuickOpen] — a search field that is really a button,
-/// sitting beside the menu bar the way a desktop app's command centre does.
-///
-/// Loop 50 shipped quick open with **no** mouse affordance: no button, no menu
-/// item, nothing to click. A keyboard-only entrance to the app's main way of
-/// finding things is an entrance most people never find.
+/// The mouse's way in to [QuickOpen] — a search field that is really a button.
+/// It shipped with no mouse affordance at all, which most people never found.
 class QuickOpenButton extends StatelessWidget {
   const QuickOpenButton({super.key});
 
@@ -476,9 +430,7 @@ class QuickOpenButton extends StatelessWidget {
                     ),
                   ),
                   // The chord is decoration — the tooltip says it too — so it
-                  // is what the field gives up first. Flexible rather than
-                  // dropped outright so it shortens before it goes, and so the
-                  // row can never overflow whatever the chrome beside it takes.
+                  // is what the field gives up first, shortening before it goes.
                   Flexible(
                     child: Padding(
                       padding: const EdgeInsets.only(left: Insets.md),

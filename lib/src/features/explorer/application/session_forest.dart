@@ -14,22 +14,14 @@ class SessionNode {
 
   final Session session;
 
-  /// Why this session names a parent — spawned, handed off, forked. Null for a
-  /// session the user started themselves.
-  ///
-  /// Set whether or not the parent is drawn above it: a fork whose parent lives
-  /// in another checkout is still a fork, and saying so is more useful than
-  /// silence. What the glyph must never imply is *which* session it came from
-  /// when that one is not on screen — see [SessionCard]'s tooltip.
+  /// Why this session names a parent — spawned, handed off, forked. Set whether
+  /// or not the parent is drawn above it; what the glyph must never imply is
+  /// *which* session it came from when that one is off screen.
   final SessionLink? link;
 
   /// The parent chain does not terminate: it loops, or it is longer than
-  /// [SessionLineage.maxWalk].
-  ///
-  /// Loop 54's rule, and the reason this is a flag rather than a silent
-  /// fallback: a chain we could not walk must be drawn as *unknown*, never as a
-  /// complete tree with a plausible-looking root. A broken session is placed at
-  /// the top of its row and says so.
+  /// [SessionLineage.maxWalk]. A flag rather than a silent fallback — a chain we
+  /// could not walk must be drawn as unknown, not as a plausible tree.
   final bool lineageBroken;
 
   /// Oldest first — the order the work actually happened in.
@@ -44,26 +36,9 @@ class SessionNode {
   }
 }
 
-/// Arranges the sessions drawn on one row into parent-and-child order.
-///
-/// Nesting is deliberately **local to the row**. A handoff that moved the work
-/// into a worktree has its child on the worktree's row, where the work is, and
-/// drawing it a second time under its parent would say there are two sessions.
-/// So a session is nested only when its parent is on the same row; otherwise it
-/// sits at the top level and keeps its link glyph.
-///
-/// [isPinned] orders the top level the way the flat list always has — pinned
-/// first, then, since the sessions were "supposed to be ordered by last active
-/// time", by [lastActive] rather than by when the row was created. Children are
-/// never re-ordered by either: a child that jumped above its parent would break
-/// the one thing the nesting is there to show, and the order the work happened
-/// in is what a lineage is for.
-///
-/// [lastActive] defaults to "we hold no reading", which orders the top level by
-/// `createdAt` exactly as it did before — the tie-break in
-/// [compareByLastActive]. A caller that can answer it passes
-/// `sessionLastActiveProvider`'s lookup, which every other session list reads
-/// too.
+/// Arranges the sessions drawn on one row into parent-and-child order. Nesting
+/// is local to the row, or a child would be drawn twice. Children keep the
+/// order the work happened in; a child above its parent breaks the nesting.
 List<SessionNode> buildSessionForest(
   List<Session> sessions, {
   required bool Function(String sessionId) isPinned,
@@ -83,9 +58,8 @@ List<SessionNode> buildSessionForest(
       broken.add(session.id);
       continue;
     }
-    // Walk to a root before nesting anything. The same guard `SessionDepth` and
-    // `SessionLineage` use, for the same reason: a cycle must fail the row, not
-    // hang the frame that draws it.
+    // Walk to a root before nesting anything — the guard `SessionLineage` uses:
+    // a cycle must fail the row, not hang the frame that draws it.
     final seen = <String>{session.id};
     var cursor = parentId;
     var walkable = true;

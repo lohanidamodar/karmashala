@@ -1,10 +1,5 @@
-/// How far a session's work has travelled towards being delivered.
-///
-/// One line, in order: **working → committed → pushed → pr-open →
-/// checks-passing/failing → merged → archived**. The stage is the *furthest*
-/// point the work has reached, not the next thing to do — a branch with an open
-/// pull request and an uncommitted edit is still at its pull request, and it is
-/// [deliveryActionsFor] that knows the next action there is `commit`.
+/// How far a session's work has travelled: working → committed → pushed →
+/// pr-open → checks → merged → archived. The *furthest* point, not the next.
 enum DeliveryStage {
   /// Uncommitted work, or no work yet.
   working(order: 0, label: 'Working'),

@@ -13,9 +13,8 @@ import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
 
-/// Settings → Remote access: the enable switch, the two independent relays
-/// (the embedded local one with its start/stop, and a hosted one), the paired
-/// devices with last-seen, their relay and revoke, and the pairing button.
+/// Settings → Remote access: the enable switch, the two independent relays, the
+/// paired devices with last-seen and revoke, and the pairing button.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 

@@ -7,27 +7,13 @@ import 'package:karmashala_core/util.dart';
 import '../domain/ssh_host_key.dart';
 import 'known_host_dao.dart';
 
-/// Asked when a host presents a key we have never seen. Returning `true` trusts
-/// it from now on (trust on first use); anything else refuses the connection.
-///
-/// It is only ever called for [HostKeyVerdict.unknown]. A **changed** key is
-/// never offered to the user for approval.
+/// Asked when a host presents a key we have never seen; `true` trusts it from
+/// now on. Only called for an unknown key — a changed one is never offered.
 typedef HostKeyTrustDecision =
     FutureOr<bool> Function(HostKeyPresentation presentation);
 
-/// Decides whether to accept the host key a server presented.
-///
-/// The policy, deliberately the same one OpenSSH uses:
-///
-/// * **known and matching** → accept silently.
-/// * **unknown** → ask [onUnknownHostKey]. With no handler wired the answer is
-///   *no*: an unattended connection never blindly trusts a new host.
-/// * **changed** → refuse, always, without asking. A different key on an address
-///   we have already pinned is the man-in-the-middle signal, and an interface
-///   that lets a user click through it is not host key verification.
-///
-/// The verifier logs fingerprints and addresses only — never key material and
-/// never credentials.
+/// Decides whether to accept a presented host key, with OpenSSH's policy: known
+/// accepts, unknown asks (and refuses with no handler), changed always refuses.
 class SshHostKeyVerifier {
   SshHostKeyVerifier({
     required this.knownHosts,

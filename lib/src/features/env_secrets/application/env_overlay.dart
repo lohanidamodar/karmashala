@@ -1,14 +1,7 @@
 import '../domain/env_variable.dart';
 
-/// The variables that apply to one launch, as a plain environment map.
-///
-/// Pure, and resolved **once per launch** — never per keystroke. The terminal's
-/// hot path is `terminal.onOutput` → `_pty.write`, and nothing here is on it.
-///
-/// [environmentId] and [projectId] are what the narrower scopes would match.
-/// Neither is offered in the UI yet, so today every enabled variable is
-/// [EnvVarScope.all] and both arguments are ignored in practice; they are here
-/// so adding the picker later is a UI change rather than a plumbing change.
+/// The variables that apply to one launch, as a plain environment map. Pure,
+/// and resolved once per launch — nothing here is on the terminal's hot path.
 Map<String, String> resolveEnvOverlay(
   EnvVaultData vault, {
   String? environmentId,
@@ -33,13 +26,8 @@ Map<String, String> resolveEnvOverlay(
   return overlay;
 }
 
-/// The values the log redactor should never let through, whatever they are
-/// called.
-///
-/// Only [EnvVariable.secret] values, and only those long enough to be worth a
-/// pattern: a two-character value would match half the words in a log line and
-/// turn the log into `[redacted:env-secret]` soup. Six is the same floor the
-/// shipped `named secret` rule uses for the value half of an assignment.
+/// The values the log redactor must never let through. Only secrets, and only
+/// those long enough to be worth a pattern — six, or the log is redaction soup.
 Set<String> redactableSecretValues(EnvVaultData vault) => {
   for (final variable in vault.variables)
     if (variable.secret && variable.value.length >= 6) variable.value,

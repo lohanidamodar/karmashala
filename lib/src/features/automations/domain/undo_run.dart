@@ -1,14 +1,5 @@
-/// What undoing an automation's run is allowed to take back.
-///
-/// **Asymmetric on purpose.** Restoring files is always offered: the run's base
-/// checkpoint holds every byte as it stood before the agent touched anything,
-/// and putting them back changes nothing anyone else can see. Dropping the
-/// commits the run made is a history rewrite, so it is opt-in and **refused
-/// outright once any of them exists on a remote**.
-///
-/// Pure, so the button's tooltip and the write path's assertion read the same
-/// rule — the reason shown on hover is the one the write path would have
-/// thrown.
+/// What undoing a run may take back: files always, commits only while none is
+/// on a remote. Pure, so the tooltip and the write path read one rule.
 library;
 
 /// One commit a run left on the branch. The short form is for display only.
@@ -33,25 +24,19 @@ class RunCommits {
   static const unread = RunCommits(baseSha: null, commits: [], published: null);
 
   /// Where the branch stood when the run started, from the base checkpoint's
-  /// recorded `HEAD`. Null when there is nothing safe to reset to — no
-  /// checkpoint, a repository with no commits yet, or a history that has moved
-  /// and no longer contains it.
+  /// recorded `HEAD`. Null when there is nothing safe to reset to.
   final String? baseSha;
 
   /// Commits between the run's base and HEAD, newest first.
   final List<RunCommit> commits;
 
-  /// How many of them a remote-tracking branch already holds, or **null when
-  /// git could not be asked**. Never read as zero: "nothing outside this
-  /// machine has these" and "we could not find out" are the two answers this
-  /// rule turns on, and collapsing them drops published history.
+  /// How many of them a remote already holds, or null when git could not be
+  /// asked. Never read as zero — that would drop published history.
   final int? published;
 }
 
 /// Why the commits cannot be dropped, or `null` when they can.
-///
-/// **Never a reason to block the file-level undo** — that path stands on its
-/// own and is always offered.
+/// Never a reason to block the file-level undo, which stands on its own.
 String? undoCommitsRefusal(RunCommits summary) {
   if (summary.published == null && summary.commits.isEmpty) {
     return 'What this run left on the branch has not been read, so nothing is '
@@ -91,7 +76,7 @@ String undoCommitsLabel(RunCommits summary) {
   return 'Also drop the $n commits this run made';
 }
 
-/// What restoring the files says it will do. Always offered, so it never has a
-/// refusal of its own — only a description.
+/// What restoring the files says it will do. Always offered, so it has no
+/// refusal of its own.
 String undoFilesLabel(RunCommits summary) =>
     'Put the files back as they stood before this run started';

@@ -72,29 +72,15 @@ class ArchiveOutcome {
   };
 }
 
-/// Removes a session's worktree directory and **nothing else**.
-///
-/// The same three rules Loop 48's `discardLosers` established, applied to one
-/// session instead of a fan-out's losers: it refuses while an agent is live in
-/// the worktree, refuses when there is uncommitted work unless the caller has
-/// confirmed *that specific session*, and leaves the branch alone — a branch is
-/// cheap and recoverable, a directory is what accumulates.
-///
-/// What survives is the point of the feature: the session row, its transcript,
-/// its review notes and its checkpoints are all still there and still reachable
-/// afterwards. The only database write is the archive timestamp.
+/// Removes a session's worktree directory and **nothing else**: the row, its
+/// transcript and its checkpoints survive, and the branch is left alone.
 class SessionArchiveService {
   SessionArchiveService(this._ref);
 
   final Ref _ref;
 
-  /// **One line per archive, saying what it decided.** The same discipline
-  /// `sessions.launch`, `sessions.handoff` and now `sessions.actions` keep.
-  ///
-  /// This path removes a directory and every one of its six outcomes is
-  /// invisible afterwards: the four refusals leave the worktree exactly as it
-  /// was, and a failure leaves it as git left it. A user who says "it did
-  /// nothing" has nothing to hand over, and the reason was never written down.
+  /// **One line per archive, saying what it decided**: all six outcomes are
+  /// invisible afterwards, so "it did nothing" has something to hand over.
   static final _log = AppLogger.named('sessions.archive');
 
   Future<ArchiveOutcome> archive(
@@ -159,9 +145,8 @@ class SessionArchiveService {
           .remove(
             repository.path,
             worktree,
-            // Git refuses to remove a dirty worktree without this, which is
-            // exactly the check above — so it is only ever set for a removal
-            // the user confirmed.
+            // Git refuses to remove a dirty worktree without this — the same
+            // check as above, so it is only set for a confirmed removal.
             force: changes.isNotEmpty,
           );
     } catch (error) {
@@ -172,8 +157,7 @@ class SessionArchiveService {
         .read(sessionDaoProvider)
         .markArchived(sessionId, _ref.read(clockProvider).nowUtc());
     // The row's status moved and the worktree it named is gone — a workspace
-    // fact as much as a session one. Its *name* did not change, so nothing
-    // that only draws names re-reads.
+    // fact as much as a session one. Its *name* did not change.
     _ref
         .read(sessionsRevisionProvider.notifier)
         .changed(SessionChange.archived(sessionId));

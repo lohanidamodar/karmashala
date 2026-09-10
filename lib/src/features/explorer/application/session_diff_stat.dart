@@ -11,15 +11,8 @@ import '../../notifications/application/attention_inbox.dart';
 import '../../sessions/domain/session_status.dart';
 import 'checkout.dart';
 
-/// How much work a session has produced, in the terms a row can show.
-///
-/// **A projection of [SessionDelivery], not a second measurement.** Until Loop
-/// 67 this type had its own providers running their own `git status`, and its
-/// [added]/[removed] were never filled — so MonoCode's `+949 −10`, which is the
-/// shape the card was built for, could not render outside a widget test while
-/// [SessionDelivery.lines] held exactly that number a provider away. There is
-/// now one producer of a checkout's local git facts (`checkoutDeliveryProvider`
-/// and friends) and this is the narrow view of it a tree row draws.
+/// How much work a session has produced, in the terms a row can show — a
+/// projection of [SessionDelivery], never a second measurement of its own.
 class SessionDiffStat {
   const SessionDiffStat({
     this.branch,
@@ -29,13 +22,8 @@ class SessionDiffStat {
     this.removed,
   });
 
-  /// What a row shows of [delivery].
-  ///
-  /// An **empty** numstat is dropped rather than shown as `+0 −0`: git's
-  /// `--numstat` sees no untracked file, so a checkout whose only change is a
-  /// new file reports zero lines over zero files, and the card's "N changed"
-  /// fallback is the truer sentence for it. Same rule as
-  /// [SessionDelivery.lineLabel].
+  /// What a row shows of [delivery]. An *empty* numstat is dropped rather than
+  /// shown as `+0 −0`: `--numstat` sees no untracked file.
   factory SessionDiffStat.from(SessionDelivery delivery) {
     final lines = delivery.lines;
     final counted = lines != null && !lines.isEmpty;
@@ -57,9 +45,8 @@ class SessionDiffStat {
   /// Files with working-tree changes.
   final int? changedFiles;
 
-  /// Commits this checkout has that its base does not — `origin/HEAD` when the
-  /// clone recorded one, otherwise the branch the owning repository has checked
-  /// out. Null when git could not say, or there is nothing to measure against.
+  /// Commits this checkout has that its base does not — `origin/HEAD`, else the
+  /// owning repository's branch. Null when git could not say.
   final int? commitsAhead;
 
   /// Lines added / removed against the same base, committed and uncommitted
@@ -107,23 +94,9 @@ class SessionDiffStat {
       'SessionDiffStat($branch, $changedFiles changed, ahead $commitsAhead)';
 }
 
-/// The branch and change count of one checkout.
-///
-/// **Keyed by the checkout, not by the session**, and that is the whole reason
-/// this provider exists separately: twenty sessions in a repository that has no
-/// worktrees are twenty rows describing *one* working tree, and keying by
-/// session would run `git status` twenty times for one answer. Riverpod's
-/// family cache does the deduplication for free once the key is the thing being
-/// measured.
-///
-/// The key is a [Checkout] rather than a bare [EnvironmentPath] because the
-/// three places a path reaches this tree from spell the same directory three
-/// ways — see [Checkout]. Since Loop 57 a repository row, its worktree row and
-/// every card under either share one answer whichever spelling arrived first.
-///
-/// Since Loop 67 the measurement itself is [checkoutDeliveryProvider]'s, on the
-/// same key: one producer, so a row and the strip beside it cannot disagree.
-/// Never throws — that provider folds every failure into "nothing to say".
+/// The branch and change count of one checkout, keyed by the *checkout*: twenty
+/// sessions in one working tree would otherwise run `git status` twenty times.
+/// Never throws — [checkoutDeliveryProvider] folds failure into silence.
 final checkoutStatProvider = FutureProvider.autoDispose
     .family<SessionDiffStat, Checkout>(
       (ref, checkout) async => SessionDiffStat.from(
@@ -131,11 +104,8 @@ final checkoutStatProvider = FutureProvider.autoDispose
       ),
     );
 
-/// What one worktree of [repo] has: its own branch and change count, plus how
-/// far ahead it is of its base.
-///
-/// Shared by a worktree *row* and by every session card inside it, so a
-/// worktree with four sessions costs the same as a worktree with none.
+/// What one worktree of [repo] has, shared by the worktree row and every
+/// session card in it, so four sessions cost what none do.
 final worktreeStatProvider = FutureProvider.autoDispose
     .family<
       SessionDiffStat,
@@ -146,13 +116,9 @@ final worktreeStatProvider = FutureProvider.autoDispose
       ),
     );
 
-/// The stat for a native session: its worktree's when it has one, otherwise the
-/// repository's. Both cases delegate, so a card never asks git anything a row
-/// above it has not already asked.
-///
-/// [sessionLocalDeliveryProvider] rather than `sessionDeliveryProvider`: a tree
-/// row wants the local facts, and the full provider would add a `gh` process
-/// per visible checkout.
+/// The stat for a native session: its worktree's, else its repository's, both
+/// delegated. [sessionLocalDeliveryProvider] rather than the full one, which
+/// would add a `gh` process per visible checkout.
 final sessionDiffStatProvider = FutureProvider.autoDispose
     .family<SessionDiffStat, String>(
       (ref, sessionId) async => SessionDiffStat.from(
@@ -183,19 +149,15 @@ class ProjectSummary {
   /// Changed files across the project's repositories, or null while unknown.
   final int? changedFiles;
 
-  /// Sessions whose lifecycle is [SessionStatus.running]. The row's own record
-  /// of what it started — deliberately not a claim that a process is alive,
-  /// which only `SessionWhereabouts` may make.
+  /// Sessions whose lifecycle is [SessionStatus.running] — the row's record of
+  /// what it started, not a claim that a process is alive.
   final int running;
 
   /// Unseen attention-inbox items belonging to this project's sessions.
   final int needsAttention;
 
   /// The header's right-hand label, or null when there is nothing to say.
-  ///
-  /// [running] and [needsAttention] are **not** in here: they are counts that
-  /// mean something, so they are drawn as semantic badges rather than folded
-  /// into a grey clause where a stuck agent reads like a word.
+  /// [running] and [needsAttention] are drawn as badges instead, not folded in.
   String? get label {
     if (sessions == 0) return null;
     final files = changedFiles;
@@ -205,10 +167,8 @@ class ProjectSummary {
     ].join(' · ');
   }
 
-  /// How the attention count reads beside [label], or null when nothing is
-  /// waiting. Worded exactly as the status bar words it, because they are the
-  /// same number and a user who sees "1 needs you" in one place and "1 need
-  /// you" in another has to wonder whether they are two counts.
+  /// How the attention count reads beside [label]. Worded exactly as the status
+  /// bar words it, because it is the same number.
   String? get attentionLabel => switch (needsAttention) {
     0 => null,
     1 => '1 needs you',
@@ -228,17 +188,11 @@ class ProjectSummary {
       Object.hash(sessions, changedFiles, running, needsAttention);
 }
 
-/// The project containing each native or imported session row.
-///
-/// Kept apart from the inbox projection because session placement changes on a
-/// workspace mutation, while attention can change on every status cycle. The
-/// latter must not turn into a database sweep.
+/// The project containing each native or imported session row. Kept apart from
+/// the inbox projection, which changes on every status cycle.
 final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
-  // Three unfiltered table scans, so this is the watcher it matters most to
-  // narrow. A row's *name* is not its placement, and neither is its status:
-  // only rows appearing, going away, or moving to another repository can
-  // change this map. `session_signal_cost_test.dart` pins it at zero reads for
-  // a rename.
+  // Three unfiltered table scans, so narrowing the watch matters most here: a
+  // rename is not a placement change (`session_signal_cost_test.dart`).
   ref.watchSessionKinds(const {
     SessionChangeKind.membership,
     SessionChangeKind.placement,
@@ -248,11 +202,8 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
     for (final repository in ref.read(repositoryDaoProvider).getAll())
       repository.id: repository.projectId,
   };
-  // Two columns per row, not a decoded session. This is a map from an id to an
-  // id; building a `Session` out of twenty-one columns and an `ImportedSession`
-  // out of twelve — parsing an ISO timestamp in each, which `dateFromIso`'s own
-  // comment measured at 8% of the app's CPU under load — to read two of them is
-  // the waste `SessionDao.paneSessionIds` already avoids next door.
+  // Two columns per row, not a decoded session: parsing an ISO timestamp per
+  // row is 8% of the app's CPU under load (see `dateFromIso`).
   return Map.unmodifiable({
     for (final entry in ref.read(sessionDaoProvider).repositoryIdsById().entries)
       entry.key: ?repositories[entry.value],
@@ -262,11 +213,8 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
   });
 });
 
-/// Unseen attention items grouped by project.
-///
-/// The inbox is capped, so projecting it is bounded. Project headers select
-/// their own integer from this map; a notification in one project therefore
-/// leaves every unrelated header asleep.
+/// Unseen attention items grouped by project. Headers select their own integer
+/// out of this, so one notification leaves unrelated headers asleep.
 final projectAttentionCountsProvider = Provider<Map<String, int>>((ref) {
   final projectIds = ref.watch(sessionProjectIdsProvider);
   final counts = <String, int>{};
@@ -279,33 +227,13 @@ final projectAttentionCountsProvider = Provider<Map<String, int>>((ref) {
   return Map.unmodifiable(counts);
 });
 
-/// Sessions, changed files, running sessions and waiting work under one project.
-///
-/// The counts are synchronous (DAO reads and one already-computed inbox); the
-/// change count is whatever the per-checkout providers have already answered, so
-/// a header never waits on git and never starts a second wave of it.
-///
-/// **That last clause used to be false, and it was the app's worst cost.**
-/// `ref.watch` on an `autoDispose` family does not read a provider, it *creates*
-/// one — so this loop was starting [checkoutDeliveryProvider] for every
-/// repository in the project, at five git subprocesses each. A project the
-/// owner had rescanned into 69 checkouts therefore ran **345 git processes to
-/// draw a project header the user had not even expanded**, on WSL paths over
-/// 9p. `ref.exists` is the read the comment always described, and it is the
-/// same rule `_changeRank` in `checkout_default.dart` already holds itself to:
-/// read the cache somebody else filled, never fill it.
-///
-/// The consequence is that a header shows a change count only once something
-/// that legitimately measures a checkout — the delivery strip, the Changes
-/// panel — has measured it. That is the honest version: a number nobody has
-/// asked for is not a number worth 345 subprocesses.
+/// Sessions, changed files, running sessions and waiting work under one
+/// project. `ref.exists`, never `ref.watch`, which on an autoDispose family
+/// *creates*: that once ran 345 git processes for an unexpanded header.
 final projectSummaryProvider = Provider.autoDispose
     .family<ProjectSummary, String>((ref, projectId) {
-      // A header counts sessions and running sessions; it never names one. So
-      // a rename leaves every project header asleep — the same rule the
-      // attention count above already holds. Placement is on the list because
-      // the count is per repository: a row moving between checkouts moves it
-      // from one header to another.
+      // A header counts sessions, never names one, so a rename leaves every
+      // header asleep. Placement counts: a row can move between checkouts.
       ref.watchSessionKinds(const {
         SessionChangeKind.membership,
         SessionChangeKind.status,
@@ -317,30 +245,17 @@ final projectSummaryProvider = Provider.autoDispose
           .getByProject(projectId);
       final sessionDao = ref.read(sessionDaoProvider);
       final importedDao = ref.read(importedSessionDaoProvider);
-      // The one attention count in the app, narrowed to this project rather
-      // than recomputed: a second definition of "needs you" is a second number
-      // that can disagree with the tray. Selecting the integer is important:
-      // one waiting session must not wake every project header.
+      // The one attention count in the app, narrowed rather than recomputed.
+      // Selecting the integer keeps one waiting session from waking them all.
       final needsAttention = ref.watch(
         projectAttentionCountsProvider.select(
           (counts) => counts[projectId] ?? 0,
         ),
       );
 
-      // **Two statements for the whole project, and no session decoded.**
-      // This used to be two DAO reads *per repository* whose rows were built
-      // in full and then counted — twenty-one columns and two date parses per
-      // native row, twelve and one per imported row, all to add one to an
-      // integer. A header never names a session, so nothing it asks for needs
-      // to be one. The owner has a project rescanned into 69 checkouts, which
-      // is where the per-repository statement count was felt.
-      //
-      // Measured over eight repositories, in the planner's own VM steps: the
-      // old shape cost 8 x 661 steps and 8 temp-b-tree sorts at 100 sessions
-      // and 8 x 3161 at 500; the aggregate costs 903 and 4183, in one
-      // statement, with no sort. `session_start_cost_test` counts the other
-      // half — the rows the app then has to decode — and its slope fell from
-      // four re-reads of the list per start to three.
+      // Two statements for the whole project and no session decoded. Over eight
+      // repositories the old per-repository shape cost 8 × 661 planner steps and
+      // eight temp b-tree sorts at 100 sessions; the aggregate costs 903.
       final ids = [for (final repository in repositories) repository.id];
       final counts = sessionDao.countsByRepositories(ids);
       final sessions = counts.sessions + importedDao.countByRepositories(ids);
@@ -348,10 +263,8 @@ final projectSummaryProvider = Provider.autoDispose
 
       int? changed;
       for (final repository in repositories) {
-        // The shared producer rather than this file's projection of it: a
-        // session card, the delivery strip and the Changes panel all funnel
-        // into `checkoutDeliveryProvider`, so that is the one most likely to be
-        // warm by the time a header asks.
+        // The shared producer rather than this file's projection: cards, the
+        // delivery strip and the Changes panel all warm this one.
         final provider = checkoutDeliveryProvider(Checkout(repository.path));
         if (!ref.exists(provider)) continue;
         final files = ref.watch(provider).asData?.value.dirtyFiles;

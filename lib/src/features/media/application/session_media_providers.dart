@@ -15,30 +15,19 @@ import '../data/session_media_store.dart';
 import '../domain/session_media_item.dart';
 import '../../../core/paths/app_support_directory.dart';
 
-/// How often the media panel looks for new pictures.
-///
-/// Deliberately slower than the chat's two seconds. The chat is the
-/// conversation and has to feel live; the panel is a place you go to find
-/// something, and a picture appearing four seconds after it was pasted is not a
-/// complaint anybody makes. It also only ticks while the panel is open — the
-/// provider is `autoDispose`, so closing the panel stops it outright.
+/// How often the media panel looks for new pictures — slower than the chat's
+/// two seconds on purpose, and only while the panel is open (`autoDispose`).
 const Duration kSessionMediaPollInterval = Duration(seconds: 4);
 
 /// How long to keep looking for a transcript the agent has not written yet.
 const Duration kSessionMediaSearchInterval = Duration(seconds: 3);
 
-/// How many times to ask the store locator before giving up.
-///
-/// Bounded, unlike the chat's search loop: the chat has nothing to show without
-/// the file, whereas an empty media panel is a perfectly honest answer for a
-/// session that has not written a transcript. Re-opening the panel tries again.
+/// How many times to ask the store locator before giving up. Bounded, unlike
+/// the chat's search loop: an empty media panel is an honest answer.
 const int kSessionMediaSearchAttempts = 6;
 
-/// Where extracted pictures and the per-transcript manifests live.
-///
-/// Under the application support directory rather than the temp directory: a
-/// paste the panel is showing has to survive a reboot's temp sweep, or the
-/// picture the user came back for is gone.
+/// Where extracted pictures and the per-transcript manifests live —
+/// application support, not temp, so a paste survives a reboot's temp sweep.
 final sessionMediaCacheRootProvider = FutureProvider<Directory>((ref) async {
   final support = await appSupportDirectory();
   final root = Directory(p.join(support.path, 'media'));
@@ -46,13 +35,8 @@ final sessionMediaCacheRootProvider = FutureProvider<Directory>((ref) async {
   return root;
 });
 
-/// Which session the media panel is describing.
-///
-/// The session **on screen**, not the one last clicked in the Explorer — the
-/// same rule the rest of the side panel follows since Loop 85, because
-/// switching terminal tabs changes which agent you are looking at and a panel
-/// describing the other one is worse than useless. The Explorer's selection is
-/// the fallback for a plain shell tab that runs no session of ours.
+/// Which session the media panel is describing: the session on screen, not the
+/// last one clicked in the Explorer, which is only the fallback.
 final mediaPanelSessionIdProvider = Provider<String?>(
   (ref) =>
       ref.watch(activePaneSessionIdProvider) ??
@@ -116,13 +100,8 @@ final sessionMediaSourceProvider = Provider.autoDispose
       );
     });
 
-/// Translates a path the agent wrote into one this process can open, or null
-/// when the session's environment is unknown.
-///
-/// The agent may be running in WSL while `dart:io` here is the Windows host, so
-/// `/mnt/c/…/shot.png` has to become `C:\…\shot.png` before an image can be
-/// drawn. Explicit, environment-aware, and the same call every other feature
-/// makes — `EditorActions.windowsPathFor`.
+/// Translates a path the agent wrote into one this process can open — the agent
+/// may be in WSL — or null when the session's environment is unknown.
 final sessionMediaHostPathProvider = Provider.autoDispose
     .family<String? Function(String)?, String>((ref, sessionId) {
       final environmentId = ref
@@ -135,22 +114,12 @@ final sessionMediaHostPathProvider = Provider.autoDispose
       );
     });
 
-/// Every picture [sessionId] has produced or been shown, newest first.
-///
-/// Polled, but cheaply: the scan resumes from where it stopped, so a tick over
-/// an unchanged transcript costs one `stat()` and nothing else, and a tick over
-/// a growing one reads only what was appended. Nothing here runs unless the
-/// panel is open — `autoDispose` is the whole budget.
-///
-/// Never yields an error. A session with no readable record, a store we cannot
-/// walk, a transcript the agent has not written yet: all of them are an empty
-/// panel, which is the truth, and none of them is a reason to show a red box
-/// where a list of pictures should be.
+/// Every picture [sessionId] has, newest first. An unchanged transcript costs a
+/// `stat()`, and no readable record is an empty panel, not a red box.
 final sessionMediaProvider = StreamProvider.autoDispose
     .family<List<SessionMediaItem>, String>((ref, sessionId) async* {
-      // No opening `yield []`: the panel would show its "nothing here yet"
-      // state for the length of the first scan and then fill in, which reads as
-      // a bug. It stays in `loading` until there is a real answer.
+      // No opening `yield []`: the "nothing here yet" state followed by a fill
+      // reads as a bug, so it stays in `loading` until there is a real answer.
       final source = ref.watch(sessionMediaSourceProvider(sessionId));
       if (source == null) {
         yield const [];
@@ -161,8 +130,7 @@ final sessionMediaProvider = StreamProvider.autoDispose
       try {
         root = await ref.watch(sessionMediaCacheRootProvider.future);
       } catch (_) {
-        // No place to keep extracted pictures is no media panel; say nothing
-        // rather than throwing at a side panel.
+        // Nowhere to keep pictures is no panel; say nothing rather than throw.
         yield const [];
         return;
       }
@@ -200,10 +168,8 @@ final sessionMediaProvider = StreamProvider.autoDispose
         DateTime? modified;
         int? size;
         try {
-          // `stat()` rather than the synchronous pair: this runs on the UI
-          // isolate and the transcript can live on a `\\wsl.localhost\…` share,
-          // where the synchronous form measures 1.19 ms against 0.07 ms locally
-          // (the measurement in `sessionChatTranscriptProvider`).
+          // `stat()`, not the synchronous pair: on a `\\wsl.localhost\…` share
+          // that measures 1.19 ms against 0.07 ms locally, on the UI isolate.
           final stat = await file.stat();
           if (stat.type != FileSystemEntityType.notFound) {
             modified = stat.modified;
@@ -213,10 +179,8 @@ final sessionMediaProvider = StreamProvider.autoDispose
           modified = null;
           size = null;
         }
-        // Some network shares and older filesystems expose coarse modification
-        // times. An append can therefore change the transcript without moving
-        // `modified`; size is the cheap second half of the file identity and
-        // keeps new media from waiting for a later write to become visible.
+        // Coarse modification times exist, so an append can leave `modified`
+        // untouched; size is the cheap other half of the file identity.
         if (first || modified != lastModified || size != lastSize) {
           first = false;
           lastModified = modified;
@@ -225,49 +189,30 @@ final sessionMediaProvider = StreamProvider.autoDispose
             scan = await store.refresh(path, source.cli, previous: scan);
             yield scan.newestFirst;
           } catch (_) {
-            // A pass that failed leaves the last good list on screen rather
-            // than emptying the panel under the user.
+            // A failed pass leaves the last good list on screen.
           }
         }
         await Future<void>.delayed(kSessionMediaPollInterval);
       }
     });
 
-// -----------------------------------------------------------------------------
-// Looking one picture up by the number the CLI printed
-// -----------------------------------------------------------------------------
-
-/// What a `[Image #6]` in a pane turned out to name.
-///
-/// Two answers and no third: a picture, or a sentence. There is deliberately no
-/// "nothing happened" case — the owner's rule for this app is that anything it
-/// cannot know for certain it says in words, and a Ctrl+click that silently did
-/// nothing would be indistinguishable from a broken link.
+/// What a `[Image #6]` in a pane turned out to name: a picture, or a sentence
+/// saying why not. There is deliberately no silent "nothing happened" case.
 sealed class SessionImageLookup {
   const SessionImageLookup();
 }
 
-/// The picture, ready to draw.
 class SessionImageFound extends SessionImageLookup {
   const SessionImageFound(this.item, {this.matches = 1, this.resolveHostPath});
 
   final SessionMediaItem item;
 
-  /// How many pictures in this session carry the same number — normally one.
-  ///
-  /// More than one means the CLI restarted and began counting again, which its
-  /// own transcripts do: `…/popupbits/8a817d98-….jsonl` holds three runs, with
-  /// `#1` starting each. Within a run the numbers are unique and strictly
-  /// increasing, so [item] — the newest — is the one the process now printing
-  /// into the pane means. A line further back in the scrollback, from an
-  /// earlier run, would mean an older one, and nothing in the pane's text can
-  /// tell the two apart. So the dialog says the number was reused rather than
-  /// presenting a guess as a fact.
+  /// How many pictures carry this number — above one the CLI restarted its
+  /// counter, and the dialog says so rather than presenting a guess.
   final int matches;
 
   /// Translates a path the *agent* wrote into one this process can open, or
-  /// null when there is nothing to translate. Carried rather than applied, so
-  /// the viewer gets it on exactly the terms the media panel already uses.
+  /// null when there is nothing to translate. Carried rather than applied.
   final String? Function(String path)? resolveHostPath;
 }
 
@@ -278,28 +223,11 @@ class SessionImageUnavailable extends SessionImageLookup {
   final String reason;
 }
 
-/// Finds the picture [pasteId] names inside [sessionId].
 typedef SessionImageLookupFn =
     Future<SessionImageLookup> Function(String sessionId, int pasteId);
 
-/// The lookup behind Ctrl+clicking a `[Image #6]` in a terminal pane.
-///
-/// **On demand, never on a poll.** Unlike [sessionMediaProvider] this runs once,
-/// when somebody clicks. It goes through the same [SessionMediaStore], so a
-/// session whose panel has been open resumes from the manifest and costs a
-/// `stat()`; a session whose panel has never been opened pays one full scan,
-/// which is the panel's own first-open cost and is what makes the reference
-/// clickable without the user having to open the panel first.
-///
-/// **The newest match wins, and says when it was not the only one.** The number
-/// is a CLI *process*'s counter: within one run it is unique and climbs, and it
-/// restarts when the process does. `…/popupbits/8a817d98-….jsonl` is three runs
-/// — `#1..#1`, `#1..#7`, `#1..#6` — thirteen pastes wearing seven numbers. The
-/// text a pane is printing now came from the process running now, so the newest
-/// match is the right answer for it; a line scrolled back from an earlier run
-/// means an older picture and the pane's text cannot tell which. [matches] is
-/// therefore carried out, and the dialog says the number was reused instead of
-/// quietly presenting a guess.
+/// The lookup behind Ctrl+clicking a `[Image #6]`, through the same
+/// [SessionMediaStore]; the newest wins, and [SessionImageFound.matches] warns.
 final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
   (ref) => (sessionId, pasteId) async {
     final label = '[Image #$pasteId]';
@@ -324,8 +252,8 @@ final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
     var path = source.filePath;
     final externalId = source.externalSessionId;
     if (path == null && externalId != null && externalId.isNotEmpty) {
-      // One attempt, not the panel's retry loop: a click is a question asked
-      // once, and "not written yet" is an answer worth giving straight away.
+      // One attempt, not the panel's retry loop: a click asks once, and "not
+      // written yet" is an answer worth giving straight away.
       path = await ref
           .read(sessionTranscriptLocatorProvider)
           .locate(agentId: source.cli, externalSessionId: externalId);

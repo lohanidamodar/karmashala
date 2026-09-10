@@ -1,9 +1,5 @@
-/// What a file sent to one session may be, where the agent would see it, and
-/// what happens to it when a prompt names it.
-///
-/// One family because it is one rule read at three moments: on the row before
-/// anybody picks a photo, at `attachment.begin` before a byte crosses, and at
-/// `prompt.send` when the bytes are already on this disk.
+/// What a file sent to one session may be, and what happens when a prompt names
+/// it — one rule read on the row, at `attachment.begin`, and at `prompt.send`.
 library;
 
 import 'dart:io';
@@ -24,20 +20,8 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_providers.dart';
 
-/// What a file sent to one session may be — the answer the phone is shown on
-/// the row, **before** it lets anybody pick a 4 MB photo.
-///
-/// Three things have to be true at once, and each of them is per session:
-///
-/// 1. the agent behind it reads a path written into its prompt
-///    ([AgentAttachmentSupport], declared per agent with its evidence);
-/// 2. that agent runs somewhere this desktop can write a file it will see —
-///    which rules SSH out entirely, because the agent is on another machine
-///    and a path on this disk means nothing there;
-/// 3. there is a live session to type into at all.
-///
-/// Costs nothing to compute: three DAO reads the snapshot already makes, and
-/// no process, no probe and no filesystem call.
+/// What a file sent to one session may be, answered before anybody picks a 4 MB
+/// photo. An agent on another machine is refused: a path here is nothing there.
 RemoteAttachmentSupport remoteAttachmentSupportFor(
   Ref ref,
   String? agentId,
@@ -83,10 +67,7 @@ RemoteAttachmentSupport remoteAttachmentSupportFor(
 }
 
 /// The path an agent in [environmentId] would use for a file this host wrote.
-///
-/// Explicit, through [PathTranslator], because constraint 8 forbids the
-/// implicit kind — and because getting it wrong hands an agent a path that
-/// silently does not exist rather than an error anybody can read.
+/// Getting it wrong hands it a path that silently does not exist.
 String _agentVisiblePath(Ref ref, String hostPath, String? environmentId) {
   final environments = ref.read(executionEnvironmentDaoProvider);
   final target = environmentId == null
@@ -111,17 +92,8 @@ String _agentVisiblePath(Ref ref, String hostPath, String? environmentId) {
       .path;
 }
 
-/// Commits the upload and leaves it in the session's own message box.
-///
-/// **Offered, not sent** — the rule `ComposerDrafts` was written for, and it
-/// matters more here than it does for a note: this is a phone telling an agent
-/// on somebody's desktop to open a file that has just been written onto that
-/// desktop's disk. The path lands where the person sitting at the machine reads
-/// it before the agent does, and they press Enter or they do not.
-///
-/// The conversation is revealed for the same reason `notes_view` reveals it:
-/// the composer *is* the conversation, so a group showing its terminal has no
-/// box for this to land in.
+/// Commits the upload into the session's message box — **offered, not sent**:
+/// the path lands where the person at the machine reads it first.
 Future<void> offerRemoteAttachment(
   Ref ref,
   String sessionId,
@@ -149,9 +121,8 @@ Future<void> offerRemoteAttachment(
   try {
     visible = _agentVisiblePath(ref, committed.path, environmentId);
   } on PathTranslationException {
-    // The translator's own message quotes the path, and a refusal must not:
-    // it would put this machine's directory layout — and the name the user
-    // picked — on the wire. See [RemoteApiRefusal.message].
+    // The translator's own message quotes the path, and a refusal must not: it
+    // would put this machine's directory layout on the wire.
     throw const RemoteApiRefusal(
       ErrorCode.internal,
       'this desktop cannot write a file where that agent could open it',

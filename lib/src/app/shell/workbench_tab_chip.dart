@@ -22,35 +22,11 @@ class WorkbenchTabChip extends StatelessWidget {
   final bool selected;
 
   /// Whether this chip carries the accent rule, when that is a different
-  /// question from being selected.
-  ///
-  /// **Three states, not two.** Once the window holds several strips — a
-  /// workspace group has one, and a region of a split tab has one — "the tab
-  /// this strip is showing" and "the tab your keystrokes reach" stop being the
-  /// same question. Four groups each drawing a fully selected tab say nothing
-  /// about where you are typing. So:
-  ///
-  /// | selected | accented | reads as |
-  /// | --- | --- | --- |
-  /// | false | — | not the tab this strip is showing |
-  /// | true | false | the tab this strip is showing |
-  /// | true | true | …and this is where typing goes |
-  ///
-  /// Null means the two are the same question and selection carries the accent
-  /// — which is what a strip that is always focused wants.
+  /// question from being selected. Null means it is not, and selection carries it.
   final bool? accented;
 
-  /// Whether this chip belongs to a **pane** header rather than the window's
-  /// tab strip.
-  ///
-  /// A split stacks the two rows directly on top of each other, and drawing
-  /// them identically is what made the region header read as a second, inert
-  /// copy of the tab above it — *"an extra tab that doesn't do anything"*. So
-  /// the pane variant is shorter ([Chrome.paneStrip]), its label is a step
-  /// down ([Chrome.paneLabel]), and it carries selection on its **bottom**
-  /// edge, against the pane it names, where a tab carries it on its top edge
-  /// against the window. Shape and size rather than colour, for the reason
-  /// `session_status.dart` gives: a hue is not a category.
+  /// Whether this chip belongs to a **pane** header rather than the window's tab
+  /// strip: shorter, and selected on its *bottom* edge, so it reads as a header.
   final bool dense;
 
   final VoidCallback onTap;
@@ -59,35 +35,16 @@ class WorkbenchTabChip extends StatelessWidget {
   final Widget? trailing;
   final GestureTapDownCallback? onSecondaryTapDown;
 
-  /// What a **middle click** on the chip does — the reversible close, never
-  /// ending the session.
-  ///
-  /// A wheel press is mushy on most mice and easy to fire while scrolling, so
-  /// it gets the action whose cost can be undone: the tab or pane goes and the
-  /// session is parked, which is exactly what this chip's own X button does
-  /// and what its tooltip already promises. Ending one stays behind a menu
-  /// item with a word on it.
-  ///
-  /// It lives here rather than at the call sites because both strips share this
-  /// chip, and a gesture that worked in the workbench strip but not in a
-  /// group's would be worse than not having it. `InkWell` has no tertiary
-  /// callback, hence the wrapper; it fires on *up*, so sliding off the chip
-  /// still cancels.
+  /// What a **middle click** does — the reversible close, never ending the
+  /// session. `InkWell` has no tertiary callback, hence the wrapper; it fires up.
   final VoidCallback? onClose;
   final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // The active chip takes the colour of the ground it sits over, so the tab
-    // and its content read as one surface; selection is then carried by a rule
-    // in the accent, because an outline alone is invisible against a neutral
-    // ramp at this size. The rule sits on the edge the chip belongs to: a tab
-    // points up at the window it names, a pane header points down at the pane.
-    // The middle state is a rule too, in the neutral ink rather than the
-    // accent: dropping it entirely would leave an unfocused group's chosen tab
-    // looking like any other tab in its strip, and a group must always show
-    // which tab its terminal and its status bar belong to.
+    // The active chip takes the colour of the ground it sits over, and selection
+    // is then a rule on its edge; the middle state is neutral, not unselected.
     final rule = BorderSide(
       width: 2,
       color: switch ((selected, accented)) {
@@ -118,9 +75,7 @@ class WorkbenchTabChip extends StatelessWidget {
               ),
             ),
             // Fills the slot the strip gave it rather than hugging its title:
-            // tabs are laid out at a uniform extent, so a short name left the X
-            // floating in the middle of the tab with empty space after it — "the
-            // tabs close button is aligned to text not to the tab pad itself".
+            // at a uniform extent, a short name left the X floating mid-tab.
             child: Row(
               children: [
                 ?leading,
@@ -131,9 +86,8 @@ class WorkbenchTabChip extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
                         .copyWith(
-                          // Full ink only where the keyboard is. A strip nobody
-                          // is typing in keeps its tab legible and stops it
-                          // competing with the one that is.
+                          // Full ink only where the keyboard is: a strip nobody
+                          // types in must not compete with the one that is.
                           color: selected && (accented ?? true)
                               ? scheme.onSurface
                               : scheme.onSurfaceVariant,

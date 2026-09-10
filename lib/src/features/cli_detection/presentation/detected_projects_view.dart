@@ -10,10 +10,8 @@ import 'package:agent_cli/descriptors.dart';
 import '../application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 
-/// Browses projects and sessions auto-detected from the Claude Code and Codex
-/// CLI stores. Projects are merged by path across CLIs and environments;
-/// sessions are tagged by CLI, and SDK-spawned subagents are nested under their
-/// project. Supports rename and delete.
+/// Browses projects and sessions auto-detected from the CLI stores. Projects
+/// merge by path across CLIs and environments; subagents nest under a project.
 class DetectedProjectsView extends ConsumerWidget {
   const DetectedProjectsView({super.key});
 
@@ -264,13 +262,8 @@ class _SessionTile extends ConsumerWidget {
   }
 }
 
-/// How many sessions one CLI contributed to a project.
-///
-/// One accent for every agent, deliberately. These carried `Colors.deepOrange`
-/// and `Colors.teal` — a second and a third accent, in an app that has one —
-/// and leaned on hue alone to say which CLI a count belonged to, behind labels
-/// that were `C` and `c`. The agent's own name does that job, in words, at any
-/// contrast and for anyone who cannot tell the two hues apart.
+/// How many sessions one CLI contributed to a project. Named in words, not by
+/// hue: the app has one accent, and a colour alone is not a label.
 class _Badge extends StatelessWidget {
   const _Badge({required this.agentId, required this.count});
 
@@ -280,9 +273,8 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // "Claude Code" → "Claude", "Codex CLI" → "Codex": enough to name it, short
-    // enough for a trailing badge, and read from the registry so it cannot
-    // drift from what the rest of the app calls the agent.
+    // "Claude Code" → "Claude": short enough for a trailing badge, and read
+    // from the registry so it cannot drift from what the app calls the agent.
     final name = AgentRegistry.builtIn.displayNameFor(agentId).split(' ').first;
     return Container(
       padding: const EdgeInsets.symmetric(

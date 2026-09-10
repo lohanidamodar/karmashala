@@ -1,8 +1,7 @@
 import 'dart:io';
 
-/// A single entry (file or folder) inside a listed directory. Paths are
-/// Windows-host paths, since the listing runs on the Windows host via `dart:io`
-/// (WSL folders are reached through their `\\wsl.localhost\…` / drive form).
+/// A single entry inside a listed directory. Paths are Windows-host paths —
+/// the listing runs there, so WSL folders wear their UNC form.
 class DirEntry {
   const DirEntry({
     required this.name,

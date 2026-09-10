@@ -1,31 +1,15 @@
-/// Which terminal tabs keep a mounted widget subtree.
-///
-/// `IndexedStack` is preservation, not virtualization: it stops hidden children
-/// *painting*, but every child stays mounted with its render objects, terminal
-/// controller, focus node, scroll client and layout. Measured on the reference
-/// machine with `tool/benchmark/terminal_scale_bench.dart`: 5 291 render
-/// objects and a 65 ms tab switch at 100 tabs, against 242 and 0.06 ms at one —
-/// both linear in the number of tabs, for panes nobody can see.
-///
-/// The fix is a bounded hot set. A pane's *process and buffer* live in
-/// `TerminalSessionsController` and are untouched by this, so an unmounted tab
-/// keeps running, keeps its scrollback and comes back with the same buffer —
-/// only its widgets are rebuilt.
+/// Which terminal tabs keep a mounted widget subtree. `IndexedStack` is
+/// preservation, not virtualization: 100 tabs cost 5 291 render objects.
 library;
 
-/// How many tabs keep a mounted view.
-///
-/// Eight rather than four: a mounted tab is what makes a switch instant, and
-/// the audit's own suggestion is 4–12. Eight covers the tabs anyone cycles
-/// between in a session while capping the mounted cost at roughly a twelfth of
-/// what a hundred open tabs used to pay.
+/// How many tabs keep a mounted view. Eight rather than four: a mounted tab is
+/// what makes a switch instant, and eight covers the tabs anyone cycles between
+/// in a session while capping the mounted cost at a twelfth of a hundred.
 const int kMountedTabBudget = 8;
 
 /// The bounded set of tabs whose views stay mounted, in most-recently-active
-/// order.
-///
-/// Deliberately Flutter-free so the eviction policy is unit-testable without a
-/// widget tree — the widget only asks it what to build.
+/// order. Deliberately Flutter-free, so the eviction policy is unit-testable
+/// without a widget tree — the widget only asks it what to build.
 class MountedTabs {
   MountedTabs({this.budget = kMountedTabBudget}) : assert(budget > 0);
 
@@ -38,13 +22,8 @@ class MountedTabs {
 
   bool contains(String tabId) => _mru.contains(tabId);
 
-  /// Re-derives the set from the layout.
-  ///
-  /// Called on every build rather than on every activation, so there is one
-  /// path and no way for the set to drift from the tabs that actually exist:
-  /// closed tabs drop out, the active tab is always held, and tabs never
-  /// visited fill whatever room is left — which is what a restored layout
-  /// looks like before the user has touched any of it.
+  /// Re-derives the set from the layout on every build, so it cannot drift from
+  /// the tabs that exist: closed tabs drop out and the active tab is held.
   void sync({required Iterable<String> openTabIds, String? activeTabId}) {
     final open = openTabIds.toSet();
     _mru.removeWhere((id) => !open.contains(id));

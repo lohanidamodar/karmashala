@@ -16,18 +16,8 @@ import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
-/// The debug console for the Flutter app under development, and the two
-/// buttons that make the connection worth having.
-///
-/// **Why a console and not a status light.** Hot reload on its own is a
-/// keystroke the developer already has in the pane they typed `flutter run`
-/// into. What that pane cannot do is keep a `Flutter.Error` where it can be
-/// read after the next hundred lines of output, tell a `dart:developer` record
-/// from a `print`, or hold the output of three apps apart. This is the Debug
-/// Console half of what an editor gives you, and nothing more of it.
-///
-/// It looks when it opens and when asked, and never on a timer — §19's third
-/// rule, and the same shape `SystemHealthController.refresh()` has.
+/// The debug console for the Flutter app under development, and the two buttons
+/// worth having. Looks when it opens and when asked, never on a timer (§19).
 class FlutterAppPane extends ConsumerStatefulWidget {
   const FlutterAppPane({super.key});
 
@@ -39,8 +29,8 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
   @override
   void initState() {
     super.initState();
-    // After the first frame: opening a surface must not make the frame that
-    // opens it wait on a directory read.
+    // After the first frame: opening a surface must not make that frame wait on
+    // a directory read.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(attachedAppsProvider.notifier).look();
     });
@@ -88,8 +78,8 @@ class _StatusRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
-    // Four states, four colours, and the neutral one is for the two we cannot
-    // speak to: "not looked" and "could not look".
+    // Four states, four colours; the neutral one covers the two we cannot speak
+    // to, "not looked" and "could not look".
     final colour = switch (registry) {
       FlutterAppRegistry(discoveryFailure: final String _) => semantic.failure,
       FlutterAppRegistry(hasLooked: false) => theme.colorScheme.outline,
@@ -165,9 +155,8 @@ class _AppList extends ConsumerWidget {
               size: 14,
             ),
             title: Text(app.label ?? app.id, style: theme.textTheme.bodySmall),
-            // How it was found and how old that reading is, before the
-            // address: those two survive the ellipsis in a 272px panel, and
-            // they are what says whether the row is still worth believing.
+            // How it was found and how old that reading is, before the address:
+            // those two survive the ellipsis in a 272px panel.
             subtitle: Text(
               '${describeAppDiscovery(app.discovery)} · found '
               '${describeAge(now.difference(app.observedAt))}  ·  '
@@ -204,9 +193,8 @@ class _ActionsState extends ConsumerState<_Actions> {
     try {
       await action();
     } on FlutterAppException catch (error) {
-      // Out loud, and in the failure's own words. A caught-and-dropped
-      // failure here is indistinguishable from a reload that silently did
-      // nothing, which is the one thing this pane must never look like.
+      // Out loud, and in the failure's own words: a dropped failure here looks
+      // exactly like a reload that silently did nothing.
       _say('$verb: ${error.message}');
     } on Object catch (error) {
       _say('$verb failed: $error');
@@ -349,9 +337,8 @@ class _NothingAttached extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The remedy first says there is none, because for everything but another
-    // machine's run there genuinely is none. The button below is the one case
-    // that is left.
+    // For everything but another machine's run there genuinely is no remedy;
+    // the button below is the one case that is left.
     final hint = ref.read(attachedAppsProvider.notifier).attachHint;
     return PanePlaceholder(
       icon: AppIcons.play,
@@ -428,11 +415,8 @@ class _AttachByAddressState extends ConsumerState<_AttachByAddress> {
 class _Console extends ConsumerWidget {
   const _Console({required this.app});
 
-  /// The newest lines rendered at once.
-  ///
-  /// Bounded separately from the buffer: the buffer is what an MCP call can
-  /// page through, and this is what one scroll view can hold without the
-  /// drawing isolate paying for an app that logs in a loop.
+  /// The newest lines rendered at once — bounded separately from the buffer,
+  /// which is what an MCP call pages through.
   static const int visibleLines = 500;
 
   final AttachedApp app;
@@ -451,8 +435,7 @@ class _Console extends ConsumerWidget {
         icon: AppIcons.article,
         message: app.isAttached
             // Deliberately not "no output": what the app said before we
-            // attached is not ours to report, and claiming silence would be
-            // the confident false statement §19 exists to delete.
+            // attached is not ours to report (§19).
             ? 'Nothing since Karmashala attached. Whatever the app said before '
                   'that is not in this console.'
             : 'Not attached, so there is nothing to show.',
@@ -496,15 +479,8 @@ class _ConsoleActions extends ConsumerWidget {
     return null;
   }
 
-  /// Puts the error in the session's message box.
-  ///
-  /// **Offered, not sent** — the same contract `ComposerDrafts` gives a note
-  /// and a todo, and the reason is the same: a stack trace is a fact, and what
-  /// to do about it is the developer's sentence to write. The MCP surface is
-  /// the other half of this: an agent already working *pulls* with
-  /// `flutter_logs`. Neither path dispatches, and nothing here notifies —
-  /// pushing an exception at an agent mid-turn would be Karmashala deciding
-  /// this error is the one that matters.
+  /// Puts the error in the session's message box — offered, not sent, and
+  /// nothing notifies: an exception pushed mid-turn is Karmashala deciding.
   void _offer(BuildContext context, WidgetRef ref, AppLogRecord error) {
     final sessionId = ref.read(focusedSessionIdProvider);
     final text = <String>[
@@ -612,9 +588,8 @@ class _ConsoleLine extends StatelessWidget {
               ),
             ),
           ),
-          // History, marked. The VM service replays what it had buffered to
-          // every new subscriber, so the top of this console is the app's past
-          // and the bottom is its present.
+          // History, marked: the VM service replays its buffer to every new
+          // subscriber, so the top of this console is the app's past.
           if (record.beforeAttach)
             Padding(
               padding: const EdgeInsets.only(left: Insets.xs),

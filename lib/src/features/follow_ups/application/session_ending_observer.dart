@@ -9,50 +9,12 @@ import '../../terminal/application/pane_exit_signal.dart';
 import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';
 
-/// Turns "a session ended" into a call on [FollowUpService], from the three
-/// signals the app actually has.
-///
-/// **The durable one is the row.** Every session-revision bump re-reads the
-/// workspace and sweeps it, so an ending is noticed even if the app was not
-/// running when it happened — which is the case that matters, because the
-/// moment a session dies is precisely when nobody is looking. It is also what
-/// makes the feature survive a restart with no in-memory state to rebuild.
-///
-/// **The live one is the status pipeline.** A pane-hosted session almost never
-/// gets a terminal row status — `SessionEngine` writes one and no in-app
-/// session uses it now that they all run in a PTY (Loop 41) — so a crash in the
-/// ordinary case is visible only as the status settling on
-/// [AgentActivityStatus.failed]. This listens for that, through
-/// `agentSessionStatusProvider`, which is a read-only projection of the one
-/// registry the whole app shares: no timer, no filesystem access, no poll of
-/// its own. `SessionCheckpointRecorder` reaches the same signal the same way,
-/// and this deliberately copies it rather than inventing a second seam.
-///
-/// [endingOfTransition] is what keeps that second signal honest — a first
-/// observation is not a change, and a turn ending is not a session ending.
-///
-/// **The third is the pane's own process stopping.** Neither of the other two
-/// can say [SessionEnding.completed] for a pane-hosted session, so an agent
-/// that simply *finished* — including one that walked away from a verification
-/// run — ended in silence, which is the whole thing follow-ups are for.
-/// `paneExitProvider` is a read-only fact published by the terminal, and
-/// [endingOfPaneExit] is what keeps it honest: most pane exits are not a
-/// session ending.
-///
-/// **It has to be watched, not read.** Riverpod 3 *pauses* a provider's own
-/// subscriptions while nothing is listening to that provider, so an observer
-/// nobody watches sees no status changes at all — silently, which is the worst
-/// possible failure for a thing whose whole job is noticing. `openFollowUps`
-/// watches it, and the attention inbox watches that, so the chain is live for
-/// as long as the window's status bar is.
+/// Turns "a session ended" into a call on [FollowUpService], from three
+/// signals: the row, the [AgentActivityStatus] pipeline, and a pane's own exit.
+/// **It has to be watched**: Riverpod 3 pauses an unwatched provider silently.
 class SessionEndingObserver extends Notifier<int> {
-  /// How many times this has seen the follow-up list change.
-  ///
-  /// The provider's value, and it lives on the notifier rather than in [state]
-  /// because [build] re-runs on every workspace change and has to carry the
-  /// count across. Readers use it as a revision: it stands still through a
-  /// sweep that found nothing, which is nearly all of them, and a reader
-  /// watching it therefore re-reads the table only when there is something new.
+  /// How many times this has seen the follow-up list change. On the notifier
+  /// rather than in [state], because [build] re-runs on every workspace change.
   int _revision = 0;
 
   @override
@@ -69,11 +31,8 @@ class SessionEndingObserver extends Notifier<int> {
     final service = ref.read(followUpServiceProvider);
     if (service.sweep(sessions)) _revision++;
 
-    // **The clean finish**, which neither of the other two signals carries: the
-    // row never says `completed` for a pane-hosted session and the status
-    // pipeline never settles on it. Not filtered by the session list above —
-    // this is one subscription for the whole app, and the session it names is
-    // looked up when it arrives rather than when this ran.
+    // **The clean finish**, which neither other signal carries. One subscription
+    // for the whole app; the session it names is looked up when it arrives.
     ref.listen(paneExitProvider, (_, exit) {
       if (exit == null) return;
       // No session id is a plain shell tab, or an agent started outside the

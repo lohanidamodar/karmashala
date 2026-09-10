@@ -1,15 +1,5 @@
-/// The file-browser actions that move things, kept out of the widget.
-///
-/// Each one is several awaited device calls with a refusal at every step, and
-/// each has to end in a sentence the user can act on. Written here so those
-/// sentences are testable without a phone and without pumping a dialog — the
-/// pane keeps only navigation state, which is the part a widget is good at.
-///
-/// **Every host path built from a device id goes through
-/// `deviceStagedFilePath`**, which goes through `DeviceTarget.fileSafeId`. That
-/// is the whole reason [copyToHostClipboard] does not join a path itself: see
-/// `device_file_staging.dart` for what a colon in a Windows filename does
-/// instead of failing.
+/// The file-browser actions that move things, kept out of the widget so their
+/// sentences are testable. Host paths always go via `deviceStagedFilePath`.
 library;
 
 import 'dart:io';
@@ -31,18 +21,13 @@ class DeviceFileActionReport {
   /// One line for the user. Never a stack trace and never file *contents*.
   final String message;
 
-  /// Whether anything on the device moved, so the open directory is now stale.
-  /// False for a refusal, which is exactly when re-listing would be a wasted
-  /// subprocess.
+  /// Whether anything on the device moved, so the open directory is stale.
+  /// False for a refusal, when re-listing would be a wasted subprocess.
   final bool deviceChanged;
 }
 
-/// Pastes [clip] into [directory] on the device [driver] drives.
-///
-/// One device call per entry plus its checks, and it **stops at the first
-/// refusal** rather than carrying on through the rest: a partial paste that
-/// reported only its last result is how a user comes to believe six files
-/// moved when two did. What did move is named.
+/// Pastes [clip] into [directory] on the device [driver] drives. Stops at the
+/// first refusal and names what moved: a partial paste must not read as all.
 Future<DeviceFileActionReport> pasteOnDevice({
   required DeviceDriver driver,
   required DeviceFileClipboard clip,
@@ -84,16 +69,8 @@ String _verbPast(DeviceFileClipboard clip) => clip.mode.isCut
     ? 'Moved'
     : 'Copied';
 
-/// Copies [entries] off the device and puts them on **this computer's** file
-/// clipboard, so they can be pasted into a file manager.
-///
-/// Two steps, and the first is the one that can be misread: a file clipboard
-/// holds paths, so there has to be a real file on this disk before the
-/// clipboard can name it. The staging directory is under the system temp
-/// directory and its name is the device's `fileSafeId` — never its raw id.
-///
-/// Directories are refused rather than pulled: `pullFile` copies one file, and
-/// silently walking a tree because a click landed on a folder is not a favour.
+/// Copies [entries] onto **this computer's** file clipboard: that holds paths,
+/// so each is staged to disk first. A directory is refused, never walked.
 Future<DeviceFileActionReport> copyToHostClipboard({
   required DeviceDriver driver,
   required HostClipboard host,
@@ -140,9 +117,8 @@ Future<DeviceFileActionReport> copyToHostClipboard({
   }
   final accepted = await host.writeFiles(staged);
   if (!accepted) {
-    // The files are real and on this disk; only the clipboard refused. Saying
-    // where they are is more use than saying the copy failed, because it did
-    // not.
+    // The files are real and on this disk; only the clipboard refused. Where
+    // they are is more use than saying the copy failed, because it did not.
     return DeviceFileActionReport(
       'This computer would not take the files onto its clipboard. They are in '
       '$staging, so they can still be opened from there.',
@@ -157,12 +133,7 @@ Future<DeviceFileActionReport> copyToHostClipboard({
 }
 
 /// Pushes whatever files are on **this computer's** clipboard into [directory]
-/// on the device.
-///
-/// The other half of [copyToHostClipboard]: copy in Explorer, paste here.
-/// An empty clipboard is reported as an empty clipboard and not as a failure,
-/// because that is what it is — and the message says *file* clipboard, since
-/// the usual reason is that what was copied was text.
+/// on the device. An empty clipboard is empty, not failed: it held text.
 Future<DeviceFileActionReport> pasteFromHostClipboard({
   required DeviceDriver driver,
   required HostClipboard host,
@@ -200,11 +171,8 @@ Future<DeviceFileActionReport> pasteFromHostClipboard({
   );
 }
 
-/// The last segment of a device path.
-///
-/// Its own one-liner rather than the adb parser's `devicePathBasename`, which
-/// this layer must not reach into — and it is only ever applied to a path the
-/// driver just returned.
+/// The last segment of a device path. Its own one-liner rather than the adb
+/// parser's `devicePathBasename`, which this layer must not reach into.
 String devicePathBasenameOf(String path) {
   final cut = path.lastIndexOf('/');
   return cut < 0 || cut == path.length - 1 ? path : path.substring(cut + 1);

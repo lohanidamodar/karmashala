@@ -3,19 +3,12 @@ import 'package:xterm2/xterm.dart';
 import '../domain/command_blocks.dart';
 import '../domain/osc_router.dart';
 
-/// The most lines of typed input we will read back as one command.
-///
-/// A pasted script can put hundreds of lines between `B` and `C`; the command
-/// label only needs the first line or two, and reading the whole paste on every
-/// command would be a per-command cost proportional to what the user pasted.
+/// The most lines of typed input read back as one command: a pasted script can
+/// put hundreds between `B` and `C`, and the label needs the first one or two.
 const kMaxCommandTextLines = 4;
 
-/// A [TerminalLineRef] backed by one of xterm's own [CellAnchor]s.
-///
-/// The anchor rides along with buffer mutations and detaches itself when its
-/// line is evicted from scrollback, which is exactly the contract
-/// [TerminalLineRef] describes — and it is existing public API, so tracking
-/// command positions costs no divergence in the vendored package.
+/// A [TerminalLineRef] backed by xterm's own [CellAnchor], which detaches when
+/// its line is evicted — public API, so tracking costs no divergence.
 class CellAnchorLineRef implements TerminalLineRef {
   CellAnchorLineRef(this.anchor);
 
@@ -29,11 +22,9 @@ class CellAnchorLineRef implements TerminalLineRef {
   int? get line => anchor.attached ? anchor.y : null;
 }
 
-/// Bridges xterm's `onPrivateOSC` callback to the pure [CommandBlockTracker].
-///
-/// This is the only place the two meet: everything about the OSC 133 protocol
-/// lives in the pure model, and everything about the terminal buffer lives
-/// here.
+/// Bridges xterm's `onPrivateOSC` callback to the pure [CommandBlockTracker] —
+/// the only place the two meet: everything about the protocol lives in the pure
+/// model, everything about the terminal buffer lives here.
 class CommandBlockRecorder {
   CommandBlockRecorder(
     this.terminal, {
@@ -50,11 +41,8 @@ class CommandBlockRecorder {
   /// when the shell says the command is running.
   CellAnchorLineRef? _inputRef;
 
-  /// Starts listening. Call before the process starts, so no marker is missed.
-  ///
-  /// Through the pane's [OscRouter] rather than by taking
-  /// `terminal.onPrivateOSC`: that slot is single-occupancy and the OSC 7
-  /// working directory needs the same stream, whether or not a recorder exists.
+  /// Starts listening. Call before the process starts, so no marker is missed;
+  /// through the pane's [OscRouter], since that slot is single-occupancy.
   void attach(OscRouter router) => router.add(handleOsc);
 
   /// Handles one OSC dispatched by xterm. Anything that is not an OSC 133
@@ -80,9 +68,8 @@ class CommandBlockRecorder {
   }
 
   /// The text the user typed: everything between the `B` marker and [end].
-  ///
-  /// Returns null when the shell emitted no `B` (bash does not), or when either
-  /// end has already scrolled out of history.
+  /// Null when the shell emitted no `B` (bash does not), or when either end has
+  /// already scrolled out of history.
   String? _commandTextTo(CellAnchorLineRef end) {
     final start = _inputRef;
     if (start == null) return null;

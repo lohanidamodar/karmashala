@@ -5,11 +5,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/ssh_prompt_controller.dart';
 import '../domain/ssh_host.dart';
 
-/// Asks for a password or a private key passphrase, for one connection.
-///
-/// There is no "remember this" checkbox and there never will be: `ssh_hosts`
-/// has no column that could hold a credential, and a test asserts it. What is
-/// typed here reaches `dartssh2` and nothing else.
+/// Asks for a password or a passphrase, for one connection. There is no
+/// "remember this": what is typed reaches `dartssh2` and nothing else.
 class SshSecretDialog extends StatefulWidget {
   const SshSecretDialog({required this.host, required this.kind, super.key});
 

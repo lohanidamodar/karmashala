@@ -1,12 +1,7 @@
 import '../../projects/domain/project.dart';
 
-/// What the project list is narrowed to.
-///
-/// Three states, not two: [all] is the default and shows everything;
-/// [WorkspaceScope.of] shows one context; [unassigned] shows the projects that
-/// belong to no context. The third exists because a project with no workspace
-/// must stay reachable *as such* — otherwise the only way to find the ones you
-/// never filed would be to read all 31 rows looking for a missing badge.
+/// What the project list is narrowed to. Three states: everything, one
+/// context, or the projects filed under none — which must stay reachable.
 class WorkspaceScope {
   const WorkspaceScope._(this.workspaceId, this.unassignedOnly);
 

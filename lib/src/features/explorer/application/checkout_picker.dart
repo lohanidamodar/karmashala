@@ -13,12 +13,8 @@ import 'checkout.dart';
 import 'checkout_default.dart';
 import 'picked_checkouts.dart';
 
-/// The checkout the repository-scoped surfaces are currently describing.
-///
-/// Reads a **repository** row, so it watches the workspace and nothing about
-/// sessions. It watched the session revision because that counter was where
-/// the projects controller published a rescan; renaming a session used to
-/// re-read this row for no reason at all.
+/// The checkout the repository-scoped surfaces are currently describing. Reads
+/// a *repository* row, so a session rename must not re-read it.
 final selectedCheckoutProvider = Provider<Repository?>((ref) {
   ref.watchSessionKinds(const {SessionChangeKind.workspace});
   final id = ref.watch(selectedRepositoryIdProvider);
@@ -26,20 +22,9 @@ final selectedCheckoutProvider = Provider<Repository?>((ref) {
   return ref.read(repositoryDaoProvider).getById(id);
 });
 
-/// The checkouts the session the panel is following is working in, best first.
-///
-/// [sessionCheckouts] is the rule; this is the panel's way in to it. Empty when
-/// no session is followed — a plain shell tab, or a workspace nobody has opened
-/// a session in — which is what leaves the picker in its plain path order.
-///
-/// Costs the three indexed queries [sessionCheckouts] costs and nothing else:
-/// no filesystem, no git. That is the condition of reading it from a provider
-/// the side panel rebuilds on every tab switch.
-///
-/// The change rank inside it *reads* the delivery cache without watching it, so
-/// a `git status` finishing somewhere does not silently reorder an open menu —
-/// the order is recomputed when the workspace or the followed session moves,
-/// which is when the user has reason to expect it to.
+/// The checkouts the followed session is working in, best first; empty when no
+/// session is followed. Three indexed queries, no filesystem and no git, and
+/// the change rank *reads* the delivery cache without watching it.
 final sessionCheckoutsProvider = Provider<List<Repository>>((ref) {
   final sessionId = ref.watch(followedSessionProvider);
   if (sessionId == null) return const [];
@@ -51,51 +36,17 @@ final sessionCheckoutsProvider = Provider<List<Repository>>((ref) {
   return sessionCheckouts(ref, session);
 });
 
-/// What the picker offers: **the project's parent repositories** — its clones —
-/// with the active session's leading, and no linked worktrees at all.
-///
-/// **Two levels, not one list.** One rescan took the owner's `popupbits`
-/// project to 69 recorded checkouts, and the picker — a line at the top of the
-/// side panel that says which repository you are looking at — became sixty-nine
-/// rows in path order, of which one was the answer. Listing the session's
-/// checkouts first fixed the ordering and not the shape. The owner's answer is
-/// better than either: *"the picker should show parent repos; the worktrees
-/// should appear in the details after selecting the parent repo"*. So this is
-/// level one, short by construction — a project has a handful of clones however
-/// many worktrees hang off them — and [selectedCheckoutWorktreesProvider] is
-/// level two.
-///
-/// **Which rows are worktrees is read, never asked.** `git worktree list` is
-/// the only thing that truly knows, and [checkoutLabelsProvider] already runs
-/// it once per repository *family* for the panel beside this one. This reads
-/// that answer through `ref.exists` and never fills it, the same rule
-/// `_changeRank` holds in `checkout_default.dart` — a picker that started a git
-/// process per checkout to decide what to draw would be the very cost this
-/// change exists to remove. A checkout nothing has classified yet is kept, so
-/// the list only ever shortens as knowledge arrives and the picker is never
-/// wrongly empty.
-///
-/// The session's own checkouts lead, so the repository you are working in is
-/// the one at the top rather than whichever sorts first. Confined to the
-/// selected checkout's project: offering another project's clones would move
-/// the panel out from under the user.
-///
-/// Watches the workspace revision, not the project list: a rescan that only
-/// *adds* repositories leaves the projects and the selection equal, so the
-/// picker would keep listing yesterday's clones.
+/// What the picker offers: the project's parent repositories, the active
+/// session's leading, and no linked worktrees — those are level two,
+/// [selectedCheckoutWorktreesProvider]. Worktree-ness is read, never asked.
 final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected == null) return const [];
   return ref.watch(checkoutsInProjectProvider(selected.projectId));
 });
 
-/// [projectCheckoutsProvider] for a project the app is **not** pointed at.
-///
-/// The same two-level rule, asked of a named project rather than of the
-/// selection — which is what a surface that offers a *destination* needs: the
-/// New session dialog lets you start somewhere without moving the Explorer
-/// there first, so it has to be able to ask "what are the parent checkouts of
-/// that project" about a project nothing is selected in.
+/// [projectCheckoutsProvider] for a project the app is **not** pointed at —
+/// what a surface offering a *destination*, like the New session dialog, needs.
 final checkoutsInProjectProvider = Provider.family<List<Repository>, String>((
   ref,
   projectId,
@@ -116,17 +67,13 @@ final checkoutsInProjectProvider = Provider.family<List<Repository>, String>((
       repository.id: repository,
   };
 
-  /// The row this checkout should put at the top of a picker that offers only
-  /// parents: itself when it is one, otherwise the repository it is a worktree
-  /// of. A session working in `wt-relay` is a session working on `app`, and
-  /// the picker that says so is the one whose second level then holds the
-  /// worktree the agent is actually in.
+  /// The row this checkout should lead a parents-only picker with: itself, or
+  /// the repository it is a worktree of.
   Repository? parentOf(Repository repository) {
     if (isParent(repository)) return repository;
     final owner = labels?[repository.id]?.ownerRepositoryId;
-    // A worktree whose main checkout the workspace never recorded has no
-    // parent to lead with, and inventing one would point the panel at a
-    // repository the user does not have.
+    // A worktree whose main checkout the workspace never recorded has no parent
+    // to lead with, and inventing one points the panel at a missing repository.
     return owner == null ? null : byId[owner];
   }
 
@@ -144,21 +91,16 @@ final checkoutsInProjectProvider = Provider.family<List<Repository>, String>((
   return [...leading, ...rest.where((r) => !led.contains(r.id) && isParent(r))];
 });
 
-/// Every repository row of the selected checkout's project, worktrees included.
-///
-/// [projectCheckoutsProvider] lists only parents, so anything resolving a
-/// worktree path back to the row behind it must come here instead.
+/// Every repository row of the selected checkout's project, worktrees included
+/// — [projectCheckoutsProvider] lists only parents.
 final projectCheckoutRowsProvider = Provider<List<Repository>>((ref) {
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected == null) return const [];
   return ref.watch(checkoutRowsInProjectProvider(selected.projectId));
 });
 
-/// [projectCheckoutRowsProvider] for a named project, worktrees included.
-///
-/// The second half of what a destination picker needs: the parents come from
-/// [checkoutsInProjectProvider], and the worktrees hanging off the one you
-/// chose are these rows minus those.
+/// [projectCheckoutRowsProvider] for a named project, worktrees included: the
+/// worktrees of a chosen parent are these rows minus [checkoutsInProjectProvider].
 final checkoutRowsInProjectProvider = Provider.family<List<Repository>, String>(
   (ref, projectId) {
     ref.watchSessionKinds(const {SessionChangeKind.workspace});
@@ -166,24 +108,14 @@ final checkoutRowsInProjectProvider = Provider.family<List<Repository>, String>(
   },
 );
 
-/// Level two: the linked worktrees of the repository the picker has selected,
-/// for the panel body to list underneath it.
-///
-/// One `git worktree list`, for one repository, and only while something is
-/// watching this — which is the whole point of splitting the picker in two. The
-/// old shape asked about every checkout in the project to draw a list nobody
-/// had opened; this asks about the one the user just chose.
-///
-/// The main worktree is dropped: it *is* the selected repository, and repeating
-/// it as a child of itself is how the old tree ended up drawing one checkout
-/// twice. Empty is a real answer — a clone with no worktrees — and is not the
-/// same as git having failed, which surfaces as an error on the `AsyncValue`.
+/// Level two: the linked worktrees of the repository the picker has selected.
+/// One `git worktree list` for one repository, only while something watches
+/// this. The main worktree is dropped — it *is* the selected repository.
 final selectedCheckoutWorktreesProvider =
     FutureProvider.autoDispose<List<GitWorktree>>((ref) async {
-      // **One `git worktree list` per bump.** Watching the whole session
-      // revision meant a session being renamed — on a timer, by the CLI store
-      // sweep — started a git subprocess against a `\\wsl.localhost` path.
-      // `session_signal_cost_test.dart` counts it.
+      // One `git worktree list` per workspace bump: watching the whole session
+      // revision made a rename start git on a `\\wsl.localhost` path
+      // (`session_signal_cost_test.dart`).
       ref.watchSessionKinds(const {SessionChangeKind.workspace});
       final selected = ref.watch(selectedCheckoutProvider);
       if (selected == null) return const [];
@@ -210,18 +142,9 @@ class CheckoutLabel {
   /// Null when detached or unreported.
   final String? branch;
 
-  /// The `repositories` row holding this family's **main** worktree, when the
-  /// workspace has one.
-  ///
-  /// This is what makes the picker's two levels line up. A session working in
-  /// `wt-relay` must put `app` at the top of the picker — the parent it hangs
-  /// off — and containment cannot work that out, because a worktree is a
-  /// *sibling* of its main checkout far more often than a child of it. Only
-  /// `git worktree list` knows, and it says so in the same answer that decides
-  /// [isWorktree], so carrying it costs nothing.
-  ///
-  /// Null for a main checkout, and for a worktree whose main checkout the
-  /// workspace has not recorded.
+  /// The `repositories` row holding this family's **main** worktree. Only
+  /// `git worktree list` knows it: a worktree is a *sibling* of its main
+  /// checkout more often than a child, so containment cannot work it out.
   final String? ownerRepositoryId;
 
   @override
@@ -240,35 +163,9 @@ class CheckoutLabel {
       'owner: $ownerRepositoryId)';
 }
 
-/// Worktree-or-not and branch for every checkout in [projectId], by repository
-/// id.
-///
-/// One `git worktree list` per repository *family*, not per row — the command
-/// reports the whole family wherever it is run. `autoDispose`, and read only
-/// from the open picker, so nothing runs while the panel merely sits there.
-///
-/// ## Grouped first, then asked concurrently
-///
-/// The calls are independent and were awaited one at a time, and a plain
-/// `.wait` over the rows would have been the wrong fix: the dedup that made
-/// this cheap was the loop noticing that a row was already covered by an answer
-/// it had, which only works because the answers arrive in order. Sixty-nine
-/// checkouts of one repository would have become sixty-nine processes to learn
-/// sixty-eight times what the first one said.
-///
-/// So the grouping happens **before** git is asked. Two worktrees of one clone
-/// share a git directory — that is what makes them a family — and
-/// `ChangesService.familyKey` reads it off `.git` for the price of a `typeOf`
-/// per row and no process at all. One representative per key is then asked, all
-/// at once.
-///
-/// **A row whose key is unknown falls back to the old sequential pass**, and
-/// this is the half that must not be lost: an SSH checkout has no path this
-/// process can open, so every one of them would answer "unknown", and treating
-/// each as a family of its own would turn the one saving here into N processes.
-/// They are walked afterwards, in order, skipping whatever the concurrent
-/// answers already covered — exactly today's behaviour, for exactly the rows
-/// that used to be the only behaviour.
+/// Worktree-or-not and branch for every checkout in [projectId] — one `git
+/// worktree list` per repository *family*, grouped by `familyKey` before git is
+/// asked. Rows with no key (SSH) fall back to the sequential pass.
 final checkoutLabelsProvider = FutureProvider.autoDispose
     .family<Map<String, CheckoutLabel>, String>((ref, projectId) async {
       final repositories = ref
@@ -337,8 +234,8 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
         record(listed);
       }
 
-      // And the rows nothing could be read about, the way they have always been
-      // walked: in order, skipping whatever is already covered.
+      // And the rows nothing could be read about: in order, skipping whatever
+      // is already covered.
       for (final repository in unkeyed) {
         if (family.containsKey(Checkout(repository.path))) continue;
         record(await listOrNull(repository.path));
@@ -355,11 +252,8 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
       };
     });
 
-/// Points the repository-scoped surfaces at a checkout the user picked.
-///
-/// Another *explicit* writer of the existing precedence rule — and, since the
-/// pick is remembered against the session it was made in, one the context can
-/// give back. See [PickedCheckouts] for why it has to.
+/// Points the repository-scoped surfaces at a checkout the user picked, and
+/// remembers it against the session — see [PickedCheckouts] for why.
 class CheckoutPicker {
   const CheckoutPicker(this._ref);
 

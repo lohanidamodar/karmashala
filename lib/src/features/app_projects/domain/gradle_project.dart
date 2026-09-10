@@ -1,22 +1,11 @@
-/// What a Gradle build says about itself, read the way `readPubspec` reads a
-/// pubspec: line by line, no parser, and wrong in the safe direction.
-///
-/// **Deliberately not a Gradle evaluation.** A settings script is a Kotlin or
-/// Groovy program and the only honest way to know what it includes is to run
-/// it — which is a JVM, a daemon and thirty seconds, for a question asked
-/// while somebody is looking at a list. What is read here is the shape every
-/// `gradle init` and every Android Studio template writes, and a script it
-/// misreads reads as "not a native Android project", so the app offers
-/// nothing rather than offering to build the wrong thing.
+/// What a Gradle build says about itself, read line by line with no parser and
+/// wrong in the safe direction: a script this misreads is "not native Android".
 library;
 
 import 'dart:convert';
 
 /// The modules a settings script includes, as Gradle spells them: `:app`.
-///
-/// `include(":app")`, `include ':app'` and `include ':app', ':wear'` all
-/// count. `include(projects.app)` — the type-safe accessor — does not, because
-/// resolving it means reading the accessor Gradle generates.
+/// `include(projects.app)` does not count — the accessor is Gradle's to resolve.
 List<String> gradleIncludedModules(String contents) {
   final modules = <String>[];
   for (final raw in const LineSplitter().convert(contents)) {
@@ -40,16 +29,8 @@ String? gradleRootProjectName(String contents) {
   return null;
 }
 
-/// Whether a settings script makes this a **Flutter host module** rather than
-/// a native Android project.
-///
-/// This is the discriminator that keeps `karmashala/android/` out of the
-/// native path. That directory carries `com.android.application` and an
-/// `applicationId`, has no `pubspec.yaml` of its own, and would answer to
-/// every native marker — but its settings script `includeBuild`s
-/// `flutter_tools/gradle` and applies `dev.flutter.flutter-plugin-loader`, so
-/// it is the Android half of the Flutter project one directory up. Building it
-/// as a native project would build somebody else's app behind their back.
+/// Whether a settings script makes this a Flutter host module — the
+/// discriminator that stops `karmashala/android/` being built as a native app.
 bool gradleSettingsIsFlutterHost(String contents) =>
     contents.contains('dev.flutter.') ||
     contents.contains('flutter_tools/gradle') ||
@@ -69,14 +50,11 @@ class GradleModuleReading {
   final Set<String> pluginIds;
 
   /// Version-catalog aliases: `alias(libs.plugins.android.application)` gives
-  /// `android.application`. What a fresh Android Studio project writes, so
-  /// missing it would mean missing the common case.
+  /// `android.application`. What a fresh Android Studio project writes.
   final Set<String> pluginAliases;
 
-  /// The `applicationId` **literal**, or null. A computed one
-  /// (`applicationId = "$base.$flavour"`) reads as null on purpose: a value
-  /// Gradle assembles is one we would be guessing at, and the build's own
-  /// `output-metadata.json` answers it exactly once there is a build.
+  /// The `applicationId` **literal**, or null. A computed one reads as null on
+  /// purpose; the build's `output-metadata.json` answers it exactly.
   final String? applicationId;
 
   final String? namespace;
@@ -85,10 +63,8 @@ class GradleModuleReading {
   bool get isFlutterHostModule =>
       pluginIds.any((id) => id.startsWith('dev.flutter.'));
 
-  /// Whether this module builds an Android **application** — not a library.
-  ///
-  /// [catalog] maps a normalised alias to the plugin id it stands for, read
-  /// from `gradle/libs.versions.toml`. Empty when there is no catalog.
+  /// Whether this module builds an Android **application**, not a library.
+  /// [catalog] maps a normalised alias to the plugin id it stands for.
   bool appliesAndroidApplication({
     Map<String, String> catalog = const <String, String>{},
   }) {
@@ -102,7 +78,6 @@ class GradleModuleReading {
   static const String _androidApplication = 'com.android.application';
 }
 
-/// Reads one module's build script.
 GradleModuleReading readGradleModule(String contents) {
   final ids = <String>{};
   final aliases = <String>{};
@@ -134,12 +109,8 @@ GradleModuleReading readGradleModule(String contents) {
   );
 }
 
-/// The `[plugins]` table of `gradle/libs.versions.toml`, as alias → plugin id.
-///
-/// Keys are normalised the way Gradle generates its accessors: `-` and `_`
-/// become `.`, so `android-application` and `androidApplication` both answer
-/// to `libs.plugins.android.application` and `libs.plugins.androidApplication`
-/// respectively.
+/// The `[plugins]` table of `gradle/libs.versions.toml`, as alias → plugin id,
+/// with keys normalised the way Gradle generates its accessors.
 Map<String, String> gradlePluginCatalog(String toml) {
   final catalog = <String, String>{};
   var inPlugins = false;

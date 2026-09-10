@@ -13,19 +13,8 @@ enum BulkCloseChoice {
   keepRunning,
 }
 
-/// Asks before a bulk close that would take a running session with it.
-///
-/// **Why only the bulk closes ask.** Closing *one* tab is a view action, and
-/// detaching is right there — the X is not a kill switch. Closing every other
-/// tab is the user clearing the deck, and quietly parking a dozen live agents
-/// in the background list is the outcome nobody wants: they are still burning
-/// tokens, still holding ports, and the only sign of it is a badge. So the bulk
-/// verbs state what is about to happen and make ending the default answer,
-/// while *Close, keep running* is still one click away for the person who meant
-/// the old behaviour.
-///
-/// Returns null when the user backs out. Not shown at all when nothing in the
-/// set is live — there is no question to ask.
+/// Asks before a bulk close that would take a running session with it — only
+/// the bulk closes ask, because clearing the deck would park live agents.
 Future<BulkCloseChoice?> confirmBulkTabClose(
   BuildContext context, {
   required int tabs,

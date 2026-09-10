@@ -31,24 +31,14 @@ class AgentRedetectState {
   String? get message => error ?? report?.summary;
 }
 
-/// Runs agent detection again, on demand.
-///
-/// Separate from [AgentInstallationsController] because this holds the *view's*
-/// state — busy, and the account of the last run — which the installation list
-/// itself has no business carrying.
+/// Runs agent detection again, on demand. Separate from
+/// [AgentInstallationsController] because this holds the *view's* state.
 class AgentRedetectController extends Notifier<AgentRedetectState> {
   @override
   AgentRedetectState build() => const AgentRedetectState();
 
-  /// Re-probes everything, and repairs a rotted path on the way.
-  ///
-  /// The repair is not a separate step here: `discoverAll` is the same
-  /// reconciling sweep the startup check narrows, so it already resolves a
-  /// junction chain, follows a moved executable *keeping its row id*, and keeps
-  /// a row it could not reach rather than deleting it. What this adds is the
-  /// **reading** — the filesystem asked again afterwards, published where the
-  /// startup check publishes it, so a user who presses this button sees the
-  /// same account of what is reachable that a launch would have given them.
+  /// Re-probes everything and repairs a rotted path on the way, publishing the
+  /// reading where the startup check publishes it so the two cannot disagree.
   Future<void> redetect() async {
     if (state.busy) return;
     state = const AgentRedetectState(busy: true);

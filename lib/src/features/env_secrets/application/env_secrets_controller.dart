@@ -7,14 +7,8 @@ import '../data/env_vault.dart';
 import '../domain/env_variable.dart';
 import 'env_overlay.dart';
 
-/// The vault backing this session.
-///
-/// Defaults to [EnvVault.unavailable] rather than throwing the way
-/// `databaseProvider` does. "No vault" is a legitimate state — it is what every
-/// test that does not care about environment variables should see, and what a
-/// machine whose vault could not be opened must fall back to — and the one
-/// thing this feature may never do is stop a terminal opening. `main.dart`
-/// overrides it with the real, hardened one.
+/// The vault backing this session. Defaults to [EnvVault.unavailable] rather
+/// than throwing: no vault is legitimate, and this must never stop a terminal.
 final envVaultProvider = Provider<EnvVault>((ref) => EnvVault.unavailable());
 
 /// The user's environment variables, and the master switch over them.
@@ -55,11 +49,8 @@ class EnvSecretsController extends Notifier<EnvVaultData> {
     ),
   );
 
-  /// Replaces the name, value and secrecy of [id].
-  ///
-  /// [value] is null when the user edited a secret's name without replacing its
-  /// value — the dialog cannot show them what is there, so "leave it alone" has
-  /// to be expressible.
+  /// Replaces the name, value and secrecy of [id]. [value] is null when the user
+  /// edited a secret's name only — "leave it alone" has to be expressible.
   Future<void> update(
     String id, {
     String? name,
@@ -115,14 +106,8 @@ class EnvSecretsController extends Notifier<EnvVaultData> {
     _publishRedaction(data);
   }
 
-  /// Teaches the log redactor this session's secret values.
-  ///
-  /// Belt and braces. Nothing in the app logs a `PtyLaunch.environment` map and
-  /// a test pins that it stays that way — but a value that reaches a log line
-  /// by a route nobody predicted (an error message quoting a command, a
-  /// third-party exception) must not reach the log file, the panel or the
-  /// clipboard. Redaction runs once on the way into `Diagnostics`, so installing
-  /// it here covers all four sinks at once.
+  /// Teaches the log redactor this session's secret values. Belt and braces: a
+  /// value reaching a log line by an unpredicted route must still not get out.
   void _publishRedaction(EnvVaultData data) {
     final rule = RedactionRule.literalValues(
       redactableSecretValues(data),
@@ -138,12 +123,8 @@ final envSecretsControllerProvider =
       EnvSecretsController.new,
     );
 
-/// The environment overlay every terminal launch layers onto the host
-/// environment.
-///
-/// Read (not watched) at launch by `terminalInstanceFactoryProvider`. Changing
-/// a variable therefore affects the *next* pane rather than the ones already
-/// running, which is what the settings page says it does.
+/// The environment overlay every terminal launch layers on. Read, not watched:
+/// a change affects the *next* pane, which is what the settings page says.
 final terminalEnvOverlayProvider = Provider<Map<String, String>>(
   (ref) => resolveEnvOverlay(ref.watch(envSecretsControllerProvider)),
 );

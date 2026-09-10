@@ -1,23 +1,11 @@
 /// The rules that decide whether an agent may be started with nobody watching.
-///
-/// **Pure, and over plain inputs.** Nothing here reads a table, a setting or a
-/// filesystem; the lookups live in `unattended_preflight.dart` and hand the
-/// answers in. That split is what makes one gate serve every unattended entry
-/// point — arming in the UI, a scheduled fire, the queue drain — so an
-/// automation cannot be refused by one path and armed by another, and what the
-/// arm form says on hover is the sentence the write path throws.
+/// Pure and over plain inputs, so one gate serves every unattended entry point.
 library;
 
 import 'package:agent_cli/descriptors.dart';
 
-/// Where the agent would run, as the environment resolver answered.
-///
-/// Three values because they are three different things to tell a person: the
-/// checkout names an environment this app can run a command in; nothing names
-/// where its commands would run at all; or it is named and unreachable from
-/// here. `EnvironmentRefusal.sshUnavailable` is exactly the third — *this app
-/// cannot reach where the agent would run* — and it maps here rather than
-/// being re-derived, so the resolver stays the one answer to that question.
+/// Where the agent would run, as the environment resolver answered — three
+/// values, and `EnvironmentRefusal.sshUnavailable` maps here, not re-derived.
 enum UnattendedReach {
   /// Named, and a command can be run there from this app.
   reachable,
@@ -29,12 +17,8 @@ enum UnattendedReach {
   unreachable,
 }
 
-/// Why an automation may not fire with nobody watching.
-///
-/// Named values rather than a bare string so a surface can decide *where* to
-/// send the user — the verification rules point at the checkout's checks, the
-/// permission rule at the agent's own modes — while the sentence stays the
-/// same wherever it is shown.
+/// Why an automation may not fire with nobody watching. Named values so a
+/// surface can decide where to send the user, while the sentence stays one.
 enum UnattendedRefusalKind {
   /// Verification is off for the checkout the automation would run in.
   verificationDisabled,
@@ -58,11 +42,8 @@ enum UnattendedRefusalKind {
   environmentUnreachable,
 }
 
-/// One refusal: what rule said no, in the words a person reads.
-///
-/// There is exactly one refusal type on purpose. The arm form shows [reason],
-/// the write path throws [reason], and the recorded `missed`/`failed` run row
-/// stores [reason] — so a reason on hover is the reason arming would throw.
+/// One refusal: what rule said no, in the words a person reads. Exactly one
+/// type, so a [reason] shown on hover is the reason arming would throw.
 class UnattendedRefusal {
   const UnattendedRefusal(this.kind, this.reason);
 
@@ -100,27 +81,18 @@ class UnattendedGateInput {
   /// The checkout's own name, so a sentence names the thing that is not ready.
   final String repositoryName;
 
-  /// Whether this checkout's work is verified at all.
   final bool verificationEnabled;
 
-  /// How many project checks the checkout has configured.
   final int projectCheckCount;
 
   final String agentName;
 
-  /// Whether the installation this was armed on is still here.
-  ///
-  /// An arming-time precondition that lapses on its own: the CLI is
-  /// uninstalled, or its row went away. Refused rather than resolved to
-  /// another installation — an automation names *this* agent on *this*
-  /// machine, and silently running it somewhere else is the substitution the
-  /// whole gate exists to prevent.
+  /// Whether the installation this was armed on is still here — refused rather
+  /// than resolved to another, since it names *this* agent on *this* machine.
   final bool agentInstalled;
 
-  /// The most the chosen permission selection permits, or **null when nobody
-  /// has established this agent's modes** — `AgentPermissionSupport.riskOf`
-  /// answers null for an unknown agent and for "enforce nothing", and both are
-  /// the absence of a claim rather than a permissive one.
+  /// The most the chosen selection permits, or null when nobody has established
+  /// this agent's modes — the absence of a claim, never a permissive one.
   final PermissionRisk? permits;
 
   /// The mode's own label, for the sentence. Empty when there is none.
@@ -136,35 +108,13 @@ class UnattendedGateInput {
   final String reachReason;
 }
 
-/// Whether a mode still stops and asks a human.
-///
-/// Decided on the rung, because the rung is the part that carries evidence:
-/// every [PermissionRisk] value's own description says what it does, and two
-/// of them say they ask. [PermissionRisk.ask] is *"Prompts before edits and
-/// commands"*; [PermissionRisk.acceptEdits] is *"Writes without asking. Still
-/// asks before running commands"* — so an automation armed on either would
-/// stop at a prompt with nobody in the room, which is a button that silently
-/// does nothing.
-///
-/// The other three do not ask. [PermissionRisk.readOnly] changes nothing, so
-/// there is nothing to ask permission for; [PermissionRisk.autoRun] says *"no
-/// routine prompts"*; [PermissionRisk.bypass] says *"no prompts"*. Bypass is
-/// **not** refused here — it is [PermissionRisk.isDangerous], which the arm
-/// form warns about and makes the person confirm, and inventing a second
-/// refusal for it would be this gate deciding a question the arming human
-/// already answered.
-///
-/// A null rung is not an answer and is handled by [unattendedRefusal] rather
-/// than by this function: "we have not established what this does" is refused,
-/// never read as "it does not prompt" (§19).
+/// Whether a mode still stops and asks a human: [PermissionRisk.ask] and
+/// [PermissionRisk.acceptEdits] do. A null rung is [unattendedRefusal]'s (§19).
 bool permissionModeCanPrompt(PermissionRisk risk) =>
     risk == PermissionRisk.ask || risk == PermissionRisk.acceptEdits;
 
-/// Why this automation may not fire unattended, or `null` when it may.
-///
-/// The order is the order a person can act in: what the checkout is missing
-/// first, then the mode they picked, then whether we can get to the machine at
-/// all — because fixing the last one is not something the arm form can offer.
+/// Why this automation may not fire unattended, or `null` when it may. Ordered
+/// so a person can act: the checkout, then the mode, then reachability last.
 UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   final repository = input.repositoryName.trim().isEmpty
       ? 'this checkout'
@@ -243,7 +193,6 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   }
 }
 
-/// Whether an unattended fire may proceed.
 bool canRunUnattended(UnattendedGateInput input) =>
     unattendedRefusal(input) == null;
 

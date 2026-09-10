@@ -1,17 +1,9 @@
-// **The picture, and everything layered over it** — the live view itself, the
-// touch and keyboard surfaces it arms, the overlay that says a held frame is
-// not a live one, and what it draws instead when there is no picture yet.
-//
-// A part of `device_pane.dart` rather than its own library: `_LiveView` is
-// private to the pane, and its type name is what the pane's committed widget
-// tree records, so making it public to move it would cost the proof.
+// The picture, and everything layered over it. A part of `device_pane.dart`:
+// `_LiveView`'s type name is what the pane's committed widget tree records.
 part of 'device_pane.dart';
 
-/// The live picture, plus the tap/drag surface.
-///
-/// The video is wrapped in an [AspectRatio] matching the **device** aspect, so
-/// the player never letterboxes internally and the widget box is exactly the
-/// picture — which is what makes the coordinate mapping a pure scale.
+/// The live picture, plus the tap/drag surface. The [AspectRatio] matches the
+/// *device*, so the widget box is the picture and the mapping is a pure scale.
 class _LiveView extends ConsumerWidget {
   const _LiveView({
     required this.video,
@@ -37,10 +29,8 @@ class _LiveView extends ConsumerWidget {
   final AndroidDevice? device;
   final bool starting;
 
-  /// Whether [video] is the previous session's held frame rather than a live
-  /// picture. It is covered and labelled while this is true, and nothing taps
-  /// through it: a stale frame is the one thing a live view must never be
-  /// mistaken for.
+  /// Whether [video] is the previous session's held frame. Covered, labelled,
+  /// and nothing taps through it: a stale frame must not pass for a live one.
   final bool reconnecting;
 
   final DeviceGestureSink? sink;
@@ -54,13 +44,8 @@ class _LiveView extends ConsumerWidget {
   /// Whether automatic reconnection has given up.
   final bool exhausted;
 
-  /// Whether the app is still finding out what is attached.
-  ///
-  /// The first listing costs about 460ms on a Mac — an SDK to discover, `adb`
-  /// and `simctl` to ask — and for that time the pane invited the user to
-  /// "pick a device below" from a list that had not arrived. Not false, but a
-  /// prompt for something nobody could do yet, which reads as "there is
-  /// nothing here" the moment it is wrong.
+  /// Whether the app is still finding out what is attached. The first listing
+  /// costs ~460 ms, and "pick a device below" then reads as "nothing here".
   final bool probing;
 
   final VoidCallback onRestart;
@@ -107,8 +92,7 @@ class _LiveView extends ConsumerWidget {
       children: [
         Expanded(
           // Keyboard forwarding wraps the picture rather than sitting beside
-          // it: it is only ever on while *this* is what has focus, and the bar
-          // it draws underneath has to say so where the user is looking.
+          // it: it is only on while *this* has focus, and the bar says so.
           child: DeviceKeyboardSurface(
             sink: keyboard,
             deviceLabel: currentDevice.displayName,
@@ -119,20 +103,16 @@ class _LiveView extends ConsumerWidget {
                   fit: StackFit.expand,
                   children: [
                     if (reconnecting)
-                      // Not a Video with an overlay next to it: the two travel
-                      // together by construction, so no later edit can leave a
-                      // held frame passing for a live one.
+                      // Not a Video with an overlay beside it: the two travel
+                      // together, so no later edit can un-label a held frame.
                       HeldPicture(
                         deviceLabel: currentDevice.displayName,
                         child: Video(
                           controller: controller,
                           fit: BoxFit.fill,
                           controls: NoVideoControls,
-                          // media_kit defaults to `low`, which is a plain
-                          // bilinear sample. The stream is captured smaller
-                          // than the pane draws it, so this upscale is on
-                          // every frame and `low` makes a soft picture blocky
-                          // as well. Costs nothing on the wire.
+                          // media_kit defaults to `low`, a plain bilinear
+                          // sample; this upscale is on every frame.
                           filterQuality: FilterQuality.medium,
                         ),
                       )
@@ -143,18 +123,13 @@ class _LiveView extends ConsumerWidget {
                           controller: controller,
                           fit: BoxFit.fill,
                           controls: NoVideoControls,
-                          // media_kit defaults to `low`, which is a plain
-                          // bilinear sample. The stream is captured smaller
-                          // than the pane draws it, so this upscale is on
-                          // every frame and `low` makes a soft picture blocky
-                          // as well. Costs nothing on the wire.
+                          // media_kit defaults to `low`, a plain bilinear
+                          // sample; this upscale is on every frame.
                           filterQuality: FilterQuality.medium,
                         ),
                       ),
-                    // A device with nothing new to show is not a fault, so it
-                    // gets a chip rather than the scrim below — with the way
-                    // out on it, because this is the one state the app cannot
-                    // be certain about.
+                    // A device with nothing new to show is not a fault: a chip
+                    // rather than the scrim, with the way out on it.
                     if (idle)
                       Align(
                         alignment: Alignment.topCenter,
@@ -164,9 +139,8 @@ class _LiveView extends ConsumerWidget {
                           onRestart: onRestart,
                         ),
                       ),
-                    // A stale picture must not pass for a live one. The frame
-                    // underneath is left visible — it is still the last thing
-                    // the device showed — but it is dimmed and labelled.
+                    // A stale picture must not pass for a live one: the frame
+                    // underneath stays visible, dimmed and labelled.
                     if (unwell)
                       StreamStalledOverlay(
                         health: report,

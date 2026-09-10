@@ -20,12 +20,8 @@ import 'attached_apps.dart';
 import 'flutter_app_providers.dart';
 import 'flutter_sdk_readings.dart';
 
-/// How many of the pane's bottom rows the announcement is looked for in.
-///
-/// A `flutter run` prints its address a few lines before it hands over to the
-/// interactive key list, and a Gradle build paints a lot after it. Sixty rows
-/// covers the gap at any pane height without reading a whole scrollback on
-/// every painted frame.
+/// How many of the pane's bottom rows the announcement is looked for in — sixty
+/// covers the gap to the interactive key list at any pane height.
 const int kFlutterRunRowsRead = 60;
 
 /// Everything a preflight established, so the caller that acts on it does not
@@ -40,21 +36,10 @@ typedef FlutterReadiness = ({
 /// What a start attempt did: the run it opened, or the line saying why not.
 typedef FlutterLoopOutcome = ({FlutterPreflight preflight, FlutterCommandRun? run});
 
-/// One owned lifecycle for a Flutter project: where its commands run, whether
-/// there is an SDK to run them with, and the visible panes they run in.
-///
-/// **Every `flutter` line goes through the resolver.** Not one of them is a
-/// bare command or a guessed shell: `ExecutionEnvironmentResolver` says which
-/// environment, `FlutterSdkReadings` says which binary in it, and
-/// `visibleCommandOpenerProvider` opens the pane with the WSL distribution or
-/// the SSH host attached. That chain is CLAUDE.md §17, and a refusal anywhere
-/// along it is the preflight line rather than a silent fallback.
-///
-/// **Nothing polls.** A run's state is its pane's liveness, read when asked,
-/// with the run's own [FlutterCommandRun.startedAt] as its age.
+/// One owned lifecycle for a Flutter project: every `flutter` line goes through
+/// the resolver and a visible pane (§17), and nothing polls.
 class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
-  /// The listeners this controller put on panes it opened, so they come off
-  /// when the container does.
+  /// Pane listeners this controller owns, so they come off with the container.
   final Map<String, void Function()> _watchers = <String, void Function()>{};
 
   @override
@@ -81,10 +66,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     return null;
   }
 
-  /// The live run of [kind] for [directory], if there is one.
-  ///
-  /// "Live" is the pane's own answer, taken now. A run whose pane has exited
-  /// is history and does not stand in the way of the next one.
+  /// The live run of [kind] for [directory]. "Live" is the pane's own answer,
+  /// taken now, so a run whose pane exited does not block the next one.
   FlutterCommandRun? liveRunFor(String directory, FlutterCommandKind kind) {
     for (final run in state.reversed) {
       if (run.kind != kind) continue;
@@ -190,9 +173,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
           project: found,
         );
       }
-      // A `null` is "could not be established" and is deliberately **not** a
-      // block: refusing to run because we failed to look would stop a working
-      // checkout over our own blind spot (§19).
+      // A `null` is "could not be established", deliberately not a block: our
+      // own blind spot must not stop a working checkout (§19).
     }
 
     return (
@@ -203,13 +185,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     );
   }
 
-  /// Resolves this project's dependencies, in a visible pane, in the
-  /// repository's own environment.
-  ///
-  /// The same shape as the worktree setup hook and through the same opener:
-  /// started, not awaited. `pub get` on a cold cache has no bound, and holding
-  /// a tool call on it would be a hang; what the caller gets is the pane from
-  /// the moment it opens, and the exit code when the process stops.
+  /// Resolves this project's dependencies in a visible pane: started, not
+  /// awaited, because `pub get` on a cold cache has no bound.
   Future<FlutterLoopOutcome> pubGet(EnvironmentPath project) async {
     final ready = await readiness(project, kind: FlutterCommandKind.pubGet);
     if (!ready.preflight.isClear) {
@@ -237,28 +214,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     );
   }
 
-  /// Launches [project] on [deviceId] and arms the auto-attach.
-  ///
-  /// **Two routes to the address, and the file is the one that matters.**
-  /// `--vmservice-out-file` makes `flutter run` write the `ws://…/ws` address
-  /// into the directory this app already watches, which is the mechanism
-  /// `AttachedApps` was built on: no parsing, no ambiguity, and several apps at
-  /// once reconcile on their own. `look()` is called here so that watch is
-  /// armed even when no panel is open.
-  ///
-  /// The pane's rows are read as a **backstop**, for the run whose file never
-  /// arrives — an SSH checkout, a distribution whose translation we could not
-  /// spell, a `flutter` old enough to ignore the flag. See
-  /// `vmServiceUriInPaneRows` for why that is second choice and not first.
-  ///
-  /// One run per device, checked twice, and the two answer different
-  /// questions. This app's own live runs are the durable half: a pane is
-  /// running or it is not, and that never lapses. `DeviceClaims` is the half
-  /// that speaks to the *other* tools — it names the session holding the phone
-  /// so a `device_tap` is refused by name — and it lapses after a couple of
-  /// minutes of silence by design, which a long `flutter run` will reach.
-  /// That is the right way round: a lapsed claim frees the phone for the
-  /// `device_*` tools while the pane check still refuses a second launch.
+  /// Launches [project] on [deviceId], arming the auto-attach from the
+  /// `--vmservice-out-file`; one run per device, refused by pane, not by claim.
   Future<FlutterLoopOutcome> run({
     required EnvironmentPath project,
     required String deviceId,
@@ -325,16 +282,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     return outcome;
   }
 
-  /// Runs one of the project's own gates — `flutter analyze` or `flutter
-  /// test` — in a visible pane, in the repository's environment.
-  ///
-  /// **The pane, and not an awaited `CommandRunner.run`.** A gate is the one
-  /// thing here with a natural end, so awaiting it would be defensible; what
-  /// it does not have is a natural *length*, and this repository's own test
-  /// suite takes minutes. Holding a tool call open for that is the hang
-  /// `SETTLED.md` refused leases over, and it would put the output somewhere
-  /// nobody can watch it. So it runs where it can be seen, and its exit code
-  /// becomes a recorded verdict through `FlutterGateObserver`.
+  /// Runs `flutter analyze` or `flutter test` in a visible pane — a gate has no
+  /// natural length — and its exit code becomes a recorded verdict.
   Future<FlutterLoopOutcome> gate(
     EnvironmentPath project,
     FlutterCommandKind kind, {
@@ -366,10 +315,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     );
   }
 
-  /// The process in [paneId] has stopped. Returns the run it belonged to with
-  /// its exit code on it, or **null when that pane was not one of ours** —
-  /// which is nearly every pane exit in the app, so this has to be cheap and
-  /// silent.
+  /// The run in [paneId] with its exit code, or null when that pane was not
+  /// ours — nearly every pane exit, so this stays cheap and silent.
   FlutterCommandRun? noteExit(String paneId, int? exitCode) {
     final run = byPane(paneId);
     if (run == null) return null;
@@ -407,16 +354,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     return null;
   }
 
-  /// Ends the process in [paneId].
-  ///
-  /// `endSession` rather than `closePane`: the default there is to *detach* a
-  /// live process and keep it alive, which for a `flutter run` would leave an
-  /// app on the device that nothing in this app is holding the handle to.
-  ///
-  /// It does **not** release the device claim, and that is deliberate:
-  /// `DeviceClaims.release` drops everything a session holds, so releasing one
-  /// device here would take away the others that session is driving. The claim
-  /// lapses on its own, which is the mechanism it was built with.
+  /// Ends the process in [paneId] with `endSession`, not `closePane`, which
+  /// detaches; the claim is left to lapse, as releasing drops every device.
   Future<FlutterCommandRun?> stop(String paneId) async {
     final run = byPane(paneId);
     if (run == null) return null;
@@ -428,11 +367,7 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
   }
 
   /// Re-reads what can be re-read about [paneId] and attaches if it now can.
-  ///
-  /// **This is where a `--vmservice-out-file` is read**, and it is read only
-  /// because somebody asked: the file is written once by a process we do not
-  /// own, so a watch of our own would be a second subscription to the thing
-  /// `AttachedApps` already watches, and a poll would be worse.
+  /// The only place a `--vmservice-out-file` is read, and only on request.
   Future<FlutterCommandRun?> refresh(String paneId) async {
     var run = byPane(paneId);
     if (run == null) return null;
@@ -500,21 +435,16 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
       final app = await apps.attach(uri.toString());
       updated = updated.copyWith(appId: app.id);
     } on Object {
-      // The address is still the address: a connection that failed now is
-      // worth reporting and worth retrying, and losing the URI would make the
-      // retry impossible. `flutter_apps` carries the reachability.
+      // The address is still the address: losing it would kill the retry, and
+      // `flutter_apps` carries the reachability.
       updated = updated.copyWith(appId: AttachedApp.idFor(uri));
     }
     _replace(updated);
     return updated;
   }
 
-  /// Watches the pane's own rows for the announcement, and stops watching the
-  /// moment it has one.
-  ///
-  /// A listener on the terminal, not a timer: xterm notifies when the process
-  /// has written something, so this costs a parse per painted frame of a
-  /// starting app and nothing at all once it is attached.
+  /// Watches the pane's rows for the announcement and stops at the first hit —
+  /// a terminal listener, not a timer, so it costs nothing once attached.
   void _watchPaneForAnnouncement(FlutterCommandRun run) {
     final instance = ref
         .read(terminalSessionsControllerProvider.notifier)

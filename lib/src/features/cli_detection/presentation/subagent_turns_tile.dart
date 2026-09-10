@@ -8,21 +8,12 @@ import '../../sessions/presentation/tool_activity_row.dart';
 import '../application/subagent_providers.dart';
 import 'package:agent_cli/read.dart';
 
-/// How many delegates deep the rendering will nest before it stops offering to
-/// go further.
-///
-/// Depth 3 is the deepest seen on this machine, and the index is joined on ids
-/// from a format Anthropic documents as internal: a malformed one that pointed
-/// an agent back at an ancestor would otherwise nest until the frame died.
+/// How deep the rendering nests before it stops offering to go further. The cap
+/// exists because an index pointing back at an ancestor would nest for ever.
 const int kMaxSubagentNesting = 4;
 
 /// What a delegated agent did, hung under the `Task` call that spawned it.
-///
-/// **Collapsed by default, and unread while collapsed.** A fan-out of ten
-/// subagents must not bury the conversation that spawned them, and the turns
-/// behind one real session here come to 1,485 MiB — so the row shows what the
-/// meta already told us (the description it ran with, the agent it ran as, how
-/// deep it nested) and touches the transcript only when asked.
+/// Collapsed by default and unread while collapsed — a transcript can be huge.
 class SubagentTurnsTile extends ConsumerStatefulWidget {
   const SubagentTurnsTile({
     required this.reference,
@@ -47,11 +38,8 @@ class SubagentTurnsTile extends ConsumerStatefulWidget {
 class _SubagentTurnsTileState extends ConsumerState<SubagentTurnsTile> {
   bool _expanded = false;
 
-  /// Whether the transcript has ever been asked for.
-  ///
-  /// Kept separate from [_expanded] so collapsing does not stop watching: the
-  /// turn count stays on the closed row, and re-opening it does not pay for the
-  /// file a second time.
+  /// Whether the transcript has ever been asked for. Separate from [_expanded]
+  /// so collapsing does not re-read the file on the next open.
   bool _read = false;
 
   void _toggle() => setState(() {
@@ -201,12 +189,8 @@ class _SubagentHeader extends StatelessWidget {
   }
 }
 
-/// One turn of a delegate's transcript.
-///
-/// Deliberately leaner than the parent conversation's row: no Copy, no Save as
-/// note. Those are gestures on *the conversation the user is having*, and a
-/// fan-out of ten delegates would otherwise add hundreds of icon buttons to
-/// the tab order — which `test/support/window_matrix.dart` walks.
+/// One turn of a delegate's transcript. Leaner than the parent's row on purpose:
+/// a fan-out of ten would add hundreds of icon buttons to the tab order.
 class _SubagentTurn extends StatelessWidget {
   const _SubagentTurn({
     required this.message,

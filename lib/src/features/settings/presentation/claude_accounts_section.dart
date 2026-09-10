@@ -10,9 +10,8 @@ import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import 'settings_section.dart';
 
-/// Per-Claude-installation account management: one card per install showing the
-/// logged-in account (with a Refresh and Capture), plus a single shared pool of
-/// saved accounts any install can be switched to — all without re-auth.
+/// Per-Claude-installation account management: one card per install, plus a
+/// shared pool of saved accounts any install can switch to without re-auth.
 class ClaudeAccountsSection extends ConsumerWidget {
   const ClaudeAccountsSection({required this.installations, super.key});
 
@@ -56,8 +55,7 @@ class ClaudeAccountsSection extends ConsumerWidget {
   }
 }
 
-/// One card: the current account for a single Claude installation, with Refresh,
-/// Capture, and a "Switch to" menu over the shared saved-account pool.
+/// One card: one installation's account, with Refresh, Capture and Switch to.
 class _ClaudeInstallCard extends ConsumerStatefulWidget {
   const _ClaudeInstallCard({required this.installation});
 
@@ -183,8 +181,7 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                       '${account.email}.',
                     ),
                     itemBuilder: (_) => [
-                      // The account already in force is the checked one, not a
-                      // row with a tick tacked on the far end.
+                      // The account in force is the checked one, not a tick.
                       for (final account in accounts)
                         DesktopMenuItem(
                           value: account,
@@ -275,8 +272,8 @@ class _CurrentAccount extends StatelessWidget {
   }
 }
 
-/// A row in the shared saved-account pool. Switching happens from an install
-/// card (which knows the target environment); here we only display and forget.
+/// A row in the saved-account pool: display and forget only, since switching
+/// needs the install card's target environment.
 class _SavedAccountRow extends StatelessWidget {
   const _SavedAccountRow({required this.account, required this.onForget});
 
@@ -296,8 +293,7 @@ class _SavedAccountRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          // A bullet in front of the account, not a glyph — same call as the
-          // project card's running badge.
+          // A bullet, not a glyph — same call as the project card's badge.
           const Icon(AppIcons.circle, size: 8),
           const SizedBox(width: Insets.sm),
           Expanded(

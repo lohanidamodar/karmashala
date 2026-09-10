@@ -10,41 +10,8 @@ import '../application/session_launcher.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 
-/// The pending approval for one session, and the buttons that can answer it.
-///
-/// Pinned above the composer rather than spliced into the message list. The
-/// transcript is rendered from the agent's *own* record of the conversation
-/// (Loop 41), and an approval exists only on its screen — inserting a synthetic
-/// message would put something in the transcript that the agent never wrote,
-/// and it would scroll away while still being live. This is a control over the
-/// session, so it is drawn as one.
-///
-/// ## What it will and will not say
-///
-/// **It never describes what is being approved in its own words.** The status
-/// report carries the agent's rows or hook message verbatim or it carries
-/// nothing, and when it carries nothing this says so and points at the
-/// terminal. A plausible-sounding summary of an action the user is about to
-/// authorise is the worst thing this widget could produce.
-///
-/// **It only offers answers the agent named.** Both keys come from
-/// `AgentApprovalRules`, read off the agent's own footer. Codex's prompt names
-/// no way to decline, so Codex gets no Deny button — not an Esc we assumed
-/// would work.
-///
-/// **It only offers keys at all when a prompt is open.** `awaitingApproval`
-/// means the session has stopped for the user; it does not mean there is
-/// something to confirm. Claude Code fires the same hook when it merely
-/// finished a turn and is sitting at its own input, and Approve types Enter —
-/// which at an idle prompt submits whatever is in the composer. So the buttons
-/// hang off `AgentStatusReport.waiting`, and only [AgentWaitKind.approval]
-/// draws them. The other two kinds get the same notice with the same quoted
-/// words and nothing to press.
-///
-/// **The conversation is the only place it is drawn.** It was hosted under the
-/// terminal panes too, where the agent already draws the prompt this answers
-/// and typing into it is the answer — so every word here can assume the reader
-/// cannot see that prompt, and point at the terminal view.
+/// The pending approval for one session, and the buttons that answer it. It
+/// never words the request itself, and offers only keys the agent named.
 class ApprovalRequestCard extends ConsumerWidget {
   const ApprovalRequestCard({required this.sessionId, super.key});
 
@@ -139,10 +106,8 @@ class _Evidence extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     if (report.evidence.isEmpty) {
-      // The honest empty state: a hook that carried no message, or a source that
-      // only knows the session has stopped. What it can honestly say depends on
-      // whether a prompt is open — "asking for something" is a claim, and it is
-      // false for an agent that has simply finished its turn.
+      // The honest empty state: a hook that carried no message, or a source
+      // that only knows the session stopped. "Asking for something" is a claim.
       return Text(
         switch (report.waiting) {
           AgentWaitKind.approval =>
@@ -198,12 +163,8 @@ class _Evidence extends StatelessWidget {
   }
 }
 
-/// The notice for a session that has stopped for the user with no prompt open.
-///
-/// Deliberately has no buttons at all rather than disabled ones. Every key this
-/// card can send is a keystroke into another program's interface, and there is
-/// no prompt here for one to land on: Claude Code's Enter would submit whatever
-/// is in its composer, and Esc would cancel something else.
+/// The notice for a session stopped for the user with no prompt open. No
+/// buttons at all: every key is a keystroke with nothing here to land on.
 class _NothingToAnswer extends ConsumerWidget {
   const _NothingToAnswer({
     required this.sessionId,
@@ -303,10 +264,8 @@ class _Answers extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 2),
-        // Every button says which key it presses. We are typing into another
-        // program's interface on the user's behalf, and "Approve" alone would
-        // hide that — particularly for Claude Code, where Enter confirms
-        // whichever option is highlighted rather than a fixed "yes".
+        // Every button says which key it presses: we are typing into another
+        // program on the user's behalf, and "Approve" alone would hide that.
         for (final answer in [rules.approve, rules.deny].nonNulls)
           Text(
             '${answer.label}: ${answer.effect}',
@@ -338,9 +297,8 @@ class _Answers extends ConsumerWidget {
         .read(sessionLauncherProvider)
         .answerPrompt(sessionId, answer.keys);
     if (sent) return;
-    // Only reported when it did not land. A successful keypress needs no
-    // announcement — the agent's own screen is the acknowledgement, and the
-    // status badge follows it within a poll.
+    // Only reported when it did not land: a successful keypress needs no
+    // announcement — the agent's own screen is the acknowledgement.
     messenger.showSnackBar(
       const SnackBar(
         content: Text(
@@ -352,10 +310,7 @@ class _Answers extends ConsumerWidget {
 }
 
 /// Reveals the pane so the user can answer anything we could not represent.
-///
-/// Shared by both halves of the card: whatever it can and cannot offer, the
-/// terminal is always the complete answer, and pointing at it is the one thing
-/// that is true in every state.
+/// Shared by both halves of the card: the terminal is the complete answer.
 void _openTerminal(WidgetRef ref, String sessionId) {
   final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
   if (paneId != null) {

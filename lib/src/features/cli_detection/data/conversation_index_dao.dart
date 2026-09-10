@@ -10,11 +10,8 @@ class ConversationTurn {
     required this.text,
   });
 
-  /// The turn's position in the transcript **as parsed**, tool rows included.
-  ///
-  /// A hint for a future jump, never a key: `readCliTranscript` is best-effort,
-  /// so a transcript whose format has drifted parses to fewer rows and every
-  /// ordinal after the drift shifts. Nothing may resolve a turn by it.
+  /// The turn's position in the transcript as parsed, tool rows included. A
+  /// hint, never a key: format drift shifts every ordinal after it.
   final int ordinal;
 
   /// `user` or `agent`. A `tool` row never reaches here — see
@@ -40,9 +37,8 @@ class ConversationIndexState {
   final String cli;
   final String filePath;
 
-  /// The transcript's mtime and length when it was last read. Null together for
-  /// a read whose file could not be stat-ed — which is a real state, not a
-  /// missing one, and simply means the next trigger cannot skip.
+  /// The transcript's mtime and length when last read. Null together for a file
+  /// that could not be stat-ed, which only means the next read cannot skip.
   final DateTime? modifiedAt;
   final int? size;
 
@@ -81,36 +77,21 @@ class ConversationHit {
   /// The matched text, cut down to the words around the match by FTS5 itself.
   final String excerpt;
 
-  /// When this conversation was last read off disk, or null for a row whose
-  /// watermark has since been deleted. **The age of the reading** — a hit is
-  /// only ever as current as the last trigger that indexed its conversation,
-  /// and the surface showing it has to be able to say so (CLAUDE.md §19).
+  /// When this conversation was last read off disk — the age of the reading,
+  /// which the surface showing a hit has to be able to say (CLAUDE.md §19).
   final DateTime? indexedAt;
 }
 
-/// How many turns go into one `INSERT`.
-///
-/// Statement count is the cost being managed here: `AppDatabase.execute`
-/// prepares and finalises per call, so a 2 000-turn transcript is 2 000
-/// prepares at one row each and 16 at this width. Not larger, because
-/// `SQLITE_MAX_VARIABLE_NUMBER` is 32 766 in this build and five columns a row
-/// puts the ceiling at 6 553.
+/// How many turns go into one `INSERT`. `AppDatabase.execute` prepares per
+/// call; five columns a row caps this at 6 553 variables per statement.
 const int kConversationInsertBatch = 128;
 
-/// How many matching turns one search reads.
-///
-/// t3.codes' day-one number, taken deliberately rather than beaten: their
-/// version is forty lines of `LIKE` because they own the message rows, and the
-/// honest comparison is that we had to build the index first. Unranked for the
-/// same reason — `ORDER BY rank` is one clause away and nobody should have to
-/// defend a weighting on day one.
+/// How many matching turns one search reads. Unranked: `ORDER BY rank` is one
+/// clause away, and no weighting is worth defending on day one.
 const int kConversationSearchLimit = 50;
 
-/// Data-access for the conversation index. Hand-written SQL, no codegen.
-///
-/// **Keyed by the CLI's own conversation id**, not our session row id, because
-/// a conversation moves between `sessions` and `imported_sessions` over its
-/// life and the index must not move with it.
+/// Data-access for the conversation index. Keyed by the CLI's own conversation
+/// id, not our row id: a conversation moves between tables, the index must not.
 class ConversationIndexDao {
   ConversationIndexDao(this._db);
 
@@ -130,11 +111,8 @@ class ConversationIndexDao {
     return rows.isEmpty ? null : _stateFromRow(rows.first);
   }
 
-  /// Replaces every indexed turn of [sessionId] with [turns], and dates it.
-  ///
-  /// **One transaction, so a failure leaves the previous rows in place.** A
-  /// half-written index is the one outcome that would be worse than a stale
-  /// one: it cannot be told from a conversation that genuinely says less.
+  /// Replaces every indexed turn of [sessionId] with [turns]. One transaction:
+  /// a half-written index cannot be told from a conversation that says less.
   void replaceTurns({
     required String sessionId,
     required String cli,
@@ -177,14 +155,8 @@ class ConversationIndexDao {
     });
   }
 
-  /// Records that [sessionId]'s transcript was read at this watermark **without
-  /// replacing what is indexed**.
-  ///
-  /// The degraded case: a parse that produced no visible turns is
-  /// indistinguishable from a transcript whose format we no longer understand,
-  /// and the rows already there are the best answer we have. Advancing the
-  /// watermark anyway is what stops the next trigger re-parsing the same file
-  /// to learn the same nothing.
+  /// Records the watermark without replacing what is indexed. A parse that found
+  /// no turns cannot be told from format drift, so the old rows are the answer.
   void keepTurns({
     required String sessionId,
     required String cli,
@@ -233,12 +205,8 @@ class ConversationIndexDao {
     );
   }
 
-  /// The turns matching [query], oldest-indexed first, capped at [limit].
-  ///
-  /// Returns empty for a query too short or too punctuated to search for, and
-  /// **never throws on what the user typed**: the expression is built from
-  /// quoted string literals by [conversationMatchExpression], so no input
-  /// reaches FTS5 as an operator.
+  /// The turns matching [query], capped at [limit]. Never throws on user input:
+  /// [conversationMatchExpression] quotes it, so nothing reaches FTS5 as syntax.
   List<ConversationHit> search(
     String query, {
     int limit = kConversationSearchLimit,
@@ -296,13 +264,8 @@ class ConversationIndexDao {
     };
   }
 
-  /// Every conversation `imported_sessions` records a transcript path for.
-  ///
-  /// Read **without** the supersession filter every other read of that table
-  /// carries. A record a native session row has taken over is hidden from lists
-  /// because the live row is the better representation — but it is still the
-  /// only place the path to that conversation's transcript is written down, and
-  /// this index is keyed by the conversation rather than by either row.
+  /// Every conversation `imported_sessions` records a transcript path for. Read
+  /// without the supersession filter: a hidden record still holds the only path.
   List<({String sessionId, String cli, String filePath})>
   recordedTranscripts() {
     statements++;
@@ -319,10 +282,7 @@ class ConversationIndexDao {
   }
 
   /// Every conversation a live session row names, with the agent running it.
-  ///
-  /// These have no path on file — a launched session was never imported —
-  /// so the backfill has to find them in a store, and the triggers hand them
-  /// to `ConversationIndexer.want` without one.
+  /// These have no path on file: a launched session was never imported.
   List<({String sessionId, String cli})> liveConversations() {
     statements++;
     return [

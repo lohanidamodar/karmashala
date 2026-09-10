@@ -8,16 +8,8 @@ import '../domain/host_deployment.dart';
 import 'host_binaries.dart';
 import 'host_deploy_target.dart';
 
-/// Puts the session host on a machine and confirms it answers.
-///
-/// The order is: measure the machine, pick a binary, resolve the remote home,
-/// skip the upload when what is already there matches, install, ask it `hello`,
-/// and start it only if that fails. Every outcome is a [HostDeployment] carrying
-/// the time it was taken — a host that answered five minutes ago is not a host
-/// that is answering.
-///
-/// The home is *resolved*, never spelled: a deploy is half shell commands and
-/// half SFTP, and only one of those two expands `$HOME`.
+/// Puts the session host on a machine and confirms it answers. Every outcome
+/// carries when it was taken — a host that answered is not one that answers.
 class HostDeployer {
   HostDeployer({
     required this.target,
@@ -37,15 +29,8 @@ class HostDeployer {
   final DateTime Function() _now;
   final AppLogger _logger;
 
-  /// What is hung off the remote home: `~/.karmashala`, matching where the host
-  /// itself falls back to for its socket, so everything it owns on a machine is
-  /// under one directory a person can delete.
-  ///
-  /// A *fragment*, never a path. The path is built from the home this deploy
-  /// resolved, because half of what a deploy does never sees a shell: `mkdir`
-  /// and `wc` expand `$HOME`, SFTP does not, and a literal `$HOME/...` handed
-  /// to `sftp.open` is a directory that does not exist. Every deploy went that
-  /// way until 2026-09-10.
+  /// What is hung off the remote home. A *fragment*, never a path: `mkdir`
+  /// expands `$HOME`, SFTP does not, so a literal `$HOME/...` names nothing.
   static const String remoteHomeSubdirectory = '.karmashala';
 
   Future<HostDeployment> deploy() async {
@@ -183,8 +168,7 @@ class HostDeployer {
   Future<HostPlatform?> measurePlatform() async {
     final result = await target.run(
       // `ldd --version` writes to stderr on some builds and stdout on others,
-      // and Alpine's exits non-zero; the redirect and the `|| true` are what
-      // make the reading survive both.
+      // and Alpine's exits non-zero; the redirect and `|| true` survive both.
       'uname -s; uname -m; (ldd --version 2>&1 || true) | head -1',
     );
     final lines = const LineSplitter().convert(result.stdout).where((l) => l.isNotEmpty).toList();
@@ -197,20 +181,15 @@ class HostDeployer {
           ? HostLibc.musl
           : libcLine.contains('glibc') || libcLine.contains('gnu libc')
           ? HostLibc.glibc
-          // Not "glibc by default": a machine that did not say is a machine we
-          // do not know about, and the deployer treats unknown as worth trying
-          // while reporting it as unknown.
+          // Not "glibc by default": a machine that did not say is one we do not
+          // know about, worth trying while being reported as unknown.
           : HostLibc.unknown,
       observedAt: _now(),
     );
   }
 
-  /// The remote home as an absolute path, asked of the machine's own shell.
-  ///
-  /// Null when it did not answer with one — which is *unknown*, never a guess
-  /// at `/home/<user>`: a deploy that spells the path itself is how a literal
-  /// `$HOME` reached SFTP in the first place. The last non-empty line is taken
-  /// so a shell rc file that prints something cannot be read as a home.
+  /// The remote home as an absolute path, asked of the machine's shell. Null is
+  /// *unknown*, never a guess at `/home/<user>`; the last non-empty line wins.
   Future<String?> resolveHome() async {
     final RemoteRun result;
     try {
@@ -231,10 +210,8 @@ class HostDeployer {
     return home.length > 1 && home.endsWith('/') ? home.substring(0, home.length - 1) : home;
   }
 
-  /// Uploads unless the remote file is already exactly this size. Size, not a
-  /// checksum: the version is in the filename, so a same-named file of the same
-  /// length is the same build, and hashing megabytes over SSH on every pane
-  /// open would cost more than it saves.
+  /// Uploads unless the remote file is already this size. Size, not a checksum:
+  /// the version is in the filename, and hashing megabytes per open costs more.
   Future<void> _install(String remoteDirectory, String remotePath, HostBinary binary) async {
     final existing = await target.run(
       'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(remotePath)} 2>/dev/null || echo missing',
@@ -242,9 +219,8 @@ class HostDeployer {
     final reported = existing.stdout.trim();
     if (reported == '${binary.bytes.length}') {
       _logger.debug('$remotePath is already ${binary.bytes.length} bytes; skipping the upload.');
-      // Still make sure it can run: a file restored from a backup, or copied
-      // by something that dropped the mode, is the size it should be and is
-      // not executable.
+      // Still make sure it can run: a file restored from a backup is the size
+      // it should be and is not executable.
       await target.run('chmod +x ${_quote(remotePath)}');
       return;
     }
@@ -273,10 +249,8 @@ class HostDeployer {
     }
   }
 
-  /// Runs `attach` and completes the handshake, which is the only proof that
-  /// matters: the file being present is not the host answering. A refusal is
-  /// an answer too — a protocol mismatch names both versions, and that is
-  /// exactly what the caller has to report.
+  /// Runs `attach` and completes the handshake — the only proof that matters,
+  /// since a file being present is not a host answering.
   Future<HostGreeting?> _sayHello(String remotePath) async {
     RemoteChannel? channel;
     try {
@@ -323,9 +297,8 @@ class HostDeployer {
     }
   }
 
-  /// The host's own words carry its version. Quoted back, never guessed: if the
-  /// wording ever changes this reports an unknown version rather than a wrong
-  /// one, and the caller still knows the two ends disagree.
+  /// The host's own words carry its version. Quoted back, never guessed: a
+  /// changed wording then reports an unknown version rather than a wrong one.
   static HostGreeting? _greetingFromRefusal(ErrorMessage refusal) {
     if (refusal.code != ProtocolErrorCode.protocolMismatch) return null;
     final match = RegExp(r'host speaks protocol (\d+)').firstMatch(refusal.message);
@@ -336,9 +309,8 @@ class HostDeployer {
     );
   }
 
-  /// `setsid nohup … &`, so the daemon is out of this channel's process group
-  /// before the channel closes. Output goes to a log next to the socket rather
-  /// than into the channel, which would keep it open.
+  /// `setsid nohup … &`, so the daemon leaves this channel's process group
+  /// before it closes; output goes to a log, which would hold the channel open.
   Future<RemoteRun> _startServe(String home, String remotePath) {
     final directory = '$home/$remoteHomeSubdirectory';
     return target.run(

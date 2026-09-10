@@ -13,9 +13,8 @@ class CliDetectionService {
     CodexStoreReader? codexReader,
     CodexAppServerReader? codexAppServerReader,
     this.antigravityReader = const AntigravityStoreSessions(
-      // The app's SQLite binding, handed to the package's reader: it is what
-      // turns Antigravity's own store from "not recorded" into step counts and
-      // titles (core/database/sqlite_row_reader.dart).
+      // The app's SQLite binding, handed to the package's reader: it turns
+      // Antigravity's store from "not recorded" into step counts and titles.
       reader: AntigravityStoreReader(
         countSteps: false,
         readRows: readSqliteRows,
@@ -53,15 +52,8 @@ class CliDetectionService {
     AgentStoreFormat.antigravityStore: antigravityReader,
   };
 
-  /// The store reads [stores] needs, **agent-major**: every Claude home, then
-  /// every Codex home, then every Antigravity one.
-  ///
-  /// The order is the registry's own — `builtInAgentDescriptors` already lists
-  /// them that way — and it is the order that matters. Claude's store is
-  /// addressable and cheap; Codex's is the one whose every candidate file has
-  /// to be opened because its paths carry a date rather than a working
-  /// directory. Claude first means the common case is answered while the slow
-  /// store is still walking.
+  /// The store reads [stores] needs, agent-major and in registry order: Claude's
+  /// store is cheap and Codex's opens every candidate, so Claude answers first.
   List<StoreScanJob> jobsFor(List<CliStore> stores) => [
     for (final descriptor in registry.descriptors)
       for (final store in stores)
@@ -102,18 +94,8 @@ class CliDetectionService {
       store.environmentId: ?store.codexAppServer,
   };
 
-  /// Reads every store and returns the flat list of detected sessions.
-  ///
-  /// [onJob] sees each job's sessions as that job finishes, so Claude's are
-  /// usable while Codex is still walking. Callers that only want the total can
-  /// ignore it.
-  ///
-  /// **No app-server is asked here, on purpose.** This is the path the *main*
-  /// isolate takes — `detect()`, and the transcript index the status registry
-  /// runs on its slow slot — and starting `codex app-server` costs a ~1 s
-  /// `CreateProcessW` charged to the isolate that calls it. The protocol is
-  /// reached through `runStoreScanJobs`, which the store-scan worker runs; a
-  /// main-isolate read walks the files.
+  /// Reads every store and returns the flat list; [onJob] sees each job as it
+  /// finishes. No app-server here: `CreateProcessW` costs ~1 s on this isolate.
   Future<List<DetectedSession>> readStores(
     List<CliStore> stores, {
     Set<String>? claudeDirectories,
@@ -151,7 +133,6 @@ class CliDetectionService {
 }
 
 /// One CLI's store in one environment: the unit the scan queue processes.
-///
 /// Plain data, because it crosses to the worker isolate.
 class StoreScanJob {
   const StoreScanJob({

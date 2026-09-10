@@ -38,11 +38,7 @@ class AutomationDao {
   );
 
   /// Replaces everything about [automation] but its id and its checkout.
-  ///
-  /// `armed_at` moves with an edit on purpose: changing what an automation
-  /// does is authorising the new thing, and the missed-fire sweep counts from
-  /// that moment rather than claiming occurrences of a rule that no longer
-  /// exists.
+  /// `armed_at` moves with an edit: changing it is authorising the new thing.
   void update(Automation automation) => _db.execute(
     'UPDATE automations SET name = ?, cron = ?, fires_at = ?, '
     'agent_installation_id = ?, prompt = ?, permission_mode = ?, enabled = ?, '
@@ -159,9 +155,8 @@ class AutomationDao {
       .map(_checkVerdict)
       .toList();
 
-  /// Records that this run's checks were looked at, whatever they said — and
-  /// whether or not there were any. The timestamp is the whole point: without
-  /// it "no verdicts" cannot be told from "nobody looked".
+  /// Records that this run's checks were looked at, whatever they said. Without
+  /// the timestamp, "no verdicts" cannot be told from "nobody looked".
   void noteChecksObserved(String runId, DateTime at) => _db.execute(
     'UPDATE automation_runs SET checks_observed_at = ? WHERE id = ?;',
     [isoFromDate(at), runId],
@@ -174,8 +169,8 @@ class AutomationDao {
         checkId: row['check_id'] as String?,
         name: row['name']! as String,
         command: _argv(row['command'] as String?),
-        // A word this build cannot read is not a pass and not a fail; reading
-        // it as inconclusive is the only answer that claims nothing.
+        // A word this build cannot read is not a pass and not a fail;
+        // inconclusive is the only answer that claims nothing.
         verdict:
             VerificationVerdict.parse(row['verdict'] as String?) ??
             VerificationVerdict.inconclusive,
@@ -184,9 +179,8 @@ class AutomationDao {
         checkedAt: dateFromIso(row['checked_at']),
       );
 
-  /// Forgiving in the same way `ProjectCheckDao._argv` is, and for the same
-  /// reason: one unreadable row must not stop a run's other verdicts being
-  /// read.
+  /// Forgiving like `ProjectCheckDao._argv`: one unreadable row must not stop a
+  /// run's other verdicts being read.
   static List<String> _argv(String? raw) {
     if (raw == null || raw.isEmpty) return const [];
     try {
@@ -236,11 +230,8 @@ class AutomationDao {
     return rows.isEmpty ? null : _run(rows.first);
   }
 
-  /// The newest occurrence this install has recorded anything about, or null.
-  ///
-  /// The floor a missed-fire sweep counts from. Occurrences before it are
-  /// already accounted for; occurrences before the automation was armed were
-  /// never ours to claim, which is the caller's other half of the same rule.
+  /// The newest occurrence this install has recorded anything about, or null —
+  /// the floor a missed-fire sweep counts from.
   DateTime? lastObservedOccurrence(String automationId) {
     final rows = _db.query(
       'SELECT MAX(scheduled_for) AS at FROM automation_runs '

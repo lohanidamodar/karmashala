@@ -26,18 +26,8 @@ class BrowserViewportShot {
   bool get isEmpty => png == null && problem == null;
 }
 
-/// `browser_screenshot`, for the person at the window.
-///
-/// The pane could only ever show the **crop** a pick produced: an element, on
-/// its own, out of its surroundings. That is the right picture to hand an agent
-/// asking about one button and the wrong one for the question a person is
-/// usually holding — *what does the page look like right now*.
-///
-/// The same [BrowserService.screenshot] the tool calls, with no selector: the
-/// viewport, which is what the developer is looking at. The full page stays the
-/// tool's argument. A pane that offered it would be offering to draw something
-/// nobody can see in the window it is drawn in, and the crop beside it already
-/// covers "one particular thing".
+/// `browser_screenshot`, for the person at the window: the viewport, which is
+/// what they are looking at. The full page stays the tool's argument.
 class BrowserViewportShotController extends Notifier<BrowserViewportShot> {
   @override
   BrowserViewportShot build() => const BrowserViewportShot();
@@ -65,12 +55,8 @@ final browserViewportShotProvider =
       BrowserViewportShotController.new,
     );
 
-/// The action that takes one.
-///
-/// Icon-only, and in the console strip rather than beside **Pick element**.
-/// That row is a 304px panel with two labelled buttons already in it, and a
-/// third overflowed it; the strip below has a flexible field to give space
-/// back, so a control added there cannot push anything off the edge.
+/// The action that takes one. Icon-only and in the console strip: the Pick
+/// element row is a 304px panel that a third labelled button overflowed.
 class BrowserViewportShotButton extends ConsumerWidget {
   const BrowserViewportShotButton({required this.state, super.key});
 

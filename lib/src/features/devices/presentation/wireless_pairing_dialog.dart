@@ -18,17 +18,8 @@ enum WirelessPairingMethod {
   final String label;
 }
 
-/// Pairs a phone over Wi-Fi, both ways Android offers.
-///
-/// It lives on the device pane's toolbar because that toolbar already owns
-/// *which device* — a wirelessly paired phone appears in the same
-/// `adb devices` listing as a cabled one and gets the same rows, so pairing
-/// belongs beside Refresh rather than in Settings, where it would be a
-/// preference rather than an act.
-///
-/// **Nothing polls once this closes.** The controller is auto-disposed and this
-/// dialog holds its only listener, so unmounting it is what ends the mDNS
-/// watch — see `WirelessPairingController`.
+/// Pairs a phone over Wi-Fi, both ways Android offers. On the device toolbar
+/// because a paired phone joins the same `adb devices` list — not a setting.
 class WirelessPairingDialog extends ConsumerStatefulWidget {
   const WirelessPairingDialog({super.key});
 
@@ -107,10 +98,8 @@ class _WirelessPairingDialogState
             color: theme.colorScheme.tertiary,
           ),
           const SizedBox(width: Insets.sm),
-          // Expanded, because a dialog title is `headlineSmall`: on a
-          // phone-sized window these three words want 386 px against the 262
-          // the dialog has, and a bare Text in a Row overflows rather than
-          // wrapping.
+          // Expanded, because a dialog title is `headlineSmall`: in a
+          // phone-sized window a bare Text in a Row overflows rather than wraps.
           const Expanded(child: Text('Pair over Wi-Fi')),
         ],
       ),
@@ -123,10 +112,8 @@ class _WirelessPairingDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // A `Wrap` of chips rather than a `SegmentedButton`: the dialog is
-              // 260 px wide inside a phone-sized window, where two labelled
-              // segments overflow by 124 px and a Wrap simply takes a second
-              // line. Same idiom as the remote-access pairing dialog beside it.
+              // A `Wrap` of chips rather than a `SegmentedButton`: at 260 px
+              // two labelled segments overflow by 124, and a Wrap takes a line.
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: Insets.xs,
@@ -234,12 +221,8 @@ class _WirelessPairingDialogState
     );
   }
 
-  /// How big the QR may be drawn. Off `MediaQuery` rather than a `LayoutBuilder`
-  /// — `AlertDialog` asks its content for intrinsic sizes, which a
-  /// `LayoutBuilder` cannot answer at all.
-  ///
-  /// 128 is what the dialog's own chrome takes: 40 of inset padding and 24 of
-  /// content padding on each side.
+  /// How big the QR may be drawn: off `MediaQuery`, since `AlertDialog` asks
+  /// for intrinsic sizes. 128 is its chrome — 40 inset and 24 content a side.
   static double _qrSide(BuildContext context) =>
       (MediaQuery.sizeOf(context).width - 128).clamp(120.0, 260.0);
 
@@ -249,10 +232,8 @@ class _WirelessPairingDialogState
         : const SizedBox.shrink(),
     WirelessPairingWatching(:final invite, :final scansLeft) => Column(
       children: [
-        // Black on white in both themes: a camera wants contrast, and an
-        // inverted QR is the one thing many scanners refuse. Square, and never
-        // wider than the dialog it is in — a fixed size overflows a
-        // phone-sized window.
+        // Black on white in both themes: a camera wants contrast and many
+        // scanners refuse an inverted QR. Never wider than the dialog.
         CustomPaint(
           key: const Key('wireless-pairing-qr'),
           size: Size.square(_qrSide(context)),

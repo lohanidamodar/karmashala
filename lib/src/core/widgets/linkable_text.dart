@@ -5,21 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:karmashala_core/util.dart';
 
-/// Text whose URLs are clickable, for a surface where a tap already means
-/// something else.
-///
-/// Notes and todos both had a tap of their own before they had links — a note
-/// card opens its editor, and a todo's body opens an inline field, because
-/// *"there is nowhere else for a tap on a todo to go"*. So a link cannot simply
-/// take the tap: it has to win only where the glyphs actually are, and
-/// everything else must still reach [onTapText]. That is what [_linkAt] is for,
-/// and it is why this is a hit test rather than a `TapGestureRecognizer` per
-/// span — a recognizer would swallow taps on the whole span's line box.
-///
-/// [maxLines] is passed to the measuring painter as well as to the text, and
-/// that is load-bearing rather than tidy: a note body is clipped to four lines,
-/// and a painter laid out unbounded would report boxes for text that is not on
-/// screen, mapping a tap near the ellipsis to a link further down.
+/// Text whose URLs are clickable where a tap already means something else: a
+/// hit test, not a recognizer, which would swallow the whole line box.
 class LinkableText extends StatelessWidget {
   const LinkableText(
     this.text, {
@@ -53,8 +40,8 @@ class LinkableText extends StatelessWidget {
     final base = DefaultTextStyle.of(context).style.merge(style);
     final links = linksInText(text);
     if (links.isEmpty) {
-      // Nothing to hit-test and nothing to underline: stay a plain Text so a
-      // surface with no URL in it costs no painter and no gesture arena entry.
+      // Nothing to hit-test and nothing to underline: stay a plain Text, so a
+      // surface with no URL costs no painter and no gesture arena entry.
       final plain = Text(
         text,
         style: style,

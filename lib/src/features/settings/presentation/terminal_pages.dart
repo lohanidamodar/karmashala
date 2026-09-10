@@ -14,8 +14,7 @@ import 'settings_row.dart';
 import 'settings_section.dart';
 import '../../terminal/application/terminal_profiles.dart';
 
-/// Settings → Terminal: the default shell, the grid's own font size, imported
-/// colour themes and the contested chords.
+/// Settings → Terminal: default shell, font size, themes, contested chords.
 class TerminalPage extends ConsumerWidget {
   const TerminalPage({super.key});
 
@@ -40,8 +39,7 @@ class TerminalPage extends ConsumerWidget {
                 label: 'Shell new terminals open with',
                 control: DropdownButtonFormField<String>(
                   initialValue: current.id,
-                  // Long profile labels otherwise size the button past its
-                  // box and overflow it by a hair at large text sizes.
+                  // Long profile labels otherwise overflow at large text.
                   isExpanded: true,
                   items: [
                     for (final profile in profiles)
@@ -79,9 +77,7 @@ class TerminalPage extends ConsumerWidget {
                 value: settings.hostBackedLocalPanes,
                 onChanged: controller.setHostBackedLocalPanes,
               ),
-              // Under the switch whether it is on or off: whether a host is
-              // running here is a fact about the machine, and somebody deciding
-              // whether to turn this on is exactly who needs it.
+              // Under the switch either way: it is what the decision needs.
               const SessionHostStatusLine(),
               SettingsSwitchRow(
                 label: 'Resume running panes on launch',
@@ -105,8 +101,7 @@ class TerminalPage extends ConsumerWidget {
   }
 }
 
-/// The terminal's own font size — deliberately separate from the UI text
-/// scale: grid density and label legibility are different preferences.
+/// The terminal's font size — separate from the UI text scale on purpose.
 class _TerminalFontSection extends ConsumerWidget {
   const _TerminalFontSection();
 
@@ -145,8 +140,7 @@ class _TerminalFontSection extends ConsumerWidget {
                   : null,
               icon: const Icon(AppIcons.minusCircle, size: Chrome.icon),
             ),
-            // Flexible, not a fixed box: the number is mono text and grows
-            // with the UI text scale like everything else on the page.
+            // Flexible, not fixed: the mono number grows with the text scale.
             Flexible(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: 30),
@@ -174,12 +168,8 @@ class _TerminalFontSection extends ConsumerWidget {
   }
 }
 
-/// Import a terminal colour theme from Ghostty or Warp.
-///
-/// The stored value is the theme's identity, not its colours, so editing the
-/// file is picked up. If it later disappears or breaks, the terminal keeps the
-/// built-in theme and the reason is shown here rather than anywhere near the
-/// terminal itself.
+/// Import a terminal colour theme from Ghostty or Warp. The identity is
+/// stored, not the colours, so editing the file is picked up.
 class TerminalThemeSection extends ConsumerWidget {
   const TerminalThemeSection({super.key});
 
@@ -191,8 +181,8 @@ class TerminalThemeSection extends ConsumerWidget {
     final discovered = ref.watch(discoveredTerminalThemesProvider);
     final loaded = ref.watch(importedTerminalThemeProvider);
 
-    // A stored theme whose file has since gone would leave the dropdown with a
-    // value none of its items carry, which makes it throw and flash red.
+    // A vanished theme file would leave the dropdown on a value no item
+    // carries, which makes it throw.
     final ids = discovered.map((t) => t.id).toSet();
     final value = selected != null && ids.contains(selected) ? selected : null;
 
@@ -256,17 +246,8 @@ class TerminalThemeSection extends ConsumerWidget {
 }
 
 /// Who gets a keystroke when a terminal pane has focus: Karmashala, or the
-/// process inside the pane.
-///
-/// This exists because the honest answer is "it depends on how you work".
-/// `Ctrl+B` is the tmux prefix, and taking it from someone who lives in tmux
-/// breaks every window, pane and copy-mode command they have; `Ctrl+K` is
-/// readline's kill-line, and quick open is the chord this app is used through.
-/// Both defaults are a guess about the user, so both are switches.
-///
-/// Only the contested chords are listed. A terminal cannot encode
-/// `Ctrl+Shift+<letter>` at all, so those take nothing from the shell however
-/// they are set and a switch for them would be a switch that does nothing.
+/// process inside it. Both defaults are a guess about how you work. Only
+/// contested chords are listed — a terminal cannot encode `Ctrl+Shift+<letter>`.
 class TerminalChordsSection extends ConsumerWidget {
   const TerminalChordsSection({super.key});
 
@@ -331,8 +312,7 @@ class _ChordRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // The price is only on screen while it is being paid. Saying what Ctrl+K
-    // costs a shell that is not being asked to give it up is noise.
+    // The price is on screen only while it is being paid.
     final cost = claimed ? chord.shellCost : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.sm),

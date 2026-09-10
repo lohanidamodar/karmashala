@@ -64,12 +64,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   final _composer = TextEditingController();
 
   /// Which delegated agent hangs under which row, by the row's index in the
-  /// whole transcript.
-  ///
-  /// Rebuilt from the messages every time they are — the ordinals are theirs —
-  /// and read back by [ChatTranscriptView.detailBuilder] later in the same
-  /// frame. Nothing here reads a subagent's transcript; a [SubagentRef] is a
-  /// path and a description.
+  /// whole transcript. Read back by [ChatTranscriptView.detailBuilder].
   final _subagents = <int, SubagentRef>{};
 
   /// Held rather than read in [dispose]: `ref` is unusable once the element is
@@ -88,9 +83,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   @override
   void dispose() {
-    // The workbench unmounts the conversation when it moves to another session
-    // (see `_conversationFor`), so half-typed text is parked where the next
-    // mount already looks for it rather than thrown away.
+    // The workbench unmounts the conversation when it moves to another session,
+    // so half-typed text is parked where the next mount already looks for it.
     _leaving = true;
     final draft = _composer.text;
     if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
@@ -99,11 +93,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   }
 
   /// Moves whatever the Notes panel queued for this session into the box.
-  ///
-  /// Appended, not assigned: half-typed text in the composer is the user's, and
-  /// a note arriving must not overwrite it. Nothing is sent — the whole point
-  /// of routing a note through here is that the user reads it first, and then
-  /// presses Enter on the ordinary `continueSession` path.
+  /// Appended, not assigned, and never sent — the user reads it first.
   void _takeQueuedNote() {
     if (_leaving) return;
     final queued = _drafts.take(widget.sessionId);
@@ -134,12 +124,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   }
 
   /// Translates a path the agent wrote into one this process can open, or null
-  /// when the session's environment is unknown.
-  ///
-  /// The agent may be running in WSL while `dart:io` here is the Windows host,
-  /// so `/mnt/c/…/shot.png` has to become `C:\…\shot.png` before an image can
-  /// be drawn. Explicit, environment-aware, and the same call every other
-  /// feature makes — `EditorActions.windowsPathFor`.
+  /// when the environment is unknown: a WSL `/mnt/c/…` has to become `C:\…`.
   String? Function(String)? _hostPathResolver() {
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     if (session == null) return null;
@@ -154,12 +139,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
-  /// Where this session's agent was standing.
-  ///
-  /// `Session.workingDirectory` is null for every row written before schema
-  /// v22 and for a session nobody recorded a cwd for; null means **unknown**,
-  /// never "the repository root", so the fallback is made here and out loud
-  /// rather than being read as a claim the row does not make.
+  /// Where this session's agent was standing. Null means **unknown**, never
+  /// "the repository root", so the fallback is made here and out loud.
   EnvironmentPath? _workingDirectory() {
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     if (session == null) return null;
@@ -174,17 +155,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// What a click on a file path in the conversation does.
-  ///
-  /// **It reveals; it does not open.** The path is expanded to in the Files
-  /// panel and its row selected, and that is all — the panel already opens a
-  /// file when its row is tapped, so opening stays a second, deliberate click.
-  /// A folder is only opened in the tree.
-  ///
-  /// This is also the **only** place the feature touches a disk. Detection is
-  /// by shape (`kTranscriptPathPattern`), so a transcript full of path-shaped
-  /// tokens costs no `stat` at all until somebody asks for one; asking is what
-  /// turns "this looks like a path" into "this file is not there".
+  /// What a click on a file path does: **it reveals; it does not open**. Also
+  /// the only place the feature touches a disk — detection is by shape.
   Future<void> _openPath(String token) async {
     final parsed = tokenForMatch(token);
     final base = _workingDirectory();
@@ -245,9 +217,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     }
 
     // Outside it there is no row to select, so the host's own file manager is
-    // the only place left. `canReveal` starts no process, so asking first
-    // costs nothing and turns a click that would do nothing into one that says
-    // why.
+    // all that is left. `canReveal` starts no process, so asking first is free.
     if (!revealer.canReveal(path)) {
       _say(
         (await revealer.reveal(path)).error ??
@@ -280,10 +250,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       if (mounted) _takeQueuedNote();
     });
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
-    // A PTY-hosted session's conversation lives in the agent's own transcript,
-    // because an interactive agent has no structured stream on stdout to read
-    // (see `SessionTranscriptLocator`). A session from before the PTY runtime
-    // still renders from the engine's event log.
+    // A PTY-hosted session's conversation lives in the agent's own transcript
+    // (see `SessionTranscriptLocator`): stdout carries no structured stream.
     final fromPty = session?.surface == SessionSurface.pane;
     final transcript = fromPty
         ? ref
@@ -296,26 +264,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     // Whether a chat rendering is possible for **this session** — a reading,
-    // not a registry lookup. Every in-app session has the same PTY; what
-    // differs is whether the agent left a transcript of this one where we can
-    // read it, and `reading.reason` says which nothing it is when it did not.
+    // not a registry lookup; `reading.reason` says which nothing it is.
     final reading = fromPty
         ? sessionChatView(ref, widget.sessionId)
         : const SessionChatView.unread(prior: true);
     final chatAvailable = !fromPty || reading.hasChatView;
     // Whether there is a terminal to point at. Nothing lands a session here on
-    // its own any more — the workbench shows the terminal surface and says so
-    // there — but the user can always switch to the conversation, so every
-    // sentence below that says "the terminal" still has to be true when read.
+    // its own any more, but the user can switch, so the sentences must be true.
     final hasTerminal = sessionTerminalPane(ref, widget.sessionId) != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // No title and no back button: the workbench tab above already names
-        // the session and closes it, and the strip's Chat/Terminal toggle
-        // already switches the view. What is left is what only this session
-        // can answer — what it is doing, and how to stop it.
+        // and closes the session, and the strip's toggle switches the view.
         SizedBox(
           height: Chrome.tabStrip,
           child: Row(
@@ -324,9 +286,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
               const Spacer(),
               // On the header rather than in the composer's chip row: a recap
-              // is asked for by somebody who has just opened this session and
-              // has not typed anything, and it costs a turn — so it sits with
-              // the other deliberate acts, not beside the message box.
+              // costs a turn, so it sits with the other deliberate acts.
               _RecapButton(sessionId: widget.sessionId),
               _OpenInTerminalButton(sessionId: widget.sessionId),
               if (active)
@@ -342,8 +302,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         SessionRepositoriesBar(sessionId: widget.sessionId),
         const Divider(height: 1),
         // Above the messages and outside their scroll: a digest you have to
-        // scroll back to is a digest of a conversation you have already
-        // re-read. Draws nothing until somebody asks for one.
+        // scroll back to is a digest of a conversation you have already re-read.
         SessionRecapCard(sessionId: widget.sessionId),
         Expanded(
           child: transcript.when(
@@ -355,11 +314,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               // Paths in the conversation are clickable, and a click reveals
               // rather than opens — see [_openPath].
               onPathTap: _openPath,
-              // The one thing the parent's `Task(…)` row never showed: what
-              // the agent it spawned actually did. Collapsed, and unread until
-              // it is opened — a fan-out of ten must not bury this
-              // conversation, and the turns behind one real session here come
-              // to 1,485 MiB.
+              // What the parent's `Task(…)` row never showed. Collapsed and
+              // unread until opened — one session's turns came to 1,485 MiB.
               detailBuilder: (message, ordinal) {
                 final reference = _subagents[ordinal];
                 if (reference == null) return null;
@@ -372,48 +328,35 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               // feature exists, so there is nothing left behind to hide.
               onSaveNote: notesEnabled ? _saveNote : null,
               // The delivery strip sits on the composer's channel: its prompt
-              // actions send through `continueSession`, so they are available
-              // in exactly the same circumstances.
+              // actions send through `continueSession`.
               footer: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Above the handoff row and the composer, because it is the
-                  // thing blocking the session: nothing the user types will be
-                  // read until the agent's prompt is answered.
+                  // Above the handoff row and the composer, because it blocks
+                  // the session: nothing typed is read until it is answered.
                   ApprovalRequestCard(sessionId: widget.sessionId),
                   DeliveryStrip(sessionId: widget.sessionId),
-                  // Directly above the box, because "what is it doing right
-                  // now" was only answerable by scrolling to the end of the
-                  // transcript and noticing a tool row with no result under
-                  // it. Draws nothing when nothing is outstanding.
+                  // Directly above the box: "what is it doing right now" was
+                  // only answerable by scrolling to the end. Silent when idle.
                   ActivityStrip(sessionId: widget.sessionId),
                   // Directly above the composer whose chip row posts it, so the
-                  // answer to "what did that chip just do" is next to the chip
-                  // rather than across the bottom of the window.
+                  // answer to "what did that chip just do" is next to the chip.
                   SessionNoticeLine(sessionId: widget.sessionId),
                   MessageComposer(
                     controller: _composer,
-                    // MonoCode's chip row: the session's own safety policy,
-                    // where the message is written rather than buried in
-                    // Settings under the agent's name — and what the session
-                    // has cost so far, which is a question about this session
-                    // and belongs beside it rather than in the global chrome.
+                    // MonoCode's chip row: the session's own safety policy, and
+                    // what this session has cost, beside the session itself.
                     chips: [
                       PermissionModeChip(sessionId: widget.sessionId),
                       // The same pair as the terminal's own bar, in the same
-                      // order: what this session may do without asking, and
-                      // what it is thinking with.
+                      // order: what it may do without asking, and what with.
                       SessionModelChip(sessionId: widget.sessionId),
                       SessionStatsButton(sessionId: widget.sessionId),
                     ],
                     hintText: active
-                        // No emoji: the hint used to read "(attach an image
-                        // with 🖼)" and there is no 🖼 anywhere in the
-                        // composer to press — the attach control is a
-                        // Phosphor image glyph whose tooltip already names
-                        // the gesture, including the Ctrl+V one the hint
-                        // never mentioned.
+                        // No emoji: the old hint named a 🖼 that is nowhere in
+                        // the composer; the attach control's tooltip does.
                         ? 'Message the agent…'
                         : 'Type to continue this session…',
                     onSend: (text) => ref
@@ -436,13 +379,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
-  /// What to say when there is nothing to render.
-  ///
-  /// Each branch is about what this session actually has, read off the same
-  /// `sessionTerminalPane` the workbench's own empty state reads, so the two
-  /// surfaces cannot describe one session differently. The branch that used to
-  /// be wrong: a session with no chat view *and* no pane was told "its terminal
-  /// is the session" when there was no terminal left.
+  /// What to say when there is nothing to render. Each branch reads the same
+  /// `sessionTerminalPane` the workbench does, so the two cannot disagree.
   String _emptyHint({
     required bool chatAvailable,
     required SessionChatView reading,
@@ -451,11 +389,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required bool hasTerminal,
   }) {
     if (!chatAvailable) {
-      // The refusal names *why* it is one. "This agent keeps no transcript we
-      // can read" was true of every Antigravity session until one install
-      // turned out to keep one for every conversation, so the sentence is the
-      // reading's own — an unreadable store, or a transcript file that is not
-      // on this disk.
+      // The refusal names *why* it is one: "keeps no transcript" was true of
+      // every Antigravity session until one install turned out to keep them.
       return hasTerminal
           ? 'No chat view for this session. ${reading.reason} Its terminal is '
                 'the session.'
@@ -475,16 +410,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
-  /// The agent's own transcript as chat messages.
-  ///
-  /// Tool lines used to be dropped here, on the argument that the terminal view
-  /// already showed them. The owner's report retired that argument: the
-  /// conversation is where they read what the agent did, and a session whose
-  /// commands and screenshots are invisible is a session they have to go and
-  /// watch in a second window.
-  /// The subagent a row spawned travels beside the messages rather than inside
-  /// [ChatMessage], which the remote and companion payloads also carry and
-  /// which has no place for a widget's state.
+  /// The agent's own transcript as chat messages. The subagent a row spawned
+  /// travels beside them, not inside [ChatMessage], which has no room for it.
   List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) {
     _subagents.clear();
     return chatMessagesFromTranscript(messages, subagents: _subagents);
@@ -495,8 +422,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   List<ChatMessage> _toMessages(List<SessionEvent> events) {
     final messages = <ChatMessage>[];
     for (final event in events) {
-      // Surface conversation turns and any failure, but keep ordinary
-      // lifecycle/status chatter out of the chat.
       switch (event.type) {
         case SessionEventTypes.userMessage:
           _addText(messages, 'user', event.payload);
@@ -517,13 +442,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     return messages;
   }
 
-  /// A tool call from the engine's own event log.
-  ///
-  /// The adapter records `name` and `input` (`parseClaudeMessage`), so a native
-  /// session can show what ran for the same reason a PTY one can. It cannot yet
-  /// show what came back: `SessionEventTypes.toolResult` is named but nothing
-  /// emits it, and inventing an answer would be worse than admitting there
-  /// isn't one.
+  /// A tool call from the engine's own event log. It cannot yet show what came
+  /// back: `SessionEventTypes.toolResult` is named and nothing emits it.
   void _addToolCall(List<ChatMessage> out, String payload) {
     try {
       final decoded = jsonDecode(payload);
@@ -558,11 +478,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 }
 
 /// The header's Recap action: asks this session's own CLI what it concluded.
-///
-/// A button and not a menu entry, because the answer appears directly above it
-/// and the pairing is the affordance. It spins while the CLI is answering and
-/// is inert until it does — a second press would spend a second turn on the
-/// question already in flight.
+/// Inert while it answers — a second press spends a second turn.
 class _RecapButton extends ConsumerWidget {
   const _RecapButton({required this.sessionId});
   final String sessionId;
@@ -632,23 +548,8 @@ class _OpenInTerminalButton extends ConsumerWidget {
   }
 }
 
-/// The pane [sessionId] can be *shown* in, or null when it has none.
-///
-/// A row keeps its `pane_id` after the pane behind it is gone, so the id alone
-/// is not the question: the terminal must still hold an instance for it, in a
-/// tab or detached. A pane restored from disk counts — its scrollback is the
-/// session's record even though nothing is running in it.
-///
-/// That the restored pane counts is now a promise the resume keeps rather than
-/// one it broke. `SessionLauncher.livePaneFor` requires a *live* instance and
-/// still does, so `reveal` refuses a dormant pane; but the launch it falls
-/// through to resumes **into** that pane
-/// (`SessionLauncher.dormantPaneFor`), instead of opening a second one beside
-/// the one shown here.
-///
-/// The single answer to "has this session got a terminal", so which surface the
-/// workbench opens and what the conversation says about the terminal cannot
-/// disagree.
+/// The pane [sessionId] can be *shown* in, or null when it has none. A row
+/// keeps its `pane_id` after the pane is gone, so an instance must still exist.
 String? sessionTerminalPane(WidgetRef ref, String sessionId) {
   final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
   if (paneId == null) return null;
@@ -656,26 +557,8 @@ String? sessionTerminalPane(WidgetRef ref, String sessionId) {
   return terminals.instanceFor(paneId) == null ? null : paneId;
 }
 
-/// A CLI transcript as chat messages, with a compacted session's history
-/// shown **once**.
-///
-/// Everything before the last compaction boundary is history the CLI dropped
-/// from its own context and then restated as the summary that follows it, so
-/// drawing both is the same conversation twice. Measured on a real compacted
-/// transcript on this machine: `readCliTranscript` returns 2,793 rows, of which
-/// row 1,287 is a 17,795-character row summarising the 1,287 above it — and
-/// drawn, because the CLI writes it as a `user` message, as something the user
-/// typed. Row 2,556 does it again for everything up to there.
-///
-/// Claude Code's own `--resume` shows the summary and the continuation, and so
-/// does this, with one line saying how many messages are behind it so that
-/// nothing is dropped silently.
-///
-/// **The cut is here and not in `readCliTranscript`.** That list keeps every
-/// row, its order and its roles, so the conversation index and search still
-/// hold the whole pre-compaction history; only the reading of it stops
-/// repeating itself. [subagents], when given, is filled with the delegates to
-/// hang on the rows they were spawned from, keyed by position in the result.
+/// A CLI transcript as chat messages, with a compacted session's history shown
+/// **once** — the summary restates everything before the last boundary.
 @visibleForTesting
 List<ChatMessage> chatMessagesFromTranscript(
   List<TranscriptMessage> messages, {
@@ -731,12 +614,6 @@ List<ChatMessage> chatMessagesFromTranscript(
 }
 
 /// **Whether a chat view can be built for this session**, as a reading rather
-/// than a fact about the agent.
-///
-/// It was a registry question — `agentSupportsChatView` over the store format —
-/// until Antigravity's transcripts turned out to exist on one install and not
-/// on the other. Now it is [sessionChatViewProvider]: the same allowlist as the
-/// prior, and a look at this session's own file where the prior refuses.
-/// Watched rather than read, so the view redraws when the probe settles.
+/// than a fact about the agent. Watched, so the view redraws when it settles.
 SessionChatView sessionChatView(WidgetRef ref, String sessionId) =>
     ref.watch(sessionChatViewProvider(sessionId));

@@ -10,15 +10,12 @@ import 'package:karmashala_remote/companion.dart';
 import '../../application/companion_providers.dart';
 import '../companion_chrome.dart';
 
-/// The moment a QR is decoded or a code submitted, the camera/input screen
-/// pushes this: staged, readable progress — code accepted, looking for the
-/// desktop (LAN / relay), proving keys, paired — with distinct failure states,
-/// a Retry that re-runs the same attempt, and a Back that returns cleanly.
+/// Staged progress for one pairing attempt — code accepted, looking for the
+/// desktop, proving keys, paired — with a Retry that re-runs the same attempt.
 class PairingProgressScreen extends ConsumerStatefulWidget {
   const PairingProgressScreen({required this.attempt, super.key});
 
-  /// One pairing attempt against the gateway — `pairWithQr` with the scanned
-  /// payload, or `pairWithCode` with the typed text. Re-run by Retry.
+  /// One pairing attempt against the gateway, re-run by Retry.
   final Future<CompanionPairing> Function(CompanionGateway gateway) attempt;
 
   @override
@@ -41,8 +38,8 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
   @override
   void initState() {
     super.initState();
-    // Subscribe before the attempt starts so no stage is missed; start the
-    // attempt off the build phase so its first events may setState.
+    // Subscribe before the attempt starts so no stage is missed; start it off
+    // the build phase so its first events may setState.
     _updates = ref
         .read(companionGatewayProvider)
         .pairingProgress
@@ -126,8 +123,7 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
                     Container(
                       padding: const EdgeInsets.all(Insets.lg),
                       decoration: BoxDecoration(
-                        // The same tint-plus-words the link banner uses: the
-                        // sentence carries the meaning at full contrast and
+                        // Tint plus words: the sentence carries the meaning and
                         // the colour only supports it.
                         color: SemanticColors.of(
                           context,
@@ -136,9 +132,8 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
                       ),
                       child: Text(
                         _error ?? 'Pairing failed.',
-                        // What went wrong is the only thing on this screen
-                        // worth reading once it appears, so it is set as prose
-                        // rather than as a caption.
+                        // Prose, not a caption: once it appears it is the only
+                        // thing on this screen worth reading.
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurface,
                         ),
@@ -147,8 +142,8 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
                     const SizedBox(height: Insets.lg),
                     FilledButton.icon(
                       onPressed: _run,
-                      // Unsized: the touch theme gives every button glyph
-                      // Touch.icon, and a hand-picked 16 undercut it.
+                      // Unsized: the touch theme already gives every button
+                      // glyph Touch.icon.
                       icon: const Icon(AppIcons.arrowsClockwise),
                       label: const Text('Retry'),
                     ),
@@ -201,12 +196,11 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final density = UiDensity.of(context);
-    // One step of a four-step rail: big enough to read as a state mark, and
-    // the same size whichever of the four states it is in.
+    // The same size whichever of the four states it is in.
     final mark = density.icon + 2;
     final failed = _stage == CompanionPairingStage.failed;
-    // Where the attempt stopped: on failure the current stage index is where
-    // it died, and that row wears the warning.
+    // On failure the current stage index is where it died, and that row wears
+    // the warning.
     final activeIndex = failed ? _failurePoint().index : _stage.index;
     final done = _stage == CompanionPairingStage.paired
         ? step.stage.index <= activeIndex
@@ -272,11 +266,11 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
     );
   }
 
-  /// The stage a failed attempt died in: the furthest stage it reported.
-  /// The stream told us how far it got; codeAccepted is the floor.
+  /// The stage a failed attempt died in — the furthest it reported, with
+  /// codeAccepted as the floor.
   CompanionPairingStage _failurePoint() {
-    // _stage is `failed` here; the last non-terminal stage rendered is what
-    // the rows walked through — recomputed from what we captured.
+    // _stage is `failed` here, so the last non-terminal stage is recomputed
+    // from what was captured.
     if (_hostName != null) return CompanionPairingStage.proving;
     if (_detail != null) return CompanionPairingStage.searching;
     return CompanionPairingStage.codeAccepted;

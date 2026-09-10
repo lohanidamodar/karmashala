@@ -1,22 +1,11 @@
 part of 'workbench.dart';
 
-// What the strip does while something is being dragged over it: the marks it
-// draws, and the target on each chip that reads them.
-
 /// The insertion mark the strip draws while a tab is being dragged over it.
-///
-/// A drop that only announces itself by its result is a drop nobody aims: the
-/// strip has to say *where this will land* while the button is still down, the
-/// way every browser and editor does. Exactly one is ever on screen — a drag
-/// has one active target at a time — so a test can find *the* mark and read its
-/// rect to say which edge of which chip it is on.
+/// Exactly one is ever on screen, so a test can read *the* mark's rect.
 const kTabDropMarker = Key('tab-strip/drop-marker');
 
-/// The chip a pane will join, or a tab will divide the workspace beside.
-///
-/// A whole-chip mark rather than the edge caret [_markedForDrop] draws: neither
-/// drop lands the thing *between* two chips, so an edge would be pointing at a
-/// position that does not exist.
+/// The chip a pane will join, or a tab will divide the workspace beside — a
+/// whole-chip mark, because neither drop lands the thing *between* two chips.
 const kPaneJoinMarker = Key('tab-strip/pane-join-marker');
 const kTabSplitMarker = Key('tab-strip/split-marker');
 
@@ -68,9 +57,8 @@ Widget _markedForDrop(
       top: 0,
       bottom: 0,
       width: 2,
-      // The mark is a statement, not a target: a drag is hit-tested through
-      // the avatar, and 2px of the chip that answered a pointer differently
-      // while a drag was over it would be a control nobody meant to make.
+      // The mark is a statement, not a target: a drag is hit-tested through the
+      // avatar, and a chip answering a pointer differently would be a control.
       child: IgnorePointer(
         child: ColoredBox(color: Theme.of(context).colorScheme.primary),
       ),
@@ -112,9 +100,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
     final box = context.findRenderObject() as RenderBox?;
     if (box != null && box.hasSize && box.size.width > 0) {
       final offMiddle = box.globalToLocal(globalPos).dx - box.size.width / 2;
-      // Which half the pointer is over says where the tab lands. Dead centre
-      // is not a coin flip: it goes the way the drag came from, which is the
-      // whole rule the strip had before it had halves.
+      // Which half the pointer is over says where the tab lands. Dead centre is
+      // not a coin flip: it goes the way the drag came from.
       final leading = offMiddle.abs() <= _centreSlack
           ? _comesFromTheRight(data)
           : offMiddle < 0;
@@ -132,13 +119,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
   bool _comesFromTheRight(TerminalDrag data) =>
       data is TabDrag && _indexInStrip(data.tabId) > widget.index;
 
-  /// The region of this tab a dropped **pane** joins.
-  ///
-  /// The chip is the only place a *background* tab can be addressed at all: the
-  /// workbench shows one tab's regions at a time, so a pane can be dropped onto
-  /// a region only while its tab is in front. Dropping on the chip says "into
-  /// that tab" and the front region of the tab's focused group is where it
-  /// lands — the same place a new pane would.
+  /// The region of this tab a dropped **pane** joins: the chip is the only way
+  /// to address a *background* tab, so a drop on it lands in the front region.
   String get _paneAnchor =>
       widget.tab.layout.groupOf(widget.tab.focusedPaneId)?.activePaneId ??
       widget.tab.focusedPaneId;
@@ -164,8 +146,7 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
           return tabId != widget.tab.id;
         }(),
         // Which half of the chip the pointer is over means nothing to a pane —
-        // a tab is a destination here, not a place in a list — so the position
-        // is left alone and the whole chip lights up instead.
+        // a tab is a destination here, not a place in a list.
         PaneDrag(:final paneId) => sessions.canMovePaneIntoRegion(
           paneId,
           _paneAnchor,
@@ -180,9 +161,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
         }
       },
       onAcceptWithDetails: (details) {
-        // The pane keeps its id, its process and its buffer: the controller
-        // moves it between the two tabs' layouts and never touches
-        // `_instances`, so the terminal is the same object at a new address.
+        // The pane keeps its id, its process and its buffer: only the two tabs'
+        // layouts change, and `_instances` is never touched.
         if (details.data case PaneDrag(:final paneId)) {
           sessions.movePaneIntoRegion(paneId, _paneAnchor);
           return;
@@ -192,8 +172,7 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
               HardwareKeyboard.instance.isMetaPressed ||
               _ctrlPressed;
           // Ctrl-drop divides the **workspace** and puts the tab in the new
-          // group, not the tab it was dropped on: a tab carries a session, a
-          // view and a status strip together, and only a group can host that.
+          // group: a tab carries a session and a strip, which only a group hosts.
           if (ctrl && tabId != widget.tab.id && widget.groupId != null) {
             sessions.moveTabBesideGroup(
               tabId,
@@ -248,11 +227,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
   }
 }
 
-/// What a dragged tab looks like under the pointer.
-///
-/// Deliberately not the chip itself: the chip is as wide as the strip gave it
-/// and carries a close button, and dragging a control that can still be clicked
-/// reads as a bug. A label is enough to say which tab is in flight.
+/// What a dragged tab looks like under the pointer. Not the chip itself: it
+/// carries a close button, and dragging a clickable control reads as a bug.
 class _TabDragFeedback extends StatelessWidget {
   const _TabDragFeedback({required this.title});
 

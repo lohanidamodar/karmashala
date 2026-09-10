@@ -8,11 +8,8 @@ import 'package:karmashala_remote/companion.dart';
 
 import '../../../core/util/clock_provider.dart';
 
-/// A list of sessions as the phone received it, with the instant it arrived.
-///
-/// The pair travels together because they are one fact: rows with no reading
-/// time cannot be shown honestly, and a reading time with no rows describes
-/// nothing.
+/// A list of sessions as the phone received it, with the instant it arrived —
+/// one fact, since rows with no reading time cannot be shown honestly.
 class CompanionSessionsSnapshot {
   const CompanionSessionsSnapshot({
     required this.sessions,
@@ -25,13 +22,9 @@ class CompanionSessionsSnapshot {
   final DateTime receivedAt;
 }
 
-/// The gateway the companion UI reads.
-///
-/// The package owns the interface and both implementations; the provider over
-/// them is the app's wiring, so it stays here. Defaults to an unpaired
-/// [FakeCompanionGateway] so companion mode boots to the pairing screen with
-/// no host wired; the orchestrator overrides this with the real client at
-/// integration.
+/// The gateway the companion UI reads. Defaults to an unpaired
+/// [FakeCompanionGateway] so companion mode boots to the pairing screen; the
+/// orchestrator overrides it with the real client.
 final companionGatewayProvider = Provider<CompanionGateway>(
   (ref) => FakeCompanionGateway(),
 );
@@ -46,11 +39,9 @@ final companionLinkProvider = StreamProvider<CompanionLinkState>(
   (ref) => ref.watch(companionGatewayProvider).linkStates,
 );
 
-/// Why the link is not up, when the gateway has learned anything more exact
-/// than "connecting". Its own provider on purpose: the reason is learned by a
-/// dial that failed while the phone was already `connecting`, so there is no
-/// link-state change under it, and a surface that only re-reads the getter on
-/// rebuild shows a bare "Connecting…" for the whole first pass.
+/// Why the link is not up, when the gateway knows anything more exact than
+/// "connecting". Its own stream because the reason arrives with no link-state
+/// change under it, so a getter re-read on rebuild would never see it.
 final companionLinkTroubleProvider = StreamProvider<String?>(
   (ref) => ref.watch(companionGatewayProvider).linkTroubleStates,
 );
@@ -62,8 +53,7 @@ final companionConnectionsProvider =
     );
 
 /// Drives [CompanionGateway.switchTo] / [CompanionGateway.removeConnection],
-/// holding the host id whose switch is in flight so every surface that offers
-/// the verb shows the same progress and the same refusal.
+/// holding the in-flight host id so every surface shows the same progress.
 class CompanionSwitcher extends Notifier<String?> {
   @override
   String? build() => null;
@@ -91,9 +81,8 @@ class CompanionSwitcher extends Notifier<String?> {
     } on GatewayException catch (error) {
       lastError = error.message;
     } on Object {
-      // Nothing may escape into an unhandled async error: the surfaces that
-      // offer these verbs show `lastError` and nothing else, so a refusal
-      // that gets past here is a tap that visibly did nothing.
+      // Nothing may escape: the surfaces show `lastError` and nothing else, so
+      // a refusal that gets past here is a tap that visibly did nothing.
       lastError = 'That could not be done just now. Try again.';
     } finally {
       state = null;
@@ -117,19 +106,8 @@ final companionLinkSinceProvider = StreamProvider<DateTime?>(
   (ref) => ref.watch(companionGatewayProvider).linkSinceStates,
 );
 
-/// The host's session rows **and when this phone received them**.
-///
-/// §19: what the phone holds is a reading, and a reading carries its age. The
-/// stamp is written where the rows arrive — in the stream, not on the first
-/// read — so a screen that opens an hour later shows the snapshot's real age
-/// rather than the age of its own first frame.
-///
-/// **One subscription, deliberately.** [CompanionGateway.watchSessions] is a
-/// `Stream.multi`: every listener gets its own subscription and its own
-/// `sessions.list` refresh at the host. A second provider over the same call
-/// would therefore be a frame on the wire, which is exactly what the phone's
-/// search must never cost — so the rows and the stamp are read off this one
-/// stream and everything else derives from it.
+/// The host's rows, stamped on arrival so their real age shows (§19). One
+/// subscription: `watchSessions` is a `Stream.multi`, so a second is a frame.
 final companionSessionsSnapshotProvider =
     StreamProvider<CompanionSessionsSnapshot>((ref) {
       final clock = ref.watch(clockProvider);
@@ -144,18 +122,12 @@ final companionSessionsSnapshotProvider =
           );
     });
 
-/// Every session the host holds, live.
-///
-/// **Not `whenData`**, for the reason `companionAsync` is not `AsyncValue.when`:
-/// Riverpod 3 reports a provider that failed and is being retried as
-/// `AsyncLoading` *carrying* its error, and `whenData` takes its loading branch
-/// and drops the error — which turned "your desktop refused to list its
-/// sessions" into a skeleton that never resolved.
+/// Every session the host holds, live. Not `whenData`: a provider being retried
+/// is `AsyncLoading` *carrying* its error, which `whenData` silently drops.
 final companionSessionsProvider =
     Provider<AsyncValue<List<CompanionSessionSummary>>>((ref) {
       final snapshot = ref.watch(companionSessionsSnapshotProvider);
-      // The same precedence `companionAsync` applies, applied once here: rows
-      // if there are rows, then the reason there are none, then "not yet".
+      // Rows if there are rows, then the reason there are none, then "not yet".
       if (snapshot.hasValue) return AsyncData(snapshot.requireValue.sessions);
       final failure = snapshot.error;
       if (failure != null) {
@@ -231,15 +203,11 @@ final companionSessionProvider = Provider.autoDispose
       return null;
     });
 
-/// What could be started on the active desktop: its projects, their checkouts
-/// and the agents installed where each checkout lives.
-///
-/// A pull, not a subscription — projects and installations change when the
-/// user changes them on the desktop, not while a phone watches — so the start
-/// screen reads it once and `ref.invalidate` is the retry.
+/// What could be started on the active desktop. A pull, not a subscription:
+/// projects change when the user changes them, so `ref.invalidate` is the retry.
 final companionActiveHostKeyProvider = Provider<String?>((ref) {
-  // Watch both streams so link/host changes invalidate the pull, while using
-  // the gateway's current values makes the first read deterministic too.
+  // Watch both streams so link/host changes invalidate the pull; the gateway's
+  // current values make the first read deterministic.
   ref.watch(companionLinkProvider);
   ref.watch(companionPairingProvider);
   final gateway = ref.watch(companionGatewayProvider);
@@ -259,11 +227,9 @@ final companionWorkspaceProvider = FutureProvider.autoDispose<
   return ref.watch(companionGatewayProvider).listWorkspace();
 });
 
-/// Projects on the active desktop, including projects with no sessions.
-/// This is deliberately a pull separate from the live session stream: a new
-/// transcript/status event must not trigger another project scan. Link changes
-/// invalidate the host snapshot; callers can invalidate it for an explicit
-/// refresh after a mutation.
+/// Projects on the active desktop, including those with no sessions. A pull
+/// separate from the session stream, so a transcript event cannot trigger
+/// another project scan.
 final companionProjectsProvider = FutureProvider.autoDispose<
   List<RemoteWorkspaceProject>
 >((ref) {

@@ -1,44 +1,7 @@
 import '../../sessions/domain/handoff_packet.dart';
 
-/// The document a review session is handed as its first message.
-///
-/// ## Why this is not a handoff packet
-///
-/// `HandoffPacket` exists to make a second agent able to *continue* work, and
-/// its whole discipline is aimed at that: quote the conversation, never rewrite
-/// it as the reader's own, say how much was left out. A review needs the
-/// opposite emphasis. The reviewer is not continuing anything, so the
-/// conversation is not what it needs — it needs **the diff and the claim**, and
-/// an explicit instruction not to touch either.
-///
-/// The two documents share one rule, for the same reason: **null renders as a
-/// sentence admitting it**, never as an omitted section. A missing "what
-/// changed" heading reads as "nothing changed", and a reviewer that believes
-/// the tree is clean will pass a change it never looked at. That is the exact
-/// failure a review exists to prevent, so it is the one the wording spends its
-/// care on.
-///
-/// ## Why the verdict contract is spelled out
-///
-/// A review that concludes in prose is a review nobody can find later. The
-/// brief names the tool calls that turn a reading into a record, and it says
-/// that finding nothing is a *pass with a reason* rather than saying nothing at
-/// all — an unrecorded clean review is indistinguishable from a review that
-/// never happened.
-///
-/// ## Why findings become threads and not just notes
-///
-/// A verdict answers "is this change all right"; it does not answer "what do I
-/// do on Tuesday". The findings underneath it used to live only in
-/// `verification_note`s, which is to say in a transcript — anchored to nothing,
-/// triageable by nobody, and impossible to reply to. So the brief separates the
-/// two acts on purpose: a **note** is the reviewer's reasoning, including for
-/// the parts that were fine, and a **thread** (`review_thread_add`) is a thing
-/// somebody has to decide about, hung off the file and the lines it is about.
-/// The reviewer files threads as `open`, never as "should fix": a reviewer that
-/// could mark its own findings must-fix would be writing the author's task list
-/// and having it read as the user's, which is the same objection
-/// `decision_tools.dart` raises about an agent recording an approval.
+/// The document a review session is handed as its first message: the diff and
+/// the claim. A null renders as a sentence admitting it, never as an omission.
 class ReviewBrief {
   const ReviewBrief({
     required this.authorAgentName,
@@ -56,29 +19,18 @@ class ReviewBrief {
     this.permissionSummary,
   });
 
-  /// The agent that wrote the code.
   final String authorAgentName;
 
-  /// The agent about to check it.
   final String reviewerAgentName;
 
   final String subjectTitle;
 
-  /// **Karmashala's** id for the session under review, not the CLI's.
-  ///
-  /// This is the id the verdict is filed under: `verification_start`'s
-  /// `sessionId` is compared against `sessions.id`, and a fan-out candidate
-  /// names the same value. Handing over the agent's own external id — which is
-  /// what a handoff packet quotes, because a human reads that one — would file
-  /// the verdict against nothing and quietly produce an unattributed run.
+  /// **Karmashala's** id for the session under review, not the CLI's: the
+  /// verdict is filed against `sessions.id`, and an external id names nothing.
   final String subjectSessionId;
 
-  /// What the author says the change does, in their words or the user's.
-  ///
-  /// Null is "nobody wrote one down", and renders as that. A review with no
-  /// claim is still worth doing — "does this diff look right" is a question —
-  /// but the reviewer has to know it is judging without a stated intent rather
-  /// than assuming there was none.
+  /// What the author says the change does, or null for "nobody wrote one down"
+  /// — rendered as that, so the reviewer knows it has no stated intent.
   final String? claim;
 
   final String? workingDirectory;
@@ -90,19 +42,16 @@ class ReviewBrief {
   /// the positive answer "the working tree is clean".
   final List<HandoffChange>? changes;
 
-  /// The unified diff, already trimmed to [ReviewDiffBudget]. Null when git
-  /// would not produce one.
+  /// The unified diff, trimmed to [ReviewDiffBudget]; null when git refused.
   final String? diff;
 
   /// How many characters of [diff] were dropped to fit the budget.
   final int diffOmittedCharacters;
 
-  /// What the review session may and may not do, in the words the permission
-  /// carry uses. Null when nothing was resolved.
+  /// What the review may do, in the permission carry's words; null if unknown.
   final String? permissionSummary;
 
-  /// The brief as Markdown, which is what the reviewer receives as its first
-  /// message.
+  /// The brief as Markdown — the reviewer's first message.
   String render() {
     final out = StringBuffer()
       ..writeln('# Review this change')
@@ -284,12 +233,8 @@ class ReviewBrief {
   }
 }
 
-/// How much of a diff the brief carries inline.
-///
-/// The reviewer is standing in the directory and can run `git diff` itself, so
-/// the inline copy is an opening move rather than the only source. What it buys
-/// is a first turn spent reading instead of a first turn spent fetching — and
-/// what it costs is input tokens on every review, which is why it is bounded.
+/// How much of a diff the brief carries inline. The reviewer can run `git diff`
+/// itself, so this only buys a first turn — and costs tokens on every review.
 class ReviewDiffBudget {
   const ReviewDiffBudget({this.maxCharacters = 12000});
 
@@ -297,12 +242,8 @@ class ReviewDiffBudget {
 }
 
 /// Trims [diff] to [budget], keeping the **head**, and reports what was dropped.
-///
-/// Head rather than tail, which is the opposite of [trimRecap]'s choice and for
-/// the opposite reason: a conversation's state is at its end, but a diff's
-/// files are in a stable order and the reviewer needs to start somewhere it can
-/// then continue from with `git diff`. Truncating the middle would leave a
-/// hunk header without its body, which reads as a change that is not there.
+/// Head, not tail like [trimRecap]: a diff's files are in a stable order and the
+/// reviewer continues with `git diff`; a trimmed middle orphans a hunk header.
 ({String text, int omitted}) trimReviewDiff(
   String diff, [
   ReviewDiffBudget budget = const ReviewDiffBudget(),

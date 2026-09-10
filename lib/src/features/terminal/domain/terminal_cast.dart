@@ -1,12 +1,7 @@
 import 'dart:convert';
 
-/// What one recorded event is.
-///
-/// Only two kinds are produced. Output is the bytes the process wrote; resize
-/// is the grid changing underneath it, which a replay has to reproduce or every
-/// later line wraps in the wrong place. asciinema also defines `i` (keystrokes)
-/// and `m` (markers); neither is recorded — see [TerminalCast] on why input is
-/// deliberately not captured.
+/// What one recorded event is: output, or a resize a replay has to reproduce or
+/// every later line wraps wrong. asciinema's `i` and `m` are not recorded.
 enum CastEventKind {
   output('o'),
   resize('r');
@@ -62,26 +57,9 @@ class CastEvent {
   return (columns: columns, rows: rows);
 }
 
-/// A recording of a terminal pane: the grid it started on, and the bytes that
-/// arrived, each stamped with when.
-///
-/// **Data, not pixels.** A minute of a busy shell is tens of kilobytes, and can
-/// be re-rendered afterwards at any size, font and theme — and it can never
-/// contain a notification that popped up, another window, or the rest of the
-/// desktop, because none of that was ever in the pipe. A screen capture would
-/// have thrown all of that away.
-///
-/// **Output only.** Keystrokes are not recorded, which is a privacy property
-/// rather than an omission: what a shell echoes is in the cast because it was on
-/// screen, and what it deliberately does not echo — the password `read -s` is
-/// waiting for, a `sudo` prompt — never enters the recording at all. The cast is
-/// still whatever *was* on screen and is not redactable; see
-/// `TerminalRecordingController` for what the user is told.
-///
-/// The wire format is [asciinema v2](https://docs.asciinema.org/manual/asciicast/v2/):
-/// a JSON header line followed by one JSON array per event. Reading and writing
-/// the documented format rather than one of ours means an existing cast plays
-/// here and a recording made here plays anywhere.
+/// A recording of a terminal pane: the bytes that arrived, each stamped with
+/// when. **Output only** — a `read -s` password never echoes, so it is never in
+/// it.
 class TerminalCast {
   const TerminalCast({
     required this.columns,
@@ -115,12 +93,8 @@ class TerminalCast {
   Duration get duration => events.isEmpty ? Duration.zero : events.last.at;
 
   /// The largest grid the recording ever had, header and every resize
-  /// considered.
-  ///
-  /// This is what a renderer has to frame for. A video cannot change size
-  /// half-way through, so the frame is cut for the widest and tallest the grid
-  /// ever got and a smaller grid simply leaves room unused — the alternative is
-  /// re-cropping mid-playback, which reads as a glitch.
+  /// considered — what a renderer has to frame for, since a video cannot change
+  /// size half-way through and re-cropping mid-playback reads as a glitch.
   ({int columns, int rows}) get widestGrid {
     var maxColumns = columns;
     var maxRows = rows;
@@ -154,11 +128,9 @@ String encodeCast(TerminalCast cast) {
   return out.toString();
 }
 
-/// Elapsed time as the format's fractional seconds.
-///
-/// Microsecond resolution, with trailing zeroes trimmed so a whole second is
-/// `1` rather than `1.000000` — asciinema's own writer does the same and the
-/// difference is a third of the file's size on a chatty recording.
+/// Elapsed time as the format's fractional seconds. Microsecond resolution with
+/// trailing zeroes trimmed, as asciinema's own writer does — the difference is
+/// a third of the file's size on a chatty recording.
 num formatCastSeconds(Duration at) {
   final micros = at.inMicroseconds;
   if (micros % Duration.microsecondsPerSecond == 0) {
@@ -167,11 +139,9 @@ num formatCastSeconds(Duration at) {
   return double.parse((micros / Duration.microsecondsPerSecond).toStringAsFixed(6));
 }
 
-/// Reads back what [encodeCast] wrote.
-///
-/// Lines that are not events are skipped rather than fatal: a cast recorded
-/// elsewhere may carry `i` and `m` events this app does not model, and dropping
-/// them plays the recording rather than refusing it.
+/// Reads back what [encodeCast] wrote. Lines that are not events are skipped
+/// rather than fatal: a cast recorded elsewhere may carry `i` and `m` events
+/// this app does not model, and dropping them plays it rather than refusing.
 TerminalCast decodeCast(String text) {
   final lines = const LineSplitter().convert(text);
   if (lines.isEmpty) throw const FormatException('empty cast');

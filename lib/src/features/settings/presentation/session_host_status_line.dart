@@ -8,20 +8,8 @@ import '../../terminal/application/local_host_providers.dart';
 import '../../terminal/presentation/session_status.dart';
 
 /// What the session host on this machine is doing, beside the switch that uses
-/// it.
-///
-/// This is the whole of the supervisor, and saying so is the point. Nothing
-/// registers a service or a systemd unit; what exists is that the app starts
-/// `serve` when a pane needs one and finds none, and that this line says
-/// whether one is running, which version, whether *this* app started it, and
-/// **how old that reading is** — so a row that has been on screen for an hour
-/// cannot be mistaken for a fresh one.
-///
-/// It follows §19 exactly: nothing has been checked until something checks, an
-/// unknown reads as unknown rather than as "not running", the reading carries
-/// its age, and nothing polls — the check runs when the page opens and when the
-/// user asks. It also starts nothing: `observe` looks and takes no action, so
-/// reading Settings with the switch off cannot launch a daemon.
+/// it. Per §19 the reading carries its age and nothing polls; `observe` starts
+/// nothing, so reading Settings with the switch off cannot launch a daemon.
 class SessionHostStatusLine extends ConsumerStatefulWidget {
   const SessionHostStatusLine({super.key});
 
@@ -86,10 +74,8 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
 }
 
 /// The sentence the row shows, as a pure function so it can be asserted without
-/// a widget tree — and so the three facts it must carry stay in one place.
-///
-/// Never claims health that was not observed: a null [reading] says nothing has
-/// been checked, and it is not the same statement as "no host is running".
+/// a widget tree. A null [reading] says nothing has been checked, which is not
+/// the same statement as "no host is running".
 String sessionHostStatusText(HostDeployment? reading, {DateTime? now}) {
   if (reading == null) return 'Nothing has been checked yet.';
   final age = describeAge(reading.observedAt.toUtc(), now: now?.toUtc());

@@ -4,11 +4,7 @@ import '../fanout/application/comparison_providers.dart';
 import '../repositories/application/repository_providers.dart';
 
 /// The fan-out comparisons an agent can read: one prompt run on several agents
-/// in parallel worktrees, and what each of them produced.
-///
-/// Read-only, and the only family here that needs neither the caller's identity
-/// nor anything outside the database — a comparison belongs to a repository,
-/// not to whoever is asking about it.
+/// in parallel worktrees. Read-only, and it needs no caller identity.
 class FanOutTools {
   FanOutTools(this._container);
 
@@ -112,12 +108,8 @@ class FanOutTools {
                 'verdict': evidence.verdict.name,
                 'label': evidence.label,
                 'runId': evidence.runId,
-                // Present even when null, unlike every optional field above.
-                // An omitted producer reads as a gap in the tool rather than a
-                // gap in the record, which is exactly how a self-graded pass
-                // comes to be read as a checked one — the thing G3 exists to
-                // stop. Every human-facing surface already says this; an agent
-                // reading a comparison was the last one that could not.
+                // Present even when null: an omitted producer reads as a gap in
+                // the tool rather than in the record — what G3 exists to stop.
                 'producedBySessionId': evidence.producerSessionId,
                 'attribution': candidate.evidenceAttribution.name,
                 'attributionLabel': candidate.evidenceAttribution.label,

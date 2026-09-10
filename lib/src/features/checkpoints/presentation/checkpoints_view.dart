@@ -14,38 +14,16 @@ import '../application/checkpoint_service.dart';
 import '../application/session_checkpoint_recorder.dart';
 import '../domain/checkpoint.dart';
 
-/// Which session's checkpoints the panel is describing.
-///
-/// The session **on screen**, not the one last clicked in the Explorer — the
-/// same rule [planPanelSessionIdProvider] and [mediaPanelSessionIdProvider]
-/// follow, and for the same reason: switching terminal tabs changes which
-/// agent has been editing your checkout.
+/// Which session's checkpoints the panel is describing — the session **on
+/// screen**, not the one last clicked in the Explorer.
 final checkpointsPanelSessionIdProvider = Provider<String?>(
   (ref) =>
       ref.watch(activePaneSessionIdProvider) ??
       ref.watch(selectedSessionIdProvider),
 );
 
-/// **The checkpoints of a session, and the way back to one.**
-///
-/// Deliberately plain. The place this belongs is beside the turn it belongs to,
-/// in the transcript — that is the sessions owner's surface, and a follow-up.
-/// Until then this is the honest minimum: a list you can read, a diff you can
-/// check, and a restore that tells you what it will cost before it does it.
-///
-/// Nothing here polls. The list is read when the panel opens and again when a
-/// checkpoint is written, and **every row carries the age of its capture**
-/// (§19) — a chain of turns with no ages on it cannot be used to pick the one
-/// you meant.
-///
-/// It now offers the two verbs the MCP tools had and the widget did not:
-/// `checkpoint_capture` as **Capture now** in the header, and
-/// `checkpoint_restore`'s `paths:` as a restore beside each file a checkpoint
-/// touched. Both go through [CheckpointService] — the per-file one as a
-/// [HunkSelection] over the whole file, which is exactly what the tool sends.
-/// The per-file verb sits next to the evidence for it, one tap from the diff
-/// you would read before using it, because putting back one file is the safer
-/// of the two and should not be the harder to find.
+/// The checkpoints of a session, and the way back to one. Nothing polls, and
+/// every row carries the age of its capture (§19).
 class CheckpointsView extends ConsumerStatefulWidget {
   const CheckpointsView({super.key});
 
@@ -71,10 +49,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
             IconButton(
               tooltip: 'Capture the working tree now',
               icon: const Icon(AppIcons.plusCircle, size: Chrome.iconAction),
-              // Disabled rather than absent while a capture is in flight: two
-              // `git add -A` runs over one private index is the collision the
-              // recorder guards against, and a button that silently did
-              // nothing would be the worse half of that.
+              // Disabled rather than absent while a capture is in flight: two `git add -A`
+              // runs over one private index is the collision the recorder guards against.
               onPressed: sessionId == null || _capturing
                   ? null
                   : () => _captureNow(sessionId),
@@ -165,11 +141,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     CheckpointReason.manual => 'Checkpoint',
   };
 
-  /// Puts [checkpoint] back — the whole tree, or only [paths].
-  ///
-  /// `paths` is the widget's half of `checkpoint_restore`'s `paths:`, sent the
-  /// same way: one whole-file [HunkSelection] each, so the service decides what
-  /// is applied and this never writes to a working tree itself.
+  /// Puts [checkpoint] back — the whole tree, or only [paths], sent as one
+  /// whole-file [HunkSelection] each exactly as `checkpoint_restore` does.
   Future<void> _restore(
     Checkpoint checkpoint, {
     bool confirm = false,
@@ -204,12 +177,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     }
   }
 
-  /// **Capture now** — the user's own hand on `checkpoint_capture`.
-  ///
-  /// Through [SessionCheckpointRecorder], which is the door the MCP tool uses:
-  /// it holds the per-session guard against two captures at once, bumps the
-  /// revision every reader watches, and files a labelled capture in the
-  /// decision record. Going straight to the service would skip all three.
+  /// **Capture now**, through [SessionCheckpointRecorder] — the door the MCP
+  /// tool uses. Going straight to the service skips the guard, revision and record.
   Future<void> _captureNow(String sessionId) async {
     setState(() => _capturing = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -231,13 +200,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     }
   }
 
-  /// The refusal, in the service's words.
-  ///
-  /// Not a sentence of its own: [checkpointRestoreRefusal] is the function
-  /// `restore` refuses on, so what is shown here *is* the rule that was
-  /// applied — including the half of an undo we cannot do
-  /// ([kRestoreLeavesTheConversation]), which is the reason this dialog was
-  /// wrong before it was long.
+  /// The refusal, in the service's words: [checkpointRestoreRefusal] is the
+  /// function `restore` refuses on, so this *is* the rule that was applied.
   Future<bool> _askToOverwrite(CheckpointConflict conflict) async {
     final answer = await showDialog<bool>(
       context: context,
@@ -327,11 +291,8 @@ class _CheckpointDiff extends ConsumerWidget {
   }
 }
 
-/// One file a checkpoint touched, and the safer of the two ways back.
-///
-/// Restoring a single path is the verb somebody actually wants most of the
-/// time — one file an agent broke, out of a turn that was otherwise right —
-/// and it is the one the widget had no way to ask for at all.
+/// One file a checkpoint touched, and the safer of the two ways back — the
+/// verb somebody wants most of the time, and the one the widget had no way to ask.
 class _FileRow extends StatelessWidget {
   const _FileRow({required this.path, required this.onRestore});
 

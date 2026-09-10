@@ -6,16 +6,8 @@ import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../checkpoints/domain/checkpoint.dart';
 import 'package:karmashala_git/git.dart';
 
-/// The per-turn record of a session's working tree, as an agent can read and
-/// use it.
-///
-/// Like the session tools, these default to the caller's own session: the
-/// credential in the MCP URL says who is asking, so a checkpoint tool called
-/// with no `sessionId` is asking about the conversation it is running in.
-///
-/// Lifted out of `LauncherControlServer` unchanged, for the reason every other
-/// family was: the server's job is the transport and the boundary, and a tool
-/// family's only tie to it is the container it reads providers from.
+/// The per-turn record of a session's working tree. Like the session tools,
+/// these default to the caller's own session, named by its MCP credential.
 class CheckpointControlTools {
   CheckpointControlTools(this._container, {this.callerSessionId});
 
@@ -78,9 +70,8 @@ class CheckpointControlTools {
         .captureNow(
           sessionId,
           label: label,
-          // A labelled capture lands in the decision record, and the record
-          // attributes every row. Null when the bridge has no session of its
-          // own, which reads as "not recorded" rather than as the user.
+          // A labelled capture lands in the decision record, which attributes
+          // every row; null reads as "not recorded" rather than as the user.
           decidedBy: callerSessionId == null
               ? null
               : 'an agent in session $callerSessionId',

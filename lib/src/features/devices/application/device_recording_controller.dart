@@ -12,17 +12,11 @@ import 'package:karmashala_devices/devices.dart';
 import 'ios_device_providers.dart';
 
 /// The folder recordings are written to, under the app's support directory.
-///
-/// Not the Desktop, which is where a *screenshot* goes: a screenshot is a
-/// thing you are about to paste somewhere, and a screen recording is a file
-/// you keep. Not the system temp directory either — the OS deletes that, and
-/// this is something the user asked for by name.
+/// Not the Desktop (that is a screenshot) and not temp, which the OS deletes.
 const String kDeviceRecordingsFolder = 'recordings';
 
-/// What an MPEG-TS recording of an Android live view is called.
-///
-/// **`.ts`, not `.mp4`, and that is the honest name for what is in it.** See
-/// `DeviceRecordingController.startLiveViewRecording`.
+/// What an MPEG-TS recording of an Android live view is called: `.ts`, not
+/// `.mp4` — see `DeviceRecordingController.startLiveViewRecording`.
 const String kTransportStreamExtension = 'ts';
 
 /// Opens an MP4 destination. Injected so a test needs no OS muxer.
@@ -39,11 +33,8 @@ const String kQuickTimeExtension = 'mov';
 /// recorder a list instead of a disk.
 typedef RecordingSinkOpener = Future<RecordingSink> Function(String path);
 
-/// The directory recordings go in, created if it is missing.
-///
-/// It creates rather than only naming, so the one caller that does not write
-/// through a [RecordingSink] — the simulator, where `simctl` writes the file
-/// itself — does not need a second way to make a folder.
+/// The directory recordings go in, created if it is missing — `simctl` writes
+/// its own file and would otherwise need a second way to make the folder.
 final deviceRecordingDirectoryProvider = Provider<Future<String> Function()>(
   (ref) => () async {
     final directory = Directory(
@@ -85,23 +76,13 @@ final deviceRecordingProvider =
       DeviceRecordingController.new,
     );
 
-/// The one screen recording this app will run at a time.
-///
-/// **One at a time on purpose.** The pane shows one device, and a second
-/// recording would be a long-lived side effect with nothing on screen
-/// representing it — the failure this whole feature is shaped around.
-///
-/// It is a provider and not pane state for the reason `androidLiveViewProvider`
-/// is: the side panel unmounts the device pane whenever it switches surface,
-/// and a recording that vanished with it would leave a half-written file and no
-/// way to ask about it.
+/// The one screen recording at a time — a second would be a side effect with
+/// nothing on screen — held in a provider, since a pane switch would strand it.
 class DeviceRecordingController extends Notifier<DeviceRecordingState> {
   /// Mirrors [state] so `ref.onDispose` has something to read — reading
   /// `state` inside a life-cycle callback is forbidden.
   DeviceRecordingState _current = const DeviceRecordingIdle();
 
-  /// The live view the pane last told us about, or null when there is none to
-  /// record.
   LiveViewRecordingSource? _source;
 
   RecordingSink? _sink;
@@ -111,44 +92,33 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
   StreamSubscription<DeviceScreenSize>? _sizes;
   ProcessHandle? _process;
 
-  /// Events taken off the transport stream. The first is the container tables;
-  /// anything at all after it means a frame arrived, which is how "nothing was
-  /// recorded" is told apart from "a few hundred bytes of header".
+  /// Events off the transport stream. The first is the container tables, so
+  /// anything after it is how "nothing recorded" is told from "a header".
   int _chunks = 0;
   int _gaps = 0;
   int _geometryChanges = 0;
 
   /// Set the moment a finish begins, so the source ending, a failed write and
-  /// the user pressing Stop cannot each write an outcome for the same
-  /// recording.
+  /// Stop cannot each write an outcome for the same recording.
   bool _finishing = false;
 
-  /// Whether chunks off the transport stream still belong in the file.
-  ///
-  /// Needed because the recorder's subscription is **dropped rather than
-  /// awaited** — see [_finish] — so a frame already in flight can arrive after
-  /// the destination has been closed.
+  /// Whether chunks still belong in the file: the subscription is dropped
+  /// rather than awaited (see [_finish]), so one can arrive after the close.
   bool _accepting = false;
 
   static final AppLogger _log = AppLogger.named('device-recording');
 
   @override
   DeviceRecordingState build() {
-    // The app is closing, or the container is being torn down. The file is
-    // closed rather than left open, and no outcome is written: there is
-    // nobody left to read one.
+    // The app is closing: close the file, and write no outcome nobody reads.
     ref.onDispose(() => unawaited(_abandon()));
     return _current = const DeviceRecordingIdle();
   }
 
   void _set(DeviceRecordingState next) => state = _current = next;
 
-  /// Tells the recorder that [source]'s live view is running.
-  ///
-  /// Called on every session start, not only when a recording is wanted. A
-  /// recording that lost its frames when the pane unmounted picks them up here
-  /// when the pane comes back, which is why this is separate from
-  /// [startLiveViewRecording].
+  /// Tells the recorder that [source]'s live view is running. Called on every
+  /// session start, so a recording that lost its frames picks them up again.
   void offerLiveView(LiveViewRecordingSource source) {
     _source = source;
     final active = _current;
@@ -162,41 +132,8 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     _set(active.copyWith(receiving: true, gaps: _gaps));
   }
 
-  /// Records the live view the pane last offered.
-  ///
-  /// ## Why the file is a `.ts` and not a `.mp4`
-  ///
-  /// This app does not run the scrcpy client: it pushes `scrcpy-server`, parses
-  /// the protocol itself, and already holds the **encoded H.264 elementary
-  /// stream** the picture is made of. So a recording needs no second capture
-  /// and no re-encode — it needs a container, and there is no ffmpeg and no
-  /// native muxer here. What there is, written for the live view, is
-  /// `TsMuxer`: a pure-Dart MPEG-TS muxer already carrying scrcpy's per-frame
-  /// timestamps, already flagging its own discontinuities, and already
-  /// demuxable by libmpv's FFmpeg. So this writes the bytes the picture is
-  /// already made of, straight to disk.
-  ///
-  /// The cost is the extension. `.ts` opens in VLC, mpv and anything FFmpeg is
-  /// behind, and `ffmpeg -i x.ts -c copy x.mp4` remuxes it losslessly with no
-  /// re-encode — but it is not the file every player on the machine will
-  /// double-click. Saying so is the point: an `.mp4` that does not play would
-  /// be worse.
-  ///
-  /// MPEG-TS also happens to be the container that survives what this stream
-  /// does. A rotation re-sends SPS/PPS mid-stream and changes the picture's
-  /// size; MP4 fixes both in one sample entry, and a rotation would need a
-  /// second track.
-  ///
-  /// ## And why there is an MP4 now anyway
-  ///
-  /// [DeviceRecordingContainer.mp4] muxes the *same* frames through the
-  /// operating system's MP4 sink — still no re-encode, measured byte-identical
-  /// — so the file every player double-clicks costs nothing but the container.
-  /// The rotation limit above is real and is what the outcome says when one
-  /// happens; MPEG-TS stays on offer for exactly that.
-  ///
-  /// [container] defaults to MPEG-TS so it is never chosen by omission. The
-  /// surfaces name what they want.
+  /// Records the live view the pane last offered. `.ts` by default: the app
+  /// already holds the encoded H.264 and has no muxer but its own `TsMuxer`.
   Future<void> startLiveViewRecording({
     DeviceRecordingContainer container =
         DeviceRecordingContainer.transportStream,
@@ -255,17 +192,8 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     _attach(source);
   }
 
-  /// Records a booted simulator with `simctl io <udid> recordVideo`.
-  ///
-  /// A different route from the Android one, and it has to be: this app has no
-  /// video stream of a simulator to tee — the live view is WebDriverAgent's
-  /// MJPEG, which is a screenshot feed and not an encoded video — while
-  /// `simctl` records the display itself and writes a real QuickTime movie.
-  ///
-  /// **macOS only, and unverified.** `simctlServiceProvider` is null on any
-  /// other host, which is the same gate every other simulator verb uses, so
-  /// this returns without doing anything there. Nothing below has been watched
-  /// producing a file: it was written and tested on Windows.
+  /// Records a booted simulator with `simctl io … recordVideo`: its live view
+  /// is MJPEG, not an encoded stream. macOS only, and never watched working.
   Future<void> startSimulatorRecording(SimulatorTarget target) async {
     if (_current is DeviceRecordingActive) return;
     final simctl = ref.read(simctlServiceProvider);
@@ -316,11 +244,8 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
   /// Ends the recording and writes its outcome. Idempotent.
   Future<void> stop() => _finish();
 
-  /// Clears the last outcome, once the user has read it.
-  ///
-  /// It is not cleared on a timer and not cleared by starting something else:
-  /// the message names a file on disk, and a user who switched panes has to be
-  /// able to come back and still find out where it went.
+  /// Clears the last outcome once the user has read it — never on a timer:
+  /// the message names a file on disk the user may come back for.
   void dismiss() {
     if (_current is DeviceRecordingIdle) _set(const DeviceRecordingIdle());
   }
@@ -361,13 +286,8 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     });
   }
 
-  /// The live view stopped: the pane was switched away from, the stream was
-  /// restarted, or the device went.
-  ///
-  /// The recording is **not** finished here. It stays open, visible and the
-  /// user's to stop — the whole reason it lives in a provider — and says it is
-  /// no longer capturing. Ending it would silently drop a recording on a pane
-  /// switch, and the file is what the user asked for.
+  /// The live view stopped. The recording is **not** finished here: it stays
+  /// open and the user's to stop, or a pane switch would silently drop it.
   void _sourceEnded() {
     final video = _video;
     final sizes = _sizes;
@@ -409,13 +329,8 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     _sink = null;
     _mp4 = null;
     _process = null;
-    // **Dropped, not awaited.** The transport stream is an `async*` generator
-    // suspended on the session's frame controller, and cancelling one of those
-    // does not complete until the generator next reaches a yield — which on an
-    // idle device is never, because scrcpy encodes on change and a phone
-    // nobody is touching sends nothing for minutes. Awaiting it would hang
-    // Stop on exactly the device that is easiest to leave recording.
-    // [_accepting] is what keeps a late chunk out of a closed file.
+    // Dropped, not awaited: cancelling the `async*` transport stream does not
+    // complete until it next yields, which on an idle device is never.
     unawaited(video?.cancel());
     unawaited(sizes?.cancel());
     // The interrupt, not a kill: see `SimctlService.startRecording`.
@@ -442,8 +357,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
 
     final length = ref.read(clockProvider).nowUtc().difference(active.startedAt);
     // A transport stream whose only event was the container tables holds no
-    // picture, however many bytes that is. An MP4 counts access units, so one
-    // of those is already a picture.
+    // picture, however many bytes. An MP4 counts access units, so one is real.
     final noPicture =
         bytes == 0 ||
         (sink != null && _chunks <= 1) ||
@@ -511,8 +425,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
   }
 
   /// Releases what a recording holds without writing an outcome — the app is
-  /// going away, and a state nobody will read is not worth the risk of
-  /// touching a disposed provider.
+  /// going away, and nobody is left to read one.
   Future<void> _abandon() async {
     final video = _video;
     final sizes = _sizes;
@@ -545,8 +458,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     try {
       return await File(path).length();
     } on Object {
-      // Never written, or gone. Zero here means "no file", which the caller
-      // turns into "nothing was recorded" rather than a length of zero.
+      // Never written, or gone: zero means "no file" to the caller.
       return 0;
     }
   }

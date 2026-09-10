@@ -65,10 +65,8 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       kind: ref.watch(deviceEnvironmentProvider).kind,
     );
 
-    // Stop streaming a device that went away — once the list has actually
-    // said so. A refresh in flight reads as the same empty list as a machine
-    // with nothing plugged in, and tearing the live view down for one is what
-    // a resume would run into first.
+    // Stop streaming a device that went away — once the list has said so: a
+    // refresh in flight reads as the same empty list as nothing plugged in.
     if (_liveSerial != null &&
         deviceList.hasValue &&
         !devices.any((d) => d.serial == _liveSerial && d.isReady)) {
@@ -77,23 +75,15 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       });
     }
 
-    // The same rule for a simulator, which did not have it: shutting one down
-    // left its picture on screen showing the last frame that ever arrived. A
-    // still image of a device that no longer exists is the worst kind of
-    // wrong — it is indistinguishable from a live device that has stopped
-    // moving, and every control on it goes on offering to drive something that
-    // is gone.
+    // The same rule for a simulator: a still image of a device that no longer
+    // exists cannot be told from a live one that has stopped moving.
     final liveSimulatorUdid = switch (ref.watch(simulatorLiveViewProvider)) {
       SimulatorLiveViewRunning(:final view) => view.udid,
       SimulatorLiveViewStarting(:final udid) => udid,
       _ => null,
     };
-    // Only once the list has actually come back. `bootedSimulatorsProvider`
-    // reads the same empty list while the load is in flight as it does when
-    // every simulator really has gone, so testing it directly would tear the
-    // picture down on every refresh — the same "null means both *loading* and
-    // *absent*" mistake that made the device surface report a missing Android
-    // SDK on a machine that had one.
+    // Only once the list has come back: a load in flight reads the same empty
+    // list as every simulator having gone, and would tear the picture down.
     final simulatorList = ref.watch(iosSimulatorsProvider);
     final knownBooted = simulatorList.asData?.value.where(
       (s) => s.state.isReady || s.state == SimulatorState.booting,
@@ -108,18 +98,15 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       });
     }
 
-    // The device the pane is about. While the live view is running it is the
-    // device that view is for; the two are the same by construction, and
-    // reading it from one place is what keeps them that way.
+    // The device the pane is about: while the live view runs it is that
+    // view's device, and reading it from one place keeps them the same.
     final live = _liveSerial == null
         ? null
         : devices.where((d) => d.serial == _liveSerial).firstOrNull;
     final paneDevice = live ?? selected;
 
-    // Whether the simulator's picture is what this pane is showing. Named once
-    // and used twice, because the body below and the control row underneath it
-    // have to agree: they did not, and an Android hardware-key row sat beneath
-    // an iPhone's picture, pointed at a device that was not on screen.
+    // Whether the simulator's picture is what this pane shows. Named once and
+    // used twice: an Android key row once sat beneath an iPhone's picture.
     final simulatorShowing =
         ref.watch(simulatorLiveViewProvider) is! SimulatorLiveViewIdle;
 
@@ -142,16 +129,13 @@ class _DevicePaneState extends ConsumerState<DevicePane>
               : null,
           onStop: _liveSerial == null ? null : _stopAndRebuild,
         ),
-        // Above the picture and outside both platform branches: a recording is
-        // the one thing on this pane that outlives the surface it was started
-        // from, so it cannot live inside the row that is replaced when the
-        // simulator's picture wins.
+        // Above the picture and outside both platform branches: a recording
+        // outlives the surface it was started from.
         const DeviceRecordingBanner(),
         const Divider(height: 1),
         Expanded(
-          // The simulator's picture wins while it is up. It is the only thing
-          // on screen the user asked for by name, and the Android branches
-          // below are all about a device they did not pick.
+          // The simulator's picture wins while it is up: it is the only thing
+          // on screen the user asked for by name.
           child: simulatorShowing
               ? const SimulatorLivePane()
               : reason != null
@@ -176,25 +160,19 @@ class _DevicePaneState extends ConsumerState<DevicePane>
                 )
               : _LiveView(
                   // The held frame while a restart is in flight, so the
-                  // picture does not blink out and back. It is covered and
-                  // labelled — see [_LiveView.reconnecting].
+                  // picture does not blink out and back — covered, and said.
                   video: _video ?? _heldVideo,
                   device: live,
                   // A remount shows the spinner, never the last frame: the
-                  // held picture is a `Player` that went with the old element,
-                  // and there is nothing to hold it in between.
+                  // held picture went with the old element.
                   starting: _starting || _resuming,
                   reconnecting: _holdingPicture,
                   sink: _sink,
                   keyboard: _keyboardSink,
                   health: _health,
                   exhausted: _restarts.isExhausted && _reconnectTimer == null,
-                  // Still being found out, rather than found to be empty. The
-                  // SDK is resolved once, and the device list is only
-                  // "unknown" until its first answer — a later refresh has the
-                  // previous answer to stand on, and re-announcing the search
-                  // over a list the user can already see would be a flicker,
-                  // not information.
+                  // Still being found out, rather than found to be empty:
+                  // only the first answer is unknown, and re-asking flickers.
                   probing:
                       !(sdk.asData != null || sdk.hasError) ||
                       !deviceList.hasValue,
@@ -207,17 +185,11 @@ class _DevicePaneState extends ConsumerState<DevicePane>
                 ),
         ),
         // Not while a simulator's picture is up: that pane carries its own
-        // controls, and this row would sit under an iPhone offering Back,
-        // Recents and a screenshot of an Android device the user is not
-        // looking at.
+        // controls, and this row would offer Back under an iPhone.
         if (!simulatorShowing && paneDevice != null) ...[
           const Divider(height: 1),
-          // Deliberately [live], not [paneDevice]: a hardware key is *input*,
-          // and input follows the running session rather than the selection.
-          // Stopping the live view used to leave these driving whichever device
-          // happened to be selected — the user believed they had disconnected
-          // and had not. The row stays on screen, disabled, because a control
-          // that vanishes reads as a fault while an inert one says why.
+          // Deliberately [live], not [paneDevice]: input follows the running
+          // session, or Stop leaves these driving whatever is selected.
           _AndroidControls(
             device: live,
             clipboard: _clipboard,

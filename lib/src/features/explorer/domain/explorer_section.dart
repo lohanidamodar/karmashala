@@ -2,21 +2,9 @@ import 'package:karmashala_git/github.dart';
 import '../../sessions/domain/delivery_stage.dart';
 import '../../sessions/domain/session_status.dart';
 
-/// **What a rule may ask about one session, and nothing else.**
-///
-/// Every field here is a fact the app has *already* read for another reason:
-/// the session row's own status, the delivery reading a card or a strip paid
-/// for, the pull request a strip fetched, and the ambient waiting list the
-/// status watcher publishes. Nothing in this type can be produced by asking
-/// git, `gh` or SQLite a new question, and that is the whole design constraint
-/// — `test/features/scale/quiet_soak_cost_test.dart` pins **zero** statements
-/// over an hour of idle at a hundred panes, and a section that reached for a
-/// fact would have to reach for it once per session per rebuild.
-///
-/// Null is "we have not measured it", never "no" — the same rule
-/// [SessionDelivery] sets, and it matters more here than there: a rule that
-/// read an unmeasured branch as an empty string would quietly file every
-/// unopened session under `release/*` the moment somebody wrote the glob `*`.
+/// What a rule may ask about one session — only facts the app has already
+/// read for another reason, so nothing here costs a git, `gh` or SQLite call.
+/// Null always means "not measured yet", never "no".
 class SectionFacts {
   const SectionFacts({
     required this.id,
@@ -36,13 +24,8 @@ class SectionFacts {
 
   final String title;
 
-  /// Whether this is an imported CLI conversation rather than a native session.
-  ///
-  /// Imported rows have no lifecycle of their own ([status] is null) and no
-  /// checkout of their own, so they can only ever be matched by their
-  /// repository's branch or by explicit membership. Said out loud because the
-  /// alternative — silently dropping them — would make "everything on
-  /// `release/*`" a lie on a workspace that is mostly imported history.
+  /// Whether this is an imported CLI conversation. Imported rows have no
+  /// lifecycle and no checkout, so only a branch or explicit membership matches.
   final bool imported;
 
   /// The session row's own lifecycle. Null for [imported] rows.
@@ -61,17 +44,11 @@ class SectionFacts {
   final PullRequestState? pullRequestState;
 
   /// The verdict on the pull request's checks. Null both when there is no pull
-  /// request and when nobody has asked `gh` about this checkout yet — the two
-  /// are told apart by [pullRequestState].
+  /// request and when nobody has asked `gh` yet — [pullRequestState] separates.
   final ChecksState? checks;
 
-  /// Whether the agent is stopped at a prompt waiting on the user, per the
-  /// ambient waiting list the status watcher keeps.
-  ///
-  /// Read from that list rather than from the attention *inbox* deliberately:
-  /// the inbox retires an item the moment its session is looked at, which is
-  /// right for a notification and wrong for a section — a group you can empty
-  /// by glancing at it is a group you cannot work through.
+  /// Whether the agent is stopped at a prompt. Read from the ambient waiting
+  /// list, not the attention inbox, which retires an item once it is looked at.
   final bool awaitingInput;
 
   @override
@@ -80,11 +57,8 @@ class SectionFacts {
       'checks ${checks?.name ?? '-'}, awaiting $awaitingInput)';
 }
 
-/// The persisted discriminator for a [SectionRule].
-///
-/// A string in the database rather than an index, for the reason every enum in
-/// this schema is stored by name: a reordered `values` list must not silently
-/// re-file every section a user has made.
+/// The persisted discriminator for a [SectionRule]. Stored by name, not index:
+/// a reordered `values` list must not re-file every section a user made.
 enum SectionRuleKind {
   /// Membership is the user's pin set. See [PinnedRule].
   pinned,
@@ -106,27 +80,19 @@ enum SectionRuleKind {
   }
 }
 
-/// What decides whether a session belongs to a section.
-///
-/// Sealed, so adding a rule is a compile error everywhere the set is switched
-/// over — including the DAO, which is the one place a forgotten case would show
-/// up as data loss rather than as a missing group.
+/// What decides whether a session belongs to a section. Sealed, so adding a
+/// rule is a compile error in the DAO, where a missed case would be data loss.
 sealed class SectionRule {
   const SectionRule();
 
   SectionRuleKind get kind;
 
-  /// The rule's one parameter, for the rules that take one. Persisted as a
-  /// single nullable column rather than as a JSON blob: there is exactly one
-  /// parameterised rule today, and a blob would hide the day there are two.
+  /// The rule's one parameter, for the rules that take one. A column rather
+  /// than a JSON blob, so the day there are two rules is not hidden.
   String? get pattern => null;
 
-  /// Whether [facts] satisfies this rule.
-  ///
-  /// **Explicit rules answer `false`.** [PinnedRule] and [ManualRule] have no
-  /// predicate at all — their membership is a list, not a question — and
-  /// answering `false` here keeps the one caller ([assignSections]) honest:
-  /// explicit membership is resolved in its own pass, before any rule runs.
+  /// Whether [facts] satisfies this rule. [PinnedRule] and [ManualRule] answer
+  /// `false`: explicit membership is resolved in its own pass, before any rule.
   bool matches(SectionFacts facts);
 
   /// Whether membership comes from a list the user maintains rather than from
@@ -156,12 +122,8 @@ sealed class SectionRule {
 }
 
 /// The one section that cannot be deleted, renamed, reordered or given a rule.
-///
-/// Its membership is [Settings.pinnedSessionIds] — the set the pin toggle in
-/// every row menu already writes — rather than a members table of its own.
-/// Two pin stores would be two answers to "is this pinned", and the row's own
-/// pin glyph reads the settings one; a section that disagreed with the glyph
-/// beside it would be worse than no section.
+/// Its membership is [Settings.pinnedSessionIds], so it cannot disagree with
+/// the pin glyph on the row.
 class PinnedRule extends SectionRule {
   const PinnedRule();
 
@@ -183,13 +145,8 @@ class ManualRule extends SectionRule {
   bool matches(SectionFacts facts) => false;
 }
 
-/// A pull request whose checks have gone red.
-///
-/// Reads [SectionFacts.checks] rather than [DeliveryStage.checksFailing] so the
-/// answer is the same on a row whose stage was never computed. The two agree by
-/// construction — `SessionDelivery.stage` derives `checksFailing` from exactly
-/// this field — and reading the narrower one means a session with a red build
-/// and an uncommitted edit still lands here.
+/// A pull request whose checks have gone red. Reads [SectionFacts.checks]
+/// rather than the stage, so a red build with an uncommitted edit still lands.
 class ChecksFailingRule extends SectionRule {
   const ChecksFailingRule();
 
@@ -223,14 +180,9 @@ class AwaitingInputRule extends SectionRule {
   bool matches(SectionFacts facts) => facts.awaitingInput;
 }
 
-/// A session whose own row records that it ended badly.
-///
-/// The durable fact, not the live one: `SessionStatus.failed` is what the row
-/// goes on saying after the process is gone, which is the difference between a
-/// section you can come back to in the morning and one that empties itself
-/// overnight. `cancelled` is deliberately **not** here — a session the user
-/// stopped is not a session that failed, and folding the two would fill this
-/// group with work nobody wants back.
+/// A session whose own row records that it ended badly — the durable
+/// `SessionStatus.failed`. `cancelled` is deliberately not here: a session the
+/// user stopped is not one that failed.
 class EndedInFailureRule extends SectionRule {
   const EndedInFailureRule();
 
@@ -241,12 +193,8 @@ class EndedInFailureRule extends SectionRule {
   bool matches(SectionFacts facts) => facts.status == SessionStatus.failed;
 }
 
-/// A branch matching a glob — `release/*`, `feat/**`, `hotfix-?`.
-///
-/// The pattern is compiled once, when the rule is constructed, because a
-/// section is matched against every session in the workspace on every session
-/// change and `RegExp` compilation is the one part of matching that is not
-/// free.
+/// A branch matching a glob — `release/*`, `feat/**`, `hotfix-?`. Compiled
+/// once at construction: matching runs over every session on every change.
 class BranchGlobRule extends SectionRule {
   BranchGlobRule(this.glob) : _pattern = compileBranchGlob(glob);
 
@@ -268,22 +216,9 @@ class BranchGlobRule extends SectionRule {
   }
 }
 
-/// Compiles a branch glob to the regular expression that matches it.
-///
-/// The three wildcards, and why they are these three:
-///
-/// * `*` — any run of characters **except `/`**. `release/*` is the example in
-///   every request for this feature, and it means "the release branches", not
-///   "release/ and everything nested under it". A `*` that crossed slashes
-///   would make the obvious pattern quietly wrong on a repository that uses
-///   `release/2026/q1`.
-/// * `**` — any run, slashes included, for when crossing them is the point.
-/// * `?` — exactly one non-`/` character.
-///
-/// Anchored at both ends: a glob describes a whole branch name. A user who
-/// wants "contains" writes `*fix*`, which reads as what it does.
-///
-/// Case-sensitive, because git refs are.
+/// Compiles a branch glob to a regular expression. `*` does not cross `/` (so
+/// `release/*` is not `release/2026/q1`), `**` does, `?` is one non-`/` char;
+/// anchored at both ends and case-sensitive, because git refs are.
 RegExp compileBranchGlob(String glob) {
   final buffer = StringBuffer('^');
   for (var i = 0; i < glob.length; i++) {
@@ -305,11 +240,8 @@ RegExp compileBranchGlob(String glob) {
   return RegExp(buffer.toString());
 }
 
-/// The id the v29 migration seeds the built-in Pinned section under.
-///
-/// A literal rather than a generated id, and it has to be: the section is
-/// created by a migration, which has no id generator, and the UI needs to be
-/// able to name it without a lookup.
+/// The id the v29 migration seeds the built-in Pinned section under. A literal
+/// because a migration has no id generator and the UI must name it unaided.
 const String kPinnedSectionId = 'section-pinned';
 
 /// One saved group in the Explorer sidebar.
@@ -331,11 +263,8 @@ class ExplorerSection {
   /// see [assignSections].
   final int position;
 
-  /// Whether the section is folded shut.
-  ///
-  /// Defaults to shut, and every seeded section is written shut, because a
-  /// collapsed section costs nothing at all: nothing about it is matched and no
-  /// row under it is built. See [explorerSectionAssignmentProvider].
+  /// Whether the section is folded shut. Shut by default: a collapsed section
+  /// is matched against nothing and builds no rows.
   final bool collapsed;
 
   /// The rows the user put here by hand. Empty for every rule section, and for
@@ -392,36 +321,9 @@ class ExplorerSection {
       '${collapsed ? ' collapsed' : ''})';
 }
 
-/// Which section claims each session, when several would take it.
-///
-/// **The order the user sees is the order that decides**, with one clause above
-/// it:
-///
-/// 1. **Explicit beats derived.** A session the user pinned is in Pinned, and a
-///    session the user dropped into a manual group is in that group, whatever
-///    any rule says about it. Putting a row somewhere by hand is a statement
-///    about *that row*; a rule is a statement about a shape. The moment a rule
-///    could overrule a hand-placed row, "drag it here" stops meaning anything.
-///    Between two explicit claims the topmost section wins, and Pinned is fixed
-///    at position 0, so a pinned session is always in Pinned.
-/// 2. **Among rules, position decides.** The first section, top to bottom,
-///    whose rule matches takes the row.
-///
-/// The alternative — a fixed severity table, red-build outranks awaiting-input
-/// outranks failed — was written and thrown away. It answers the common case
-/// well and cannot be argued with, which is the problem: a user who wants their
-/// `release/*` group to win over "Checks failing" has no way to say so, and
-/// nobody reading the sidebar can tell why a red release branch is filed where
-/// it is. Position is visible, it is already the thing the user arranges, and
-/// dragging a section upwards is a sentence anyone can read. The seeded order
-/// still *starts* at that severity ordering, so the default behaviour is the
-/// one the table would have given.
-///
-/// A session that no section claims is in no section, and is drawn where it
-/// always was — under its project.
-///
-/// [sections] must be in sidebar order. [pinnedIds] is the settings pin set,
-/// which is [PinnedRule]'s membership.
+/// Which section claims each session when several would take it: explicit
+/// membership wins over any rule, and among rules the topmost section in
+/// sidebar order takes the row. A row nobody claims stays under its project.
 Map<String, List<SectionFacts>> assignSections(
   List<ExplorerSection> sections,
   Iterable<SectionFacts> items, {
@@ -439,17 +341,14 @@ Map<String, List<SectionFacts>> assignSections(
   return claimed;
 }
 
-/// The one section that takes [item], or null when none does.
-///
-/// Split out of [assignSections] so the rule can be asserted on its own — the
-/// priority order is the part of this feature most likely to be argued with,
-/// and an argument wants a function it can call with two sections and one row.
+/// The one section that takes [item], or null when none does. Split out so the
+/// priority order can be asserted with two sections and one row.
 ExplorerSection? claimantFor(
   List<ExplorerSection> sections,
   SectionFacts item, {
   Set<String> pinnedIds = const {},
 }) {
-  // Clause 1: explicit membership, top to bottom.
+  // Explicit membership, top to bottom.
   for (final section in sections) {
     final claims = switch (section.rule.kind) {
       SectionRuleKind.pinned => pinnedIds.contains(item.id),
@@ -458,7 +357,7 @@ ExplorerSection? claimantFor(
     };
     if (claims) return section;
   }
-  // Clause 2: rules, top to bottom.
+  // Then rules, top to bottom.
   for (final section in sections) {
     if (section.rule.matches(item)) return section;
   }

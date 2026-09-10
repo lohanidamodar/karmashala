@@ -12,25 +12,7 @@ import 'session_resume_providers.dart';
 final _log = AppLogger.named('sessions.launch');
 
 /// Tells the person whose session it was that the CLI refused their command
-/// line, the moment the pane running it stops.
-///
-/// **The refusal was already parsed and already unread.** `RejectedValue` has
-/// been read off a dead pane since the day Codex dropped `untrusted`, but the
-/// only surface watching it is the Explorer card's subtitle — so a user looking
-/// at the pane that just flashed and died saw "Session ended" and nothing else,
-/// which is the whole failure the parse was written to end.
-///
-/// Posted as a [SessionNotice] rather than raised: the launch itself succeeded
-/// (the process spawned; it exited while reading its own arguments), so there
-/// is no call left to fail, and the notice bar is where this session's other
-/// launch news already goes — `permission_mode_chip.dart` puts "the restart
-/// failed" there.
-///
-/// **Costs one grid read per pane that actually died**, and none at all for an
-/// agent whose refusal nobody has read: [paneRejectedValue] returns before
-/// touching the buffer when the descriptor declares no pattern. Nothing polls —
-/// this runs from the same liveness edge `SessionLivenessReconciler` already
-/// reconciles on.
+/// line, the moment its pane stops — a notice, because the launch itself ran.
 void reportRefusedLaunches(Ref ref, Iterable<String> stoppedPaneIds) {
   final refusals = <String, ({String pane, RejectedValue value})>{};
   for (final paneId in stoppedPaneIds) {

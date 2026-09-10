@@ -8,10 +8,8 @@ import 'device_providers.dart';
 /// Which handshake is running, for the one line the dialog shows while it does.
 enum WirelessPairingStep { pairing, connecting }
 
-/// Where one wireless pairing attempt has got to.
-///
-/// Five states because they are five different screens, and because "paired but
-/// not attached" is a half-success the user must not answer by pairing again.
+/// Where one wireless pairing attempt has got to. Five states because "paired
+/// but not attached" is a half-success the user must not answer by re-pairing.
 sealed class WirelessPairingState {
   const WirelessPairingState();
 }
@@ -44,10 +42,7 @@ final class WirelessPairingConnected extends WirelessPairingState {
 }
 
 /// Paired but not attached — the phone has not said which port to connect on.
-///
-/// Its own state rather than a failure: the pairing is done and spending
-/// another one would be wrong. [host] prefills the field that asks for the
-/// port.
+/// Its own state, not a failure: spending another pairing would be wrong.
 final class WirelessPairingPaired extends WirelessPairingState {
   const WirelessPairingPaired({required this.host, required this.message});
   final String host;
@@ -73,32 +68,16 @@ final mdnsPollIntervalProvider = Provider<Duration>(
   (ref) => kMdnsPollInterval,
 );
 
-/// Drives both ways of pairing a phone over Wi-Fi.
-///
-/// **Auto-disposed on purpose.** The QR method polls `adb mdns services`, and a
-/// poll that outlives the dialog is a process created every couple of seconds
-/// for a window nobody has open. The dialog holds the only listener, so its
-/// unmount is what ends the poll; [cancel] is the same stop, asked for
-/// explicitly.
-///
-/// **Bounded, not timed.** [kMdnsPollBudget] scans for the QR and
-/// [kConnectDiscoveryBudget] for the connect service afterwards, so an attempt
-/// has a worst case measured in processes rather than in patience.
-///
-/// **Nothing here logs the code or the password.** The invite prints only its
-/// service name, `adb pair` is handed the code as an argument and never echoed,
-/// and only the states above leave this class.
+/// Drives both ways of pairing a phone over Wi-Fi. Auto-disposed: the QR
+/// method polls `adb mdns services`, and a poll outliving the dialog spawns on.
 class WirelessPairingController extends Notifier<WirelessPairingState> {
-  /// Bumped by every new attempt, by [cancel] and by disposal. Every await in
-  /// this class is followed by a check against it, so a poll from a spent
-  /// attempt cannot paint over a fresh one — the rule `PairingDialog` already
-  /// uses for the remote-access code.
+  /// Bumped by every new attempt, by [cancel] and by disposal: every await is
+  /// followed by a check, so a spent attempt cannot paint over a fresh one.
   int _attempt = 0;
   var _disposed = false;
 
-  /// The armed gap between two polls. Held so it can be *cancelled* rather than
-  /// left to fire into a closed dialog: an unmounted pane must leave nothing
-  /// running, and a timer that wakes to discover it is unwanted still woke.
+  /// The armed gap between two polls. Held so it can be *cancelled*: a timer
+  /// that wakes to discover it is unwanted still woke.
   Timer? _waitTimer;
   Completer<void>? _waiting;
 

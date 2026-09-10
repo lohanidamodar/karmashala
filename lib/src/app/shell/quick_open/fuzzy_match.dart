@@ -1,10 +1,5 @@
-/// Fuzzy matching and scoring for quick open.
-///
-/// Pure: no widgets, no providers, no clock. One surface has to rank a session
-/// title, a file path, a branch name and a command against the same query, so
-/// the ranking must be a function of the text alone — anything that needs to
-/// know *what kind* of thing it is scoring belongs to the caller, as a per-item
-/// weight.
+/// Fuzzy matching and scoring for quick open. Pure: what *kind* of thing is
+/// being scored belongs to the caller, as a per-item weight.
 library;
 
 /// What a query matched in one piece of text.
@@ -19,9 +14,8 @@ class FuzzyMatch {
   final List<int> positions;
 }
 
-/// Characters after which the next character starts a new word. Paths, branch
-/// names, and command labels are all word-separated by one of these, which is
-/// why `gso` finds `git status --oneline` and `apsh` finds `app_shell.dart`.
+/// Characters after which the next character starts a new word — which is why
+/// `gso` finds `git status --oneline` and `apsh` finds `app_shell.dart`.
 bool _isSeparator(int code) =>
     code == 0x20 || // space
     code == 0x2F || // /
@@ -54,21 +48,11 @@ const _leadingGapPenalty = 1.6;
 const _innerGapPenalty = 2.2;
 
 /// The longest a haystack can be before its length stops counting against it.
-/// Without a cap a deeply nested path could never outrank a short one even on
-/// an exact filename match.
+/// Without a cap a deeply nested path could never outrank a short one.
 const _lengthPenaltyCap = 60.0;
 
-/// Scores [query] against [text], or returns null when [text] does not contain
-/// [query]'s characters in order.
-///
-/// Two passes, because they answer different questions and users expect both:
-///
-/// * a **substring** hit (`login` in `Fix login bug`) is the common case and
-///   should always beat a scattered subsequence hit of the same query;
-/// * a **subsequence** hit (`fxlgn`) is what makes an abbreviation work.
-///
-/// An empty query matches everything with score 0, so "what is here?" is a
-/// legal question and the caller decides what to show for it.
+/// Scores [query] against [text], or null when [text] lacks [query]'s characters
+/// in order. A substring hit always beats a scattered subsequence hit.
 FuzzyMatch? fuzzyMatch(String query, String text) {
   if (query.isEmpty) return const FuzzyMatch(score: 0, positions: []);
   if (text.isEmpty) return null;
@@ -110,8 +94,7 @@ FuzzyMatch? _subsequence(String text, String haystack, String needle) {
     final target = needle.codeUnitAt(q);
     var found = -1;
     // Prefer a word-start occurrence over the first occurrence: for `apsh` in
-    // `app_shell.dart` the `sh` must land on `shell`, not on the `s` that never
-    // comes. Scan forward for a word start, and fall back to the nearest hit.
+    // `app_shell.dart` the `sh` must land on `shell`, not on the first `s`.
     var fallback = -1;
     for (var i = cursor; i < haystack.length; i++) {
       if (haystack.codeUnitAt(i) != target) continue;

@@ -2,16 +2,8 @@ import '../domain/verification_artifact.dart';
 import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
 
-/// Renders a run as one markdown document.
-///
-/// Written to be **pasted**: into a pull request, into a prompt, into a message
-/// to whoever asked whether the change works. Image links are relative to the
-/// run's own directory, so the folder is the unit that moves — copy it anywhere
-/// and the pictures still resolve.
-///
-/// [inlined] carries the contents of the small text artifacts (console errors,
-/// the log slice) keyed by relative path. Anything not in it is linked instead,
-/// which is what keeps a 200-line logcat out of a report meant to be read.
+/// Renders a run as one markdown document, written to be pasted. Image links
+/// are relative, so the folder is the unit that moves; [inlined] is inlined.
 String renderVerificationReport(
   VerificationRun run, {
   Map<String, String> inlined = const {},
@@ -51,8 +43,7 @@ String renderVerificationReport(
       '(`${run.sessionId}`) |',
     );
   }
-  // Who graded it, on the same table as what was graded: a report that says
-  // PASS without saying who decided is the self-graded exam G3 names.
+  // Who graded it, beside what was graded: PASS with no name is self-graded.
   out.writeln(
     '| Verifier | ${run.attribution.label}'
     '${run.producedBySessionId == null ? '' : ' (`${run.producedBySessionId}`)'} |',
@@ -163,8 +154,7 @@ String _clock(DateTime at) {
 
 String _two(int value) => value.toString().padLeft(2, '0');
 
-/// Keeps a summary from breaking the list it sits in. Pipes matter because
-/// summaries also land in the table above.
+/// Keeps a summary from breaking its list — and the pipes of the table above.
 String _escape(String value) =>
     value.replaceAll('\n', ' ').replaceAll('|', r'\|');
 

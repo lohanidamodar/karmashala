@@ -22,15 +22,8 @@ import '../../git/presentation/worktree_browse.dart';
 import '../../git/presentation/worktree_create_dialog.dart';
 import '../../sessions/application/delivery_providers.dart';
 
-/// The browsable `https://` URL for a git remote, or null when there is not one.
-///
-/// Remotes are written four ways and only one of them is a URL a browser
-/// understands: `git@github.com:owner/repo.git` is scp syntax, not a URI, and
-/// `Uri.parse` reads it as the scheme `git@github.com`. Normalising here means
-/// the panel can offer one link whichever way the repository was cloned.
-///
-/// Returns null for anything without a real host — a local path, a bare
-/// `/srv/git/repo.git`, a Windows drive — so a dead link is never offered.
+/// The browsable `https://` URL for a git remote, or null when there is not
+/// one — `git@host:owner/repo.git` is scp syntax and `Uri.parse` misreads it.
 String? webUrlForRemote(String remote) {
   final value = remote.trim();
   if (value.isEmpty) return null;
@@ -61,12 +54,8 @@ String? webUrlForRemote(String remote) {
   };
 }
 
-/// What the app knows about the current project and repository: paths, the
-/// execution environment, and live Git facts read straight from the repo.
-///
-/// Everything here used to be text you could select and nothing else, which is
-/// why it read as a debug dump: the remote is a link, the branch copies, and
-/// every path opens where it lives.
+/// What the app knows about the current project and repository. Everything
+/// here is a control: the remote links, the branch copies, a path opens.
 class RepositoryInfoView extends ConsumerWidget {
   const RepositoryInfoView({super.key});
 
@@ -194,19 +183,8 @@ class _RevealButton extends ConsumerWidget {
   }
 }
 
-/// Local Git details for the selected repository: branch, remote, worktrees and
-/// recent commits. Git is authoritative; these read live.
-///
-/// Three sections, three widgets. One build used to watch all four providers,
-/// so a `git worktree list` landing repainted the commit log beside it.
-///
-/// **Unless there is no git to detail**, and then the whole section is one
-/// sentence read from [selectedCheckoutGitTroubleProvider]: four rows each
-/// saying "not a git repository" in a 240px panel is one fact spelled four
-/// times.
-///
-/// The one watch back in this build does not undo the split above: the three
-/// children are `const`, so an identical instance rebuilds none of them.
+/// Local Git details, read live. Three sections, three `const` widgets, so a
+/// `git worktree list` landing does not repaint the commit log beside it.
 class _GitDetails extends ConsumerWidget {
   const _GitDetails();
 
@@ -233,11 +211,8 @@ class _GitDetails extends ConsumerWidget {
   }
 }
 
-/// The GIT section when git has nothing to say — a plain paragraph on the muted
-/// ramp, with no error colour and no exception name.
-///
-/// A wrapping paragraph rather than a [_kv] row: this pane drags down to 240px,
-/// where that row's label column would leave a sentence about 170px.
+/// The GIT section when git has nothing to say. A wrapping paragraph rather
+/// than a [_kv] row: at 240px that row's label column leaves ~170px.
 class _GitTroubleNote extends StatelessWidget {
   const _GitTroubleNote({required this.report});
 
@@ -281,11 +256,8 @@ class _GitTroubleNote extends StatelessWidget {
   }
 }
 
-/// The branch the selected checkout has out, and its remote.
-///
-/// Both describe the **checkout**, not whichever worktree is being read: the
-/// status bar and Quick Open read these too, and browsing a diff must not move
-/// what the bottom of the window says.
+/// The branch the selected checkout has out, and its remote — both describe
+/// the **checkout**, so browsing a diff does not move the status bar.
 class _BranchAndRemote extends ConsumerWidget {
   const _BranchAndRemote();
 
@@ -296,9 +268,7 @@ class _BranchAndRemote extends ConsumerWidget {
     final remote = ref.watch(repoRemoteUrlProvider);
 
     // A row that failed on its own, the remote while the branch answered say.
-    // Named rather than a flat `unavailable`, which covered all three states
-    // with one word. `.error` before the loading case: see
-    // `selectedCheckoutGitTroubleProvider`.
+    // `.error` before the loading case: see `selectedCheckoutGitTroubleProvider`.
     String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
       AsyncData(:final value) => value ?? fallback,
       AsyncValue(:final error?) => gitTroubleLabel(gitTroubleOf(error)),
@@ -315,9 +285,8 @@ class _BranchAndRemote extends ConsumerWidget {
           theme,
           'Branch',
           branchText,
-          // The branch name is what you paste into a `git checkout`, a PR body
-          // or a message to an agent, and selecting 12 characters of 12px mono
-          // with a mouse is a worse way to get it than a button.
+          // The branch name is what you paste into a `git checkout` or a PR body, and
+          // selecting 12 characters of 12px mono with a mouse is a worse way to get it.
           action: branch is AsyncData && branch.value != null
               ? _CopyButton(value: branchText, what: 'Branch')
               : null,
@@ -333,14 +302,8 @@ class _BranchAndRemote extends ConsumerWidget {
   }
 }
 
-/// The selected checkout's worktrees — a list, and the thing you steer the
-/// diff with.
-///
-/// **Closed by default once there are more than a few.** The owner had eight in
-/// flight, drawn flat and expanded, and PROJECT and PROJECT ROOT were pushed off
-/// the bottom of a 240px panel. Two or three is not a space problem and opens
-/// itself; more than that is one line until you ask, and then a bounded region
-/// that scrolls inside itself rather than growing without limit.
+/// The selected checkout's worktrees, and the thing you steer the diff with.
+/// Closed once there are more than a few: eight expanded filled a 240px panel.
 class _Worktrees extends ConsumerStatefulWidget {
   const _Worktrees();
 
@@ -522,17 +485,8 @@ class _WorktreesHeader extends StatelessWidget {
   }
 }
 
-/// One worktree, and the two verbs it offers.
-///
-/// **Clicking reads it** — the diff, the commit log, nothing else. It writes no
-/// session row and no working directory, so a browse cannot move where an agent
-/// runs or what it resumes from.
-///
-/// **Right-clicking offers the other one**: `CheckoutPicker`, the same call
-/// behind the panel's own picker and the `select_checkout` tool, which points
-/// the Explorer and every scoped panel here and remembers the pick against the
-/// followed session. That one is deliberate, named, and never a side effect of
-/// looking.
+/// One worktree. **Clicking reads it** — no session row, no working directory,
+/// so a browse cannot move where an agent runs. Right-click picks it.
 class _WorktreeRow extends ConsumerWidget {
   const _WorktreeRow({
     required this.worktree,
@@ -587,10 +541,8 @@ class _WorktreeRow extends ConsumerWidget {
           '${worktree.path.path}\n'
           "Click to read this worktree's changes\n"
           "Right-click to select it as the session's checkout",
-      // [RowContextMenu] rather than a bare right-click: the tooltip above
-      // tells the user to right-click, and until now that was the only way in
-      // — the chip is a focus stop and had no answer for `Shift+F10`, the Menu
-      // key or a screen reader. No `⋮`: the chip is a chip.
+      // [RowContextMenu] rather than a bare right-click: the chip is a focus stop
+      // and had no answer for `Shift+F10`, the Menu key or a screen reader.
       child: RowContextMenu(
         menuLabel: 'Actions for ${worktree.label}',
         itemBuilder: () => [
@@ -640,9 +592,8 @@ class _WorktreeRow extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
               style: MonoStyles.small.copyWith(color: accent),
             ),
-            // The worktree's own path, environment and all — not the
-            // repository's environment wearing the worktree's text, which is a
-            // location nobody promised exists.
+            // The worktree's own path, environment and all — not the repository's
+            // environment wearing the worktree's text, which is a location nobody promised.
             action: _RevealButton(dense: true, path: worktree.path),
           ),
         ),
@@ -747,9 +698,8 @@ Widget _line(
         color: iconColor ?? theme.colorScheme.onSurfaceVariant,
       ),
       const SizedBox(width: 6),
-      // Flexible, because a worktree branch is as long as an agent's name and
-      // this row is 200px wide: it ellipsises rather than pushing the path off
-      // the edge of the panel.
+      // Flexible, because a worktree branch is as long as an agent's name in a
+      // 200px row: it ellipsises rather than pushing the path off the edge.
       Flexible(
         child:
             leadWidget ??
@@ -807,9 +757,8 @@ class _RemoteValue extends StatelessWidget {
             child: InkWell(
               onTap: () async {
                 final messenger = ScaffoldMessenger.of(context);
-                // `launchUrl` reports a refusal by *returning false*, not by
-                // throwing, so a catch alone would leave a click that did
-                // nothing looking exactly like a click that worked.
+                // `launchUrl` reports a refusal by *returning false*, not by throwing, so a
+                // catch alone leaves a click that did nothing looking like one that worked.
                 var opened = false;
                 Object? failure;
                 try {
@@ -875,10 +824,7 @@ class _CopyButton extends StatelessWidget {
   }
 }
 
-/// The repository whose name the Changes view should title itself with.
-///
-/// Watches the row rather than the list: this and `ShellStatusBar` are siblings
-/// and a list announcement reaches both whether or not the repository moved.
-/// See `selectedRepositoryProvider`.
+/// The repository whose name the Changes view titles itself with. Watches the
+/// row rather than the list, which announces to siblings either way.
 Repository? selectedRepository(WidgetRef ref) =>
     ref.watch(selectedRepositoryProvider);

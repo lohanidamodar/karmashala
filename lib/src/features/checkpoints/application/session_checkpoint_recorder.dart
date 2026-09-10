@@ -11,31 +11,13 @@ import '../domain/checkpoint.dart';
 import 'checkpoint_providers.dart';
 
 /// Why [SessionCheckpointRecorder.captureNow] can answer with no checkpoint.
-///
-/// Two reasons, and nothing above this can tell them apart: the tree is
-/// byte-for-byte the last checkpoint, or the session has no working tree to
-/// checkpoint at all. Saying both is §19's rule — an admission of ignorance
-/// beats picking the likelier one and being confidently wrong.
+/// Two reasons nothing above can tell apart, so it says both (§19).
 const String kNothingToCapture =
     'Nothing has changed since the last checkpoint, or this session has no '
     'repository to checkpoint.';
 
-/// Turns "an agent finished a turn" into a checkpoint.
-///
-/// **Which signal, and why this one.** `SessionEventTypes.sessionCompleted`
-/// looks like the right event and is not: it means the session's *process*
-/// ended, and it is emitted only by the adapter engine, which no in-app session
-/// uses now that every one of them runs in a PTY (Loop 41). The signal that
-/// actually means "a turn ended" is the Loop 28 status pipeline settling from
-/// [AgentActivityStatus.working] to [AgentActivityStatus.idle] — which is the
-/// same transition the notifications feature already calls "finished".
-///
-/// This watches it through `agentSessionStatusProvider`, a read-only seam in
-/// `sessions/`, so nothing in the sessions feature has to know checkpoints
-/// exist. That costs one status poll per *running* session while this is alive.
-/// The cheaper wiring is a third sink on the notifications watcher, which polls
-/// once for everything — a follow-up, and a change to a file this loop was kept
-/// out of.
+/// Turns "an agent finished a turn" into a checkpoint, off the Loop 28 status
+/// pipeline settling `working` -> `idle`, not `sessionCompleted`.
 class SessionCheckpointRecorder extends Notifier<int> {
   final _log = AppLogger.named('checkpoints');
 
@@ -45,10 +27,8 @@ class SessionCheckpointRecorder extends Notifier<int> {
 
   @override
   int build() {
-    // Re-read the session list when a row appears, goes away or changes
-    // status, so a session started after this was built is watched too. A full
-    // table scan plus one `ref.listen` per running row, so it must not run for
-    // a rename — which is published on a timer by the CLI store sweep.
+    // Re-read the session list when a row appears, goes or changes status. A full
+    // scan plus a listen per running row, so it must not run for a rename.
     ref.watchSessionKinds(const {
       SessionChangeKind.membership,
       SessionChangeKind.status,
@@ -73,13 +53,8 @@ class SessionCheckpointRecorder extends Notifier<int> {
     return sessions.length;
   }
 
-  /// Captures [sessionId]'s working tree now, whatever its status.
-  ///
-  /// Public so the MCP tool and the UI can ask for one; the turn hook above is
-  /// the same call with a different reason.
-  /// [decidedBy] and [decidedBySessionId] say who asked, for the decision
-  /// record — see [_recordIfChosen]. Null is "not recorded", which is what a
-  /// caller that genuinely does not know should pass.
+  /// Captures [sessionId]'s working tree now, whatever its status. [decidedBy]
+  /// says who asked; null is "not recorded", which a caller that cannot say passes.
   Future<Checkpoint?> captureNow(
     String sessionId, {
     CheckpointReason reason = CheckpointReason.manual,
@@ -117,19 +92,8 @@ class SessionCheckpointRecorder extends Notifier<int> {
     captureNow(sessionId, reason: CheckpointReason.turn);
   }
 
-  /// Writes a *deliberately marked* checkpoint to the session's decision
-  /// record.
-  ///
-  /// Two conditions, and both are the point. The reason must be
-  /// [CheckpointReason.manual] — somebody asked for this one, as opposed to the
-  /// turn hook above, which fires on every idle transition and would fill the
-  /// record with the fact that time passed. And the label must say something —
-  /// "a checkpoint taken with a reason" is the act; a nameless one records that
-  /// a snapshot exists, which the checkpoint chain already says perfectly well.
-  ///
-  /// This is the gap analysis's fourth item: the chain records that a turn
-  /// happened, never that a state was *chosen*. A labelled manual capture is
-  /// the only signal in the app that says which is which.
+  /// Writes a *deliberately marked* checkpoint to the decision record: manual
+  /// reason and a label, because the chain already records that a turn happened.
   void _recordIfChosen(
     Checkpoint checkpoint, {
     required String? decidedBy,

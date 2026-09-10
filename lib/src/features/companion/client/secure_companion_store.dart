@@ -1,9 +1,6 @@
-/// The phone's pairing record at rest, in the platform keystore.
-///
-/// Design §2: the device key lives in `flutter_secure_storage`
-/// (Keystore/Keychain), never plain preferences. This is the only file that
-/// touches the plugin; tests inject a fake backend via [withBackend], and the
-/// desktop build never constructs it at all.
+/// The phone's pairing record at rest, in the platform keystore — the device
+/// key lives in Keystore/Keychain, never plain preferences (Design §2). The
+/// only file that touches the plugin.
 library;
 
 // The backend functions are named for callers but stored privately, which the
@@ -24,35 +21,15 @@ typedef SecureWrite = Future<void> Function(String key, String value);
 
 typedef SecureDelete = Future<void> Function(String key);
 
-/// How long one keystore call may take before it counts as failed.
-///
-/// A platform channel that never comes back is worse than one that refuses:
-/// `CompanionConnections.mutate` serialises every read-modify-write on ONE
-/// static chain, so a single call that hangs stops every later one for the
-/// life of the process — and the connect loop persists its generation counter
-/// inside the dial. That is a phone reading "Connecting…" with a live desktop
-/// at the other end and no way back short of force-quitting.
+/// How long one keystore call may take. `CompanionConnections.mutate` chains
+/// every write, so one hung call stops every later one for the process's life.
 const Duration kSecureStoreTimeout = Duration(seconds: 5);
 
-/// A [CompanionStore] over the platform's secure storage.
-///
-/// A read that fails for any reason — first run, a cleared keystore, a
-/// restored backup the OS refuses to decrypt — answers null, which the
-/// gateway reads as "unpaired"; a launch must never crash on bad storage.
-/// Writes and deletes propagate their failures: a pairing that could not be
-/// persisted has to fail out loud, not pretend it stuck.
-///
-/// Every call is bounded by [timeout]: not answering is a failure like any
-/// other, and it must be reported as one rather than held open for ever.
+/// A [CompanionStore] over the platform's secure storage: a failed read answers
+/// null ("unpaired"), writes propagate, and every call is bounded by [timeout].
 class SecureCompanionStore implements CompanionStore {
-  /// The real plugin-backed store the companion bootstrap uses.
-  ///
-  /// [onLog] defaults to [debugPrint] on purpose. A read that fails answers
-  /// null, which the gateway reads as "unpaired" — indistinguishable, from
-  /// the outside, from a phone that never paired at all. That is the right
-  /// behaviour and the wrong silence: when a keystore stops decrypting what
-  /// it holds (an app update that rotated the master key is the usual way),
-  /// the only evidence is this line.
+  /// The real plugin-backed store. [onLog] defaults to [debugPrint]: a keystore
+  /// that stopped decrypting looks exactly like a phone that never paired.
   factory SecureCompanionStore({
     void Function(String message)? onLog,
     Duration timeout = kSecureStoreTimeout,

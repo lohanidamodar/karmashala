@@ -1,23 +1,12 @@
-/// Ghostty config/theme files: `key = value` lines.
-///
-/// Both parsers here are pure functions over a string. They never touch the
-/// filesystem and never throw — a malformed file yields fewer keys, not an
-/// exception, so a broken theme can never reach the terminal as a crash.
+/// Ghostty config/theme files: `key = value` lines. Both parsers here are pure
+/// functions over a string that never throw — a malformed file yields fewer
+/// keys, so a broken theme can never reach the terminal as a crash.
 library;
 
 import '../domain/terminal_palette.dart';
 
-/// Parses a Ghostty config or theme file.
-///
-/// Every key maps to the list of values it was given, because `palette` is
-/// spelled as a repeated key. For scalar keys the caller takes the last entry.
-///
-/// The grammar, which follows real files rather than an idealised one:
-/// lines are trimmed first (so CRLF files work); a line whose trimmed form
-/// starts with `#` is a comment; the *first* `=` splits key from value; a `#`
-/// preceded by whitespace and outside quotes starts an inline comment; a value
-/// wrapped wholly in matching quotes has them stripped; lines with no `=`, and
-/// empty keys, are skipped.
+/// Parses a Ghostty config or theme file. Every key maps to a *list*, because
+/// `palette` is spelled as a repeated key; scalars take the last entry.
 Map<String, List<String>> parseGhosttyConfig(String content) {
   final result = <String, List<String>>{};
   for (final rawLine in content.split('\n')) {
@@ -64,10 +53,9 @@ String _stripInlineComment(String value) {
   return value;
 }
 
-/// Maps parsed Ghostty keys onto a [TerminalPalette].
-///
-/// Anything unusable — an unknown key, a colour we cannot read, a palette index
-/// outside 0–15 — is dropped silently. A theme is allowed to be partial.
+/// Maps parsed Ghostty keys onto a [TerminalPalette]. Anything unusable — an
+/// unknown key, a colour we cannot read, a palette index outside 0–15 — is
+/// dropped silently: a theme is allowed to be partial.
 TerminalPalette ghosttyPalette(Map<String, List<String>> config) {
   String? colorOf(String key) {
     final values = config[key];

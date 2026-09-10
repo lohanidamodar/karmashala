@@ -7,12 +7,8 @@ import '../../../core/util/clock_provider.dart';
 import '../application/device_logcat_session.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// Whether the logcat view under the picture is open.
-///
-/// Outside the widget so that closing it is what disposes
-/// [deviceLogcatSessionProvider], and so that switching side-panel surface and
-/// coming back finds the log where it was left rather than reopening a stream
-/// the user had closed.
+/// Whether the logcat view under the picture is open. Outside the widget, so
+/// closing it disposes the session and a surface switch finds it as left.
 class DeviceLogcatOpen extends Notifier<bool> {
   @override
   bool build() => false;
@@ -24,17 +20,8 @@ final deviceLogcatOpenProvider = NotifierProvider<DeviceLogcatOpen, bool>(
   DeviceLogcatOpen.new,
 );
 
-/// **The device's log, under its picture.**
-///
-/// The `device_logcat` tool has always been able to read this and a person
-/// could not — which is backwards for the one surface in the app where somebody
-/// is watching an app run and wants to know why it just did that.
-///
-/// Collapsed it is one strip and costs nothing: the session provider is
-/// `autoDispose`, so a closed view holds no subscription and no `logcat`
-/// process. Open, it is the same [AdbService] the tool reads through, streaming
-/// rather than snapshotting, bounded in lines and honest about the ones it
-/// dropped.
+/// **The device's log, under its picture.** Collapsed it is one strip that
+/// costs nothing: the session is `autoDispose`, so no view, no `logcat`.
 class DeviceLogcatSection extends ConsumerWidget {
   const DeviceLogcatSection({required this.device, super.key});
 
@@ -121,9 +108,8 @@ class _Logcat extends ConsumerStatefulWidget {
 }
 
 class _LogcatState extends ConsumerState<_Logcat> {
-  /// What one scroll view holds. A second bound, above the tail's own: the
-  /// buffer is what a reader scrolls back through, this is what the drawing
-  /// isolate pays for on a device that logs in a loop.
+  /// What one scroll view holds. A second bound above the tail's own: this is
+  /// what the drawing isolate pays for on a device that logs in a loop.
   static const int visibleLines = 400;
 
   final _package = TextEditingController();
@@ -182,8 +168,7 @@ class _Controls extends StatelessWidget {
               hintText: 'Package, e.g. com.example.app',
             ),
             // Submit rather than keystroke: pinning to a package respawns
-            // `logcat` with `--pid`, and doing that per character would be a
-            // process per keystroke.
+            // `logcat --pid`, so per character is a process per keystroke.
             onSubmitted: session.filterByPackage,
           ),
         ),
@@ -238,9 +223,8 @@ class _Lines extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(Insets.md),
           child: Text(
-            // Three different nothings, and never one word for all of them: a
-            // filter that matches no process, a stream nobody started, and a
-            // device that is genuinely quiet need opposite responses.
+            // Three different nothings, never one word for all: a filter that
+            // matches nothing, a stream nobody started, and a quiet device.
             problem ??
                 (session.starting
                     ? 'Attaching to the log…'

@@ -8,21 +8,8 @@ import '../domain/project_build.dart';
 import '../domain/project_descriptor.dart';
 import 'project_build_loop.dart';
 
-/// The `project_build` tool: what a checkout **is**, and the artifact its own
-/// toolchain builds.
-///
-/// **One tool, and not a second device path.** Install and launch already have
-/// framework-agnostic tools — `device_install_app` takes a path,
-/// `device_launch_app` takes an application id — so this stops at producing
-/// exactly those two strings and names them in the answer. Building a second
-/// route onto the phone from here is the duplication the backlog item refuses.
-///
-/// **Not folded into `flutter_run`.** That tool is a Flutter lifecycle down to
-/// its action names — `pubGet`, `run` with a `deviceId`, `analyze`, `test` —
-/// and every sentence in its schema is about the VM service. A native Android
-/// project has none of that, and adding a `build` action there would put a
-/// Gradle refusal behind a name that promises Flutter. The two are separate
-/// because the loops are.
+/// The `project_build` tool: what a checkout is, and the artifact its toolchain
+/// builds. It stops at the two strings the `device_*` tools take.
 class ProjectBuildTools {
   ProjectBuildTools(this._container);
 
@@ -208,11 +195,8 @@ class ProjectBuildTools {
     );
   }
 
-  /// The project directory, from a checkout id and an optional sub-path.
-  ///
-  /// A checkout id rather than a path, the way `flutter_run` takes one: the id
-  /// is what carries the environment, and a bare path would have to be guessed
-  /// into one — which is the guess CLAUDE.md §17 is about.
+  /// The project directory, from a checkout id and an optional sub-path. An id
+  /// rather than a path: the id is what carries the environment (§17).
   EnvironmentPath _project(Map<String, dynamic> args) {
     final id = (args['checkoutId'] as String?)?.trim() ?? '';
     if (id.isEmpty) {

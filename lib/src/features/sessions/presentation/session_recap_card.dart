@@ -11,12 +11,8 @@ import '../application/session_recap_service.dart';
 import '../domain/session_recap.dart';
 import '../domain/session_resume.dart';
 
-/// The sessions a recap is being written for right now.
-///
-/// A set rather than a flag, because two conversations can be open and the
-/// Explorer can ask for a third. Nothing here is persisted: an app that closed
-/// mid-recap has spent the turn either way, and a spinner restored from disk
-/// would be waiting for a process that is gone.
+/// The sessions a recap is being written for right now. Not persisted: an app
+/// that closed mid-recap spent the turn, and a restored spinner waits forever.
 class SessionRecapRuns extends Notifier<Set<String>> {
   @override
   Set<String> build() => const {};
@@ -35,15 +31,8 @@ final sessionRecapRunningProvider = Provider.family<bool, String>(
       ref.watch(sessionRecapRunsProvider.select((all) => all.contains(sessionId))),
 );
 
-/// Asks [sessionId]'s own CLI for a recap and reports what happened.
-///
-/// **The only door.** Every surface that offers a recap calls this, and nothing
-/// else calls [SessionRecapService.write] — which is what makes "never on a
-/// tick, never at launch, never when a session ends" checkable rather than
-/// merely intended.
-///
-/// A second press while one is in flight is ignored rather than queued: the
-/// first is already spending the turn this one would spend again.
+/// Asks [sessionId]'s own CLI for a recap. **The only door**, which is what
+/// makes "never on a tick, never at launch, never at the end" checkable.
 Future<void> requestSessionRecap(
   BuildContext context,
   WidgetRef ref,
@@ -62,13 +51,8 @@ Future<void> requestSessionRecap(
   }
 }
 
-/// The recap at the top of a conversation, with the age of the reading.
-///
-/// Above the messages and outside the scroll, because the whole point of it is
-/// that it is there when the session opens — a digest that has to be scrolled
-/// back to is a digest of a conversation you have already re-read. It draws
-/// nothing at all until somebody asks for one (§19: never a panel that invites
-/// a spend by looking empty).
+/// The recap at the top of a conversation, with the age of the reading. Draws
+/// nothing until somebody asks — never a panel that invites a spend.
 class SessionRecapCard extends ConsumerWidget {
   const SessionRecapCard({required this.sessionId, super.key});
 
@@ -81,9 +65,8 @@ class SessionRecapCard extends ConsumerWidget {
 
     final theme = Theme.of(context);
     final running = ref.watch(sessionRecapRunningProvider(sessionId));
-    // Null while the transcript is still loading. An unknown is never a zero,
-    // and a zero here would report every recap as covering more than the
-    // session holds — which is not a state that exists.
+    // Null while the transcript is still loading: a zero here would report
+    // every recap as covering more than the session holds.
     final turnsNow = ref
         .watch(sessionChatTranscriptProvider(sessionId))
         .asData
@@ -128,9 +111,8 @@ class SessionRecapCard extends ConsumerWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   else if (stale)
-                    // Offered only where it would say something new. A recap of
-                    // a conversation that has not moved would cost a turn to
-                    // re-derive the text already on screen.
+                    // Offered only where it would say something new: a turn
+                    // spent re-deriving the text already on screen is wasted.
                     TextButton.icon(
                       icon: const Icon(AppIcons.arrowsClockwise),
                       label: const Text('Recap again'),

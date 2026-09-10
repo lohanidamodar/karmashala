@@ -7,20 +7,8 @@ import 'package:karmashala_devices/devices.dart';
 import 'device_drive_tools.dart';
 import 'device_tool_support.dart';
 
-/// Looking at a device without touching it: the screen as a picture, as a
-/// hierarchy, as a query, and the log behind it.
-///
-/// `device_tap` needs coordinates, and the only way an agent could once get
-/// them was to read them off a screenshot — which cannot say what is tappable,
-/// and is one scale factor away from tapping the wrong thing while reporting
-/// success. The dump and the query hand it the view hierarchy instead: what is
-/// on screen, and exactly where to hit it.
-///
-/// On a simulator that is the *only* honest way to get a coordinate, because
-/// the screenshot is in pixels and the tap is in points.
-///
-/// Every tool here only reads, so none of them takes the claim — see
-/// [DeviceToolFamily.driverThatCan].
+/// Looking at a device without touching it. A coordinate off a screenshot is in
+/// pixels where the tap is in points, so the hierarchy is the honest source.
 class DeviceObserveTools extends DeviceToolFamily {
   DeviceObserveTools(super.container, {super.callerSessionId});
 
@@ -72,10 +60,8 @@ class DeviceObserveTools extends DeviceToolFamily {
     );
     await file.writeAsBytes(shot.bytes, flush: true);
 
-    // The warning is the whole reason DeviceScreenshot carries two spaces. On a
-    // simulator the capture is the pixel backing store and the tap is in
-    // points; a coordinate measured off this image and handed to device_tap
-    // lands off the bottom of the screen while the call reports success.
+    // On a simulator the capture is the pixel backing store and the tap is in
+    // points, so a coordinate off this image lands off the bottom of the screen.
     final spaces = shot.spacesAgree
         ? 'Tap coordinates are in ${shot.tapSpace.label}, the same space as '
               'this image.'
@@ -189,9 +175,8 @@ class DeviceObserveTools extends DeviceToolFamily {
       '',
       rendered.listing.isEmpty ? '(nothing matched)' : rendered.listing,
       '',
-      // Said here rather than only in the tool description, because the moment
-      // it is needed is the moment a dump has come back looking complete and
-      // empty.
+      // Said here rather than only in the tool description, because it is needed
+      // exactly when a dump has come back looking complete and empty.
       ...?_canvasHint(tree, screen),
       'Tap one with device_tap_element(text: "…"), which re-reads the screen '
           'and hits the element itself. The coordinates above also work with '

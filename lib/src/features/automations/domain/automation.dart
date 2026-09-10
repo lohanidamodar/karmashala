@@ -1,14 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 
-/// When an automation fires: a recurring cron expression, or one absolute
-/// instant.
-///
-/// Two kinds and no third. A cron expression is a rule that outlives any one
-/// occurrence; a one-shot is a single instant that either happened or was
-/// missed. Folding the second into the first — storing `at 03:00 on the 9th` as
-/// a cron — loses the fact that it is *over* once it has fired, which is
-/// exactly what makes a one-shot catchable-up rather than silently rolled to
-/// tomorrow.
+/// When an automation fires: a cron expression, or one absolute instant. Two
+/// kinds, because a one-shot stored as a cron loses that it is *over*.
 class AutomationSchedule {
   const AutomationSchedule.cron(String this.cron) : firesAt = null;
 
@@ -41,13 +34,8 @@ class AutomationSchedule {
       isOnce ? 'once at ${firesAt!.toIso8601String()}' : 'cron "$cron"';
 }
 
-/// An agent run a person authorised in advance.
-///
-/// **[armedAt] is the authorisation**, and there is deliberately no
-/// `armed_by`: this app has one user, arming happens only in the UI, and a
-/// column naming who did it would be a claim the schema cannot keep — an agent
-/// that could write this row would make the column lie. The absence *is* the
-/// statement, and the MCP catalogue says the same thing from the other side.
+/// An agent run a person authorised in advance. [armedAt] is the authorisation;
+/// there is no `armed_by`, because an agent could write it and make it lie.
 class Automation {
   const Automation({
     required this.id,
@@ -75,19 +63,16 @@ class Automation {
   /// Never resolved to another one; see `UnattendedGateInput.agentInstalled`.
   final String agentInstallationId;
 
-  /// What the agent is told when it comes up.
   final String prompt;
 
   /// The mode it runs under, canonical (`mode=auto`). Null means nobody chose,
-  /// which resolves to the agent's declared default — and the gate then reads
-  /// that default's rung like any other.
+  /// which resolves to the agent's declared default.
   final PermissionSelection? permissionMode;
 
   /// Paused automations keep their row, their runs and their arming.
   final bool enabled;
 
-  /// When a person armed it. The floor a missed-fire sweep counts from: an
-  /// occurrence before this moment was never ours to claim.
+  /// When a person armed it — the floor a missed-fire sweep counts from.
   final DateTime armedAt;
 
   Automation copyWith({

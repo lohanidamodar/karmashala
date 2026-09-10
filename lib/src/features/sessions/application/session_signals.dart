@@ -1,20 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// **What a change to the session list actually touched.**
-///
-/// `sessionsRevisionProvider` is one global counter with sixteen bump sites and
-/// twenty-eight watchers. Every bump invalidates all twenty-eight, and several
-/// of them answer with a full synchronous `SELECT * FROM sessions` — and
-/// `package:sqlite3` is synchronous, so that scan runs on the UI isolate,
-/// inside the frame. So one narrow fact ("a session's title changed") woke
-/// everything that cares about sessions at all, including code that scans every
-/// row. `session_signal_cost_test.dart` measured it: renaming one session cost
-/// **9 reads at 1 session, 18 at 10 and 108 at 100**, four of them unfiltered
-/// table scans, plus a `git worktree list` subprocess.
-///
-/// These are the concerns a watcher can subscribe to instead. A watcher names
-/// what it actually reads, and a change that touched nothing on its list leaves
-/// it asleep.
+/// **What a change to the session list actually touched.** One global counter
+/// woke all twenty-eight watchers: renaming one session cost 108 reads at 100.
 enum SessionChangeKind {
   /// A row appeared or went away — the shape of the list changed.
   membership,
@@ -29,22 +16,17 @@ enum SessionChangeKind {
   /// conversation it is on.
   placement,
 
-  /// A row's own policy — today, its permission mode. No global surface reads
-  /// it; the chip that draws it is per-session and watches [SessionSignals.forSession].
+  /// A row's own policy — today, its permission mode. Only the per-session
+  /// chip that draws it watches this.
   settings,
 
-  /// Projects, repositories and checkouts. Not a session fact at all, but the
-  /// projects controller has always published it on this same counter, and the
-  /// checkout picker and the delivery providers are watching *for it* rather
-  /// than for anything about sessions.
+  /// Projects, repositories and checkouts — not a session fact, but the
+  /// checkout picker and the delivery providers watch this counter *for it*.
   workspace,
 }
 
-/// One published change: which concerns it touched, and which row it was about.
-///
-/// A null [sessionId] means "this touched rows we cannot name". Every
-/// per-session watcher must then wake, because we cannot honestly say it did
-/// not — see [SessionSignals.forSession].
+/// One published change: which concerns it touched, and which row. A null
+/// [sessionId] means "rows we cannot name", so every per-session watcher wakes.
 class SessionChange {
   const SessionChange({required this.kinds, this.sessionId});
 
@@ -65,11 +47,8 @@ class SessionChange {
         SessionChangeKind.placement,
       };
 
-  /// A row's title changed and nothing else did.
-  ///
-  /// The narrowest and by far the most frequent change in the app: the CLI
-  /// store sweep's title sync fires on a timer, so this one runs without the
-  /// user doing anything at all.
+  /// A row's title changed and nothing else — the most frequent change in the
+  /// app, since the CLI store sweep's title sync fires on a timer.
   const SessionChange.renamed(String this.sessionId)
     : kinds = const {SessionChangeKind.title};
 
@@ -103,14 +82,8 @@ class SessionChange {
       },
       sessionId = null;
 
-  /// **The coarse signal.** Says only "something about sessions changed", so
-  /// every watcher wakes, narrowed or not.
-  ///
-  /// This is what `SessionsRevisionController.bump()` publishes, and therefore
-  /// what every bump site that has not been given a narrower word still
-  /// publishes. Keeping it exactly as expensive as it always was is the point:
-  /// a half-migrated system where one watcher silently stops updating is far
-  /// worse than a slow one.
+  /// **The coarse signal**: every watcher wakes, narrowed or not. Kept as
+  /// expensive as it was — a watcher that silently stopped would be worse.
   static const everything = SessionChange(kinds: _allKinds);
 
   static const _allKinds = {
@@ -128,12 +101,8 @@ class SessionChange {
   final String? sessionId;
 }
 
-/// A monotonic counter per concern, and one per row that has changed.
-///
-/// Counters rather than a change *event*: a watcher reads its own number
-/// through `select`, so Riverpod compares an `int` and rebuilds nothing when
-/// the number stood still. A watcher that misses a frame still sees the number
-/// move, which an event stream could not promise.
+/// A monotonic counter per concern, and one per row that changed. Counters,
+/// not events: a watcher that missed a frame still sees the number move.
 class SessionSignals {
   const SessionSignals._({
     required this.revision,
@@ -152,20 +121,15 @@ class SessionSignals {
   /// Every change, of every kind. What `sessionsRevisionProvider` publishes.
   final int revision;
 
-  /// Changes that named no row. Floor under every per-session counter, so a
-  /// coarse bump cannot leave a per-session watcher behind.
-  ///
-  /// Read through [forKinds] and [forSession] rather than directly: the whole
-  /// value of this type is that a watcher subscribes to one number.
+  /// Changes that named no row — the floor under every per-session counter, so
+  /// a coarse bump cannot leave one behind. Read through [forSession].
   final int broadcasts;
 
   final Map<SessionChangeKind, int> byKind;
   final Map<String, int> bySession;
 
-  /// The number a watcher of [kinds] reads.
-  ///
-  /// A sum, because each counter only ever rises: the sum moves if and only if
-  /// one of the kinds moved, which is exactly the question.
+  /// The number a watcher of [kinds] reads. A sum, because each counter only
+  /// ever rises: it moves if and only if one of the kinds moved.
   int forKinds(Set<SessionChangeKind> kinds) {
     var total = 0;
     for (final kind in kinds) {
@@ -174,10 +138,8 @@ class SessionSignals {
     return total;
   }
 
-  /// The number a watcher of one row reads.
-  ///
-  /// Includes [broadcasts] so that a change naming no row — the coarse
-  /// `bump()`, a project rescan — still wakes it.
+  /// The number a watcher of one row reads. Includes [broadcasts], so a change
+  /// naming no row — the coarse `bump()`, a project rescan — still wakes it.
   int forSession(String sessionId) => broadcasts + (bySession[sessionId] ?? 0);
 
   SessionSignals after(SessionChange change) {
@@ -214,32 +176,14 @@ final sessionSignalsProvider =
       SessionSignalsController.new,
     );
 
-/// **The coarse signal: "something about sessions changed".**
-///
-/// Every change still moves this, whichever word it was published with, so a
-/// watcher that has not been narrowed behaves exactly as it always did. That is
-/// deliberate and load-bearing: a half-migrated system where one watcher
-/// silently stops updating is far worse than a slow one, so nothing here is
-/// allowed to get quieter by accident.
-///
-/// It is a counter this controller **writes**, rather than one derived from
-/// [sessionSignalsProvider], and that is not an accident either: a derived
-/// value is recomputed when Riverpod next flushes, whereas three callers
-/// (`McpSessionTokenReaper`, the repo file index, the remote controller) hold a
-/// bare `listen` on this and were written expecting the notification the moment
-/// the write happens. Deriving it made all three miss every bump.
-///
-/// A watcher that knows what it reads should say so instead — see
-/// [SessionChangeKind], [SessionSignalRef.watchSessionKinds] and
-/// [SessionSignalRef.watchSession]. This counter is the fallback, not the
-/// interface.
+/// **The coarse signal: "something about sessions changed".** A counter this
+/// controller *writes*: deriving it made three bare `listen`s miss every bump.
 class SessionsRevisionController extends Notifier<int> {
   @override
   int build() => 0;
 
-  /// Publishes a change that says nothing more specific than its own
-  /// existence. Still the honest word for a caller that genuinely does not know
-  /// what moved — a launch mints a row, writes a status and claims a pane.
+  /// Publishes a change that says nothing but its own existence — still the
+  /// honest word for a launch, which mints a row and claims a pane.
   void bump() => changed(SessionChange.everything);
 
   /// **The one write path.** Narrow first, so a coarse listener woken by the

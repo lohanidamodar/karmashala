@@ -14,11 +14,8 @@ class RemoteBrowseException implements Exception {
       'RemoteBrowseException: $message${cause == null ? '' : ' ($cause)'}';
 }
 
-/// Lists directories on a remote host over SFTP.
-///
-/// SFTP rather than `ls`: it returns structured entries with types and sizes
-/// instead of text to be parsed, it rides the connection that is already open,
-/// and it cannot be confused by a filename containing a newline.
+/// Lists directories on a remote host over SFTP: structured entries rather than
+/// parsed `ls`, on the connection that is already open.
 class RemoteFileBrowser {
   RemoteFileBrowser({required this.connection, required this.environmentId});
 
@@ -39,12 +36,8 @@ class RemoteFileBrowser {
     return _resolve(path.path);
   }
 
-  /// Entries in [directory], directories first and then case-insensitively by
-  /// name — the order a file browser wants, decided here so every caller agrees.
-  ///
-  /// Throws [ArgumentError] if [directory] belongs to another environment; a
-  /// Windows path must never be sent to a remote server as though it were one
-  /// of its own.
+  /// Entries in [directory], directories first then case-insensitive by name.
+  /// Throws [ArgumentError] if [directory] belongs to another environment.
   Future<List<RemoteDirectoryEntry>> list(EnvironmentPath directory) async {
     _requireOwnEnvironment(directory);
     final sftp = await _client();

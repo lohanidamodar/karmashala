@@ -3,15 +3,7 @@ import 'package:karmashala_git/github.dart';
 import 'delivery_stage.dart';
 
 /// Everything one session's row and strip need to say where its work stands.
-///
-/// **Every field is nullable and `null` always means "could not tell"**, never
-/// "no" — the same rule Loop 33's `HandoffRepoState` set, kept because the
-/// probes behind these fields fail for a dozen boring reasons (git absent, `gh`
-/// logged out, a base ref not fetched) and a delivery strip that reads a failed
-/// probe as a definite answer will hide the action the user came for.
-///
-/// The two exceptions are [archived] and [hasWorktree], which come from the
-/// database rather than a process and are therefore always known.
+/// **Every field is nullable and `null` means "could not tell"**, never "no".
 class SessionDelivery {
   const SessionDelivery({
     this.branch,
@@ -40,8 +32,7 @@ class SessionDelivery {
   final String? branch;
 
   /// What [aheadOfBase] and [behindBase] were measured against — `origin/main`
-  /// when the remote's default branch is known, otherwise the branch the
-  /// repository itself has checked out.
+  /// where known, otherwise the branch the repository itself has out.
   final String? baseBranch;
 
   /// The branch's upstream (`origin/work`). Null means it has none, which is
@@ -68,25 +59,18 @@ class SessionDelivery {
   final int? aheadOfBase;
   final int? behindBase;
 
-  /// Commits the branch has that its upstream does not. Null when there is no
-  /// upstream (never pushed) *or* when git could not say; [upstream] tells the
-  /// two apart.
+  /// Commits the branch has that its upstream does not. Null for "never pushed"
+  /// *or* "git could not say"; [upstream] tells the two apart.
   final int? unpushed;
 
   final PullRequestSnapshot? pullRequest;
 
-  /// Which merge buttons the forge leaves enabled for this repository.
-  ///
-  /// Defaults to [MergeStrategies.unknown] rather than being nullable: "we did
-  /// not ask" and "we asked and learned nothing" are the same thing to every
-  /// reader, and the type already carries a null per strategy for it.
+  /// Which merge buttons the forge leaves enabled here. Not nullable: "did not
+  /// ask" and "learned nothing" read the same, and each strategy carries a null.
   final MergeStrategies mergeStrategies;
 
-  /// What the base branch's protection requires, when a merge has been read as
-  /// `BLOCKED` and the rules could be read.
-  ///
-  /// [BranchProtection.unknown] by default and for every other merge state:
-  /// this costs a `gh` process and `BLOCKED` is the only state it can explain.
+  /// What the base branch's protection requires, when a merge read as
+  /// `BLOCKED`. Unknown otherwise: it costs a `gh` process to ask.
   final BranchProtection branchProtection;
 
   /// Whether this session works in a worktree of its own — the only thing
@@ -110,41 +94,13 @@ class SessionDelivery {
   bool get isOnDefaultBranch =>
       branch != null && defaultBranch != null && branch == defaultBranch;
 
-  /// Whether the base has moved on under this branch, on evidence.
-  ///
-  /// **Two independent signals, both read only in the positive direction, and
-  /// they are not redundant.**
-  ///
-  /// [behindBase] is `git rev-list --count` against whatever `origin/main` this
-  /// clone last fetched. Nothing in this app runs `git fetch` — see
-  /// `checkoutDeliveryProvider`, which is deliberately a handful of local
-  /// processes and no network — so the count is only as fresh as the user's
-  /// last pull. That
-  /// makes a count above zero *proof* that the branch is behind (those commits
-  /// are already on this disk and are not on this branch) and a count of zero
-  /// proof of nothing at all.
-  ///
-  /// [PullRequestSnapshot.isBehindBase] is GitHub's own `mergeStateStatus:
-  /// BEHIND`, which knows the true tip of the base and knows whether the
-  /// repository even requires branches to be current. It is authoritative when
-  /// it fires, and silent whenever a higher-priority blocker masks it — see
-  /// [MergeStateStatus] for the observed ordering.
-  ///
-  /// So each one catches what the other misses: the local count sees a branch
-  /// with no pull request at all, and the forge's reading sees a branch whose
-  /// base moved since the last fetch. Either alone is enough, and neither
-  /// staying quiet means anything.
+  /// Whether the base has moved on, on evidence. Both signals read only in the
+  /// positive direction: nothing here runs `git fetch`, so zero proves nothing.
   bool get isBehindBase =>
       (behindBase ?? 0) > 0 || pullRequest?.isBehindBase == true;
 
-  /// Whether something established says this branch and its base disagree.
-  ///
-  /// Only the forge can say this today. A local `git merge --no-commit` would
-  /// answer it without a network round trip, but it is a *write*: it leaves
-  /// MERGE_HEAD and a half-merged index in a working tree an agent may be
-  /// editing, and this getter is read on a two-minute poll for every visible
-  /// session. Asking GitHub costs nothing extra because the answer already
-  /// rides in the `gh pr view` the strip was making anyway.
+  /// Whether something established says this branch and its base disagree. Only
+  /// the forge: a local `git merge --no-commit` is a *write* on a live tree.
   bool get hasConflict => pullRequest?.hasConflict == true;
 
   /// The furthest point this work has reached. See [DeliveryStage].
@@ -168,9 +124,8 @@ class SessionDelivery {
 
     if (isDirty) return DeliveryStage.working;
     if ((aheadOfBase ?? 0) > 0) {
-      // Pushed only on a *positive* zero from git. No upstream, or a count we
-      // could not read, both stop at committed — claiming work is on the remote
-      // when it is not is the one mistake with a cost.
+      // Pushed only on a *positive* zero from git: claiming work is on the
+      // remote when it is not is the one mistake here with a cost.
       if (upstream != null && unpushed == 0) return DeliveryStage.pushed;
       return DeliveryStage.committed;
     }

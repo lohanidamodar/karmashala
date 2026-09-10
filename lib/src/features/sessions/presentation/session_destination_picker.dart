@@ -8,14 +8,8 @@ import '../../projects/application/project_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 
-/// Where a session is about to run.
-///
-/// **A project is not the unit a session runs in — a checkout is.** A project
-/// holds several clones and the worktrees hanging off them, and an agent starts
-/// in exactly one directory. So the project is only how you *get to* the answer;
-/// [checkout] is the answer, and it is null only while a project has no
-/// recorded repository at all, which is a state the picker says out loud rather
-/// than hides behind an empty dropdown.
+/// Where a session is about to run. **A project is not the unit a session runs
+/// in — a checkout is**, so [checkout] is the answer and the project the route.
 class SessionDestination {
   const SessionDestination({required this.projectId, this.checkout});
 
@@ -26,13 +20,7 @@ class SessionDestination {
 }
 
 /// The destination a dialog opens on: **whatever the app is already pointed
-/// at**, so the common case costs no extra click and the dialog behaves exactly
-/// as it did before the picker existed.
-///
-/// Falls back to the first project the Explorer would draw when nothing is
-/// selected — a workspace with projects but no selection can still start a
-/// session — and to `null` when there are no projects at all, which is the one
-/// case no picker can rescue.
+/// at**, else the first project the Explorer would draw, else `null`.
 final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected != null) {
@@ -50,24 +38,7 @@ final defaultSessionDestinationProvider = Provider<SessionDestination?>((ref) {
 });
 
 /// Two dropdowns that say **where** a session will run: a project, then a
-/// checkout inside it.
-///
-/// **Why two, and not one list of checkouts.** One rescan of the owner's hub
-/// recorded 69 checkouts in a single project. A flat list of everything the
-/// workspace knows would be that list plus every other project's, in path
-/// order, of which one row is the answer — the exact shape
-/// `projectCheckoutsProvider` exists to avoid. So this reuses that machinery
-/// rather than inventing a second notion of "where a session runs": level one
-/// is the project, level two is its **parent** checkouts, and the worktrees of
-/// the checkout you are on are indented underneath it — only that one family
-/// expands, so the list stays as short as the project is wide.
-///
-/// **Only recorded worktrees are offered.** The same rule the side panel's
-/// picker holds: a worktree with no `repositories` row is not a destination
-/// because there is nothing to point a session at, and Rescan is what turns one
-/// into the other. Nothing here starts a `git worktree list` of its own — the
-/// labels are the ones [checkoutLabelsProvider] already computes per project
-/// for the panel beside it.
+/// checkout. Flat would be 69 rows for one project. Recorded worktrees only.
 class SessionDestinationPicker extends ConsumerWidget {
   const SessionDestinationPicker({
     required this.destination,
@@ -87,9 +58,6 @@ class SessionDestinationPicker extends ConsumerWidget {
     final projects = ref.watch(workspaceScopedProjectsProvider);
     // Watched, not merely read: this is what classifies a row as a worktree, so
     // without it every worktree in the project would be offered as a parent.
-    // One `git worktree list` per repository *family* in one project, for as
-    // long as this widget is mounted — the cost the side panel's picker already
-    // pays when it opens, and the reason the list is correct rather than long.
     final labels = ref
         .watch(checkoutLabelsProvider(destination.projectId))
         .asData
@@ -106,8 +74,7 @@ class SessionDestinationPicker extends ConsumerWidget {
         ?.root;
 
     // The family a checkout belongs to — itself when it is a parent, its owner
-    // when it is a worktree. Only one family's worktrees are drawn, and it is
-    // the one the current choice is in.
+    // when it is a worktree. Only the current choice's family is drawn.
     String? familyOf(Repository repository) {
       final label = labels?[repository.id];
       if (label == null || !label.isWorktree) return repository.id;
@@ -127,9 +94,8 @@ class SessionDestinationPicker extends ConsumerWidget {
         }
       }
     }
-    // A dropdown value that is not among its items is an assertion, and there
-    // is one honest way to be in that position: the chosen worktree's own main
-    // checkout is not a row this workspace recorded, so no parent leads it.
+    // A dropdown value not among its items is an assertion, and there is one
+    // honest way there: the chosen worktree's main checkout is unrecorded.
     if (checkout != null && !offered.any((o) => o.$1.id == checkout.id)) {
       offered.add((checkout, false));
     }
@@ -156,9 +122,8 @@ class SessionDestinationPicker extends ConsumerWidget {
                   onChanged(
                     SessionDestination(
                       projectId: id,
-                      // The project's own first parent checkout, by the same
-                      // rule the side panel leads with — never a stale row from
-                      // the project the user just left.
+                      // The project's own first parent checkout, by the rule
+                      // the side panel leads with — never a stale row.
                       checkout: ref
                           .read(checkoutsInProjectProvider(id))
                           .firstOrNull,
@@ -176,9 +141,8 @@ class SessionDestinationPicker extends ConsumerWidget {
           )
         else
           DropdownButtonFormField<String>(
-            // Keyed by the project: a `FormField` keeps its own value, and
-            // after a project change that value names a checkout that is no
-            // longer in the items — which is an assertion, not a wrong label.
+            // Keyed by the project: after a project change a `FormField`'s kept
+            // value names a checkout no longer in the items, which asserts.
             key: ValueKey('checkout-in-${destination.projectId}'),
             initialValue: checkout?.id,
             isExpanded: true,
@@ -219,8 +183,7 @@ class SessionDestinationPicker extends ConsumerWidget {
   }
 
   /// One line, because a dropdown item is one line: the name, then whatever
-  /// tells two clones of the same name apart — the branch for a worktree, the
-  /// sub-path for a clone.
+  /// tells two clones apart — a branch for a worktree, a sub-path for a clone.
   String _label(
     Repository repository, {
     required bool isWorktree,

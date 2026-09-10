@@ -5,33 +5,8 @@ import 'package:karmashala_core/logging.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_protocol.dart';
 
-/// The Streamable HTTP binding: one path, POST only, no session.
-///
-/// ## Why loopback, given the threat model next door
-///
-/// `LauncherControlServer`'s class doc argues at length that loopback TCP is
-/// not an access-control decision — it has no peer credentials, so any process
-/// on the box, running as any user, can open the port — and that is why
-/// privileged `/rpc` lives on a unix socket in an owner-only directory instead.
-///
-/// This endpoint is on loopback anyway, for the reason that doc already gives
-/// for `/agent-hook`: **an MCP client dials an `http://` URL.** It cannot dial
-/// a socket path, and an agent running in WSL or over SSH could not name a
-/// Windows one even if its client could. There is no transport that is both
-/// reachable by a real MCP client and stronger than this.
-///
-/// So the boundary is what is left, and it is deliberate rather than residual:
-///
-/// * **A token of its own**, minted under exactly the same prerequisites as the
-///   `/rpc` token. If the owner-only channel could not be established, this
-///   endpoint has no credential and answers `401` to everything — the same
-///   fail-closed rule, not a hole beside it.
-/// * **`Origin` validation.** This is the mitigation that actually earns its
-///   place: the realistic attack on a loopback service is a page in the user's
-///   own browser reaching it by DNS rebinding, and that is exactly the attack
-///   a unix socket would not have prevented either. A present `Origin` that is
-///   not loopback gets `403`, as the spec requires.
-/// * **`127.0.0.1` only**, never `0.0.0.0`.
+/// The Streamable HTTP binding: one path, POST only, no session. On loopback
+/// because an MCP client dials a URL; `Origin` is checked, `127.0.0.1` only.
 class McpHttpEndpoint {
   McpHttpEndpoint({
     required this.server,
@@ -141,12 +116,8 @@ class McpHttpEndpoint {
     }
   }
 
-  /// Who is calling, from the credential they presented.
-  ///
-  /// The path segment is the primary carrier and `Authorization: Bearer` the
-  /// fallback, because some clients are easier to configure one way than the
-  /// other — but they are the *same* credential space, so there is one rule
-  /// about what a token means and not two.
+  /// Who is calling, from the credential presented. The path segment carries it
+  /// and `Authorization: Bearer` is the fallback — one credential space, not two.
   _Caller _authenticate(HttpRequest request) {
     final live = token;
     // No credential exists, so no caller can present one. Without this an
@@ -174,13 +145,8 @@ class McpHttpEndpoint {
     return const _Caller.rejected();
   }
 
-  /// Whether a browser-set `Origin` may drive this server.
-  ///
-  /// Absent is fine — an agent CLI is not a browser and sends none. Present and
-  /// loopback is fine. Present and anything else, `null` included, is a page,
-  /// and a page has no business here: `null` is the opaque origin a sandboxed
-  /// frame or a `file://` document sends, which is a browser context that has
-  /// deliberately hidden where it came from.
+  /// Whether a browser-set `Origin` may drive this server. Absent is fine; any
+  /// origin but loopback — `null` included — is a page, and is refused.
   static bool _originAllowed(String? origin) {
     if (origin == null) return true;
     final uri = Uri.tryParse(origin);
@@ -191,10 +157,8 @@ class McpHttpEndpoint {
         uri.host == '[::1]';
   }
 
-  /// Request headers, lower-cased, one value each.
-  ///
-  /// `HttpHeaders` already lower-cases field names; the protocol layer relies
-  /// on that and this is where it is made true rather than assumed.
+  /// Request headers, lower-cased, one value each: the protocol layer assumes
+  /// that, and this is where it is made true rather than assumed.
   static Map<String, String> _headersOf(HttpRequest request) {
     final headers = <String, String>{};
     request.headers.forEach((name, values) {

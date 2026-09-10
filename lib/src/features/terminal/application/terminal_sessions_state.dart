@@ -1,11 +1,8 @@
 part of 'terminal_sessions_controller.dart';
 
-/// One tab: a tree of regions and which pane has focus.
-///
-/// [focusedPaneId] is always the front pane of its own region — a pane stacked
-/// behind another is not somewhere the keyboard can be. Bringing a pane forward
-/// and focusing it are therefore the same act; see
-/// [TerminalSessionsController.focusPane].
+/// One tab: a tree of regions and which pane has focus. [focusedPaneId] is
+/// always the front pane of its region — a pane stacked behind another is not
+/// somewhere the keyboard can be, so activating and focusing are one act.
 class TerminalTab {
   const TerminalTab({
     required this.id,
@@ -26,11 +23,8 @@ class TerminalTab {
   }
 }
 
-/// A session whose view was closed but whose process was left running.
-///
-/// This is what separates session lifetime from view lifetime: closing a tab
-/// removes the *view*, and the build, dev server or agent inside carries on in
-/// the background until the user ends it or the app quits.
+/// A session whose view was closed but whose process was left running — what
+/// separates session lifetime from view lifetime.
 class DetachedSession {
   const DetachedSession({
     required this.paneId,
@@ -77,13 +71,8 @@ class TerminalSessionsState {
   /// died while its tab was in the background still repaints as dead.
   final Map<String, PaneLiveness> liveness;
 
-  /// Per-pane working directory, republished whenever a shell reports a `cd`
-  /// (OSC 7) — so the tab label, and anything else naming a pane by where it
-  /// is, follows the shell instead of the directory it was launched in.
-  ///
-  /// Its own projection rather than a flag on the tab list, for the same reason
-  /// [liveness] is one: a `cd` in a background pane must not rebuild the tab
-  /// strip.
+  /// Per-pane working directory, republished on every OSC 7 `cd`. Its own
+  /// projection, so a `cd` in a background pane does not rebuild the tab strip.
   final Map<String, String?> workingDirectories;
 
   /// Incremented on every publish so title and metadata watchers can detect
@@ -92,8 +81,8 @@ class TerminalSessionsState {
 
   bool get isEmpty => tabs.isEmpty;
 
-  /// Liveness of [paneId]. An unknown pane is treated as not running: the
-  /// safe answer, since the only way to be live is to be tracked.
+  /// Liveness of [paneId]. An unknown pane is not running — the only way to be
+  /// live is to be tracked.
   PaneLiveness livenessOf(String paneId) =>
       liveness[paneId] ?? PaneLiveness.exited;
 
@@ -108,14 +97,8 @@ class TerminalSessionsState {
     return null;
   }
 
-  /// Equal when every part is the **same object**.
-  ///
-  /// The controller rebuilds each collection only when that collection changed
-  /// (see `_tabsMutated` and friends), so identity here is the whole point:
-  /// a consumer selecting `state.tabs` is no longer told to rebuild because a
-  /// process exited somewhere, and a publish that changed nothing tells nobody
-  /// anything. A deep comparison would give the same answer at O(N) per
-  /// publish, which is the cost being removed.
+  /// Equal when every part is the **same object**: a consumer selecting
+  /// `state.tabs` is not woken by a process exiting, and no comparison is O(N).
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

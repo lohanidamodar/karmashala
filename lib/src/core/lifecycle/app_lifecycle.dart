@@ -24,52 +24,18 @@ import '../database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
-/// regardless.
-///
-/// Quitting is measured, not assumed: Loop 55 timed a graceful quit at
-/// 225–396 ms end to end, and Loop 48 found a build that would not exit at all
-/// because one component could not be shut down. Cleanup that is worth doing is
-/// worth doing quickly; cleanup that hangs is worth abandoning. **This is the
-/// pathological ceiling, not the expected cost** — every step here completes in
-/// microseconds when nothing is wrong, and the normal quit stays where Loop 55
-/// measured it.
-///
-/// It is the sum of the per-step caps below, deliberately: a **shared** budget
-/// let the first step starve every later one, which meant one hung hook rewrite
-/// took the handshake deletion with it — the single step this owner exists for.
-/// Each step gets its own slice instead, so a hang costs that step and nothing
-/// else. [kShutdownStepBudgets] is that sum, itemised.
+/// regardless. The sum of the per-step caps: one hang cannot starve the rest.
 const kShutdownBudget = Duration(milliseconds: 3550);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
 
-/// The hook rewrite gets longer: it is the only step that touches another
-/// application's files, and the only one where being cut off is worse than
-/// being slow.
+/// The hook rewrite gets longer: the only step that touches another
+/// application's files, and the only one where being cut off beats being slow.
 const _kHookStepBudget = Duration(milliseconds: 150);
 
-/// Reaping the panes' processes gets the longest slice.
-///
-/// Every other step is an in-memory teardown or a single file delete. This one
-/// spawns `taskkill /PID <pid> /T /F` per live pane (see
-/// `killWindowsProcessTree`) — an external process each, run concurrently — and
-/// the cost of cutting it short is the thing it exists to prevent: a dev server
-/// still holding a port, or a build still holding a file lock, after the app
-/// has gone.
-///
-/// **1500 ms was below the measurement, which is why it was abandoned on
-/// nearly every quit.** It was written as "a ceiling, not a wait — the reaps
-/// normally land in tens of milliseconds", and the 2026-09-09 soak said
-/// otherwise: with a *single* pane to reap the step hit its cap on 18 of 20
-/// cycles, and a probe around the call put 1284-1934 ms of it on `taskkill.exe`
-/// alone. On the same machine `taskkill /PID 999999`, killing nothing, took
-/// 812-983 ms. So the number is the cost of starting one Windows binary, the
-/// reap cannot be made cheaper from Dart, and a cap under it meant the kill
-/// this step exists for was abandoned rather than waited for — the orphaned
-/// dev server, every quit. 2500 ms covers the measured range with headroom, and
-/// `killWindowsProcessTree` carries the same bound so nothing outlives the step
-/// that owns it.
+/// Reaping the panes' processes gets the longest slice: it spawns a
+/// `taskkill` per live pane, and starting one Windows binary alone costs ~1 s.
 const _kTerminalStepBudget = Duration(milliseconds: 2500);
 
 /// What the teardowns that disposing the container *starts* get: one SSH socket
@@ -94,42 +60,11 @@ const kShutdownStepBudgets = <String, Duration>{
   'provider teardown': _kContainerStepBudget,
 };
 
-/// The single owner of everything bootstrap creates.
-///
-/// Before Loop 61 there was none: `main()` built `SystemIntegrationService` as a
-/// temporary expression, kept `LauncherControlServer` in a local whose comment
-/// claimed it was retained, and never called `stop()` on it — so a normal quit
-/// left the bridge handshake on disk pointing at a port nothing was listening
-/// on. Cleanup happened because the process ended, which is not the same thing
-/// as cleanup happening.
-///
-/// ## Order
-///
-/// Shutdown runs in one direction, outermost first:
-///
-/// 1. **Hook installation** — it rewrites third-party agents' own config files.
-///    Anything else can be interrupted; a half-written config cannot.
-/// 2. **Background watchers** — stop producing work for things about to close.
-/// 3. **Control server** — closing it deletes the handshake, so no bridge
-///    starts up against a dead port. This is the step the app never had.
-/// 4. **System integration** — hotkeys released, tray icon removed, listeners
-///    detached.
-/// 5. **Terminal processes** — the panes' process *trees*, killed and waited
-///    for. After the OS integration, because a tray icon that outlives the
-///    window is cosmetic and an orphaned dev server is not.
-/// 6. **The provider container** — last, because every step above reads from
-///    it. Its `dispose()` is synchronous and runs unconditionally, but the
-///    teardowns it *starts* are not: `ref.onDispose` takes a callback, not a
-///    future, so an SSH socket close and an agent child process were begun and
-///    dropped. Those are started here, where the wait for them is budgeted.
-///
-/// Each step is bounded and independent: one that throws or hangs is logged and
-/// the next one still runs.
+/// The single owner of everything bootstrap creates. Shutdown runs one way,
+/// outermost first, each step bounded — one that throws or hangs is logged.
 class AppLifecycle {
-  /// [stopwatch] is the seam the budget is measured through. Injected so a test
-  /// can spend the budget on a clock it controls instead of waiting out real
-  /// milliseconds — a shutdown deadline measured against the wall clock is a
-  /// flake looking for a busy machine.
+  /// [stopwatch] is the seam the budget is measured through, so a test spends it
+  /// on a clock it controls rather than on a busy machine's wall clock.
   AppLifecycle(
     this._container, {
     AppLogger? logger,
@@ -150,21 +85,12 @@ class AppLifecycle {
   Future<void>? _hookInstallation;
   Future<void>? _shutdown;
 
-  /// The steps the last [shutdown] cut off at their own cap, in order.
-  ///
-  /// Recorded rather than only logged, because *which* step was abandoned is
-  /// the property worth holding and wall-clock milliseconds are not: on a
-  /// loaded machine the elapsed time is the machine, while a 700 ms shutdown
-  /// that skipped the step which deletes the handshake would pass any duration
-  /// bound you could pick.
+  /// The steps the last [shutdown] cut off at their own cap, in order. *Which*
+  /// step was abandoned is worth asserting on; wall-clock milliseconds are not.
   final List<String> abandonedSteps = <String>[];
 
-  /// The steps that never ran at all because the overall budget was already
-  /// spent when their turn came.
-  ///
-  /// **This is the failure the per-step slices exist to prevent** — one hang
-  /// eating the sequence — so it is a list to assert on rather than a warning
-  /// in a file nobody opens.
+  /// The steps that never ran because the overall budget was already spent — the
+  /// failure the per-step slices exist to prevent, so it is a list to assert on.
   final List<String> skippedSteps = <String>[];
 
   /// How long the last completed [shutdown] took. Measured rather than
@@ -178,8 +104,7 @@ class AppLifecycle {
   bool get isShuttingDown => _shutdown != null;
 
   /// Creates and initializes the desktop OS integration, wiring its Quit to
-  /// this owner's [shutdown] so a graceful quit tears the app down in order
-  /// *before* the window is destroyed.
+  /// [shutdown] so the app tears down in order before the window is destroyed.
   Future<SystemIntegrationService> startSystemIntegration({
     NativeAdapters? adapters,
     OsQuitRegistrar? registerOsQuit,
@@ -193,8 +118,7 @@ class AppLifecycle {
       endProcess: endProcess,
     );
     // Mounting the remote-access controller here is what makes "enabled last
-    // run" mean "listening this run". Off by default, it costs one settings
-    // read and starts nothing.
+    // run" mean "listening this run". Off by default, it starts nothing.
     _container.read(remoteAccessControllerProvider);
     _systemIntegration = service;
     _container.read(systemIntegrationProvider.notifier).adopt(service);
@@ -202,24 +126,8 @@ class AppLifecycle {
     return service;
   }
 
-  /// Starts the local control server and retains it, so `stop()` has a caller.
-  ///
-  /// **Retained before it is started, not after.** `start()` publishes the
-  /// handshake part-way through — the socket node is already bound, and the WSL
-  /// listener and the session-config directory come *after* it — so from the
-  /// moment `mcp_bridge.json` appears there is a server with files on disk and
-  /// several hundred milliseconds of starting left to do. Assigning this field
-  /// only once `start()` returned left that whole window with nothing for step
-  /// 3 to stop: it took the `?? Future<void>.value()` branch and logged no
-  /// skip, no timeout and no failure, because from its point of view there was
-  /// no server. The 2026-09-09 soak measured that as the *usual* outcome of a
-  /// quit — 18 of 20 — and this line is half the fix; the other half is
-  /// `LauncherControlServer.stop` making an in-flight `start` unwind instead of
-  /// republishing what it just removed.
-  ///
-  /// Returns `null` when the server could not be started at all — distinct from
-  /// a server that started and withheld privileged RPC, which is a running
-  /// server with a [LauncherControlServer.status] to show.
+  /// Starts the local control server and retains it *before* `start()` returns,
+  /// which publishes the handshake part-way. `null` if it never started at all.
   Future<LauncherControlServer?> startControlServer({
     LauncherControlServer? server,
   }) async {
@@ -237,49 +145,14 @@ class AppLifecycle {
     }
   }
 
-  /// Installs the agents' status hooks in the background and retains the
-  /// future, so shutdown can wait for a config rewrite rather than cut it off.
-  ///
-  /// [afterFirstFrame], when given, is what the **first** sweep waits behind.
-  /// It exists because "in the background" was only ever true of the *await*:
-  /// until Loop 78 every file operation on the install path was synchronous, so
-  /// the sweep ran on the isolate in one unbroken block between two frames and
-  /// the window could not paint until it finished. It measured **1053 ms of a
-  /// 1.91 s launch** on the owner's machine — 55% of it, for work no user is
-  /// waiting for. Both halves of that are fixed here: the I/O is asynchronous
-  /// (`AgentHookInstaller`) so it yields, and the first sweep now starts after
-  /// the window has painted rather than while it is trying to.
-  ///
-  /// **What a session started in the gap gets, exactly.** The hook *entry* in
-  /// the agent's own config is a constant written once and then recognised on
-  /// every later launch (see `AgentHookInstaller.hookCommand`), so on any
-  /// launch but the very first it is already there before this app starts. What
-  /// a launch writes is the **endpoint file**, and the installed script reads
-  /// that *when a hook fires* rather than when the CLI starts — so a session
-  /// launched in the gap loses only the events that fire inside it, and starts
-  /// reporting the moment the file lands. It is not a session that is deaf for
-  /// its lifetime. That is exactly why the gap is one frame and not "when the
-  /// app is idle", and why the caller's gate must have a fallback rather than
-  /// waiting for a frame that a tray-only launch may never paint.
-  ///
-  /// Until the sweep reports, the app says so rather than saying nothing:
-  /// `AgentHookInstallationReport.unswept` is the initial state and the Tools
-  /// panel renders it as *not in place yet*. §19 of `CLAUDE.md` is the rule
-  /// being followed — an unobserved state is `unknown`, never `healthy`.
+  /// Installs the agents' status hooks in the background and retains the future,
+  /// so shutdown can wait for a config rewrite rather than cut it off.
   void installAgentHooks(
     LauncherControlServer server, {
     Future<void> Function()? afterFirstFrame,
   }) {
-    // The WSL switch usually does not exist yet when an app that launches with
-    // Windows starts, so the first sweep skips every WSL store — and until now
-    // nothing ever revisited that decision: the owner's WSL sessions ran all
-    // morning with no hooks while the adapter sat there. The server tells us
-    // when it finally binds, and the sweep is idempotent to the byte, so
-    // running it again costs a config rewrite only where something changed.
-    //
-    // No frame gate on this one: by the time the switch binds the window has
-    // long since painted, and a re-sweep that waited for a *further* frame
-    // would be waiting on an idle app.
+    // The WSL switch usually does not exist yet when the app launches, so the
+    // first sweep skips WSL; the server says when it binds and a re-sweep is free.
     server.onWslInterfaceBound = () {
       _logger.info('The WSL switch is up; installing hooks for it now.');
       _installAgentHooksNow(server);
@@ -287,17 +160,8 @@ class AppLifecycle {
     _installAgentHooksNow(server, gate: afterFirstFrame);
   }
 
-  /// The one CLI-session import of this run, behind [afterFirstFrame].
-  ///
-  /// Same gate and same reasoning as [installAgentHooks]: the walk is over
-  /// stores that live inside WSL, so every entry is a `\\wsl.localhost` round
-  /// trip, and start-up is already under scrutiny. Nothing waits on it — the
-  /// tree fills in when it lands, and until then the Explorer says the stores
-  /// have not been checked rather than implying they have.
-  ///
-  /// A gate that throws must not cost the user their sessions, so it is caught
-  /// and the import runs anyway; a launch straight to the tray may never paint
-  /// a frame, which is what the caller's timeout is for.
+  /// The one CLI-session import of this run, behind [afterFirstFrame] — the walk
+  /// is one WSL round trip per entry. Nothing waits on it, a throwing gate least.
   Future<void> importCliSessions({Future<void> Function()? afterFirstFrame}) =>
       _cliSessionImport ??= _importCliSessions(afterFirstFrame);
 
@@ -337,12 +201,8 @@ class AppLifecycle {
     _hookInstallation = _sweepAgentHooks(endpoint, gate);
   }
 
-  /// One sweep, behind [gate], with everything it reports published.
-  ///
-  /// Retained by [_installAgentHooksNow] rather than fired and forgotten, so
-  /// shutdown's `agent hook installation` step can wait for a config rewrite
-  /// instead of cutting it off — and so a sweep still sitting behind [gate]
-  /// when the user quits is one the shutdown budget can decline to wait for.
+  /// One sweep, behind [gate], with everything it reports published. Retained so
+  /// shutdown can wait for a config rewrite instead of cutting it off.
   Future<void> _sweepAgentHooks(
     AgentHookEndpoint endpoint,
     Future<void> Function()? gate,
@@ -366,15 +226,11 @@ class AppLifecycle {
           .read(agentHookInstallationServiceProvider)
           .installAll(endpoint);
       final report = AgentHookInstallationReport(results);
-      // Published, not just logged. A skipped environment means the
-      // hook-only states are unreportable there for the whole run, and
-      // Settings is where the user can be told rather than told nothing.
+      // Published, not just logged: a skipped environment means the hook-only
+      // states are unreportable there all run, and Settings is where to say so.
       _container.read(agentHookInstallationReportProvider.notifier).set(report);
-      // The environments that report by file rather than by socket. A
-      // WSL agent cannot reach any address this app binds, so it writes
-      // its payloads into its own store home and this polls for them;
-      // see `AgentHookSpoolDrainer`. An empty list stops the timer, so a
-      // machine with no WSL polls nothing.
+      // The environments that report by file rather than by socket — a WSL agent
+      // cannot reach any address this app binds. An empty list stops the timer.
       _container.read(agentHookSpoolDrainerProvider).watch(report.spoolSources);
       _logger.info(
         'Agent hooks: ${report.installed} installed, '
@@ -389,19 +245,7 @@ class AppLifecycle {
   }
 
   /// Installs Karmashala's skills into every agent CLI that declares a root,
-  /// behind the same first-frame gate the hooks use.
-  ///
-  /// Beside the hooks because it is the same act — writing files into somebody
-  /// else's agent configuration — and unlike them in every way that made hooks
-  /// hard. There is no address, so no environment is skipped and none has to be
-  /// probed; the bytes are constant, so a re-install writes nothing; and each
-  /// `SKILL.md` is staged and renamed, so a sweep cut off by a quit leaves the
-  /// old file or the new one and never half of either. That is why nothing
-  /// waits for this at shutdown and nothing is retired there.
-  ///
-  /// Not retained and not awaited: a launch must not wait on a
-  /// `\\wsl.localhost` share to answer, and the sweep publishes what it found
-  /// when it lands.
+  /// behind the hooks' gate. Each file is staged and renamed, so a quit is safe.
   void installAgentSkills({Future<void> Function()? afterFirstFrame}) {
     unawaited(_sweepAgentSkills(afterFirstFrame));
   }
@@ -430,21 +274,8 @@ class AppLifecycle {
     }
   }
 
-  /// Looks for agents this workspace has never searched for, in the background.
-  ///
-  /// Agent discovery was a single scan at workspace creation, so a descriptor
-  /// that joined the registry in an app *upgrade* — `antigravity` in 1.1.4 —
-  /// stayed invisible until the user happened to find "Discover agents" in
-  /// Settings. This asks only about the `(agent, environment)` pairs with
-  /// neither an installation row nor a probe record, so a launch with nothing
-  /// new to look for spawns no processes at all.
-  ///
-  /// Skipped on a workspace that has never discovered anything: that launch's
-  /// own first-run scan is doing the same work, and racing it would probe every
-  /// agent twice.
-  ///
-  /// Not awaited and not retained. Each probe is a bounded subprocess with
-  /// nothing to tear down, and the window must not wait on WSL to answer.
+  /// Looks in the background for agents this workspace has never searched for.
+  /// Skipped on a never-discovered workspace: its first-run scan is doing this.
   void startAgentDiscovery() {
     final database = _container.read(databaseProvider);
     if (database.readMetadata(MetadataKeys.agentsDiscoveredAt) == null) return;
@@ -470,28 +301,7 @@ class AppLifecycle {
   }
 
   /// Verifies the stored agent executables and repairs the rows whose path has
-  /// rotted, behind [afterFirstFrame].
-  ///
-  /// **The owner's ask, and the durable half of the fix.** Codex's self-update
-  /// turned the stable path the app had stored into a junction chain Windows
-  /// refuses to traverse, and nothing ever looked again — the app kept trying
-  /// to spawn a path that could not be spawned, launch after launch. The path
-  /// is durable *state*; whether it still resolves is a *measurement*, and one
-  /// taken at first run expires. So it is taken again on every launch.
-  ///
-  /// A repair also has to keep happening because its own answer is perishable:
-  /// what the resolver finds is `releases\<version>\…`, which the next Codex
-  /// update moves. The check is the part that lasts; the resolution is only
-  /// what makes each round of it succeed.
-  ///
-  /// Same gate and same reasoning as [importCliSessions] — a stat is cheap but
-  /// the sweep behind a failure is not, and the window must not wait on it. A
-  /// gate that throws still gets the check run, because the gate is about
-  /// *when*.
-  ///
-  /// Skipped on a workspace that has never discovered anything, exactly as
-  /// [startAgentDiscovery] is: that launch's own first-run scan is writing the
-  /// rows this would be checking, and racing it would probe everything twice.
+  /// rotted. Every launch: a path is state, whether it resolves is a measurement.
   Future<void> repairAgentPaths({Future<void> Function()? afterFirstFrame}) =>
       _pathRepair ??= _repairAgentPaths(afterFirstFrame);
 
@@ -520,9 +330,8 @@ class AppLifecycle {
       final report = await _container
           .read(agentInstallationsControllerProvider.notifier)
           .repairBrokenPaths();
-      // Published, not just logged: an unrepaired row is something only the
-      // user can fix, and Settings is where they can be told which of "not
-      // installed" and "cannot be reached" it actually is.
+      // Published, not just logged: an unrepaired row is something only the user
+      // can fix, and "not installed" and "cannot be reached" are different answers.
       _container.read(agentPathRepairProvider.notifier).set(report);
       if (report.isClean) return;
       _logger.info('Agent paths: ${report.summary}');
@@ -533,32 +342,8 @@ class AppLifecycle {
     }
   }
 
-  /// Re-reads the recorded agent versions whose reading has aged out, behind
-  /// [afterFirstFrame] and **after** the path check.
-  ///
-  /// The other half of §20's problem, and the answer to the question §20 left
-  /// open: a stored *path* was being re-measured on every launch while the
-  /// stored *version* beside it was never re-read at all. `discoverUnprobed`
-  /// skips any pair that already has an installation row, so a known agent's
-  /// version was written once by the first scan and only a manual "Detect
-  /// agents" ever wrote it again — the app reported Claude Code 2.1.252 for a
-  /// binary answering 2.1.263, launch after launch.
-  ///
-  /// **The launch is the occasion; the row's recorded age is the gate.** A
-  /// version probe is a subprocess, so re-reading unconditionally would spend
-  /// exactly what makes the path check affordable, and re-reading per session
-  /// start would spend a process per session for a number nobody is looking at.
-  /// A workspace whose readings are all fresh spawns nothing here; one that has
-  /// aged out pays one process per local and WSL installation, once, and not
-  /// again until the reading ages out. What no cadence can fix is a bare
-  /// number, so the reading's age is stored and shown — that is the durable
-  /// half, exactly as the *check* rather than the resolution is the durable
-  /// half of the path repair.
-  ///
-  /// After the path check, deliberately: a row the repair just moved has had
-  /// its version re-read by that sweep already, and a row whose executable is
-  /// gone must not be spawned at. It re-enters [repairAgentPaths], which is
-  /// memoised, so the two share one gate and one run.
+  /// Re-reads the recorded agent versions whose reading has aged out, after the
+  /// path check. The launch is the occasion; the row's recorded age is the gate.
   Future<void> refreshAgentVersions({
     Future<void> Function()? afterFirstFrame,
   }) => _versionRefresh ??= _refreshAgentVersions(afterFirstFrame);
@@ -589,18 +374,8 @@ class AppLifecycle {
     }
   }
 
-  /// The one conversation-index catch-up this database will ever have.
-  ///
-  /// **Once ever, not once a launch.** `ConversationIndexBackfill` records in
-  /// `app_metadata` that it ran, and a workspace already caught up costs one
-  /// metadata read here and stops. Everything after that arrives on the two
-  /// triggers the index is built on — see `ConversationIndexer`.
-  ///
-  /// Sequenced *behind* [importCliSessions] rather than beside it, because both
-  /// want a walk of the CLI stores and those live inside WSL: two of them
-  /// racing is every entry paid for twice over `\\wsl.localhost`. The import
-  /// also writes the `imported_sessions` rows this reads its paths from, so
-  /// running second is what lets a first-ever launch index its history at all.
+  /// The one conversation-index catch-up this database will ever have. Behind
+  /// [importCliSessions]: both walk the CLI stores, and racing pays each twice.
   Future<void> backfillConversationIndex({
     Future<void> Function()? afterFirstFrame,
   }) => _conversationBackfill ??= _backfillConversationIndex(afterFirstFrame);
@@ -629,12 +404,8 @@ class AppLifecycle {
     }
   }
 
-  /// Takes ownership of components built elsewhere.
-  ///
-  /// The app builds almost everything through the methods above, but the two
-  /// pieces that need external configuration — a control server pointed at
-  /// specific paths, an in-flight hook installation — come in this way, so
-  /// there is still exactly one object that will shut them down.
+  /// Takes ownership of components built elsewhere, so there is still exactly
+  /// one object that will shut them down.
   void adopt({
     LauncherControlServer? controlServer,
     SystemIntegrationService? systemIntegration,
@@ -645,21 +416,15 @@ class AppLifecycle {
     if (hookInstallation != null) _hookInstallation = hookInstallation;
   }
 
-  /// Tears the application down in order, within [kShutdownBudget].
-  ///
-  /// Idempotent and safe to call from more than one exit path — the tray's
-  /// Quit, the window's close button and a future restart all land here, and
-  /// concurrent callers await the same sequence rather than racing it.
+  /// Tears the application down in order, within [kShutdownBudget]. Idempotent:
+  /// tray Quit, window close and a restart all land here and await one sequence.
   Future<void> shutdown() => _shutdown ??= _runShutdown();
 
   Future<void> _runShutdown() async {
     final watch = (_stopwatch ?? Stopwatch())..start();
 
-    // 0. Give up on any skill sweep still running. **Not a step**: it sets a
-    //    flag and returns, so it needs no slice of the budget and cannot be
-    //    abandoned itself. A sweep is bounded work whose *wait* something else
-    //    already owns; what it must not do is go on writing into somebody's
-    //    home after the app has gone, and telling it so is free.
+    // 0. Give up on any skill sweep still running. Not a step: it sets a flag and
+    //    returns, so it needs no slice of the budget and cannot be abandoned.
     if (_container.exists(agentSkillInstallationServiceProvider)) {
       _container.read(agentSkillInstallationServiceProvider).abandon();
     }
@@ -673,16 +438,8 @@ class AppLifecycle {
       cap: _kHookStepBudget,
     );
 
-    // 1b. Retire the callback endpoint (Loop 68, B2; narrowed in Loop 71).
-    //     What dies with this process is the port and the token, and those now
-    //     live in one generated file per agent rather than inline in the
-    //     agent's own config — so this deletes those files and leaves the
-    //     config entries alone. Taking the entries out here and putting
-    //     byte-identical ones back on the next start is what gave the race in
-    //     `AgentHookInstaller` two chances a launch to strip us out of somebody
-    //     else's settings.json. With the endpoint file gone the installed
-    //     script costs the agent an `if not exist` and exits zero, which is
-    //     cheaper than the `curl -m 2` a stale entry used to cost.
+    // 1b. Retire the callback endpoint: delete the generated per-agent endpoint
+    //     files, leaving the config entries — removing those raced the installer.
     await _step('agent hook endpoint retirement', watch, () async {
       // Stop draining first. `retireEndpoints` deletes the spool directories,
       // and a tick that ran into a directory being removed underneath it would
@@ -702,18 +459,16 @@ class AppLifecycle {
       }
     });
 
-    // 2c. Remote access (Loop 70): the LAN listener, the beacon and every
-    //     device channel. A phone left talking to a dead port would just
-    //     reconnect forever; closing cleanly lets it back off properly.
+    // 2c. Remote access: the LAN listener, the beacon and every device channel.
+    //     Closing cleanly lets a phone back off instead of reconnecting forever.
     await _step('remote access', watch, () async {
       if (_container.exists(remoteAccessControllerProvider)) {
         await _container.read(remoteAccessControllerProvider).shutdown();
       }
     });
 
-    // 2d. The embedded local relay (Loop 77), after the host service above
-    //     stopped dialling it: close the listening socket so the port is
-    //     free the moment the app is gone.
+    // 2d. The embedded local relay, after the host service stopped dialling it:
+    //     close the socket so the port is free the moment the app is gone.
     await _step('local relay', watch, () async {
       if (_container.exists(localRelayServiceProvider)) {
         await _container.read(localRelayServiceProvider).stop();
@@ -735,10 +490,8 @@ class AppLifecycle {
       () => _systemIntegration?.dispose() ?? Future<void>.value(),
     );
 
-    // 5. The panes' process trees. Killing them is `taskkill /T` per pane, so
-    //    this is the one step whose work is another process rather than a
-    //    field being nulled — and the only one where not waiting means leaving
-    //    something of the user's running.
+    // 5. The panes' process trees, `taskkill /T` per pane. The one step whose
+    //    work is another process, and where not waiting leaves the user's running.
     await _step(
       'terminal processes',
       watch,
@@ -750,14 +503,8 @@ class AppLifecycle {
       cap: _kTerminalStepBudget,
     );
 
-    // 6. The container. Its own `dispose()` is synchronous and cannot hang, so
-    //    it runs unconditionally — even with the budget spent, because every
-    //    provider's teardown hangs off it. What is *not* synchronous is the
-    //    work that teardown starts, and Riverpod cannot wait for it:
-    //    `ref.onDispose` takes a callback, so the SSH pool's socket closes and
-    //    the session engine's agent processes were started and dropped. Both
-    //    are idempotent, so starting them here — where the wait is budgeted —
-    //    leaves the providers' own hooks as no-ops.
+    // 6. The container. `dispose()` is synchronous and runs unconditionally; what
+    //    it *starts* is not, so those begin here, where the wait is budgeted.
     final pending = _startContainerTeardowns();
     final database = _databaseOrNull();
     try {
@@ -772,12 +519,8 @@ class AppLifecycle {
       cap: _kContainerStepBudget,
     );
 
-    // 7. The database handle, after everything that could still write through
-    //    it has stopped. Not a `_step`: `close()` is one synchronous call that
-    //    a deadline could not preempt anyway, and skipping it is what the soak
-    //    was measuring. `exit(0)` releases the file but gives SQLite no chance
-    //    to checkpoint, so every one of 20 quits left `karmashala.sqlite-wal`
-    //    and `-shm` for the next launch to recover from.
+    // 7. The database handle, last. Not a `_step`: `close()` is one synchronous
+    //    call, and `exit(0)` leaves a `-wal`/`-shm` for the next launch to recover.
     try {
       database?.close();
     } on Object catch (error) {
@@ -792,19 +535,8 @@ class AppLifecycle {
     await flushLog();
   }
 
-  /// Puts what has been logged on disk, **outside [kShutdownBudget]**.
-  ///
-  /// It used to be a step like any other, and that was the bug: `_step` bounds
-  /// every action by what is left of the shared deadline, so a shutdown that
-  /// spent its budget skipped exactly the flush that would have recorded it.
-  /// The soak counted the result — 20 quits, 8 `shutdown in N ms` lines — and
-  /// the twelve missing ones are the twelve worth reading. A quit whose own
-  /// account is the first casualty of the quit going wrong is a quit nobody
-  /// can debug.
-  ///
-  /// Called again by `SystemIntegrationService._quit` immediately before the
-  /// process ends, because the window destroy logs after this returns. Two
-  /// flushes cost one empty queue check; a missing one costs the evidence.
+  /// Puts what has been logged on disk, **outside [kShutdownBudget]**: as a step
+  /// it was skipped by exactly the shutdowns whose account was worth reading.
   Future<void> flushLog() async {
     try {
       await Diagnostics.instance.flushFile().timeout(kLogFlushBudget);
@@ -814,11 +546,8 @@ class AppLifecycle {
     }
   }
 
-  /// The database this container was given, or null when it has none.
-  ///
-  /// Read *before* `dispose()` for the same reason the teardowns are: a
-  /// disposed container cannot be read from, and this is the one handle whose
-  /// close has to outlast every provider that might still be using it.
+  /// The database this container was given, or null when it has none. Read
+  /// *before* `dispose()`, which leaves the container unreadable.
   AppDatabase? _databaseOrNull() {
     try {
       return _container.read(databaseProvider);
@@ -829,11 +558,7 @@ class AppLifecycle {
   }
 
   /// Starts the teardowns that container disposal would otherwise fire and
-  /// forget, returning their futures so the caller can wait for them.
-  ///
-  /// Read *before* `dispose()`, because a disposed container cannot be read
-  /// from; started before it too, so a provider's own `onDispose` finds the
-  /// work already done rather than doing it a second time.
+  /// forget. Read and started before `dispose()`, so its own hooks are no-ops.
   List<Future<void>> _startContainerTeardowns() {
     final pending = <Future<void>>[];
     for (final start in <Future<void> Function()>[

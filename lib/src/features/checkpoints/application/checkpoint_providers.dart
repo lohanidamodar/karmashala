@@ -21,12 +21,8 @@ final checkpointServiceProvider = Provider<CheckpointService>(
   ),
 );
 
-/// The working tree a session's checkpoints are taken of.
-///
-/// A session that was given a worktree is checkpointed in that worktree; one
-/// working directly in the repository is checkpointed there. Returns `null` when
-/// the session or its repository is gone, which is a reason not to checkpoint
-/// rather than an error.
+/// The working tree a session's checkpoints are taken of. `null` when the
+/// session or its repository is gone — a reason not to checkpoint, not an error.
 EnvironmentPath? checkpointTargetFor(Ref ref, String sessionId) {
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return null;
@@ -47,12 +43,8 @@ final checkpointsRevisionProvider =
       CheckpointsRevisionController.new,
     );
 
-/// Checkpoints for [sessionId], newest first.
-///
-/// `autoDispose`, and read only by the panel: a closed panel holds no
-/// subscription, and an open one re-reads when the revision moves — never on a
-/// tick. A checkpoint set changes exactly when one is written, and that write
-/// bumps [checkpointsRevisionProvider].
+/// Checkpoints for [sessionId], newest first. `autoDispose` and read only by
+/// the panel: it re-reads when the revision moves, never on a tick.
 final sessionCheckpointsProvider = Provider.autoDispose
     .family<List<Checkpoint>, String>((ref, sessionId) {
       ref.watch(checkpointsRevisionProvider);

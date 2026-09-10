@@ -7,12 +7,8 @@ import '../application/automation_undo.dart';
 import '../domain/automation_run.dart';
 import '../domain/undo_run.dart';
 
-/// Taking back what one unattended run did.
-///
-/// **The asymmetry is on screen.** Restoring the files is offered without
-/// condition; dropping the commits is a checkbox that is *disabled with its
-/// reason* whenever [undoCommitsRefusal] says so — and the write path asserts
-/// the same function, so the tooltip and the refusal cannot drift.
+/// Taking back what one unattended run did. Files unconditionally; the commits
+/// checkbox is disabled with [undoCommitsRefusal]'s reason.
 class AutomationUndoDialog extends ConsumerStatefulWidget {
   const AutomationUndoDialog({required this.run, super.key});
 
@@ -30,9 +26,8 @@ class AutomationUndoDialog extends ConsumerStatefulWidget {
 }
 
 class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
-  /// Null while the reading is being taken. **Not an empty summary** — "we have
-  /// not looked yet" and "there is nothing" are different, and only the second
-  /// may enable anything.
+  /// Null while the reading is being taken. Not an empty summary — "we have not
+  /// looked yet" and "there is nothing" are different.
   RunCommits? _commits;
   bool _dropCommits = false;
   String? _outcome;
@@ -128,8 +123,7 @@ class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
         await undo.restoreFiles(widget.run);
       } on CheckpointConflict catch (conflict) {
         // The work that was in the way is already a checkpoint of its own, so
-        // confirming loses nothing — that is `CheckpointService`'s rule and
-        // this repeats it rather than inventing a second one.
+        // confirming loses nothing — `CheckpointService`'s rule, not a second.
         if (!mounted) return;
         setState(() => _outcome = conflict.message);
         await undo.restoreFiles(widget.run, confirm: true);

@@ -10,25 +10,8 @@ import 'package:karmashala_core/logging.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
-/// The live log tail: what the app is actually saying, inside the app.
-///
-/// **Why this reads a counter instead of listening.** A busy channel —
-/// `device-stream`, `terminal` — emits far faster than the frame budget, and a
-/// listener that called `setState` per record would be a rebuild storm of
-/// exactly the kind Loop 87 just removed. So the ring buffer notifies nobody:
-/// it bumps an integer, and this panel compares that integer on a
-/// [LogsPanel.refreshInterval] timer, repainting at most ten times a second no
-/// matter how many thousands of records arrived in between. Logging stays a
-/// synchronous array store, and the UI cost is bounded by the clock rather than
-/// by the log rate.
-///
-/// **Paused means frozen.** Following renders the live tail; pausing keeps the
-/// snapshot taken at that moment, so reading an older line is not a fight with
-/// the list moving underneath. Scrolling away from the newest end pauses on its
-/// own, which is what every log viewer has taught people to expect.
-///
-/// Everything here is already redacted: the buffer is the only source, and
-/// nothing reaches it unredacted.
+/// The live log tail, inside the app: a counter polled on a timer rather than a
+/// listener, because a busy channel emits faster than the frame budget.
 class LogsPanel extends ConsumerStatefulWidget {
   const LogsPanel({super.key});
 
@@ -291,11 +274,8 @@ class _Filters extends StatelessWidget {
               isDense: true,
               underline: const SizedBox.shrink(),
               style: style,
-              // `DropdownButton` is Material 2 and the app's
-              // `dropdownMenuTheme` reaches only Material 3's `DropdownMenu`,
-              // so its chevron ignored the theme and came out at Material's
-              // 24 px beside a `Chrome.icon` toolbar one row above it. The
-              // text style was already the panel's; the glyph was not.
+              // `DropdownButton` is Material 2 and `dropdownMenuTheme` reaches
+              // only Material 3's `DropdownMenu`, so its chevron ignores it.
               iconSize: Chrome.icon,
               items: [
                 for (final (label, level) in _levelFilters)

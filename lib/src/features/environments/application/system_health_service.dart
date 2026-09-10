@@ -14,33 +14,8 @@ import 'environment_health.dart';
 import 'environment_providers.dart';
 import 'system_health.dart';
 
-/// Runs the machine checks behind the health panel.
-///
-/// **Nothing in here runs on a timer.** Every check spawns at least one
-/// process, and a panel that re-probed itself every few seconds would cost more
-/// than the failures it reports; the controller below runs them when the panel
-/// is opened and when the user asks again, and the report carries the time it
-/// ran so a reading can never pass itself off as live.
-///
-/// **On notifying rather than looking.** These checks are deliberately *not*
-/// wired into `AgentActivityStatus`, `NotificationReason` or the attention
-/// inbox, and the reasons are worth keeping written down:
-///
-/// * To notify, the app would have to poll — the thing above says it must not.
-/// * The event a user actually cares about is *their agent session losing its
-///   tools*, and the app cannot see that. Claude Code binds its MCP servers
-///   when it starts and owns those processes; this app can speak for its own
-///   bridge and its own endpoint and nothing else. A notification worded as
-///   "your session lost its tools" would be the same confident false statement
-///   this panel exists to delete, moved somewhere louder.
-/// * The inbox is per-session by construction — `PendingNotification` and
-///   `InboxItem` both require a `WatchedSession` — and a machine fault has no
-///   session to belong to. Filing it under an arbitrary one would misattribute
-///   the failure to whichever agent happened to be running.
-///
-/// What replaces it: the panel is one keystroke away in quick-open, Settings →
-/// Tools no longer claims the bridge works because a file exists, and every
-/// verdict is shown with its age.
+/// Runs the machine checks behind the health panel. **Nothing here runs on a
+/// timer**, and the report carries the time it ran — see docs/SETTLED.md.
 class SystemHealthService {
   SystemHealthService(this.ref);
 
@@ -88,11 +63,8 @@ class SystemHealthService {
     return results;
   }
 
-  /// Runs one check, turning any escape into an honest [HealthLevel.unknown].
-  ///
-  /// A health panel that can be crashed by the thing it is reporting on is the
-  /// same failure as one that lies about it: either way the user learns
-  /// nothing.
+  /// Runs one check, turning any escape into an honest [HealthLevel.unknown]: a
+  /// panel crashed by what it reports on teaches the user nothing either.
   Future<SystemCheck> _guard(
     SystemCheckId id,
     String title,
@@ -180,14 +152,8 @@ class SystemHealthService {
 
   // --- Control server ------------------------------------------------------
 
-  /// The other half of "can an agent get tools": whether the app will answer
-  /// the bridge it just spawned.
-  ///
-  /// **Read, not probed.** `LauncherControlServer` writes this as it starts and
-  /// knows which hardening step failed; a forwarded tool call could only
-  /// observe that something went wrong. So this row costs nothing and says so
-  /// — its detail names the recording rather than letting the panel's timestamp
-  /// imply a fresh measurement.
+  /// Whether the app will answer the bridge it just spawned. **Read, not
+  /// probed** — the server records which hardening step failed as it starts.
   Future<SystemCheck> _checkControlServer() async {
     final status = ref.read(controlServerStatusProvider);
     final level = switch (status.transport) {
@@ -286,10 +252,8 @@ class SystemHealthService {
 
   // --- Android tooling -----------------------------------------------------
 
-  /// Scoped to the host SDK on purpose. A WSL or SSH environment can hold its
-  /// own SDK with its own adb server, and the devices feature already treats
-  /// those as separate; folding them in here would produce a single verdict
-  /// about several unrelated installations.
+  /// Scoped to the host SDK on purpose: a WSL or SSH environment can hold its
+  /// own, and one verdict about several installations says nothing.
   Future<SystemCheck> _checkAndroidTooling() async {
     const id = SystemCheckId.androidTooling;
     const title = 'Android tooling';
@@ -446,10 +410,8 @@ class SystemHealthService {
         : AvdImageStatus.missingSystemImage(name, image);
   }
 
-  /// The `sdkmanager` argument for the first missing image.
-  ///
-  /// `image.sysdir.1` is the package id with `/` where `;` belongs, so the id
-  /// is derived from the AVD's own file rather than guessed from an API level.
+  /// The `sdkmanager` argument for the first missing image. `image.sysdir.1` is
+  /// the package id with `/` where `;` belongs, so it is derived, not guessed.
   String? _sdkmanagerLine(List<AvdImageStatus> broken, AndroidSdk sdk) {
     final path = broken.first.imagePath;
     if (path == null) return null;
@@ -465,11 +427,8 @@ class SystemHealthService {
 
   // --- Disk space ----------------------------------------------------------
 
-  /// Measures the volume the app's own data sits on.
-  ///
-  /// That volume rather than "the disk": it is one the app can name and knows
-  /// it writes to — the database, checkpoints and logs all land there — and on
-  /// this machine it is `C:`, which is the one that filled.
+  /// Measures the volume the app's own data sits on — one it can name and knows
+  /// it writes to, rather than "the disk".
   Future<SystemCheck> _checkDiskSpace() async {
     const id = SystemCheckId.diskSpace;
     final support = await supportDirectory();
@@ -551,12 +510,8 @@ final mcpBridgeProbeProvider = Provider<McpBridgeProbe>(
   (ref) => McpBridgeProbe(runner: ref.watch(hostCommandRunnerProvider)),
 );
 
-/// The last reading, and nothing until there is one.
-///
-/// A [Notifier] rather than a `FutureProvider` so that both the health panel
-/// and Settings → Tools read the *same* result: two surfaces that each ran
-/// their own probe could disagree about the same machine, which is a smaller
-/// version of the bug this whole feature is fixing.
+/// The last reading, and nothing until there is one. A [Notifier] so the panel
+/// and Settings read the *same* result rather than two probes of one machine.
 class SystemHealthController extends Notifier<SystemHealthReport> {
   @override
   SystemHealthReport build() => SystemHealthReport.notChecked;

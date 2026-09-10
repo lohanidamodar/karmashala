@@ -13,12 +13,8 @@ class ProjectCheckDao {
 
   // --- the switch -----------------------------------------------------------
 
-  /// Whether verification is on for [repositoryId].
-  ///
-  /// **No row means off.** A checkout nobody has configured has not opted in,
-  /// and reading its silence as consent is exactly what the gate exists to
-  /// stop. Not "unknown": absence here is a decision nobody made, and the safe
-  /// reading of a decision nobody made is no.
+  /// Whether verification is on for [repositoryId]. No row means off, not
+  /// unknown: reading a checkout's silence as consent is what the gate stops.
   bool isVerificationEnabled(String repositoryId) {
     final rows = _db.query(
       'SELECT enabled FROM project_verification WHERE repository_id = ?;',
@@ -38,7 +34,6 @@ class ProjectCheckDao {
     [repositoryId, intFromBool(enabled), isoFromDate(now)],
   );
 
-  /// Every checkout that has turned verification on.
   Set<String> verifiedRepositories() => {
     for (final row in _db.query(
       'SELECT repository_id FROM project_verification WHERE enabled = 1;',
@@ -90,9 +85,8 @@ class ProjectCheckDao {
     createdAt: dateFromIso(row['created_at']),
   );
 
-  /// Forgiving in the way `WorktreeSetup.fromJson` is: a row this code did not
-  /// write reads as no command rather than throwing, so one bad row cannot
-  /// stop the whole list being read.
+  /// Forgiving like `WorktreeSetup.fromJson`: a row this code did not write
+  /// reads as no command rather than throwing.
   static List<String> _argv(String? raw) {
     if (raw == null || raw.isEmpty) return const [];
     try {

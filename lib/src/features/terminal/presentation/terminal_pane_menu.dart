@@ -1,13 +1,5 @@
-// **The pane's right-click menu, and the two things it keeps** — copy, paste,
-// find, record, the pane splits, the way back out of one, and ending the
-// session; plus the two capture rows, which are the terminal's door into the
-// Todos and Notes an agent already reaches through `todo_add` and `note_add`.
-//
-// A part of `terminal_panel.dart` rather than a library of its own, for the
-// reason every part of this file has: `_TerminalPaneStackState` is private,
-// and an extension on it can only be written inside its own library. Making
-// the state class public to move it would cost the tree golden this split is
-// proved by.
+// **The pane's right-click menu, and the two captures on it.** A `part`
+// because `_TerminalPaneStackState` is private.
 
 part of 'terminal_panel.dart';
 
@@ -30,23 +22,21 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
     if (overlay == null) return;
     final selection = session.controller.selection;
     final hasSelection = selection != null;
-    // Read once, as the menu is built, and used by every row that wants it.
-    // The two capture rows are only offered for a selection that caught
-    // something: a drag over blank cells is not a todo, and a row that opens
-    // an empty composer is a row that wasted the click.
+    // Read once as the menu is built. The captures are offered only for a
+    // selection that caught something: a drag over blank cells is not a todo.
     final selected = selection == null
         ? null
         : session.terminal.buffer.getText(selection);
     final capturable = selected != null && selected.trim().isNotEmpty;
     final notesEnabled = ref.read(notesEnabledProvider);
     final recordingThis = ref.read(terminalRecordingProvider).isRecording(paneId);
-    // What the recording will be able to become, said before it is started
-    // rather than when the export dialog has to refuse.
+    // What the recording will be able to become, said before it starts rather
+    // than when the export dialog has to refuse.
     final canWriteMp4 = ref.read(videoSupportProvider).available;
     final choice = await showMenu<String>(
       context: context,
-      // The same one-pixel anchor `ContextMenuRegion._show` uses, so a menu
-      // opened from a pane lands where one opened from the Explorer does.
+      // The same one-pixel anchor `ContextMenuRegion._show` uses, so a pane's
+      // menu lands where the Explorer's does.
       position: RelativeRect.fromRect(
         Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
@@ -71,11 +61,9 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
           icon: AppIcons.magnifyingGlass,
           shortcut: shellChordLabel<FindInScrollbackIntent>(),
         ),
-        // Keeping what is on screen, in the two places the app already keeps
-        // the user's own writing — and the two an agent already reaches through
-        // `todo_add` and `note_add`. Offered only with a selection, because
-        // unlike Copy there is no disabled version of this that says anything:
-        // "create a todo from nothing" is not a lesser act, it is not an act.
+        // Offered only with a selection, because unlike Copy there is no
+        // disabled version that says anything: "create a todo from nothing" is
+        // not a lesser act, it is not an act.
         if (capturable) ...[
           const DesktopMenuDivider(),
           DesktopMenuItem(
@@ -83,9 +71,8 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
             label: 'Create todo from selection',
             icon: AppIcons.listChecks,
           ),
-          // Absent, not disabled, when Notes is switched off — the one reading
-          // `notesEnabledProvider` exists for, so the capture affordance and
-          // the surface cannot disagree about whether the user asked for this.
+          // Absent, not disabled, when Notes is off, so the affordance and the
+          // surface cannot disagree about whether the user asked for it.
           if (notesEnabled)
             DesktopMenuItem(
               value: 'note',
@@ -94,12 +81,9 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
             ),
         ],
         const DesktopMenuDivider(),
-        // The *pane* split, and the only place it is offered. The toolbar's two
-        // split buttons divide the whole workspace group now — a strip, a
-        // surface and a status bar of its own — which is a different act, and
-        // one row of chrome cannot honestly stand for both.
-        // Recording is a pane's own verb, on the pane's own menu, beside the
-        // other one — the same placement rule the split rows below state.
+        // The pane splits below are the only place *pane* splitting is offered:
+        // the toolbar's buttons divide the whole workspace group, which is a
+        // different act. Recording is a pane's own verb for the same reason.
         DesktopMenuItem(
           value: 'record',
           label: recordingThis
@@ -121,12 +105,10 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
           icon: AppIcons.squareSplitVertical,
         ),
         const DesktopMenuDivider(),
-        // Only while there is a split to collapse, and only then: with one
-        // pane the tab strip's own close button is the way, and two words for
-        // one act in two places is how a menu stops being read.
+        // Only while there is a split to collapse: with one pane the tab
+        // strip's close button is the way, and two words for one act in two
+        // places is how a menu stops being read.
         if (_sessions.isPaneInSplit(paneId)) ...[
-          // The way back out of a split, beside the way to close one. The
-          // region this pane leaves goes with it — see [movePaneToNewTab].
           DesktopMenuItem(
             value: 'untangle',
             label: 'Move pane to a new tab',
@@ -165,9 +147,8 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
       case 'note':
         if (selected != null) await _captureNote(paneId, selected);
       case 'paste':
-        // The same rule as the chord, from the same place: a menu item called
-        // Paste that silently does nothing with a screenshot on the clipboard
-        // is the bug being fixed, not a lesser version of it.
+        // The same rule as the chord, from the same place: a Paste that
+        // silently does nothing with a screenshot on the clipboard is the bug.
         await pasteIntoTerminal(session.terminal, controller: session.controller);
       case 'find':
         _actions.openSearch();
@@ -184,10 +165,9 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
     }
   }
 
-  /// Keeps [selected] as a todo, filed under the pane's project.
-  ///
-  /// Collapsed to one line **and shown collapsed**, because that is what a
-  /// todo is and a terminal selection usually is not — see [todoLineFrom].
+  /// Keeps [selected] as a todo, filed under the pane's project. Collapsed to
+  /// one line **and shown collapsed**, because that is what a todo is and a
+  /// terminal selection usually is not — see [todoLineFrom].
   Future<void> _captureTodo(String paneId, String selected) async {
     final source = ref.read(terminalSelectionSourceProvider(paneId));
     final todo = await showNewTodoDialog(
@@ -217,8 +197,8 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
     _say('Saved to Notes.');
   }
 
-  /// Confirmation, not navigation: the side panel stays where the user left
-  /// it. A right-click in a terminal is not a request to rearrange the window.
+  /// Confirmation, not navigation: a right-click in a terminal is not a request
+  /// to rearrange the window.
   void _say(String message) => ScaffoldMessenger.maybeOf(
     context,
   )?.showSnackBar(SnackBar(content: Text(message)));

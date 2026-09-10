@@ -4,23 +4,8 @@ import 'package:karmashala_core/util.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// The last screen this app read on each device — one record per device, kept
-/// only in memory.
-///
-/// Written by every tool that reads a screen and consulted by the one tool that
-/// acts on a coordinate. That is the whole of it: the ingredients for a
-/// pre-action check already existed (`device_ui_dump`, `device_find_elements`),
-/// and nothing bound them to the tap.
-///
-/// **Per device, not per caller.** A fingerprint is a fact about the screen,
-/// not about who looked: if another agent moved the screen, the coordinate a
-/// third one is holding is stale too. Who read it is kept for the sentence,
-/// never for the decision.
-///
-/// Nothing polls it, nothing expires it and nothing sweeps it. A record is
-/// overwritten by the next read of that device and consulted only when someone
-/// taps a coordinate; its **age** is what the caller is told and what decides
-/// whether a mismatch refuses or warns — see [kDeviceLookWindow].
+/// The last screen this app read on each device, in memory only and keyed per
+/// device, not per caller: a moved screen is stale for whoever holds it.
 class DeviceScreenMemory {
   DeviceScreenMemory({required this.clock});
 
@@ -32,12 +17,8 @@ class DeviceScreenMemory {
   /// What was last seen on [deviceId], or null if nothing has been read.
   ScreenObservation? lastLookAt(String deviceId) => _byDevice[deviceId];
 
-  /// Describes a screen that has just been read, **without** filing it.
-  ///
-  /// Split from [file] for one caller: the pre-tap check has to compare the
-  /// screen it just read against the last one *before* replacing it, and must
-  /// not file anything at all when it refuses — a refusal that recorded the new
-  /// screen would let the identical retry straight through.
+  /// Describes a screen that has just been read, **without** filing it: the
+  /// pre-tap check must not record the screen it is about to refuse over.
   ScreenObservation observationOf({
     required String deviceId,
     required UiHierarchy tree,

@@ -27,10 +27,8 @@ class ImportSummary {
   bool get isEmpty => projects == 0 && repositories == 0 && sessions == 0;
 }
 
-/// Imports detected CLI projects/sessions into the workspace: find-or-create a
-/// `Project` and `Repository` for each detected folder and record its sessions
-/// as [ImportedSession]s. Idempotent — existing projects/repositories are reused
-/// and already-imported sessions are ignored (dedupe by `(cli, externalId)`).
+/// Imports detected CLI projects/sessions into the workspace, finding or
+/// creating a `Project` and `Repository` per folder. Idempotent.
 class ProjectImportService {
   ProjectImportService({
     required this.projectDao,

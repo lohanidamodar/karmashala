@@ -31,11 +31,8 @@ class UnresumableSession {
   String get note => promiseVerdictNote(verdict, agentName);
 }
 
-/// What one reading found.
-///
-/// [removable] and [uncertain] are separate lists rather than one list with a
-/// flag, because only one of them is ever acted on and the separation is what
-/// makes that impossible to get wrong at the call site.
+/// What one reading found. [removable] and [uncertain] are separate lists, not
+/// one list with a flag, so a call site cannot act on the wrong half.
 class UnresumableReview {
   const UnresumableReview({
     required this.removable,
@@ -53,8 +50,7 @@ class UnresumableReview {
       checkedAt = null;
 
   /// Rows whose agent store was read to the end without the conversation in it
-  /// — [PromiseVerdict.unkept], and the only rows [SessionBulkDelete] is ever
-  /// handed from here.
+  /// — the only rows [SessionBulkDelete] is ever handed from here.
   final List<UnresumableSession> removable;
 
   /// Rows we could not judge. Shown, counted, and never deleted.
@@ -78,47 +74,9 @@ class UnresumableReview {
   );
 }
 
-/// Finds the rows that name a conversation their agent does not have, and acts
-/// on them.
-///
-/// **The state this exists for already has words**, in
-/// `resumeMissingConversationMessage`: a session whose agent takes a
-/// `--session-id` gets one of our ids at launch and records it immediately,
-/// which makes the id a promise about a conversation that does not exist yet. A
-/// launch that failed, or a session nothing was ever said in, leaves the promise
-/// unkept. Until now that was only ever discovered *reactively*, by resuming the
-/// row and reading the explanation.
-///
-/// ## Two passes, and why
-///
-/// **The cheap signal does not work.** `externalSessionId == null` cannot find
-/// these rows, because the id is recorded at launch — a dead row and a live row
-/// are identical on that field. Knowing for certain means asking the CLI whether
-/// it has the conversation, and doing that per row, eagerly, is exactly the cost
-/// the Explorer's per-row git probes were just relieved of. So:
-///
-/// 1. **Screening** — [screenSessionPromise], per row, from the row and two
-///    in-memory facts. No disk, no subprocess, no store. This is what stays
-///    flat as the workspace grows.
-/// 2. **One sweep** — [conversationPresenceSweepProvider], a single pass over
-///    every located store, run only when the user asks. Its cost is
-///    O(stores), not O(rows), and it answers for every candidate at once.
-///
-/// The alternative — the existing single-row `conversationPresenceProvider`,
-/// per candidate — was rejected on cost: Codex's answer walks its whole
-/// `sessions/` tree, so forty candidates would be forty walks of it. The sweep
-/// keeps the *same rule* as that probe, so the two cannot disagree about
-/// whether a resume would have been refused.
-///
-/// ## Why nothing is cached and nothing is scheduled
-///
-/// There was a hope that the app's existing store sweeps had already paid for
-/// this. They have not: nothing memoizes `SessionTranscriptLocator.index()`,
-/// `SessionStatusRegistry` keeps only a per-session path once found (and only
-/// for sessions whose agent has a state file *and* still wants a probe), and
-/// `SessionAutoImportService` runs on a user action. There is no existing
-/// artefact to cross-check against, so this reads the stores itself — once,
-/// when asked, never on a timer. §19's third rule.
+/// Finds the rows that name a conversation their agent does not have.
+/// `externalSessionId == null` cannot: the id is recorded at launch. So free
+/// per-row screening, then one sweep of the stores — O(stores), never cached.
 class UnresumableSessionsController extends Notifier<UnresumableReview> {
   @override
   UnresumableReview build() => const UnresumableReview.unchecked();
@@ -184,16 +142,9 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
     }
   }
 
-  /// Removes the rows this reading found removable, and nothing else.
-  ///
-  /// [ids] is intersected with [UnresumableReview.removable] rather than
-  /// trusted: the sheet can be open while a session starts, and a row the
-  /// reading has not judged must not be deletable through a set that names it.
-  ///
-  /// `deleteFromCli: false`, and provably so rather than as a default: every
-  /// row here is one whose store was read to the end *without* the conversation
-  /// in it, so there is no transcript to purge. Offering the choice would be
-  /// offering to delete a file we have just established does not exist.
+  /// Removes the rows this reading found removable, and nothing else: [ids] is
+  /// intersected with [UnresumableReview.removable] rather than trusted.
+  /// `deleteFromCli: false` provably — there is no transcript to purge.
   void remove(Iterable<String> ids) {
     final allowed = {for (final row in state.removable) row.session.id};
     final targets = ref
@@ -214,20 +165,9 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
     );
   }
 
-  /// Starts a fresh conversation **in** [sessionId], keeping the row.
-  ///
-  /// The other answer, and for most rows the better one: the promise is simply
-  /// made again. Everything the user associates with the row — its title, its
-  /// age, its pins, its notes, its place in a lineage — is what a delete would
-  /// have thrown away, and reuse is already how the launcher continues a
-  /// session (see `SessionLaunchRequest.restartSessionId`).
-  ///
-  /// Only a row this reading found [PromiseVerdict.unkept]. The restriction is
-  /// the same one [remove] has and it matters as much in this direction: an
-  /// `unknown` verdict means the store was unreachable, so the conversation may
-  /// well be there and resumable once the distribution is running — and
-  /// starting a second one over the row would abandon it. A row we cannot speak
-  /// for gets neither verb.
+  /// Starts a fresh conversation **in** [sessionId], keeping the row. Only a row
+  /// found [PromiseVerdict.unkept]: `unknown` means the store was unreachable,
+  /// so starting over the row could abandon a live conversation.
   Future<Session> restart(String sessionId) async {
     if (!state.removable.any((row) => row.session.id == sessionId)) {
       throw StateError(
@@ -259,8 +199,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
         installation: installation,
         title: row.title,
         // A conversation that never existed is a new one, whatever the row's
-        // age says — so the *new session* permission mode, and the row's own
-        // recorded choice still wins inside `permissionFor`.
+        // age says — so the *new session* permission mode.
         purpose: SessionPurpose.newSession,
         surface: row.surface,
         restartSessionId: row.id,
@@ -284,22 +223,9 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
     return launched.session;
   }
 
-  /// The rows worth reading a store for — the free half.
-  ///
-  /// **Three queries, whatever the workspace holds**: the sessions, the
-  /// installations and the repositories, each read once into a map. Everything
-  /// per row after that is a map lookup or a read of the terminal controller's
-  /// own in-memory pane table. No disk, no subprocess, and nothing that grows
-  /// the statement count with the row count — which is the property
-  /// `unresumable_scale_cost_test.dart` counts, and the reason this can run
-  /// over a workspace of any size on a keypress.
-  ///
-  /// The pane check is deliberately **not** `SessionLauncher.livePaneFor`,
-  /// which would re-read the row we are already holding: one `getById` per row
-  /// is exactly the shape of cost this whole design exists to avoid. The rule
-  /// it applies is the same one, spelled out below against the same
-  /// `TerminalInstance.liveness` — a detached pane is live, a pane restored
-  /// from disk is not.
+  /// The rows worth reading a store for — three queries whatever the workspace
+  /// holds, then map lookups, so the statement count is flat in the row count
+  /// (`unresumable_scale_cost_test.dart`). Not `livePaneFor`, which re-reads.
   List<_Candidate> _screen() {
     final now = ref.read(clockProvider).nowUtc();
     final registry = ref.read(agentRegistryProvider);
@@ -328,9 +254,8 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
         now: now,
       );
       if (screening != PromiseScreening.candidate) continue;
-      // Where the agent would have written it — the same resolution
-      // `refuseIfConversationMissing` uses, so the sweep is asked about the
-      // store the resume path would have consulted.
+      // Where the agent would have written it — the resolution
+      // `refuseIfConversationMissing` uses, so the sweep is asked the same thing.
       final directory =
           session.workingDirectory ??
           session.worktree ??

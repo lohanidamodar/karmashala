@@ -23,14 +23,8 @@ class EnvironmentScan {
   final int? found;
 }
 
-/// Probes **one** environment for installed agents.
-///
-/// Deliberately not the same thing as `AgentInstallationsController.discoverAll`:
-/// a remote host has to be dialled to be probed, and dialling every saved host
-/// because the user wanted to rescan their laptop is not what they asked for.
-/// One environment at a time also means one environment's failure — a refused
-/// key, a machine that is off — is reported against that environment instead of
-/// disappearing into a whole-app scan.
+/// Probes **one** environment for installed agents — not `discoverAll`: a
+/// remote host must be dialled, and one failure belongs to one environment.
 class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
   @override
   Map<String, EnvironmentScan> build() => const {};
@@ -41,10 +35,8 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
   Future<void> scan(ExecutionEnvironment environment) async {
     _set(environment.id, const EnvironmentScan(busy: true));
     try {
-      // Connect first, explicitly. Agent discovery treats an unavailable
-      // environment as "nothing installed", which for a remote host would turn
-      // a refused connection into an empty list — a failure wearing the costume
-      // of a successful, boring result.
+      // Connect first, explicitly. Discovery treats an unavailable environment as
+      // "nothing installed", which for a remote host hides a refusal as an empty list.
       if (environment.kind == EnvironmentKind.ssh) {
         await ref
             .read(sshConnectionPoolProvider)
@@ -60,10 +52,8 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
         ids: ref.read(agentCliIdsProvider),
         clock: ref.read(agentCliClockProvider),
         registry: ref.read(agentRegistryProvider),
-        // The third and last caller of discovery, so a per-environment scan
-        // sees through a Windows junction chain exactly as the other two do.
-        // Without this, the one control a user reaches for after "my agent is
-        // not showing up" is the one that still cannot find it.
+        // The third and last caller of discovery, so a per-environment scan sees
+        // through a Windows junction chain exactly as the other two do.
         pathProbe: ref.read(agentCliPathProbeProvider),
         hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover();

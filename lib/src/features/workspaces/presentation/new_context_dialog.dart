@@ -8,17 +8,7 @@ import '../application/workspaces_controller.dart';
 import '../domain/workspace.dart';
 
 /// Names a new context and returns it, so the caller can put something in it
-/// straight away.
-///
-/// Exists because "put this project in a context" and "there is no context yet"
-/// are the same moment for a user who has never made one. Sending them to the
-/// manage dialog would make it three steps — create it, find the project, pick
-/// the context — for a decision they have already made. This asks the one
-/// question it has to and hands the context back.
-///
-/// Two fields, one of them optional: the name is what a picker shows, and the
-/// description is the line that makes "Appwrite" mean something six weeks
-/// later.
+/// straight away: "file this" and "there is no context yet" are one moment.
 class NewContextDialog extends ConsumerStatefulWidget {
   const NewContextDialog({this.forProjectNamed, super.key});
 
@@ -72,9 +62,7 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
   Widget build(BuildContext context) {
     final project = widget.forProjectNamed;
     return AlertDialog(
-      // The column is three fields tall at most, and at 720x560 with text at
-      // 1.3x that is the case where the buttons would otherwise leave the
-      // window.
+      // At 720x560 with text at 1.3x the buttons would otherwise leave the window.
       scrollable: true,
       title: DesktopDialogTitle(
         icon: AppIcons.folderPlus,

@@ -10,10 +10,8 @@ import '../application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 
 /// Points the change-reading surfaces at [worktree], or back at the checkout
-/// itself when that is the row picked.
-///
-/// The one writer of a browse, so both panes make the same promise: nothing is
-/// selected, nothing is remembered against a session, and no agent moves.
+/// itself. The one writer of a browse: nothing is selected, nothing is
+/// remembered against a session, and no agent moves.
 void browseWorktree(
   WidgetRef ref, {
   required String repositoryId,
@@ -34,12 +32,9 @@ void browseWorktree(
   );
 }
 
-/// "Which worktree's changes am I reading" — the Changes pane's own picker.
-///
-/// Absent until there is a choice to make, so a clone with no worktrees keeps
-/// the header it has. Costs one `git worktree list` for the selected checkout
-/// while the pane is open; the panel chrome above it already asks the same
-/// question, and the answer is what tells this pane a worktree has gone.
+/// "Which worktree's changes am I reading" — the Changes pane's own picker,
+/// absent until there is a choice to make. Shares the `git worktree list` the
+/// panel chrome above already asks for.
 class WorktreeBrowsePicker extends ConsumerWidget {
   const WorktreeBrowsePicker({super.key});
 
@@ -115,11 +110,9 @@ class WorktreeBrowsePicker extends ConsumerWidget {
   }
 }
 
-/// The one line that has to be said out loud: the worktree being read has been
-/// removed, and the pane has fallen back to the checkout.
-///
-/// Nothing at all in every other state — including while the listing is still
-/// loading, because "not asked yet" is not "gone".
+/// The worktree being read has been removed and the pane has fallen back to the
+/// checkout. Nothing in every other state, including while the listing is
+/// loading: "not asked yet" is not "gone".
 class WorktreeBrowseNotice extends ConsumerWidget {
   const WorktreeBrowseNotice({super.key});
 

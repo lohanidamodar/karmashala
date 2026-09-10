@@ -1,8 +1,5 @@
 /// Finding terminal themes on disk and reading them into a [TerminalPalette].
-///
-/// The parsers this calls are pure and total; everything fallible here is I/O,
-/// and every failure becomes a [ThemeLoadError] carrying a readable reason with
-/// no filesystem path in it. Nothing here can throw into the terminal.
+/// Every failure is a [ThemeLoadError]; nothing here can throw into a terminal.
 library;
 
 import 'dart:io';
@@ -54,18 +51,8 @@ class DiscoveredTheme {
   int get hashCode => id.hashCode;
 }
 
-/// The per-user configuration root, taken from whichever variable the host
-/// actually sets.
-///
-/// `%APPDATA%` is Windows'; `$XDG_CONFIG_HOME` (or `~/.config`) is the POSIX
-/// convention Ghostty follows on macOS and Linux. Read off the environment
-/// rather than off `Platform` so both conventions stay reachable from a test on
-/// either host — and because a Windows session that also sets `HOME` (Git Bash,
-/// MSYS) should still be answered with `APPDATA`.
-///
-/// Reading only `APPDATA` meant every theme directory came back empty off
-/// Windows, and the picker reported "none installed" on a machine that had
-/// them.
+/// The per-user configuration root, from whichever variable the host sets, not
+/// from `Platform` — a Windows session may also set `HOME` (Git Bash, MSYS).
 String? _configHome(Map<String, String> environment) {
   final appData = environment['APPDATA'];
   if (appData != null && appData.isNotEmpty) return appData;
@@ -76,22 +63,16 @@ String? _configHome(Map<String, String> environment) {
   return p.posix.join(home, '.config');
 }
 
-/// The separator style a discovered root belongs to.
-///
-/// These paths describe *another* platform's disk as often as this one's: the
-/// suite runs on Windows and asserts the macOS and Linux locations, and a
-/// `p.join` there spelled `/Users/a/.config\ghostty\themes`. The branch that
-/// found the root already knows the answer — `APPDATA` is Windows, `HOME` and
-/// `XDG_CONFIG_HOME` are POSIX — so it is chosen rather than inferred.
+/// The separator style a discovered root belongs to: these paths often describe
+/// another platform's disk, so the branch that found the root says which.
 p.Context _contextFor(Map<String, String> environment) {
   final appData = environment['APPDATA'];
   return appData != null && appData.isNotEmpty ? p.windows : p.posix;
 }
 
-/// Where Ghostty keeps user themes.
-///
-/// The reference implementation returns nothing on Windows, which makes a named
-/// theme unresolvable there, so this looks beside the config on every host.
+/// Where Ghostty keeps user themes. The reference implementation returns
+/// nothing on Windows, which makes a named theme unresolvable there, so this
+/// looks beside the config on every host.
 List<Directory> ghosttyThemeDirectories({Map<String, String>? environment}) {
   final env = environment ?? Platform.environment;
   final config = _configHome(env);
@@ -99,13 +80,8 @@ List<Directory> ghosttyThemeDirectories({Map<String, String>? environment}) {
   return [Directory(_contextFor(env).join(config, 'ghostty', 'themes'))];
 }
 
-/// Where Warp keeps user themes.
-///
-/// Windows splits them per install channel under `%APPDATA%`; macOS and Linux
-/// use one `~/.warp/themes` for every channel, which is what Warp's own
-/// documentation names. Warp's bundled themes live inside its binary rather
-/// than on disk, so an empty result genuinely means "none installed" rather
-/// than "look harder".
+/// Where Warp keeps user themes. Its bundled ones live inside the binary, so an
+/// empty result means "none installed" rather than "look harder".
 List<Directory> warpThemeDirectories({Map<String, String>? environment}) {
   final env = environment ?? Platform.environment;
   final appData = env['APPDATA'];
@@ -120,12 +96,8 @@ List<Directory> warpThemeDirectories({Map<String, String>? environment}) {
   return [Directory(p.posix.join(home, '.warp', 'themes'))];
 }
 
-/// Scans [directories] for theme files of [format].
-///
-/// Ghostty theme files have no extension; Warp's are `.yaml`/`.yml`. Results are
-/// sorted and de-duplicated by path so ids are stable between runs. A directory
-/// that does not exist, or cannot be read, contributes nothing rather than
-/// failing the scan.
+/// Scans [directories] for theme files of [format], sorted and de-duplicated by
+/// path so ids are stable. An unreadable directory contributes nothing.
 List<DiscoveredTheme> discoverTerminalThemes(
   List<Directory> directories, {
   required TerminalThemeFormat format,
@@ -220,11 +192,9 @@ class ThemeLoadError extends ThemeLoadResult {
   final String reason;
 }
 
-/// Reads the theme a stored id points at.
-///
-/// Every failure — a bad id, a deleted file, an unreadable one, a malformed one,
-/// one carrying too little colour — comes back as a [ThemeLoadError]. The caller
-/// keeps the current theme and shows the reason.
+/// Reads the theme a stored id points at. Every failure — a bad id, a deleted,
+/// unreadable or malformed file, one carrying too little colour — comes back as
+/// a [ThemeLoadError], and the caller keeps the current theme.
 ThemeLoadResult loadTerminalTheme(String id) {
   final separator = id.indexOf(':');
   if (separator <= 0) return const ThemeLoadError('Not a theme reference.');

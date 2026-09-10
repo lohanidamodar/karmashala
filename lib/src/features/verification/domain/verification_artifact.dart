@@ -26,13 +26,9 @@ enum VerificationArtifactKind {
   }
 }
 
-/// A file captured during a run.
-///
-/// **The bytes are never in SQLite.** The row records where the file is, how
-/// big it is and which step produced it; the file itself lives under the run's
-/// own directory in the application-support tree. [relativePath] is relative to
-/// that directory, which is what makes the exported markdown's image links work
-/// wherever the folder is copied to.
+/// A file captured during a run. The bytes are never in SQLite: the row records
+/// where the file is, and [relativePath] is relative to the run's own directory
+/// so the exported image links work wherever the folder is copied to.
 class VerificationArtifact {
   const VerificationArtifact({
     required this.id,

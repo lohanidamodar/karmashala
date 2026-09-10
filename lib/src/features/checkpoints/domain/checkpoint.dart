@@ -20,12 +20,8 @@ enum CheckpointReason {
   );
 }
 
-/// What a repository's working tree looked like at one moment, and what had
-/// changed since the moment before.
-///
-/// The content lives in git — [treeSha] is a real tree object and [commitSha]
-/// the commit that anchors it — so a checkpoint is small, and restoring one is
-/// a diff and a patch rather than a copy.
+/// What a repository's working tree looked like at one moment. The content is
+/// in git, so a checkpoint is small and a restore is a diff and a patch.
 class Checkpoint {
   const Checkpoint({
     required this.id,
@@ -91,10 +87,8 @@ class Checkpoint {
     files: files ?? this.files,
   );
 
-  /// The ref that keeps this session's checkpoint chain reachable.
-  ///
-  /// One ref per session, not per checkpoint: the commits form a chain, so
-  /// holding the tip holds all of them, and `git gc` walks the rest.
+  /// The ref that keeps this session's checkpoint chain reachable. One per
+  /// session: the commits chain, so holding the tip holds all of them.
   static String refFor(String sessionId) =>
       'refs/karmashala/checkpoints/$sessionId';
 }

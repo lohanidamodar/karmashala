@@ -39,9 +39,8 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
   /// Which relay endpoint tab the shown code is rooted in.
   int _endpoint = 0;
 
-  /// Regenerating spends the old session, whose `done` then errors with
-  /// "pairing was cancelled" — that stale error must not paint over the
-  /// fresh code. Only the newest attempt may touch state.
+  /// Regenerating spends the old session, whose "pairing was cancelled" must
+  /// not paint over the fresh code: only the newest attempt may touch state.
   int _beginSerial = 0;
 
   @override
@@ -334,9 +333,8 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
           ),
         ],
         const SizedBox(height: Insets.sm),
-        // The full QR payload, for a device that can receive a paste — the
-        // typed code above is the thing to key in by hand. A Wrap, not a Row:
-        // the two buttons overflow 340px in some locales/scales.
+        // The full QR payload, for a device that can paste. A Wrap, not a Row:
+        // the two buttons overflow 340px in some locales and scales.
         Wrap(
           alignment: WrapAlignment.center,
           spacing: Insets.xs,

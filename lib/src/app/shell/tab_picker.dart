@@ -7,12 +7,8 @@ import '../theme/design_tokens.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
 
-/// One tab in the workbench strip, as the picker needs it.
-///
-/// Wraps a [QuickOpenItem] rather than restating one: a tab *is* a findable
-/// thing, so it is scored by [scoreItem] and drawn by [QuickOpenRow] like every
-/// other row in the shell. Only the two things a result cannot have are added —
-/// whether it is the tab on screen, and how to close it.
+/// One tab in the workbench strip, as the picker needs it. Wraps a
+/// [QuickOpenItem] so a tab is scored and drawn like every other row.
 class TabEntry {
   const TabEntry({required this.item, required this.active, this.onClose});
 
@@ -35,19 +31,8 @@ class _Ranked {
   final List<int> positions;
 }
 
-/// Every open tab, in one filterable list.
-///
-/// **Why a list and not just better scrolling.** The app is built for a hundred
-/// live terminals, and a horizontal strip is hopeless
-/// at a hundred tabs however well it scrolls — the answer has to be a way to
-/// *find* a tab by name, not a way to travel past ninety-nine of them. So this
-/// is the affordance that scales, and the strip's chevrons are the one for
-/// mild overflow.
-///
-/// **Two `zsh` tabs have to be distinguishable.** Each row carries the tab's
-/// whereabouts as well as its title — the session running in it, or the
-/// directory its pane is in — and the filter matches those too, which is what
-/// makes the list usable when every title is the name of a shell.
+/// Every open tab, in one filterable list — the affordance that scales where a
+/// horizontal strip does not. Rows carry whereabouts, so two `zsh` tabs differ.
 class TabPicker extends ConsumerStatefulWidget {
   const TabPicker({required this.entries, super.key});
 
@@ -104,8 +89,7 @@ class _TabPickerState extends ConsumerState<TabPicker> {
       ));
     }
     // Strip order breaks a tie — `List.sort` is not stable, so the position a
-    // tab is actually drawn in has to be part of the comparison rather than
-    // something the sort is trusted to preserve.
+    // tab is drawn in has to be part of the comparison.
     scored.sort((a, b) {
       final byScore = b.score.compareTo(a.score);
       return byScore != 0 ? byScore : a.order.compareTo(b.order);
@@ -122,8 +106,7 @@ class _TabPickerState extends ConsumerState<TabPicker> {
   }
 
   /// Moves the cursor to [index], clamped. Does not wrap, for the reason quick
-  /// open does not: a list that jumps from its last row to its first is one you
-  /// cannot hold the arrow key down on.
+  /// open does not: a list you cannot hold the arrow key down on.
   void _select(int index) {
     if (_rows.isEmpty) return;
     setState(() => _selected = index.clamp(0, _rows.length - 1));
@@ -199,8 +182,7 @@ class _TabPickerState extends ConsumerState<TabPicker> {
       _selected = active < 0 ? 0 : active;
     }
     // Closing the last row leaves the cursor past the end. It stays where the
-    // list now ends rather than snapping to the top, so closing a run of tabs
-    // from the bottom keeps working without moving the mouse back.
+    // list now ends rather than snapping to the top.
     if (_selected >= _rows.length) _selected = _rows.isEmpty ? 0 : _rows.length - 1;
 
     return Dialog(

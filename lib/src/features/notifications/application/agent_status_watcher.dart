@@ -12,28 +12,8 @@ import '../domain/session_attention.dart';
 import '../domain/watched_session.dart';
 import 'session_status_registry.dart';
 
-/// Turns what changed about an agent's status into decisions, and keeps the set
-/// of sessions that need the user up to date.
-///
-/// **Two inputs, and hooks are the first of them.** A hook report arrives
-/// through [applyHookChange] as the callback lands — authoritative, already in
-/// memory, and applied to exactly the session it names. [poll] is the fallback:
-/// a full pass every [interval] over the registry's latest cycle, for the
-/// sessions no hook speaks for and for the membership questions a single hook
-/// cannot answer. Before this, a hook waited up to five seconds to be
-/// *discovered* by a poll that had to look at everything.
-///
-/// Two outputs, deliberately different in kind:
-///
-/// * [onAttention] is **state** — everything currently waiting on the user.
-///   It is recomputed every poll and is never gated on focus, because the tray
-///   is ambient.
-/// * [onNotify] is an **event** — a transition the policy judged worth
-///   interrupting for. It goes through the dispatcher, which coalesces.
-///
-/// Collaborators are passed in as functions rather than read from a container,
-/// so the whole loop can be driven in a test with a real [AgentStatusService]
-/// and no window, database or agent.
+/// Turns what changed about an agent's status into decisions. Hooks arrive
+/// through [applyHookChange] as they land; [poll] is the fallback pass.
 class AgentStatusWatcher {
   AgentStatusWatcher({
     required this.registry,
@@ -46,18 +26,12 @@ class AgentStatusWatcher {
     this.policy = const AgentNotificationPolicy(),
     this.interval = const Duration(seconds: 5),
   }) {
-    // Subscribed from construction rather than from [start], because a hook is
-    // not something this class schedules — it is something that happens to it,
-    // and the subscription costs nothing until one does. [dispose] ends it.
+    // Subscribed from construction, not from [start]: a hook is not something
+    // this class schedules, and the subscription costs nothing until one lands.
     _hookChanges = registry.hookChanges.listen(applyHookChange);
   }
 
   /// Where every session's status already lives.
-  ///
-  /// This used to gather them itself — a `for` loop awaiting one transcript
-  /// after another over a list somebody else had truncated at 60. It now reads
-  /// a cycle the registry produced for the whole app, so the policy runs over
-  /// *every* watched session and costs no I/O of its own.
   final SessionStatusRegistry registry;
 
   final NotificationSettings Function() readSettings;
@@ -66,14 +40,8 @@ class AgentStatusWatcher {
   final void Function(List<SessionAttention> attention) onAttention;
   final void Function(PendingNotification event) onNotify;
 
-  /// Everything one poll saw, for the attention inbox: what is waiting, what
-  /// was looked at, and what changed.
-  ///
-  /// A third output rather than a reshaping of the first two, because the inbox
-  /// needs a fact neither of them carries — *which sessions the watcher could
-  /// still see*. Without it an inbox cannot tell "the approval was answered"
-  /// from "we lost sight of the session", and Loop 42's tray silently dropped
-  /// the second case.
+  /// Everything one poll saw, for the attention inbox. It carries which sessions
+  /// the watcher could still see — "answered" is not "lost sight of".
   final void Function(InboxUpdate update)? onInbox;
 
   final AgentNotificationPolicy policy;
@@ -81,12 +49,8 @@ class AgentStatusWatcher {
 
   final Map<AgentSessionKey, AgentActivityStatus> _lastStatus = {};
 
-  /// Everything currently holding the user up, in the order the last full pass
-  /// found it.
-  ///
-  /// Kept between passes rather than rebuilt from scratch each time, because a
-  /// hook pass knows about exactly one session and still has to publish the
-  /// whole ambient set — the tray lists all of it.
+  /// Everything currently holding the user up, kept between passes: a hook pass
+  /// knows one session and still has to publish the whole ambient set.
   Map<AgentSessionKey, SessionAttention> _attention = {};
 
   StreamSubscription<SessionStatusEntry>? _hookChanges;
@@ -129,10 +93,8 @@ class AgentStatusWatcher {
     if (_polling || _disposed) return;
     _polling = true;
     try {
-      // Read the app's state *before* the cycle is awaited. These are cheap
-      // synchronous reads of a provider container, and after an async gap the
-      // container may be gone — a shutdown that lands mid-poll must not throw
-      // out of a background timer.
+      // Read the app's state *before* the cycle is awaited: after an async gap
+      // the provider container may be gone, and this runs on a background timer.
       final settings = readSettings();
       final focused = isWindowFocused();
       final visible = visibleSessionIds();
@@ -157,14 +119,8 @@ class AgentStatusWatcher {
         if (waiting != null) attention[entry.key] = waiting;
       }
 
-      // Forget sessions that fell out of the watch set. If one comes back it is
-      // a first observation again, which the policy treats as "no evidence
-      // anything just changed" — the conservative answer.
-      //
-      // `seen` is now every watched session rather than the first sixty of
-      // them, which is what makes that conservatism honest: before Loop 87 a
-      // session could be dropped here purely for sorting late, and its next
-      // real transition was then swallowed as a first observation.
+      // Forget sessions that fell out of the watch set: one that comes back is
+      // a first observation again, which the policy treats as no evidence.
       _lastStatus.removeWhere((key, _) => !seen.contains(key));
       _attention = attention;
       onAttention(attention.values.toList(growable: false));
@@ -181,18 +137,8 @@ class AgentStatusWatcher {
     }
   }
 
-  /// One session, whose status a hook just changed between passes.
-  ///
-  /// **The primary path.** A hook is authoritative and already in memory, so it
-  /// reaches the tray, the inbox and the toast pipeline as it lands rather than
-  /// up to [interval] later; [poll] is the fallback for the sessions no hook
-  /// speaks for.
-  ///
-  /// A *partial* pass, and the `watched` set it hands the inbox says so: this
-  /// looked at exactly one session, so the inbox retires that session's cleared
-  /// condition and nobody else's. `_lastStatus` is not pruned here for the same
-  /// reason — "not looked at this pass" is not "no longer watched", and only
-  /// [poll], which sees the whole watch set, is entitled to decide the second.
+  /// One session whose status a hook just changed — the primary path. A partial
+  /// pass: only [poll] sees the whole set, so only it may prune `_lastStatus`.
   void applyHookChange(SessionStatusEntry entry) {
     if (_disposed) return;
     final news = <({WatchedSession session, NotificationReason reason})>[];
@@ -221,12 +167,8 @@ class AgentStatusWatcher {
     );
   }
 
-  /// The policy over one session: what happened, whether to interrupt for it,
-  /// and whether it is still holding the user up.
-  ///
-  /// Shared by the full pass and the hook pass so the two cannot come to
-  /// disagree about what a status means — appending to [news] and firing
-  /// [onNotify] as a side effect, and returning the attention it leaves behind.
+  /// The policy over one session, shared by the full pass and the hook pass so
+  /// the two cannot disagree. Appends to [news] and fires [onNotify].
   SessionAttention? _judge(
     SessionStatusEntry entry, {
     required NotificationSettings settings,

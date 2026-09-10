@@ -14,40 +14,9 @@ import '../domain/explorer_section.dart';
 import 'explorer_row.dart';
 import 'session_rows.dart';
 
-/// **The saved sections, drawn above the project tree.**
-///
-/// A different question from the one the tree answers and from the one the
-/// attention inbox answers. The tree says *where* work lives; the inbox says
-/// *what needs me now*; a section says *show me everything shaped like this* —
-/// every red build on a `release/*` branch, every agent sitting at a prompt,
-/// every session that died. Nothing in the app answered that, and the facts to
-/// answer it were already being polled.
-///
-/// **Why this returns a list instead of being a widget.** The Explorer's body
-/// is one `ListView`, and a `ListView` builds only the children the sliver asks
-/// for — which is the entire reason `explorer_panel_scale_test.dart` can show
-/// five hundred sessions and inflate thirty cards. A `Column` of sections
-/// spliced into that list would build every row of every open section whether
-/// or not any of them were on screen, and would have quietly turned the panel
-/// back into the O(rows) thing it was before Loop 58. So the sections
-/// contribute *siblings* to the same list, and the sliver goes on doing its
-/// job.
-///
-/// **A collapsed section costs nothing, when the sidebar is not filtering.**
-/// Not "a little": nothing. It contributes one header widget, watches no facts,
-/// matches no rule and mounts none of [explorerSectionAssignmentProvider]'s
-/// graph — the candidate sweep, the fact table and the assignment are all
-/// `autoDispose` and reachable only from the branch below. That is why a
-/// collapsed header shows no count: a count *is* a match over the whole
-/// workspace.
-///
-/// **And why hiding an empty section has a price.** "Is this section empty" is
-/// that same match, so [Settings.hideEmptySections] — on by default — mounts
-/// the graph for as long as the Explorer is on screen. It buys back three rows
-/// that said nothing, for the bill an open section already paid: three sweeps
-/// on a change to the session list, none per rebuild, no subprocess. See
-/// [explorerSectionLayoutProvider], which is the one place that trade is made,
-/// and `explorer_sections_cost_test.dart`, which pins both halves of it.
+/// The saved sections, drawn above the project tree. Returns a list, never a
+/// widget: the Explorer's body is one `ListView`, and a `Column` would build
+/// every row of every open section. A collapsed one matches nothing, so no count.
 List<Widget> explorerSectionNodes(WidgetRef ref) {
   final sections = ref.watch(explorerSectionLayoutProvider).shown;
   if (sections.isEmpty) return const [];
@@ -64,9 +33,8 @@ List<Widget> explorerSectionNodes(WidgetRef ref) {
       nodes.add(_SectionEmpty(section: section));
       continue;
     }
-    // Where each row is, said in the sidebar's own terms. A section crosses
-    // projects, so "which one is this" is the fact the tree never has to
-    // supply and a section always does.
+    // Where each row is, in the sidebar's own terms: a section crosses
+    // projects, so "which one is this" is a fact the tree never supplies.
     final candidates = {
       for (final candidate in ref.watch(sectionCandidatesProvider))
         candidate.id: candidate,
@@ -78,10 +46,8 @@ List<Widget> explorerSectionNodes(WidgetRef ref) {
     final pinned = section.isPinned;
     for (final facts in members) {
       final candidate = candidates[facts.id];
-      // A row the sweep no longer has is a member of a hand-filled group whose
-      // session has been deleted. Skipped rather than drawn as a stub: the DAO
-      // keeps no foreign key on `sessions` (see the v29 migration), so a stale
-      // member row is an expected shape, not a broken one.
+      // A member of a hand-filled group whose session has been deleted. The DAO
+      // keeps no foreign key on `sessions`, so this is expected, not broken.
       if (candidate == null) continue;
       final where = _whereLabel(candidate, projects);
       final native = candidate.native;
@@ -111,14 +77,9 @@ List<Widget> explorerSectionNodes(WidgetRef ref) {
   return nodes;
 }
 
-/// Where a section's row lives, as `project/sub/path`.
-///
-/// The project name is included and the tree's version does not include it,
-/// because they answer different questions: under a project header the project
-/// is already established, and in a section it is the first thing the user
-/// needs. Falls back to the bare sub-path when the project is not in the
-/// sidebar's own list, which is what a repository retired under a session looks
-/// like.
+/// Where a section's row lives, as `project/sub/path` — the project name is
+/// included here and not in the tree, where it is already established. Falls
+/// back to the bare path when the project is not in the sidebar's list.
 String? _whereLabel(SectionCandidate candidate, Map<String, Project> projects) {
   final project = projects[candidate.projectId];
   final directory = candidate.worktree ?? candidate.repositoryPath;
@@ -147,11 +108,9 @@ class _SectionHeader extends ConsumerWidget {
     final muted = density.muted(theme);
     final controller = ref.read(explorerSectionsProvider.notifier);
 
-    // One function, handed to both the row and its button: `ExplorerRow`
-    // carries the right-click and keyboard paths to a menu, and `RowMenuButton`
-    // is the pointer's. Two literals here would be two menus that drift — and a
-    // literal at all would build every entry on every build of every header,
-    // for a menu that is open on one of them at most.
+    // One function handed to both the row and its button: `ExplorerRow` carries
+    // the right-click and keyboard paths, `RowMenuButton` the pointer's. A
+    // literal would build every entry on every build of every header.
     List<PopupMenuEntry<String>> items() => [
       DesktopMenuItem(value: 'new', label: 'New section…', icon: AppIcons.plus),
       if (section.isEditable) ...[
@@ -226,13 +185,9 @@ class _SectionHeader extends ConsumerWidget {
   }
 }
 
-/// What an open, empty section says.
-///
-/// It says *why* it is empty, not just that it is, because for a rule section
-/// "nothing matches" and "nothing has been measured yet" are different
-/// situations with different fixes — and the second one is real: the app reads
-/// a pull request when a session's strip asks for one, never on a sweep of
-/// rows nobody has opened. A group that went silently blank would look broken.
+/// What an open, empty section says — *why* it is empty, because "nothing
+/// matches" and "nothing has been measured yet" have different fixes, and the
+/// second is real: a pull request is read when a strip asks, never on a sweep.
 class _SectionEmpty extends StatelessWidget {
   const _SectionEmpty({required this.section});
 
@@ -298,11 +253,8 @@ String describeRule(SectionRuleKind kind) => switch (kind) {
   SectionRuleKind.branchGlob => 'Branch matches…',
 };
 
-/// Creates a section, or edits one.
-///
-/// [SectionRuleKind.pinned] is not offered: there is one Pinned section, the
-/// migration creates it, and a second one would be a second answer to a
-/// question `Settings.pinnedSessionIds` already answers.
+/// Creates a section, or edits one. [SectionRuleKind.pinned] is not offered:
+/// there is one Pinned section and `Settings.pinnedSessionIds` is its answer.
 class SectionEditorDialog extends StatefulWidget {
   const SectionEditorDialog({required this.section, super.key});
 
@@ -356,11 +308,8 @@ class _SectionEditorDialogState extends State<SectionEditorDialog> {
     super.dispose();
   }
 
-  /// The name the user typed, or the rule's own words when they typed nothing.
-  ///
-  /// A nameless section is the common case — most people want "the failing
-  /// ones" and have no further opinion — and forcing a name for it is a dialog
-  /// that gets in the way of its own purpose.
+  /// The name the user typed, or the rule's own words when they typed nothing —
+  /// a nameless section is the common case, and forcing a name gets in the way.
   String get _effectiveName {
     final typed = _name.text.trim();
     if (typed.isNotEmpty) return typed;

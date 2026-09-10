@@ -3,16 +3,8 @@ import 'package:xterm2/xterm.dart';
 import '../domain/scrollback_limits.dart';
 import 'scrollback_codec.dart';
 
-/// A pane's parsed scrollback, handed back while nobody can see it.
-///
-/// The storage half of the ingest tiers. A detached pane kept the same
-/// [kLiveScrollbackMaxLines] buffer as a visible one — `BufferLine`s of four
-/// 32-bit words per cell — for a view nobody has and, since visibility-aware
-/// ingestion landed, with nothing writing into it either. See
-/// [kColdScrollbackMaxLines] for the measurement.
-///
-/// Split out of the pane so the mechanism can be tested without a PTY, and so
-/// there is one implementation of it rather than one per kind of instance.
+/// A pane's parsed scrollback, handed back while nobody can see it — the
+/// storage half of the ingest tiers, split out so it is testable without a PTY.
 class ScrollbackPark {
   ScrollbackPark(this.terminal);
 
@@ -26,28 +18,8 @@ class ScrollbackPark {
 
   bool get isParked => _parked != null;
 
-  /// Encodes the scrollback and releases the lines above the screen.
-  ///
-  /// Returns whether anything was released, which the caller uses to decide
-  /// whether to drop the command blocks anchored to those lines.
-  ///
-  /// The lines are **removed** rather than trimmed: `trimStart` only moves the
-  /// circular buffer's start index, leaving every `BufferLine` reachable from
-  /// the backing array — which for a pane that has stopped producing output
-  /// means never overwritten and never freed.
-  ///
-  /// The screen stays, and costs nothing: a buffer can never hold fewer lines
-  /// than its viewport. Keeping it is what lets `terminalTailLines` still read
-  /// a detached session's last screen, so a background session does not go dark
-  /// for the status sources merely because nobody is looking at it.
-  ///
-  /// Does nothing while a full-screen program owns the display. The alternate
-  /// buffer is bounded to the viewport already, and there is no way to write a
-  /// snapshot back into the main buffer while the alternate one is in front —
-  /// so such a pane keeps history it could not otherwise restore. [isParked] is
-  /// therefore also how `ColdScreen` knows to leave a TUI alone: its screen is
-  /// redrawn by the reattach replay, and a half-applied redraw underneath that
-  /// would only be applied twice.
+  /// Encodes the scrollback and **removes** the lines above the screen, since
+  /// `trimStart` only moves an index. Does nothing while a TUI owns the screen.
   bool park() {
     if (_parked != null || terminal.isUsingAltBuffer) return false;
     _parked = encodeScrollback(
@@ -62,11 +34,8 @@ class ScrollbackPark {
     return true;
   }
 
-  /// Rebuilds a bounded recent window from the parked snapshot.
-  ///
-  /// The kept screen is also the tail of that snapshot, so the buffer is
-  /// cleared before the replay: the window is written once, in order, rather
-  /// than appended below a copy of its own last page.
+  /// Rebuilds a bounded recent window from the parked snapshot. The buffer is
+  /// cleared first: the kept screen is also the tail of that snapshot.
   void unpark() {
     final parked = _parked;
     _parked = null;

@@ -5,23 +5,8 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The pending approval for one session, on the phone.
-///
-/// Drawn to the desktop card's rules (Loop 49), which are not stylistic:
-///
-/// * **evidence is verbatim or absent** — the agent's own rows, monospaced,
-///   scrolling rather than re-flowing, never a summary in our words;
-/// * **only answers the agent named** get buttons, and every button says which
-///   keys it presses on the user's behalf;
-/// * **buttons only when a prompt is open.** `needs_approval` means the session
-///   has stopped for the user; it does not mean there is something to confirm.
-///   Claude Code fires the same hook when it has merely finished its turn, and
-///   approve types Enter — which at that prompt sends whatever is in the
-///   composer. So [RemoteWaitKind.input] gets the same card with the same
-///   quoted words and nothing to press, exactly as `ApprovalRequestCard` does
-///   on the desktop;
-/// * pinned above the composer, because it is a control over the session, not
-///   a message in it.
+/// The pending approval for one session, evidence verbatim. Nothing to press
+/// for [RemoteWaitKind.input] — there approve would type Enter into a composer.
 class CompanionApprovalCard extends StatefulWidget {
   const CompanionApprovalCard({
     required this.approval,
@@ -44,20 +29,14 @@ class CompanionApprovalCard extends StatefulWidget {
 
 class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
   /// How many rows of the agent's own output the quote box shows before it
-  /// scrolls. Expressed in rows rather than pixels so a reader at 200% text
-  /// gets the same eight rows a reader at 100% does, instead of three.
+  /// scrolls. Rows and not pixels, so 200% text still gets eight of them.
   static const _evidenceRows = 8;
 
   bool _busy = false;
 
-  /// Whether this card may offer keys at all.
-  ///
-  /// The host decides, and now says so twice: it names an answer only for a
-  /// prompt it can see, and it says what the session is waiting on. A label
-  /// from a host too old to send [RemoteWaitKind] is still honoured — that end
-  /// can make no other claim — but [RemoteWaitKind.input] is refused whatever
-  /// arrives with it, because the session it describes is sitting at its own
-  /// composer and approve would type into that.
+  /// Whether this card may offer keys at all. The host decides; a label from a
+  /// host too old to send [RemoteWaitKind] is still honoured, but
+  /// [RemoteWaitKind.input] is refused whatever arrives with it.
   bool get _answerable =>
       widget.approval.waiting != RemoteWaitKind.input &&
       (widget.approval.approveLabel != null ||
@@ -87,9 +66,8 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
     final name = approval.agentName;
 
     return Container(
-      // Lined up with the transcript above it rather than on a gutter of its
-      // own: it was inset 8 while the messages it is about were inset 12 and
-      // the composer under it 16, so three stacked things had three edges.
+      // Lined up with the transcript above it; three stacked things had three
+      // different edges.
       margin: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, Insets.sm),
       padding: EdgeInsets.symmetric(
         horizontal: density.padX,
@@ -98,18 +76,15 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
         // The radius every other card on the phone draws; Radii.sm is the
-        // desktop's, and a 6px corner on a full-width card reads as an
-        // accident rather than as a decision.
+        // desktop's and reads as an accident at full width.
         borderRadius: BorderRadius.circular(
           density.isTouch ? Radii.lg : Radii.sm,
         ),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      // The card grows with the text scale and the footer it sits in does not
-      // scroll, so at a large scale it would push the conversation off the
-      // screen. Capped against the viewport and scrolled inside instead: a
-      // card that has to be scrolled still shows every word, and a clipped one
-      // hides the evidence the reader is being asked to act on.
+      // The card grows with the text scale and the footer does not scroll, so
+      // it is capped against the viewport and scrolls inside — a clipped card
+      // would hide the evidence the reader is being asked to act on.
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.45,
@@ -126,9 +101,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
                         ? AppIcons.warningCircle
                         : AppIcons.chatCircleDots,
                     size: density.iconSmall,
-                    // Being asked for something is the semantic layer's
-                    // `attention`, not the scheme's tertiary — a colour that
-                    // means nothing anywhere else in the app. A card with
+                    // Being asked for something is `attention`; a card with
                     // nothing to press is not asking, so it stays muted.
                     color: _answerable
                         ? SemanticColors.of(context).attention
@@ -149,9 +122,8 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
               _evidence(context, theme, scheme),
               const SizedBox(height: Insets.sm),
               // Whether anything can be pressed is asked before whether this
-              // phone may press it: "you were not granted approval rights"
-              // would be a strange thing to tell someone about a session that
-              // has nothing to approve.
+              // phone may press it, or a session with nothing to approve would
+              // be answered with "you were not granted approval rights".
               if (!_answerable)
                 _nothingToAnswer(theme, scheme)
               else if (!widget.canAnswer)
@@ -176,8 +148,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
     final approval = widget.approval;
     final name = approval.agentName;
     if (approval.evidence.isEmpty) {
-      // What it can honestly say depends on what the session is waiting on:
-      // "asking for something" is a claim, and it is false for an agent that
+      // "Asking for something" is a claim, and it is false for an agent that
       // has simply finished its turn.
       return Text(
         switch (approval.waiting) {
@@ -207,8 +178,8 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
           ),
         ),
         SizedBox(height: UiDensity.of(context).lineGap),
-        // Scrolls rather than wrapping: these are rendered terminal rows and
-        // re-flowing them would break the alignment they were drawn with.
+        // Scrolls rather than wrapping: re-flowing rendered terminal rows would
+        // break the alignment they were drawn with.
         ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: _evidenceHeight(context, theme),
@@ -229,17 +200,16 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
     );
   }
 
-  /// [_evidenceRows] rows of the quote box, at whatever size the reader's own
-  /// text scale makes a row. A fixed pixel cap shrank the evidence to three
-  /// lines exactly when the reader had asked for bigger text.
+  /// [_evidenceRows] rows at whatever size the reader's text scale makes a row;
+  /// a fixed pixel cap shrank the evidence exactly when text got bigger.
   double _evidenceHeight(BuildContext context, ThemeData theme) {
     final style = theme.textTheme.bodySmall;
     final row = (style?.fontSize ?? Insets.md) * (style?.height ?? 1.35);
     return MediaQuery.textScalerOf(context).scale(row) * _evidenceRows;
   }
 
-  /// The notice for a session that has stopped for the user with no prompt we
-  /// may answer. Deliberately has no buttons at all rather than disabled ones.
+  /// The notice for a session stopped for the user with no prompt we may
+  /// answer. No buttons at all, rather than disabled ones.
   Widget _nothingToAnswer(ThemeData theme, ColorScheme scheme) {
     final name = widget.approval.agentName;
     return Text(switch (widget.approval.waiting) {
@@ -286,8 +256,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
           ],
         ),
         const SizedBox(height: Insets.xs),
-        // Every button says what it does on the user's behalf: the desktop is
-        // typing into another program's interface for you.
+        // Every button says which keys it presses on the user's behalf.
         for (final (label, effect) in [
           (approval.approveLabel, approval.approveEffect),
           (approval.denyLabel, approval.denyEffect),

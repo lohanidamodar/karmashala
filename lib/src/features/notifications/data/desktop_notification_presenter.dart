@@ -8,27 +8,14 @@ import 'package:karmashala_core/logging.dart';
 import '../domain/notification_request.dart';
 import 'notification_presenter.dart';
 
-/// Desktop OS notifications, via `local_notifier` — the same leanflutter family
-/// as the `tray_manager` and `window_manager` this app already builds on.
-///
-/// Platform reality, which is not uniform:
-///
-/// * **Windows** — real toasts through WinToast. An unpackaged app has to own a
-///   Start Menu shortcut carrying its AUMID before Windows will accept a toast
-///   from it, so [ShortcutPolicy.requireCreate] creates one on first use.
-/// * **macOS / Linux** — the package implements both (`UNUserNotification` and
-///   libnotify), and the code path is identical, but neither was exercised in
-///   this loop. Treat them as untested, not as promised.
-///
-/// Every call is best-effort. A host where the plugin is missing or setup is
-/// refused degrades to silence, logged once, rather than taking the app down.
+/// Desktop OS notifications, via `local_notifier`. Windows toasts need the app
+/// to own a Start Menu shortcut with its AUMID; macOS and Linux are untested.
 class DesktopNotificationPresenter implements NotificationPresenter {
   DesktopNotificationPresenter({this.onActivated, AppLogger? logger})
     : _logger = logger ?? AppLogger.named('notifications');
 
   /// How many delivered notifications to keep alive. `local_notifier` registers
-  /// every [LocalNotification] as a listener and never drops it, so a
-  /// long-running app has to retire them itself.
+  /// every [LocalNotification] as a listener and never drops it.
   static const _keepAlive = 8;
 
   static bool get isSupportedHere =>

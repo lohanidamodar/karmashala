@@ -1,12 +1,8 @@
 import 'established.dart';
 import 'project_kind.dart';
 
-/// A device family a project can be built for.
-///
-/// Deliberately not "platform": the question this answers is which of the
-/// fourteen framework-agnostic `device_*` tools the artifact can be handed to,
-/// and those speak `adb` and `simctl`. A desktop build is a real thing and has
-/// no place here, because nothing installs it onto a device.
+/// A device family a project can be built for. Not "platform": the question is
+/// which `device_*` tool the artifact goes to, so a desktop build is not here.
 enum ProjectTarget {
   android('Android'),
   ios('iOS');
@@ -16,29 +12,23 @@ enum ProjectTarget {
   final String label;
 }
 
-/// Where an application id comes from.
-///
-/// Three sources, and the order is the order of preference — which is the
-/// order of how much of it is *ours*.
+/// Where an application id comes from, in order of preference — which is the
+/// order of how much of it is ours.
 enum ApplicationIdSource {
-  /// `output-metadata.json`, which the Android Gradle Plugin writes beside the
-  /// APK it just produced. It carries `applicationId` and `outputFile`, so the
-  /// build's own record answers both questions and nothing here parses a build
-  /// script or spawns a second tool.
+  /// `output-metadata.json`, written by AGP beside the APK: it carries both
+  /// `applicationId` and `outputFile`, so nothing here parses a build script.
   buildOutputMetadata(
     'output-metadata.json beside the artifact',
   ),
 
-  /// An `applicationId` literal in the module's build script. The only source
-  /// available **before** a build, so it is what detection reports — and it
-  /// reads a literal only, because `applicationId = "$flavour"` is a value
-  /// Gradle computes and we would be guessing at.
+  /// An `applicationId` literal in the module's build script — the only source
+  /// available before a build. A literal only: `"$flavour"` is Gradle's to say.
   moduleBuildScript(
     'the applicationId literal in the module build script',
   ),
 
-  /// `CFBundleIdentifier` out of the built `.app` bundle's `Info.plist`, which
-  /// is what `device_install_app` already reads back on iOS.
+  /// `CFBundleIdentifier` from the built `.app` bundle's `Info.plist`, which is
+  /// what `device_install_app` already reads back on iOS.
   bundleInfoPlist('CFBundleIdentifier in the built bundle'),
   ;
 
@@ -48,21 +38,15 @@ enum ApplicationIdSource {
 }
 
 
-/// Which program runs a [ProjectBuildSpec.command], resolved per environment.
-///
-/// **The second kind is what made this a field.** With only Flutter in the
-/// table the tool was implicit — there was one — and the controller could
-/// assume it. `gradlew` is the second, and it is not a name on PATH but a file
-/// *in the project*: the descriptor has to say which of the two it wants, or
-/// the code that runs it is guessing.
+/// Which program runs a [ProjectBuildSpec.command]. A field, not an assumption,
+/// because `gradlew` is a file in the project rather than a name on PATH.
 enum ProjectBuildTool {
-  /// The Flutter SDK found for that environment by `FlutterSdkReadings`,
-  /// which is where CLAUDE.md §17's refusal lives.
+  /// The Flutter SDK found for that environment by `FlutterSdkReadings`, where
+  /// CLAUDE.md §17's refusal lives.
   flutterSdk('the Flutter SDK for that environment'),
 
-  /// The `gradlew` wrapper **in the project**. Never a `gradle` on PATH: the
-  /// wrapper is how a project pins the Gradle it was written for, and building
-  /// with another one is building something else.
+  /// The `gradlew` wrapper in the project, never a `gradle` on PATH: the
+  /// wrapper is how a project pins the Gradle it was written for.
   gradleWrapper('the project\'s own gradlew'),
 
   /// `xcodebuild`, which exists only on a Mac.
@@ -82,8 +66,7 @@ class ProjectArtifact {
   const ProjectArtifact({required this.directory, required this.fileName});
 
   /// Forward-slash separated and relative to the project, so one spelling
-  /// works for a Windows checkout and a distribution alike; the caller joins
-  /// it with that environment's own context.
+  /// works for a Windows checkout and a distribution alike.
   final String directory;
 
   final String fileName;
@@ -94,12 +77,8 @@ class ProjectArtifact {
   String toString() => path;
 }
 
-/// One target's build: the command, the artifact, and the application id.
-///
-/// Every field is an [Established] rather than a value, because a descriptor
-/// that cannot say *how it knows* is a guess with a nice shape. The iOS spec
-/// below is the case that proves it earns its keep: it is complete, readable,
-/// reviewable — and every field says nobody ran it.
+/// One target's build. Every field is an [Established] rather than a value: a
+/// descriptor that cannot say how it knows is a guess with a nice shape.
 class ProjectBuildSpec {
   const ProjectBuildSpec({
     required this.target,
@@ -127,10 +106,8 @@ class ProjectBuildSpec {
   /// `:app`, `:mobile` and whatever somebody called theirs.
   static const String modulePlaceholder = '<module>';
 
-  /// Whether this app can build for this target at all.
-  ///
-  /// False leaves [refusal] as the whole answer: a button nobody ran is worse
-  /// than no button.
+  /// Whether this app can build for this target at all; false leaves [refusal]
+  /// as the whole answer, because a button nobody ran is worse than no button.
   bool get isRunnable => command.isMeasured && artifact.isMeasured;
 
   /// The one sentence the UI and the tool refuse with. Empty when runnable.
@@ -169,13 +146,8 @@ class ProjectBuildSpec {
   };
 }
 
-/// Everything Karmashala knows about one [ProjectKind] beyond how to spot it.
-///
-/// Shaped after `AgentDescriptor` in `built_in_agents.dart`, and for the same
-/// reason: a second framework should be a row of data rather than a second
-/// feature. What differs is that every field here carries how it was
-/// established, because a build command is a claim about somebody's machine
-/// and an agent's flag list is a claim about a binary we can run.
+/// Everything known about one [ProjectKind] beyond how to spot it — a row of
+/// data, with every field carrying how it was established.
 class ProjectDescriptor {
   const ProjectDescriptor({
     required this.kind,
@@ -186,18 +158,12 @@ class ProjectDescriptor {
 
   final ProjectKind kind;
 
-  /// One line: what this kind is, as a person reads it.
   final String summary;
 
   final List<ProjectBuildSpec> builds;
 
-  /// Tier 3 from the backlog item: the channel that talks to the app while it
-  /// runs, and the honest absence where there is none.
-  ///
-  /// [EstablishedState.absent] and [EstablishedState.unchecked] are different
-  /// answers here and the difference is the point. Native Android has no live
-  /// channel — that is Android, not our blind spot. React Native has Metro and
-  /// the Hermes inspector and nobody here has run either.
+  /// The channel that talks to the app while it runs: [EstablishedState.absent]
+  /// is "Android has none", [EstablishedState.unchecked] "nobody ran Metro".
   final Established<String> liveChannel;
 
   ProjectBuildSpec? buildFor(ProjectTarget target) {

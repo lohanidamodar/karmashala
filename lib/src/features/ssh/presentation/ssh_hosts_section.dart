@@ -16,12 +16,8 @@ import 'ssh_connection_status_chip.dart';
 import 'ssh_host_dialog.dart';
 import 'remote_file_browser_dialog.dart';
 
-/// The saved remote hosts, and everything you can do to one.
-///
-/// Remote hosts are the one kind of execution environment that cannot be
-/// discovered — there is no probe that finds a machine you have not mentioned —
-/// so this list *is* how an SSH environment comes to exist. Adding a host here
-/// writes both the host row and its `ssh:<id>` environment.
+/// The saved remote hosts, and everything you can do to one. Remote hosts
+/// cannot be discovered, so this list *is* how an SSH environment comes to be.
 class SshHostsSection extends ConsumerWidget {
   const SshHostsSection({super.key});
 
@@ -49,13 +45,8 @@ class SshHostsSection extends ConsumerWidget {
   }
 }
 
-/// One saved host.
-///
-/// The buttons stay drawn and stay worded: this is a settings form, not a
-/// dense list, and "Edit" in words is the interface here rather than the
-/// icon-only clutter the row menu exists to remove. What it gains is the other
-/// half of the rule — the same actions on a right-click, `Shift+F10` and the
-/// Menu key, so a habit learned in the panes is not disappointed here.
+/// One saved host. The buttons stay drawn and worded — a settings form, not a
+/// dense list — and the same actions are on a right-click and the Menu key.
 class _HostCard extends ConsumerWidget {
   const _HostCard({required this.host});
 

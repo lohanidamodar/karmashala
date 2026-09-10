@@ -30,16 +30,8 @@ enum NotificationReason {
   bool get isDelivery =>
       this == checksFailed || this == changesRequested || this == readyToMerge;
 
-  /// Whether something is *stopped* until the user does something, as opposed
-  /// to merely having happened.
-  ///
-  /// The one table for that question. It decides which of the user's two
-  /// notification switches applies ([AgentNotificationPolicy._wanted]), how a
-  /// mixed burst is headlined ([NotificationCoalescer.summarize]) and how long
-  /// a toast may be held before it is delivered
-  /// (`NotificationDispatcher.windowFor`) — and those three must not drift,
-  /// because between them they decide whether an agent blocked on a permission
-  /// prompt is told about at all, described honestly, and told about in time.
+  /// Whether something is *stopped* until the user acts, rather than merely
+  /// having happened. The one table for that question — three callers share it.
   bool get needsUser => this != finished;
 }
 
@@ -115,29 +107,13 @@ class NotificationContext {
   final Set<String> visibleSessionIds;
 }
 
-/// Decides whether one agent status change deserves to interrupt the user.
-///
-/// The rule, in one sentence: **notify only when an agent has just finished a
-/// turn or just started waiting on you, we can show it happened now, and you
-/// are not already looking at it.**
-///
-/// Everything else — an agent picking work up, a session we have lost track of,
-/// the first sighting of a session that was already in that state when the app
-/// started — is deliberately silent. Most status transitions are noise, and an
-/// app that interrupts on all of them gets its notifications switched off.
+/// Notify only when an agent has just finished a turn or just started waiting
+/// on you, we can show it happened now, and you are not already looking at it.
 class AgentNotificationPolicy {
   const AgentNotificationPolicy();
 
-  /// The news in [transition] — the half of the rule that is about the
-  /// **agent**, with nothing in it about the user's attention.
-  ///
-  /// Split out so the attention inbox and the toast share one classifier. They
-  /// must agree about what happened and disagree only about whether it is worth
-  /// interrupting for: an inbox that used its own rules would list things no
-  /// toast ever mentioned, and the two counts would drift apart within a day.
-  ///
-  /// Returns `notify(reason)` when there is news, and the suppression that
-  /// explains its absence when there is not.
+  /// The news in [transition], with nothing in it about the user's attention —
+  /// one classifier, so the inbox and the toast cannot describe it differently.
   NotificationDecision newsIn(AgentStatusTransition transition) {
     if (transition.from == transition.to) {
       return const NotificationDecision.suppress(
@@ -163,18 +139,8 @@ class AgentNotificationPolicy {
     return NotificationDecision.notify(reason);
   }
 
-  /// The news in one session's delivery state — the same classifier, applied to
-  /// the other half of what a session can be waiting on.
-  ///
-  /// It lives here, beside [newsIn], for the reason [newsIn] was split out in
-  /// the first place: the inbox and the toast must agree about *what happened*
-  /// and disagree only about whether it is worth interrupting for. A second
-  /// classifier somewhere else would list things no toast ever mentioned.
-  ///
-  /// **One item per session at a time.** A pull request can be red, unreviewed
-  /// and unmergeable at once; reporting all three would turn a work list into a
-  /// log. [deliveryNewsIn] names the most actionable of them, and a change
-  /// between two of those is itself news.
+  /// The news in one session's delivery state. One item per session at a time:
+  /// a PR can be red, unreviewed and unmergeable at once, and this is no log.
   NotificationDecision newsInDelivery(DeliveryTransition transition) {
     final now = deliveryNewsIn(transition.to);
     if (now == null) {
@@ -183,9 +149,7 @@ class AgentNotificationPolicy {
       );
     }
     // A missing previous snapshot counts as "was not true", so a check that
-    // went red while the app was closed is still news the first time it is
-    // seen. It cannot repeat: the same state next poll is not a change, and the
-    // inbox keys an item by its kind and session anyway.
+    // went red while the app was closed is still news the first time it is seen.
     if (deliveryNewsIn(transition.from) == now) {
       return const NotificationDecision.suppress(
         NotificationSuppression.notAChange,
@@ -194,11 +158,8 @@ class AgentNotificationPolicy {
     return NotificationDecision.notify(now);
   }
 
-  /// What, if anything, a session's delivery state is asking of the user.
-  ///
-  /// A failing build first: it is the most concrete and the one the agent can
-  /// act on without a human. Readiness comes last because it is good news, and
-  /// good news does not outrank a blocker.
+  /// What, if anything, a session's delivery state is asking of the user. A
+  /// failing build first; readiness last, because good news is not a blocker.
   NotificationReason? deliveryNewsIn(SessionDelivery? delivery) {
     final pr = delivery?.pullRequest;
     if (pr == null || !pr.isOpen) return null;
@@ -231,9 +192,8 @@ class AgentNotificationPolicy {
       );
     }
 
-    // Being told about the thing already on your screen is the fastest way to
-    // make someone turn notifications off. "On screen" means the window has
-    // focus too: a selected session behind another app is not being looked at.
+    // Being told about what is already on your screen is the fastest way to
+    // make someone turn notifications off — and behind another app is not on it.
     if (context.windowFocused &&
         context.visibleSessionIds.contains(transition.session.sessionId)) {
       return const NotificationDecision.suppress(
@@ -250,38 +210,21 @@ class AgentNotificationPolicy {
     return NotificationDecision.notify(reason);
   }
 
-  /// What an agent being in [status] means, with nothing in it about *when* it
-  /// got there: an agent needs you, or an agent is done. `working` is never
-  /// news — starting is not an event anyone wants a toast for.
-  ///
-  /// **The one table for agent status in this app.** [newsIn] adds the edge
-  /// conditions on top of it, and [AttentionKind.forStatus] reads the same
-  /// answer as a level ("who needs me now") rather than as an edge ("what just
-  /// changed"). That distinction is real and the two enums stay separate, but
-  /// the arms behind them are written once, so moving `failed` out of "worth
-  /// interrupting for" cannot leave it in the tray's waiting list.
-  ///
-  /// Static because the domain types beside it read it without a policy — a
-  /// classifier with no state should not need one.
+  /// What an agent being in [status] means; `working` is never news. The one
+  /// table for agent status, shared with [AttentionKind.forStatus].
   static NotificationReason? reasonForStatus(AgentActivityStatus status) =>
       switch (status) {
         AgentActivityStatus.awaitingApproval => NotificationReason.needsInput,
         AgentActivityStatus.failed => NotificationReason.failed,
-        // Any known state settling into idle is a turn ending. In [newsIn],
-        // `from` can only be idle here when it equals `to`, which was already
-        // rejected.
+        // Any known state settling into idle is a turn ending; `from` can only
+        // be idle here when it equals `to`, which [newsIn] already rejected.
         AgentActivityStatus.idle => NotificationReason.finished,
         AgentActivityStatus.working => null,
         AgentActivityStatus.unknown => null,
       };
 
-  /// Whether we can honestly claim the change happened *now*.
-  ///
-  /// A hook is the agent telling us as it happens, so it always counts. A state
-  /// file only counts when we have a previous known status to have moved away
-  /// from; otherwise the file may have looked like this for hours and we are
-  /// merely reading it for the first time (app start, or a session that has
-  /// just become observable).
+  /// Whether we can honestly claim the change happened *now*. A hook always
+  /// counts; a state file may have looked like this for hours.
   bool _justHappened(AgentStatusTransition transition) =>
       transition.source == AgentStatusSource.hook ||
       (transition.from != null &&

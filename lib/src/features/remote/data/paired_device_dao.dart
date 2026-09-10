@@ -10,20 +10,8 @@ class PairedDeviceDao {
 
   final AppDatabase _db;
 
-  /// Saves a pairing, replacing the row this device already had.
-  ///
-  /// **An upsert on the device id, not a plain insert.** A phone re-pairs with
-  /// the same identity and brand-new key material, and it is the same phone:
-  /// it must refresh its row rather than arrive as a stranger and leave the
-  /// old one behind holding a key nobody will ever use again.
-  ///
-  /// What a re-pair replaces: the key, what was granted, the name, the relay
-  /// it came in on, its generation (a fresh key means a fresh rendezvous
-  /// series, so starting over carries nothing with it) and — because a
-  /// re-pair is not a revocation — the revoked flag. What it keeps: the row's
-  /// identity and `created_at`, which is when this desktop first met the
-  /// phone, and any push token, which stays valid until the phone re-registers
-  /// on its next connect.
+  /// An **upsert on the device id**: a phone re-pairing with new key material
+  /// is the same phone, and keeps its `created_at` and push token.
   void insert(PairedDevice device) {
     _db.execute(
       'INSERT INTO paired_devices '
@@ -83,8 +71,8 @@ class PairedDeviceDao {
     ]);
   }
 
-  /// Persists the rendezvous generation counter — the one number the loop-64
-  /// key schedule needs remembered per device.
+  /// Persists the rendezvous generation counter — the one number the key
+  /// schedule needs remembered per device.
   void updateGeneration(String id, int generation) {
     _db.execute('UPDATE paired_devices SET generation = ? WHERE id = ?;', [
       generation,
@@ -101,13 +89,8 @@ class PairedDeviceDao {
     );
   }
 
-  /// What `notifications.register` brought: the push token, and what the phone
-  /// said about itself on the same frame.
-  ///
-  /// [now] stamps the presence rather than the token, because presence is the
-  /// half that is only worth anything with its age beside it (§19). An old
-  /// companion sends no presence at all, and the columns then say so in words
-  /// this build reads back as every field's own unknown.
+  /// What `notifications.register` brought. [now] stamps the presence, not the
+  /// token: presence is only worth anything with its age beside it (§19).
   void updatePush(
     String id, {
     required String token,

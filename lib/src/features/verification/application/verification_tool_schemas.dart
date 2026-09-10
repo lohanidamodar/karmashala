@@ -1,10 +1,6 @@
-/// MCP tool definitions for verification runs, served to the bridge alongside
-/// the browser and device tools.
-///
-/// Five tools, deliberately: start, note, finish, list, get. Everything a run
-/// records comes from the browser and device tools the agent already has, so
-/// there is nothing here for "click during a run" — driving is driving, and the
-/// run is what remembers it.
+/// MCP tool definitions for verification runs, served alongside the browser and
+/// device tools. Five of them — start, note, finish, list, get — because the
+/// driving comes from the tools the agent already has.
 const List<Map<String, dynamic>> verificationToolSchemas = [
   {
     'name': 'verification_start',

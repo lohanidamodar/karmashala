@@ -4,19 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/settings_tab.dart';
 import 'settings_screen.dart';
 
-/// [SettingsScreen] as the content of a workbench tab.
-///
-/// The screen itself is unchanged — the same nav, the same sections, the same
-/// compact drill-down. All this adds is where the selected page lives: in
-/// [settingsTabSectionProvider] rather than in the screen's `State`, because
-/// the tab drops its subtree whenever another tab is on screen and a page kept
-/// in `State` would be forgotten on every switch.
+/// [SettingsScreen] as the content of a workbench tab. All it adds is where the
+/// selected page lives — [settingsTabSectionProvider], not the screen's
+/// `State`, which the tab drops whenever another tab is on screen.
 class SettingsTabView extends ConsumerWidget {
   const SettingsTabView({super.key});
 
-  /// How many of these have been built. The seam the cost gate counts through:
-  /// a tab that is not the one on screen must build this **zero** times, and a
-  /// build is the only way the page can come to subscribe to anything.
+  /// How many of these have been built — the seam the cost gate counts: a tab
+  /// that is not the one on screen must build this zero times.
   @visibleForTesting
   static int debugBuildCount = 0;
 

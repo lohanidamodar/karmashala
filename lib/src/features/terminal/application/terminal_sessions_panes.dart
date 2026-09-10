@@ -1,18 +1,12 @@
 part of 'terminal_sessions_controller.dart';
 
-// `Notifier.ref` is `@protected`, which covers a subclass and not an
-// extension — even one splitting that subclass's own body inside its own
-// library, which is all any part of this file is.
+// `Notifier.ref` is `@protected`, which covers a subclass and not an extension
+// splitting that subclass's own body inside its own library.
 // ignore_for_file: invalid_use_of_protected_member
 
-/// The **life of one pane**: declaring it, creating it, adopting it and the
-/// four listeners that come with it, focusing and resizing it, and — at the
-/// other end — deciding whether closing it detaches or ends it, then releasing
-/// it and taking those listeners back off.
-///
-/// `_adopt` and `_unlisten` are a matched pair and are the reason this is one
-/// family: every listener attached in the first is dropped in the second, so a
-/// disposed instance can never call back into the controller.
+/// The **life of one pane**: declaring, creating, adopting, focusing, resizing,
+/// and deciding whether closing it detaches or ends it. `_adopt` and `_unlisten`
+/// are a matched pair — every listener the first attaches, the second drops.
 extension TerminalPaneLifecycle on TerminalSessionsController {
   /// A pane that exists, holds its profile and its directory, and has no
   /// process — the state a restored pane sits in until its tab is opened.
@@ -34,10 +28,8 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     return paneId;
   }
 
-  /// Closes [paneId], collapsing its split. Closes the tab if it was the last
-  /// pane in it.
-  ///
-  /// Like [closeTab], this detaches a running process instead of killing it
+  /// Closes [paneId], collapsing its split, and the tab if it was the last pane
+  /// in it. Like [closeTab], a running process is detached rather than killed
   /// unless [detach] is false.
   void closePane(String paneId, {bool detach = true}) {
     final tab = _tabContaining(paneId);
@@ -45,10 +37,8 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     _userClosedSinceRestore = true;
 
     final layout = tab.layout.close(paneId);
-    // Nothing left, or nothing left but empty regions — the same answer either
-    // way, and for the same reason: what stays behind has to be something the
-    // user can come back to. See [movePaneToNewTab], the other way a tab can be
-    // emptied down to its regions.
+    // Nothing left, or nothing but empty regions: what stays behind has to be
+    // something the user can come back to.
     if (layout == null || layout.panes.every(_isEmptyRegion)) {
       closeTab(tab.id, detach: detach);
       return;
@@ -74,21 +64,14 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     _replaceTab(tab.copyWith(layout: tab.layout.resize(splitId, index, delta)));
   }
 
-  /// Focuses [paneId], activating the tab that holds it and bringing it to the
-  /// front of its region.
-  ///
-  /// Selecting a tab in a region header and focusing a pane are the same act:
-  /// a pane behind another is not on screen, so there is nowhere for focus to
-  /// sit there. Not persisted — the front pane of each region rides along on
-  /// the next structural save and on quit, and writing the layout every time
-  /// somebody clicks a pane is exactly the per-interaction database work this
-  /// controller is careful not to do.
+  /// Focuses [paneId], activating its tab and bringing it to the front of its
+  /// region — selecting in a region header and focusing are the same act. Not
+  /// persisted: the front pane rides along on the next structural save.
   void focusPane(String paneId) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
-    // Already here: a press inside the pane you are already typing in must not
-    // republish the layout. A pane calls this on *every* pointer down, so
-    // without this a click while selecting text rebuilt the whole tab strip.
+    // A pane calls this on *every* pointer down, so without the early return a
+    // click while selecting text rebuilt the whole tab strip.
     if (_activeTabId == tab.id &&
         tab.focusedPaneId == paneId &&
         tab.layout.groupOf(paneId)?.activePaneId == paneId) {
@@ -102,13 +85,9 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     _focusActivePane();
   }
 
-  /// Moves focus to the pane adjacent to the focused one in [direction], and
-  /// at the edge of the tab's own split to the **workspace group** next door.
-  ///
-  /// One chord, two levels, and no ambiguity about which: inside a split tab
-  /// the next thing left of this pane is the pane beside it; at the tab's edge
-  /// it is the group beside it. That is what the arrow means on screen either
-  /// way, so it is what the key does.
+  /// Moves focus to the pane next door in [direction], and at the edge of the
+  /// tab's own split to the **workspace group** next door — one chord, two
+  /// levels, each being what the arrow means on screen there.
   void movePaneFocus(PaneDirection direction) {
     final tab = _activeTab;
     final target = tab?.layout.paneInDirection(tab.focusedPaneId, direction);
@@ -139,25 +118,21 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
   }
 
   /// Takes ownership of [instance] and starts tracking whether it needs saving.
-  ///
   /// The PTY coalescer already collapses output to one notification per frame,
-  /// so this costs one set insert per frame per pane — and stops a quiet pane
-  /// being re-encoded three times a minute for nothing.
+  /// so this costs one set insert per frame per pane.
   void _adopt(String paneId, TerminalInstance instance) {
     _instances[paneId] = instance;
     _livenessMutated();
     _directoriesMutated();
-    // A dormant pane is replayed history with nothing running behind it, so its
-    // buffer cannot change and there is nothing to track — and reaching for
-    // `terminal` here would build the very buffer the restore is avoiding.
+    // A dormant pane's buffer cannot change, and reaching for `terminal` here
+    // would build the very buffer the restore is avoiding.
     if (instance is! DormantTerminalInstance) {
       void markDirty() => _markDirty(paneId);
       _dirtyListeners[paneId] = markDirty;
       instance.terminal.addListener(markDirty);
     }
-    // Republish when the process exits so the pane (and its tab, and the
-    // background-session list) stops presenting itself as live. One rebuild per
-    // process death — not per frame — so this costs nothing.
+    // Republish on exit so the pane, its tab and the background-session list
+    // stop presenting it as live. One rebuild per death, not per frame.
     void onLiveness() {
       _livenessMutated();
       if (instance.liveness.value == PaneLiveness.exited) {
@@ -165,13 +140,8 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
       }
       if (instance.liveness.value == PaneLiveness.exited &&
           _shouldCollapse(paneId, instance)) {
-        // Not inline: this runs from inside the notifier's own callback, and
-        // closing the pane disposes that notifier. One turn later it is a
-        // plain call — and the decision is re-asked there, because by then the
-        // pane may not be in a tab at all: two panes exiting in the same task
-        // queue two collapses, and the first one's close can take the tab (and
-        // so the second pane) with it. Re-asking covers that, and the published
-        // liveness change is what repaints when the answer has become no.
+        // Not inline: closing the pane disposes the notifier this runs inside, and
+        // two panes exiting in one task queue two collapses.
         Future.microtask(() {
           if (!_shouldCollapse(paneId, instance)) {
             _publish();
@@ -186,10 +156,9 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
 
     _livenessListeners[paneId] = onLiveness;
     instance.liveness.addListener(onLiveness);
-    // Republish when the shell says it changed directory, so the tab label and
-    // the region header follow a `cd`. One rebuild per `cd` — the instance's
-    // notifier drops a report of the directory it already holds, which is what
-    // keeps a shell that emits OSC 7 on every prompt redraw free.
+    // So the tab label and region header follow a `cd`. One rebuild per `cd`:
+    // the instance drops a report of the directory it already holds, which is
+    // what keeps a shell emitting OSC 7 on every prompt redraw free.
     void onDirectory() {
       _directoriesMutated();
       _publish();
@@ -197,33 +166,19 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
 
     _directoryListeners[paneId] = onDirectory;
     instance.directory.addListener(onDirectory);
-    // Nothing else claims `onTitleChange`, so the controller owns it: the tab
-    // label is the controller's to derive, and the pane has no idea it is one.
-    //
-    // Not for a dormant pane: no process ever ran there, so it cannot name its
-    // own window — and `terminal` is the `late final` whose first read parses
-    // the stored scrollback, which is the cost restore exists to avoid.
+    // Not for a dormant pane: nothing ever ran there, and `terminal` is the
+    // `late final` whose first read parses the stored scrollback.
     if (instance is! DormantTerminalInstance) {
-      // Resolved once per pane and captured, not per title: a TUI that repaints
-      // its title every frame must not rebuild a launch every frame.
+      // Captured once per pane, not per title: a TUI repainting its title every
+      // frame must not rebuild a launch every frame.
       final launchers = _launcherNames(instance);
       instance.terminal.onTitleChange = (title) =>
           _onPaneTitle(paneId, title, launchers);
     }
   }
 
-  /// Says out loud that this pane's process stopped **by itself**.
-  ///
-  /// The one seam out of this feature, and it publishes a fact rather than a
-  /// conclusion: nothing here knows who reads [paneExitProvider] or what they
-  /// do with it. See [PaneExit].
-  ///
-  /// Reached only from a pane's own liveness change, which is what makes it the
-  /// narrow signal it is: closing a pane, ending a session and quitting the app
-  /// each dispose the instance, and [_unlisten] runs first in all three — so
-  /// the `exited` a disposal writes for anyone still attached is announced to
-  /// nobody. None of those three is an agent finishing its work, and a notice
-  /// for them would fire every time somebody closes a terminal.
+  /// Says out loud that this pane's process stopped **by itself**. Only a pane's
+  /// own liveness change reaches it — a disposal's `exited` is announced to nobody.
   void _announceExit(String paneId, TerminalInstance instance) {
     ref
         .read(paneExitProvider.notifier)
@@ -236,12 +191,9 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
         );
   }
 
-  /// Whether the pane that just exited should take itself off the screen.
-  ///
-  /// See [shouldCollapseOnExit] for the rule. All that is left here is the one
-  /// thing the pure rule cannot know: whether this pane is still in a tab at
-  /// all. It may not be — the decision is re-asked a microtask later, by which
-  /// time another pane's collapse may already have taken the tab.
+  /// Whether the pane that just exited should take itself off the screen —
+  /// [shouldCollapseOnExit] plus the one thing the pure rule cannot know:
+  /// whether this pane is still in a tab at all.
   bool _shouldCollapse(String paneId, TerminalInstance instance) {
     if (_tabContaining(paneId) == null) return false;
     return shouldCollapseOnExit(
@@ -259,19 +211,16 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     return count;
   }
 
-  /// Whether [paneId] shares its tab with another pane that has something in
-  /// it — what "in a split" means to the menus that offer to close or move one.
+  /// Whether [paneId] shares its tab with another *occupied* pane — what "in a
+  /// split" means to the menus that offer to close or move one.
   bool isPaneInSplit(String paneId) {
     final tab = _tabContaining(paneId);
     return tab != null && _occupiedPanes(tab) > 1;
   }
 
   /// Detaches [paneId] if a process is still running behind it, and releases it
-  /// otherwise.
-  ///
-  /// The asymmetry is the whole policy: keep-alive exists to protect running
-  /// work, and a pane whose shell already exited has none to protect. Without
-  /// this, every closed tab would leave a dead entry in the background list.
+  /// otherwise: keep-alive protects running work, and without the asymmetry
+  /// every closed tab would leave a dead entry in the background list.
   void _detachOrRelease(String paneId) {
     final instance = _instances[paneId];
     if (instance == null) return;
@@ -298,15 +247,13 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     return shouldDetachOnClose(
       isLive: instance.liveness.value.isLive,
       isAgentSession: instance.agentLaunch != null,
-      // Null means the shell is not instrumented and has told us nothing.
-      // `pending` is the block being typed *or* run; only one that has started
-      // is a command actually executing.
+      // Null means the shell is not instrumented. `pending` is the block being
+      // typed *or* run; only a started one is a command executing.
       commandRunning: recorder == null
           ? null
           : recorder.tracker.pending?.hasStarted ?? false,
-      // One past the threshold the rule will apply, which is all it can
-      // distinguish — so a pane at the scrollback cap still closes in a walk of
-      // a few lines.
+      // One past the threshold the rule applies, so a pane at the scrollback
+      // cap still closes in a walk of a few lines.
       nonBlankLines: nonBlankLineCount(
         instance.terminal,
         stopAt: (greeting ?? 0) + kIdleShellHistoryLines + 1,
@@ -322,11 +269,9 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     _livenessMutated();
     _directoriesMutated();
     _unlisten(paneId, instance);
-    // Both halves of the debt. Dropping only the flag left the pane's
-    // *unsaved age* behind for the life of the container — one entry per pane
-    // closed while dirty, and Diagnostics reporting an ever-growing "oldest
-    // unsaved" beside zero dirty panes, which is exactly the "my work is not
-    // being written" signal it exists to give.
+    // Both halves of the debt: dropping only the flag left the unsaved *age*
+    // behind, and Diagnostics reported a growing "oldest unsaved" beside zero
+    // dirty panes.
     _markClean(paneId);
     _encoded.remove(paneId);
     instance.dispose();

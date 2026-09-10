@@ -1,15 +1,5 @@
-/// A thought the user chose to keep instead of acting on it.
-///
-/// ## The one rule
-///
-/// **A note is quoted, not summarised.** Capturing a message stores that
-/// message's own words; nothing in this feature paraphrases a conversation on
-/// the user's behalf. The argument is `HandoffPacket`'s, for the same reason —
-/// a verbatim excerpt is either right or visibly incomplete, while a
-/// paraphrase's errors are invisible to the reader who most needs them, and the
-/// reader here is the agent the note is eventually sent back to.
-///
-/// Editing is the user's. [updatedAt] says when they took it.
+/// A thought the user chose to keep instead of acting on it. **Quoted, not
+/// summarised**: capturing a message stores that message's own words.
 class Note {
   const Note({
     required this.id,
@@ -33,15 +23,8 @@ class Note {
   /// The note itself: the prompt this will become when it is sent back.
   final String body;
 
-  /// The project this note is filed under, or null for a note that belongs to
-  /// no project — an ordinary note, not one waiting to be sorted.
-  ///
-  /// Distinct from [sourceRepositoryId], which says where the note *came
-  /// from*: filing is the user's and can be changed, origin is a fact about
-  /// the past and cannot. A note captured from a session starts filed under
-  /// that session's project because the database already knows which one that
-  /// is, and the v33 backfill applied the same rule to every note taken before
-  /// this column existed.
+  /// The project this note is filed under, or null. Distinct from
+  /// [sourceRepositoryId]: filing is the user's, origin is a fact about the past.
   final String? projectId;
 
   /// The session the note was taken from, or null when it was written from
@@ -53,10 +36,8 @@ class Note {
   /// a note whose session is gone can still say where it came from.
   final String? sourceRepositoryId;
 
-  /// The captured message's index in the transcript that was on screen, and the
-  /// role that wrote it (`user`, `agent`). Together they answer "what were we
-  /// discussing?" without needing a message id that PTY-hosted sessions do not
-  /// have.
+  /// The captured message's index in the transcript and the role that wrote it —
+  /// no message id, which PTY-hosted sessions do not have.
   final int? sourceMessageOrdinal;
   final String? sourceMessageRole;
 

@@ -13,53 +13,8 @@ import '../application/device_file_actions.dart';
 import '../application/device_fleet.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// Browsing a device's storage, and moving files across.
-///
-/// **A list of roots, not a filesystem.** The driver says which roots it can
-/// reach and this draws exactly those — see `domain/device_files.dart`. Android
-/// has a real tree plus app-private directories; a real iOS device has only
-/// the containers of development-signed apps, and a simulator is a directory on
-/// the host. A picker that started at `/` would be lying on two of those three.
-///
-/// **A directory it cannot read says so.** `DeviceDirectoryListing` carries a
-/// `note` for the refusal and `skipped` for lines the parser could not read,
-/// and both are drawn. Most of `/data` is unreadable without root, and an empty
-/// folder that is really a refusal is the failure this whole surface is built
-/// to avoid: it reads as "nothing here" and sends the user looking elsewhere.
-///
-/// Every call is a subprocess, so every call is awaited and the dialog draws a
-/// progress state rather than freezing. Nothing here runs on the platform
-/// thread.
-///
-/// ## Two clipboards, kept apart on purpose
-///
-/// **The app's own**, holding device paths — what Copy and Cut fill and what
-/// Paste empties. Those paths are moved by the *device*, with no host round
-/// trip, so pasting a 2 GB video into the next folder costs one `cp` rather
-/// than two transfers. It is deliberately not the system clipboard:
-/// `/sdcard/DCIM/a.jpg` means nothing to any other program on this computer,
-/// and putting it there as text would silently replace whatever the user had
-/// copied with a string nothing can open.
-///
-/// **This computer's**, holding real files — which is how a file crosses
-/// between here and the phone in either direction: *Copy for this computer*
-/// stages a file under the system temp directory and puts its path on the
-/// system file clipboard, so it pastes into Explorer; *Paste from this
-/// computer* reads that clipboard and pushes what is on it. See
-/// `application/device_file_actions.dart`.
-///
-/// **Dragging a row onto a folder** is the same device-side move, as a gesture.
-/// `pointerDragAnchorStrategy` is not optional there: without it
-/// `DragTargetDetails.offset` is the *feedback widget's* top-left rather than
-/// the pointer, so a drop lands on whichever row happens to be under the
-/// corner of the label.
-///
-/// **What this cannot do: drag a file to or from Explorer.** A drop from
-/// outside needs a native `IDropTarget` and a drag out needs a native drag
-/// source; neither is in this app's dependencies, and adding a C++ plugin is
-/// exactly what `pubspec.yaml` already has two stubs for after the VS 2026
-/// toolchain dropped ATL. The clipboard route above is the same operation
-/// without a plugin.
+/// Browsing a device's storage, and moving files across: the roots the driver
+/// says it can reach, never a filesystem, and a refusal is never "empty".
 class DeviceFilesDialog extends ConsumerStatefulWidget {
   const DeviceFilesDialog({
     required this.device,
@@ -79,12 +34,8 @@ class DeviceFilesDialog extends ConsumerStatefulWidget {
   /// directory, read lazily so nothing touches the filesystem at construction.
   final String? temporaryDirectory;
 
-  /// Creates the staging directory.
-  ///
-  /// A seam for the same reason [host] is one, and a sharper one than it looks:
-  /// a widget test body runs inside `FakeAsync`, so a real `Directory.create`
-  /// never completes there and the symptom is `pumpAndSettle timed out` rather
-  /// than anything about the filesystem.
+  /// Creates the staging directory. A seam like [host] is one: a widget test
+  /// runs inside `FakeAsync`, where a real `Directory.create` never completes.
   final HostDirectoryMaker makeDirectory;
 
   static Future<void> show(BuildContext context, AndroidDevice device) =>
@@ -178,8 +129,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final driver = _driver;
     if (driver == null) return;
     // A directory to save into, not a save dialog: `file_selector`'s save
-    // sheet is the one piece of this that is not dependable on every desktop,
-    // and the app already asks for a directory in two other places.
+    // sheet is the one piece of this not dependable on every desktop.
     final directory = await pickOneDirectory(
       what: 'where to save ${entry.name}',
       confirmButtonText: 'Save here',
@@ -297,11 +247,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
   }
 
   /// Drops [entry] into [directory] — the drag gesture for a device-side move.
-  ///
-  /// A move rather than a copy, which is what dragging within one filesystem
-  /// means everywhere else. The app's own clipboard is left alone: a drag is
-  /// not a cut, and clobbering a held Copy because somebody dragged something
-  /// would lose work they had queued.
+  /// A move, not a copy, and it leaves the app's own clipboard alone.
   Future<void> _dropInto(DeviceFileEntry entry, String directory) async {
     final driver = _driver;
     if (driver == null) return;
@@ -524,15 +470,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
   bool get _writable => _root?.writable == true;
 
   /// Wraps [builder] in a `DragTarget` that moves a dropped entry into [onto].
-  ///
-  /// **`pointerDragAnchorStrategy` is on the `Draggable` side and is not
-  /// optional** — see [_row]. It is named here too because this is the half
-  /// that reads `DragTargetDetails`, and the two only agree about where the
-  /// drop happened if the anchor is the pointer.
-  ///
-  /// A null [onto] accepts nothing, which is how the Up button behaves at a
-  /// root: a target that accepted and then did nothing would look like a
-  /// failed move.
+  /// A null [onto] accepts nothing: one that did nothing would look failed.
   Widget _dropTarget({
     required String? onto,
     required Widget Function(bool hovering) builder,
@@ -588,19 +526,11 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     );
   }
 
-  /// One entry: a drag source, and a drop target when it is a directory.
-  ///
-  /// **`pointerDragAnchorStrategy` is load-bearing.** Flutter's default anchor
-  /// makes `DragTargetDetails.offset` the *feedback widget's* top-left rather
-  /// than the pointer, so with a wide row as feedback a drop lands on whatever
-  /// is under the corner of the label — several rows above where the user is
-  /// pointing. This cost real debugging time in the workspace splits and the
-  /// same trap is here.
+  /// One entry: a drag source, and a drop target when it is a directory. With
+  /// no `pointerDragAnchorStrategy` a drop lands under the feedback's corner.
   Widget _row(ThemeData theme, ColorScheme scheme, DeviceFileEntry entry) {
-    // The hover highlight goes on the `ListTile` itself rather than on a
-    // coloured box around it: Flutter asserts on the latter, because a tile
-    // paints its background and its ink on the nearest Material and anything
-    // coloured in between hides both.
+    // The hover highlight goes on the `ListTile` itself, not a coloured box:
+    // Flutter asserts, because a tile paints on the nearest Material.
     Widget wrap({required bool hovering}) {
       final tile = _tile(theme, scheme, entry, hovering: hovering);
       // Only a writable root can be dragged out of: a move needs a delete at
@@ -753,11 +683,8 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     return '${(value / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  /// Lines the parser could not read, said out loud.
-  ///
-  /// `ls -l` output differs by device and by Android version, and a line this
-  /// build cannot parse is a **known unknown** — dropping it silently would
-  /// make a directory look shorter than it is.
+  /// Lines the parser could not read, said out loud: `ls -l` differs by device,
+  /// and dropping one silently makes a directory look shorter than it is.
   Widget _skippedFooter(
     ThemeData theme,
     ColorScheme scheme,
@@ -801,8 +728,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
   );
 }
 
-/// The row menu's items. An enum so the switch is exhaustive: an action added
-/// without a handler is a compile error rather than a menu entry that does
-/// nothing.
+/// The row menu's items. An enum so an action added without a handler is a
+/// compile error rather than a menu entry that does nothing.
 enum _RowAction { copy, cut, copyForHost }
 

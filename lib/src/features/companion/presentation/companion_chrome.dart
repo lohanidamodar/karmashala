@@ -1,27 +1,5 @@
-/// The companion's shared chrome: one app bar, one bottom sheet, one section
-/// header, one readable width.
-///
-/// Each of these was written out by hand in three to five places, and each had
-/// drifted in a way a user could see. Four app bars took Material's fixed 56px
-/// while three others grew with the text scale, so at 200% the Diagnostics and
-/// Pairing titles clipped and the Project and New-session titles did not. Two
-/// of the three bottom sheets were not scroll-controlled, which caps a sheet at
-/// half the viewport — the host switcher put a bare [Column] in that half and
-/// overflowed as soon as a phone had four desktops. Five section headings
-/// repeated the same `labelSmall` line and the same 8px gap.
-///
-/// The tokens here are the app's own — [Insets], [Radii], the [TextTheme]
-/// roles. The **geometry** is the phone's: heights come from [Touch] and
-/// [UiDensity], never from [Chrome], because a pointer's 30px row is not a
-/// target. Where a companion widget can also be hosted at pointer density —
-/// the shell previewed on a desktop — the density is asked rather than
-/// assumed.
-///
-/// Width is the same kind of decision, taken here for the same reason: past
-/// the compact breakpoint every companion list would otherwise run its rows
-/// the full width of a tablet. [companionReadableWidth] is the one answer, and
-/// [companionListInsets] and [CompanionReadable] are the two shapes of content
-/// that need it.
+/// The companion's shared chrome: app bar, bottom sheet, section header,
+/// readable width. Heights from [Touch]/[UiDensity], never [Chrome]'s 30px row.
 library;
 
 import 'package:flutter/material.dart';
@@ -29,32 +7,17 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 
 /// The room a scrolling list leaves under its last row when a floating action
-/// button hovers over it.
-///
-/// A [Touch.target]-tall button plus a gutter above and below it. The Projects
-/// tab was leaving [Insets.xl], which is less than the button is tall, so the
-/// last project's row sat behind the button offering to start another session
-/// in it.
+/// button hovers over it: a [Touch.target]-tall button plus a gutter each side.
 const double companionFabGutter = Touch.target + Insets.xl;
 
-/// The widest a column of companion content is ever drawn.
-///
-/// Exactly [UiDensity.compactWidth] — the widest phone this app was designed
-/// for — because past that point the extra pixels are gutter, not measure. A
-/// session title, a checkout path or a paragraph of settings prose set across
-/// 1280px of tablet is a line the eye has to track back along, and CLAUDE.md
-/// §6 forbids stretching narrow list content over a wide screen. Tying the
-/// cap to the breakpoint rather than picking a second number also means the
-/// column below 600 is untouched: the gutter is zero on every phone.
+/// The widest a column of companion content is ever drawn: the compact
+/// breakpoint itself, so the gutter is zero on every phone and a tablet does
+/// not run a line of prose across 1280px (CLAUDE.md §6).
 const double companionReadableWidth = UiDensity.compactWidth;
 
-/// The room left either side of that column on this surface, or zero on a
-/// phone.
-///
-/// Measured from the viewport, and the only thing here that is: width decides
-/// *measure* — how long a line of prose may run — and [UiDensity] decides how
-/// big a target must be. A tablet is wide and is still held in a hand, so it
-/// gets the gutter and keeps the 48dp rows.
+/// The room left either side of that column, or zero on a phone. Measured from
+/// the viewport, not the density: a tablet is wide and still held in a hand, so
+/// it gets the gutter and keeps the 48dp rows.
 double companionGutterOf(BuildContext context) {
   final width = MediaQuery.sizeOf(context).width;
   return width <= companionReadableWidth
@@ -62,12 +25,8 @@ double companionGutterOf(BuildContext context) {
       : (width - companionReadableWidth) / 2;
 }
 
-/// [base] widened by that gutter — what a companion list passes as its own
-/// `padding`.
-///
-/// Padding rather than a [ConstrainedBox] wrapped round the list, so a tablet's
-/// empty margin still takes a fling: the content narrows, the scrollable does
-/// not.
+/// [base] widened by that gutter — padding rather than a [ConstrainedBox] round
+/// the list, so a tablet's empty margin still takes a fling.
 EdgeInsets companionListInsets(BuildContext context, EdgeInsets base) {
   final gutter = companionGutterOf(context);
   return gutter == 0
@@ -95,18 +54,15 @@ class CompanionReadable extends StatelessWidget {
 }
 
 /// The height of a companion app bar: [Touch.appBar] grown with the ambient
-/// text scale, or the desktop's title-bar row when this is not a touch surface.
-///
-/// A screen's own name is the worst thing on it to clip, and Material's fixed
-/// `toolbarHeight` clips it at any scale above about 130%.
+/// text scale, or the desktop's title-bar row off a touch surface. Material's
+/// fixed `toolbarHeight` clips a title above about 130%.
 double companionAppBarHeight(BuildContext context) =>
     UiDensity.of(context).isTouch
     ? Touch.appBarOf(context)
     : Chrome.titleBarOf(context);
 
-/// The companion's app bar. Everything but the height comes from the theme;
-/// the height is the one thing a theme cannot express, because it depends on
-/// the text scaler in effect at this point in the tree.
+/// The companion's app bar. Only the height is set here: a theme cannot express
+/// it, because it depends on the text scaler at this point in the tree.
 AppBar companionAppBar(
   BuildContext context, {
   required Widget title,
@@ -117,13 +73,9 @@ AppBar companionAppBar(
   actions: actions,
 );
 
-/// A titled bottom sheet that can always be read to the end.
-///
-/// Scroll-controlled and capped against the viewport rather than left at
-/// Material's default half-height: a picker's job is to show every choice, and
-/// a list of desktops or projects at 200% text is taller than half a phone.
-/// [children] scroll under a pinned [title]; the drag handle and the sheet's
-/// colour and radius come from the touch theme.
+/// A titled bottom sheet that can always be read to the end: scroll-controlled
+/// and capped against the viewport, because Material's default half-height is
+/// shorter than a list of desktops at 200% text.
 Future<T?> companionSheet<T>(
   BuildContext context, {
   required String title,
@@ -164,21 +116,16 @@ Future<T?> companionSheet<T>(
   ),
 );
 
-/// The line that names a group of settings — "DESKTOPS", "DIAGNOSTICS".
-///
-/// `labelSmall` is the ramp's micro step, and the app theme already gives it
-/// the 0.8 letter-spacing and w600 an all-caps run needs; the widget's job is
-/// to stop five screens each remembering that, and to say `header: true` so a
-/// screen reader can jump between sections instead of reading every row.
+/// The line that names a group of settings — "DESKTOPS", "DIAGNOSTICS". Says
+/// `header: true`, so a screen reader can jump between sections.
 class CompanionSectionHeader extends StatelessWidget {
   const CompanionSectionHeader(this.label, {this.gap = Insets.sm, super.key});
 
-  /// Written as it is drawn — the caller keeps its own capitalisation, so the
-  /// string in the source is the string on the screen.
+  /// Written as it is drawn: the caller keeps its own capitalisation.
   final String label;
 
-  /// The space under the heading, before what it heads. [Insets.sm] by
-  /// default; zero where the container already spaces its children.
+  /// The space under the heading; zero where the container already spaces its
+  /// children.
   final double gap;
 
   @override

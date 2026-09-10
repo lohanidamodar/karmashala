@@ -10,20 +10,8 @@ import '../domain/notification_policy.dart';
 import '../domain/watched_session.dart';
 import 'attention_inbox.dart';
 
-/// Turns delivery state into attention-inbox items.
-///
-/// **It has no poller of its own.** Every reading it judges is one the delivery
-/// providers had already fetched to draw a row with, so a pull request that
-/// nobody is looking at costs nothing and produces no items. The honest limit
-/// of that trade: a session whose row is not rendered anywhere raises no
-/// delivery news until something asks about it. In practice the Explorer draws
-/// every session, so "rendered somewhere" is the normal case — and the moment
-/// it is not, the alternative would have been a second `gh` poller running for
-/// rows nobody can see.
-///
-/// The last reading per session is kept because that is the only thing the
-/// classifier cannot work out for itself: whether a red build is *news* depends
-/// entirely on whether it was already red.
+/// Turns delivery state into attention-inbox items. No poller of its own: it
+/// only judges readings the delivery providers already fetched to draw a row.
 class DeliveryAttentionController
     extends Notifier<Map<String, SessionDelivery>> {
   @override
@@ -45,21 +33,15 @@ class DeliveryAttentionController
         .reason;
     if (reason == null) return;
 
-    // Into the inbox only. A toast is an interruption and delivery news arrives
-    // on a two-minute tick, so it would land minutes after the fact with no way
-    // to tell how stale it was; the inbox is a work list and carries it
-    // honestly.
+    // Into the inbox only: delivery news arrives on a two-minute tick, so a
+    // toast would land minutes after the fact with no way to say how stale.
     ref
         .read(attentionInboxProvider.notifier)
         .apply(InboxUpdate(news: [(session: session, reason: reason)]));
   }
 
-  /// The session in the terms the inbox talks about.
-  ///
-  /// Built here rather than looked up through `WatchedSessionLoader`, which
-  /// enumerates and filters *every* session for the status poller and would
-  /// drop the ones this cares about: a session with no CLI session id still has
-  /// a branch, a pull request and a place in the inbox.
+  /// The session in the terms the inbox talks about. Built here, not through
+  /// `WatchedSessionLoader`, which would drop a session with no CLI id.
   WatchedSession? _watchedSession(String sessionId) {
     final session = ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return null;

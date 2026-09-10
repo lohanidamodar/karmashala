@@ -40,13 +40,8 @@ class RepositoryDao {
     );
   }
 
-  /// Records what repository the row [id] is a checkout of, or clears it.
-  ///
-  /// Its own statement rather than a field of [update], which is the rescan's
-  /// write and knows only about names and paths. This one is written from a
-  /// reading of `origin` and must not be undone by a sweep that never looked at
-  /// one — the same separation `AgentInstallationDao.updatePath` keeps for the
-  /// same reason.
+  /// Records what repository the row [id] is a checkout of, or clears it. Its own
+  /// statement, so a rescan that never read `origin` cannot undo it.
   void updateCanonicalId(String id, String? canonicalId) {
     _db.execute('UPDATE repositories SET canonical_id = ? WHERE id = ?;', [
       canonicalId,
@@ -54,15 +49,8 @@ class RepositoryDao {
     ]);
   }
 
-  /// Every row whose working tree is [path], compared the way the filesystem
-  /// does rather than the way a string does.
-  ///
-  /// Plural because it can be: the table has no uniqueness on a location, and
-  /// two rows recorded from two spellings of one directory are exactly what
-  /// [samePath] exists to reconcile. Filtered in Dart after an indexed read of
-  /// the environment, because case folding and separator folding are decisions
-  /// SQL cannot make — `/home/A` and `/home/a` are two directories on POSIX and
-  /// one on Windows.
+  /// Every row whose working tree is [path]. Filtered in Dart after an indexed
+  /// read: case and separator folding are decisions SQL cannot make.
   List<Repository> getByLocation(EnvironmentPath path) {
     final rows = _db.query(
       'SELECT * FROM repositories WHERE environment_id = ?;',
@@ -100,21 +88,8 @@ class RepositoryDao {
     _db.execute('DELETE FROM repositories WHERE id = ?;', [id]);
   }
 
-  /// How many rows of recorded history a [delete] of [repositoryId] would
-  /// destroy: native sessions, the extra links of sessions whose *primary*
-  /// repository is elsewhere, imported CLI history, and fanout comparisons.
-  ///
-  /// Every one of those foreign keys is `ON DELETE CASCADE`, so this number is
-  /// not advisory — it is the size of the hole [delete] would leave. It exists
-  /// because a rescan may now retire a checkout whose folder has gone, and a
-  /// folder going away is no reason at all to lose the transcript of the work
-  /// that was done in it. `fanout_comparisons` is counted with the rest
-  /// deliberately: those rows are written to stay readable *after* the worktree
-  /// they describe is removed, which is exactly this situation.
-  ///
-  /// `UNION` rather than four sums, because a session's primary link appears in
-  /// both `sessions` and `session_repositories` and counting it twice would
-  /// overstate what is at stake.
+  /// How many rows of recorded history a [delete] would destroy — every one of
+  /// those foreign keys cascades, so this is the size of the hole, not advice.
   int historyReferenceCount(String repositoryId) {
     final rows = _db.query(
       'SELECT COUNT(*) AS n FROM ('

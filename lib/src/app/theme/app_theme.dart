@@ -2,17 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
 
-/// Application theming — a neutral desktop chrome with one accent.
-///
-/// The scheme is written out rather than seeded: `ColorScheme.fromSeed` tints
-/// every surface towards the seed hue, which is exactly what a neutral ramp must
-/// not do. Greys are grey; the accent appears only on selection, focus and the
-/// primary action; anything that carries meaning comes from [SemanticColors].
-///
-/// `primary` and `tertiary` are deliberately the same colour. Material hands
-/// widgets three "brand" slots, and the direction allows one accent — aliasing
-/// them means a widget cannot accidentally introduce a second brand colour by
-/// reaching for the other slot.
+/// A neutral desktop chrome with one accent. Written out rather than seeded:
+/// `fromSeed` tints every surface, which a neutral ramp must not do.
 class AppTheme {
   const AppTheme._();
 
@@ -134,12 +125,8 @@ class AppTheme {
           minimumSize: const Size.square(26),
           maximumSize: const Size.square(30),
           padding: const EdgeInsets.all(Insets.xs),
-          // An `IconButton` sizes its glyph from its own button style, not
-          // from the ambient `iconTheme` above — so with this unset every
-          // one of them fell back to Material's 24, inside a 30px box with
-          // 4px of padding, i.e. a glyph larger than the room it was given.
-          // Call sites had been papering over it one `size:` literal at a
-          // time; roughly half never did and drew the oversized default.
+          // An `IconButton` sizes its glyph from its own button style, not from the
+          // ambient `iconTheme` — unset, every one fell back to Material's 24.
           iconSize: Chrome.icon,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm),
@@ -154,11 +141,8 @@ class AppTheme {
         selectedColor: scheme.primary,
         selectedTileColor: scheme.primary.withValues(alpha: 0.10),
         iconColor: scheme.onSurfaceVariant,
-        // Material's default title is `bodyLarge` — 16px, larger than the
-        // `bodyMedium` a dialog's own content text is set in, so a tile inside
-        // a dialog shouted over the sentence explaining it. The companion's
-        // touch theme has always named these two; the desktop never did, and
-        // took the fallback instead. Same shape, one step down the ramp.
+        // Material's default title is `bodyLarge`, larger than the `bodyMedium` a
+        // dialog's own content is set in, so a tile shouted over its explanation.
         titleTextStyle: text.bodyMedium,
         subtitleTextStyle: text.bodySmall,
         shape: const RoundedRectangleBorder(
@@ -193,10 +177,8 @@ class AppTheme {
         labelStyle: text.labelMedium,
         padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       ),
-      // `*.icon` constructors size their leading glyph from the button style
-      // too — Material's default is 18, against a chrome whose every other
-      // glyph is `Chrome.icon`. Same fix, same reason, as `menuButtonTheme`
-      // below.
+      // `*.icon` constructors size their leading glyph from the button style too,
+      // and Material's default is 18 against a chrome of `Chrome.icon`.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 30),
@@ -272,14 +254,8 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         menuPadding: const EdgeInsets.symmetric(vertical: 4),
         textStyle: text.bodySmall,
-        // Under Material 3 a `PopupMenuItem` reads `labelTextStyle` and
-        // ignores `textStyle` entirely — the same trap as `DropdownButton` and
-        // `dropdownMenuTheme`, in the other direction. So every plain
-        // `PopupMenuItem` in the app (the terminal's right-click menu, the
-        // side-panel context menu, the permission pickers) drew at Material's
-        // `labelLarge`/14 while a `DesktopMenuItem` in the same menu surface
-        // drew its own `bodySmall`/12. Both fields are set, to the same style,
-        // because either one can be the one that gets read.
+        // Under Material 3 a `PopupMenuItem` reads `labelTextStyle` and ignores
+        // `textStyle`. Both are set, to one style, because either may be the one read.
         labelTextStyle: WidgetStatePropertyAll(text.bodySmall),
         iconColor: scheme.onSurfaceVariant,
         iconSize: Chrome.icon,
@@ -302,13 +278,8 @@ class AppTheme {
           side: BorderSide(color: scheme.outlineVariant),
         ),
       ),
-      // The panel a `SubmenuButton` opens. Without this it fell back to
-      // Material's defaults while every other menu in the app came from
-      // `popupMenuTheme` — a different surface, a heavier elevation, no
-      // border and different padding, all in a menu sitting inches from the
-      // ones it disagreed with. Deliberately the same values as
-      // `popupMenuTheme` above rather than similar ones: two menus that are
-      // meant to look identical should read from one set of numbers.
+      // The panel a `SubmenuButton` opens. Deliberately the same values as
+      // `popupMenuTheme`: two menus meant to look identical read from one set.
       menuTheme: MenuThemeData(
         style: MenuStyle(
           elevation: const WidgetStatePropertyAll(8),
@@ -341,10 +312,8 @@ class AppTheme {
             EdgeInsets.symmetric(horizontal: Insets.sm),
           ),
           textStyle: WidgetStatePropertyAll(text.bodySmall),
-          // A `MenuItemButton`'s leading icon is sized by the button style,
-          // not by the ambient `iconTheme`, so these came out at Material's
-          // 24pt default beside body-small labels while the same icon in a
-          // toolbar or a popup menu was `Chrome.icon`.
+          // A `MenuItemButton`'s leading icon is sized by the button style, not the
+          // ambient `iconTheme`, so these came out at Material's 24pt default.
           iconSize: const WidgetStatePropertyAll(Chrome.icon),
           iconColor: WidgetStatePropertyAll(scheme.onSurfaceVariant),
           shape: WidgetStatePropertyAll(
@@ -402,27 +371,13 @@ class AppTheme {
   /// small label used as the chrome eyebrow.
   static TextTheme _textTheme(ColorScheme scheme) {
     final typography = Typography.material2021(colorScheme: scheme);
-    // Use light-on-dark glyph colours in dark mode (the bug that made dark text
-    // unreadable was always using the `.black` set).
+    // Light-on-dark glyph colours in dark mode; always using the `.black` set is
+    // what made dark text unreadable.
     final colours = scheme.brightness == Brightness.dark
         ? typography.white
         : typography.black;
-    // **The geometry has to be merged in here.** `typography.black`/`.white`
-    // carry colour and family and *no font sizes at all* — the sizes live in
-    // `typography.englishLike`, and `ThemeData.localize` merges them into
-    // `ThemeData.textTheme` only, at build time. Every component theme below
-    // that captures one of these styles (`popupMenuTheme.textStyle`,
-    // `dialogTheme.titleTextStyle`, `chipTheme.labelStyle`,
-    // `tooltipTheme.textStyle`, `menuButtonTheme.textStyle`,
-    // `listTileTheme.titleTextStyle`, `appBarTheme.titleTextStyle`) captured a
-    // style with a null `fontSize`, so it inherited whatever size was ambient
-    // instead of the ramp step it names: a popup menu item that says
-    // `bodySmall` was measured rendering at 14, not 12. This is the reason the
-    // chrome's own menus and dialogs never looked like the rest of the chrome.
-    //
-    // The cost is that the type scale no longer varies by script category —
-    // the app is English-only, and a menu that ignores its own theme is the
-    // worse of the two problems.
+    // The geometry has to be merged in here: `typography.black`/`.white` carry no
+    // font sizes, so a captured component style inherits whatever is ambient.
     final base = typography.englishLike.merge(colours);
     final onSurface = scheme.onSurface;
     return base.copyWith(

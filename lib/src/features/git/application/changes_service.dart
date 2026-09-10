@@ -4,30 +4,11 @@ import '../../environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 
 /// Notified with a repository whose working tree this service has just
-/// rewritten. Quick Open's index marks that root stale; see [CheckoutMoved] for
-/// why the notice is a callback and not the index itself.
+/// rewritten, so Quick Open's index can mark that root stale.
 typedef WorkingTreeChanged = void Function(EnvironmentPath repo);
 
-/// High-level access to a repository's working-tree changes and diffs,
-/// resolving the runner each call needs: a read by where the checkout's files
-/// live, a write by the row it is filed under — see [_ask]. Git is the source
-/// of truth and there is no editor (ADR 0004).
-///
-/// **Almost read-only, and that is a rule rather than an accident.** Committing
-/// and pushing are things the *agent* does: the delivery strip's `Commit` and
-/// `Push` send a prompt into the session verbatim, so the model writes the
-/// message with the context it just worked in and reports a rejected push in
-/// the transcript. `commitAll` and `push` wrappers sat here with no caller from
-/// the day they were written until Loop 67 deleted them; they were a second,
-/// silent way to do what the strip already asks for. `GitService` keeps
-/// `stageAll`/`commit`/`push` — the data layer's vocabulary is not an offer.
-/// [mergeBranch] is the exception, and it exists for the fan-out comparison,
-/// which merges a winning branch on the user's explicit instruction.
-/// [mergeRef] and [abortMerge] are the second, and they exist together: the
-/// delivery strip's `Update` brings a branch level with its base, and a merge
-/// that stops on a conflict must be undone rather than left in the working tree
-/// an agent may be about to run in. Neither is a general "let the app write to
-/// git" licence — both are one user press with one meaning.
+/// A repository's changes and diffs; reads run where the files live, writes on
+/// the row's runner. Almost read-only: committing and pushing are the agent's.
 class ChangesService {
   ChangesService({
     required this.runnerFactory,
@@ -56,14 +37,8 @@ class ChangesService {
     return env;
   }
 
-  /// Runs a **read-only** question against the runner that owns [repo]'s files
-  /// rather than the row it is filed under; [gitProbeTargetFor] has the
-  /// measurement and every case that falls back to the row.
-  ///
-  /// The three writes below keep [_gitFor] — a merge runs the checkout's own
-  /// git, with that side's config and filters. Nothing here returns an
-  /// [EnvironmentPath], so a moved read cannot hand a Windows-spelled path to a
-  /// session that chose WSL; that is why `WorktreeService` is untouched.
+  /// Runs a read-only question on the runner that owns [repo]'s files, not the
+  /// row's; returns no [EnvironmentPath], so a moved read cannot mis-spell one.
   Future<T> _ask<T>(
     EnvironmentPath repo,
     Future<T> Function(GitService git, EnvironmentPath at) question,
@@ -95,30 +70,9 @@ class ChangesService {
   Future<String?> originHead(EnvironmentPath repo) =>
       _ask(repo, (git, at) => git.originHead(at));
 
-  /// Both of [repo]'s `origin` facts — the URL and the default branch — from
-  /// **two file reads rather than two subprocesses**, falling back to git for
-  /// whichever the files could not answer.
-  ///
-  /// This is what every visible Explorer row's delivery reading funnels into,
-  /// once per repository, so it is the one place in this service where reading
-  /// a file instead of running `git` is worth the code. `.git/config` carries
-  /// `remote.origin.url` on a line; `origin/HEAD` is a line in
-  /// `refs/remotes/origin/HEAD` or absent from `packed-refs`. Neither read
-  /// costs a `CreateProcessW`, which — see `checkout_probe_queue.dart` — is
-  /// charged to the calling thread whatever the future looks like.
-  ///
-  /// **Falls back per fact, not per call**, and falls back on any uncertainty
-  /// at all: an SSH repository this process cannot open, a `.git` that is
-  /// neither a directory with a config nor a pointer file, a config with
-  /// `include`/`insteadOf` indirection in it, a `reftable` repository with no
-  /// `refs/` tree. `GitOriginReader` documents each one. A wrong answer here is
-  /// worse than a slow one — the URL decides whether a row looks for a pull
-  /// request, and `origin/HEAD` is the base every ahead/behind count is
-  /// measured against.
-  ///
-  /// It lives here rather than in `GitService` because the environment is what
-  /// decides whether the files are reachable at all, and this is the layer that
-  /// holds it.
+  /// Both of [repo]'s `origin` facts — the URL and the default branch — from two
+  /// file reads rather than two subprocesses, falling back to git per *fact* on
+  /// any uncertainty at all: a wrong answer here is worse than a slow one.
   Future<RepositoryOrigin> originFacts(EnvironmentPath repo) async {
     final reading = await GitOriginReader(
       files: files,
@@ -139,26 +93,16 @@ class ChangesService {
     );
   }
 
-  /// **Whether a merge is half-done in [repo]**, from one `.git` stat rather
-  /// than a process; null when this host cannot see that filesystem.
-  ///
-  /// Beside [originFacts] for the same reason: it is a fact a file already
-  /// states, and `CreateProcessW` is charged to the calling thread however the
-  /// future looks. See `GitMergeStateReader`.
+  /// Whether a merge is half-done in [repo], from one `.git` stat rather than a
+  /// process; null when this host cannot see that filesystem.
   Future<bool?> mergeInProgress(EnvironmentPath repo) => GitMergeStateReader(
     files: files,
     hostPathOf: hostPathMapperFor(_environmentOf(repo)),
   ).read(repo.path);
 
-  /// **Which family of worktrees [repo] belongs to**, or null when the files
-  /// could not say.
-  ///
-  /// Equal for two checkouts of one clone and never equal for two unrelated
-  /// ones. It exists so a caller with a list of checkouts can group them before
-  /// asking git anything — `git worktree list` reports the whole family from
-  /// any member, so one process per *group* is the whole answer and one per row
-  /// is N−1 wasted. See [GitOriginReader.commonDirectory] for what it costs and
-  /// for why null means "ask the way you used to", not "a family of one".
+  /// Which family of worktrees [repo] belongs to, or null — which means "ask
+  /// the way you used to", never "a family of one". Callers group by it so one
+  /// `git worktree list` answers for the whole family instead of one per row.
   Future<String?> familyKey(EnvironmentPath repo) => GitOriginReader(
     files: files,
     hostPathOf: hostPathMapperFor(_environmentOf(repo)),
@@ -223,23 +167,17 @@ class ChangesService {
   Future<List<GitCommit>> log(EnvironmentPath repo, {int limit = 20}) =>
       _ask(repo, (git, at) => git.log(at, limit: limit));
 
-  /// Merges [branch] into [repo]'s checked-out branch. The one write here; see
-  /// the class doc for why it is the only one.
-  ///
-  /// `touch` rather than `invalidate` for the index: the directory is still the
-  /// same directory and most of its files are still the files it had, so the
-  /// cached list stays worth drawing for one frame while the re-walk runs.
+  /// Merges [branch] into [repo]'s checked-out branch. `touch` rather than
+  /// `invalidate` for the index: most files are still the files it had, so the
+  /// cached list stays worth drawing while the re-walk runs.
   Future<void> mergeBranch(EnvironmentPath repo, String branch) async {
     await _gitFor(repo).mergeBranch(repo, branch);
     onWorkingTreeChanged?.call(repo);
   }
 
   /// Brings [repo]'s checked-out branch level with [ref], fast-forwarding when
-  /// it can. See `GitService.mergeRef` for why this is not [mergeBranch].
-  ///
-  /// The index is touched on the way *out* whether or not the merge succeeded:
-  /// a merge that stopped on a conflict has already rewritten files in the
-  /// working tree, so a cached listing taken before it is stale either way.
+  /// it can. The index is touched whether or not the merge succeeded: one that
+  /// stopped on a conflict has already rewritten files.
   Future<void> mergeRef(EnvironmentPath repo, String ref) async {
     try {
       await _gitFor(repo).mergeRef(repo, ref);
@@ -256,18 +194,8 @@ class ChangesService {
     return restored;
   }
 
-  /// Moves [branch] back to [sha], leaving the working tree and index alone.
-  ///
-  /// The fourth write, and the narrowest — one press with one meaning, like
-  /// the merges above. It exists for *"also drop the commits this run made"*
-  /// on an unattended automation, which `undo_run.dart` refuses outright once
-  /// any of those commits is on a remote; that rule is read by the checkbox's
-  /// tooltip and asserted again here by the caller, so the two cannot drift.
-  ///
-  /// `update-ref` rather than `git reset`, deliberately. The files have
-  /// already been put back from the run's base checkpoint, so a `--hard` would
-  /// throw away whatever the user has done since and a `--mixed` would
-  /// silently unstage their index. Nothing but the branch pointer moves.
+  /// Moves [branch] back to [sha]; `undo_run.dart` refuses once any of those
+  /// commits is on a remote. `update-ref`, so no file or index entry moves.
   Future<void> moveBranchTo(
     EnvironmentPath repo, {
     required String branch,

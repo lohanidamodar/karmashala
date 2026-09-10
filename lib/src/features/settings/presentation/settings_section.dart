@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
 
-/// One labelled block on the settings page.
-///
-/// Extracted so sections that live in their own feature — SSH hosts, execution
-/// environments — sit on the page looking like the ones that do not.
+/// One labelled block on the settings page. Extracted so sections that live in
+/// their own feature sit on the page looking like the ones that do not.
 class SettingsSection extends StatelessWidget {
   const SettingsSection({
     required this.title,

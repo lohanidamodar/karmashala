@@ -12,34 +12,18 @@ import 'worktree_service.dart';
 import 'worktree_setup_providers.dart';
 import 'worktree_setup_service.dart';
 
-/// The `agentId` a worktree setup pane is opened under.
-///
-/// A setup command is not an agent, and this is the one place that pretends
-/// otherwise. `openAgentTab` is the only route in the app that *starts* a pane
-/// on a chosen command — `openTab` takes a shell profile and nothing else —
-/// and going through it buys the WSL, SSH and Windows wrapping that
-/// `wrapForPty` and `SshTerminalInstance` already do correctly, which is
-/// exactly what §17 says must not be re-derived by hand.
-///
-/// What it costs is that the pane is stored as `agent:` and treated as an agent
-/// pane on a restore. That is the safe direction: `shouldRestartOnActivate`
-/// excludes agent panes, so a restored setup pane replays nothing and re-runs
-/// nothing. The id is namespaced so it can never collide with a registry agent,
-/// and `AgentRegistry.byId` answering null for it is a case
-/// `AgentPaneLaunch.fromJson` already handles.
+/// The `agentId` a setup pane is opened under: `openAgentTab` is the only route
+/// with the §17 wrapping, and an `agent:` pane is one a restore never re-runs.
 const String kWorktreeSetupAgentId = 'karmashala:worktree-setup';
 
-/// Provides the [WorktreeService], wired to the command-runner factory and the
-/// environment store.
 final worktreeServiceProvider = Provider<WorktreeService>(
   (ref) => WorktreeService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
     setup: ref.watch(worktreeSetupServiceProvider),
-    // Loop 67: a worktree that has just appeared or vanished is the one change
-    // Quick Open's OS watcher cannot see, because the folder is outside every
-    // watched root. Both reads happen inside the callback, so composing this
-    // service never builds an index.
+    // A worktree that has just appeared or vanished is the one change Quick
+    // Open's OS watcher cannot see. Both reads are inside the callback, so
+    // composing this service never builds an index.
     onCheckoutMoved: (directory) {
       final root = ref.read(editorActionsProvider).windowsPathFor(directory);
       if (root != null) ref.read(repoFileIndexProvider).invalidate(root);
@@ -47,19 +31,16 @@ final worktreeServiceProvider = Provider<WorktreeService>(
   ),
 );
 
-/// The setup that runs when a worktree is created.
-///
-/// Every collaborator is a callback read *inside* itself, so composing this
-/// provider opens no database and builds no terminal — the same discipline
-/// `onCheckoutMoved` above follows, and the reason `git/` can depend on a
-/// setting that lives in `repositories` without importing it into the service.
+/// The setup that runs when a worktree is created. Every collaborator is read
+/// *inside* its callback, so composing this provider opens no database and
+/// builds no terminal.
 final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
   return WorktreeSetupService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     clock: ref.watch(clockProvider),
     lookup: (repo) {
-      // The checkout is matched the way the filesystem does — `Checkout`
-      // exists because the same directory reaches this app spelled three ways.
+      // Matched the way the filesystem does: the same directory reaches this
+      // app spelled three ways.
       for (final repository in ref.read(repositoryDaoProvider).getAll()) {
         if (Checkout(repository.path) != Checkout(repo)) continue;
         return (
@@ -67,18 +48,15 @@ final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
           setup: ref.read(worktreeSetupDaoProvider).get(repository.id),
         );
       }
-      // Not a recorded checkout. Nothing to look a setting up by, and not an
-      // error: `worktree_create` can be pointed at a path a scan has not been
-      // to yet.
+      // Not a recorded checkout, and not an error: `worktree_create` can be
+      // pointed at a path no scan has been to yet.
       return null;
     },
     record: (report) {
       ref.read(worktreeSetupDaoProvider).record(report);
       ref.read(worktreeSetupRevisionProvider.notifier).bump();
     },
-    // The pane itself is opened by the one route both this and the Flutter
-    // loop take. See `visibleCommandOpenerProvider` for why it was extracted
-    // rather than copied.
+    // The one route both this and the Flutter loop take.
     openPane: (command) => ref.read(visibleCommandOpenerProvider)(
       VisibleCommand(
         agentId: kWorktreeSetupAgentId,

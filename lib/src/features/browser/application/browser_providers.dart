@@ -4,11 +4,8 @@ import 'package:riverpod/riverpod.dart';
 import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
 
-/// The debugging port Karmashala attaches to (or launches a browser on).
-///
-/// Chrome's own default, so a browser the user started with
-/// `--remote-debugging-port=9222` — and, since Chrome 136, its own
-/// `--user-data-dir` — is found without configuring anything.
+/// The debugging port Karmashala attaches to — Chrome's own default, so a
+/// browser started with `--remote-debugging-port=9222` is found unconfigured.
 final browserDebugPortProvider = Provider<int>(
   (ref) => BrowserLauncher.defaultPort,
 );
@@ -32,17 +29,8 @@ class _HandleAsBrowserProcess implements BrowserProcess {
   Future<void> kill() => _handle.kill();
 }
 
-/// The app's side of `karmashala_browser`'s process seam.
-///
-/// The package spawns nothing itself — it takes a [BrowserProcessStarter] — so
-/// that its launcher does not need `CommandRequest`, whose `EnvironmentPath`
-/// belongs to the environments layer for a process that is always local. This
-/// is the one adapter that closes it, and every construction of a
-/// [BrowserService] in the app goes through it.
-///
-/// A [CommandException] is re-thrown as a [BrowserProcessException] carrying
-/// its message alone, so the startup failure the launcher reports reads exactly
-/// as it did when it caught the runner's own exception.
+/// The app's side of `karmashala_browser`'s process seam: the package spawns
+/// nothing itself, so this is the one adapter that closes it.
 BrowserProcessStarter browserProcessStarter(CommandRunner runner) =>
     (String executable, List<String> arguments) async {
       try {
@@ -56,10 +44,8 @@ BrowserProcessStarter browserProcessStarter(CommandRunner runner) =>
       }
     };
 
-/// The browser driver.
-///
-/// Kept as a single long-lived service because a session owns a WebSocket and
-/// possibly a spawned process; disposing the provider tears both down.
+/// The browser driver. One long-lived service, because a session owns a
+/// WebSocket and possibly a spawned process; disposing tears both down.
 final browserServiceProvider = Provider<BrowserService>((ref) {
   final service = BrowserService(
     startProcess: browserProcessStarter(ref.watch(hostCommandRunnerProvider)),

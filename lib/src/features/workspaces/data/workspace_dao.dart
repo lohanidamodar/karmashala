@@ -21,11 +21,8 @@ class WorkspaceDao {
     );
   }
 
-  /// The name and the description in **one** statement.
-  ///
-  /// They are edited together — the dialog's inline editor shows both fields at
-  /// once — so writing them separately would make one user action two writes
-  /// and leave a window in which the row held half of it.
+  /// The name and the description in **one** statement: they are edited
+  /// together, so two writes would leave a window holding half the change.
   void updateDetails(String id, {required String name, String? description}) {
     _db.execute('UPDATE workspaces SET name = ?, description = ? WHERE id = ?;', [
       name,
@@ -34,9 +31,8 @@ class WorkspaceDao {
     ]);
   }
 
-  /// Removes the workspace. Its projects are **kept** and become unassigned —
-  /// the `ON DELETE SET NULL` on `projects.workspace_id` does that, so there is
-  /// no second statement here to forget.
+  /// Removes the workspace. Its projects are **kept** and become unassigned, by
+  /// `ON DELETE SET NULL` — there is no second statement here to forget.
   void delete(String id) {
     _db.execute('DELETE FROM workspaces WHERE id = ?;', [id]);
   }

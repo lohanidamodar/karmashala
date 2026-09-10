@@ -21,14 +21,8 @@ final knownHostDaoProvider = Provider<KnownHostDao>(
   (ref) => KnownHostDao(ref.watch(databaseProvider)),
 );
 
-/// How an unknown host key is decided: by asking the user, through
-/// [SshPromptController].
-///
-/// The safe default Loop 37 shipped is preserved rather than replaced. The
-/// controller refuses outright whenever no prompt UI is mounted, so an
-/// unattended run still never trusts a new host — but when a window *is* open,
-/// the fingerprint is put in front of the user instead of the connection dying
-/// with nobody able to say yes.
+/// How an unknown host key is decided: by asking the user through
+/// [SshPromptController], which refuses outright when no prompt UI is mounted.
 final hostKeyTrustDecisionProvider = Provider<HostKeyTrustDecision?>(
   (ref) =>
       (presentation) => ref
@@ -71,11 +65,8 @@ final sshConnectionPoolProvider = Provider<SshConnectionPool>((ref) {
     keyReader: ref.watch(sshPrivateKeyReaderProvider).read,
     clock: ref.watch(clockProvider),
   );
-  // `onDispose` takes a callback, not a future, so this close was started and
-  // dropped — on quit the process ended before the sockets did. The lifecycle
-  // owner starts it itself and awaits it inside the shutdown budget; this hook
-  // stays for every other way the container goes away, and is a no-op by the
-  // time it runs on quit ([SshConnectionPool.closeAll] empties the pool first).
+  // `onDispose` takes a callback, not a future, so this close is started and
+  // dropped; the lifecycle owner awaits its own inside the shutdown budget.
   ref.onDispose(pool.closeAll);
   return pool;
 });

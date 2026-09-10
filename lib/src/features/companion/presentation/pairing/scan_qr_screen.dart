@@ -9,10 +9,8 @@ import '../companion_chrome.dart';
 import 'pairing_progress_screen.dart';
 import 'short_code_screen.dart';
 
-/// Scans the pairing QR code the desktop displays.
-///
-/// The camera preview is injectable ([scannerBuilder]) so widget tests can
-/// drive the payload path without a camera or the scanner's platform channel.
+/// Scans the pairing QR the desktop displays. The camera preview is injectable
+/// ([scannerBuilder]), so a widget test needs no camera or platform channel.
 class ScanQrScreen extends ConsumerStatefulWidget {
   const ScanQrScreen({this.scannerBuilder, super.key});
 

@@ -8,10 +8,8 @@ import '../../terminal/domain/terminal_profile.dart';
 import '../application/snippet_providers.dart';
 import '../domain/command_snippet.dart';
 
-/// The dropdown's stand-in for "no tag". A sentinel rather than a null value
-/// because a `DropdownButtonFormField` reads null as *nothing selected* and
-/// falls back to its hint, which would draw the commonest choice as if the user
-/// had not made one.
+/// The dropdown's stand-in for "no tag". A sentinel, because a
+/// `DropdownButtonFormField` reads null as *nothing selected* and shows a hint.
 const _anyShell = '';
 
 /// What the user typed in [SnippetEditorDialog].
@@ -77,14 +75,9 @@ class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
     super.dispose();
   }
 
-  /// "Any shell" plus one entry per shell this machine can actually launch.
-  ///
-  /// Derived from the discovered profiles rather than from [TerminalShell]'s
-  /// values, so a Mac is not offered PowerShell and a Windows box with no
-  /// distribution installed is not offered WSL — the same host-shaping
-  /// `terminalProfilesFor` already does for the new-terminal menu. A tag the
-  /// snippet already carries is added even when no profile matches, so editing
-  /// a snippet written on another machine does not silently retag it.
+  /// "Any shell" plus one entry per shell this machine can launch — from the
+  /// discovered profiles, not [TerminalShell]'s values, so a Mac is not offered
+  /// PowerShell. A tag the snippet already carries is kept regardless.
   List<String> _shellOptions() {
     final offered = <String>{
       for (final profile in ref.read(terminalProfilesProvider))
@@ -206,12 +199,8 @@ class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
   }
 }
 
-/// The whole snippet library: what is saved, and the way to add, edit or
-/// remove one.
-///
-/// The *picking* surface is quick open — this is the place things are kept, the
-/// way Settings is the place a preference is kept rather than the way it is
-/// used.
+/// The whole snippet library: what is saved, and how to add, edit or remove
+/// one. The *picking* surface is quick open; this is where things are kept.
 class SnippetLibraryDialog extends ConsumerWidget {
   const SnippetLibraryDialog({super.key, this.suggestedShellId});
 

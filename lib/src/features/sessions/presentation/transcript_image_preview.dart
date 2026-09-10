@@ -6,47 +6,21 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/stream.dart';
 
-/// How big a file may be before we refuse to hand it to the decoder.
-///
-/// A decode allocates roughly `width * height * 4` bytes whatever the file
-/// weighs, and this runs inside a list that re-parses its source every two
-/// seconds. The transcript is not the place to find out that a 200 MB PSD
-/// export was renamed `.png`.
+/// How big a file may be before we refuse to hand it to the decoder: a decode
+/// allocates `width * height * 4` bytes whatever the file weighs.
 const int kMaxImagePreviewBytes = 12 * 1024 * 1024;
 
 /// The tallest a preview draws inline. Wide images letterbox rather than push
 /// the rest of the conversation off the screen; the viewer shows them whole.
 const double kInlineImageMaxHeight = 220;
 
-/// The frame a preview always occupies, whatever it is holding.
-///
-/// Two reasons, both real: the thumbnail is a *control* — it opens the viewer —
-/// and a control the size of the picture behind it is a control with no size at
-/// all until the decoder finishes; and reserving the frame keeps the row from
-/// jumping under the reader's eyes when it does.
+/// The frame a preview always occupies, whatever it is holding: the thumbnail
+/// is a control, and one sized by its picture has no size until the decode ends.
 const double kInlineImageMinWidth = 120;
 const double kInlineImageMinHeight = 72;
 
-/// The picture behind a transcript row that read an image.
-///
-/// The owner's first ask, verbatim: reading an image showed a file name and
-/// nothing else. What Claude Code records is
-/// `tool_use{name:'Read', input:{file_path:'…'}}` — the path, written in the
-/// **agent's** environment — plus a base64 copy of the bytes in the answering
-/// `tool_result`. The bytes are deliberately *not* what is drawn here: one real
-/// transcript carried 96 of them, and the reader would have to hold every one
-/// in memory on every poll. The path is cheap, and the file is nearly always
-/// still there.
-///
-/// Nearly always is not always, so every way this can fail degrades to a line
-/// of text and never to an exception:
-///
-/// * the agent deleted the screenshot after looking at it;
-/// * the path is a WSL one and `dart:io` here is the Windows host — hence
-///   [resolveHostPath], the same explicit translation
-///   `EditorActions.windowsPathFor` performs everywhere else in the app;
-/// * the file is far too big to decode ([kMaxImagePreviewBytes]);
-/// * the file is not an image at all, or is a corrupt one.
+/// The picture behind a transcript row that read an image, drawn from the path
+/// rather than the transcript's base64 copy. Every failure degrades to a line.
 class TranscriptImagePreview extends StatefulWidget {
   const TranscriptImagePreview({
     required this.path,
@@ -85,8 +59,7 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   }
 
   /// Stats the file **once per path**, not once per build: the transcript
-  /// rebuilds on every poll, and a `\\wsl.localhost\…` stat costs ~1.2 ms
-  /// against 0.07 ms locally (the measurement in `sessionChatTranscriptProvider`).
+  /// rebuilds on every poll, and a `\\wsl.localhost\…` stat costs ~1.2 ms.
   void _resolve() {
     _file = null;
     _problem = null;
@@ -189,10 +162,8 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   }
 }
 
-/// The degraded form: one quiet line, in place of the picture.
-///
-/// It never repeats the file name — the row above the preview already carries
-/// the path, and printing it twice is the complaint this work started from.
+/// The degraded form: one quiet line in place of the picture. It never repeats
+/// the file name — the row above already carries the path.
 class _Note extends StatelessWidget {
   const _Note({required this.text});
   final String text;

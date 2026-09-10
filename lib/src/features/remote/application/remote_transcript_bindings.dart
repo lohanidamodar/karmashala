@@ -1,10 +1,5 @@
-/// One read of a session's record, and the two answers it carries: the page
-/// the phone renders, and what that same read says is still in flight.
-///
-/// A family because it is **one file**: the poll sweep re-reads a watched
-/// session's whole transcript, and the largest one here is 53 MB — so
-/// everything that turns that read into a payload lives beside it rather than
-/// asking for it a second time.
+/// One read of a session's record, and the two answers it carries: the page and
+/// what is still in flight. The largest transcript here is 53 MB.
 library;
 
 import 'dart:convert';
@@ -28,15 +23,8 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';
 
-/// The same source selection as `SessionTranscriptView`: a PTY-hosted
-/// session renders from the agent's own record; anything else renders from
-/// the engine's event log. Attribution is REBUILT from the parent session's
-/// typed fields and stripped on a whole-string match — never parsed out of
-/// the text (the dray constraint).
-///
-/// **One read, two answers.** The activity comes off the very same parse — see
-/// [RemoteSessionRecord] — because the poll sweep re-reads this file and the
-/// largest one here is 53 MB.
+/// The same source selection as `SessionTranscriptView`. Attribution is REBUILT
+/// from the parent's typed fields, never parsed out of the text.
 Future<RemoteSessionRecord> remoteTranscriptFor(
   Ref ref,
   String sessionId,
@@ -80,9 +68,8 @@ Future<RemoteSessionRecord> remoteTranscriptFor(
   }
   return (
     page: RemoteTranscriptPage(
-      // The row this actually came from. A phone that asked with a superseded
-      // imported id learns the live one here rather than being told its stale
-      // id is fine.
+      // The row this actually came from: a phone that asked with a superseded
+      // imported id learns the live one here.
       sessionId: session.id,
       messages: messages,
       cursor: messages.length,
@@ -105,11 +92,8 @@ Future<RemoteSessionRecord> remoteTranscriptFor(
   );
 }
 
-/// The wire form of one [SessionActivity], stamped with when we looked.
-///
-/// The host's clock rather than the phone's, and said out loud, so the phone
-/// can measure an elapsed time both ends agree on — see
-/// [RemoteSessionActivity.observedAt].
+/// The wire form of one [SessionActivity], stamped with the host's clock and
+/// said out loud, so both ends agree on an elapsed time.
 RemoteSessionActivity _activityOf(
   Ref ref,
   String sessionId,
@@ -132,9 +116,8 @@ RemoteSessionActivity _activityOf(
   },
 );
 
-/// An imported CLI session's transcript: the agent's own store file, exactly
-/// what the desktop's imported view reads. Tool rows dropped like the pane
-/// mapping; no attribution — an imported session has no parent of ours.
+/// An imported CLI session's transcript, exactly what the desktop's imported
+/// view reads. No attribution — an imported session has no parent of ours.
 Future<RemoteTranscriptPage> _importedTranscript(
   ImportedSession session,
 ) async {
@@ -156,10 +139,8 @@ Future<RemoteTranscriptPage> _importedTranscript(
 typedef _AgentRecord = ({
   List<RemoteTranscriptMessage> messages,
   RemoteTranscriptAbsence? absence,
-  /// The parse the [messages] were cut from, kept so the activity can be read
-  /// off the same read. **Null means there was no record to read** — which is
-  /// what tells "nothing is outstanding" from "we cannot see", and is exactly
-  /// the distinction every early return below is already making.
+  /// The parse the [messages] were cut from, so activity is read off the same
+  /// read. **Null means there was no record** — not "nothing is outstanding".
   List<TranscriptMessage>? turns,
 });
 
@@ -179,27 +160,8 @@ _AgentRecord _structuralNothing(SessionChatView reading) => (
   turns: null,
 );
 
-/// The agent's own transcript file — `sessionChatTranscriptProvider`'s source,
-/// read once rather than polled. Tool rows are dropped, as the desktop chat
-/// view drops them.
-///
-/// The empty answers are not interchangeable, and this is the only place that
-/// can tell them apart. A **structural** nothing is one that will still hold
-/// after the agent answers — an agent whose store keeps its messages in a form
-/// nothing here opens, or a session whose store keeps the conversation and no
-/// readable transcript beside it — and the phone words that as its own empty
-/// state. Every other early return is a nothing we cannot account for — no
-/// external id yet, an installation that has gone, a store file the locator
-/// could not find — and those stay unexplained rather than being dressed up as
-/// the structural one.
-///
-/// **Which one this is is now read per session, not per agent.** It was
-/// `agentSupportsChatView` over the store format, which sent `noChatView` for
-/// every Antigravity session; the WSL install here keeps a readable JSONL
-/// transcript for all 25 of its conversations, so that refusal was wrong for
-/// every one of them. `SessionChatView` is the same reading the desktop's own
-/// chat view and plan panel use, off the store scan this already pays for, so
-/// the two ends cannot describe one session differently.
+/// The agent's own transcript file, read once, not polled. A **structural**
+/// nothing still holds after the agent answers; other empties do not.
 Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
   final screen = screenSessionChatView(ref, session.id);
   if (screen.keepsNoRecord) return _structuralNothing(screen);

@@ -3,35 +3,19 @@ import '../../../core/database/row_mapping.dart';
 import '../domain/follow_up.dart';
 import '../domain/session_ending.dart';
 
-/// How many open follow-ups are ever handed to the inbox at once.
-///
-/// The same number and the same argument as `kAttentionInboxCap`: past a couple
-/// of hundred, a list of things to come back to has stopped being a work queue
-/// and become a log. Bounded **here**, at the source, rather than by the
-/// inbox's own eviction — an evicted follow-up would be re-filed by the very
-/// next sync with a fresh arrival time and would displace a survivor, forever.
+/// How many open follow-ups are ever handed to the inbox at once. Bounded
+/// here, at the source: an evicted one would be re-filed by the next sync.
 const int kOpenFollowUpCap = 200;
 
-/// Data-access for what sessions left behind (schema v25).
-///
-/// Four methods, and the shape of them is the point: a follow-up can be
-/// **raised**, **read**, and **resolved**, and that is all. There is no update
-/// — the words a follow-up was raised with are the source's own and must not be
-/// quietly revised later — and no delete, because "why is this not in my list
-/// any more?" deserves an answer, which is what [FollowUpResolution] is for.
+/// Data-access for what sessions left behind. A follow-up can be raised, read
+/// and resolved — no update, and no delete, so a disappearance has an answer.
 class FollowUpDao {
   FollowUpDao(this._db);
 
   final AppDatabase _db;
 
-  /// Records [followUp], or returns null when this session already has one
-  /// open.
-  ///
-  /// Returning null rather than throwing, and rather than replacing: the caller
-  /// is an observer that re-notices the same ended session on every revision
-  /// bump, so "already known" is the *ordinary* outcome and must be cheap and
-  /// silent. Replacing would be worse still — it would reset the age the user
-  /// reads the list by every few seconds.
+  /// Records [followUp], or returns null when this session already has one open.
+  /// Replacing would reset the age the user reads the list by.
   FollowUp? raise(FollowUp followUp) {
     return _db.transaction(() {
       final open = _db.query(
@@ -57,10 +41,8 @@ class FollowUpDao {
     });
   }
 
-  /// Everything still waiting, newest first, at most [limit].
-  ///
-  /// Newest first because this is a work queue: the thing that just broke is
-  /// the thing most likely to still be in the user's head.
+  /// Everything still waiting, newest first, at most [limit] — a work queue, so
+  /// the thing that just broke is the thing still in the user's head.
   List<FollowUp> open({int limit = kOpenFollowUpCap}) {
     final rows = _db.query(
       'SELECT * FROM session_follow_ups WHERE resolved_at IS NULL '
@@ -80,10 +62,8 @@ class FollowUpDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  /// Closes [id], recording when and which way it went.
-  ///
-  /// A no-op on one already closed — `WHERE resolved_at IS NULL` — so a second
-  /// call cannot overwrite the record of how it was closed the first time.
+  /// Closes [id], recording when and which way it went. A no-op on one already
+  /// closed, so a second call cannot overwrite the first record.
   void resolve(
     int id, {
     required FollowUpResolution resolution,
@@ -97,13 +77,7 @@ class FollowUpDao {
   }
 
   /// `'<sessionId>/<ending>'` for every ending that has ever produced a row,
-  /// **open or resolved**.
-  ///
-  /// One query for the whole table, read once per app run, so the sweep can
-  /// answer "have I already considered this?" without a query per ended
-  /// session. Resolved rows are included deliberately: the session row that
-  /// raised a notice goes on saying `failed` forever, so forgetting a dismissed
-  /// one would re-raise it on the next bump.
+  /// open or resolved. One query per app run, so the sweep needs none per session.
   Set<String> raisedEndings() {
     final rows = _db.query(
       'SELECT DISTINCT session_id, ending FROM session_follow_ups;',

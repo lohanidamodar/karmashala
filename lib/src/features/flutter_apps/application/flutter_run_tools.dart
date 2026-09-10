@@ -8,26 +8,12 @@ import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 import 'flutter_loop.dart';
 
-/// How many rows of a pane come back with an answer.
-///
-/// Enough to hold a Gradle failure or the tail of a test run, and small enough
-/// that a status call on a healthy run is a few hundred tokens rather than a
-/// scrollback.
+/// How many rows of a pane come back with an answer — enough for a Gradle
+/// failure, small enough that a healthy status call is a few hundred tokens.
 const int kFlutterRunLogRows = 80;
 
-/// The `flutter_run` tool: one owned lifecycle for a Flutter project.
-///
-/// **Why one tool and not six.** Every action here is a step of the same loop —
-/// resolve, resolve dependencies, launch, look, gate — and they share one
-/// preflight, one environment resolution and one set of refusals. Split into
-/// six tools they would share none of it, and a caller would have to learn the
-/// order.
-///
-/// **The log only earns its tokens when something went wrong or is still
-/// going.** A gate that passed comes back as a verdict and a run that is over
-/// comes back as an exit code; neither carries its output. A run that is still
-/// going, or one that stopped badly, carries the tail — that is the moment
-/// somebody has a question about it.
+/// The `flutter_run` tool: one lifecycle for a Flutter project, one tool rather
+/// than six because they share a preflight and a set of refusals.
 class FlutterRunTools {
   FlutterRunTools(this._container, {this.callerSessionId});
 
@@ -180,11 +166,8 @@ class FlutterRunTools {
           'action "status" and paneId "${run.paneId}".',
   };
 
-  /// One run, and its log only when the log is worth reading.
-  ///
-  /// [endedByUs] is the one case where an absent pane is not a blind spot: we
-  /// stopped it a moment ago, so "we no longer have the pane" would read as
-  /// doubt about something we did on purpose.
+  /// One run, and its log only when the log is worth reading. [endedByUs] is
+  /// the one case where an absent pane is not a blind spot.
   Map<String, Object?> _describe(
     FlutterCommandRun run, {
     required bool includeLog,
@@ -237,11 +220,8 @@ class FlutterRunTools {
       if (value != null) '$value',
   ];
 
-  /// The project directory, from a checkout id and an optional sub-path.
-  ///
-  /// A checkout id rather than a path, the way `worktree_create` takes one:
-  /// the id is what carries the environment, and a bare path would have to be
-  /// guessed into one — which is the guess CLAUDE.md §17 is about.
+  /// The project directory, from a checkout id and an optional sub-path. An id
+  /// rather than a path: the id is what carries the environment (§17).
   EnvironmentPath _project(Map<String, dynamic> args) {
     final id = (args['checkoutId'] as String?)?.trim() ?? '';
     if (id.isEmpty) {
@@ -274,9 +254,8 @@ class FlutterRunTools {
     );
   }
 
-  /// The one live run, when there is exactly one. Null when there are none —
-  /// and when there are two, because stopping the wrong app is worse than
-  /// being asked which.
+  /// The one live run, when there is exactly one; null for none and for two,
+  /// because stopping the wrong app is worse than being asked which.
   FlutterCommandRun? _onlyLiveRun() {
     final live = <FlutterCommandRun>[
       for (final run in _loop.runs)

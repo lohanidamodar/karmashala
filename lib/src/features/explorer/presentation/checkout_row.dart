@@ -8,22 +8,8 @@ import 'explorer_row.dart';
 import 'session_card.dart';
 
 /// One place a session can live: a repository, one of its worktrees, or a
-/// folder the scanner has not been to yet.
-///
-/// A single dense line, because the pane's vertical space belongs to the cards.
-/// It carries four things and nothing else:
-///
-/// ```
-/// ▾ ⑂ karmashala-app   projects/karmashala-app   main  3 changed   + ⋮
-/// ```
-///
-/// * **what it is** — the glyph says repository, worktree, or unscanned folder;
-/// * **where it is** — the name, and the path relative to the project when that
-///   is not simply the name. On a hub project this is the answer to the owner's
-///   question: which sub-directory is this;
-/// * **what git says** — branch and change count, from the checkout provider the
-///   cards beneath share, so a row costs no `git status` of its own;
-/// * **what you can do** — start a session here, or open the menu.
+/// folder the scanner has not been to yet. A single dense line, because the
+/// pane's vertical space belongs to the cards.
 class CheckoutRow extends StatelessWidget {
   const CheckoutRow({
     required this.depth,
@@ -58,9 +44,8 @@ class CheckoutRow extends StatelessWidget {
   final bool? expanded;
   final bool selected;
 
-  /// The checkout's branch and change count. Asynchronous by construction: the
-  /// row draws without it and fills in when git answers, and a folder git cannot
-  /// answer for shows nothing rather than an error.
+  /// The checkout's branch and change count, asynchronous by construction: a
+  /// folder git cannot answer for shows nothing rather than an error.
   final SessionDiffStat? stat;
 
   /// A short clause in place of the branch — "not scanned yet".
@@ -79,16 +64,9 @@ class CheckoutRow extends StatelessWidget {
   final RowMenuItemBuilder? menuItemsBuilder;
   final ValueChanged<String>? onMenu;
 
-  /// The measured facts are dropped in order of value as the pane narrows,
-  /// rather than all at once: the change count answers "is there work here",
-  /// which is what the row is scanned for, and the branch is on every card
-  /// beneath it anyway.
-  ///
-  /// **The Explorer opens at 304px** and clamps to 200, so a single threshold
-  /// above 304 means the default pane shows a repository row with nothing on
-  /// its right at all — which is what driving the app found. The indent is
-  /// already spent by the time the builder runs — [ExplorerRow] draws it as the
-  /// tile's own margin — so the width measured here is what the row really has.
+  /// The measured facts are dropped in order of value as the pane narrows. Two
+  /// thresholds because the Explorer opens at 304px and clamps to 200 — one
+  /// threshold above 304 empties the default pane's rows.
   static const _statWidth = 200.0;
   static const _branchWidth = 300.0;
 
@@ -141,18 +119,16 @@ class CheckoutRow extends StatelessWidget {
           color: iconColor ?? scheme.onSurfaceVariant,
         ),
         SizedBox(width: density.glyphGap),
-        // The name gets the larger share: it is what the eye is scanning
-        // for, and the path beneath it is context. Both are flexible, so
-        // neither can push the right-hand facts off the row.
+        // The name gets the larger share and the path is context. Both are
+        // flexible, so neither can push the right-hand facts off the row.
         Flexible(
           flex: 2,
           child: Text(
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            // The same weight a project name and a session title carry: a
-            // repository row that read lighter than the cards under it had
-            // the hierarchy upside down.
+            // The same weight a project name and a session title carry: a row
+            // lighter than the cards under it had the hierarchy upside down.
             style: density.title(theme),
           ),
         ),

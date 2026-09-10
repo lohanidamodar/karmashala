@@ -33,11 +33,8 @@ class CodeEditor {
   int get hashCode => kind.hashCode;
 }
 
-/// Detects which code editors are installed and opens a folder in one.
-///
-/// Everything runs through the Windows-host [CommandRunner] (constraint 6): a
-/// fire-and-forget `start` of the editor's CLI with the target folder, which
-/// returns immediately.
+/// Detects which code editors are installed and opens a folder in one, all
+/// through the Windows-host [CommandRunner] (constraint 6). Fire-and-forget.
 class CodeEditorService {
   CodeEditorService(this._runner, {bool? windows})
     : _windows = windows ?? Platform.isWindows;
@@ -66,13 +63,8 @@ class CodeEditorService {
     return found;
   }
 
-  /// Whether [executable] resolves on `PATH`.
-  ///
-  /// `where.exe` is Windows'. Elsewhere it is `command -v` through a shell —
-  /// it is a builtin, and the portable spelling where `which` is not
-  /// guaranteed to be installed. Asking `where.exe` on a Mac found nothing, so
-  /// the editor list came up empty and "Open in editor" had nothing to offer
-  /// on a machine with VS Code plainly installed.
+  /// Whether [executable] resolves on `PATH`. `where.exe` is Windows'; elsewhere
+  /// it is `command -v`, a builtin, because `which` may not be installed.
   Future<bool> _onPath(String executable) async {
     try {
       final result = await _runner.run(
@@ -89,20 +81,15 @@ class CodeEditorService {
     }
   }
 
-  /// Opens [folderPath] — an absolute path on *this* host, which is a Windows
-  /// or UNC path on Windows and an ordinary POSIX one elsewhere — in [editor].
+  /// Opens [folderPath] — absolute on *this* host — in [editor].
   /// Fire-and-forget.
   Future<void> open(CodeEditor editor, {required String folderPath}) async {
     await _runner.start(
       CommandRequest(
         executable: editor.executable,
         arguments: [folderPath],
-        // On Windows, VS Code/Zed are launched by their bare CLI name (`code`
-        // resolves to `code.cmd`), which needs the shell. A custom editor is a
-        // full exe path, so launch it directly to avoid `cmd /c` quoting
-        // surprises. Off Windows nothing needs a shell: `code` and `zed` are
-        // ordinary executables on PATH, and wrapping them in one only adds a
-        // layer that can mangle a path with a space in it.
+        // On Windows a bare `code` resolves to `code.cmd` and needs the shell; a
+        // custom editor is a full exe path, so launch it directly and skip the quoting.
         runInShell: _windows && editor.kind != CodeEditorKind.custom,
         workingDirectory: editor.kind == CodeEditorKind.custom
             ? EnvironmentPath(

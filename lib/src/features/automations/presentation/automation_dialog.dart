@@ -11,12 +11,8 @@ import '../application/unattended_preflight.dart';
 import '../domain/automation.dart';
 import '../domain/cron_schedule.dart';
 
-/// Arming an automation, which is the whole of the authorisation.
-///
-/// **The gate is shown live, in its own words, and the button is disabled by
-/// it.** The sentence under Arm is the same sentence the fire path would throw
-/// — one function produces both, so the reason on screen cannot drift from the
-/// reason the write refuses with.
+/// Arming an automation, which is the whole of the authorisation. The gate's
+/// own sentence disables the button, so it cannot drift from the write's.
 class AutomationDialog extends ConsumerStatefulWidget {
   const AutomationDialog({required this.repository, this.existing, super.key});
 
@@ -147,8 +143,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               ),
               const SizedBox(height: Insets.sm),
               // A segmented control rather than two radios: `RadioListTile`'s
-              // `groupValue` is deprecated in this SDK, and the choice is
-              // binary anyway.
+              // `groupValue` is deprecated in this SDK.
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment(value: true, label: Text('Repeating')),
@@ -264,12 +259,8 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     );
   }
 
-  /// The agent's own modes, flat and safest first.
-  ///
-  /// `AgentPermissionSupport.selections()` rather than a picker per axis: what
-  /// the gate reads is the whole selection's rung, and a two-axis agent's seven
-  /// distinct combinations are easier to choose between than two menus whose
-  /// interaction the reader has to work out.
+  /// The agent's own modes, flat and safest first. Whole selections rather than
+  /// a picker per axis, because the gate reads the whole selection's rung.
   Widget _modePicker(List<AgentInstallation> installations) {
     final theme = Theme.of(context);
     final installationId = _installationId;
@@ -303,9 +294,8 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
         for (final selection in selections)
           DropdownMenuItem(
             value: selection.canonical,
-            // Whole selections rather than axes here, so the familiar name is
-            // the composed rung's — which is the one the unattended gate
-            // reads.
+            // Whole selections rather than axes, so the familiar name is the
+            // composed rung's — the one the unattended gate reads.
             child: Text(describeSelectionFamiliar(support, selection)),
           ),
       ],
@@ -356,9 +346,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               permissionMode: candidate.permissionMode,
               enabled: true,
               // The authorisation, dated. Editing one re-dates it: changing
-              // what an automation does is authorising the new thing, and the
-              // missed-fire sweep counts from that moment rather than claiming
-              // occurrences of a rule that no longer exists.
+              // what an automation does is authorising the new thing.
               armedAt: controller.now(),
             )
           : candidate.copyWith(armedAt: controller.now()),

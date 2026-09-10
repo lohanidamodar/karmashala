@@ -1,14 +1,5 @@
-// **The live view's session** — everything the pane does that is not drawing.
-//
-// Starting and stopping a stream, opening and re-attaching the player, holding
-// the previous picture across a restart, the health subscription and the
-// restart policy, the gesture, keyboard and clipboard sinks with their adb
-// fallback, and the resume that survives the side panel unmounting the pane.
-//
-// A mixin because a class cannot be split across parts and `build` reads the
-// fields this owns; `on WidgetsBindingObserver` because the lifecycle callback
-// below is that mixin's, and applying this after it is what keeps the override
-// order the class had.
+// The live view's session — everything the pane does that is not drawing.
+// A mixin, applied after WidgetsBindingObserver to keep the override order.
 part of 'device_pane.dart';
 
 /// Shared by the pane and the native-player verification probe.
@@ -50,13 +41,8 @@ enum LiveViewSelectionAction {
   moveTo,
 }
 
-/// The rule that keeps the picture and the device picker talking about the same
-/// device.
-///
-/// Pure and public on purpose: it is the whole of the fix for "switching
-/// devices leaves the live view on the old device", and the pane it lives in
-/// cannot be driven in a widget test — the live view needs a real media_kit
-/// `Player`, which needs libmpv.
+/// The rule that keeps the picture and the device picker on one device.
+/// Pure and public because the pane itself cannot be driven in a widget test.
 ({LiveViewSelectionAction action, AndroidDevice? device}) liveViewSelection({
   required String? liveSerial,
   required String? selectedSerial,
@@ -84,37 +70,18 @@ mixin _DeviceLiveStream
   String? _streamError;
   bool _starting = false;
 
-  /// The device the live view is for: whose picture is on screen, whose
-  /// coordinate space gestures are mapped through, and whose keys the hardware
-  /// buttons press. `null` when the live view is off.
-  ///
-  /// There used to be two answers to "which device is this pane about" — this
-  /// field and [selectedDeviceSerialProvider] — and nothing kept them equal, so
-  /// switching devices left the picture on the old one and taps were mapped
-  /// through the new one's resolution. The provider is now the source of truth
-  /// and this is only ever a *reflection* of it, maintained in exactly one
-  /// place: [_onSelectionChanged].
-  ///
-  /// It is stored in [androidLiveViewProvider] rather than in this `State`,
-  /// because the side panel unmounts the pane whenever it switches surface and
-  /// the flag has to survive that. Every write below is inside — or
-  /// immediately followed by — a `setState`, which is why reading it does not
-  /// need to watch.
+  /// The device the live view is for, `null` when off: only ever a reflection
+  /// of [selectedDeviceSerialProvider], kept there so it survives a remount.
   String? get _liveSerial => ref.read(androidLiveViewProvider);
   set _liveSerial(String? serial) =>
       ref.read(androidLiveViewProvider.notifier).select(serial);
 
-  /// A live view being brought back after a remount, before the device list has
-  /// answered. Kept apart from [_starting], whose job is to refuse a second
-  /// `_startStream` for the device already starting — a resume has to be let
-  /// through it.
+  /// A live view being brought back after a remount. Kept apart from
+  /// [_starting], which refuses a second start — a resume must be let through.
   bool _resuming = false;
 
-  /// Distinguishes an in-flight start from a newer one that has overtaken it.
-  ///
-  /// Switching device while the first stream is still starting is an ordinary
-  /// thing to do, so a start cannot simply refuse to be interrupted; instead
-  /// the loser notices it has been superseded and tears its own session down.
+  /// Distinguishes an in-flight start from a newer one that overtook it; the
+  /// loser notices it has been superseded and tears its own session down.
   int _startToken = 0;
 
   /// The stream's own opinion of itself. `null` before the first report.
@@ -127,47 +94,25 @@ mixin _DeviceLiveStream
 
   /// Where keystrokes go while the live view has focus. Same story as [_sink]:
   /// the control socket when there is one, `adb shell input` when there is not.
-  /// Whether they are *going* is [DeviceKeyboardSurface]'s to know — it is a
-  /// question about focus, and focus lives down there.
   DeviceKeyboardSink? _keyboardSink;
 
-  /// The device's clipboard, over the same control socket the sinks use.
-  ///
-  /// `null` when there is no control socket, and there is deliberately **no adb
-  /// fallback** — unlike input, where `adb shell input` is a worse but real
-  /// second transport. adb has no clipboard verb at all (see
-  /// `DeviceClipboardBridge`'s measurements), so with no socket the honest
-  /// answer is that the clipboard cannot be reached, and the control says so
-  /// rather than offering a button that does nothing.
+  /// The device's clipboard over the control socket. `null` with no socket,
+  /// and deliberately no adb fallback — adb has no clipboard verb at all.
   DeviceClipboardBridge? _clipboard;
 
   /// The previous session's player, kept alive across a restart so the last
   /// frame it decoded stays on screen instead of the picture going blank.
-  ///
-  /// It is a *held* picture, never a live one: whenever this is what is on
-  /// screen, [StreamReconnectingOverlay] is over it saying so. Disposed as soon
-  /// as the new stream has a picture of its own.
   Player? _heldPlayer;
   VideoController? _heldVideo;
 
-  /// Whether the picture on screen belongs to the session being replaced.
-  ///
-  /// Held across the whole restart, not derived from which field the controller
-  /// is in: the picture is the outgoing session's from the moment the restart
-  /// begins, and it is only [_heldVideo] for the part of that after the old
-  /// session has been torn down.
+  /// Whether the picture on screen belongs to the session being replaced —
+  /// held across the whole restart, not derived from which field it is in.
   bool _holdingPicture = false;
 
   Timer? _reconnectTimer;
 
-  /// Lets go of this session's registration with [PickerQuiet].
-  ///
-  /// The live view is the one thing on this pane that works on the isolate
-  /// whether or not anybody is touching it, and a host file dialog is built on
-  /// that same thread — see `core/util/file_picking.dart`. Registering the
-  /// *session* rather than the pane is deliberate: the picker the user opens is
-  /// rarely on this surface (Settings, a new project, an SSH key), and the rule
-  /// is about the isolate, not about which pane is in front.
+  /// Lets go of this session's [PickerQuiet] registration. The session, not
+  /// the pane: the rule is about the isolate a host file dialog shares.
   VoidCallback? _releaseQuiet;
 
   /// When an unwell stream is worth restarting, and how long to wait first.
@@ -179,9 +124,8 @@ mixin _DeviceLiveStream
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // The side panel unmounts this pane every time it switches surface, and
-    // [dispose] takes the session down with it. What survived is the intent;
-    // this is what acts on it.
+    // The side panel unmounts this pane on every surface switch; what
+    // survives is the intent, and this is what acts on it.
     final serial = ref.read(androidLiveViewProvider);
     if (serial != null) {
       // From the first frame, so the pane does not flash "pick a device" on
@@ -191,11 +135,8 @@ mixin _DeviceLiveStream
     }
   }
 
-  /// Puts the live view back on the device it was on before the unmount.
-  ///
-  /// The device list is awaited rather than read: it outlives the pane, but a
-  /// refresh may be in flight, and a list still loading reads as the same empty
-  /// list as a phone that has been unplugged.
+  /// Puts the live view back on the device it was on before the unmount. The
+  /// list is awaited: one still loading reads as an unplugged phone.
   Future<void> _resumeLiveView(String serial) async {
     List<AndroidDevice> devices;
     try {
@@ -218,10 +159,8 @@ mixin _DeviceLiveStream
     await _startStream(device);
   }
 
-  /// A minimised window is not a stalled player.
-  ///
-  /// `inactive` is deliberately still watching: an unfocused window is one the
-  /// user can see perfectly well, and often the whole point of a live view.
+  /// A minimised window is not a stalled player; `inactive` is deliberately
+  /// still watching — an unfocused window is one the user can still see.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _session?.setWatched(
@@ -229,12 +168,8 @@ mixin _DeviceLiveStream
     );
   }
 
-  /// A real teardown, not [DeviceStreamSession.setWatched] on a retained
-  /// session. `setWatched` only stops the watchdog reading silence as a stall;
-  /// it does not stop one frame being encoded on the phone, pushed over the
-  /// socket and decoded by libmpv. A pane the user switched away from is worth
-  /// no battery on their handset and no decode on the host — so the session
-  /// goes, and [androidLiveViewProvider] remembers that it should come back.
+  /// A real teardown, not `setWatched`: a pane switched away from is worth no
+  /// encode on the phone. [androidLiveViewProvider] remembers to come back.
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -244,13 +179,8 @@ mixin _DeviceLiveStream
     super.dispose();
   }
 
-  /// Tears the running session down. Leaves [_liveSerial] alone: this is what a
-  /// restart or a device switch uses, and both are still "the live view is on".
-  ///
-  /// With [retainPicture] the player outlives the session it was showing, so a
-  /// restart of the same device replaces the picture rather than removing it.
-  /// Everything that carries input — the sockets, the sinks, the keyboard — is
-  /// torn down either way: only the frame is kept.
+  /// Tears the running session down, leaving [_liveSerial] alone — a restart
+  /// or a switch is still "on". [retainPicture] keeps the frame, never input.
   Future<void> _disposeSession({bool retainPicture = false}) async {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
@@ -283,8 +213,7 @@ mixin _DeviceLiveStream
     await player?.dispose();
   }
 
-  /// Lets go of the held frame. Idempotent: a restart, a stop, a device switch
-  /// and `dispose` all pass through here.
+  /// Lets go of the held frame. Idempotent: every teardown path comes here.
   Future<void> _releaseHeldPicture() async {
     final player = _heldPlayer;
     _heldPlayer = null;
@@ -300,14 +229,8 @@ mixin _DeviceLiveStream
     await _releaseHeldPicture();
   }
 
-  /// Keeps the live view on whatever device the user has chosen.
-  ///
-  /// This is the whole of the fix for "switching devices leaves the live view
-  /// on the old device". It deliberately listens to
-  /// [selectedDeviceSerialProvider] — the *explicit* choice — and not to the
-  /// derived [selectedDeviceProvider], whose "default to the only ready device"
-  /// convenience would otherwise move the stream to a different phone by itself
-  /// when the streamed emulator died.
+  /// Keeps the live view on the *explicit* [selectedDeviceSerialProvider], not
+  /// the derived one, whose "only ready device" default would move it alone.
   void _onSelectionChanged(String? serial) {
     if (!mounted) return;
     final next = liveViewSelection(
@@ -332,9 +255,6 @@ mixin _DeviceLiveStream
   }
 
   /// Restarts the live view for the device it is already showing.
-  ///
-  /// Distinct from refreshing the device list, which is what the toolbar's
-  /// other button does and what people reached for when the picture froze.
   Future<void> _restartStream({bool manual = true}) async {
     final serial = _liveSerial ?? ref.read(selectedDeviceProvider)?.serial;
     final device = ref
@@ -348,12 +268,8 @@ mixin _DeviceLiveStream
     await _startStream(device);
   }
 
-  /// Reacts to the stream's opinion of itself.
-  ///
-  /// **Restarting is [StreamRestartPolicy]'s decision, not this method's.** It
-  /// used to be "anything that is not healthy", which included a device sitting
-  /// on a static screen, and the live view spent nine minutes restarting a
-  /// phone nobody was touching.
+  /// Reacts to the stream's opinion of itself. Restarting is
+  /// [StreamRestartPolicy]'s call: a static screen is not an unhealthy stream.
   void _onHealth(DeviceStreamHealth health) {
     if (!mounted) return;
     setState(() => _health = health);
@@ -368,9 +284,7 @@ mixin _DeviceLiveStream
       case StreamRecovery.none:
         return;
       case StreamRecovery.resetVideo:
-        // The cheapest rung: the device is asked for a fresh keyframe over the
-        // control socket we already know is healthy. Nothing is torn down, so
-        // there is nothing for the user to see except the picture resuming.
+        // The cheapest rung: a fresh keyframe over a socket already healthy.
         final sent = session?.requestVideoReset() ?? false;
         _log.info(
           sent
@@ -383,8 +297,7 @@ mixin _DeviceLiveStream
         );
         unawaited(_reattachPlayer());
       case StreamRecovery.restart:
-        // Said out loud, because the log of the restart loop recorded only that
-        // the stream had stopped — never why, which is what made it a mystery.
+        // With the reason: the old loop logged only that the stream stopped.
         _log.warning(
           'Restarting the live view on $_liveSerial in '
           '${step.delay.inSeconds}s (attempt ${_restarts.attempt}): '
@@ -407,17 +320,14 @@ mixin _DeviceLiveStream
     // Set before selecting, so the resulting notification sees the pane already
     // pointed at this device and does not restart what it just started.
     _liveSerial = device.serial;
-    // Starting the live view *is* choosing a device. Pinning it here means the
-    // toolbar, the picture, the gestures and the hardware keys cannot disagree
-    // about which device the pane is about.
+    // Starting the live view *is* choosing a device: pinning it here keeps the
+    // toolbar, picture, gestures and hardware keys from disagreeing.
     ref.read(selectedDeviceSerialProvider.notifier).select(device.serial);
     // Only for the device already on screen. Another device's last frame is
     // not a stale picture of this one — it is the wrong phone.
     final retainPicture = _session?.serial == device.serial && _player != null;
     // A hold that is not being renewed belongs to a stream that is not coming
-    // back — another device, or a start that was overtaken. Only `_starting`
-    // keeps it off the screen, and that is too thin a thread for a frame that
-    // would be labelled with the wrong device's name.
+    // back; its frame would be labelled with the wrong device's name.
     if (!retainPicture) unawaited(_releaseHeldPicture());
     setState(() {
       _starting = true;
@@ -441,8 +351,7 @@ mixin _DeviceLiveStream
       }
       _healthSubscription = session.health.listen(_onHealth);
       // From the moment there is a session, not from the moment the pane is
-      // looked at: the stream keeps working while the user is somewhere else in
-      // the app, and that is exactly where the pickers are.
+      // looked at: the pickers are elsewhere in the app, and it keeps working.
       _releaseQuiet = PickerQuiet.instance.register(session.setQuiet);
       final sink = _controlSink(session);
       final control = session.control;
@@ -454,22 +363,16 @@ mixin _DeviceLiveStream
         _holdingPicture = false;
         _health = null;
         _sink = sink;
-        // Built here rather than lazily so the device's pushed clipboard is
-        // being listened for from the moment the stream is up: it arrives as
-        // an event, and a listener attached only when the user first presses
-        // the button would have missed everything before that.
+        // Built eagerly: the device pushes its clipboard as an event, so a
+        // listener attached on first press would have missed everything.
         _clipboard = control == null
             ? null
             : DeviceClipboardBridge(channel: control);
-        // The keyboard needs no screen size, so it is available immediately in
-        // either transport — a gesture has to wait for `wm size`, a keystroke
-        // does not.
+        // No screen size needed, unlike a gesture waiting on `wm size`.
         _keyboardSink = _keyboardSinkFor(session);
       });
-      // A recording that lost its frames when this pane last unmounted picks
-      // them up here. Offered on every start, not only when one is running:
-      // the recorder is what decides whether it wants them, and it is the only
-      // thing that knows whether a recording is open.
+      // Offered on every start, not only when a recording is running: only
+      // the recorder knows whether one is open and wants the frames.
       ref.read(deviceRecordingProvider.notifier).offerLiveView(
         LiveViewRecordingSource(
           target: AndroidTarget(device),
@@ -483,9 +386,8 @@ mixin _DeviceLiveStream
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_releaseHeldPicture()),
       );
-      // No control socket: the adb fallback needs the device's screen size,
-      // which is a round trip. Fetched off the start path so a slow `wm size`
-      // delays gestures rather than the picture.
+      // The adb fallback needs a `wm size` round trip; fetched off the start
+      // path so a slow answer delays gestures rather than the picture.
       if (sink == null) unawaited(_useAdbSink(session.serial));
     } catch (error) {
       if (!mounted || token != _startToken) return;
@@ -500,10 +402,6 @@ mixin _DeviceLiveStream
   }
 
   /// Builds a player pointed at [url] and waits for it to open.
-  ///
-  /// Extracted because re-attaching the player is a recovery step of its own:
-  /// the same player, the same properties, a second time, against a stream that
-  /// never went away.
   Future<({Player player, VideoController controller})> _openPlayer(
     Uri url,
   ) async {
@@ -516,25 +414,16 @@ mixin _DeviceLiveStream
       ),
     );
     final native = player.platform as NativePlayer;
-    // libmpv defaults to buffering for smooth playback; these make it behave
-    // like a monitor. `setProperty` swallows libmpv's return code, so these
-    // were verified by reading them back: `profile=low-latency` really is
-    // applied (`cache-pause=no`, `video-latency-hacks=yes` and
-    // `stream-buffer-size=4096` are the profile's values, not the defaults).
+    // libmpv buffers for smoothness; these make it a monitor. `setProperty`
+    // swallows libmpv's return code — verify a change by reading it back.
     await configureDeviceLivePlayer(native.setProperty);
     final controller = VideoController(player);
     await player.open(Media(url.toString()));
     return (player: player, controller: controller);
   }
 
-  /// Rebuilds the player against the stream it is already reading.
-  ///
-  /// The middle rung of the recovery ladder, and the one that fixes a wedged
-  /// player without costing anything: the scrcpy server, the tunnel, the
-  /// sockets and the session all stay exactly as they are, and the media server
-  /// hands the new viewer a fresh muxer, fresh tables and the cached keyframe.
-  /// The old picture stays on screen — behind [HeldPicture] — until the new one
-  /// has opened, so the pane never goes blank for it.
+  /// Rebuilds the player against the stream it is already reading: the middle
+  /// recovery rung, fixing a wedged player without touching server or sockets.
   Future<void> _reattachPlayer() async {
     final session = _session;
     if (session == null || _starting) return;
@@ -573,12 +462,8 @@ mixin _DeviceLiveStream
     }
   }
 
-  /// The control-socket gesture sink for a session, or `null` when the session
-  /// has no control socket and the adb fallback is needed.
-  ///
-  /// The two are not equivalent and the pane says which is in use, because a
-  /// drag that tracks the finger and a drag that jumps on release are different
-  /// products.
+  /// The control-socket gesture sink, or `null` when there is none and the adb
+  /// fallback is needed — a drag that jumps on release is a different product.
   DeviceGestureSink? _controlSink(DeviceStreamSession session) {
     final control = session.control;
     if (control == null) return null;
@@ -592,12 +477,8 @@ mixin _DeviceLiveStream
     );
   }
 
-  /// Every sink the pane hands out goes through here.
-  ///
-  /// The stream cannot tell a device with nothing to draw from one that has
-  /// stopped answering unless it knows the user is asking — and the live view
-  /// is the only place that knows. Wrapping at the one place sinks are built
-  /// means no transport can forget to say so.
+  /// Every sink goes through here: the stream cannot tell a static screen from
+  /// a device that stopped answering unless it knows input is being sent.
   DeviceGestureSink _observed(
     DeviceStreamSession session,
     DeviceGestureSink sink,
@@ -608,12 +489,8 @@ mixin _DeviceLiveStream
     DeviceKeyboardSink sink,
   ) => ObservedKeyboardSink(sink, onInput: session.noteInput);
 
-  /// Where keystrokes for [session] go.
-  ///
-  /// Unlike gestures this never returns `null` for want of a screen size: the
-  /// control socket if there is one, `adb shell input` if there is not, and
-  /// `null` only when there is no adb either — which the pane states rather
-  /// than swallowing keys.
+  /// Where keystrokes for [session] go: the control socket, else `adb shell
+  /// input`, and `null` only when there is no adb either.
   DeviceKeyboardSink? _keyboardSinkFor(DeviceStreamSession session) {
     final control = session.control;
     if (control != null) {
@@ -630,12 +507,8 @@ mixin _DeviceLiveStream
     );
   }
 
-  /// Installs the `adb shell input` gesture sink for [serial].
-  ///
-  /// The screen size comes from **the device being streamed**, by serial. It
-  /// used to come from whatever was selected, which is a different device the
-  /// moment the two disagree — and a tap mapped through the wrong resolution
-  /// lands in the wrong place while looking like it worked.
+  /// Installs the `adb shell input` gesture sink for [serial] — sized by the
+  /// streamed device, since the wrong resolution silently misplaces a tap.
   Future<void> _useAdbSink(String serial) async {
     final adb = ref.read(adbServiceProvider);
     if (adb == null) return;
@@ -665,20 +538,16 @@ mixin _DeviceLiveStream
     if (!mounted || serial == null || session == null) return;
     final adb = ref.read(adbServiceProvider);
     // The clipboard has no second transport, so it goes rather than degrading.
-    // Kept as a fact the controls can read: the button then explains that the
-    // socket has closed instead of failing on every press.
     final clipboard = _clipboard;
     if (clipboard != null && !clipboard.isOpen) {
       _clipboard = null;
       unawaited(clipboard.dispose());
     }
-    // Keyed on the transport rather than the class: every sink is wrapped for
-    // input observation now, so `is AdbKeyboardSink` would never be true again
-    // and the fallback would reinstall itself on every dropped event.
+    // Keyed on the transport, not the class: every sink is wrapped now, so
+    // `is AdbKeyboardSink` would reinstall the fallback on every drop.
     if (adb != null &&
         _keyboardSink?.transport != DeviceKeyboardTransport.adbInput) {
-      // The keyboard falls back on its own: it does not need the screen size
-      // the gesture sink is about to go and fetch.
+      // The keyboard needs no screen size, so it falls back immediately.
       setState(
         () => _keyboardSink = _observedKeys(
           session,

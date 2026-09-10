@@ -5,27 +5,8 @@ import 'package:karmashala_devices/devices.dart';
 import 'device_claims.dart';
 import 'device_fleet.dart';
 
-/// **Install, launch and force-stop, from the window.**
-///
-/// The same three verbs `device_install_app`, `device_launch_app` and
-/// `device_terminate_app` offer an agent, resolved the same way: a
-/// [DeviceDriver] out of the [DeviceFleet], the capability checked, then the
-/// device taken through [DeviceClaims]. There is no second path to a device
-/// here and no call to a tool from the UI — this is the layer the tools
-/// themselves sit on.
-///
-/// **The claim is what makes this safe to add.** An agent mid-test-run holds
-/// the phone, and a person cold-restarting the app underneath it would break
-/// the run in a way neither of them could see. So the window takes a driver the
-/// way `DeviceControlTools._driverToDrive` does, in the same order and for the
-/// same reasons: the driver first, so the claim is keyed on the canonical id
-/// and two names for one phone collide; the capability next, so a device that
-/// cannot do the thing is not held while being told so.
-///
-/// **The window claims nothing of its own.** It passes a null session id, which
-/// [DeviceClaims.claim] treats as the launcher: it respects a standing claim
-/// and takes none. A person is at the machine and is not a session that can
-/// lapse, so a claim in their name would have no holder to name and no end.
+/// **Install, launch and force-stop, from the window** — the same layer the
+/// `device_*` tools sit on: driver, then capability, then [DeviceClaims].
 class DeviceAppActions {
   DeviceAppActions(this._ref);
 
@@ -69,12 +50,8 @@ class DeviceAppActions {
     (driver) => driver.terminateApp(appId),
   );
 
-  /// Resolves, checks, claims, acts — and stamps the answer.
-  ///
-  /// Every outcome carries the moment the driver answered (§19). A device
-  /// action's result is a *reading*: "installed" is true of the instant it was
-  /// said and of no later instant, and a line with no age on it invites the
-  /// reader to believe it still holds.
+  /// Resolves, checks, claims, acts — and stamps the answer with the moment
+  /// the driver said it: "installed" is a reading, true of that instant.
   Future<DeviceActionOutcome<T>> _act<T>(
     String deviceId,
     String verb,
@@ -96,9 +73,8 @@ class DeviceAppActions {
         at: _ref.read(clockProvider).nowUtc(),
       );
     } on Object catch (error) {
-      // `DeviceBusy` and `DeviceRefusal` both `toString()` to the sentence they
-      // were built with — the holder named, or the reason this device cannot —
-      // so neither needs unwrapping to be worth showing.
+      // `DeviceBusy` and `DeviceRefusal` both `toString()` to the sentence
+      // they were built with, so neither needs unwrapping to be shown.
       return DeviceActionOutcome<T>(
         verb: verb,
         problem: '$error',

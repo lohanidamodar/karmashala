@@ -20,12 +20,8 @@ import '../domain/verification_step.dart';
 import 'attribution_mark.dart';
 import 'review_action.dart';
 
-/// The verification pane: the runs that have been recorded, and what each one
-/// proved.
-///
-/// A list until a run is opened, then that run — master/detail *in place*,
-/// because the panel is 360 px wide and a two-column split at that width is two
-/// unreadable columns. The list is the index; the run is the evidence.
+/// The verification pane: the runs recorded, and what each proved. Master and
+/// detail in place — a split at 360 px is two unreadable columns.
 class VerificationPane extends ConsumerWidget {
   const VerificationPane({super.key});
 
@@ -48,8 +44,7 @@ class VerificationPane extends ConsumerWidget {
         if (selected == null) return const _RunList();
         final run = ref.watch(verificationRunProvider(selected));
         if (run == null) {
-          // The run was deleted from under us; fall back to the list rather
-          // than showing an empty detail view.
+          // The run was deleted from under us; fall back to the list.
           return const _RunList();
         }
         return _RunDetail(run: run);
@@ -230,8 +225,7 @@ class _RunDetail extends ConsumerWidget {
               ),
               _SessionRow(run: run),
               _VerifierRow(run: run),
-              // Directly under who graded it, because that row is where a
-              // self-graded pass becomes legible and this is the answer to it.
+              // Directly under who graded it: that row is the question.
               if (run.sessionId case final sessionId?) ...[
                 const SizedBox(height: Insets.sm),
                 Align(
@@ -270,8 +264,7 @@ class _RunDetail extends ConsumerWidget {
   }
 }
 
-/// Export, reveal, delete. Deliberately in the header rather than at the bottom
-/// of a long scroll — they are about the run, not about what you have read.
+/// Export, reveal, delete — in the header, because they are about the run.
 class _RunActions extends ConsumerStatefulWidget {
   const _RunActions({required this.run});
 
@@ -385,8 +378,7 @@ class _SessionRow extends ConsumerWidget {
     if (id == null) {
       return const _MetaRow(label: 'Session', value: 'not attached to one');
     }
-    // A deleted session must not blank the row: the evidence outlives it, and
-    // the id is still the truth about what produced this run.
+    // A deleted session must not blank the row: the evidence outlives it.
     final session = ref.read(sessionDaoProvider).getById(id);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,10 +400,7 @@ class _SessionRow extends ConsumerWidget {
   }
 }
 
-/// Who produced the verdict, and whether that was the session under test.
-///
-/// The row that makes a self-graded pass legible as one. Derived from the two
-/// ids every time it paints, so it cannot disagree with them.
+/// Who produced the verdict — derived from the two ids on every paint.
 class _VerifierRow extends ConsumerWidget {
   const _VerifierRow({required this.run});
 
@@ -524,9 +513,7 @@ class _ScreenshotTile extends ConsumerStatefulWidget {
 }
 
 class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
-  /// Asked once per tile, not once per build: the pane rebuilds on scroll and
-  /// on every session signal, and a stat per rebuild per screenshot is exactly
-  /// the cost this was moved off the frame to avoid.
+  /// Asked once per tile, not per build: the pane rebuilds on every scroll.
   late Future<bool> _present;
 
   String get _path =>
@@ -569,9 +556,7 @@ class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
             child: FutureBuilder<bool>(
               future: _present,
               builder: (context, snapshot) {
-                // Nothing until the answer arrives — a tile that guessed
-                // "missing" for a frame would flash the cleaned-up note over
-                // evidence that is perfectly present.
+                // A tile that guessed "missing" would flash over real evidence.
                 if (!snapshot.hasData) return const SizedBox.shrink();
                 if (!snapshot.data!) {
                   return _MissingFile(path: artifact.relativePath);
@@ -579,8 +564,7 @@ class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
                 return Image.file(
                   file,
                   fit: BoxFit.contain,
-                  // A run's evidence is not worth an exception: a corrupt or
-                  // half-written PNG shows as a note, not a red box.
+                  // A half-written PNG shows as a note, not a red box.
                   errorBuilder: (context, _, _) =>
                       _MissingFile(path: artifact.relativePath),
                 );
@@ -623,25 +607,19 @@ class _FileTile extends ConsumerStatefulWidget {
 }
 
 class _FileTileState extends ConsumerState<_FileTile> {
-  /// How much of a file is shown inline. A logcat slice is capped at 400 lines
-  /// when it is captured, so this is a backstop rather than the usual case.
+  /// How much of a file is shown inline; a backstop, since a logcat slice is
+  /// already capped at 400 lines when captured.
   static const _maxCharacters = 200 * 1024;
 
   bool _open = false;
   String? _text;
 
-  /// Which open this text belongs to, so a slow read that lands after the user
-  /// has closed the tile — or opened it again — cannot overwrite the newer one.
+  /// Which open this text belongs to, so a slow read cannot land on a newer one.
   int _generation = 0;
 
-  /// **Read off the frame.** This used to be `existsSync()` plus
-  /// `readAsStringSync()`, on the UI isolate, for a whole artifact file — the
-  /// comment defending it argued a few hundred kilobytes was cheap, which is
-  /// true of the bytes and false of the wait: an artifact directory can be a
-  /// `\\wsl.localhost` share, where the synchronous pair costs 1.19 ms against
-  /// 0.07 ms locally before the file is even read, and a 200 KB read on top of
-  /// it is several frames of a frozen window. The state machine it was trading
-  /// away is the three lines below.
+  /// **Read off the frame.** On a `\\wsl.localhost` share the synchronous
+  /// `existsSync()` + `readAsStringSync()` pair costs 1.19 ms against 0.07 ms
+  /// locally before the file is read at all.
   Future<void> _toggle() async {
     if (_open) {
       setState(() => _open = false);

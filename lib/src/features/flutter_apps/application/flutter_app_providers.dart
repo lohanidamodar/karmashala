@@ -6,16 +6,10 @@ import 'package:path/path.dart' as p;
 import '../../../core/paths/app_support_directory.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
-/// The folder name under application support. Named for what is in it.
 const String kVmServiceDirectoryName = 'vmservice';
 
-/// Where `flutter_run` points `--vmservice-out-file` for the runs **this app
-/// starts**, created on first use.
-///
-/// Under application support rather than in the project, because the address
-/// is not a fact about the code: it belongs to one run of it, and a project
-/// checked out twice would otherwise have two runs writing the same file.
-/// Nobody is asked to point a hand-typed run at it — see `AttachedApps`.
+/// Where `flutter_run` points `--vmservice-out-file`. Under application support,
+/// not the project: the address belongs to one run, not to the code.
 final flutterAppDiscoveryDirectoryProvider =
     FutureProvider<VmServiceUriDirectory>((ref) async {
       final support = await appSupportDirectory();

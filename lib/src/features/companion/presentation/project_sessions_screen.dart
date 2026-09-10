@@ -17,17 +17,8 @@ import 'project_group.dart';
 import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
-/// One project's sessions, under that project's own name.
-///
-/// The second half of Loop 82's answer to "I can't tell projects from
-/// sessions": on this screen there *are* only sessions, and the thing they all
-/// belong to is the app bar title with a back arrow beside it. Nothing has to
-/// be inferred from a font weight.
-///
-/// The title is also the way sideways: with more than one project it opens a
-/// sheet listing them all, and choosing one swaps this screen in place — so
-/// moving between projects never means scrolling past sessions that are not
-/// yours to read.
+/// One project's sessions, under that project's own name; the app bar title is
+/// also the way sideways, opening a sheet that swaps this screen in place.
 class ProjectSessionsScreen extends ConsumerStatefulWidget {
   const ProjectSessionsScreen({required this.projectKey, super.key});
 
@@ -43,8 +34,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   late String _key = widget.projectKey;
   final _search = TextEditingController();
 
-  /// The field's own text. The project this screen is open on is never
-  /// filtered away by it — see [companionMatchingGroups]'s `keepKey`.
+  /// The field's own text; the project this screen is open on is never filtered
+  /// away by it.
   String _raw = '';
 
   @override
@@ -110,15 +101,12 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
             sessions.asData?.value ?? const <CompanionSessionSummary>[],
           );
     final query = companionSearchQuery(_raw);
-    // Filtered with `keepKey`: the project this screen is about survives a
-    // query it does not match, with its own sessions still narrowed — the
-    // alternative is telling the user their project is gone because they
-    // typed a word.
+    // `keepKey`: the project this screen is about survives a query it does not
+    // match, or typing a word would say the project is gone.
     final visible = companionMatchingGroups(merged, query, keepKey: _key);
     final group = visible.where((g) => g.key == _key).firstOrNull;
     final scheme = Theme.of(context).colorScheme;
-    // The switcher lists every project the host holds, filtered or not: it is
-    // the way sideways, not a second view of the search.
+    // The switcher lists every project the host holds, filtered or not.
     final canSwitch = merged.length > 1;
 
     return Scaffold(
@@ -130,7 +118,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           onTap: canSwitch ? () => _switchProject(merged) : null,
         ),
         actions: [
-          // Only when the desktop granted it: an action that can only ever be
+          // Only when the desktop granted it: an action that can only be
           // refused is worse than one that is not there.
           if (ref
               .watch(companionGatewayProvider)
@@ -140,7 +128,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
               icon: const Icon(AppIcons.plus),
               tooltip: 'Start a session',
               // The project this screen is already about, so the user is not
-              // asked a question they have answered by standing here.
+              // asked a question they answered by standing here.
               onPressed: () => Navigator.of(context).push(
                 companionRoute<void>(
                   context,
@@ -155,8 +143,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const LinkBanner(),
-            // Only when there is something to search: a field over a project
-            // with no sessions can only ever answer "nothing".
+            // Only when there is something to search.
             if (group != null && merged.any((g) => g.sessions.isNotEmpty))
               CompanionSearchField(
                 controller: _search,
@@ -173,9 +160,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
     );
   }
 
-  /// The four states, in the order a user cares about: what is here, then why
-  /// it is not. A project that has vanished from the host's list is its own
-  /// state, distinct from a list that failed to arrive.
+  /// The four states, in the order a user cares about. A project that vanished
+  /// from the host's list is its own state, not a list that failed to arrive.
   Widget _body(
     BuildContext context,
     AsyncValue<List<CompanionSessionSummary>> sessions,
@@ -188,8 +174,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The strip and its rule take the same gutter the list below takes,
-          // so a tablet does not draw a full-width rule under a capped column.
+          // Same gutter as the list below, so a tablet does not draw a
+          // full-width rule under a capped column.
           CompanionReadable(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -201,9 +187,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           ),
           Expanded(
             child: group.sessions.isEmpty
-                // An active query is why the list is empty; saying "no
-                // sessions yet" about a project that has them would be the
-                // wrong sentence and would hide the way out of the filter.
+                // An active query is why the list is empty; "no sessions yet"
+                // would hide the way out of the filter.
                 ? (query.isEmpty
                       ? CompanionNotice(
                           icon: AppIcons.chat,
@@ -268,9 +253,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
     return const CompanionSkeletonList();
   }
 
-  /// This project's sessions, the running ones lifted to the top under their
-  /// own header. Lifted rather than copied: a session appears once on a
-  /// screen, and within each part the host's order is untouched.
+  /// This project's sessions, the running ones lifted to the top under their own
+  /// header — lifted and not copied, so a session appears once.
   Widget _list(List<CompanionSessionSummary> sessions) {
     final split = partitionByRunning(sessions);
     return CompanionSessionList(
@@ -281,9 +265,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
     );
   }
 
-  /// Nothing in this project matched — over the two fields a session is known
-  /// by, in the snapshot the phone is already holding, whose age is named
-  /// because that is the only thing the result is a statement about.
+  /// Nothing in this project matched — a statement about the snapshot the phone
+  /// holds, whose age is named for that reason.
   Widget _noMatch(CompanionProjectGroup group) => CompanionNotice.noMatch(
     query: _raw.trim(),
     searched: 'the session titles and agents in ${group.name}',
@@ -295,8 +278,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   );
 }
 
-/// The app bar's title: the project's name, and — when there is somewhere to
-/// go — a caret saying it opens the list of projects.
+/// The app bar's title: the project's name, with a caret when there is
+/// somewhere to go.
 class _Title extends StatelessWidget {
   const _Title({required this.name, required this.canSwitch, this.onTap});
 
@@ -338,8 +321,8 @@ class _Title extends StatelessWidget {
   }
 }
 
-/// What the app bar cannot say: how much is here, how much wants you, and
-/// where on disk it is.
+/// What the app bar cannot say: how much is here, how much wants you, and where
+/// on disk it is.
 class _Facts extends StatelessWidget {
   const _Facts({required this.group});
 

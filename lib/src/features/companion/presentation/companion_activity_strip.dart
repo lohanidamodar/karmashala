@@ -9,19 +9,8 @@ import 'package:karmashala_remote/remote.dart';
 import '../../sessions/presentation/activity_strip.dart';
 import '../application/companion_providers.dart';
 
-/// **What this session is doing right now**, on the phone, above the composer.
-///
-/// The desktop's activity strip said, and the phone could not: a session card
-/// reading "working" with a transcript that had not moved for ten minutes was
-/// the whole of what a pocket could learn. This is the same fact, over the same
-/// link, from the same rule — `sessionActivityFrom` on the desktop, so the two
-/// screens cannot word one session two ways.
-///
-/// Three things it will not do. It does not draw before the host has answered
-/// (a phone that has heard nothing has not heard "nothing"), it does not turn a
-/// refusal into silence (an older pairing was never granted `view_activity` and
-/// is told so in the host's words), and it does not turn "we cannot see" into
-/// an empty list.
+/// What this session is doing right now, above the composer, from the desktop's
+/// own `sessionActivityFrom`; draws nothing before the host has answered.
 class CompanionActivityStrip extends ConsumerStatefulWidget {
   const CompanionActivityStrip({required this.sessionId, super.key});
 
@@ -57,7 +46,7 @@ class _CompanionActivityStripState
     final activity = ref.watch(companionActivityProvider(widget.sessionId));
     final reading = activity.asData?.value;
     if (reading == null || !reading.known) {
-      // Nothing has been heard from the desktop yet. Not a claim of any kind.
+      // Nothing heard from the desktop yet: not a claim of any kind.
       _stopTicking();
       return const SizedBox.shrink();
     }
@@ -82,8 +71,8 @@ class _CompanionActivityStripState
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final colour = SemanticColors.of(context).working;
-    // Counted from the host's own reading plus what has passed here since it
-    // landed — never one machine's instant minus another's.
+    // The host's own reading plus what has passed here since, never one
+    // machine's instant minus another's.
     final since = DateTime.now().difference(reading.at);
     final longest = reading.calls
         .map((call) => call.elapsed)
@@ -140,10 +129,8 @@ class _CompanionActivityStripState
   }
 }
 
-/// The phone's wording for an absence the host stated as a fact.
-///
-/// Worded here rather than on the wire, so an older host's unrecognised value
-/// reads as null and this is never asked about a word it cannot place.
+/// The phone's wording for an absence the host stated as a fact — worded here,
+/// so an older host's unrecognised value reads as null.
 String companionActivityAbsenceSentence(RemoteActivityAbsence absence) =>
     switch (absence) {
       RemoteActivityAbsence.noRecord =>

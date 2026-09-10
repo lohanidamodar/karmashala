@@ -1,14 +1,5 @@
-/// Whether a process is running behind a terminal pane's buffer.
-///
-/// A pane's buffer and the process that filled it have separate lifetimes, and
-/// the UI has to tell them apart: replayed history from last week must not look
-/// like a shell waiting for input. This names the three cases so nothing has to
-/// infer "is this real?" from the buffer's contents.
-///
-/// It says nothing about whether a tab is *showing* the pane — that is
-/// attachment, and it belongs to the sessions controller. A detached session is
-/// [live]; a restored one that nobody has started is [restored] whether or not
-/// it sits in a tab.
+/// Whether a process is running behind a pane's buffer — replayed history must
+/// not look like a shell waiting for input. Not whether a tab is showing it.
 enum PaneLiveness {
   /// A process is running. Keystrokes reach it and its output is arriving.
   live,
@@ -17,16 +8,8 @@ enum PaneLiveness {
   /// because it never started (a pane that failed to spawn).
   exited,
 
-  /// Rebuilt from a stored record after a restart. Nothing has ever run in this
-  /// buffer: everything in it is replayed history, and no command has been (or
-  /// will be) re-executed unless the user asks.
-  ///
-  /// A launch does now give some panes a process back — the shells of the
-  /// active tab that were running when the app closed, which the owner asked
-  /// for — but those never reach this state: they are built live and report
-  /// [live] from the first frame. So this still means exactly what it says, and
-  /// `shouldRestartOnLaunch` is the one place that decides which panes it
-  /// applies to.
+  /// Rebuilt from a stored record after a restart: nothing has ever run in this
+  /// buffer, and no command is re-executed unless the user asks.
   restored;
 
   /// Whether a process is running behind the buffer.

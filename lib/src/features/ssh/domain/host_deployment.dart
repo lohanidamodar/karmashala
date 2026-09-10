@@ -16,9 +16,8 @@ class HostPlatform {
   /// Normalised `uname -m`: x64, arm64, or whatever it actually said.
   final String architecture;
 
-  /// glibc, musl, or unknown — a reading, never a guess. Alpine and other musl
-  /// machines are out of scope: the binaries are cross-compiled from the
-  /// Windows Dart SDK and are glibc-linked ELF, so there is nothing to send.
+  /// glibc, musl, or unknown — a reading, never a guess. musl machines are out
+  /// of scope: the binaries are glibc-linked ELF, so there is nothing to send.
   final HostLibc libc;
   final DateTime observedAt;
 
@@ -64,10 +63,8 @@ enum HostDeploymentStatus {
   unknown,
 }
 
-/// One reading about one machine's host, with the time it was taken.
-///
-/// Nothing here is cached as a fact: a host that answered an hour ago may be
-/// gone, and the pane is entitled to know how old this is before trusting it.
+/// One reading about one machine's host, with the time it was taken. Nothing
+/// here is a cached fact: a host that answered an hour ago may be gone.
 @immutable
 class HostDeployment {
   const HostDeployment({
@@ -95,13 +92,8 @@ class HostDeployment {
   final String? hostVersion;
   final int? protocolVersion;
 
-  /// Whether this deploy had to start `serve` itself.
-  ///
-  /// True means the host was not running when we asked — after a reboot, or
-  /// because somebody killed it — and therefore holds none of the sessions it
-  /// held before. Nothing supervises the daemon in stage one, so this is the
-  /// signal a pane needs to say "your sessions are gone" instead of silently
-  /// starting a new one and looking like it lost them.
+  /// Whether this deploy had to start `serve` itself. True means it holds none
+  /// of the sessions it held before — what a pane needs to say they are gone.
   final bool restartedByUs;
 
   bool get isReady => status == HostDeploymentStatus.ready;
@@ -131,7 +123,6 @@ class HostBinary {
   final String source;
 
   /// How many files matched this target where [source] was found. More than one
-  /// means older builds are sitting beside it, so a notice can say which of
-  /// them was taken rather than leaving the choice invisible.
+  /// means older builds sit beside it, so a notice can say which was taken.
   final int candidates;
 }

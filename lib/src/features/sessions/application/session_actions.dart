@@ -33,70 +33,32 @@ import 'session_providers.dart';
 import 'session_ui_providers.dart';
 import 'session_working_directory.dart';
 
-/// Rename/delete operations available for **every** session in the app — native
-/// engine sessions and imported CLI sessions alike. Renames and deletes
-/// propagate to the originating CLI store (best-effort), whichever kind of row
-/// they started from.
+/// Rename/delete for every session in the app, native or imported; both
+/// propagate to the originating CLI store, best-effort.
 class SessionActions {
   SessionActions(this._ref);
   final Ref _ref;
 
-  /// **One line per action, saying what it decided** — the discipline
-  /// `sessions.launch` and `sessions.handoff` already keep, and which this file
-  /// did not.
-  ///
-  /// It used to write only on the destructive path, on the argument that
-  /// renames and resumes are reversible and visible on screen. Half of each of
-  /// those is neither: a rename's *store* half happens in somebody else's
-  /// files, a resume chooses between reattaching and launching a second
-  /// process, and continuing a session picks one of three delivery paths. None
-  /// of those choices leaves a mark on screen, and every one of them is a place
-  /// a bug would be silent.
   static final _log = AppLogger.named('sessions.actions');
 
-  /// Renames a native row, and tells the CLI that owns the conversation.
-  ///
-  /// The workspace half is synchronous and complete before the returned future
-  /// is: the row is written and published first, so the name is on screen
-  /// whatever the CLI does next. Only then does [_propagateNativeRename] try to
-  /// reach the store — best-effort, because a Codex that is not installed must
-  /// not undo a rename the user can already see.
-  ///
-  /// This used to stop at the workspace row, which is why a Codex session
-  /// launched *by* Karmashala and renamed *in* Karmashala reached no store at
-  /// all.
+  /// Renames a native row, then tells the CLI store behind it — best-effort, so
+  /// an uninstalled CLI cannot undo a rename already on screen.
   Future<void> renameNative(String id, String title) async {
-    // `byUser`: this is the one event that makes a title the user's, and
-    // recording it is what stops the CLI rename sync taking it back — for the
-    // life of the row, not just this run of the app.
+    // `byUser` is what stops the CLI rename sync taking the title back, for the
+    // life of the row.
     _ref.read(sessionDaoProvider).updateTitle(id, title, byUser: true);
-    // The narrowest fact the app publishes, and the most frequent: nothing but
-    // this row's name moved. See `session_signal_cost_test.dart` for what the
-    // coarse word used to cost — 108 session reads at a hundred sessions.
+    // The narrowest signal on purpose: the coarse word cost 108 session reads
+    // at a hundred sessions.
     _publish(SessionChange.renamed(id));
     _ref
         .read(terminalSessionsControllerProvider.notifier)
         .notifyTitleChanged();
-    // What the CLI store did with it, which is the half of this action nothing
-    // on screen can show: the workspace title is already applied and published
-    // whatever happens next.
     final store = await _propagateNativeRename(id, title);
     _log.info('Renamed $id: byUser=true store=$store');
   }
 
-  /// Carries a native row's new title out to the CLI store behind it.
-  ///
-  /// **Codex costs no store walk.** `thread/name/set` needs the thread id and
-  /// nothing else, and the row already carries it as `externalSessionId`, so
-  /// the conversation is named without reading a single file. Every other CLI
-  /// is renamed by editing its transcript, which means finding it — the same
-  /// one pass over the stores [deleteNative] pays.
-  ///
-  /// Never throws. The workspace title is already applied and published.
-  ///
-  /// Answers **which route the rename took**, for [renameNative]'s one line —
-  /// the four outcomes are otherwise indistinguishable from outside, and three
-  /// of them leave the CLI still calling the conversation by its old name.
+  /// Carries a native row's new title out to the CLI store. Codex needs only
+  /// the thread id; every other costs one pass over the stores. Never throws.
   Future<String> _propagateNativeRename(String id, String title) async {
     final session = _ref.read(sessionDaoProvider).getById(id);
     final externalId = session?.externalSessionId;
@@ -173,25 +135,15 @@ class SessionActions {
     _publish(SessionChange.removed(id));
   }
 
-  /// Takes one native row out of the workspace, and nothing else: the row, the
-  /// transcript pane if it was showing this one, and the line saying so.
-  ///
-  /// [fromCliStore] records what the *caller* already did to the agent's own
-  /// transcript — this method never touches it. False in the bulk path even
-  /// when a purge is about to run, because that purge logs its own line once it
-  /// knows what it actually removed.
-  ///
-  /// **Publishes nothing.** The caller does, so a batch can publish once — see
-  /// [deleteSessionsFromWorkspace].
+  /// Takes one native row out of the workspace and nothing else. Publishes
+  /// nothing — the caller does, so a batch can publish once.
   void _removeNativeRow(Session session, {required bool fromCliStore}) {
     _ref.read(sessionDaoProvider).delete(session.id);
     if (_ref.read(selectedSessionIdProvider) == session.id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
-    // Deleting a session is the one act here that can reach irreversibly
-    // outside the app, so it is written down. After the fact, so the line means
-    // it happened rather than that it was attempted — the throws in
-    // [deleteNative] all abandon the delete with the CLI store untouched.
+    // After the fact, so the line means the delete happened: every throw in
+    // [deleteNative] abandons it with the CLI store untouched.
     _log.info(
       'Deleted session ${session.id} (${session.title}): '
       'fromCliStore=$fromCliStore agent=${session.agentInstallationId}',
@@ -205,20 +157,8 @@ class SessionActions {
     }
   }
 
-  /// Removes a whole selection of rows from the workspace as **one act**.
-  ///
-  /// Each kind still goes through its own removal — the same DAO delete and the
-  /// same selection clearing its single delete does — but the set publishes
-  /// exactly once. That is not tidiness: three bare listeners sit on
-  /// `sessionsRevisionProvider` (the quick-open file index, the terminal
-  /// layout, the remote controller) and each does real work per bump, so
-  /// thirty-three rows published one at a time would run all three
-  /// thirty-three times for one click.
-  ///
-  /// The CLI store is not touched here. Removing a row from the workspace is
-  /// undone by re-importing it; deleting an agent's transcript is undone by
-  /// nothing, so that half runs behind this and reports for itself — see
-  /// [purgeSessionsFromCliStore].
+  /// Removes a whole selection from the workspace as **one act**, publishing
+  /// once: three bare listeners do real work per bump. The CLI store is left.
   void deleteSessionsFromWorkspace({
     List<Session> natives = const [],
     List<ImportedSession> imported = const [],
@@ -230,8 +170,7 @@ class SessionActions {
     for (final session in imported) {
       _removeImportedRow(session);
     }
-    // The coarse word, deliberately: this named several rows, and a change that
-    // names no single one is exactly what `sessionId: null` means. Not
+    // Coarse on purpose: this named several rows, so no single one. Not
     // `workspaceChanged` — no project, repository or checkout moved.
     _publish(
       const SessionChange(
@@ -260,32 +199,13 @@ class SessionActions {
     _publish(SessionChange.renamed(session.id));
   }
 
-  /// Removes [sessions] from their agents' own stores as **one batch**.
-  ///
-  /// Workspace rows are not touched: the caller that has a cascade — deleting a
-  /// whole project — has already dropped them, and this is the half that
-  /// reaches outside the app. Never throws; what could not be removed comes
-  /// back in the report so a locked file is *told to the user* rather than
-  /// swallowed by the `catch (_)` this replaces.
-  ///
-  /// Logged after the fact, like [deleteNative], so the line means the
-  /// transcripts are gone rather than that we tried.
+  /// Removes [sessions] from their agents' own stores as one batch. Never
+  /// throws — what could not be removed comes back in the report.
   Future<CliDeleteReport> purgeFromCliStore(List<ImportedSession> sessions) =>
       purgeSessionsFromCliStore(imported: sessions);
 
-  /// The same batch, for a selection that holds **both** kinds of row.
-  ///
-  /// An imported row already carries its own store file, so it maps straight to
-  /// a [DetectedSession]. A native row carries only the conversation id, and
-  /// finding the file behind it means walking the CLI stores — which is why
-  /// [deleteNative] can only afford to delete one session at a time. Here every
-  /// native row is looked up in **one** pass over the stores, and the
-  /// transcripts of both kinds then go to [CliSessionMutator.deleteAll] as a
-  /// single batch: one index pass per store rather than one per session.
-  ///
-  /// Never throws. A native row whose conversation cannot be identified comes
-  /// back as a failure under its own title, because that is the honest report —
-  /// its transcript is still on disk.
+  /// The same batch for a selection of both kinds: native rows are looked up in
+  /// one pass. One we cannot identify comes back as a failure, honestly.
   Future<CliDeleteReport> purgeSessionsFromCliStore({
     List<Session> natives = const [],
     List<ImportedSession> imported = const [],
@@ -359,22 +279,8 @@ class SessionActions {
     _publish(SessionChange.removed(session.id));
   }
 
-  /// Resumes an imported CLI session in place: it becomes a live native session
-  /// (seeded with its prior transcript and launched with `--resume`), and the
-  /// imported entry is replaced by it so there is no duplicate. Returns the live
-  /// session's id. Throws if the repository or a matching installation is gone.
-  ///
-  /// If we are **already running** that conversation, nothing is launched: the
-  /// running pane is reopened instead. Since Loop 38 a closed tab leaves its
-  /// agent running, so the CLI store keeps listing a session whose process is
-  /// very much alive — and resuming it started a second writer on the same
-  /// transcript, which Codex refuses outright.
-  ///
-  /// Reattaching wins here for **every** agent, including one that would have
-  /// permitted a second process: this surface can reopen the pane, and doing so
-  /// is instant, keeps the scrollback and cannot fail. Whether the agent would
-  /// have allowed it only matters where reopening is not on offer — see
-  /// [openInSystemTerminal].
+  /// Resumes an imported CLI session in place as a live native session and
+  /// returns its id; reattaches instead when that conversation is already live.
   Future<String> resumeImported(ImportedSession session) async {
     final launcher = _ref.read(sessionLauncherProvider);
     final action = launcher.resumeActionForConversation(
@@ -384,8 +290,7 @@ class SessionActions {
     final running = launcher.runningSessionWithExternalId(session.externalId);
     if (action == ResumeAction.reattach && running != null) {
       launcher.reveal(running.id);
-      // Same replacement the launch path does: the imported row was only ever a
-      // second record of a session we own, and we are now showing that one.
+      // The imported row was only ever a second record of a session we own.
       _dropImported(session);
       _log.info(
         'Resumed imported ${session.id} (${session.cli}): '
@@ -411,10 +316,8 @@ class SessionActions {
         'Run "Discover agents" in Settings first.',
       );
     }
-    // Through the one launcher, so a resumed session is the same kind of thing
-    // as a new one: a PTY, a row, and the *existing-session* permission mode —
-    // which this path used to apply to `SessionEngine.start`, i.e. to a
-    // genuinely new session (Loop 33 §6.1).
+    // Through the one launcher, so the resume gets the *existing-session*
+    // permission mode rather than a new session's.
     final launched = await _ref
         .read(sessionLauncherProvider)
         .launch(
@@ -433,16 +336,13 @@ class SessionActions {
       'environment=${session.environmentId}',
     );
     await _seedHistory(started.id, session);
-    // Replace the imported entry with the now-live session (drop only our row,
-    // keeping the CLI store file intact).
     _dropImported(session);
     _ref.read(selectedSessionIdProvider.notifier).select(started.id);
     return started.id;
   }
 
-  /// Drops the imported record for [session] and deselects it, leaving the CLI
-  /// store file alone. Shared by both resume outcomes — launched, and revealed
-  /// because it was already running — so the two cannot tidy up differently.
+  /// Drops the imported record and deselects it, leaving the CLI store file
+  /// alone. Shared by both resume outcomes so they cannot tidy up differently.
   void _dropImported(ImportedSession session) {
     _ref.read(importedSessionDaoProvider).delete(session.id);
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
@@ -451,30 +351,21 @@ class SessionActions {
     _publish(SessionChange.removed(session.id));
   }
 
-  /// Resumes [session] and immediately sends [text] to it — the flow behind the
-  /// imported session's message box, so typing a reply continues the session in
-  /// place instead of spawning a separate one.
-  ///
-  /// Delivery goes through [continueSession] rather than the engine, so the text
-  /// is typed into the PTY the resume just produced — the one write path into
-  /// the agent. It also means a session that was *already* running receives the
-  /// message instead of the send being aimed at an engine that never started it.
+  /// Resumes [session] and sends [text] through [continueSession], not the
+  /// engine, so it lands in the PTY the resume produced — the one write path.
   Future<void> resumeAndSend(ImportedSession session, String text) async {
     final id = await resumeImported(session);
     await continueSession(id, text);
   }
 
-  /// Sends [text] to a native session, relaunching its agent first when the
-  /// session has ended — so the message box always works, not only while the
-  /// agent happens to be live. Throws a clear error if the repository or agent is
-  /// no longer available.
+  /// Sends [text] to a native session, relaunching its agent first if the
+  /// session has ended. Throws if the repository or agent is gone.
   Future<void> continueSession(String sessionId, String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
     // A PTY-hosted session is typed into, not messaged: chat and terminal are
-    // two views of one session, so there is exactly one write path into the
-    // agent and the two views cannot get out of step.
+    // two views of one session, so there is one write path into the agent.
     if (_ref.read(sessionLauncherProvider).sendTo(sessionId, trimmed)) {
       _log.info('Continued $sessionId: typed into its pane');
       return;
@@ -508,17 +399,13 @@ class SessionActions {
           .resolvedPermissionFor(
             installation.agentId,
             SessionPurpose.existingSession,
-            // The session's own mode, when it has one: a resume runs under what
-            // this session carries, not under whatever the global default has
-            // become since it started.
+            // The session's own mode, not the global default as it now stands.
             sessionMode: session.permissionMode,
           );
       await engine.resume(
         session: session,
-        // Where this session was actually running, when we know: the CLIs key
-        // their conversation stores by directory, so the root is a fallback
-        // rather than an answer. A directory that has gone away falls back to
-        // it rather than failing the resume.
+        // The CLIs key their conversation stores by directory, so the repo root
+        // is a fallback rather than an answer.
         workingDirectory: directoryOrFallback(
           _ref,
           directory: sessionWorkingDirectoryOf(_ref, session),
@@ -532,15 +419,12 @@ class SessionActions {
       resumed = true;
     }
 
-    // Which of the three delivery paths this took, and whether a second process
-    // was started to take it.
     _log.info('Continued $sessionId through the engine: resumed=$resumed');
     await engine.sendMessage(sessionId, trimmed);
   }
 
-  /// Copies the imported CLI session's prior transcript into the resumed native
-  /// session's event log so resuming continues the conversation instead of
-  /// starting blank. Capped to the most recent messages; best-effort.
+  /// Copies the imported session's prior transcript into the resumed session's
+  /// event log, so a resume continues rather than starts blank. Best-effort.
   Future<void> _seedHistory(String sessionId, ImportedSession session) async {
     try {
       final messages = await readCliTranscript(session.filePath, session.cli);
@@ -582,15 +466,8 @@ class SessionActions {
     PermissionSelection? permissionMode,
     String? title,
   }) async {
-    // Now goes through the one launcher, which means it **records a session**.
-    // Spawning an external terminal used to change real-world state with no row
-    // and no UI feedback; the session only reappeared later, as an unrelated
-    // `ImportedSession` (Loop 33 §6.5).
-    //
-    // [terminal] is no longer chosen here: the launcher resolves the configured
-    // default so the dialog, the mini launcher and the MCP tool cannot pick
-    // three different ones. The parameter stays so callers that already asked
-    // the user keep compiling, and is honoured by preference below.
+    // Through the one launcher, so an external terminal records a session row
+    // too; [terminal] is honoured, but the launcher owns the default.
     final launched = await _ref
         .read(sessionLauncherProvider)
         .launch(
@@ -607,8 +484,8 @@ class SessionActions {
     return launched.session;
   }
 
-  /// A shell command (cd + resume, with permission flags) for [session], to copy
-  /// to the clipboard. Throws if the repository is gone.
+  /// A shell command (cd + resume, with permission flags) for [session], to
+  /// copy to the clipboard. Throws if the repository is gone.
   String resumeShellCommand(ImportedSession session) {
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
@@ -636,20 +513,18 @@ class SessionActions {
     );
   }
 
-  /// The shell family a copied command has to be spelled for: the one belonging
-  /// to the directory the command `cd`s into, never the host's. A Windows
-  /// session gets PowerShell even when the row was adopted from a WSL store.
+  /// The shell family a copied command must be spelled for: the one belonging
+  /// to the directory it `cd`s into, never the host's.
   EnvironmentKind _shellKindOf(String environmentId) =>
-      // `runnable: false`: this spells a line for the user to copy and runs
-      // nothing, so whether this app could dial an SSH host is not the
-      // question. A WSL row with no distribution still is.
+      // `runnable: false`: nothing is launched here, only spelled out to copy.
       _ref
           .read(environmentResolverProvider)
           .resolve(environmentId, runnable: false)
           .require
           .kind;
 
-  /// A shell command (cd + resume, with permission flags) for native [sessionId].
+  /// A shell command (cd + resume, with permission flags) for native
+  /// [sessionId].
   String nativeResumeShellCommand(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -675,14 +550,11 @@ class SessionActions {
           .permissionFor(
             installation.agentId,
             SessionPurpose.existingSession,
-            // The session's own mode, when it has one: a resume runs under what
-            // this session carries, not under whatever the global default has
-            // become since it started.
+            // The session's own mode, not the global default as it now stands.
             sessionMode: session.permissionMode,
           ),
-      // No existence check: nothing is being started, and a command the user
-      // copies for later should name the directory the conversation belongs
-      // to even if that folder is not mounted at this moment.
+      // No existence check: a command copied for later should name the
+      // conversation's directory even if it is not mounted right now.
       cwd: workingDirectory.path,
       // The *working directory's* environment, not the installation's: the
       // shell that has to understand this line is the one that shell opens in.
@@ -691,8 +563,8 @@ class SessionActions {
     );
   }
 
-  /// A shell command (cd + fresh session, with permission flags) for [projectId]'s
-  /// first repository with the default agent.
+  /// A shell command (cd + fresh session, with permission flags) for
+  /// [projectId]'s first repository with the default agent.
   String newSessionShellCommand(String projectId) {
     final repos = _ref.read(repositoryDaoProvider).getByProject(projectId);
     if (repos.isEmpty) {
@@ -713,9 +585,7 @@ class SessionActions {
             .read(sessionLauncherProvider)
             .defaultInstallationIn(repo.path.environmentId) ??
         installs.first;
-    // Through the same decision as the two resume commands, where it always
-    // answers "nothing to refuse": this command names no conversation, so it
-    // cannot be mistaken for continuing one.
+    // Always "nothing to refuse" here: this command names no conversation.
     _refuseWhatCannotResume(installation.agentId, null);
     return shellCommandLine(
       agentExecutable: installation.executable.path,
@@ -729,17 +599,8 @@ class SessionActions {
     );
   }
 
-  /// Opens [session] in an external [terminal] (Windows Terminal, WezTerm, …),
-  /// starting in its repository and running the agent's resume command. Throws
-  /// if the repository/environment is no longer available.
-  ///
-  /// Refuses when we are already running that conversation **and the agent will
-  /// not share it**: the external terminal would be a second writer, which is
-  /// not something reopening a tab can stand in for, so the user is told in
-  /// plain words rather than shown the CLI's own JSON-RPC refusal.
-  ///
-  /// For an agent that permits it — Claude Code — this is allowed and is the
-  /// point: a second terminal listening to the same conversation.
+  /// Opens [session] in an external [terminal], starting in its repository, and
+  /// refuses when we run that conversation and the agent will not share it.
   Future<void> openInSystemTerminal(
     ImportedSession session,
     SystemTerminal terminal,
@@ -780,20 +641,16 @@ class SessionActions {
           .permissionFor(session.cli, SessionPurpose.existingSession),
       registry: _ref.read(agentRegistryProvider),
     );
-    // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host shells
-    // take a start directory.
+    // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host
+    // shells take a start directory.
     final cwd = env.wslDistribution == null ? repo.path.path : null;
     await _ref
         .read(systemTerminalServiceProvider)
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
-  /// Opens the native [sessionId] in an external [terminal], starting in its
-  /// repository and running the agent there. Throws a clear error if the repo or
-  /// agent installation is no longer available.
-  ///
-  /// Refuses a session whose pane is still live **when its agent forbids a
-  /// second process**, for the same reason [openInSystemTerminal] does.
+  /// Opens native [sessionId] in an external [terminal]. Refuses a live pane
+  /// whose agent forbids a second process, as [openInSystemTerminal] does.
   Future<void> openSessionInSystemTerminal(
     String sessionId,
     SystemTerminal terminal,
@@ -808,9 +665,8 @@ class SessionActions {
     _ref
         .read(sessionLauncherProvider)
         .refuseIfForbidden(
-          // An installation we can no longer resolve resolves to no capability,
-          // which is `false` — the safe answer, and the same one an unknown
-          // agent gets.
+          // An installation we can no longer resolve has no capability, which
+          // is `false` — the safe answer.
           agentId: installationForGuard?.agentId ?? '',
           sessionId: sessionId,
           externalSessionId: session.externalSessionId,
@@ -843,25 +699,17 @@ class SessionActions {
         .read(environmentResolverProvider)
         .resolveFor(repo.path)
         .require;
-    // Resolved once and used three times: the command line's `cd`, the
-    // terminal's own start directory, and the refusal below — which is about
-    // the difference between this and where the conversation was written.
     final recorded = sessionWorkingDirectoryOf(_ref, session);
     final directory = directoryOrFallback(
       _ref,
       directory: recorded,
       fallback: repo.path,
     ).directory;
-    // After the id is resolved, not before: `_recoverExternalSessionId` and
-    // `_continuableConversationFor` can both supply one the row did not carry,
-    // and it is the id we end up with that the command has to continue.
+    // After the id is resolved: the two recovery paths above can supply one the
+    // row did not carry, and it is that id the command has to continue.
     _refuseWhatCannotResume(installation.agentId, externalId);
-    // The weaker sibling of that refusal, and the reason it is a notice rather
-    // than a throw is [resumeDirectoryCaveatFor]'s: this surface is where the
-    // substitution actually happens — an archived worktree opens the repository
-    // root here — and a session the user can no longer open at all is worse
-    // than one they were warned about. Posted against the session rather than
-    // raised, because the terminal is about to open either way.
+    // A notice, not a throw: this surface is where the substitution happens,
+    // and the terminal opens either way.
     final caveat = resumeDirectoryCaveatFor(
       _ref.read(agentRegistryProvider),
       installation.agentId,
@@ -888,9 +736,7 @@ class SessionActions {
           .permissionFor(
             installation.agentId,
             SessionPurpose.existingSession,
-            // The session's own mode, when it has one: a resume runs under what
-            // this session carries, not under whatever the global default has
-            // become since it started.
+            // The session's own mode, not the global default as it now stands.
             sessionMode: session.permissionMode,
           ),
       registry: _ref.read(agentRegistryProvider),
@@ -903,26 +749,8 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
-  /// Refuses to build anything that would claim to continue [externalId] for an
-  /// agent that cannot be told to continue anything.
-  ///
-  /// **This replaces a stopgap, and the replacement is narrower on purpose.**
-  /// The old guard fired on `store.format == antigravityStore` and tested the
-  /// *built command* for the id, because the builder chose its resume arguments
-  /// from a hard-coded `switch (cli)` and so produced a bare executable for
-  /// every agent outside it. It was written to stop refusing by itself once the
-  /// builder read the registry — which it now does, so testing the builder's
-  /// output against the same descriptor that produced it would prove nothing.
-  ///
-  /// What is left is the case the registry itself calls hopeless: an agent
-  /// whose `interactiveResume` is [AgentResumeStyle.unsupported], or one this
-  /// registry has never heard of. Those still have to end in a sentence, not in
-  /// a command that quietly starts a fresh conversation under an old session's
-  /// name.
-  ///
-  /// Called with a null/empty [externalId] by the fresh-session command too,
-  /// where the answer is always "nothing to refuse" — one decision, every
-  /// surface, rather than three call sites deciding for themselves.
+  /// Refuses to claim to continue [externalId] for an agent the registry calls
+  /// hopeless — [AgentResumeStyle.unsupported], or one it never heard of.
   void _refuseWhatCannotResume(String agentId, String? externalId) {
     final refusal = resumeRefusalFor(
       _ref.read(agentRegistryProvider),
@@ -932,38 +760,23 @@ class SessionActions {
     if (refusal != null) throw StateError(refusal);
   }
 
-  /// The conversation an agent's own store says this session's directory last
-  /// used, recorded on the row so the rest of the resume is ordinary.
-  ///
-  /// The last of three ways to answer "which conversation is this?", after the
-  /// row's own id and [_recoverExternalSessionId]'s transcript match. It exists
-  /// because `agy` gives neither: it mints its own id, tells us nothing, and
-  /// writes a transcript we cannot read — so before this, every stopped
-  /// Antigravity session hit "No resumable CLI session id could be found" while
-  /// its store held the answer.
-  ///
-  /// A **refusal is thrown in the store's own words** rather than returned as
-  /// null: "the store names no conversation here" and "another session already
-  /// holds the one it names" are different problems, and collapsing them into
-  /// the generic sentence is the bug being fixed. `null` means only that this
-  /// agent has no such notion, and the caller's own message stands.
+  /// The conversation the agent's own store says this directory last used —
+  /// the last resort for `agy`, which mints an id and never tells us.
   Future<String?> _continuableConversationFor(Session session) async {
     final plan = await _ref.read(antigravityResumePlannerProvider)(session);
     if (plan == null) return null;
     if (plan is AntigravityResumeRefused) throw StateError(plan.reason);
     final conversationId = conversationIn(plan);
     if (conversationId == null) return null;
-    // Recorded, exactly as `_recoverExternalSessionId` records what it finds:
-    // the session is about to be continued as that conversation, so the row
-    // should say so before anything else asks.
+    // Recorded now, so the row names the conversation before anything else
+    // asks.
     _ref
         .read(sessionDaoProvider)
         .updateExternalSessionId(session.id, conversationId);
     return conversationId;
   }
 
-  /// Recovers the CLI id for sessions created before schema v5. Matching is
-  /// intentionally conservative: the agent kind and repository must match and
+  /// Recovers the CLI id for sessions created before schema v5, conservatively:
   /// the first user message must identify exactly one CLI transcript.
   Future<String?> _recoverExternalSessionId(
     Session session,
@@ -1050,9 +863,8 @@ class SessionActions {
   ) async =>
       (await _detectedByKey({(agentId, externalId)}))[(agentId, externalId)];
 
-  /// The store files behind `(agentId, conversationId)` pairs, in **one** walk
-  /// of the CLI stores however many are asked for. Single and bulk deletes
-  /// share it so neither can come to read a store differently from the other.
+  /// The store files behind `(agentId, conversationId)` pairs in **one** walk,
+  /// however many are asked for; single and bulk deletes share it.
   Future<Map<(String, String), DetectedSession>> _detectedByKey(
     Set<(String, String)> wanted,
   ) async {
@@ -1083,15 +895,13 @@ class SessionActions {
     cwd: EnvironmentPath(environmentId: session.environmentId, path: ''),
     filePath: session.filePath,
     storeHome: session.storeHome,
-    // Carried so a failure can be reported in the session's own name. Without
-    // them `displayTitle` falls back to "(empty session)", which is what a
-    // "could not be deleted" notification would otherwise have called it.
+    // Carried so a failure is reported under the session's own name; without
+    // them `displayTitle` says "(empty session)".
     title: session.title,
     preview: session.preview,
   );
 
-  /// The coarse word, for the paths that genuinely move several things at
-  /// once — a resume launches a process, writes a status and claims a pane.
+  /// The coarse word, for paths that genuinely move several things at once.
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
 
   void _publish(SessionChange change) =>

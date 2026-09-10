@@ -1,17 +1,5 @@
-/// The skills Karmashala installs into the agent CLIs on this machine.
-///
-/// A skill and `instructions(topic:)` say the same kind of thing through two
-/// different doors. The tool has to be *called* by an agent that already
-/// suspects it exists; a skill is discovered by the CLI without being asked
-/// for and is a slash command the user can type. This file is the second door,
-/// and nothing else.
-///
-/// **The rosters are generated, never typed.** `karmashala-instructions` lists
-/// the topics from [kMcpGuides] — the same constant `instructions` itself
-/// reads — so the skill and the tool cannot disagree about what there is to
-/// read. `agent_skills_test` holds that equality, and holds every tool these
-/// bodies name against the served catalogue, because a skill naming a tool
-/// that no longer exists is worse than no skill: it reads as a capability.
+/// The skills Karmashala installs into the agent CLIs: what `instructions()`
+/// says, through a door the CLI discovers. Rosters come from [kMcpGuides].
 library;
 
 import 'package:agent_cli/descriptors.dart';

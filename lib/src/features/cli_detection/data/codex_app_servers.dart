@@ -6,19 +6,8 @@ import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/read.dart';
 
-/// One live `codex app-server` per execution environment, opened on demand.
-///
-/// **Per environment, not per call and not per session.** A Windows Codex and a
-/// WSL Codex are different executables over different stores, so they need
-/// different connections — but every rename in one environment shares one, which
-/// is what turns a ~1 s spawn into a one-off. Nothing is started until something
-/// asks; a machine that never renames a Codex thread never runs `codex`.
-///
-/// Reuses the app's existing launch mechanism rather than inventing one:
-/// `CommandRunnerFactory` picks the runner for the environment (`wsl.exe -d
-/// $distro -- codex …` for WSL, the executable itself locally) and
-/// `AgentInstallation` says where the binary is, exactly as `CodexAdapter` does
-/// when it starts a session.
+/// One live `codex app-server` per execution environment, opened on demand —
+/// per environment, so a ~1 s spawn is paid once and never on an idle machine.
 class CodexAppServers {
   CodexAppServers({
     required this.runnerFactory,
@@ -46,12 +35,7 @@ class CodexAppServers {
   int get openConnections => _byEnvironment.length;
 
   /// The app-server for [environmentId], or `null` when there is no Codex there.
-  ///
-  /// [storeHome] is the store the caller means, spelled the way *this host* spells
-  /// it — a Windows path, or the `\\wsl.localhost\…` UNC form. It is translated
-  /// into the environment's own spelling and checked against what `initialize`
-  /// reports, so a rename cannot land in another Codex's store. Omit it and any
-  /// Codex that answers is accepted.
+  /// [storeHome] is checked against `initialize`, so a rename cannot go astray.
   CodexAppServerClient? forEnvironment(String environmentId, {String? storeHome}) {
     final cached = _byEnvironment[environmentId];
     if (cached != null) return cached;
@@ -114,8 +98,7 @@ class CodexAppServers {
   }
 
   /// [storeHome] in the environment's own spelling, or `null` when it cannot be
-  /// expressed there — in which case no assertion is made rather than a wrong
-  /// one.
+  /// expressed there — better no assertion than a wrong one.
   String? _expectedHomeIn(ExecutionEnvironment environment, String? storeHome) {
     if (storeHome == null || storeHome.isEmpty) return null;
     if (environment.kind != EnvironmentKind.wsl) return storeHome;

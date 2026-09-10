@@ -1,12 +1,5 @@
-// **The drop target over a pane** — the half of the panel that exists only
-// while something is being dragged: the four edge zones, which one the pointer
-// is nearest, and the "Drop to split" overlay that says what letting go would
-// do. A **tab** dropped here divides the workspace group and lands in the new
-// one; a **pane** divides the tab, which is what a region is for.
-//
-// A part of `terminal_panel.dart` rather than a library of its own: both types
-// are private, and the panel's tree golden records their names. Making them
-// public to move them would cost the proof.
+// **The drop target over a pane** — four edge zones and a "Drop to split"
+// overlay. A **tab** dropped here divides the group; a **pane** divides the tab.
 
 part of 'terminal_panel.dart';
 
@@ -23,10 +16,8 @@ class _PaneDropTarget extends ConsumerStatefulWidget {
 
   final String paneId;
 
-  /// The workspace group this pane is in. A **tab** dropped on an edge divides
-  /// that group and lands in the new one; a **pane** divides the tab, which is
-  /// what a region is for. See
-  /// [TerminalSessionsController.moveTabBesideGroup].
+  /// The workspace group this pane is in — what a **tab** dropped on an edge
+  /// divides. See [TerminalSessionsController.moveTabBesideGroup].
   final String? groupId;
 
   final Widget child;

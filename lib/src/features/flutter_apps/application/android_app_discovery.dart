@@ -9,36 +9,23 @@ import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 
-/// How many distinct announcements one device's log may produce.
-///
-/// `logcat` replays its ring buffer when a stream opens, which is what finds an
-/// app that started before the pane did — and also every run that has since
-/// ended. The bound is on `adb forward` calls, not on time: past this many the
-/// device is not asked for another tunnel.
+/// How many distinct announcements one device's log may produce — `logcat`
+/// replays its ring buffer, so the bound is on `adb forward` calls, not time.
 const int kMaxDeviceAnnouncements = 16;
 
 /// The tags the Dart VM's announcement can arrive under. `flutter` is the one
 /// measured on this machine; `DartVM` is in `flutter attach`'s own allowlist.
 const List<String> kVmServiceLogTags = <String>['flutter', 'DartVM'];
 
-/// **Finds a Flutter app running on a phone or emulator, from the log.**
-///
-/// The Dart VM prints `The Dart VM service is listening on http://…` to stdout
-/// and Android routes it to `logcat`; the port in it is a port on the device,
-/// so an `adb forward` makes it reachable here. That is exactly what `flutter
-/// attach` does, and it is the only way in for an app nothing on this machine
-/// started — one launched by tapping its icon, or by another tool.
-///
-/// **Nothing polls.** A line is an event. The stream is filtered at adb to the
-/// two tags that can carry the announcement, so a busy device costs nothing to
-/// watch, and it is dropped the moment nothing is watching.
+/// Finds a Flutter app on a phone from its log line and `adb forward`s the
+/// port — the only way in for an app nothing on this machine started.
 class AndroidAppDiscovery {
   AndroidAppDiscovery({
     required AdbService? adb,
     required AttachedApps apps,
     AppLogger? logger,
-    // Public parameter names over private fields, as `DeviceLogcatSession`
-    // does: `_adb:` would be a poor argument to write at a call site.
+    // Public parameter names over private fields: `_adb:` would be a poor
+    // argument to write at a call site.
     // ignore: prefer_initializing_formals
   }) : _adb = adb,
        // ignore: prefer_initializing_formals
@@ -133,9 +120,8 @@ class AndroidAppDiscovery {
     unawaited(_streams.remove(serial)?.kill());
   }
 
-  /// Drops every stream. The `adb forward` tunnels are deliberately left in
-  /// place: an app found here is attached *through* one, and removing it would
-  /// cut a live connection to close a socket adb reclaims when the device goes.
+  /// Drops every stream. The `adb forward` tunnels are left in place: an app
+  /// found here is attached *through* one, and removing it would cut it.
   void dispose() {
     _disposed = true;
     for (final serial in _streams.keys.toList()) {
@@ -144,11 +130,8 @@ class AndroidAppDiscovery {
   }
 }
 
-/// Reads every connected Android device's log while something is watching.
-///
-/// `autoDispose` is the whole bound on cost, the same way
-/// `deviceLogcatSessionProvider` is bounded: a closed pane holds no `logcat`
-/// process, because nothing is left subscribed to this.
+/// Reads every connected Android device's log while something is watching;
+/// `autoDispose` is the whole bound on cost, so a closed pane holds no process.
 final androidAppDiscoveryProvider =
     FutureProvider.autoDispose<AndroidAppDiscovery>((ref) async {
       final discovery = AndroidAppDiscovery(

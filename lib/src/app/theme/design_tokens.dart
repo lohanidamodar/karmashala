@@ -1,19 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens for Karmashala's desktop chrome.
-///
-/// **Neutral by decision** (see the design note
-/// `2026-08-30-desktop-ui-direction.md`). The ink / brass / parchment identity
-/// is retired: a greyscale ramp carries the chrome, a single accent marks
-/// selection and focus, and colour that means something is reserved for
-/// [SemanticColors]. The app sits beside a terminal painted in the user's own
-/// imported theme, so the chrome must not compete with it.
+/// Design tokens for Karmashala's desktop chrome. Neutral by decision: the app
+/// sits beside a terminal in the user's own theme and must not compete with it.
 class AppColors {
   const AppColors._();
 
-  // ---------------------------------------------------------------------
-  // Neutral surface ramp — light
-  // ---------------------------------------------------------------------
   static const lightLowest = Color(0xFFFFFFFF);
   static const lightSurface = Color(0xFFF7F7F8);
   static const lightLow = Color(0xFFF2F2F4);
@@ -25,9 +16,6 @@ class AppColors {
   static const lightOutline = Color(0xFF8C8C96);
   static const lightOutlineVariant = Color(0xFFD5D5DC);
 
-  // ---------------------------------------------------------------------
-  // Neutral surface ramp — dark
-  // ---------------------------------------------------------------------
   static const darkLowest = Color(0xFF0E0E11);
   static const darkSurface = Color(0xFF17171B);
   static const darkLow = Color(0xFF1F1F24);
@@ -47,12 +35,8 @@ class AppColors {
   static const dangerDark = Color(0xFFFF9D96);
 }
 
-/// Colour that carries meaning, not identity.
-///
-/// Agent status, diff hunks and warnings are the only things allowed to be
-/// coloured outside the accent; everything else lives on the neutral ramp. Kept
-/// as a [ThemeExtension] so light and dark resolve through `Theme.of` like any
-/// other themed value, and so a widget can never reach for a raw `Colors.green`.
+/// Colour that carries meaning, not identity — agent status, diff hunks and
+/// warnings only. A [ThemeExtension], so no widget reaches for `Colors.green`.
 @immutable
 class SemanticColors extends ThemeExtension<SemanticColors> {
   const SemanticColors({
@@ -186,12 +170,8 @@ class Touch {
   static const icon = 18.0;
   static const iconSmall = 14.0;
 
-  /// The glyph in an empty state — [Chrome.iconHero]'s touch counterpart.
-  ///
-  /// Bigger than the desktop's 28 because it is not competing with a 240px
-  /// side panel for room: on a phone the empty state owns the whole screen,
-  /// and a 28px mark on 390px of nothing reads as a stray icon rather than as
-  /// the one picture the screen has.
+  /// The glyph in an empty state — [Chrome.iconHero]'s touch counterpart, bigger
+  /// because a phone's empty state owns the whole screen.
   static const iconHero = 32.0;
 
   /// A touch surface's app bar, at the default text scale.
@@ -204,29 +184,8 @@ class Touch {
       MediaQuery.textScalerOf(context).scale(appBar).clamp(appBar, 96.0);
 }
 
-/// How dense the *shared* cards and rows draw themselves.
-///
-/// The Explorer's `SessionCard` and `ProjectCard` are the same widgets on the
-/// desktop and on the phone — one design language, adapted rather than forked.
-/// What differs between a mouse and a thumb is spacing, hit area and one step
-/// of the type ramp, and that is one decision, taken once, here.
-///
-/// **Read from a [UiDensityScope], not from the ambient width.** The Explorer
-/// pane is routinely narrower than the compact breakpoint on a 1440px desktop,
-/// and a widget test hosts a card in a 300px box; inferring density from
-/// whatever `MediaQuery` reports would make both of those touch surfaces. The
-/// root that *knows* what it is — the companion app — installs the scope via
-/// [UiDensity.wrap]. Anything with no scope above it is [UiDensity.pointer],
-/// which is exactly what the desktop has always drawn.
-///
-/// **The question is what is driving the app, not how wide the window is.**
-/// This used to be `width < 600 ? touch : pointer`, and that made a 10-inch
-/// tablet — 800–1200px, held in a hand — draw 26px rows and 11px labels for a
-/// mouse it does not have. Width was standing in for input modality, and the
-/// two are not the same thing: a desktop window dragged narrow is still a
-/// mouse, and a tablet in landscape is still a thumb. Either rule keyed on
-/// width alone gets one of those wrong. See [UiDensity.forPlatform] for the
-/// signal used instead, and why it is the only honest one available.
+/// How dense the *shared* cards and rows draw themselves. Read from a
+/// [UiDensityScope], never the ambient width — a 300px pane is not a phone.
 enum UiDensity {
   /// A mouse aims: dense rows, 11–13px glyphs, no target floor.
   pointer,
@@ -234,49 +193,12 @@ enum UiDensity {
   /// A thumb does not: 48dp targets, roomier padding, one step up the ramp.
   touch;
 
-  /// The Material compact breakpoint (CLAUDE.md §6).
-  ///
-  /// A **width** class, and since density stopped keying on width, only that:
-  /// it is what `companionReadableWidth` caps a column of prose at. Measure is
-  /// a width question; modality is not.
+  /// The Material compact breakpoint (CLAUDE.md §6). A **width** class and only
+  /// that: measure is a width question, modality is not.
   static const compactWidth = 600.0;
 
-  /// The density [platform] calls for: what its owner holds it with.
-  ///
-  /// Android, iOS and Fuchsia are driven by a finger at every size — a folded
-  /// phone at 350px and a tablet at 1280px are both thumbs. Windows, macOS and
-  /// Linux are driven by a mouse at every size, including a window dragged
-  /// under the compact breakpoint. So the platform answers this and the
-  /// viewport does not.
-  ///
-  /// This is the one platform branch the responsive contract allows
-  /// (CLAUDE.md §6: *platform checks only for platform capabilities*). Density
-  /// is not layout — it decides hit area and the floor under a glyph, and the
-  /// input device those are sized for is a property of the machine, not of the
-  /// window. Layout still branches on width, and still should.
-  ///
-  /// **What was ruled out**, because none of it is a modality signal we can
-  /// trust:
-  ///
-  /// - `MediaQueryData.navigationMode` names a *keyboard* mode — whether arrow
-  ///   keys traverse or edit ([NavigationMode.directional] is for a TV remote).
-  ///   The engine never sets it from the input hardware; it is
-  ///   [NavigationMode.traditional] on a phone and on a desktop alike.
-  /// - `MouseTracker.mouseIsConnected` is real, but it is false until a mouse
-  ///   has actually hovered the window, so every desktop launch would start at
-  ///   touch and snap to pointer on the first mouse move — the whole app
-  ///   relaying out under the cursor. It also cannot say which device was used
-  ///   *last*: an iPad with a Magic Keyboard reports a mouse and is still held
-  ///   in a hand, and Apple keeps 44pt targets there for exactly that reason.
-  /// - A touchscreen on a Windows laptop is invisible to us and deliberately
-  ///   so. It is a mouse surface while the user is on the mouse, which is
-  ///   nearly always; shrinking every target because the panel *could* be
-  ///   poked would be the same error in the other direction.
-  ///
-  /// The known cost: Android in a desktop shell — DeX, a Chromebook with a
-  /// mouse — is drawn for a thumb. That is the conservative half of the
-  /// trade. A finger on a 26px row misses; a mouse on a 48dp row merely has
-  /// room to spare.
+  /// The density [platform] calls for: what its owner holds it with, because
+  /// width stands in for modality and gets a tablet or a narrow window wrong.
   static UiDensity forPlatform(TargetPlatform platform) => switch (platform) {
     TargetPlatform.android ||
     TargetPlatform.fuchsia ||
@@ -329,14 +251,8 @@ enum UiDensity {
             letterSpacing: 0,
           );
 
-  /// [base] re-tuned for this density: **identity** for [UiDensity.pointer],
-  /// so the desktop keeps the theme it has always had.
-  ///
-  /// Everything here is a size, not a colour or a font — the two platforms
-  /// share one palette and one type ramp, and differ only in how much room a
-  /// finger needs. Material's own `visualDensity: compact` and `shrinkWrap`
-  /// tap targets are the first things undone: they shrink every button in the
-  /// app below the 48dp floor.
+  /// [base] re-tuned for this density: **identity** for [UiDensity.pointer].
+  /// Sizes only — Material's compact density undoes the 48dp floor, so it goes.
   ThemeData themeFor(ThemeData base) {
     if (!isTouch) return base;
     final scheme = base.colorScheme;
@@ -426,16 +342,8 @@ enum UiDensity {
     );
   }
 
-  /// Installs the density for [child] — taken from the platform the ambient
-  /// theme adapts to, so a folded phone and a landscape tablet both get a
-  /// thumb — and re-tunes the inherited theme to match.
-  ///
-  /// The one call a root makes; nothing below it decides for itself. Read
-  /// through `ThemeData.platform` rather than [defaultTargetPlatform] because
-  /// that is Flutter's own seam for "which platform's interaction is this
-  /// subtree adapting to": it defaults to the real one, and a test — or a
-  /// preview of the phone shell on a desktop — can name the other without a
-  /// debug-only global.
+  /// Installs the density for [child] and re-tunes the inherited theme. Read
+  /// through `ThemeData.platform`, Flutter's own seam, so a test can name one.
   static Widget wrap(BuildContext context, Widget child) {
     final theme = Theme.of(context);
     final density = UiDensity.forPlatform(theme.platform);
@@ -468,33 +376,20 @@ class Motion {
   static const base = Duration(milliseconds: 220);
 }
 
-/// Fixed heights for the desktop chrome, in logical pixels.
-///
-/// Sized for a mouse: a pointer hits a 28px row reliably, and every pixel spent
-/// on chrome is a pixel taken from the terminal. Collected here so the title
-/// bar, the workbench tab strip, the side-panel rail and the status bar stay in
-/// proportion to one another instead of drifting apart file by file.
+/// Fixed heights for the desktop chrome, in logical pixels, sized for a mouse.
+/// Collected so the title bar, tab strip, rail and status bar stay in proportion.
 class Chrome {
   const Chrome._();
 
   /// The workbench tab strip, the side panel's header and every pane header.
   static const tabStrip = 30.0;
 
-  /// The menu-bar row at the top of the window — deliberately *the same* row
-  /// as [tabStrip]. It was 32 against everything else's 30, which is enough to
-  /// see and not enough to look intended: the top-left of the window read as
-  /// one undifferentiated slab of chrome rather than two rows.
+  /// The menu-bar row at the top of the window — deliberately *the same* row as
+  /// [tabStrip]; 32 against 30 read as one undifferentiated slab, not two rows.
   static const titleBar = tabStrip;
 
-  /// A **pane** header — the row one region of a split draws for the panes
-  /// stacked in it.
-  ///
-  /// Deliberately *not* [tabStrip]. The two rows sit one directly above the
-  /// other in a split, and drawing them at the same height made the region
-  /// header read as a second, inert copy of the tab above it — the owner's
-  /// "an extra tab that doesn't do anything". Height is the cheapest thing a
-  /// glance sorts by, it costs no colour, and here it hands 6px back to the
-  /// terminal rather than taking any.
+  /// A **pane** header. Deliberately not [tabStrip]: drawn at the same height,
+  /// the region header read as "an extra tab that doesn't do anything".
   static const paneStrip = 24.0;
 
   /// The status bar along the bottom of the window.
@@ -512,33 +407,16 @@ class Chrome {
   static const menuRow = 32.0;
   static const menuRowTall = 44.0;
 
-  /// The widest a column of prose is allowed to get, in logical pixels.
-  ///
-  /// A conversation is read, not scanned, and a line that runs the full width
-  /// of a 2560px window loses the reader between its end and the next line's
-  /// start (CLAUDE.md §6: *constrain readable content with a max width*). The
-  /// chat transcript and the composer under it are centred at this width so
-  /// they stay one column rather than two that happen to be near each other.
-  ///
-  /// Named here because it was written as a bare `860` in three places — the
-  /// transcript's list, its footer slot and the composer — and three copies of
-  /// a measure are three chances for the column and the box beneath it to stop
-  /// lining up. [UiDensity.compactWidth] is the *touch* answer to the same
-  /// question and is deliberately narrower; this is the pointer surface's.
+  /// The widest a column of prose is allowed to get. Named because it was a bare
+  /// `860` in three places, and three copies of a measure drift apart.
   static const readableWidth = 860.0;
 
-  /// One level of a file tree's indentation.
-  ///
-  /// Narrower than [Insets.lg] on purpose: a repository nests deeply and a
-  /// 16px step runs a `lib/src/features/…/presentation` path off the side of
-  /// a side panel long before the name it is indenting becomes readable.
+  /// One level of a file tree's indentation, narrower than [Insets.lg]: a 16px
+  /// step runs a deep path off the side of a side panel.
   static const treeIndent = 14.0;
 
-  /// How far a tree line with no row of its own — "Empty", "Loading…" — clears
-  /// the disclosure column, on top of its [treeIndent].
-  ///
-  /// It sits under its level's names rather than under their carets, so it
-  /// reads as that folder's content and not as a sibling of it.
+  /// How far a tree line with no row of its own clears the disclosure column, on
+  /// top of its [treeIndent] — under its level's names, not under their carets.
   static const treeGutter = 22.0;
 
   /// The height of a control that has to sit inside a [titleBar] row — a menu
@@ -567,13 +445,8 @@ class Chrome {
   /// enough to still fit the side panel at its 240px minimum.
   static const iconHero = 28.0;
 
-  /// The label on a tab chip — the workbench strip's, and a region header's.
-  ///
-  /// Fixed rather than scaled, and named here for exactly that reason: a chip
-  /// sits in a [tabStrip] row that does not grow, so a label that followed the
-  /// text scaler would be clipped rather than read. A size still belongs in the
-  /// theme layer when it is deliberately fixed — a widget must not be the place
-  /// that decides one.
+  /// The label on a tab chip. Fixed rather than scaled, and named here for that
+  /// reason: a chip sits in a [tabStrip] row that does not grow.
   static const TextStyle tabLabel = TextStyle(fontSize: 12);
 
   /// [tabLabel] a step down, for a [paneStrip] row. A pane is named *inside* a
@@ -598,10 +471,7 @@ class Chrome {
 const String kMonoFamily = 'monospace';
 
 /// The ledger hand's text styles, in the theme layer where a size may be
-/// named. Feature widgets use these instead of declaring their own
-/// `fontSize:` (the token guard test enforces it), and because the size lives
-/// on an ordinary [TextStyle] they follow the app's text scaler like any
-/// other text.
+/// named. Feature widgets use these instead of their own `fontSize:`.
 class MonoStyles {
   const MonoStyles._();
 

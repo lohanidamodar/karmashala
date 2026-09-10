@@ -1,25 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
 
-/// **Which agents the Explorer is showing.**
-///
-/// A *filter*, not a section, and the distinction is the whole design. A
-/// section **groups**: [assignSections] hands each row to exactly one of them,
-/// top to bottom, so a "Codex" section would take a red-build Codex session
-/// *away* from "Checks failing" — the two would compete for the same row rather
-/// than compose. A filter **hides**: it narrows the whole list, sections and
-/// project tree alike, and the two questions stack. "Checks failing, among my
-/// Codex sessions" is one section and one filter, and there is no arrangement
-/// of sections that answers it.
-///
-/// The other half of the argument is arithmetic. The request was "agy only,
-/// codex only, claude only, or two of them only" — that is every non-empty
-/// subset of three agents, which is seven sections to maintain by hand and
-/// fifteen at four agents. A set is one control.
-///
-/// **The empty set means "every agent", never "no agents".** Unticking the last
-/// agent returns to the unfiltered list, which is the only reading that leaves
-/// the control reversible: a filter whose natural end state is a blank sidebar
-/// is a filter users learn to be afraid of.
+/// Which agents the Explorer is showing. A *filter*, not a section: a section
+/// groups, so a "Codex" section would take a red-build row *away* from "Checks
+/// failing". The empty set means every agent, so the last untick is a way back.
 class AgentFilter {
   const AgentFilter(this.agentIds);
 
@@ -31,18 +14,9 @@ class AgentFilter {
 
   bool get isUnfiltered => agentIds.isEmpty;
 
-  /// Whether a session run by [agentId] is shown.
-  ///
-  /// **Null is shown, always.** `null` here means *the workspace cannot say
-  /// which agent this is* — a native session whose `agent_installations` row
-  /// went away when the CLI was uninstalled (`AgentInstallationsController`
-  /// deletes on reconcile, so this is an ordinary shape rather than corruption),
-  /// or an id no [AgentRegistry] descriptor claims. Neither can ever be ticked
-  /// in the menu, so hiding them would put rows behind a control that cannot
-  /// give them back — a session that vanished with no way to ask for it. The
-  /// same reasoning `SectionFacts.imported` records for imported history, which
-  /// is *not* in that position: an imported conversation names its CLI in
-  /// `ImportedSession.cli`, so it is classified and filtered like any other row.
+  /// Whether a session run by [agentId] is shown. Null is shown, always: null
+  /// means the workspace cannot say which agent it is, and such a row can never
+  /// be ticked in the menu, so hiding it would leave no way to get it back.
   bool allows(String? agentId) =>
       agentIds.isEmpty || agentId == null || agentIds.contains(agentId);
 
@@ -67,24 +41,15 @@ class AgentFilter {
       'AgentFilter(${agentIds.isEmpty ? 'all' : agentIds.join(', ')})';
 }
 
-/// The agents the filter can name, in registry order.
-///
-/// The menu is built from the registry rather than from a sweep of the
-/// workspace: the registry is three constants and no database statement, and an
-/// agent it does not list is one [AgentFilter.allows] never hides anyway.
+/// The agents the filter can name, in registry order — built from the registry,
+/// not a sweep: an agent it does not list is one [AgentFilter.allows] never hides.
 List<String> filterableAgentIds(AgentRegistry registry) => [
   for (final descriptor in registry.descriptors) descriptor.id,
 ];
 
-/// What the funnel is doing, said in one sentence.
-///
-/// **It names both halves.** "Showing Codex only" tells the user what they
-/// asked for; naming the agents whose sessions are consequently off the list is
-/// what stops a filtered Explorer from reading as a lost session. Names rather
-/// than a count, because a workspace-wide count of hidden rows is a sweep of
-/// the whole session table and the Explorer only ever reads the projects the
-/// user has expanded — see [visibleProjectSessionsProvider], which says the
-/// count where it is free to say it.
+/// What the funnel is doing, in one sentence, naming both halves so a filtered
+/// Explorer does not read as a lost session. Names rather than a count: a count
+/// of hidden rows would sweep the whole session table.
 String agentFilterTooltip(AgentFilter filter, AgentRegistry registry) {
   if (filter.isUnfiltered) return 'Filter sessions';
   final shown = <String>[];
@@ -94,9 +59,8 @@ String agentFilterTooltip(AgentFilter filter, AgentRegistry registry) {
       registry.displayNameFor(id),
     );
   }
-  // A filter naming an agent this registry has never heard of — a descriptor
-  // removed under a saved choice. Said rather than dropped, so the menu's own
-  // ticks and this sentence cannot disagree.
+  // A filter naming an agent this registry has never heard of. Said rather than
+  // dropped, so the menu's ticks and this sentence cannot disagree.
   for (final id in filter.agentIds) {
     if (registry.byId(id) == null) shown.add(id);
   }

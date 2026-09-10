@@ -1,24 +1,5 @@
-/// Showing **what an agent changed in a file**, as a diff, wherever a file
-/// write is rendered.
-///
-/// ## Wiring
-///
-/// The data is already in the transcript — see `file_edit_reader.dart` — so a
-/// surface that renders tool calls needs three lines:
-///
-/// ```dart
-/// final collector = FileEditCollector();
-/// for (final line in decodedTranscriptLines) collector.add(line, agentId);
-/// // …then, per edit:
-/// FileEditDiffCard(record: edit)
-/// ```
-///
-/// A live engine-hosted session goes through `fileEditsFromToolCall` with a
-/// `tool.call` payload instead, and gets the same card.
-///
-/// Use [FileEditCollector] rather than calling the per-line readers directly:
-/// Claude records one write twice, once as the call and once as the result, and
-/// only the collector folds the pair into a single row.
+/// Showing what an agent changed in a file, as a diff. Feed it through
+/// [FileEditCollector]: Claude records one write twice, as call and as result.
 library;
 
 import 'dart:math' as math;
@@ -32,23 +13,15 @@ import 'package:karmashala_git/git.dart';
 import 'diff_line_tile.dart';
 
 /// How many diff rows a card draws inline before it gives the diff its own
-/// scrolling box.
-///
-/// Most agent edits are far shorter than this — a recorded Claude patch is
-/// typically a handful of hunks — and a card that fits stays part of the page
-/// it sits in, so the transcript scrolls as one thing. Only the long ones pay
-/// for a nested scroller.
+/// scrolling box. A card that fits scrolls with the transcript as one thing.
 const int kFileEditInlineRows = 24;
 
 /// Row height, fixed so the long-diff list can use `itemExtent` and build only
 /// what is visible. It matches [DiffLineTile]'s 18px gutter.
 const double kDiffRowHeight = 18;
 
-/// One file an agent wrote, with its diff a click away.
-///
-/// Collapsed by default and summarised in the header — the same shape as the
-/// Git panel's changed-file rows, because it is the same question asked in a
-/// different place.
+/// One file an agent wrote, with its diff a click away — collapsed and
+/// summarised, the same shape as the Git panel's changed-file rows.
 class FileEditDiffCard extends StatefulWidget {
   const FileEditDiffCard({
     required this.record,
@@ -77,10 +50,8 @@ class _FileEditDiffCardState extends State<FileEditDiffCard> {
   void didUpdateWidget(FileEditDiffCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Diffing happens here and in [initState] and nowhere else: `build` runs on
-    // every frame this card is in, and this app's window shares its isolate
-    // with a synchronous database. `buildFileEditDiff` memoises on top of that,
-    // so a recycled list element that lands back on a record it has already
-    // shown costs a map lookup.
+    // every frame this card is in, and this isolate also holds a synchronous
+    // database.
     if (widget.record != oldWidget.record) {
       _diff = buildFileEditDiff(widget.record);
     }
@@ -128,9 +99,8 @@ class _Header extends StatelessWidget {
     return InkWell(
       onTap: onToggle,
       child: Semantics(
-        // One label for the whole row. Without it a screen reader reads four
-        // unrelated fragments — "Modified", "a.dart", "+1", "-1" — and the two
-        // signs are exactly the part that does not read aloud as anything.
+        // One label for the whole row: otherwise a screen reader reads four
+        // fragments, and "+1"/"-1" do not read aloud as anything.
         label: fileEditSemanticsLabel(diff),
         child: ExcludeSemantics(
           child: Padding(
@@ -221,8 +191,7 @@ class _Body extends StatelessWidget {
 
     final rows = diff.lines;
     // Long lines run off the side rather than wrapping, so every row is exactly
-    // [kDiffRowHeight] tall — which is what lets the long case build only the
-    // rows on screen. A wrapped row has no knowable height.
+    // [kDiffRowHeight] tall and `itemExtent` can build only what is visible.
     final content = LayoutBuilder(
       builder: (context, constraints) {
         final width = math.max(constraints.maxWidth, 1400.0);
@@ -297,12 +266,9 @@ class _Note extends StatelessWidget {
   }
 }
 
-/// The shortest name that still identifies the file — its own name, with the
-/// directory above it when there is one.
-///
-/// The full path is on the row's tooltip and in its semantics label; a session
-/// runs in one repository and shows the same three leading directories on every
-/// line, which is a lot of a narrow pane spent saying nothing.
+/// The shortest name that still identifies the file — its own, with the
+/// directory above it. The full path is on the tooltip and in the semantics
+/// label; every row of one session shares the same leading directories.
 String fileEditDisplayName(String path) {
   final parts = path.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).toList();
   if (parts.isEmpty) return path;

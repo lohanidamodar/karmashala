@@ -5,20 +5,8 @@ import '../../snippets/application/snippet_insertion.dart';
 import '../../snippets/domain/command_snippet.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 
-/// Text queued for a session's message composer, keyed by session id.
-///
-/// This is how a note reaches an agent, and the reason it is a queue rather
-/// than a call: **a note is not sent, it is offered**. Sending a note back puts
-/// its words in the box under the transcript, where the user reads them,
-/// changes their mind about half of them, and presses Enter — or does not. A
-/// note is a deferred instruction the user wrote for themselves weeks ago;
-/// dispatching one silently would be Karmashala deciding it was still right.
-///
-/// The draft survives until the composer picks it up, so sending back to a
-/// session that is not on screen leaves the text waiting there rather than
-/// dropping it. Nothing here touches the agent: from the composer onwards it is
-/// the ordinary `sessionActionsProvider.continueSession` path, the same one
-/// typing into the box uses.
+/// Text queued for a session's message composer, keyed by session id: **a note
+/// is not sent, it is offered**. The draft waits until the composer takes it.
 class ComposerDrafts extends Notifier<Map<String, String>> {
   @override
   Map<String, String> build() => const {};
@@ -61,17 +49,8 @@ enum SessionOfferOutcome {
   waitingForAPane,
 }
 
-/// Offers [text] to [sessionId] **in the face that session is already
-/// showing**.
-///
-/// Terminal up, the text is typed at the prompt through [insertSnippet] — the
-/// one path into a pane, which never presses Enter there. Chat up, it is
-/// queued for the composer. Either way it is *offered*: nothing here submits.
-///
-/// The face is **read, never written**. Revealing the conversation (`e7adebe6`)
-/// stopped a note vanishing into an unmounted composer, but forced the chat
-/// open over whatever the user was working in; reading the face answers the
-/// same question without moving anybody.
+/// Offers [text] to [sessionId] in the face that session is already showing —
+/// typed at a prompt, or queued for a composer. The face is read, never written.
 SessionOfferOutcome offerToSession(
   WidgetRef ref, {
   required String sessionId,
@@ -120,9 +99,7 @@ String sessionOfferMessage(SessionOfferOutcome outcome, String title) =>
     };
 
 /// [text] as [insertSnippet] takes it: a one-line command, never submitted.
-///
-/// A throwaway rather than a second write path — `singleLine` and the rule
-/// that a pane is typed into and not sent to both live in there.
+/// A throwaway rather than a second write path.
 CommandSnippet _offered(String text) => CommandSnippet(
   id: 'offered',
   label: 'Offered text',

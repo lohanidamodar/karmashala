@@ -21,8 +21,7 @@ class AppearancePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
-    // The dropdown's value must be one of its items; snap a stored scale that
-    // is not on the menu (an old file, a hand edit) to the nearest step.
+    // The dropdown's value must be one of its items; snap to the nearest step.
     final scale = uiTextScaleOptions.reduce(
       (a, b) =>
           (a - settings.uiTextScale).abs() < (b - settings.uiTextScale).abs()
@@ -97,8 +96,7 @@ class AppearancePage extends ConsumerWidget {
   }
 }
 
-/// Settings → System: OS integrations (awake, tray, login) and the global
-/// launcher hotkey.
+/// Settings → System: OS integrations, and the global launcher hotkey.
 class SystemPage extends ConsumerWidget {
   const SystemPage({super.key});
 
@@ -157,9 +155,8 @@ class SystemPage extends ConsumerWidget {
   }
 }
 
-/// The global hotkey that summons the window from anywhere. Shows the current
-/// combo with a Change button; recording only happens inside the dialog
-/// the button opens, so it never captures stray keypresses on the settings page.
+/// The global hotkey that summons the window. Recording happens only inside
+/// the Change dialog, so it never captures the settings page's keypresses.
 class LauncherHotkeySection extends ConsumerWidget {
   const LauncherHotkeySection({super.key});
 
@@ -221,10 +218,7 @@ class LauncherHotkeySection extends ConsumerWidget {
               ],
             ),
           ),
-          // A chord another application already holds registers as a failure
-          // and nothing else; without this the switch says on and the shortcut
-          // does nothing. Changing the chord resets the retry budget, so this
-          // line is also the instruction for clearing it.
+          // A chord another app holds only fails; changing it resets retries.
           NativeSettingStatusLine(
             NativeSetting.launcherHotkey,
             enabled: enabled,
@@ -235,8 +229,7 @@ class LauncherHotkeySection extends ConsumerWidget {
   }
 }
 
-/// A modal that records a single hotkey. The recorder is only active while this
-/// dialog is open, so it can't swallow keypresses meant for the settings page.
+/// A modal that records a single hotkey, active only while it is open.
 class _HotkeyRecorderDialog extends StatefulWidget {
   const _HotkeyRecorderDialog({required this.initial});
 

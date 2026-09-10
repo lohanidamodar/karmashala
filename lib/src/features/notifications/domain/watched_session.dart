@@ -23,11 +23,8 @@ class WatchedSession {
 
   final bool imported;
 
-  /// The live pane this native session occupies, when it has one.
-  ///
-  /// Carried from the loader's already-read session row so a status cycle does
-  /// not query that same row again merely to recover its pane id. Imported
-  /// sessions never have an in-app pane.
+  /// The live pane this native session occupies, when it has one. Carried from
+  /// the loader's row so a cycle need not re-query it; imported have none.
   final String? paneId;
 
   /// The agent's transcript file, when one is known. `null` for native

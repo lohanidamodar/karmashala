@@ -1,30 +1,14 @@
-// **The floating handle on a pane of a split** — the grip a pane is dragged
-// out by, and the two verbs that used to live in a per-region header. A region
-// of a split draws no header any more, so this is the pane's only handle: it
-// starts the [PaneDrag] that lets a pane be dropped on the tab strip to become
-// a tab, on another region's header to join it, or on another pane to
-// re-split.
-//
-// A part of `terminal_panel.dart` rather than a library of its own, because
-// `_PaneFloatingActions` is private and the panel's tree golden records that
-// name. `paneDragHandleKey` travels with it: the key is the handle's, and a
-// test aiming at the grip is aiming at this widget.
+// **The floating handle on a pane of a split** — the grip that starts the
+// [PaneDrag]. A `part` because `_PaneFloatingActions` is private.
 
 part of 'terminal_panel.dart';
 
-/// The grip a split pane is dragged out by, so a test can aim at it.
-///
-/// Named rather than found by geometry for the reason [kTabStripEmptySpace] is:
-/// the handle *is* the subject of the gesture.
+/// The grip a split pane is dragged out by. Named rather than found by
+/// geometry: the handle *is* the subject of the gesture.
 Key paneDragHandleKey(String paneId) => ValueKey('pane-handle/$paneId');
 
-/// The floating handle in the top-right corner of a split pane: a grip to drag
-/// the pane by, and the two verbs that used to live in a per-region header.
-///
-/// A region of a split no longer draws a header (see [_buildRegion]), so this
-/// is the pane's only handle — including the grip that starts a [PaneDrag],
-/// which is what still lets a pane be dropped on the tab strip to become a tab,
-/// on another region's header to join it, or on another pane to re-split.
+/// The floating handle in a split pane's top-right corner. A region draws no
+/// header, so this grip is the pane's only way to be dragged anywhere.
 class _PaneFloatingActions extends ConsumerStatefulWidget {
   const _PaneFloatingActions({
     required this.paneId,
@@ -59,8 +43,8 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
       child: AnimatedOpacity(
         opacity: opacity,
         duration: const Duration(milliseconds: 150),
-        // Invisible is also unclickable: the box stays to keep the hover
-        // target and the geometry the same in every state.
+        // Invisible is also unclickable; the box stays so the hover target and
+        // the geometry are the same in every state.
         child: IgnorePointer(
           ignoring: opacity == 0.0,
           child: Container(

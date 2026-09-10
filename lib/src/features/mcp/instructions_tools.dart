@@ -1,43 +1,5 @@
-/// `instructions(<topic>)` — the policy an agent needs and a tool description
-/// has nowhere to put.
-///
-/// ## Why this tool exists
-///
-/// This app serves around seventy tools. Until now the only place to say
-/// anything to the agent driving them was a per-tool `description`, and that
-/// channel is wrong for most of what actually needs saying. A description is
-/// read *while choosing a tool*, is duplicated across every tool a rule
-/// touches, and has no room for the sentence that matters — which is almost
-/// never "what this does" and almost always "what a success here does **not**
-/// mean".
-///
-/// The four things this codebase most needs an agent to know are all of that
-/// shape, and none of them fit in a description:
-///
-/// * `session_send` returning `delivered: true` says the text reached a PTY.
-///   It says nothing about the agent on the other side having read it, agreed
-///   with it, or finished.
-/// * `terminal_run` cannot know an exit code in a pane whose shell has no
-///   OSC 133 integration, and reports `exitCodeKnown: false` rather than
-///   inventing a zero.
-/// * `checkpoint_restore` takes a safety checkpoint before it overwrites
-///   anything, so the scariest tool here is itself undoable.
-/// * `worktree_create` makes a folder and a branch. Nobody starts working in
-///   it. It is not a way to delegate.
-///
-/// ## Why the tool lists in the guides are generated
-///
-/// A guide that hand-lists its tools is a second catalogue, and a second
-/// catalogue is a catalogue that goes stale — quietly, in the direction of
-/// claiming a family is smaller and safer than it is. So a guide declares
-/// *prefixes*, and its membership is computed from [kMcpToolAnnotations], the
-/// same table `tools/list` annotates from. Add `browser_cookies` to that table
-/// and it appears in the browser guide with its hints, without anyone
-/// remembering to come here.
-///
-/// The other half of the anti-drift story is in `mcp_tool_catalogue_test`:
-/// every tool the table marks `destructiveHint` must be claimed by some guide.
-/// A new destructive family therefore cannot ship without one.
+/// `instructions(<topic>)` — the policy a tool `description` has nowhere to put,
+/// with each guide's tool list generated from [kMcpToolAnnotations].
 library;
 
 import 'mcp_tool_catalogue.dart';
@@ -69,10 +31,8 @@ class McpGuide {
   /// belongs with the workspace, `get_usage` with sessions.
   final List<String> extraTools;
 
-  /// Every catalogued tool this guide is responsible for, in catalogue order.
-  ///
-  /// Read from [kMcpToolAnnotations] rather than stored, so the list cannot
-  /// disagree with what the server actually serves.
+  /// Every catalogued tool this guide is responsible for, read from
+  /// [kMcpToolAnnotations] so the list cannot disagree with what is served.
   List<String> get tools => <String>[
     for (final name in kMcpToolAnnotations.keys)
       if (claims(name)) name,
@@ -82,13 +42,8 @@ class McpGuide {
       extraTools.contains(name) ||
       prefixes.any((prefix) => name.startsWith(prefix));
 
-  /// The guide as the tool returns it: the prose, then the generated roster.
-  ///
-  /// The roster carries each tool's annotations because "which of these can I
-  /// not undo" is the question the prose above it is answering, and repeating
-  /// the answer next to the names is cheaper than making the reader hold the
-  /// two apart. `moves-attention` rides along for the reader who is deciding
-  /// whether to run one of these over a list.
+  /// The guide as the tool returns it: the prose, then the generated roster with
+  /// each tool's annotations beside it.
   String render() {
     final roster = <String>[
       for (final name in tools)
@@ -125,11 +80,8 @@ class McpGuide {
   }
 }
 
-/// The guides, in the order the topic listing shows them.
-///
-/// Ordered by how early an agent needs them, not alphabetically: an agent that
-/// reads only the first two has read the two facts that cause the most wasted
-/// work in this app.
+/// The guides, ordered by how early an agent needs them: reading only the first
+/// two gets the two facts that cause the most wasted work in this app.
 const List<McpGuide> kMcpGuides = <McpGuide>[
   McpGuide(
     topic: 'sessions',
@@ -737,9 +689,8 @@ class InstructionsTools {
         'the first time you use it in a task.',
   ].join('\n');
 
-  /// One text block. Same shape the browser tools use, and for the same
-  /// reason: a returned `String` would be JSON-encoded by `_toolResult` and
-  /// arrive as one quoted line with `\n` in it.
+  /// One text block, as the browser tools use: a returned `String` would be
+  /// JSON-encoded by `_toolResult` and arrive as one quoted line with `\n` in it.
   static Object _text(String body) => <String, Object?>{
     '_mcpContent': <Object?>[
       <String, Object?>{'type': 'text', 'text': body},

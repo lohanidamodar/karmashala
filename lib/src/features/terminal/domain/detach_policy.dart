@@ -1,88 +1,13 @@
-/// Whether closing a pane keeps its process alive.
-///
-/// Karmashala detaches rather than kills, and that is the right default for
-/// the thing it is for: closing the tab of a running agent, a build, a dev
-/// server or an ssh session must not end it. But it was applied to *every* live
-/// pane, so opening a shell, typing nothing, and closing the tab left a
-/// PowerShell running with no tab — and, since the tiering work, a cold pane
-/// with a spool and a row in the layout, restored on the next launch.
-/// Multiplied by a working day that is a background session list nobody asked
-/// for and a slower restore every morning.
-///
-/// The rule, in one place and pure so it can be tested without a process: keep
-/// what someone would miss, release what nobody would.
-///
-/// Pure Dart on purpose — no xterm, no Flutter — so the whole decision is unit
-/// testable. The caller supplies the four observations.
+/// Whether closing a pane keeps its process alive: keep what someone would
+/// miss, release what nobody would. Pure, so it is testable without a process.
 library;
 
-/// Non-blank lines of **its own** an un-instrumented shell may have before its
-/// buffer counts as history worth keeping.
-///
-/// This is the fallback, and — because shell integration is **off by default**,
-/// and because a `cmd.exe` pane can never have it at all — it is also the
-/// common path. So it is deliberately
-/// conservative, and errs towards *keeping*: being wrong that way leaves a
-/// session running, and being wrong the other way ends one somebody wanted.
-///
-/// "Of its own" is the part that was missing, and it is what the owner's report
-/// — *"empty wsl terminal stays in the background instead of just ending"* —
-/// turned out to be about. Six was derived from single-line prompts: PowerShell
-/// prints two or three lines and a prompt, `cmd.exe` two, `bash` usually one.
-/// A **multi-line prompt** breaks that arithmetic, because the shell redraws it
-/// once per command and every redraw is counted as history.
-///
-/// Measured through a real ConPTY against the owner's `archlinux`, whose zsh
-/// runs starship — a blank separator, a directory line and a `>` line, so three
-/// rows per command:
-///
-/// ```txt
-/// idle, untouched          nonBlank=2     released
-/// after 1 silent command   nonBlank=5     released
-/// after 2 silent commands  nonBlank=8     KEPT   <- the bug
-/// after `pwd`              nonBlank=12    kept
-/// after `ls`               nonBlank=106   kept
-/// ```
-///
-/// Two commands that printed **nothing at all** parked a shell in the
-/// background list, where it also survives a restart — the restore path puts
-/// tab-less sessions straight back into it. That is the opposite of what this
-/// file says it does: "a shell that has printed nothing beyond its banner has
-/// nothing anyone would come back for".
-///
-/// The fix is not a bigger number — a five-line prompt would break that one
-/// too. It is to stop guessing the part that can be measured: the pane records
-/// its own greeting (see `TerminalInstance.greetingLines`) and this six is
-/// counted *on top of* it. So the constant keeps its meaning, and gains the
-/// one it was always supposed to have — six lines of history **beyond whatever
-/// this shell greeted you with**.
-///
-/// That also settles a case the old wording conceded it got wrong: a shell
-/// whose login MOTD is longer than six lines used to be kept unconditionally.
-/// Now the MOTD is the greeting, and the pane is kept only for real output past
-/// it.
+/// Non-blank lines of **its own** a shell may print before its buffer counts as
+/// history — on top of its greeting, since a prompt can redraw three rows.
 const int kIdleShellHistoryLines = 6;
 
-/// Whether closing this pane should detach it rather than end it.
-///
-/// * **Not live** — nothing to keep; the process is already gone.
-/// * **An agent session** — always kept. It is the unit of work the app is
-///   about, it may be mid-turn, and its transcript is the point.
-/// * **A command executing** — always kept. OSC 133 says so directly, and a
-///   build or a dev server that dies because a tab was closed is exactly the
-///   failure detaching exists to prevent.
-/// * **An instrumented shell at an idle prompt** — released. The shell told us
-///   it is running nothing; there is no guessing to do.
-/// * **An un-instrumented shell** — kept only if it has real history, because
-///   without OSC 133 the buffer is the only evidence there is. A shell that has
-///   printed nothing beyond its banner has nothing anyone would come back for.
-///
-/// [greetingLines] is what that last case measures "beyond its banner" against:
-/// the lines the shell had put on screen before the user ran anything in it, or
-/// null for a pane nothing was ever run in. See [kIdleShellHistoryLines] for
-/// why it is measured rather than guessed. Null falls back to counting from
-/// zero, which is what this rule did before greetings existed — the safe
-/// direction, since a smaller greeting only ever keeps more.
+/// Whether closing this pane should detach it rather than end it. An agent
+/// session or a running command is always kept; a shell only with real history.
 bool shouldDetachOnClose({
   required bool isLive,
   required bool isAgentSession,
@@ -96,41 +21,8 @@ bool shouldDetachOnClose({
   return nonBlankLines > (greetingLines ?? 0) + kIdleShellHistoryLines;
 }
 
-/// Whether a pane that has just exited should close itself.
-///
-/// Two reports, a release apart, are the same request at two scopes. The first:
-/// "how to close the split — even after terminal was exit with exit command the
-/// split pane was still there". The second, once splits closed themselves:
-/// *"typing exit on terminal tab, should also close the tab right"*.
-///
-/// They are the same because the reasoning never depended on the split. Typing
-/// `exit` — or pressing Ctrl+D — is a **request to be done with that shell**,
-/// and honouring a request is not the same as throwing something away. A pane
-/// is a working surface rather than a record of one, at whatever scope it
-/// happens to occupy, so the surface goes when the work in it is dismissed;
-/// closing the last pane in a tab closes the tab, and closing the last tab
-/// leaves the empty workspace that *Close all* already reaches.
-///
-/// So [isSplit] is gone rather than defaulted, because a condition that no
-/// longer decides anything should not be left where a reader can mistake it for
-/// one. What remains are the two exceptions this file argues for — and they are
-/// the whole safety story, so neither is negotiable:
-///
-/// * **an agent session stays** — its scrollback is the point of the session,
-///   and an ended agent is exactly what [shouldDetachOnClose] keeps. Ending one
-///   may have cost real money; a dead shell is just a dead shell.
-/// * **a failure stays** — a pane that exited non-zero is holding the error
-///   somebody opened the terminal to read, and closing it would throw away the
-///   one thing they wanted. Only a clean exit is a shell being *dismissed*; a
-///   crash is **evidence**, and evidence is not dismissed by the thing that
-///   produced it. An exit status we never learned counts as "not clean", which
-///   errs towards keeping.
-///
-/// That split is also why this is not behind a setting. The dangerous half of
-/// "close on exit" is losing output nobody has read yet, and the exit code
-/// already separates it out: what closes is a shell the user personally told to
-/// end, and what stays is everything that ended some other way. A preference
-/// here would only ask people to predict which of those they meant.
+/// Whether a pane that has just exited should close itself. An agent session
+/// stays, and so does a failure: a non-zero pane holds an error to be read.
 bool shouldCollapseOnExit({
   required bool isAgentSession,
   required int? exitCode,

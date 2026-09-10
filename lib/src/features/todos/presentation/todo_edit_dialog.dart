@@ -11,18 +11,8 @@ import 'project_menu.dart';
 /// enormous must not swallow the dialog.
 const _maxLines = 4;
 
-/// Opens a todo composer pre-filled with [body] and keeps what comes back.
-///
-/// **The panel's own one-line field is still the fast path** and nothing here
-/// replaces it: type, press Enter, done. This is for the other case — text
-/// captured from somewhere else, which the user has to *read* before it
-/// becomes a line on their list. A terminal selection is the case it was
-/// written for, and it is exactly the case where saving without showing would
-/// file a screenful of shell output as a todo.
-///
-/// [joinedLines] is how many lines the capture originally spanned, so the
-/// dialog can say what it collapsed rather than quietly presenting the result
-/// as what the user selected.
+/// Opens a todo composer pre-filled with [body]. For text captured elsewhere,
+/// which the user has to *read* first — a terminal selection, say.
 Future<Todo?> showNewTodoDialog(
   BuildContext context,
   WidgetRef ref, {
@@ -140,10 +130,8 @@ class _TodoEditDialogState extends ConsumerState<TodoEditDialog> {
               onChanged: (id) => setState(() => _projectId = id),
             ),
             const SizedBox(height: Insets.sm),
-            // Said out loud, above the Save button, because the field no
-            // longer shows what was selected. A todo is one line and a
-            // terminal selection usually is not; collapsing it silently would
-            // be the app quietly rewriting the user's text.
+            // Said out loud above Save, because the field no longer shows what was
+            // selected: collapsing it silently would be the app rewriting the user's text.
             Text(
               joined > 1
                   ? '$joined lines were joined into one — a todo is a single '

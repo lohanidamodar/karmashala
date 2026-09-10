@@ -15,8 +15,8 @@ import '../domain/verification_target.dart';
 import 'verification_recorder.dart';
 import 'verification_report.dart';
 
-/// Raised when a run cannot be started, noted or finished. Its message is the
-/// whole message — the MCP bridge renders a thrown error verbatim.
+/// Raised when a run cannot be started, noted or finished; its message is the
+/// whole message, since the bridge renders a thrown error verbatim.
 class VerificationException implements Exception {
   const VerificationException(this.message);
   final String message;
@@ -25,20 +25,12 @@ class VerificationException implements Exception {
   String toString() => message;
 }
 
-/// "A run started, stepped or finished" — nothing more.
-///
-/// **Owned apart from [VerificationService] on purpose.** The service holds a
-/// [VerificationArtifactStore], and therefore a resolved artifact root; a
-/// surface that only wants to be *told* something changed must not be made to
-/// depend on the filesystem to hear it. When the signal hung off the service,
-/// the delivery strip — which every session view draws, on the warm-up frame —
-/// reached the root through it and left the whole feature errored underneath
-/// itself. See `verificationChangesProvider`.
+/// "A run started, stepped or finished" — owned apart from
+/// [VerificationService] so a listener never reaches the artifact root for it.
 class VerificationChangeSignal {
   final _controller = StreamController<void>.broadcast();
 
-  /// Fires whenever a run starts, is stepped or finishes, so a pane can follow
-  /// along without polling.
+  /// Fires on every start, step and finish, so a pane need not poll.
   Stream<void> get stream => _controller.stream;
 
   void bump() {
@@ -48,12 +40,8 @@ class VerificationChangeSignal {
   Future<void> dispose() => _controller.close();
 }
 
-/// Starts, records and finishes verification runs.
-///
-/// **One run at a time, deliberately.** The evidence is collected by installing
-/// a sink on the app's single browser and adb services; two runs would fight
-/// over the same seam, and a step landing in the wrong run is worse than being
-/// told to finish the first one.
+/// Starts, records and finishes verification runs. One at a time: the evidence
+/// sink goes on the app's single browser and adb services.
 class VerificationService {
   VerificationService(
     this._dao,
@@ -71,9 +59,8 @@ class VerificationService {
   final VerificationDao _dao;
   final VerificationArtifactStore _store;
 
-  /// The app's single browser driver, read lazily — a run installs its sink on
-  /// this exact object, which is what makes the pane and the MCP tools record
-  /// themselves.
+  /// The app's single browser driver — a run installs its sink on this exact
+  /// object, which is what makes the pane and the MCP tools self-record.
   final BrowserService Function() browserOf;
 
   /// adb, or null when no Android SDK was found.
@@ -86,30 +73,21 @@ class VerificationService {
 
   VerificationRecorder? _recorder;
 
-  /// The run being recorded, or null.
   VerificationRun? get activeRun => _recorder?.run;
 
   bool get isRecording => _recorder != null;
 
-  /// Fires whenever a run starts, is stepped or finishes, so a pane can follow
-  /// along without polling.
   Stream<void> get changes => _changes.stream;
   final VerificationChangeSignal _changes;
 
-  /// Whether [dispose] should close the signal. False when one was handed in:
-  /// the signal outlives any single service, which is the point of it.
+  /// Whether [dispose] closes the signal — false when one was handed in, since
+  /// it outlives any single service.
   final bool _ownsChanges;
 
   void _changed() => _changes.bump();
 
-  // --- Lifecycle -------------------------------------------------------------
-
-  /// Begins recording against [target].
-  ///
-  /// A browser target attaches to the browser and goes to the URL; a device
-  /// target with a package brings that app to the front, unless [launch] is
-  /// false. Both are recorded as the run's first steps, because they are the
-  /// first thing the run did.
+  /// Begins recording against [target]. A browser target attaches and
+  /// navigates; a device target fronts its package unless [launch] is false.
   Future<VerificationRun> start({
     required VerificationTarget target,
     String? title,
@@ -151,16 +129,12 @@ class VerificationService {
         case VerificationTargetKind.device:
           await _openDevice(recorder, target, launch: launch);
         case VerificationTargetKind.change:
-          // Nothing to attach to and nothing to bring to the front. A change
-          // run must not touch the browser or adb even to ask them a question:
-          // a review recorded on a machine with no Chrome and no Android SDK
-          // is the ordinary case, not a degraded one.
+          // A change run must not touch the browser or adb even to ask.
           break;
       }
     } on Object catch (error) {
-      // The run itself survives a target that could not be reached: an agent
-      // still wants to finish it as "inconclusive, the page never loaded"
-      // rather than have the failure erase the record of trying.
+      // The run survives an unreachable target: still finishable as
+      // inconclusive, rather than losing the record of having tried.
       recorder.note('Could not reach the target', detail: '$error');
       rethrow;
     } finally {
@@ -179,15 +153,12 @@ class VerificationService {
       try {
         await browser.connect();
       } on BrowserException {
-        // Nothing drivable to attach to. Opening a tab at the target is the
-        // only way to get a page at all, so the run starts there.
+        // Nothing to attach to: opening a tab is the only way to a page.
         if (url == null || url.isEmpty) rethrow;
         await browser.connect(url: url);
       }
     }
-    // Watching starts **before** the navigation, not after it: the errors a
-    // page throws while loading are exactly the ones worth catching, and
-    // observing afterwards would miss every one of them.
+    // Before the navigation: the errors a page throws while loading count.
     await browser.startObserving();
     if (url != null && url.isNotEmpty) await browser.navigate(url);
   }
@@ -228,11 +199,7 @@ class VerificationService {
     }
   }
 
-  /// Waits for every queued artifact write to land.
-  ///
-  /// Steps are already durable when the call that produced them returns; this
-  /// is about the files. A caller that is about to *read* a run — a tool result,
-  /// the pane, the report — awaits this first.
+  /// Waits for every queued artifact write to land; steps are already durable.
   Future<void> flush() => _recorder?.drain() ?? Future<void>.value();
 
   /// Adds a step the agent wrote itself.
@@ -245,28 +212,9 @@ class VerificationService {
     _changed();
   }
 
-  /// Records a check **this app ran itself**, start to finish, in one call.
-  ///
-  /// `flutter analyze` and `flutter test` are the two it exists for. They are
-  /// not the same shape as everything else here: a browser or a device run is
-  /// an agent *driving* something over many turns, and the recorder follows
-  /// along; a gate is one command with one exit code, and the verdict is that
-  /// code. There is nothing to drive and nothing to follow.
-  ///
-  /// **It does not take the recording slot.** [start] refuses while a run is
-  /// open, correctly — two recorders on one browser would interleave. A gate
-  /// installs no sink and touches neither service, so an agent that is halfway
-  /// through verifying a screen can run a gate without its own run being
-  /// clobbered or refused.
-  ///
-  /// The target is [VerificationTargetKind.change] for the reason that kind
-  /// gives: a gate drives nothing, and there is no address to store. What it
-  /// was about is in the title and in the step.
-  ///
-  /// **An exit code we never saw is `inconclusive`, never a pass** (§19) — a
-  /// pane the user closed by hand reports no code at all, and calling that
-  /// green would be the confident false statement the whole record exists to
-  /// avoid.
+  /// Records a gate this app ran itself in one call. It takes no recording
+  /// slot, so it cannot clobber an open run, and an exit code we never saw is
+  /// `inconclusive`, never a pass (§19).
   Future<VerificationRun> recordCommandCheck({
     required String title,
     required List<String> command,
@@ -332,8 +280,7 @@ class VerificationService {
     return _dao.getRun(id) ?? run;
   }
 
-  /// Closes the run: collects the trailing evidence, records the verdict, and
-  /// writes the report.
+  /// Closes the run: trailing evidence, the verdict, and the report.
   Future<VerificationRun> finish({
     required VerificationVerdict verdict,
     String? reason,
@@ -371,17 +318,12 @@ class VerificationService {
     return _dao.getRun(run.id)!;
   }
 
-  /// Everything collected without being asked, at the end of the run.
-  ///
-  /// Each piece is best effort and independently guarded: a device that
-  /// unplugged must still produce a run with the steps that did happen.
+  /// Collected without being asked, at the end. Each piece is guarded alone.
   Future<void> _collectClosingEvidence(
     VerificationRecorder recorder,
     VerificationRun run,
   ) async {
-    // A change run collected nothing without being asked and has nothing to
-    // collect now: its evidence is the notes the reviewer wrote and the reason
-    // on its verdict.
+    // A change run's evidence is the reviewer's notes and the verdict's reason.
     if (run.target.isChange) return;
     if (run.target.isBrowser) {
       final browser = browserOf();
@@ -416,8 +358,7 @@ class VerificationService {
           );
         }
       }
-      // The last thing the page looked like. Taken with the sink still
-      // installed so it is a step as well as a picture.
+      // Taken with the sink still installed, so it is a step as well.
       await _bestEffort(() => browser.screenshot());
       return;
     }
@@ -446,12 +387,9 @@ class VerificationService {
     }
   }
 
-  /// Removes the sinks and stops watching. Always runs, even when the closing
-  /// evidence threw: a run that leaves its sink installed would record the next
-  /// person's clicks.
+  /// Removes the sinks. Always runs: a leftover one records the next person.
   Future<void> _detach(VerificationRun run) async {
-    // No sink was installed, so removing one would only be an excuse to
-    // construct a browser this run never wanted.
+    // No sink was installed; building a browser to remove one is an excuse.
     if (run.target.isChange) return;
     final adb = adbOf();
     if (adb != null) adb.actionSink = null;
@@ -463,9 +401,7 @@ class VerificationService {
   }
 
   /// Abandons the active run without a verdict, leaving it open in the record.
-  ///
-  /// Used when the app is shutting down. Deliberately not "delete": an
-  /// abandoned run is a fact about what happened.
+  /// Not "delete": an abandoned run is a fact about what happened.
   Future<void> abandon() async {
     final recorder = _recorder;
     if (recorder == null) return;
@@ -475,13 +411,7 @@ class VerificationService {
     _changed();
   }
 
-  // --- Reading ---------------------------------------------------------------
-
-  /// Runs newest first, each with its steps and artifacts.
-  ///
-  /// The steps come along because every caller shows a count — the pane's row,
-  /// the tool's listing — and a list that says "0 steps" for a run with twelve
-  /// is worse than no count at all.
+  /// Runs newest first, with steps and artifacts — every caller shows a count.
   List<VerificationRun> list({int limit = 50, String? sessionId}) => [
     for (final run in _dao.listRuns(limit: limit, sessionId: sessionId))
       run.copyWith(
@@ -492,12 +422,7 @@ class VerificationService {
 
   VerificationRun? get(String id) => _dao.getRun(id);
 
-  /// A run by id, or by an unambiguous prefix of one.
-  ///
-  /// Ids are long enough to be sortable in a folder listing, which makes them
-  /// long enough to be tedious to retype; this accepts the leading characters
-  /// the way git accepts a short hash, and refuses rather than guesses when
-  /// several match.
+  /// A run by id or unambiguous prefix; it refuses when several match.
   VerificationRun? find(String idOrPrefix) {
     final exact = _dao.getRun(idOrPrefix);
     if (exact != null) return exact;
@@ -514,7 +439,6 @@ class VerificationService {
 
   String pathOf(VerificationArtifact artifact) => _store.pathOf(artifact);
 
-  /// Attaches a run to a session (or detaches it with null).
   void attachToSession(String runId, String? sessionId) {
     _dao.updateSessionId(runId, sessionId);
     _changed();
@@ -542,9 +466,7 @@ class VerificationService {
       if (!shouldInline(artifact)) continue;
       final bytes = await _store.read(artifact);
       if (bytes == null) continue;
-      // Decoded as UTF-8, not fromCharCodes: a logcat line or a page's own
-      // error message is routinely not ASCII, and mangling it in the report is
-      // exactly the kind of quiet corruption evidence must not have.
+      // UTF-8, not fromCharCodes: a logcat line is routinely not ASCII.
       inlined[artifact.relativePath] = utf8.decode(bytes, allowMalformed: true);
     }
     final markdown = renderVerificationReport(run, inlined: inlined);
@@ -559,8 +481,6 @@ class VerificationService {
     if (_ownsChanges) await _changes.dispose();
   }
 
-  // --- Helpers ---------------------------------------------------------------
-
   VerificationRecorder _require() {
     final recorder = _recorder;
     if (recorder == null) {
@@ -571,8 +491,8 @@ class VerificationService {
     return recorder;
   }
 
-  /// Runs [action], returning null instead of throwing. Used for evidence:
-  /// failing to collect a screenshot must not lose the run's verdict.
+  /// Runs [action], returning null instead of throwing: a screenshot that
+  /// cannot be collected must not lose the run's verdict.
   Future<T?> _bestEffort<T>(Future<T> Function() action) async {
     try {
       return await action();

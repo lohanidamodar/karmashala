@@ -9,8 +9,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../domain/transcript_path_link.dart';
 
 /// What tells a link this app made out of a bare path from one the author
-/// wrote. Carried in the element's `title`, which markdown gives us for free
-/// and nothing else in a transcript uses.
+/// wrote. Carried in the element's `title`, which nothing else here uses.
 const String kPathLinkTitle = 'karmashala-path';
 
 /// Called with the path a reader clicked, exactly as the agent wrote it.
@@ -24,14 +23,8 @@ TextStyle pathLinkStyle(ColorScheme scheme) => TextStyle(
   decorationColor: scheme.primary.withValues(alpha: 0.4),
 );
 
-/// Renders an agent/user message as Markdown — selectable prose with fenced
-/// code blocks syntax-highlighted — so the chat reads like a real CLI session.
-///
-/// File paths in the prose become links when [onPathTap] is given. That is done
-/// with a markdown *inline syntax* rather than by rewriting the text: a
-/// preprocessed string would put links inside fenced code blocks and inside
-/// links the author already wrote, and there would be no way to tell afterwards
-/// which was which.
+/// Renders an agent/user message as Markdown. Paths become links through an
+/// *inline syntax*, never a rewritten string, which would relink code fences.
 class MarkdownMessage extends StatelessWidget {
   const MarkdownMessage(this.data, {this.onPathTap, super.key});
 
@@ -46,10 +39,8 @@ class MarkdownMessage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    // The retired ink-purple and parchment survived here as raw hex, which is
-    // why the by-name greps for the old palette missed them. Code sits one step
-    // *behind* the message it is in: lowest under a dark surface, low under a
-    // light one, which is where the scheme already puts a recessed panel.
+    // Code sits one step *behind* the message it is in: lowest under a dark
+    // surface, low under a light one, where a recessed panel already goes.
     final codeBg = dark
         ? scheme.surfaceContainerLowest
         : scheme.surfaceContainerLow;
@@ -88,28 +79,19 @@ class MarkdownMessage extends StatelessWidget {
   }
 }
 
-/// The one instance, built once for the life of the process.
-///
-/// A syntax allocated per message or per build would recompile
-/// [kTranscriptPathPattern] every time a row was drawn, on a list that
-/// re-renders on a two-second poll.
+/// The one instance, built once for the life of the process: a syntax allocated
+/// per message would recompile [kTranscriptPathPattern] on every row.
 final List<md.InlineSyntax> kPathLinkSyntaxes = <md.InlineSyntax>[
   _PathLinkSyntax(),
 ];
 
-/// Turns a path-shaped token into an ordinary markdown link.
-///
-/// It runs **before** markdown's own syntaxes (user syntaxes are evaluated
-/// first), which is what protects the two things that must render unchanged:
-/// a fenced block never reaches the inline parser at all, and an inline code
-/// span is consumed whole at its opening backtick, where this pattern cannot
-/// match.
+/// Turns a path-shaped token into an ordinary markdown link. It runs **before**
+/// markdown's own syntaxes, which is what leaves fences and code spans alone.
 class _PathLinkSyntax extends md.InlineSyntax {
   _PathLinkSyntax() : super(kTranscriptPathPattern.pattern);
 
-  /// Reimplemented rather than delegated because [onMatch] has no way to
-  /// decline: `InlineSyntax.tryMatch` reports a match whatever `onMatch`
-  /// answers, and refusing there would leave the parser standing still.
+  /// Reimplemented rather than delegated because [onMatch] cannot decline:
+  /// `tryMatch` reports a match whatever it answers, and refusing would stall.
   @override
   bool tryMatch(md.InlineParser parser, [int? startMatchPos]) {
     final start = startMatchPos ?? parser.pos;

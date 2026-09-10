@@ -17,11 +17,8 @@ class SnippetTarget {
   final String paneId;
   final String title;
 
-  /// The shell this pane runs, or null when it could not be determined — a
-  /// pane restored from a profile id this build no longer resolves. Null is
-  /// offered only the untagged snippets, which is the same rule
-  /// [CommandSnippet.fitsShell] applies from the other side: neither party
-  /// guesses.
+  /// The shell this pane runs, or null when it could not be determined. Null is
+  /// offered only the untagged snippets — neither party guesses.
   final TerminalShell? shell;
 
   /// Whether this pane is somebody's live agent CLI rather than a shell.
@@ -40,26 +37,8 @@ class SnippetTarget {
   ];
 }
 
-/// **The active terminal**, resolved the one way that survives a modal.
-///
-/// Not `FocusManager.primaryFocus`: the palette is a dialog, so by the time an
-/// item is picked the keyboard is in a search field and the pane has lost focus
-/// entirely. What "active" means in this app is controller state —
-/// `activeTab.focusedPaneId`, moved when the user clicks a pane, activates a
-/// tab or walks the splits — and a dialog does not touch it. So the pane that
-/// was in front when the palette opened is still the answer when it closes,
-/// which is exactly what the toolbar's own find and split buttons act on.
-///
-/// Callers resolve this **when the palette is built**, not when a row is
-/// activated, and hand the captured target down. The two answers agree in every
-/// ordinary case; where they differ — the pane's process exits under the open
-/// palette and the controller refocuses another — the captured one is right and
-/// a fresh read would type into a pane the user never chose. The staleness is
-/// caught rather than ignored: [insertSnippet] re-reads the pane before writing
-/// and reports [SnippetOutcome.noPane] if it has gone.
-///
-/// Returns null when the active region is empty (a split nobody has filled) or
-/// when there is no tab at all.
+/// **The active terminal**, resolved from controller state rather than
+/// `primaryFocus`: the palette is a dialog and the pane has lost focus by then.
 SnippetTarget? resolveSnippetTarget(
   TerminalSessionsController terminals,
   TerminalSessionsState state,
@@ -81,10 +60,8 @@ SnippetTarget? snippetTargetFor(
   return SnippetTarget(
     paneId: paneId,
     title: instance.title,
-    // An agent pane's id is `agent:claudeCode`, which resolves to no profile
-    // and so read as an *unknown* shell — and an unknown shell is offered only
-    // the untagged snippets. The launch already says which distribution it is
-    // in, one field away, so ask it rather than answering null.
+    // An agent pane's id is `agent:claudeCode`, which resolves to no profile and
+    // so read as unknown. The launch says which distribution it is in.
     shell:
         terminalProfileFromId(instance.profileId)?.shell ??
         _shellOfLaunch(instance.agentLaunch),
@@ -93,12 +70,8 @@ SnippetTarget? snippetTargetFor(
   );
 }
 
-/// The shell an agent's launch *states*, or null when it states none.
-///
-/// Only the WSL case is inferred, because it is the only one the launch
-/// actually carries. An agent started natively is not running a shell at all,
-/// and an SSH one names a host rather than a shell — guessing either would be
-/// the confident wrong answer, which is worse than an unknown.
+/// The shell an agent's launch *states*, or null. Only the WSL case is
+/// inferred: a native agent runs no shell and an SSH one names a host.
 TerminalShell? _shellOfLaunch(AgentPaneLaunch? launch) =>
     launch?.wslDistribution == null ? null : TerminalShell.wsl;
 
@@ -142,44 +115,8 @@ class SnippetInsertionResult {
       outcome == SnippetOutcome.typedIntoAgentPane;
 }
 
-/// Types [snippet] into a pane.
-///
-/// ## Type, do not send
-///
-/// The default is to write the command at the prompt and stop. `sendTo` and
-/// `TerminalControlTools._type` both append a carriage return because a PTY
-/// line discipline reads CR as *submit*, and both are delivering something the
-/// caller composed on purpose in that moment. A snippet is the opposite: it was
-/// written weeks ago, it is picked from a fuzzy-matched list where the row
-/// above is one arrow key away, and the library is exactly where the
-/// irreversible one-liners live. So the carriage return is opt-in, per snippet,
-/// declared once by the person who saved it — never a modifier held at pick
-/// time, which is a thing fingers do by accident.
-///
-/// This is the third member of the same family as those two, not a second write
-/// path beside them: it reaches the pane through `Terminal.textInput` exactly
-/// as they do, and the only difference is whether the CR is appended — the same
-/// distinction `SessionLauncher.answerPrompt` already draws against `sendTo`.
-///
-/// ## Never into a live agent turn
-///
-/// A pane running an agent CLI is somebody's session, and a carriage return
-/// there is a *turn taken as if the user had typed it* — the reason
-/// `terminal_run` refuses such a pane outright. Typing is still allowed and
-/// still useful (it is how a command gets in front of the agent's composer for
-/// the user to finish), but [CommandSnippet.submit] is ignored there and the
-/// result says so.
-///
-/// ## Placeholders, and why there are none yet
-///
-/// A `${...}` marker would need a fill-in step before the text is typed, an
-/// escape for a literal `$`, and a decision about whether the caret lands mid
-/// string — which is a surface of its own, not a field. It is also less needed
-/// than it looks *because* this types rather than sends: a snippet saved as
-/// `git checkout ` lands at the prompt with the caret after it, and the branch
-/// name is simply the next thing the user types. Trailing arguments are free
-/// today; only interior ones would need the language, and they can have their
-/// own pass.
+/// Types [snippet] into a pane. **Type, do not send** — the carriage return is
+/// opt-in per snippet, and is ignored outright in a live agent turn.
 SnippetInsertionResult insertSnippet({
   required TerminalSessionsController terminals,
   required TerminalSessionsState state,

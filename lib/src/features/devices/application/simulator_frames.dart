@@ -5,19 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:karmashala_core/logging.dart';
 
-/// The newest decoded frame of a simulator's screen, for a widget to paint.
-///
-/// Stands in for a video player. WebDriverAgent sends `multipart/x-mixed-replace`
-/// MJPEG, and media_kit's libmpv cannot read it: that build of ffmpeg has no
-/// `mpjpeg` demuxer, so probing fell back to the playlist demuxer and the pane
-/// stayed black no matter which options were set. Nothing about MJPEG needs a
-/// player though — the frames are ordinary JPEGs and Flutter decodes those — so
-/// they are decoded here and painted straight into the tree.
-///
-/// Decoding is **drop-to-latest**. Frames arrive faster than they can be
-/// decoded whenever the machine is busy, and a queue would show the user a
-/// steadily older picture while the lag grew without bound. Only the most
-/// recent frame is kept; the ones that arrive mid-decode are discarded.
+/// The newest decoded frame of a simulator's screen. Stands in for a player:
+/// libmpv has no `mpjpeg` demuxer, and decoding is drop-to-latest.
 class SimulatorFrames {
   SimulatorFrames(Stream<Uint8List> frames) {
     _subscription = frames.listen(

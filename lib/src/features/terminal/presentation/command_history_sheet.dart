@@ -15,11 +15,8 @@ String formatCommandDuration(Duration d) {
   return '${minutes}m ${seconds}s';
 }
 
-/// The commands OSC 133 saw in one pane: what ran, whether it failed, and how
-/// long it took. Selecting one scrolls the pane to its prompt.
-///
-/// Only reachable when the pane actually reported commands, so a shell without
-/// integration never shows an empty affordance.
+/// The commands OSC 133 saw in one pane; selecting one scrolls to its prompt.
+/// Only reachable when the pane reported any, so there is no empty affordance.
 class CommandHistorySheet extends StatelessWidget {
   const CommandHistorySheet({
     super.key,

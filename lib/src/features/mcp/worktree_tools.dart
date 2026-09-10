@@ -16,21 +16,8 @@ import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
 import '../sessions/domain/session.dart';
 
-/// Making a git worktree and taking one away.
-///
-/// `list_checkouts` and `select_checkout` could already see and point at the
-/// checkouts a project has; these two are what let an agent set up a parallel
-/// line of work of its own, and then clear it away.
-///
-/// **The two halves are not symmetrical, on purpose.** Creating one is
-/// recoverable — the worst case is a folder and a branch nobody wanted, and
-/// both can be deleted. Removing one is not: a worktree directory is the only
-/// place some work exists until it is committed, merged and pushed, and `git
-/// worktree remove` does not put it back. So [_remove] refuses in words for
-/// every reading it does not like **and** for every reading it could not take,
-/// and there is no argument that overrides any of it. The rule it encodes is
-/// the one the owner uses by hand: a worktree goes once its branch is merged
-/// **and** pushed, never on one of the two.
+/// Making a git worktree and taking one away. Removing is not the mirror of
+/// creating: [_remove] refuses unless the branch is merged **and** pushed.
 class WorktreeControlTools {
   WorktreeControlTools(this._container);
 
@@ -68,16 +55,8 @@ class WorktreeControlTools {
     return repository;
   }
 
-  // --- create ---------------------------------------------------------------
-
-  /// Adds a worktree of [repositoryId] on a new [branch].
-  ///
-  /// Every collision is checked *before* git runs, so a refusal names the thing
-  /// in the way rather than relaying a `fatal:` about a path the caller never
-  /// chose — it asked for a name, and the directory was derived from it. What
-  /// this cannot check is a plain directory sitting at the computed path that
-  /// is not a registered worktree; git refuses that itself, and its words are
-  /// passed straight through.
+  /// Adds a worktree of [repositoryId] on a new [branch]. Collisions are checked
+  /// before git runs, so a refusal names the thing in the way.
   Future<Object?> _create({
     required String? repositoryId,
     required String? name,
@@ -145,9 +124,8 @@ class WorktreeControlTools {
             : baseRef.trim(),
       );
     } on GitException catch (error) {
-      // Git's own words, unedited: it knows about the cases we cannot check
-      // from here — a directory in the way, a base ref that resolves to
-      // nothing, a repository in the middle of a rebase.
+      // Git's own words, unedited: it knows the cases we cannot check from
+      // here — a directory in the way, a base ref that resolves to nothing.
       throw StateError(error.message);
     }
 
@@ -164,15 +142,8 @@ class WorktreeControlTools {
     };
   }
 
-  /// The `repositories` row for the worktree just created, or why there is
-  /// none.
-  ///
-  /// The worktree exists either way — git made it, and that is reported above
-  /// regardless. This is the second, separable step, and it is the one that
-  /// can fail on its own: discovery runs on the Windows host, so a project root
-  /// on a stopped distribution or an unmounted drive cannot be scanned. Saying
-  /// "not recorded" is the difference between a caller retrying the rescan and
-  /// a caller believing the worktree was never made.
+  /// The `repositories` row for the new worktree, or why there is none: the
+  /// worktree exists either way, and "not recorded" means retry the rescan.
   Future<String> _recordCheckout(String projectId, EnvironmentPath path) async {
     try {
       final added = await _container
@@ -200,14 +171,8 @@ class WorktreeControlTools {
     }
   }
 
-  // --- remove ---------------------------------------------------------------
-
   /// Removes the worktree recorded as [repositoryId], or says why it will not.
-  ///
-  /// Nine questions, and a "no" or a "could not tell" to any of them stops it.
-  /// The branch is left alone in every case — a branch is cheap and
-  /// recoverable, a directory is what accumulates — which is the same line
-  /// `SessionArchiveService` draws for the archive button.
+  /// The branch is left alone in every case; a directory is what accumulates.
   Future<Object?> _remove(String? repositoryId) async {
     final worktree = _checkout(repositoryId, 'repositoryId');
 
@@ -292,8 +257,7 @@ class WorktreeControlTools {
     }
 
     // Merged is half the rule. Until something other than this machine holds
-    // the commits, deleting the directory is still the only copy going away —
-    // and a branch merged into a `main` nobody has pushed is exactly that.
+    // the commits, deleting the directory is still the only copy going away.
     final remotes = await _container
         .read(changesServiceProvider)
         .remoteBranchesContaining(worktree.path, 'HEAD');
@@ -314,9 +278,8 @@ class WorktreeControlTools {
     }
 
     try {
-      // No `force`, ever. Every condition it would override is one this method
-      // has already refused, so passing it could only ever mean overriding a
-      // condition we failed to check.
+      // No `force`, ever: every condition it would override is one this method
+      // has already refused, so it could only override an unchecked one.
       await _container
           .read(worktreeServiceProvider)
           .remove(owner.path, worktree.path);
@@ -343,13 +306,8 @@ class WorktreeControlTools {
     };
   }
 
-  /// A session running in [worktree] right now, or `null`.
-  ///
-  /// Two ways a session lands in one: launched with `useWorktree`, which
-  /// records the path on the row, or adopted into a checkout that happens to
-  /// be a worktree, which records only the repository id. Both are asked,
-  /// because missing either would mean pulling the floor out from under a live
-  /// agent.
+  /// A session running in [worktree] right now, or `null`. Both ways one lands
+  /// there are asked: the path on the row, and the repository id.
   Session? _liveSessionIn(Repository worktree) {
     final launcher = _container.read(sessionLauncherProvider);
     for (final session in _container.read(sessionDaoProvider).getAll()) {
@@ -372,9 +330,8 @@ class WorktreeControlTools {
         '.karmashala-worktrees beside the checkout.',
       );
     }
-    // One path segment, never a path. The value is joined onto a directory
-    // this tool chose, and a separator or a `..` in it would put the worktree
-    // somewhere the caller did not ask for and this method did not check.
+    // One path segment, never a path: a separator or a `..` in it would put the
+    // worktree somewhere the caller did not ask for and this did not check.
     if (RegExp(r'[\\/:*?"<>|]').hasMatch(name) || name.contains('..')) {
       throw ArgumentError(
         'name must be one folder name — no separators, no "..", none of '

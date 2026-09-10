@@ -15,15 +15,8 @@ import '../application/environment_scan_controller.dart';
 import '../application/environments_controller.dart';
 import 'package:agent_cli/process.dart';
 
-/// Every place Karmashala can run an agent, and what it found there.
-///
-/// Grouped by environment rather than listed flat, because the environment is
-/// what makes two installations different: `claude 2.1.251` on the Windows host
-/// and `claude 2.1.251` on a build box are not one agent seen twice, they are
-/// two independent installations that happen to share a version. A remote host
-/// appears here as a third kind of environment beside Windows and WSL, with its
-/// connection state on the same line — a machine that cannot be reached must not
-/// read as a machine with nothing installed.
+/// Every place Karmashala can run an agent, and what it found there. Grouped
+/// by environment: one version on two machines is two installations.
 class EnvironmentsSection extends ConsumerWidget {
   const EnvironmentsSection({super.key});
 
@@ -120,10 +113,8 @@ class _EnvironmentCard extends ConsumerWidget {
                 ),
               ],
             ),
-            // The address, when there is one to give. Never the id: it is a
-            // database key, the local host's is the literal `windows` on every
-            // platform, and this card printed it under a heading reading
-            // "macOS".
+            // The address, when there is one. Never the id: it is a database key, and the
+            // local host's is the literal `windows` under a heading reading "macOS".
             if (host != null) ...[
               const SizedBox(height: Insets.xs),
               Text(host!.address, style: MonoStyles.small),

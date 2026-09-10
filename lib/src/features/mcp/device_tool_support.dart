@@ -5,16 +5,8 @@ import '../devices/application/device_fleet.dart';
 import '../devices/application/device_screen_memory.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// What reaching a device costs, written once for every `device_*` family.
-///
-/// The families were one class before they were five files, and these are the
-/// members all of them used: the fleet, the claim, the screen memory and the
-/// two ways of getting a driver. Here rather than copied into each, because a
-/// second spelling of "take this device for this caller" is a second claim
-/// policy, and the whole point of [DeviceClaims] is that there is only one.
-///
-/// Nothing here knows what kind of device it is holding — see `device_tools.dart`
-/// for why that is the rule rather than an accident.
+/// What reaching a device costs, written once for every `device_*` family: a
+/// second spelling of "take this device" is a second [DeviceClaims] policy.
 abstract class DeviceToolFamily {
   DeviceToolFamily(this.container, {this.callerSessionId});
 
@@ -46,17 +38,8 @@ abstract class DeviceToolFamily {
   Future<DeviceDriver> _driver(String? id, String verb) async =>
       (await deviceFleet()).driverFor(id, verb: verb);
 
-  /// The driver for a call that only **reads** this device.
-  ///
-  /// The capability is checked up front rather than left to fail inside the
-  /// driver, so the refusal names the capability that is missing and what still
-  /// works — the driver's own error would name whatever step happened to fall
-  /// over first.
-  ///
-  /// A read renews a claim this caller already holds and never takes one, so
-  /// looking at a phone somebody else is driving is always allowed. It has to
-  /// be: an agent that has just been refused needs to be able to see what the
-  /// holder is doing.
+  /// The driver for a call that only **reads** this device. A read renews a
+  /// claim this caller already holds and never takes one, so it is never refused.
   Future<DeviceDriver> driverThatCan(
     String? id,
     String verb,
@@ -73,12 +56,6 @@ abstract class DeviceToolFamily {
 
   /// The driver for a call that will **change** this device, with the device
   /// taken for this caller — or [DeviceBusy] naming whoever is driving it.
-  ///
-  /// Ordered deliberately. The driver resolves first so the claim is keyed on
-  /// the canonical id: two agents naming one phone two different ways
-  /// (`emulator-5554` and an AVD name, a serial and a udid) must collide rather
-  /// than miss each other. The capability is checked before the claim, so a
-  /// device that cannot do the thing is not held while it is being told so.
   Future<DeviceDriver> driverToDrive(
     String? id,
     String verb,
@@ -105,13 +82,8 @@ abstract class DeviceToolFamily {
   }
 }
 
-/// Which device the caller means.
-///
-/// Three spellings for one argument. `serial` is what every existing Android
-/// caller passes and cannot change; `udid` is what `list_devices` calls a
-/// simulator's id and therefore the word an agent has in front of it when it
-/// writes the next call. Accepting both costs one line and removes a class of
-/// "I copied the field name out of your own output and you rejected it".
+/// Which device the caller means. Three spellings for one argument, because
+/// `list_devices` prints `udid` where every Android caller passes `serial`.
 String? deviceIdIn(Map<String, dynamic> args) =>
     (args['serial'] ?? args['udid'] ?? args['device']) as String?;
 
@@ -144,12 +116,8 @@ String indexedMatches(List<UiNode> matches, DeviceScreenSize? screen) => [
     '[$i] ${describeUiNode(matches[i], screen: screen)}',
 ].join('\n');
 
-/// Wraps a listing as an MCP text block.
-///
-/// Deliberately not returned as a JSON map: the bridge pretty-prints every
-/// map result, and one JSON object per node costs several times what one line
-/// per node does. The whole point of this surface is that a screen fits in a
-/// few hundred tokens.
+/// Wraps a listing as an MCP text block, not a JSON map: the bridge
+/// pretty-prints maps, and one object per node costs several times one line.
 Object uiTextBlock(List<String> sections) => {
   '_mcpContent': [
     {'type': 'text', 'text': sections.join('\n')},

@@ -13,24 +13,8 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/flutter_sdk_readings.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
-/// Settings → Environments: **the Flutter SDK a person names for an
-/// environment**, when PATH there does not mention one.
-///
-/// The Flutter loop refuses in words when `where flutter.bat` / `command -v
-/// flutter` answers nothing — which is the right refusal, and was the whole
-/// answer. Somebody with an SDK unpacked outside PATH had nowhere to say so.
-///
-/// One row per execution environment, because that is the unit the question is
-/// asked in: an SDK on the Windows host says nothing about a WSL distribution,
-/// and §17 is the reason it must not.
-///
-/// **Two different things on each row, kept apart.** The field is a *setting* —
-/// a statement, stored in `Settings.flutterSdkPaths`, never rewritten by
-/// discovery (§20's third rule). The line under it is a *reading* — what
-/// happened when the path was last run, with its age beside it. Nothing here
-/// measures on its own: opening this page spawns nothing, and Check is the
-/// button that costs a process. An SSH environment is not probed unasked at
-/// all, because probing it means dialling somebody's machine.
+/// Settings → Environments: the Flutter SDK a person names for an environment.
+/// One row each (§17); the field is a setting, the line under it a reading.
 class FlutterSdkSection extends ConsumerWidget {
   const FlutterSdkSection({super.key});
 
@@ -58,10 +42,8 @@ class FlutterSdkSection extends ConsumerWidget {
           ),
           for (final environment in environments)
             _FlutterSdkRow(
-              // Keyed by environment, not by position. Discovery can insert a
-              // distribution above an existing one, and an unkeyed row would
-              // hand its state — the text in the field — to whichever
-              // environment moved into its slot.
+              // Keyed by environment, not position: discovery can insert a row
+              // above, and an unkeyed one would hand its text to the newcomer.
               key: ValueKey(environment.id),
               environment: environment,
               stored: paths[environment.id],
@@ -100,10 +82,8 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
     super.dispose();
   }
 
-  /// Browse is the convenience; the field is the way out — the same order, and
-  /// for the same measured reason, as `AgentPathSection._browse`. It is also
-  /// the only order that works here: a WSL or SSH path is spelled for *that*
-  /// machine and no Windows file dialog can reach it.
+  /// Browse is the convenience; the field is the way out, and the only order
+  /// that works here — a WSL or SSH path is spelled for *that* machine.
   Future<void> _browse() async {
     final file = await pickOneFile(what: 'the flutter executable');
     if (file == null) return;
@@ -168,8 +148,7 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
                   isDense: true,
                   labelText: 'Flutter executable',
                   // Named rather than implied: on Windows the extensionless
-                  // file beside it is a POSIX script, and running that is the
-                  // §17 disaster.
+                  // file beside it is a POSIX script — the §17 disaster.
                   hintText: r'e.g. C:\src\flutter\bin\flutter.bat',
                 ),
                 onSubmitted: _save,

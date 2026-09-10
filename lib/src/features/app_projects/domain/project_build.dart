@@ -1,17 +1,12 @@
 import 'project_descriptor.dart';
 import 'project_kind.dart';
 
-/// The `agentId` a project build pane is opened under.
-///
-/// Namespaced like `kFlutterLoopAgentId`, and for the same reason: it can
-/// never collide with a registry agent, and a restored pane under it replays
-/// nothing.
+/// The `agentId` a project build pane is opened under — namespaced like
+/// `kFlutterLoopAgentId`, so a restored pane under it replays nothing.
 const String kProjectBuildAgentId = 'karmashala:project-build';
 
-/// What is in the way of a build, before anything is spawned.
-///
-/// Each value is a different thing to *do*, which is why they are not one
-/// "not ready" — the same rule `FlutterPreflightProblem` follows.
+/// What is in the way of a build, before anything is spawned. Each value is a
+/// different thing to *do*, which is why they are not one "not ready".
 enum ProjectBuildProblem {
   /// The resolver could not say where this checkout's commands run.
   environmentUnresolved,
@@ -73,11 +68,8 @@ class ProjectBuildPreflight {
 /// answer, for a pane the terminal no longer knows.
 enum ProjectBuildLiveness { running, finished, unknown }
 
-/// One build the app started, and everything known about it.
-///
-/// **The pane is the process**, exactly as it is for `FlutterCommandRun`:
-/// there is no second handle, the liveness is the pane's, and the output is
-/// the pane's buffer. Nothing polls.
+/// One build the app started, and everything known about it. The pane is the
+/// process, as for `FlutterCommandRun`: no second handle, and nothing polls.
 class ProjectBuildRun {
   const ProjectBuildRun({
     required this.paneId,
@@ -105,8 +97,7 @@ class ProjectBuildRun {
 
   final String environmentId;
 
-  /// The argv actually spelled, so a reader can see the wrapper that was
-  /// chosen and the task that was asked for.
+  /// The argv actually spelled, so a reader sees the wrapper that was chosen.
   final List<String> command;
 
   /// Where the artifact is expected, relative to the project, forward-slashed.
@@ -116,7 +107,6 @@ class ProjectBuildRun {
   /// `output-metadata.json` overrules it, which is why this is only expected.
   final String? expectedArtifact;
 
-  /// The Gradle module, when there is one.
   final String? module;
 
   final DateTime startedAt;

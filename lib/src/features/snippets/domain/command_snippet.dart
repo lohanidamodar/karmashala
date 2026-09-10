@@ -1,34 +1,8 @@
 import '../../terminal/domain/terminal_profile.dart';
 
-/// A command the user keeps, so that picking it is cheaper than retyping it.
-///
-/// ## Typed, not run
-///
-/// A snippet is delivered into a pane as **text at the prompt**, and [submit]
-/// is what the user has to say to make it press Enter as well. The default is
-/// false and it is the whole safety story of the feature: a library of saved
-/// commands is exactly where `git reset --hard`, `rm -rf build` and
-/// `docker system prune -af` accumulate, and it is picked from a fuzzy-matched
-/// keyboard list where the wrong row is one arrow key away. Typing leaves the
-/// last and cheapest gate — a human reading the line — in place, and costs the
-/// user one keystroke.
-///
-/// It also makes trailing arguments free, which is why this pass ships no
-/// templating: a snippet stored as `git checkout ` is typed, the caret is left
-/// where the shell put it, and the branch name is the next thing the user
-/// types. See `snippet_insertion.dart` for what a placeholder would have to
-/// cost instead.
-///
-/// ## The shell tag
-///
-/// [shellId] names the shell this snippet is written for — `powerShell`,
-/// `commandPrompt`, `wsl`, `posix` — or is null for one that fits anywhere.
-/// It is stored as the *name string* rather than as a decoded [TerminalShell]
-/// on purpose: a tag this build does not recognise must match **no** pane
-/// rather than every pane, and an enum decoded with a fallback cannot express
-/// that. A `wsl2` tag written by a future version is therefore invisible in a
-/// PowerShell pane instead of appearing in it, and the library dialog still
-/// lists it so it can be fixed.
+/// A command the user keeps. Delivered as **text at the prompt**; [submit] is
+/// what makes it press Enter. [shellId] is the raw name, so a tag this build
+/// does not know matches *no* pane rather than every pane.
 class CommandSnippet {
   const CommandSnippet({
     required this.id,
@@ -57,10 +31,8 @@ class CommandSnippet {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  /// [shellId] as a shell this build knows, or null — which means *either*
-  /// "fits every shell" or "names one this build has never heard of". The two
-  /// are told apart by [hasUnknownShell]; nothing that filters needs to,
-  /// because both answers make the same rows fit.
+  /// [shellId] as a shell this build knows, or null — either "fits every shell"
+  /// or "names one this build has never heard of"; see [hasUnknownShell].
   TerminalShell? get shell {
     for (final value in TerminalShell.values) {
       if (value.name == shellId) return value;
@@ -71,12 +43,8 @@ class CommandSnippet {
   /// Whether the tag names a shell this build cannot resolve.
   bool get hasUnknownShell => shellId != null && shell == null;
 
-  /// Whether this snippet belongs in a pane running [paneShellId].
-  ///
-  /// Compared as strings, so an unrecognised tag matches nothing. A null tag
-  /// matches everything; a pane whose own shell could not be determined
-  /// (`paneShellId == null`) is offered only the untagged ones, which is the
-  /// same rule read from the other side — neither party guesses.
+  /// Whether this snippet belongs in a pane running [paneShellId]. Compared as
+  /// strings, so an unrecognised tag matches nothing and neither party guesses.
   bool fitsShell(String? paneShellId) =>
       shellId == null || shellId == paneShellId;
 
@@ -113,14 +81,8 @@ class CommandSnippet {
       Object.hash(id, label, command, shellId, submit, createdAt, updatedAt);
 }
 
-/// [command] as the one line a PTY can be handed.
-///
-/// A stored newline would be a *submit* the user never asked for: a PTY reads
-/// CR as "run this", so a two-line snippet typed into a shell runs its first
-/// line whatever [CommandSnippet.submit] says. Every writer goes through here
-/// — the dialog, the MCP tool — so there is one place that rule lives, and the
-/// escape hatch for a genuinely multi-line command is the shell's own (`;`,
-/// `&&`, a script file), which the user writes deliberately.
+/// [command] as the one line a PTY can be handed: a stored newline is a CR,
+/// which a PTY reads as *run this*, whatever [CommandSnippet.submit] says.
 String singleLine(String command) =>
     command.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
 

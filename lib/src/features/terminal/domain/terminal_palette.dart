@@ -6,17 +6,8 @@ const kAnsiPaletteSize = 16;
 
 final _hexColor = RegExp(r'^#?(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$');
 
-/// Normalises a colour from a theme file to `#rrggbb`, or `null` if it is not
-/// one.
-///
-/// Accepts 3- or 6-digit hex with or without a leading `#`, and tolerates the
-/// value still being wrapped in quotes (Ghostty's `palette = 0="#000000"` is a
-/// real spelling that a naive parser drops on the floor). Three-digit values are
-/// expanded and everything is lowercased, so both formats normalise identically.
-///
-/// Deliberately rejected: named colours, `rgb:aa/bb/cc`, and 8-digit hex with
-/// alpha. A terminal cell colour has no alpha channel, and silently dropping the
-/// alpha would render a theme wrong rather than refusing it.
+/// Normalises a theme colour to `#rrggbb`, or `null`. 8-digit hex is rejected:
+/// a cell has no alpha, and dropping it silently would render a theme wrong.
 String? normalizeHexColor(String? value) {
   if (value == null) return null;
   var text = value.trim();
@@ -35,11 +26,7 @@ String? normalizeHexColor(String? value) {
 }
 
 /// A colour theme read from an external terminal, as a **sparse** set of
-/// overrides.
-///
-/// Every field is optional on purpose: a partial or malformed file contributes
-/// whatever it did carry and nothing else, which is what makes
-/// [applyTo] safe to call with a half-read theme.
+/// overrides — which is what makes [applyTo] safe on a half-read file.
 class TerminalPalette {
   const TerminalPalette({
     this.background,
@@ -59,11 +46,9 @@ class TerminalPalette {
   /// ANSI colours by index: 0–7 normal, 8–15 bright.
   final Map<int, String> ansi;
 
-  /// Whether this is enough of a theme to be worth applying.
-  ///
-  /// A background and a foreground and at least one ANSI colour. Below that the
-  /// result would be the current theme with one or two colours disturbed, which
-  /// looks like a bug rather than a theme.
+  /// Whether this is enough of a theme to be worth applying: a background, a
+  /// foreground and at least one ANSI colour. Below that the result is the
+  /// current theme with a colour or two disturbed, which looks like a bug.
   bool get isUsable =>
       background != null && foreground != null && ansi.isNotEmpty;
 

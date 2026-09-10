@@ -6,16 +6,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/known_hosts_controller.dart';
 import '../domain/ssh_host_key.dart';
 
-/// The one SSH failure that is not a nuisance but a warning.
-///
-/// A host presenting a different key from the one we pinned is refused by
-/// `SshHostKeyVerifier` before any handler is consulted, and the stored key is
-/// never overwritten. There is deliberately **no "connect anyway"** here: an
-/// interface that lets you click through a changed host key is not host key
-/// verification. What there is instead is the same escape hatch OpenSSH has —
-/// forget the stored key — as an explicit, separate, confirmed act, after which
-/// the next connection is a first connection and prompts for the new
-/// fingerprint on its own.
+/// The one SSH failure that is a warning, not a nuisance. There is deliberately
+/// **no "connect anyway"**; the only escape hatch is forgetting the stored key.
 class HostKeyChangedAlert extends StatelessWidget {
   const HostKeyChangedAlert({
     required this.presentation,
@@ -153,11 +145,8 @@ class _Fingerprint extends StatelessWidget {
   }
 }
 
-/// Confirms forgetting the pinned key for one `host:port`.
-///
-/// Separate from the alert, and worded so it is clear this does **not** accept
-/// the new key — it only makes the address unknown again, which is the only
-/// thing that is ever safe to do automatically on the user's say-so.
+/// Confirms forgetting the pinned key for one `host:port`. Worded so it is
+/// clear this does **not** accept the new key: the address is unknown again.
 class ForgetHostKeyDialog extends ConsumerWidget {
   const ForgetHostKeyDialog({
     required this.host,

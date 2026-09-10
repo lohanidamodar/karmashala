@@ -1,17 +1,5 @@
-/// Finding a project or a session **in what the phone already holds**.
-///
-/// Nothing here asks the desktop anything. A desktop with 31 projects and 39
-/// watched sessions is a scroll on a phone, and the answer is a filter over
-/// the snapshot in hand — not a query frame, not a poll (CLAUDE.md §19). The
-/// consequence is that a result is only ever as good as the snapshot behind
-/// it, so every screen that filters also says how old that snapshot is, and
-/// the empty state says it loudest.
-///
-/// The rule is the Explorer's, deliberately: one case-folded substring, over
-/// the project's **name and path** and the session's **title and agent**.
-/// Those are the four things a user knows a row by; matching more (a branch, a
-/// whereabouts clause) makes a query mean something different on the phone
-/// than it does on the desktop.
+/// Finding a project or a session in what the phone already holds: a filter
+/// over the snapshot, never a query frame, so a screen names its age (§19).
 library;
 
 import 'package:flutter/material.dart';
@@ -38,11 +26,8 @@ bool companionProjectMatches(CompanionProjectGroup group, String query) =>
     group.name.toLowerCase().contains(query) ||
     group.path.toLowerCase().contains(query);
 
-/// The rows of [sessions] that match, in the host's order.
-///
-/// [keepId] is never filtered away: the session a screen is open on stays on
-/// screen as the filter narrows, the way the desktop's scope filter keeps the
-/// selected project (`workspaceScopedProjectsProvider`).
+/// The rows of [sessions] that match, in the host's order. [keepId] is never
+/// filtered away, so the session a screen is open on stays on screen.
 List<CompanionSessionSummary> companionMatchingSessions(
   List<CompanionSessionSummary> sessions,
   String query, {
@@ -56,18 +41,8 @@ List<CompanionSessionSummary> companionMatchingSessions(
   ];
 }
 
-/// The groups of [groups] that match, in the host's order, each carrying only
-/// the sessions that match.
-///
-/// **Naming a project brings all of its sessions.** Someone who typed a
-/// project's name is asking for that project, not for the sessions whose
-/// titles happen to repeat it; narrowing inside a named project would hide
-/// rows for a word the user never applied to them.
-///
-/// [keepKey] is the counterpart of [companionMatchingSessions]'s `keepId`: the
-/// project a screen is open on survives a filter that excludes it, with its
-/// own sessions still narrowed. A screen that dropped it would say "this
-/// project is gone" about a project that is merely not a match.
+/// The groups that match, in the host's order. Naming a project brings all its
+/// sessions; [keepKey] keeps the one a screen is open on even if it misses.
 List<CompanionProjectGroup> companionMatchingGroups(
   List<CompanionProjectGroup> groups,
   String query, {
@@ -90,11 +65,8 @@ List<CompanionProjectGroup> companionMatchingGroups(
   return kept;
 }
 
-/// The field above a companion list.
-///
-/// **Not focused on open.** A phone keyboard that springs up on every visit
-/// covers half the list the user came to read, and costs more than the one tap
-/// it saves.
+/// The field above a companion list. Not focused on open: a keyboard that
+/// springs up covers half the list the user came to read.
 class CompanionSearchField extends StatelessWidget {
   const CompanionSearchField({
     required this.controller,
@@ -106,8 +78,8 @@ class CompanionSearchField extends StatelessWidget {
 
   final TextEditingController controller;
 
-  /// The raw text, so the clear button appears exactly when there is something
-  /// to clear.
+  /// The raw text, so the clear button appears only when there is something to
+  /// clear.
   final String query;
 
   final ValueChanged<String> onChanged;

@@ -5,27 +5,14 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import 'package:agent_cli/descriptors.dart';
 
-/// One row of a model menu: a model to run on, or the row that names no model
-/// at all.
-///
-/// A type of its own rather than a nullable `String` because `PopupMenuButton`
-/// reads a null selection as a *dismissal* and never calls `onSelected` for it
-/// — so the row that means "no model" written as a null value would have looked
-/// right and done nothing.
-///
-/// It lives here rather than beside either control because both need it and
-/// they must agree: the Settings picker's "let the agent choose" row and
-/// `ModelChip`'s "follow the Settings default" row are the same null travelling
-/// through two menus, and two wrappers would be two chances to reintroduce the
-/// trap.
+/// One row of a model menu. A type rather than a nullable `String` because
+/// `PopupMenuButton` reads a null selection as a dismissal and ignores it.
 @immutable
 class ModelChoice {
   const ModelChoice(this.modelId);
 
-  /// Name no model here. On a session that reads as "follow the Settings
-  /// default"; in Settings it reads as "let the agent choose" — no `--model`
-  /// passed at all. One constant, because it is one value: the absence of a
-  /// model, whoever is being asked.
+  /// Name no model here: "follow the Settings default" on a session, "let the
+  /// agent choose" in Settings. One constant, because it is one value.
   static const followDefault = ModelChoice(null);
 
   final String? modelId;
@@ -38,24 +25,8 @@ class ModelChoice {
   int get hashCode => modelId.hashCode;
 }
 
-/// A menu of the models one agent can be put on, with "let the agent choose"
-/// as its first row.
-///
-/// `PermissionModePicker`'s twin, and the same control as `ModelChip`'s menu on
-/// a different surface: both build their rows from [modelOptionsFor], so what
-/// is offered — and what each model is said to do to *this* agent — cannot
-/// differ between Settings and a running session. This one is handed its
-/// options and its selection because it describes an agent's default rather
-/// than a session, and there is no session to read.
-///
-/// The chip's rules hold here unchanged:
-///
-/// * **Only models the descriptor can express are selectable.** The rest are
-///   listed, disabled, and say why — an agent that takes no model flag is the
-///   one this surface has to be honest about, because a default nobody can
-///   pass is a setting that lies every time it is read.
-/// * **Naming no model is a row, not an empty selection.** It is first, it is
-///   always selectable, and it is the shipped default.
+/// A menu of the models one agent can be put on. Rows come from
+/// [modelOptionsFor]; one the descriptor cannot express is shown but disabled.
 class ModelPicker extends StatelessWidget {
   const ModelPicker({
     required this.options,
@@ -141,8 +112,7 @@ class ModelPicker extends StatelessWidget {
               ),
             ),
             // The fit is on the face of the control, not only in the menu: a
-            // default the CLI will never be told has to look different from one
-            // it will.
+            // default the CLI will never be told must look different.
             if (qualifier != null) ...[
               const SizedBox(width: Insets.xs),
               Text(
@@ -158,12 +128,8 @@ class ModelPicker extends StatelessWidget {
   }
 }
 
-/// Why [descriptor]'s model cannot be set at all, or null when it can.
-///
-/// The picker says this per row; a settings card has to say it once, above the
-/// control, or the only place that honesty lives is behind a click. Read off
-/// the same [modelOptionsFor] rows the menu draws, so the two cannot word it
-/// differently.
+/// Why [descriptor]'s model cannot be set at all, or null when it can — off the
+/// same [modelOptionsFor] rows the menu draws, so the two cannot differ.
 String? modelNotSettableReason(AgentDescriptor? descriptor) {
   if (descriptor == null || descriptor.launch.model.isSupported) return null;
   return modelOptionsFor(descriptor)

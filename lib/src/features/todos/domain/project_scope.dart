@@ -1,18 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-/// Which project's writing a surface is showing: everything, one project, or
-/// the things filed under nothing.
-///
-/// **Three states, not two.** "Filed under nothing" is a place you can go and
-/// look, not the leftover of a filter — an unfiled todo has to be as findable
-/// as a filed one, or filing quietly becomes compulsory. That is the whole
-/// reason this is a small type instead of a nullable project id: `null` would
-/// have to mean both "no filter" and "no project", and those are the two
-/// answers a person most needs to tell apart.
-///
-/// Shared by the Todos and Notes panels, which ask the same question of two
-/// tables. It lives beside `Todo` rather than in a shell-wide widget folder
-/// because it is a fact about these two features, not about the shell.
+/// Which project's writing a surface is showing. **Three states**: `null`
+/// would have to mean both "no filter" and "no project", which is the confusion.
 @immutable
 class ProjectScope {
   const ProjectScope._(this.projectId, this.unfiledOnly);
@@ -38,12 +27,8 @@ class ProjectScope {
     return unfiledOnly ? id == null : id == projectId;
   }
 
-  /// The project a new item written in this scope should be filed under.
-  ///
-  /// Looking at one project and typing a todo files it there; looking at
-  /// everything files it nowhere, which is the honest answer — "all" is not a
-  /// project, and guessing one would file work under whatever happened to be
-  /// first in a menu.
+  /// The project a new item written in this scope should be filed under. Looking
+  /// at everything files it nowhere, which is the honest answer.
   String? get projectForNewItems => projectId;
 
   @override

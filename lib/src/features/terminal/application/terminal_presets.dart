@@ -11,11 +11,9 @@ final terminalPresetDaoProvider = Provider<TerminalPresetDao>(
   (ref) => TerminalPresetDao(ref.watch(databaseProvider)),
 );
 
-/// Saving and opening a named workbench shape.
-///
-/// Thin on purpose: the shape is captured and rebuilt by
-/// [TerminalSessionsController], which is the only thing that knows what a tab
-/// is; this is where the store and the clock meet it.
+/// Saving and opening a named workbench shape. Thin on purpose — the shape is
+/// captured and rebuilt by [TerminalSessionsController]; this is where the
+/// store and the clock meet it.
 class TerminalPresets {
   const TerminalPresets(this._ref);
 
@@ -25,13 +23,9 @@ class TerminalPresets {
 
   List<TerminalPreset> all() => _dao.getAll();
 
-  /// Saves the workbench as it stands under [name].
-  ///
-  /// A name already in use is **replaced rather than duplicated**: saving twice
-  /// under one name is somebody correcting a preset, not asking for two. The id
-  /// is kept across the replacement because anything referring to the preset
-  /// holds that, not the name. Returns null when there is nothing to capture —
-  /// a workbench of empty regions declares nothing.
+  /// Saves the workbench as it stands under [name]. A name already in use is
+  /// **replaced rather than duplicated**, keeping its id, because saving twice
+  /// under one name is a correction. Null when there is nothing to capture.
   TerminalPreset? save(String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return null;
@@ -58,11 +52,9 @@ final terminalPresetsProvider = Provider<TerminalPresets>(
   TerminalPresets.new,
 );
 
-/// What to tell the user after opening [preset] gave [opening].
-///
-/// Named profiles rather than a count, because the count says nothing anybody
-/// can act on. Null when nothing was skipped: a preset that opened whole does
-/// not need announcing.
+/// What to tell the user after opening [preset] gave [opening]. Named profiles
+/// rather than a count, which says nothing anybody can act on; null when
+/// nothing was skipped.
 String? presetOpenedMessage(
   TerminalPreset preset,
   TerminalPresetOpening opening,

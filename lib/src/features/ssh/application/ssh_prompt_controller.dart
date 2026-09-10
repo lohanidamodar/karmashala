@@ -18,10 +18,8 @@ enum SshSecretKind {
   };
 }
 
-/// Something the SSH layer cannot decide on its own and must ask a human.
-///
-/// Requests are values, not dialogs: the SSH layer knows nothing about widgets,
-/// and a test can answer one without pumping a frame.
+/// Something the SSH layer cannot decide alone and must ask a human. Requests
+/// are values, not dialogs: a test can answer one without pumping a frame.
 sealed class SshPromptRequest {
   /// Identity for list keys — two prompts for the same host are still two
   /// prompts.
@@ -66,27 +64,16 @@ final class SshSecretPromptRequest extends SshPromptRequest {
   }
 }
 
-/// The queue of questions the SSH layer is waiting on, and the only bridge
-/// between a headless connection and the user.
-///
-/// Loop 37 deliberately shipped `hostKeyTrustDecisionProvider` as `null`, which
-/// makes an unrecognised host **refused** rather than trusted. That is the right
-/// default for anything unattended, and it is also why no host could ever be
-/// added: nothing existed to ask. This controller is the answer — and it keeps
-/// the safe default, because it refuses just as flatly when [attach] has never
-/// been called, i.e. when no UI is mounted to show the fingerprint.
-///
-/// Nothing here is persisted. A password or passphrase lives in the completed
-/// future and nowhere else.
+/// The queue of questions the SSH layer waits on. It keeps the safe default: an
+/// unrecognised host is **refused** whenever nothing is mounted to show it.
 class SshPromptController extends Notifier<List<SshPromptRequest>> {
   SshPromptController({AppLogger? logger})
     : _logger = logger ?? AppLogger.named('ssh.prompt');
 
   final AppLogger _logger;
 
-  /// How many prompt hosts are mounted. Counted rather than a bool so a
-  /// transient rebuild that mounts the new host before disposing the old one
-  /// never leaves the app briefly unable to ask.
+  /// How many prompt hosts are mounted. Counted, not a bool, so a rebuild that
+  /// mounts the new host before disposing the old never blocks an ask.
   int _mounted = 0;
 
   @override
@@ -98,9 +85,8 @@ class SshPromptController extends Notifier<List<SshPromptRequest>> {
   /// Called by the widget that displays prompts when it is mounted.
   void attach() => _mounted++;
 
-  /// Called when that widget goes away. Anything still queued is refused rather
-  /// than left hanging: a connection waiting forever on a dialog that no longer
-  /// exists is worse than a connection that failed.
+  /// Called when that widget goes away. Anything queued is refused rather than
+  /// left hanging on a dialog that no longer exists.
   void detach() {
     if (_mounted > 0) _mounted--;
     if (_mounted == 0 && state.isNotEmpty) {
@@ -111,13 +97,8 @@ class SshPromptController extends Notifier<List<SshPromptRequest>> {
     }
   }
 
-  /// Asks the user whether to trust an unrecognised host key.
-  ///
-  /// Refuses without asking when [presentation] is anything but
-  /// [HostKeyVerdict.unknown]. The verifier already guarantees that — a changed
-  /// key never reaches a handler — and this is the second lock on the same door:
-  /// there is no code path, here or above, that turns a changed key into a
-  /// question the user can say yes to.
+  /// Asks the user whether to trust an unrecognised host key. Refuses without
+  /// asking for any other verdict — a changed key is never a question.
   Future<bool> askHostKey(HostKeyPresentation presentation) {
     if (presentation.verdict != HostKeyVerdict.unknown) {
       _logger.error(
@@ -152,10 +133,8 @@ class SshPromptController extends Notifier<List<SshPromptRequest>> {
     return request.answer;
   }
 
-  /// Records the user's decision on an unknown host key and dequeues it.
-  ///
-  /// Accepting here is what pins the key: the verifier writes it to
-  /// `ssh_known_hosts` only after this returns true.
+  /// Records the user's decision and dequeues it. Accepting is what pins the
+  /// key: the verifier writes `ssh_known_hosts` only after this returns true.
   void answerHostKey(HostKeyPromptRequest request, {required bool trusted}) {
     request.complete(trusted);
     _dequeue(request);

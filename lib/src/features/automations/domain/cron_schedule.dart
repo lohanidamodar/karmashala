@@ -1,22 +1,5 @@
-/// A five-field cron expression, and the two questions a scheduler asks it.
-///
-/// **Hand-written, and deliberately small.** The whole surface is: five fields,
-/// `*`, a number, `a-b`, a `/step` on either, and `,` lists. There is no `@daily`,
-/// no `L`, no `#`, no seconds field and no year field — every one of those is a
-/// dialect somebody's cron does not have, and an expression this app accepts
-/// but cannot evaluate the way the user's other tools do is worse than one it
-/// refuses to parse.
-///
-/// **Refused, not guessed.** [CronSchedule.parse] answers null for anything it
-/// does not fully understand, and the arm form shows that as a refusal. An
-/// expression that half-parsed would fire at times nobody asked for.
-///
-/// **Local time, on purpose.** "03:00" means three in the morning where the
-/// machine is, which is what a person writing a nightly automation means. The
-/// cost is DST: on the hour a clock jumps forward a daily 02:30 has no
-/// occurrence that day, and on the hour it jumps back it has one — both fall
-/// out of asking `DateTime` local arithmetic rather than being special-cased,
-/// and both are what `cron(8)` does.
+/// A five-field cron expression: `*`, a number, `a-b`, `/step`, `,` lists and
+/// nothing else — refused, not half-parsed. Matched in local time, like cron(8).
 library;
 
 /// One parsed field: which values of its range match.
@@ -25,11 +8,8 @@ class _CronField {
 
   final Set<int> allowed;
 
-  /// True when the field was written as a bare `*`. What tells a *restricted*
-  /// day-of-month from an unrestricted one in the OR rule below — and it has
-  /// to be how it was written rather than what it covers, because `0-6` on
-  /// day-of-week is a restriction the user typed even though it matches every
-  /// day.
+  /// True when the field was written as a bare `*` — how it was written, not
+  /// what it covers: `0-6` is a restriction even though it matches every day.
   final bool isUnrestricted;
 
   bool matches(int value) => allowed.contains(value);
@@ -80,7 +60,6 @@ class _CronField {
   }
 }
 
-/// A parsed cron expression.
 class CronSchedule {
   const CronSchedule._(
     this.expression,
@@ -100,10 +79,8 @@ class CronSchedule {
   final _CronField _month;
   final _CronField _dayOfWeek;
 
-  /// Parses `minute hour day-of-month month day-of-week`, or **null**.
-  ///
-  /// Sunday is `0` and `7` alike, which is the one dialect difference every
-  /// cron shares.
+  /// Parses `minute hour day-of-month month day-of-week`, or **null**. Sunday
+  /// is `0` and `7` alike, the one dialect difference every cron shares.
   static CronSchedule? parse(String expression) {
     final fields = expression.trim().split(RegExp(r'\s+'));
     if (fields.length != 5) return null;
@@ -129,11 +106,8 @@ class CronSchedule {
     );
   }
 
-  /// Whether the day of [at] is one this expression fires on.
-  ///
-  /// The OR rule every cron implements and nobody documents in the same place:
-  /// when **both** day-of-month and day-of-week are restricted, a day matching
-  /// *either* is a match. When only one is restricted, only it decides.
+  /// Whether the day of [at] fires. The OR rule: with both day fields
+  /// restricted either match counts; with one, only it decides.
   bool _dayMatches(DateTime at) {
     // `DateTime.weekday` is 1..7 with Monday first; cron is 0..6 with Sunday.
     final weekday = at.weekday == DateTime.sunday ? 0 : at.weekday;
@@ -147,16 +121,12 @@ class CronSchedule {
     return true;
   }
 
-  /// How far ahead or behind a search gives up. Five years covers `0 0 29 2 *`
-  /// — a leap-day automation — with room to spare, and bounds the loop so a
-  /// combination that can never occur (`0 0 30 2 *`) answers null instead of
-  /// spinning.
+  /// How far ahead or behind a search gives up. Five years covers a leap-day
+  /// `0 0 29 2 *` and bounds a combination that can never occur.
   static const _searchDays = 366 * 5;
 
   /// The first occurrence strictly after [after], or null within the bound.
-  ///
-  /// [after] may be UTC; the answer is returned in the same zone it was asked
-  /// in, and the matching is done in local time.
+  /// Returned in the zone it was asked in; matched in local time.
   DateTime? nextAfter(DateTime after) {
     final wasUtc = after.isUtc;
     var at = _truncate(after.toLocal()).add(const Duration(minutes: 1));
@@ -180,12 +150,8 @@ class CronSchedule {
     return null;
   }
 
-  /// The last occurrence at or before [at], or null within the bound.
-  ///
-  /// Its own walk rather than "run [nextAfter] from the floor and keep the
-  /// last": the newest missed occurrence has to be findable even when counting
-  /// them all is capped, and a cap that changed the answer would make a miss's
-  /// timestamp depend on how long the laptop was shut.
+  /// The last occurrence at or before [at], or null within the bound. Its own
+  /// walk, so the newest miss stays findable when the count is capped.
   DateTime? previousAtOrBefore(DateTime at) {
     final wasUtc = at.isUtc;
     var cursor = _truncate(at.toLocal());
@@ -255,10 +221,8 @@ class CronSchedule {
   String toString() => 'CronSchedule("$expression")';
 }
 
-/// Why [expression] will not do as a schedule, or `null` when it will.
-///
-/// The words the arm form shows and the words the write path throws, from one
-/// function — the rule the whole feature is built to.
+/// Why [expression] will not do as a schedule, or `null` when it will — the
+/// words the arm form shows and the words the write path throws, from one place.
 String? cronRefusal(String expression) {
   final trimmed = expression.trim();
   if (trimmed.isEmpty) {

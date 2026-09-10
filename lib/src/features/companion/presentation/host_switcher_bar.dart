@@ -9,12 +9,8 @@ import 'companion_chrome.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The strip above the session list that names the desktop being shown and
-/// switches to another in one tap.
-///
-/// Deliberately absent with a single saved desktop: a phone paired to one
-/// machine must not pay a row of chrome to be told so — Settings still lists
-/// it. With two or more, "whose sessions are these" is the question the list
-/// cannot answer by itself, so it gets answered here rather than a tab away.
+/// switches to another in one tap. Absent with a single saved desktop, which
+/// Settings still lists.
 class HostSwitcherBar extends ConsumerWidget {
   const HostSwitcherBar({super.key});
 
@@ -23,9 +19,8 @@ class HostSwitcherBar extends ConsumerWidget {
     WidgetRef ref,
     List<CompanionConnection> connections,
   ) async {
-    // Scroll-controlled and titled like every other companion sheet: a bare
-    // Column in Material's half-height sheet overflowed as soon as a phone
-    // had four desktops, and at 200% text it overflowed with two.
+    // Scroll-controlled: a bare Column in Material's half-height sheet
+    // overflowed at four desktops, or at two with 200% text.
     final picked = await companionSheet<String>(
       context,
       title: 'DESKTOPS',

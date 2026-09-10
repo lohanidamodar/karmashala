@@ -2,13 +2,8 @@ import 'package:riverpod/riverpod.dart';
 
 import 'attached_apps.dart';
 
-/// Which attached app the pane is about, or `null` for "no explicit choice".
-///
-/// A per-surface selection rather than one global "the app": several apps run
-/// side by side by design, and the panel showing one of them must not decide
-/// which one an MCP call means. Next to the registry on purpose — the same
-/// reasoning `selectedDeviceSerialProvider` is written with, and the same fault
-/// it exists to prevent.
+/// Which attached app the pane is about, or `null` for "no explicit choice" —
+/// per-surface, so a panel cannot decide which app an MCP call means.
 class SelectedFlutterAppId extends Notifier<String?> {
   @override
   String? build() => null;
@@ -22,10 +17,7 @@ final selectedFlutterAppIdProvider =
     );
 
 /// The app the pane is describing: the explicit choice, or the only attached
-/// one when there is exactly one.
-///
-/// Derived, so the pane and the actions on it cannot hold two opinions about
-/// which app is on screen.
+/// one. Derived, so the pane and its actions cannot hold two opinions.
 final paneFlutterAppIdProvider = Provider<String?>((ref) {
   final registry = ref.watch(attachedAppsProvider);
   final chosen = ref.watch(selectedFlutterAppIdProvider);
@@ -34,13 +26,8 @@ final paneFlutterAppIdProvider = Provider<String?>((ref) {
       (registry.apps.length == 1 ? registry.apps.single.id : null);
 });
 
-/// A tick per console line, so the console repaints without the lines
-/// themselves living in the registry's state.
-///
-/// Keeping the buffer out of the notifier's state is the point: a chatty app
-/// writes several lines a frame, and putting them in `FlutterAppRegistry` would
-/// rebuild every widget watching the registry — the status row, the app list,
-/// the action bar — for each one.
+/// A tick per console line, so the console repaints without the lines living in
+/// the registry — a chatty app would rebuild every watcher once per line.
 final flutterAppConsoleTickProvider = StreamProvider.family<int, String>((
   ref,
   appId,

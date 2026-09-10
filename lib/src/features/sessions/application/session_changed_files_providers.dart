@@ -19,37 +19,8 @@ import 'session_chat_source.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
-/// What one session changed, out of the agent's own record where it keeps one
-/// and out of git where it does not.
-///
-/// **Three answers per agent, measured rather than assumed** (2026-09-08):
-///
-/// * **Codex** keeps the richest record and the app already holds the
-///   connection. `thread/turns/list` with `itemsView: 'full'` carries a
-///   `fileChange` item per applied patch — see
-///   `CodexAppServerClient.listFileChanges`, which pages it so a 15 MB thread
-///   never lands in memory whole.
-/// * **Claude Code** writes every `Edit`/`Write`/`MultiEdit` into its own JSONL
-///   transcript, and `file_edit_reader.dart` already parses one line of it. This
-///   streams the file and keeps the path and the kind, dropping the texts each
-///   line produced — a `Write` record carries the whole new file.
-/// * **Antigravity** keeps nothing readable: its conversation payloads are
-///   protobuf in an unpublished schema, which is why `readCliTranscript` refuses
-///   it by name. Git is the only source, exactly as the owner specified.
-///
-/// **The fallback, and the baseline it needs.** Sessions are *not* isolated in
-/// worktrees here — agents run in the user's own repository — so a bare
-/// `git diff` cannot attribute anything to a session. The one per-session
-/// baseline this app already records is the **checkpoint chain**: one
-/// `refs/karmashala/checkpoints/<sessionId>` per session, a tree per finished
-/// turn, and `session_checkpoint_files` naming what moved between them. It costs
-/// no process and no git invocation to read, because it is already in the
-/// database. Its honest limit is the first link: that one is measured against
-/// the commit the repository was on, so it includes whatever was already dirty.
-/// The caveat says so rather than the number pretending otherwise.
-///
-/// A session with no checkpoint has **no baseline at all**, and that is reported
-/// as such instead of being invented.
+/// What one session changed: the agent's own record where it keeps one, else
+/// the checkpoint chain, whose first link includes whatever was already dirty.
 class SessionChangedFilesService {
   const SessionChangedFilesService(this._ref, {this.translator = const PathTranslator()});
 
@@ -146,9 +117,8 @@ class SessionChangedFilesService {
     if (environment == null) {
       return (null, SessionRecordGap.recordUnreadable, 'no environment row');
     }
-    // The shared pool, so a workspace that has already renamed a thread pays no
-    // spawn at all and one that has not pays exactly one — for the connection,
-    // not for this call.
+    // The shared pool: a workspace that has already renamed a thread pays no
+    // spawn at all, and one that has not pays exactly one — for the connection.
     final client = _ref
         .read(codexAppServersProvider)
         .forEnvironment(environment.id);
@@ -175,8 +145,7 @@ class SessionChangedFilesService {
           CodexFileChangeKind.add => FileEditKind.created,
           CodexFileChangeKind.delete => FileEditKind.deleted,
           // An `update` is a modification; a kind this build does not know is
-          // still a change Codex reported, and "modified" is the weaker claim
-          // rather than a guess at a new one.
+          // still a change Codex reported, and "modified" is the weaker claim.
           CodexFileChangeKind.update ||
           CodexFileChangeKind.unknown => FileEditKind.modified,
         },
@@ -185,16 +154,8 @@ class SessionChangedFilesService {
     return (byPath.values.toList(growable: false), SessionRecordGap.none, '');
   }
 
-  /// Claude Code's own transcript, streamed and reduced to paths as it goes.
-  ///
-  /// `claudeFileEdits` is called per line and its records are dropped the moment
-  /// their path and kind are taken: one `Write` record holds the whole file it
-  /// wrote, so collecting them all to draw a list would hold the session's
-  /// entire output in memory.
-  ///
-  /// **No Claude row is ever `deleted`**, and that is the record's shape: the
-  /// CLI has no delete tool, so a removal goes through `Bash rm` and its
-  /// transcript never names the file. Codex's `apply_patch` does record one.
+  /// Claude Code's transcript, streamed and reduced to paths as it goes. **No
+  /// Claude row is ever `deleted`**: the CLI has no delete tool, so `Bash rm`.
   Future<(List<SessionChangedFile>?, SessionRecordGap, String)>
   _fromClaudeTranscript(
     Session session,
@@ -239,18 +200,8 @@ class SessionChangedFilesService {
     return (byPath.values.toList(growable: false), SessionRecordGap.none, '');
   }
 
-  /// Every path any checkpoint of this session named, oldest chain first.
-  ///
-  /// Repository-relative, because that is how `git diff --name-status` names
-  /// them and how the Changes panel shows them; [SessionChangedFile.hostPath]
-  /// stays null rather than a join this reading cannot make safely for a tree on
-  /// another filesystem.
-  ///
-  /// **No rename ever arrives here**, and that is the chain's shape rather than
-  /// an omission: `CheckpointService` asks git with `--no-renames`, so a moved
-  /// file is recorded as a delete and an add, and `session_checkpoint_files`
-  /// stores only `(path, status)` with nowhere to keep an old name. Codex's
-  /// `move_path` is the one source that can say a file moved.
+  /// Every path any checkpoint of this session named, oldest first. **No rename
+  /// arrives here**: `CheckpointService` asks git with `--no-renames`.
   List<SessionChangedFile> _fromCheckpoints(List<Checkpoint> checkpoints) {
     final byPath = <String, SessionChangedFile>{};
     for (final checkpoint in checkpoints) {
@@ -273,9 +224,8 @@ class SessionChangedFilesService {
     return byPath.values.toList(growable: false);
   }
 
-  /// Folds one path into [byPath], keeping the **strongest** claim made about
-  /// it: a file this session created stays created however often it was edited
-  /// afterwards, and one it deleted stays deleted.
+  /// Folds one path into [byPath], keeping the **strongest** claim: created
+  /// stays created however often it was edited, and deleted stays deleted.
   void _record(
     Map<String, SessionChangedFile> byPath,
     ExecutionEnvironment? environment, {
@@ -301,12 +251,8 @@ class SessionChangedFilesService {
     FileEditKind.deleted => 2,
   };
 
-  /// [path] as this host spells it, or null when it cannot be expressed here.
-  ///
-  /// The one translator (`agent_cli`'s `path_translator.dart`), never a second
-  /// one. An SSH path is deliberately not translated: it names a file on another
-  /// machine, and a stat of ours is not evidence either way — the same rule §20
-  /// applies to a remote executable.
+  /// [path] as this host spells it, or null. An SSH path is deliberately not
+  /// translated: a stat of ours is not evidence about another machine.
   String? _hostSpellingOf(String path, ExecutionEnvironment? environment) {
     if (environment == null) return null;
     switch (environment.kind) {
@@ -342,12 +288,8 @@ final sessionChangedFilesServiceProvider =
       (ref) => SessionChangedFilesService(ref),
     );
 
-/// What a session changed, read once per opening of the surface that asks.
-///
-/// `autoDispose` and watched by nothing else. **Nothing polls this** — it is
-/// read when the surface opens and when the user asks for it again, which is
-/// §19's third rule and the reason a Codex reading costs a call rather than a
-/// call every few seconds.
+/// What a session changed, read once per opening of the surface that asks —
+/// **nothing polls this**, which is why a Codex reading costs one call.
 final sessionChangedFilesProvider = FutureProvider.autoDispose
     .family<SessionChangedFilesReport, String>((ref, sessionId) {
       // This row only: the conversation a session points at is what the answer

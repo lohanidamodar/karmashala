@@ -5,13 +5,9 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../system/native_status.dart';
 
-/// What the OS actually did about one setting, shown beside its toggle.
-///
-/// Renders nothing at all when the platform call succeeded — which is almost
-/// always — so the settings page stays quiet. It appears only when a switch the
-/// user turned on did not take effect, which until Loop 61 was invisible: the
-/// setting persisted, the toggle stayed on, and the global hotkey simply never
-/// worked.
+/// What the OS actually did about one setting, shown beside its toggle. Renders
+/// nothing when the platform call succeeded, so it appears only where a switch
+/// the user turned on did not take effect — otherwise invisible.
 class NativeSettingStatusLine extends ConsumerWidget {
   const NativeSettingStatusLine(this.setting, {this.enabled = true, super.key});
 
@@ -41,9 +37,8 @@ class NativeSettingStatusLine extends ConsumerWidget {
           const SizedBox(width: Insets.xs),
           Expanded(
             child: Text(
-              // "Still trying" and "given up" are different situations for the
-              // user: one resolves itself, the other needs them to change
-              // something.
+              // "Still trying" and "given up" are different situations: one
+              // resolves itself, the other needs the user to act.
               status!.exhausted ? '$message (not retrying)' : message,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.error,

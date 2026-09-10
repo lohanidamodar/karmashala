@@ -1,13 +1,8 @@
 import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
-/// Touching a device: a tap by name, a tap by coordinate, text and keys.
-///
-/// The four verbs that change what is on screen, and the only place in this
-/// family that refuses on what it read a moment ago. [kDeviceLocatingPolicy]
-/// below says which of the two taps to reach for; `_vetCoordinate` is what
-/// makes that sentence true, because it costs the fallback exactly what the
-/// preferred path costs.
+/// Touching a device: a tap by name, a tap by coordinate, text and keys — the
+/// only place in this family that refuses on what it read a moment ago.
 class DeviceDriveTools extends DeviceToolFamily {
   DeviceDriveTools(super.container, {super.callerSessionId});
 
@@ -26,9 +21,8 @@ class DeviceDriveTools extends DeviceToolFamily {
           deviceIdIn(args),
           (args['x'] as num?)?.round(),
           (args['y'] as num?)?.round(),
-          // Default on. The check is skipped only when the caller says so, so a
-          // screen with nothing in its hierarchy is a decision rather than a
-          // silent gap.
+          // Default on: skipping the check is a decision the caller states,
+          // never a silent gap.
           verify: args['verify'] != false,
         ),
         'device_type' => _deviceType(
@@ -45,34 +39,8 @@ class DeviceDriveTools extends DeviceToolFamily {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// Taps a raw coordinate, having first looked at what is under it.
-  ///
-  /// ## The safety net, and why it is on the fallback tool
-  ///
-  /// This is the one tool that acts on numbers a caller worked out earlier, so
-  /// it is the one tool that can tap where an element *was*. The check is a
-  /// single [DeviceDriver.describeScreen] immediately before the touch — the
-  /// very same read [_deviceTapElement] already pays — which is the argument
-  /// that matters: **vetting the fallback costs exactly what the preferred path
-  /// costs**, so there is no longer a speed reason to prefer coordinates.
-  ///
-  /// It refuses on *positive* evidence and never on the absence of it. A screen
-  /// whose structure has moved since this app last read it is evidence; having
-  /// never read the screen is not, and produces a note rather than a refusal —
-  /// the coordinates may have come from a screenshot, or from the person
-  /// sitting there. Same rule as everywhere else in this codebase: an unknown
-  /// is not a zero.
-  ///
-  /// It also never turns a working call into a refusal for a reason of its own.
-  /// A driver with no [DeviceCapability.uiTree] cannot be checked and is tapped
-  /// anyway, and a screen read that *fails* — uiautomator does fall over
-  /// mid-animation and on secure windows — is reported, not raised. The one
-  /// thing that was silently wrong before and is now refused is a coordinate
-  /// off the display, which used to be sent and reported as a success.
-  ///
-  /// `verify: false` is the documented way out, and the same one Artemis takes
-  /// for its fast-action bursts: a custom-painted surface exposes nothing to
-  /// the hierarchy, so there is nothing there for a check to be about.
+  /// Taps a raw coordinate, having re-read the screen first. Refuses only on
+  /// positive evidence: a structure that has moved, or a point off the display.
   Future<Object?> _deviceTap(
     String? id,
     int? x,
@@ -123,11 +91,8 @@ class DeviceDriveTools extends DeviceToolFamily {
     try {
       read = await driver.describeScreen();
     } on Object catch (error) {
-      // Broad on purpose. Every way a screen read can fail — uiautomator
-      // mid-animation, a secure window, a device that went away between the
-      // claim and the read — ends the same way here: the check could not be
-      // performed, which is not the same as the tap being wrong. Turning an
-      // unavailable check into a refusal would break a tool that works today.
+      // Broad on purpose: every way a screen read can fail ends the same way —
+      // the check could not be performed, which is not the tap being wrong.
       return _CoordinateCheck(
         verdict:
             'not checked — reading the screen failed ($error). The tap was '
@@ -159,9 +124,8 @@ class DeviceDriveTools extends DeviceToolFamily {
     if (earlier != null && !seen.matches(earlier)) {
       final age = seen.at.difference(earlier.at);
       if (age <= kDeviceLookWindow) {
-        // Deliberately *not* filed. A refusal that recorded the new screen
-        // would let the identical retry through against a screen the caller
-        // never looked at, which is the same blind tap one round trip later.
+        // Deliberately *not* filed. Recording the new screen would let the
+        // identical retry through against a screen the caller never looked at.
         throw DeviceRefusal(
           'device_tap: the screen has moved since this app last read it, so '
           '($x, $y) is a coordinate for a screen that is gone. '
@@ -207,14 +171,8 @@ class DeviceDriveTools extends DeviceToolFamily {
     );
   }
 
-  /// One line when this screen is not the one this app last read, or null.
-  ///
-  /// A note and never a refusal, and that asymmetry is the locating policy
-  /// stated as behaviour: a dynamic locator is resolved against the screen in
-  /// front of it, so a change is something it *survives* — while the same
-  /// change makes a raw coordinate wrong, which is why `device_tap` refuses on
-  /// it. Said anyway, because the caller's wider plan was built on the older
-  /// screen and this tap succeeding is not evidence the rest of it will.
+  /// One line when this screen is not the one this app last read, or null — a
+  /// note and never a refusal, since only a raw coordinate goes stale.
   List<String>? _screenMovedSince(DeviceDriver driver, ScreenRead read) {
     final earlier = screens.lastLookAt(driver.target.id);
     if (earlier == null) return null;
@@ -274,11 +232,8 @@ class DeviceDriveTools extends DeviceToolFamily {
         'platform': driver.target.platform.name,
       };
     }
-    // A real Enter key rather than the IME's action. A view that handles its
-    // own key events — a Flutter `TextInputClient`, an embedded terminal —
-    // receives committed text but never the action, so an IME-only submit is a
-    // silent no-op there and the reply still says "typed". Pressing the key is
-    // what the caller would have done next anyway.
+    // A real Enter key, not the IME's action: a view that handles its own key
+    // events never receives the action, so an IME submit is a silent no-op.
     if (!driver.can(DeviceCapability.keys)) {
       throw DeviceRefusal(
         'device_type(submit: true): ${driver.missingReason(DeviceCapability.keys)!} '
@@ -309,9 +264,8 @@ class DeviceDriveTools extends DeviceToolFamily {
       'device_key',
       DeviceCapability.keys,
     );
-    // The driver refuses the individual keys its device does not have. That is
-    // per-key rather than a capability because a device with *some* of them is
-    // the normal case — see SimulatorDeviceDriver.pressKey.
+    // The driver refuses the individual keys its device does not have: per-key
+    // rather than a capability, because a device with *some* of them is normal.
     final press = await driver.pressKey(parsed);
     return {
       'pressed': press.key.name,
@@ -331,20 +285,16 @@ class DeviceDriveTools extends DeviceToolFamily {
         'Give at least one of text, resourceId, contentDesc or className.',
       );
     }
-    // Both capabilities, checked before the read: a driver that could describe
-    // a screen but not touch it would otherwise dump the tree, pick a target
-    // and fail at the last step, having spent the round trip.
+    // Both capabilities before the read: a driver that can describe but not
+    // touch would otherwise fail at the last step, having spent the round trip.
     final driver = await driverToDrive(
       id,
       'device_tap_element',
       DeviceCapability.uiTree,
     );
     require(driver, 'device_tap_element', DeviceCapability.input);
-    // The read *is* this tool's safety net: it resolves the locator against the
-    // screen as it is now, so a dialog that arrived between look and tap is
-    // caught here rather than by the user. What the note below adds is the
-    // other half — that the plan the caller built is stale even though this
-    // call succeeded.
+    // The read *is* the safety net: the locator resolves against the screen as
+    // it is now, so a dialog that arrived between look and tap is caught here.
     final read = await driver.describeScreen();
     final moved = _screenMovedSince(driver, read);
     recordLook(driver, read);
@@ -370,9 +320,8 @@ class DeviceDriveTools extends DeviceToolFamily {
     } else if (matches.length == 1) {
       element = matches.first;
     } else {
-      // Several matches. One unambiguous exact label is still a decision we can
-      // make; anything else is a guess, and a wrong tap is worse than an error
-      // because the agent cannot tell it happened.
+      // One unambiguous exact label is still a decision we can make; a wrong tap
+      // is worse than an error, because the agent cannot tell it happened.
       final exact = [
         for (final node in matches)
           if (query.rank(node) == 0) node,
@@ -395,13 +344,8 @@ class DeviceDriveTools extends DeviceToolFamily {
         '${describeUiNode(element, screen: screen)}',
       );
     }
-    // A node covering nearly the whole screen is a scrim or a modal barrier,
-    // never the thing anybody meant. Android exposes one as a clickable node
-    // called "Dismiss" spanning the display, directly behind the dialog whose
-    // button the caller asked for — so tapping it closes the dialog and throws
-    // away the state under test, and the reply would read like a success.
-    // Refused rather than ranked down: there is no query for which the right
-    // answer is the barrier.
+    // A node covering nearly the whole screen is a scrim: Android's clickable
+    // "Dismiss" spans the display, and tapping it reads like a success.
     if (screen != null && bounds.coversMostOf(screen)) {
       throw DeviceRefusal(
         'The best match is ${describeUiNode(element, screen: screen)}, which '
@@ -428,9 +372,8 @@ class DeviceDriveTools extends DeviceToolFamily {
       ...?moved,
       'Device ${driver.target.id}, ${read.app ?? 'unknown app'}'
           '${matches.length == 1 ? '' : ', chosen from ${matches.length} matches'}'
-          // The runner-up by name: reading "chosen from 2" is what tells you a
-          // pick went wrong, and saying which one lost turns that into a
-          // diagnosis without a second round trip.
+          // The runner-up by name: it turns "chosen from 2" into a diagnosis
+          // without a second round trip.
           '${_runnerUp(matches, element, screen)}.'
           '${element.enabled ? '' : ' NOTE: this element is disabled.'}',
       'Take a screenshot or dump again to confirm what changed.',
@@ -451,11 +394,8 @@ class DeviceDriveTools extends DeviceToolFamily {
   }
 }
 
-/// What the pre-tap check found, as the three fields the reply carries.
-///
-/// A record rather than a sentence because the three answer different
-/// questions and an agent skims: what was checked, what is under the finger,
-/// and what it should have called instead.
+/// What the pre-tap check found, as the three fields the reply carries — a
+/// record because the three answer different questions and an agent skims.
 class _CoordinateCheck {
   const _CoordinateCheck({required this.verdict, this.under, this.prefer});
 
@@ -471,20 +411,8 @@ class _CoordinateCheck {
   final String? prefer;
 }
 
-/// **The locating policy, written once and spliced into every tool it governs.**
-///
-/// Stated on the tools themselves for the reason `mcp_tool_catalogue.dart`
-/// gives for its four hints: a rule that lives in one file is a survey, and a
-/// rule an agent meets at the moment it is choosing is a rule. It is the *same*
-/// sentence on all four rather than four tailored variants, because four
-/// wordings of one rule read as four hints.
-///
-/// The third sentence is the one that changes behaviour. "Prefer the robust
-/// thing" loses to "the other one is faster" every time, and until
-/// `device_tap` started reading the screen before it acted, the other one
-/// genuinely was faster. It no longer is — counted, a vetted `device_tap` and
-/// a `device_tap_element` are the same six adb invocations — so the policy can
-/// state it as a fact rather than an exhortation.
+/// **The locating policy, spliced into every tool it governs** — the same
+/// sentence on all four, because four wordings of one rule read as four hints.
 const String kDeviceLocatingPolicy =
     'LOCATING POLICY — dynamic first, coordinates as a checked fallback. '
     'Prefer device_tap_element: it resolves the element against the screen as '

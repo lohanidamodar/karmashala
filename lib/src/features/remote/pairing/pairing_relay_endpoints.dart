@@ -1,13 +1,5 @@
-/// The relay choices the pairing dialog offers, as tabs.
-///
-/// The default is exactly one entry — the configured internet relay — and the
-/// dialog then renders no tab chrome at all. Loop 77's embedded local relay
-/// overrides this provider to add a "Local network" entry
-/// (`ws://<lan-ip>:<port>`) so pairing works with one click when the internet
-/// relay is unreachable.
-/// The contract is pinned by `pairing_relay_endpoints_test.dart`: keep the
-/// shape stable so the local-relay loop can feed it without touching the
-/// dialog.
+/// The relay choices the pairing dialog offers, as tabs. One entry — the usual
+/// case — renders no tab chrome at all; the shape is pinned by a test.
 library;
 
 import 'package:riverpod/riverpod.dart';
@@ -47,15 +39,8 @@ class PairingRelayEndpoint {
   String toString() => 'PairingRelayEndpoint($label, $url, ${kind.name})';
 }
 
-/// The endpoints the dialog shows, in tab order: every relay the host is
-/// actually serving ([relayEndpointsProvider]) — one tab each, both when both
-/// are on.
-///
-/// **Empty is a real answer** since Loop 80: remote access on with every relay
-/// switched off means no code could be redeemed, and the dialog says that
-/// rather than showing a tab nothing listens on. With remote access *off* the
-/// configured internet relay stands in, keeping the shown shape stable for a
-/// dialog that refuses with "turn on remote access" anyway.
+/// The endpoints the dialog shows, one per relay the host is serving. **Empty
+/// is real**: with every relay off, no code could be redeemed.
 final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
   ref,
 ) {

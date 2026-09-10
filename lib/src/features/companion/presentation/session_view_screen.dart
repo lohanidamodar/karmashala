@@ -28,9 +28,8 @@ class SessionViewScreen extends ConsumerStatefulWidget {
 
   final String sessionId;
 
-  /// The desktop's own wording for a stage name off the wire — rebuilt from
-  /// the typed enum, with the raw name as the honest fallback for a stage
-  /// this build predates.
+  /// The desktop's own wording for a stage name off the wire, with the raw name
+  /// as the fallback for a stage this build predates.
   static String _stageLabel(String stage) =>
       DeliveryStage.values.asNameMap()[stage]?.label ?? stage;
 
@@ -52,9 +51,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     super.initState();
     _resumeKey = _newRequestId();
     _gateway = ref.read(companionGatewayProvider);
-    // This screen *is* the phone's focus. Reported so the desktop can still
-    // push news about a session that is not the one on screen — presence
-    // routes a notification and never gates a delivery.
+    // Presence routes a notification and never gates a delivery, so the desktop
+    // can still push news about a session that is not on screen.
     unawaited(_gateway.reportFocusedSession(widget.sessionId));
   }
 
@@ -81,9 +79,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
         .asData
         ?.value;
     final link = ref.watch(companionLinkProvider).asData?.value;
-    // A card that simply vanishes reads as a dropped request, so the reason
-    // is said out loud. Events-only, so nothing is announced to a screen that
-    // opened after the fact.
+    // A card that simply vanishes reads as a dropped request. Events-only, so
+    // a screen that opened after the fact announces nothing.
     ref.listen(companionApprovalResolutionProvider(sessionId), (_, next) {
       final resolution = next.asData?.value;
       if (resolution == null) return;
@@ -94,9 +91,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
     final canApprove = gateway.capabilities.has(Capability.approve);
     final canAttach = gateway.capabilities.has(Capability.sendAttachment);
-    // A null summary is normal for the first frame while sessions.list is
-    // arriving. Once the list has a value, it is authoritative: this session
-    // was removed and must not keep exposing send/approve controls.
+    // A null summary is normal while sessions.list is arriving; once the list
+    // has a value it is authoritative and the controls must go.
     final sessionGone = sessions.hasValue && session == null;
     final imported = session?.imported ?? false;
     final resumeOffer = !sessionGone &&
@@ -106,8 +102,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
             session.status == CompanionSessionStatus.failed ||
             session.status == CompanionSessionStatus.unknown);
 
-    // Hoisted out of the tree so the readable-width wrapper below reads as
-    // one line rather than another level of nesting.
+    // Hoisted out so the readable-width wrapper below stays one line.
     final pane = sessionGone
         ? CompanionNotice(
             icon: AppIcons.folder,
@@ -121,8 +116,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
       transcript,
       loading: () => link == CompanionLinkState.connected
           ? const Center(child: CircularProgressIndicator())
-          // Nothing is on its way, because there is no link to carry it. A
-          // skeleton here is a promise the phone cannot keep.
+          // No link to carry anything, so a skeleton would be a promise the
+          // phone cannot keep.
           : CompanionNotice(
               icon: AppIcons.linkBreak,
               title: 'Waiting for your desktop',
@@ -145,19 +140,14 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
       ),
       data: (messages) => CompanionTranscriptView(
         messages: messages,
-        // Two different nothings the phone cannot tell apart: an agent that
-        // keeps no readable transcript (its terminal IS the session, as the
-        // desktop says) and a session that has not spoken yet. Claiming
-        // either one would be a guess.
+        // Two nothings the phone cannot tell apart: an agent that keeps no
+        // readable transcript, and a session that has not spoken yet.
         emptyHint:
             'No transcript to show. Some agents keep none we can read — '
             'their terminal is the session — and a session that has just '
             'started has nothing in it yet.',
-        // Starter prompts are onboarding, and onboarding is only true of a
-        // session that has not started. A chip cannot be offered to a phone
-        // that may not send one, and offering "Explain architecture" beside a
-        // session the badge says is *working* is the same confident nothing
-        // the empty transcript was.
+        // Starter prompts are onboarding, which is only true of a session that
+        // has not started — and never of a phone that may not send one.
         onSuggestionTap:
             canPrompt && session?.status != CompanionSessionStatus.working
             ? (prompt) {
@@ -171,8 +161,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Above the composer, because it blocks the session: nothing
-            // typed is read until the prompt is answered.
+            // Above the composer, because nothing typed is read until the
+            // prompt is answered.
             if (!sessionGone && approval != null && !imported)
               CompanionApprovalCard(
                 approval: approval,
@@ -180,10 +170,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 onAnswer: (decision) =>
                     gateway.answerApproval(sessionId, approval.id, decision),
               ),
-            // Directly above the composer, as the desktop puts it directly
-            // above its own: "what is it doing right now" is the question a
-            // phone in a pocket is holding, and the transcript's own tail
-            // could only answer it by not moving.
+            // Directly above the composer, as the desktop puts it: the
+            // transcript's tail could only answer "what now" by not moving.
             if (!sessionGone && !imported)
               CompanionActivityStrip(sessionId: sessionId),
             if (resumeOffer)
@@ -204,8 +192,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 hintText: canPrompt
                     ? 'Send a message…'
                     : 'This phone was not granted prompt rights.',
-                // Straight off the row, so the picker is offered only for a
-                // session the host has said what it would take for.
+                // Straight off the row, so the picker appears only where the
+                // host has said what it would take.
                 attachments: canAttach ? session?.attachments : null,
                 onSend: (text, {attachment, onProgress}) async {
                   final delivery = await gateway.sendPrompt(
@@ -216,8 +204,8 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                   );
                   if (delivery == RemotePromptDelivery.offered &&
                       context.mounted) {
-                    // A file is left in the desktop's own message box, so the
-                    // phone must not read as though the agent already had it.
+                    // The file lands in the desktop's message box, so this must
+                    // not read as though the agent already had it.
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
@@ -243,23 +231,20 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      // The composer is the bottom-most thing on the screen, so without this
-      // its send button sat under the gesture bar on every modern Android.
+      // Without this the composer's send button sits under Android's gesture
+      // bar.
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Full-bleed above the column, the way the shell draws it: an
-            // outage is chrome, not content.
+            // Full-bleed above the column: an outage is chrome, not content.
             const LinkBanner(),
-            // Everything below is content, and past the compact breakpoint it
-            // keeps a phone's measure — a transcript, a status line and a
-            // composer set across a tablet are three lines nobody can read
-            // together (CLAUDE.md §6).
+            // Everything below is content and keeps a phone's measure past the
+            // compact breakpoint (CLAUDE.md §6).
             CompanionReadable(
               child: Padding(
-                // What only this session can answer: its status, and where
-                // it is.
+                // What only this session can answer: its status, and where it
+                // is.
                 padding: EdgeInsets.symmetric(
                   horizontal: density.padX,
                   vertical: density.isTouch ? Insets.sm : Insets.xs,
@@ -294,12 +279,9 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
               ),
             ),
             const CompanionReadable(child: Divider(height: 1)),
-            // NOT `AsyncValue.when`: Riverpod 3 retries a provider that
-            // failed and reports `AsyncLoading` *carrying* the error, so
-            // `when` takes its loading branch and this screen sat on a
-            // spinner for ever — the "I opened a session and it keeps
-            // loading" report. `companionAsync` asks the questions in the
-            // order a user cares about.
+            // NOT `AsyncValue.when`: a provider being retried is
+            // `AsyncLoading` *carrying* its error, so `when` takes the loading
+            // branch and this screen spins for ever.
             Expanded(child: CompanionReadable(child: pane)),
           ],
         ),

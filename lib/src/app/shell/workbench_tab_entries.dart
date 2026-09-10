@@ -1,17 +1,7 @@
 part of 'workbench.dart';
 
-// Every terminal tab as the picker lists them, and the two questions that
-// decide what each row says.
-
-/// Whether group [groupId] is showing terminal **panes** right now.
-///
-/// Two surfaces can be up instead: the conversation, and the empty state a
-/// session with no pane of ours gets ([_hostedSelection]). While either is, no
-/// terminal tab is on screen in that group — so none of its tabs may draw as
-/// the active one, in the strip or in the picker.
-///
-/// A null [groupId] means the focused group, for the picker, which lists the
-/// window's tabs and marks the one the keyboard is in.
+/// Whether group [groupId] is showing terminal **panes** right now — while the
+/// conversation or the empty state is up, no tab there may draw as active.
 bool _showingPanes(WidgetRef ref, {String? groupId}) {
   final group = groupId ?? ref.watch(focusedWorkspaceGroupProvider);
   // Before the window has a workspace there is nothing but the terminal.
@@ -20,13 +10,8 @@ bool _showingPanes(WidgetRef ref, {String? groupId}) {
   return _hostedSelection(ref, group) == null;
 }
 
-/// Every terminal tab, as [TabPicker] lists them.
-///
-/// Top-level because two things open that picker on the same list: the strip's
-/// overflow button, and quick open's "Switch terminal tab…". Built only while
-/// the picker is up, because this is the expensive half — telling two `zsh`
-/// tabs apart means knowing which session runs in which pane, and that is a
-/// query the strip itself never needs.
+/// Every terminal tab, as [TabPicker] lists them. Built only while the picker is
+/// up: telling two `zsh` tabs apart needs what the strip never asks for.
 List<TabEntry> terminalTabEntries(WidgetRef ref) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);
@@ -37,10 +22,8 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
     SessionChangeKind.title,
     SessionChangeKind.placement,
   });
-  // The panes that exist, not every session ever opened. The pane index makes
-  // this proportional to the tabs on screen — the same narrowing
-  // `activePaneSessionIdProvider` already made, and for the same reason: this
-  // was a full table scan run to label a strip of a dozen tabs.
+  // The panes that exist, not every session ever opened: the pane index makes
+  // this proportional to the tabs on screen rather than a full table scan.
   final titles = <String, String>{
     for (final record in ref.read(sessionDaoProvider).getByPaneIds([
       for (final tab in terminals.tabs) ...tab.layout.panes,
@@ -57,9 +40,8 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
           group: QuickOpenGroup.tabs,
           title: sessions.titleForTab(tab.id),
           subtitle: _whereabouts(tab, titles, sessions),
-          // A document is not a process, so it has neither a liveness to
-          // report nor a shell's glyph — "not running" would be true of a page
-          // and would say nothing about it.
+          // A document is not a process, so it has no liveness to report —
+          // "not running" would be true of a page and say nothing about it.
           detail:
               _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
               ? null
@@ -77,11 +59,8 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
 /// Settings tab, and nothing else so far.
 bool _isDocumentTab(TerminalTab tab) => tab.layout.panes.every(isDocumentPane);
 
-/// Where a tab is: the session running in its focused pane, the directory
-/// that pane is in, or both.
-///
-/// Without it a window full of `zsh` tabs is a list of identical rows, and a
-/// picker you cannot pick from is not an answer to anything.
+/// Where a tab is: the session running in its focused pane, the directory that
+/// pane is in, or both — without it a window of `zsh` tabs is identical rows.
 String? _whereabouts(
   TerminalTab tab,
   Map<String, String> sessionTitles,

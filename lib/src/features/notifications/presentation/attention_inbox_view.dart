@@ -14,13 +14,7 @@ import '../application/attention_inbox.dart';
 import '../domain/inbox_item.dart';
 
 /// The attention inbox: everything pending, newest first, each item one click
-/// from its source.
-///
-/// It is the *list* behind the number the status bar, the rail and the tray all
-/// show. Loop 42 gave those three a badge and a tray menu; what it could not
-/// give them was somewhere to stand and read what is waiting, or a record of a
-/// turn that finished while the window was in the background — a toast that
-/// nobody was there to see was simply lost.
+/// from its source — the list behind the number the badges show.
 class AttentionInboxView extends ConsumerWidget {
   const AttentionInboxView({super.key});
 
@@ -81,23 +75,8 @@ class AttentionInboxView extends ConsumerWidget {
   }
 }
 
-/// Somewhere for a follow-up to go, without leaving the list.
-///
-/// **It starts nothing.** The standing rule in this app is that no agent runs
-/// without the user's say-so, and a row that relaunched a session on one click
-/// would break it — which is exactly why the first version of the follow-up
-/// inbox only opened the session and left the rest to be done by hand. What
-/// this adds is a shorter path to [ContinueWithDialog], which is where the
-/// agent, the mode and the packet are chosen and where the user presses the
-/// button that launches. The confirmation is not skipped; only the hunt for it
-/// is.
-///
-/// Its own widget for the shape of the control, not for the answer: whether a
-/// continuation is possible is now read once per row by [_InboxRow], because
-/// the row's *menu* has to offer the same verb this button does and the two
-/// must not disagree. The property that mattered is unchanged — only follow-up
-/// rows read [sessionContinuationProvider] at all, and the answer costs three
-/// row lookups the inbox's other two hundred rows would learn nothing from.
+/// Somewhere for a follow-up to go without leaving the list. It starts nothing:
+/// the launch button is still [ContinueWithDialog]'s, only the hunt is shorter.
 class _ContinueAction extends StatelessWidget {
   const _ContinueAction({required this.sessionId});
 
@@ -118,15 +97,8 @@ class _ContinueAction extends StatelessWidget {
   }
 }
 
-/// One waiting thing, and the two verbs it is for.
-///
-/// The buttons that stay are the ones the row *is* for — dismissing a notice
-/// you have dealt with, and, on a follow-up, the "Continue with…" the row
-/// exists to ask. What the row had no way to offer was any of it without a
-/// mouse, so [RowContextMenu] adds the right-click, `Shift+F10`, the Menu key
-/// and the screen-reader action, over the same verbs plus the one the row's own
-/// tap performs. There is no `⋮` here because there is nothing behind it: every
-/// action this row has is already a visible verb.
+/// One waiting thing, and the two verbs it is for. No `⋮`: every action this
+/// row has is already a visible verb, and [RowContextMenu] adds the keyboard.
 class _InboxRow extends ConsumerWidget {
   const _InboxRow({
     required this.item,
@@ -235,9 +207,8 @@ class _InboxRow extends ConsumerWidget {
                         letterSpacing: 0,
                       ),
                     ),
-                    // The source's own words, when it gave any. Two lines: enough
-                    // to decide whether to open the session without opening it,
-                    // and not so much that the list stops being a list.
+                    // The source's own words, when it gave any. Two lines:
+                    // enough to decide without opening the session.
                     if (item.detail case final detail?)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
@@ -253,11 +224,8 @@ class _InboxRow extends ConsumerWidget {
                   ],
                 ),
               ),
-              // Only a follow-up, and deliberately: a follow-up is a session that
-              // *ended* and left something behind, which is the question
-              // "Continue with…" answers. Every other kind belongs to a session
-              // that is still there to be talked to, and opening the row is the
-              // whole of dealing with it.
+              // Only a follow-up: every other kind belongs to a session still
+              // there to be talked to, so opening the row deals with it.
               if (canContinue)
                 _ContinueAction(sessionId: item.session.openId),
               IconButton(
