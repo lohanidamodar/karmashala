@@ -4,17 +4,10 @@ import 'dart:convert';
 import 'package:vm_service/vm_service.dart';
 
 /// A Dart VM service that answers JSON-RPC in Dart, with no socket and no
-/// running app.
+/// running app: [client] is a real `VmService` and this is its far end.
 ///
-/// `VmService` takes a stream of incoming messages and a function to write
-/// one, so the whole protocol can be served in-process: [client] is a real
-/// `VmService` — the same class the app uses — and this object is the far end
-/// of it. That is the seam `VmServiceConnector` exists for, and it is why no
-/// test in this feature needs a `flutter run`.
-///
-/// Requests are recorded in [requests] in order. Unhandled methods answer
-/// method-not-found, the way a profile-mode build answers a call to an
-/// inspector extension that was compiled out.
+/// Unhandled methods answer method-not-found, the way a profile-mode build
+/// answers a call to an inspector extension that was compiled out.
 class FakeVmService {
   FakeVmService({
     this.isolateId = 'isolates/1',
@@ -34,8 +27,7 @@ class FakeVmService {
   final String isolateId;
   final String isolateName;
 
-  /// Streams whose `streamListen` is refused — how an older VM service without
-  /// `ToolEvent` behaves.
+  /// Streams whose `streamListen` is refused, as an older VM service does.
   final Set<String> refuseStreams;
 
   /// What `getSelectedSummaryWidget` answers with, or null for "nothing is
@@ -131,8 +123,7 @@ class FakeVmService {
     _incoming.add(jsonEncode(message));
   }
 
-  /// Pushes one event on [streamId]. [event] needs a `kind` and whatever
-  /// fields that kind carries.
+  /// Pushes one event on [streamId]; [event] needs a `kind`.
   void emit(String streamId, Map<String, Object?> event) => _send(
     <String, Object?>{
       'jsonrpc': '2.0',
@@ -234,9 +225,8 @@ class FakeVmService {
       };
 }
 
-/// What a VM service answers for a method it does not have, or a stream it
-/// will not open. Returned from a handler rather than thrown, so a test
-/// describes the far end's reply instead of our own call site failing.
+/// What a VM service answers for a method it does not have. Returned rather
+/// than thrown, so a test describes the far end's reply.
 class FakeRpcError {
   const FakeRpcError(this.code, this.message);
   const FakeRpcError.methodNotFound() : code = -32601, message = 'Method not found';
@@ -244,8 +234,7 @@ class FakeRpcError {
   final String message;
 }
 
-/// One `Flutter.Error` payload, shaped the way the framework serialises a
-/// `FlutterErrorDetails` tree — a summary node inside `properties`.
+/// One `Flutter.Error` payload: a summary node inside `properties`.
 Map<String, Object?> flutterErrorTree({
   String category = 'Exception caught by widgets library',
   String summary = 'The following StateError was thrown building Boom:',

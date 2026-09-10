@@ -2,11 +2,9 @@ import 'dart:io';
 
 import '../domain/dtd_instance.dart';
 
-/// The directory every Dart Tooling Daemon on this machine records itself in.
-///
-/// One file per live daemon, named after its pid. The directory is the durable
-/// half (§20): its path is stable, and the daemons in it die with the runs that
-/// started them — so a file here is a candidate, never a fact.
+/// The directory every Dart Tooling Daemon on this machine records itself in,
+/// one file per pid. The directory is the durable half (§20): a file in it is
+/// a candidate, never a fact.
 class DtdPidFiles {
   const DtdPidFiles(this.path);
 

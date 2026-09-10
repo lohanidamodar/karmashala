@@ -2,17 +2,9 @@ import 'dart:convert';
 
 import 'vm_service_uri.dart';
 
-/// The Dart Tooling Daemon, and what it will tell anyone who asks.
-///
-/// **This is the one reader that finds a run Karmashala did not start.** Every
-/// `flutter run` starts a DDS, and a DDS with DevTools enabled — the default —
-/// starts a DTD, which records itself in a file named after its pid. The
-/// daemon then answers `ConnectedApp.getVmServices` with each attached app's
-/// VM service URI, auth token included, and that call takes no secret.
-///
-/// Measured on the owner's machine 2026-09-09 against a `flutter run` started
-/// from a plain terminal; the pid file and the reply are pinned verbatim in
-/// `dtd_instance_test.dart`.
+/// The Dart Tooling Daemon — the one reader that finds a run Karmashala did
+/// not start, because it records itself in a pid file and will hand out each
+/// attached app's VM service URI, token included, to anyone who asks.
 class DtdInstance {
   const DtdInstance({
     required this.pid,
@@ -47,10 +39,8 @@ class DtdApp {
   final String? name;
 }
 
-/// The [DtdInstance] in a pid file, or null when the file is not one.
-///
-/// [name] is the file's name, which is the pid; a file not named after a
-/// number is somebody else's and is refused rather than parsed.
+/// The [DtdInstance] in a pid file, or null when the file is not one — [name]
+/// must parse as a pid, or the file is somebody else's.
 DtdInstance? parseDtdPidFile(String name, String contents) {
   final named = int.tryParse(name);
   if (named == null) return null;
@@ -85,11 +75,8 @@ DtdInstance? parseDtdPidFile(String name, String contents) {
   );
 }
 
-/// The apps in a `ConnectedApp.getVmServices` result.
-///
-/// Liberal in what it accepts: a daemon of another version, or a reply of
-/// another shape, yields an empty list rather than an exception — this runs
-/// against whatever Dart SDK the user happens to have.
+/// The apps in a `ConnectedApp.getVmServices` result. A daemon of another
+/// version yields an empty list rather than an exception.
 List<DtdApp> vmServicesInDtdReply(String resultJson) {
   final Object? decoded;
   try {
@@ -106,8 +93,7 @@ List<DtdApp> vmServicesInDtdReply(String resultJson) {
     if (entry is! Map) continue;
     final raw = entry['uri'];
     if (raw is! String) continue;
-    // Normalised here so a daemon that hands back an http form and one that
-    // hands back a ws form are the same row.
+    // So an http form and a ws form of the same daemon are one row.
     final uri = normaliseVmServiceUri(raw);
     if (uri == null || !uri.hasPort) continue;
     final name = entry['name'];
@@ -117,12 +103,8 @@ List<DtdApp> vmServicesInDtdReply(String resultJson) {
 }
 
 /// Where daemons write themselves down, or null when this environment does not
-/// say.
-///
-/// `dart tooling-daemon --list` reads the same directory, through
-/// `package:dart_data_home`. Only the Windows answer is measured here; the
-/// other two follow the package's rule and are unverified on this machine, so
-/// a missing variable yields null rather than a guessed path (§19).
+/// say. Only the Windows answer is measured; the POSIX ones follow
+/// `package:dart_data_home`'s rule unverified.
 String? dtdPidFileDirectory(
   Map<String, String> environment, {
   required bool isWindows,

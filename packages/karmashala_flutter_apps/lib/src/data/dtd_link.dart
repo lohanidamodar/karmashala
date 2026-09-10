@@ -4,10 +4,8 @@ import 'dart:io';
 
 import '../domain/dtd_instance.dart';
 
-/// One JSON-RPC channel to a tooling daemon.
-///
-/// An interface rather than a socket so tests answer in Dart, the same seam
-/// `VmServiceConnector` is.
+/// One JSON-RPC channel to a tooling daemon; an interface rather than a socket
+/// so tests answer in Dart.
 abstract interface class DtdChannel {
   Stream<String> get messages;
   void send(String message);
@@ -20,12 +18,9 @@ typedef DtdChannelOpener = Future<DtdChannel> Function(Uri wsUri);
 /// How long a daemon has to answer before we give up on it.
 const Duration kDtdTimeout = Duration(seconds: 5);
 
-/// A live conversation with one tooling daemon.
-///
-/// Two things are read: the apps it knows about now, and the ones it learns
-/// about later. The second is why the socket is held open — an IDE's daemon
-/// outlives every run inside it, so its pid file never changes when a new app
-/// starts, and only the event says so.
+/// A live conversation with one tooling daemon. The socket is held open
+/// because an IDE's daemon outlives its runs: only the event says a new app
+/// started.
 class DtdLink {
   DtdLink._(this._channel);
 
@@ -50,15 +45,13 @@ class DtdLink {
     );
     // Subscribed before anything is asked, so an app that starts during the
     // first read is an event rather than a miss. Best-effort: a daemon too old
-    // to carry the stream can still be *asked*, and losing the live half is
-    // better than losing the daemon.
+    // for the stream can still be asked.
     try {
       await link._call('streamListen', <String, Object?>{
         'streamId': 'ConnectedApp',
       });
     } on DtdUnavailable {
-      // Nothing to say: `apps()` still works, and a daemon that has gone away
-      // fails there too, where it is already handled.
+      // `apps()` still works, and a daemon that has gone away fails there too.
     }
     return link;
   }
@@ -155,10 +148,8 @@ class DtdLink {
   }
 }
 
-/// A daemon that could not be reached or would not answer.
-///
-/// A pid file outlives a crash, so this is ordinary rather than exceptional and
-/// the caller drops the daemon instead of reporting a failure.
+/// A daemon that could not be reached or would not answer. A pid file outlives
+/// a crash, so the caller drops the daemon rather than reporting a failure.
 class DtdUnavailable implements Exception {
   const DtdUnavailable(this.reason);
   final String reason;

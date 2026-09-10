@@ -3,18 +3,10 @@ import 'package:agent_cli/process.dart';
 
 import '../domain/flutter_sdk.dart';
 
-/// Where `flutter` is inside one execution environment, measured.
-///
-/// **Modelled on `AgentDiscoveryService` on purpose**, and it reuses that
-/// file's `locateRequest` and `parseAgentVersion` rather than re-deriving
-/// them: the lookup is the same question — *where is this CLI in this
-/// environment, and what version answers* — and a second spelling of `where` /
-/// `command -v` is a second thing to get wrong.
-///
-/// What it adds, and what nothing about an agent CLI needed, is a refusal
-/// **before** anything is spawned. See `windowsInstallRefusal`: a WSL
-/// distribution's PATH ordinarily finds the Windows Flutter through `/mnt/c`,
-/// and running it to read its version would already have done the damage.
+/// Where `flutter` is inside one execution environment, measured. What it adds
+/// over `AgentDiscoveryService` is a refusal *before* anything is spawned: a
+/// WSL PATH finds the Windows Flutter through `/mnt/c`, and running it is the
+/// damage (§17).
 class FlutterSdkService {
   FlutterSdkService({
     required this.runner,
@@ -25,19 +17,13 @@ class FlutterSdkService {
   final CommandRunner runner;
   final ExecutionEnvironment environment;
 
-  /// The `flutter` a person named for this environment, or null.
-  ///
-  /// Handed in rather than read, so this stays a pure measurer with no opinion
-  /// about where a preference is kept — `FlutterSdkReadings` is the one place
-  /// that knows, and a test can put a path here without standing up settings.
+  /// The `flutter` a person named for this environment, or null. Handed in
+  /// rather than read, so this stays a pure measurer.
   final String? handSetExecutable;
 
   EnvironmentKind get _kind => environment.kind;
 
   /// Locates `flutter` and reads its version, or refuses in words.
-  ///
-  /// [now] is passed in rather than read, so the age on the reading is the
-  /// clock the rest of the app is using.
   Future<FlutterSdkReading> read(DateTime now) async {
     final reachability = reachabilityRequest(_kind);
     if (reachability != null) {
@@ -52,12 +38,9 @@ class FlutterSdkService {
       }
     }
 
-    // **The person's own answer comes first, and PATH is never asked.**
-    // §20's third rule: a hand-set path is never overruled by discovery — so
-    // it is not "tried and fallen back from" either, because a fallback that
-    // quietly finds something else is how a user comes to believe their row is
-    // being used when it is not. A hand-set path that will not run is refused
-    // by name, and clearing the row is what restores the PATH probe.
+    // §20's third rule: a hand-set path is never overruled by discovery, and
+    // never fallen back from — a silent fallback is how a user comes to
+    // believe their row is in use when it is not.
     final handSet = handSetExecutable?.trim();
     if (handSet != null && handSet.isNotEmpty) {
       return _readHandSet(now, handSet);
@@ -108,9 +91,7 @@ class FlutterSdkService {
             '${error.message}',
       );
     }
-    // A version we could not read is not a Flutter we refuse to use — the path
-    // is still the path. It is recorded as unknown rather than as a number
-    // nobody measured (§19).
+    // A version we could not read is recorded as unknown, not refused (§19).
     return FlutterSdkReading(
       environmentId: environment.id,
       readAt: now,
@@ -119,14 +100,9 @@ class FlutterSdkService {
     );
   }
 
-  /// The reading for a path a person named for this environment.
-  ///
-  /// The §17 refusal applies here **exactly as it does to a located path, and
-  /// before anything is spawned**: a person can type
-  /// `/mnt/c/Users/…/flutter/bin/flutter` into the field as easily as WSL's
-  /// PATH can resolve to it, and running it is the same disaster either way.
-  /// The harm is in the running, not in the looking. Only the sentence differs
-  /// — see `windowsInstallRefusal`'s `handSet`.
+  /// The reading for a path a person named. The §17 refusal applies before
+  /// anything is spawned: a typed `/mnt/c/…/flutter` is the same disaster as a
+  /// resolved one.
   Future<FlutterSdkReading> _readHandSet(DateTime now, String path) async {
     final windows = windowsInstallRefusal(_kind, path, handSet: true);
     if (windows != null) {
@@ -153,8 +129,7 @@ class FlutterSdkService {
             'Environments, or clear it to look on PATH again.',
       );
     }
-    // A version we could not read is not a path we refuse — the same rule the
-    // PATH branch follows, and for the same reason (§19).
+    // As on the PATH branch: unreadable version, not a refused path (§19).
     return FlutterSdkReading(
       environmentId: environment.id,
       readAt: now,
