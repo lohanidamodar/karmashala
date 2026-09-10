@@ -74,6 +74,30 @@ what unblocks the reader, then the pipe handles); `read_loop` and
 `wait_exit_thread` free their options; both `CreateThread` handles are
 `CloseHandle`d, the Win32 counterpart of `pthread_detach`.
 
+`pty_destroy` **returns immediately**, and on Windows that is the contract.
+`ClosePseudoConsole` does not return until the console host behind the pty has
+gone, and that host is a child of the *app* rather than of the shell, so
+killing the pane's process tree does not settle it — a child that ignores the
+kill holds it open indefinitely. On 2026-09-09 the quit soak lost two cycles in
+twenty to it, and on 2026-09-10 a minidump of a hung 1.20.1 caught the app's
+main thread blocked inside it with all four headless console hosts still alive.
+A synchronous call that never returns takes the isolate with it, so no
+Dart-side timeout could have rescued either.
+
+So `pty_destroy` now closes the input write side on the calling thread — nothing
+blocks on it, and it gives the child EOF on stdin — and hands `ClosePseudoConsole`,
+the output read side and the `free` to a detached `CreateThread` worker. The
+output read side stays behind the console close because the reader thread is
+blocked in `ReadFile` on that exact handle; closing it from another thread is
+the Win32 shape of the fd-recycling hazard the POSIX half carries a self-pipe to
+avoid. If `CreateThread` fails, all three are left to the OS on purpose:
+blocking the caller is the failure this exists to prevent.
+
+`test/tooling/pty_destroy_contract_test.dart` is the source guard, and
+`test/conpty_destroy_harness.c` (driven by
+`test/tooling/pty_destroy_timing_test.dart`, `live-timing`) measures it against
+a real ConPTY whose child swallows `CTRL_CLOSE_EVENT`.
+
 Also: the bare **`Sleep(1000)`** between `CreatePseudoConsole` and
 `CreateProcessW` is gone. `pty_create` is a synchronous FFI call, so upstream
 spent that second on whichever isolate called `Pty.start` — for this app the UI
