@@ -1,6 +1,6 @@
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_command_runner.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ssh/runner.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('posixQuote', () {

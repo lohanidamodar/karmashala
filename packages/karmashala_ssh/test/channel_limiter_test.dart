@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:karmashala/src/features/ssh/data/channel_limiter.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ssh/connection.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('lets work through up to the limit', () async {

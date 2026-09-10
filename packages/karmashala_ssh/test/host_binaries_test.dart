@@ -1,11 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/ssh/data/host_binaries.dart';
-import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
-import 'package:karmashala/src/features/ssh/data/host_deployer.dart';
-import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_ssh/host.dart';
 
 /// Real files in a real directory, because what is under test is a directory
 /// listing and the order the filesystem hands it back in.

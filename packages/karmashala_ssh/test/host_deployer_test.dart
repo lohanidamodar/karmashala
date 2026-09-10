@@ -2,11 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/ssh/data/host_binaries.dart';
-import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
-import 'package:karmashala/src/features/ssh/data/host_deployer.dart';
-import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_host/protocol.dart';
 
 /// A machine that answers scripted commands and speaks the protocol back over
