@@ -10,6 +10,12 @@ import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'package:karmashala/src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala/src/features/ssh/data/host_binaries.dart';
+import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
+import 'package:karmashala/src/features/ssh/data/host_deployer.dart';
+import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
+import 'package:karmashala/src/features/terminal/data/host_pane_link.dart';
+import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/remote_file_browser.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
@@ -407,6 +413,104 @@ void main() {
         reason: 'this suite expects Claude Code installed on the remote host',
       );
     });
+  });
+
+  group('deploying the session host', () {
+    // The one thing no fake could ever answer, and the reason item 3 existed:
+    // half a deploy is shell commands and half is SFTP, and only the shell
+    // expands `$HOME`. Against a fake that expanded it for both, a deployer
+    // that uploaded to a literal `$HOME/.karmashala/bin/…` was green for a day
+    // while every pane on the owner's droplet silently fell back to tmux.
+    //
+    // It uploads ~7 MB and leaves `serve` running, which is exactly the state
+    // the app expects to find; nothing here touches tmux.
+    late HostBinarySource binaries;
+
+    setUp(() {
+      final directory = _env('KARMASHALA_HOST_BINARIES');
+      binaries = directory == null
+          ? DirectoryHostBinaries.standard()
+          : DirectoryHostBinaries([Directory(directory)]);
+    });
+
+    test('resolves the remote home and installs under it', () async {
+      final deployer = HostDeployer(
+        target: SshHostDeployTarget(await trusted()),
+        binaries: binaries,
+      );
+
+      final platform = await deployer.measurePlatform();
+      expect(platform, isNotNull, reason: '`uname -sm` on $address');
+      final binary = await binaries.binaryFor(platform!);
+      if (binary == null) {
+        // A self-skip that says what it looked for, never a silent pass (§18).
+        // ignore: avoid_print
+        print(
+          '  skipped: no host binary for ${platform.targetKey} '
+          '(set KARMASHALA_HOST_BINARIES to the directory holding them; '
+          'this build has ${(await binaries.availableTargets()).join(', ')})',
+        );
+        return;
+      }
+
+      final home = await deployer.resolveHome();
+      expect(home, isNotNull, reason: r'$HOME must be resolvable before anything is written');
+      expect(home, startsWith('/'));
+
+      final deployment = await deployer.deploy();
+      // ignore: avoid_print
+      print('  ${deployment.status.name}: ${deployment.reason}');
+
+      expect(
+        deployment.status,
+        HostDeploymentStatus.ready,
+        reason: deployment.reason,
+      );
+      expect(deployment.remotePath, startsWith('$home/.karmashala/bin/'));
+      expect(deployment.remotePath, isNot(contains(r'$')));
+      expect(deployment.hostVersion, isNotNull);
+      expect(deployment.protocolVersion, kProtocolVersion);
+
+      // The file is really there, under the resolved path and executable.
+      final listed = await SshHostDeployTarget(
+        await trusted(),
+      ).run('test -x ${deployment.remotePath} && echo executable');
+      expect(listed.stdout, contains('executable'));
+    }, timeout: const Timeout(Duration(minutes: 5)));
+
+    test('a pane can open a session on it and close it again', () async {
+      final target = SshHostDeployTarget(await trusted());
+      final deployment = await HostDeployer(target: target, binaries: binaries).deploy();
+      if (deployment.status != HostDeploymentStatus.ready) {
+        // ignore: avoid_print
+        print('  skipped: ${deployment.status.name} — ${deployment.reason}');
+        return;
+      }
+
+      final link = await HostPaneLink.open(
+        await target.exec('${deployment.remotePath} attach'),
+        clientId: 'live-ssh-test',
+      );
+      // A scratch id of our own, so this can never collide with a session a
+      // real pane owns on that machine.
+      final sessionId = 'karmashala_live_test_${DateTime.now().millisecondsSinceEpoch}';
+      try {
+        final opened = await link.openSession(
+          sessionId: sessionId,
+          argv: const ['/bin/sh', '-l'],
+          environment: const {'TERM': 'xterm-256color'},
+          columns: 80,
+          rows: 24,
+        );
+        expect(opened.sessionId, sessionId);
+        // ignore: avoid_print
+        print('  attached: ${opened.sessionId} on ${link.welcome?.hostVersion}');
+        // Ended rather than left behind: this is a test's session, not a user's.
+        await link.closeSession(sessionId);
+      } finally {
+        await link.close();
+      }
+    }, timeout: const Timeout(Duration(minutes: 5)));
   });
 
   group('remote file browsing over SFTP', () {
