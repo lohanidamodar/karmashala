@@ -16,13 +16,10 @@ import 'terminal_grid_status_source.dart';
 /// 5. [AgentActivityStatus.unknown].
 ///
 /// Step 2 is the one that needs explaining. A transcript structurally cannot
-/// express "a modal is on screen waiting for you" — that is why Loop 28 made
-/// those two states hook-only — but a screen can, because the prompt is drawn on
-/// it. So the grid is allowed to *escalate* to a state no other source but a
-/// hook could have produced, and is otherwise the last resort it was introduced
-/// as. Without that split, an agent sitting on an approval dialog would report
-/// `working` from a transcript that stopped mid-turn, which is worse than
-/// `unknown` and much worse than the truth.
+/// express "a modal is on screen waiting for you" and a screen can, so the grid
+/// may *escalate* to a state no source but a hook could produce, and is
+/// otherwise the last resort. Without that split, an agent sitting on an
+/// approval dialog reports `working` from a transcript that stopped mid-turn.
 class AgentStatusService {
   AgentStatusService({
     required this.registry,
@@ -68,8 +65,7 @@ class AgentStatusService {
   }
 
   /// The hook's answer for [query], when one exists and is fresh enough to
-  /// believe. An in-memory map lookup, and therefore free to ask about every
-  /// known session on every cycle.
+  /// believe. An in-memory lookup, so it is free to ask on every cycle.
   AgentStatusReport? hookReport(AgentStatusQuery query, DateTime now) {
     final hook = hookReports.latest(query.agentId, query.sessionId);
     if (hook == null) return null;
@@ -96,15 +92,15 @@ class AgentStatusService {
       grid.status == AgentActivityStatus.awaitingApproval ||
       grid.status == AgentActivityStatus.failed;
 
-  /// Whether the transcript still has to be consulted once [hook] and [grid]
-  /// are known. The one expensive question in the precedence, asked separately
-  /// so a scheduler can decide whether this session is worth a disk read at all.
+  /// Whether the transcript still has to be consulted once [hook] and [grid] are
+  /// known — the one expensive question, asked separately so a scheduler can
+  /// decide whether this session is worth a disk read.
   bool needsStateFile(AgentStatusReport? hook, AgentStatusReport? grid) =>
       hook == null && !(grid != null && escalates(grid));
 
   /// The precedence itself, with every source already gathered. Does no I/O, so
-  /// a registry holding a cached [state] report can recompute a session's status
-  /// as often as it likes.
+  /// a registry holding a cached [state] report can recompute as often as it
+  /// likes.
   AgentStatusReport compose({
     required AgentStatusQuery query,
     required DateTime now,

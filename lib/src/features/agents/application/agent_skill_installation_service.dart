@@ -41,9 +41,8 @@ class AgentSkillInstallation {
   /// row that is not a fault: there was no agent to teach.
   final bool agentPresent;
 
-  /// Whether this row is an admission of ignorance rather than a result — the
-  /// store home did not answer inside the budget. §19's rule: an unobserved
-  /// state does not borrow an observed one's words.
+  /// Whether this row is an admission of ignorance rather than a result: the
+  /// store home did not answer inside the budget.
   final bool unknown;
 
   /// Why there are fewer than [declared], in the host's words. `null` when
@@ -57,9 +56,9 @@ class AgentSkillInstallation {
 class AgentSkillInstallationReport {
   const AgentSkillInstallationReport(this.results, {this.checkedAt});
 
-  /// **Before any sweep has finished**, which is not a sweep that found
-  /// nothing. The panel says the skills are not installed *yet* rather than
-  /// saying nothing, which would read as "they are there".
+  /// **Before any sweep has finished**, which is not a sweep that found nothing.
+  /// The panel says the skills are not installed *yet* rather than saying
+  /// nothing, which would read as "they are there".
   static const AgentSkillInstallationReport unswept =
       AgentSkillInstallationReport(<AgentSkillInstallation>[]);
 
@@ -106,16 +105,12 @@ final agentSkillInstallationReportProvider =
 /// Writes Karmashala's skills into the agent CLIs at startup, and takes them
 /// back out when asked.
 ///
-/// Deliberately thinner than [AgentHookInstallationService], because a skill
-/// has none of what makes a hook complicated. There is no address, so no
-/// environment is unreachable and none has to be skipped; there is no token,
-/// so nothing dies with the process and nothing is retired on the way out; and
-/// there is no config file of the user's to splice, so nothing here can lose
-/// the race that made hook entries constants.
-///
-/// What it keeps is the shape: every located store, every agent that declares
-/// a skills root, one row each, bounded so a `\\wsl.localhost` share that
-/// stops answering costs one row rather than the sweep.
+/// Deliberately thinner than [AgentHookInstallationService]: a skill has no
+/// address, so nothing is unreachable; no token, so nothing is retired on the
+/// way out; and no config file of the user's to splice, so nothing here can lose
+/// the race that made hook entries constants. What it keeps is the shape — every
+/// located store, every agent that declares a skills root, one row each, bounded
+/// so a `\\wsl.localhost` share that stops answering costs one row.
 class AgentSkillInstallationService {
   AgentSkillInstallationService(
     this._ref, {
@@ -127,9 +122,8 @@ class AgentSkillInstallationService {
        _skills = skills ?? kKarmashalaSkills;
 
   /// The same ten seconds [AgentHookInstallationService.defaultStoreBudget]
-  /// argues for, and for the same reason: the first touch of a WSL store home
-  /// over the share starts a stopped distribution, so the honest failure here
-  /// is slow rather than broken.
+  /// argues for: the first touch of a WSL store home over the share starts a
+  /// stopped distribution, so the honest failure here is slow, not broken.
   static const Duration defaultStoreBudget = Duration(seconds: 10);
 
   final Ref _ref;
@@ -141,13 +135,10 @@ class AgentSkillInstallationService {
   /// them at once. Cleared each sweep; see [abandon].
   final List<SkillSweepDeadline> _deadlines = <SkillSweepDeadline>[];
 
-  /// Stops every sweep in flight from touching the filesystem again.
-  ///
-  /// **What shutdown calls instead of awaiting.** A sweep writes constant bytes
-  /// into somebody's home and there is nothing half-written to finish — each
-  /// `SKILL.md` is staged and renamed — so the app owes it no grace period. It
-  /// owes it an ending, which is this: free, synchronous, and needing no slice
-  /// of the shutdown budget.
+  /// Stops every sweep in flight from touching the filesystem again — **what
+  /// shutdown calls instead of awaiting**. Each `SKILL.md` is staged and renamed
+  /// and the bytes are constant, so there is nothing half-written to finish and
+  /// no grace period is owed.
   void abandon() {
     for (final deadline in _deadlines) {
       deadline.giveUp();
@@ -168,9 +159,8 @@ class AgentSkillInstallationService {
   /// Removes every skill [installAll] wrote. The complete removal, for a user
   /// who wants this app out of their agents' configuration.
   ///
-  /// Nothing calls this on the way out, and that is the decision rather than an
-  /// omission: a skill has no volatile half, so taking constant bytes out on
-  /// quit to put identical ones back on the next start is the race
+  /// Nothing calls this on the way out, by decision: a skill has no volatile
+  /// half, and putting identical bytes back next start is the race
   /// `AgentHookInstaller` was rewritten to avoid.
   Future<List<AgentSkillInstallation>> uninstallAll() => _forEachStore(
     verb: 'uninstall',
@@ -249,9 +239,9 @@ class AgentSkillInstallationService {
   }) => body().timeout(
     _storeBudget,
     onTimeout: () {
-      // **The wait is what the bound ends; the work has to be told.** Without
-      // this the install goes on creating directories under a store home the
-      // app has already reported as unknown, at a moment nothing owns.
+      // **The wait is what the bound ends; the work has to be told.** Otherwise
+      // the install goes on creating directories under a store home the app has
+      // already reported as unknown.
       deadline.giveUp();
       final budget = _storeBudget.inSeconds >= 1
           ? '${_storeBudget.inSeconds}s'

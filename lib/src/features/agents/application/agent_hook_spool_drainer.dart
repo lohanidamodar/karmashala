@@ -19,23 +19,17 @@ class AgentHookSpoolSource {
   final Directory directory;
 
   /// The distribution this store lives in, when it lives in one. Read only to
-  /// decide whether it is worth listing the directory at all: see
-  /// [AgentHookSpoolDrainer.runningDistributions].
+  /// decide whether listing the directory is worth it at all.
   final String? wslDistribution;
 }
 
 /// Which WSL distributions are running, without starting any that are not.
 ///
-/// `wsl.exe -l --running -q` is answered by the service on the Windows side,
-/// so it cannot wake a distribution — which is the entire reason it is here.
-/// Measured at 188 ms on the owner's machine.
-///
-/// **All 188 ms of it used to be the UI isolate's**, every [runningRefresh],
-/// for as long as a WSL store was being polled: creating a process is
-/// synchronous work charged to the isolate that asks (see
-/// `agent_cli`'s `process_spawn.dart`), and this is a `wsl.exe`, the dearest
-/// kind. It goes through [sharedProcessSpawner] for the same reason the command
-/// runners do, and by the same route — the app-wide worker isolate.
+/// `wsl.exe -l --running -q` is answered by the service on the Windows side, so
+/// it cannot wake a distribution — the entire reason it is here. Measured at
+/// 188 ms, all of which used to be the UI isolate's: creating a process is
+/// synchronous work charged to whoever asks, so this goes through
+/// [sharedProcessSpawner]'s worker isolate like the command runners do.
 Future<Set<String>> wslRunningDistributions() async {
   try {
     final result = await sharedProcessSpawner.run(
@@ -51,48 +45,28 @@ Future<Set<String>> wslRunningDistributions() async {
   }
 }
 
-/// Polls the spool directories WSL agents write their hook payloads into.
-///
-/// **Why a poll and not a push.** A WSL store is reached over
-/// `\\wsl.localhost`, and `Directory.watch` on that share returns a
-/// subscription that never yields an event — measured, not assumed. The
-/// alternative push would be a long-lived `wsl.exe` relay printing events on
-/// stdout, which costs a held process per distribution and a framing format to
-/// buy back a latency nobody can feel: a listing of that share costs **0.68 ms
-/// warm**, so a tick every [interval] is a rounding error next to the
-/// five-second status poll it feeds.
-///
-/// **A rounding error only while the share answers.** That cost is the
-/// distribution's to pay, not this app's, and it has no ceiling — so every
-/// operation the drain performs is asynchronous rather than synchronous. A
-/// `listSync` here used to put the whole wait on the isolate, four hundred
-/// milliseconds apart, for as long as the distribution took; `AgentHookSpool`
-/// carries the measurements and `core/util/file_picking.dart` carries what an
-/// occupied isolate does to a native file dialog that is being created at the
-/// same moment.
-///
-/// **It will not wake a distribution the user shut down.** The share is served
-/// by a plan9 daemon *inside* the distribution, so listing it starts one that
-/// is stopped — and an app that quietly resurrects a distribution every
-/// 400 ms after `wsl --shutdown` is a worse neighbour than one that misses a
-/// hook. So the running set is refreshed every [runningRefresh] by a query that
-/// starts nothing, and a distribution that is not in it is skipped. Nothing is
-/// lost by skipping: a distribution with no processes has no agent to fire a
-/// hook. When it comes back it reappears in the set and draining resumes, and
-/// the payloads that were written before it stopped are still in the directory.
-///
-/// Fails **open**: a running-set query that errors is read as "all of them",
-/// because polling a distribution needlessly costs a millisecond and skipping
-/// one wrongly costs every status it would have reported.
-/// How the drainer arms its polling loop, and how it takes it down.
-///
-/// The same shape `ScrollbackAutosave` established for the terminal's only
-/// periodic timer: a pair of functions with real-`Timer` defaults, so the app
-/// runs on a clock and a test steps one.
+/// How the drainer arms its polling loop, and how it takes it down: the shape
+/// `ScrollbackAutosave` established, a pair of functions with real-`Timer`
+/// defaults, so the app runs on a clock and a test steps one.
 typedef PeriodicSchedule =
     Object Function(Duration interval, void Function() tick);
 typedef CancelPeriodic = void Function(Object handle);
 
+/// Polls the spool directories WSL agents write their hook payloads into.
+///
+/// **A poll and not a push** because `Directory.watch` over `\\wsl.localhost`
+/// returns a subscription that never yields an event — measured — while a
+/// listing of that share costs 0.68 ms warm. Every operation here is
+/// asynchronous: that cost belongs to the distribution and has no ceiling, and a
+/// `listSync` put the whole wait on the UI isolate every [interval].
+///
+/// **It will not wake a distribution the user shut down.** The share is served
+/// by a plan9 daemon *inside* the distribution, so listing it starts a stopped
+/// one; the running set is refreshed every [runningRefresh] by a query that
+/// starts nothing, and a distribution missing from it is skipped. Nothing is
+/// lost — one with no processes has no agent to fire a hook, and its payloads
+/// are still there when it comes back. Fails **open**: a failed running-set
+/// query is read as "all of them".
 class AgentHookSpoolDrainer {
   AgentHookSpoolDrainer({
     required this.onEvent,
@@ -121,12 +95,10 @@ class AgentHookSpoolDrainer {
   /// See the class doc. Injected so a test never spawns `wsl.exe`.
   final Future<Set<String>> Function() runningDistributions;
 
-  /// How the loop is armed, and how it is taken down. Injected exactly the way
-  /// `ScrollbackAutosave`'s `DelayedSchedule` is, and for the same reason: a
-  /// real `Timer` makes a test **wait**, and a test that waits is measuring
-  /// this machine's scheduler rather than this class. With the seam a case
-  /// fires the tick the drainer armed and counts what that tick did — the
-  /// repo's rule that work is counted and never timed.
+  /// How the loop is armed, and how it is taken down. Injected the way
+  /// `ScrollbackAutosave`'s `DelayedSchedule` is: a real `Timer` makes a test
+  /// **wait**, and a test that waits measures this machine's scheduler rather
+  /// than this class.
   final PeriodicSchedule schedule;
   final CancelPeriodic cancelSchedule;
 
@@ -139,23 +111,17 @@ class AgentHookSpoolDrainer {
   Future<void>? _inFlight;
 
   /// The drain the last tick started, or a completed future when none has run.
-  ///
-  /// Exists for the one caller that has to know when a tick it *fired* has
-  /// finished: a test stepping the loop through [schedule]. The alternative is
-  /// waiting a duration and hoping, which is what this class's cases used to
-  /// do and what the repo's rule forbids. The app never reads it — nothing is
-  /// meant to wait on a poll.
+  /// For the one caller that has to know when a tick it *fired* has finished: a
+  /// test stepping the loop through [schedule]. The app never reads it.
   Future<void> get settled => _inFlight ?? Future<void>.value();
 
   /// The directories being polled, or none. Exposed for the settings surface
   /// and for tests; the app has no reason to read it.
   List<AgentHookSpoolSource> get sources => List.unmodifiable(_sources);
 
-  /// Starts polling [sources], replacing whatever was being polled before.
-  ///
-  /// An empty list stops the timer rather than running it over nothing, which
-  /// is the usual case: a machine with no WSL, or one where every store went to
-  /// the HTTP transport.
+  /// Starts polling [sources], replacing whatever was being polled before. An
+  /// empty list stops the timer rather than running it over nothing, which is
+  /// the usual case: a machine with no WSL, or one entirely on HTTP.
   void watch(List<AgentHookSpoolSource> sources) {
     // A disposed drainer stays disposed: `dispose` is what shutdown calls, and
     // a late `watch` must not put the loop back on a share that is going away.
@@ -170,22 +136,19 @@ class AgentHookSpoolDrainer {
     });
   }
 
-  /// One pass over every source. Public so a test can step the loop.
-  ///
-  /// Re-entrant calls are dropped rather than queued: a tick that is still
-  /// waiting on a distribution has nothing to gain from a second one behind it,
-  /// and the files it has not read yet will still be there.
+  /// One pass over every source. Public so a test can step the loop. Re-entrant
+  /// calls are dropped rather than queued: the files a waiting tick has not read
+  /// yet will still be there.
   Future<void> drainOnce() async {
     if (_draining || _disposed) return;
     _draining = true;
     try {
       final running = await _runningSet();
-      // **Checked between sources, not once at the top.** `dispose` cancels
-      // the timer, which ends the *next* tick; a drain already awaiting a
-      // distribution goes on reading and deleting payloads under directories
-      // nobody owns any more — somebody's store home after a quit, and in a
-      // test the temp directory `tearDown` is already walking, which is where
-      // the `PathNotFoundException` on `%TEMP%\karmashala_drainer_*` came from.
+      // **Checked between sources, not once at the top.** `dispose` cancels the
+      // timer, which ends the *next* tick; a drain already awaiting a
+      // distribution would go on deleting payloads under directories nobody owns
+      // any more — somebody's store home after a quit, or the temp directory a
+      // test's `tearDown` is already walking.
       for (final source in _sources) {
         if (_disposed) return;
         final distribution = source.wslDistribution;

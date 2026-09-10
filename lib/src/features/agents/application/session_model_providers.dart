@@ -8,10 +8,9 @@ import '../../settings/application/settings_controller.dart';
 import 'package:agent_cli/descriptors.dart';
 
 /// The model one session will run on, and everything a control needs to say so.
-///
-/// A value with `==`, not a record, because it is what `ref.watch` compares: a
-/// state that never equals itself would repaint the chip on every session
-/// signal, which is precisely the cost this feature was asked not to add.
+/// A value with `==` rather than a record, because it is what `ref.watch`
+/// compares: a state that never equals itself would repaint the chip on every
+/// session signal.
 @immutable
 class SessionModelState {
   const SessionModelState({
@@ -33,8 +32,8 @@ class SessionModelState {
   final String? modelId;
 
   /// What the per-agent default in Settings names, or null for "let the agent
-  /// choose". Carried so the menu can say what "follow the default" resolves
-  /// to without reading the setting a second time.
+  /// choose" — carried so the menu can say what "follow the default" resolves to
+  /// without reading the setting twice.
   final String? defaultModelId;
 
   /// Whether [modelId] came from the default rather than from a choice made for
@@ -63,17 +62,12 @@ class SessionModelState {
 /// The model [sessionId] runs on, resolved by [SessionLauncher] and by nothing
 /// else.
 ///
-/// **Watches three concerns and not `title`.** `settings` is the per-session
-/// write the chip itself makes; `membership` and `placement` cover the row
-/// going away or changing which agent installation it names. Deliberately not
-/// `status`: whether the agent is idle decides what a *click* does, not what
-/// the chip says, and it is read at the moment of the click instead — a chip
-/// that woke on every status transition would tick through every turn of every
-/// session for a label that never changed.
-///
-/// Deliberately not `SessionSignals.forSession`, which would be narrower per
-/// row and wider per kind: it wakes on `title`, and the CLI store sweep renames
-/// rows on a timer without the user doing anything at all.
+/// **Watches three concerns and not `title`.** Deliberately not `status` either:
+/// whether the agent is idle decides what a *click* does, not what the chip
+/// says, and a chip that woke on every status transition would tick through
+/// every turn of every session for a label that never changed. And not
+/// `SessionSignals.forSession`, which wakes on `title` — the CLI store sweep
+/// renames rows on a timer with nobody doing anything.
 final sessionModelProvider = Provider.autoDispose
     .family<SessionModelState?, String>((ref, sessionId) {
       ref.watchSessionKinds(const {
@@ -86,10 +80,8 @@ final sessionModelProvider = Provider.autoDispose
           .effectiveModelFor(sessionId);
       if (effective == null) return null;
       // And the one setting this chip follows, selected rather than watched
-      // whole: a window resize writes settings too, and a chip that repainted
-      // for that would be the cost this feature was asked not to add. The value
-      // still comes out of the launcher's resolution above; this only decides
-      // *when* to resolve again.
+      // whole: a window resize writes settings too. The value still comes out of
+      // the launcher's resolution above; this only decides *when* to resolve.
       final agentId = effective.descriptor?.id;
       ref.watch(
         settingsControllerProvider.select(
@@ -105,10 +97,8 @@ final sessionModelProvider = Provider.autoDispose
       );
     });
 
-/// The same, for the session the app chrome is following.
-///
-/// Shaped after `focusedUsageInstallationProvider`: the status bar shows the
-/// session you are looking at, and **nothing at all** when there is none.
+/// The same, for the session the app chrome is following: the status bar shows
+/// the session you are looking at, and **nothing at all** when there is none.
 final focusedSessionModelProvider = Provider.autoDispose<SessionModelState?>((
   ref,
 ) {

@@ -72,7 +72,6 @@ class ClaudeAccountsController extends Notifier<List<ClaudeAccount>> {
     final dao = ref.read(claudeAccountDaoProvider);
     final paths = await _pathsFor(installation);
 
-    // Snapshot the outgoing account first so switching is always reversible.
     try {
       final current = await service.capture(paths);
       dao.upsert(current);

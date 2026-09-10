@@ -5,14 +5,11 @@ import 'package:agent_cli/descriptors.dart';
 
 /// Derives an agent's status from its own session/state file.
 ///
-/// This deliberately reuses what CLI detection already knows: the transcript's
-/// path comes from `DetectedSession`/`ImportedSession`, which the store readers
-/// produced. Only the classification is new, and it reads a bounded **tail**
-/// rather than re-parsing the whole file — a status poll must stay cheap.
-///
-/// Classification is data, not code: each agent's [AgentStateFileRules] say
-/// which record shapes mean what. Anything unmatched is `unknown`, never a
-/// guess.
+/// Reuses what CLI detection already knows — the transcript's path comes from
+/// `DetectedSession`/`ImportedSession` — and reads a bounded **tail** rather
+/// than re-parsing the whole file, because a status poll must stay cheap.
+/// Classification is data: each agent's [AgentStateFileRules] say which record
+/// shapes mean what, and anything unmatched is `unknown`, never a guess.
 class AgentStateFileStatusSource {
   const AgentStateFileStatusSource({this.tailBytes = 65536});
 
@@ -22,18 +19,15 @@ class AgentStateFileStatusSource {
   /// How many records before the last one to keep, for an agent whose rules
   /// walk past bookkeeping (`AgentStateFileRules.looksPastUnclassifiedRecords`).
   ///
-  /// Eight, from measurement rather than taste: replaying the owner's 52 Codex
-  /// rollouts, 48 need no walk at all and the rest need three or four. Double
-  /// the observed worst is enough, and a cap is what keeps a walk from turning
-  /// into a search back through the file for any record that says something.
+  /// Eight, from measurement: replaying the owner's 52 Codex rollouts, 48 need
+  /// no walk at all and the rest need three or four. The cap is what keeps a
+  /// walk from turning into a search back through the file.
   static const int earlierRecordsKept = 8;
 
-  /// How much of those records' text to keep, in bytes.
-  ///
-  /// A snapshot is cached for the life of a tracked session, so this is memory
-  /// held per session and it has to be flat. They are kept as **raw lines** and
-  /// decoded only if the last record says nothing, which is the rare case — so
-  /// the usual cost of the walk is this many bytes and no CPU at all.
+  /// How much of those records' text to keep, in bytes. A snapshot is cached for
+  /// the life of a tracked session, so they are kept as **raw lines** and decoded
+  /// only if the last record says nothing — the usual cost of the walk is these
+  /// bytes and no CPU at all.
   static const int earlierBytesKept = 8192;
 
   /// Reads [filePath] and classifies it, or returns `null` when there is
@@ -52,14 +46,10 @@ class AgentStateFileStatusSource {
 
   /// Stats [filePath] and, when it has changed since [known], re-reads its tail.
   ///
-  /// Split out of [read] so a scheduler can keep the expensive half — the tail
-  /// read and its JSON decode — and pay only a `stat` for a transcript nothing
-  /// has written to since it last looked. A quiet session then costs the same
-  /// whether it is sampled once a minute or once a second, which is what makes
-  /// a fair rotation over hundreds of sessions affordable.
-  ///
-  /// Returns `known` itself when the file is unchanged, and `null` when the file
-  /// is missing or unreadable — the same answer as "nothing to say".
+  /// Split out of [read] so a scheduler pays only a `stat` for a transcript
+  /// nothing has written to since it last looked, which is what makes a fair
+  /// rotation over hundreds of sessions affordable. Returns `known` itself when
+  /// the file is unchanged, and `null` when it is missing or unreadable.
   Future<StateFileSnapshot?> probe(
     String filePath, {
     StateFileSnapshot? known,
@@ -90,8 +80,8 @@ class AgentStateFileStatusSource {
   ///
   /// Pure, and re-runnable against a cached snapshot: the one time-dependent
   /// rule — a `working` record only means working while the file is still being
-  /// written — is evaluated against [now] here rather than baked into the read,
-  /// so a stale cached snapshot still ages into `unknown` on its own.
+  /// written — is evaluated against [now] here, so a stale cached snapshot still
+  /// ages into `unknown` on its own.
   AgentStatusReport? classify(
     AgentDescriptor descriptor,
     StateFileSnapshot snapshot,
@@ -120,11 +110,9 @@ class AgentStateFileStatusSource {
     );
   }
 
-  /// The first of [snapshot]'s earlier records that any rule matches.
-  ///
-  /// Only for an agent that asked for it. Decoding happens here rather than in
-  /// [probe] so a session whose last record classifies — nearly all of them —
-  /// never pays for it.
+  /// The first of [snapshot]'s earlier records that any rule matches. Only for
+  /// an agent that asked for it, and decoded here rather than in [probe] so a
+  /// session whose last record classifies — nearly all of them — never pays.
   (AgentActivityStatus, String?)? _classifyEarlier(
     AgentStateFileRules rules,
     StateFileSnapshot snapshot,
@@ -154,9 +142,8 @@ class AgentStateFileStatusSource {
     }
   }
 
-  /// What [record] says, or `null` when no rule matched it at all.
-  ///
-  /// The distinction matters to the backwards walk: a stale `working` record
+  /// What [record] says, or `null` when no rule matched it at all. The
+  /// distinction matters to the backwards walk: a stale `working` record
   /// resolves to `unknown` and is still a **match**, so the walk stops there
   /// rather than stepping back to an older record that would say `idle`.
   (AgentActivityStatus, String?)? _classify(
@@ -173,19 +160,16 @@ class AgentStateFileStatusSource {
       return (AgentActivityStatus.awaitingApproval, approval);
     }
 
-    // **Working before idle**, matching `TerminalGridStatusSource`'s order and
-    // for the same reason: one record can satisfy both, and only the working
-    // rule is looking at something specific. A Claude Code tool call is an
-    // assistant record — the idle shape — that also carries an unanswered
-    // `tool_use` block, and claiming idle there is what tells a user their work
-    // is finished while a subagent is still running.
+    // **Working before idle**, matching `TerminalGridStatusSource`'s order: one
+    // record can satisfy both, and only the working rule is looking at something
+    // specific. A Claude Code tool call is an assistant record that also carries
+    // an unanswered `tool_use` block, and claiming idle there tells a user their
+    // work is finished while a subagent is still running.
     final working = _firstMatch(rules.working, record);
     if (working != null) {
       // An in-progress record only means "working" while the file is still
-      // being written; otherwise the CLI exited mid-turn and we cannot say.
-      //
-      // A long tool call ages into `unknown` here rather than into `idle`,
-      // which is the point: `unknown` is not news and cannot fire a completion.
+      // being written; a long tool call ages into `unknown` rather than `idle`,
+      // because `unknown` is not news and cannot fire a completion.
       final since = now.difference(modified);
       return since <= rules.activityWindow
           ? (AgentActivityStatus.working, working)
@@ -225,11 +209,9 @@ class StateFileSnapshot {
   /// The last decodable record, or `null` when the file held none.
   final Map<String, Object?>? record;
 
-  /// The raw lines immediately before [record], newest first and bounded.
-  ///
-  /// Text rather than decoded records, because this is held for the life of a
-  /// tracked session and only read when [record] classifies as nothing. Empty
-  /// is the normal state for an agent whose rules never walk back.
+  /// The raw lines immediately before [record], newest first and bounded. Text
+  /// rather than decoded records, because this is held for the life of a tracked
+  /// session and only read when [record] classifies as nothing.
   final List<String> earlierLines;
 }
 
@@ -250,12 +232,10 @@ Map<String, Object?>? lastJsonRecord(String tail) {
 
 /// The lines of [tail] before the one [lastJsonRecord] returned, newest first.
 ///
-/// Bounded by both count and bytes (see
-/// [AgentStateFileStatusSource.earlierRecordsKept] and
-/// [AgentStateFileStatusSource.earlierBytesKept]) because the result is cached
-/// per tracked session. A line too long for the remaining budget ends the list
-/// rather than being kept: running out means the walk stops early and the
-/// session reads `unknown`, which is the safe direction.
+/// Bounded by both count and bytes because the result is cached per tracked
+/// session. A line too long for the remaining budget ends the list rather than
+/// being kept: the walk then stops early and the session reads `unknown`, which
+/// is the safe direction.
 List<String> earlierJsonLines(String tail) {
   final lines = tail.split('\n');
   final kept = <String>[];

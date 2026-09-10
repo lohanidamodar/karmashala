@@ -4,21 +4,15 @@ import '../../../core/database/app_database.dart';
 
 /// Which `(agent, environment)` pairs this workspace has ever *searched* for.
 ///
-/// The distinction this exists to record is the whole feature. An agent with no
-/// entry here and no installation row has never been looked for — which is not
-/// the same as one that was looked for and not found, and only the first is
-/// worth spawning a process for. Without it, discovery is a single scan at
-/// workspace creation and an agent added to the registry by an app upgrade
-/// stays invisible until the user finds "Discover agents" in Settings. That is
-/// exactly how `antigravity` shipped in 1.1.4 and went unseen.
+/// An agent with no entry here and no installation row has never been looked
+/// for, which is not the same as looked for and not found — and only the first
+/// is worth spawning a process for. Without it, discovery is a single scan at
+/// workspace creation, which is how `antigravity` shipped in 1.1.4 and went
+/// unseen.
 ///
-/// **Stored as one JSON object in app metadata, not a table.** It holds at most
-/// `descriptors × environments` entries — single digits — and the metadata store
-/// already models facts of this shape (`MetadataKeys.agentsDiscoveredAt` is the
-/// one-shot version of this very question). A schema migration would buy
-/// nothing a map cannot answer.
-///
-/// Unreadable or malformed content reads as "nothing has been probed", which
+/// Stored as one JSON object in app metadata rather than a table: it holds
+/// single digits of entries, and a schema migration would buy nothing a map
+/// cannot answer. Unreadable content reads as "nothing has been probed", which
 /// costs one extra sweep and can never suppress one.
 class AgentProbeLog {
   const AgentProbeLog(this._db);
