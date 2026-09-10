@@ -179,9 +179,9 @@ void main() {
     final where = h.container.read(sessionWhereaboutsProvider(id));
 
     expect(where.hostedLive, isTrue);
+    // The note is the stronger claim and wins the subtitle; the reading behind
+    // it is still carried, because it is what every session list orders by.
     expect(where.note, 'running here');
-    // We can see the process, so an age would only dilute a stronger claim.
-    expect(where.lastSeenLabel(testTime), isNull);
   });
 
   test('a dead pane showing the agent\'s refusal is proof of a holder', () async {
