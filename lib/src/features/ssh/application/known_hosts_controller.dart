@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
 
 /// The host keys Karmashala trusts — its `known_hosts`. Visible, because

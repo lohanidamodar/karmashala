@@ -7,9 +7,7 @@ import 'package:karmashala_host/host_paths.dart';
 import 'package:karmashala_host/protocol.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../ssh/data/host_deploy_target.dart';
-import '../../ssh/data/host_session_access.dart';
-import '../../ssh/domain/host_deployment.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'host_pane_link.dart';
 
 /// The session host on *this* machine, over its own socket — the same interface

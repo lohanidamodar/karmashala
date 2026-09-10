@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala/src/features/terminal/data/host_pane_link.dart';
 import 'package:karmashala_host/protocol.dart';
 

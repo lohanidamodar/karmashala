@@ -1,11 +1,10 @@
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/process.dart';
-import '../domain/ssh_host.dart';
-import 'known_host_dao.dart';
 import 'ssh_connection.dart';
+import 'ssh_host.dart';
+import 'ssh_host_key.dart';
 import 'ssh_host_key_verifier.dart';
-import 'ssh_host_dao.dart';
 
 /// One [SshConnection] per host, reused for the life of the app: a TCP connect
 /// plus a key exchange per command turns a 3 ms probe into hundreds of ms.
@@ -21,8 +20,8 @@ class SshConnectionPool {
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('ssh.pool');
 
-  final SshHostDao hosts;
-  final KnownHostDao knownHosts;
+  final SshHostStore hosts;
+  final KnownHostStore knownHosts;
 
   /// Asked when a host presents an unrecognised key. Absent means unknown hosts
   /// are refused rather than trusted (see [SshHostKeyVerifier]).

@@ -3,11 +3,8 @@ import 'dart:async';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import '../data/ssh_command_runner.dart';
-import '../data/ssh_connection.dart';
-import '../data/ssh_connection_pool.dart';
-import '../domain/ssh_connection_state.dart';
-import '../domain/ssh_host.dart';
+import 'package:karmashala_ssh/runner.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'ssh_failure.dart';
 import 'ssh_providers.dart';
 

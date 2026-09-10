@@ -1,4 +1,6 @@
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
+
+import 'package:meta/meta.dart';
 
 /// What `uname -sm` and the libc probe said about a machine.
 @immutable

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/settings/presentation/session_host_status_line.dart';
-import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
+import 'package:karmashala_ssh/host.dart';
 
 /// The three facts the supervisor row has to carry, and the one it must refuse
 /// to invent.

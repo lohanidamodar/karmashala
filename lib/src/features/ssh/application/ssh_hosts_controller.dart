@@ -5,7 +5,7 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:agent_cli/process.dart';
-import '../domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
 
 /// The saved remote hosts and the environments they own. Adding a host is what

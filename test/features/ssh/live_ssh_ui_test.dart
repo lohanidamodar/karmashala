@@ -14,7 +14,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_prompt_host.dart';
 import 'package:flutter/material.dart';

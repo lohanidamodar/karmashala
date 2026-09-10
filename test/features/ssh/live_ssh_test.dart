@@ -5,24 +5,17 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_command_runner.dart';
+import 'package:karmashala_ssh/runner.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'package:karmashala/src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/ssh/data/host_binaries.dart';
-import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
-import 'package:karmashala/src/features/ssh/data/host_deployer.dart';
-import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala/src/features/terminal/data/host_pane_link.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
-import 'package:karmashala/src/features/ssh/data/remote_file_browser.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_connection_state.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/files.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';

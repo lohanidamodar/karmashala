@@ -7,9 +7,8 @@ import '../../../app/widgets/desktop_dialog.dart';
 import 'package:agent_cli/process.dart';
 import '../application/ssh_failure.dart';
 import '../application/ssh_providers.dart';
-import '../data/remote_file_browser.dart';
-import '../domain/remote_directory_entry.dart';
-import '../domain/ssh_host.dart';
+import 'package:karmashala_ssh/files.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'host_key_changed_alert.dart';
 
 /// Browses a host's filesystem over SFTP. Every path it produces is an

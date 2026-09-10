@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/ssh_connection_providers.dart';
-import '../domain/ssh_connection_state.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// How a connection state reads to a user, in one line. Pure, so the wording is
 /// testable and one place decides what "retry scheduled" is called.

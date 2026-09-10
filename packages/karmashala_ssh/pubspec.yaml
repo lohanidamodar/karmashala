@@ -1,0 +1,38 @@
+name: karmashala_ssh
+description: >-
+  Reaching a machine over SSH and running the session host on it: the
+  connection and its pool, the host key policy, the command runner and process
+  handle, deploying and greeting the session host, and browsing a remote
+  directory. Not the DAOs, the providers or any UI. Pure Dart, so it runs under
+  `dart test` without a `flutter_tester` or a `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `CommandRunner`, `CommandRunnerFactory` and `ProcessHandle` — the SSH case
+  # of the runner story whose local and WSL cases live there — plus
+  # `ExecutionEnvironment` and `EnvironmentPath`.
+  agent_cli:
+    path: ../agent_cli
+  # The SSH client, its socket and channel types.
+  dartssh2: ^3.3.1
+  # Logging and `Clock`.
+  karmashala_core:
+    path: ../karmashala_core
+  # The session host's wire protocol, so the deployer's greeting and the binary
+  # it installs cannot drift from what that binary answers. Not a workspace
+  # member on purpose (see the root pubspec), so it is a plain path dependency.
+  karmashala_host:
+    path: ../../host
+  meta: ^1.16.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

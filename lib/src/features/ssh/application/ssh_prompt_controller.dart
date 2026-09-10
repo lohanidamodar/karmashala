@@ -3,8 +3,7 @@ import 'dart:async';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../domain/ssh_host.dart';
-import '../domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// Which secret a connection is asking for. Neither is ever persisted — both
 /// are held for one connection attempt and then dropped.

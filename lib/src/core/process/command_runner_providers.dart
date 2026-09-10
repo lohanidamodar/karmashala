@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../features/ssh/application/ssh_providers.dart';
-import '../../features/ssh/data/ssh_command_runner.dart';
+import 'package:karmashala_ssh/runner.dart';
 import 'package:agent_cli/process.dart';
 
 /// The command runner for the **Windows host**, for host tools such as

@@ -5,7 +5,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:flutter/gestures.dart';

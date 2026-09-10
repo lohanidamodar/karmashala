@@ -2,14 +2,12 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_command_runner.dart';
+import 'package:karmashala_ssh/runner.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'package:karmashala/src/core/util/agent_cli_bridge.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
-import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../test/support/fakes.dart';

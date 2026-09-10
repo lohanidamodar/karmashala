@@ -5,9 +5,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
-import '../data/host_binaries.dart';
-import '../data/host_session_access.dart';
-import '../domain/ssh_host.dart';
+import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
 
 /// Where the cross-compiled host binaries are found on this machine.

@@ -5,9 +5,9 @@ import 'package:dartssh2/dartssh2.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
-import '../domain/ssh_connection_state.dart';
-import '../domain/ssh_host.dart';
-import '../domain/ssh_host_key.dart';
+import 'ssh_connection_state.dart';
+import 'ssh_host.dart';
+import 'ssh_host_key.dart';
 import 'channel_limiter.dart';
 import 'resilient_ssh_socket.dart';
 import 'ssh_host_key_verifier.dart';

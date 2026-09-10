@@ -32,7 +32,7 @@ import 'package:karmashala/src/features/notifications/application/session_status
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/ssh/presentation/remote_file_browser_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_host_dialog.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
