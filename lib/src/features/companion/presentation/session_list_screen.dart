@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../explorer/presentation/project_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';

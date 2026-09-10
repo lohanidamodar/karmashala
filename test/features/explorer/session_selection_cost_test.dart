@@ -22,7 +22,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/bulk_session_delete.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';

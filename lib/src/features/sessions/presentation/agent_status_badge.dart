@@ -1,41 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_ui/rows.dart';
 import '../application/session_status_providers.dart';
-
-/// Icon, colour and words for one [AgentActivityStatus]. The words are not
-/// decoration and colour is never the only carrier; the accent is not used.
-({IconData icon, String label, Color Function(SemanticColors) colour})
-agentStatusAppearance(AgentActivityStatus status) => switch (status) {
-  AgentActivityStatus.working => (
-    icon: AppIcons.circleHalf,
-    label: 'Working',
-    colour: (semantic) => semantic.working,
-  ),
-  AgentActivityStatus.idle => (
-    icon: AppIcons.checkCircle,
-    label: 'Idle',
-    colour: (semantic) => semantic.idle,
-  ),
-  AgentActivityStatus.awaitingApproval => (
-    icon: AppIcons.warningCircle,
-    label: 'Needs you',
-    colour: (semantic) => semantic.attention,
-  ),
-  AgentActivityStatus.failed => (
-    icon: AppIcons.xCircle,
-    label: 'Failed',
-    colour: (semantic) => semantic.failure,
-  ),
-  AgentActivityStatus.unknown => (
-    icon: AppIcons.question,
-    label: 'Unknown',
-    colour: (semantic) => semantic.neutral,
-  ),
-};
 
 /// How a status was arrived at, for the tooltip. Naming the source is what
 /// makes `unknown` actionable — "nobody could tell" is not "the store says idle".

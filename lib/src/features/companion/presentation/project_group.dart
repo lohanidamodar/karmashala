@@ -2,9 +2,9 @@
 /// never a sort: the desktop already sent its rows in display order.
 library;
 
-import '../../explorer/application/session_diff_stat.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_ui/rows.dart';
 
 /// One project, with the host's rows for it in the host's own order.
 class CompanionProjectGroup {

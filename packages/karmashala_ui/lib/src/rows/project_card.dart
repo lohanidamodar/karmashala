@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/menus.dart';
-import '../application/session_diff_stat.dart';
+import '../app_icons.dart';
+import '../design_tokens.dart';
+import '../row_menu.dart';
+import 'row_stats.dart';
 import 'explorer_row.dart';
 import 'session_card.dart';
 

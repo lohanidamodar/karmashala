@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/menus.dart';
+import '../app_icons.dart';
+import '../design_tokens.dart';
+import '../row_menu.dart';
 import 'package:karmashala_session/lineage.dart';
-import '../application/session_diff_stat.dart';
+import 'row_stats.dart';
 import 'explorer_row.dart';
 
 /// A coarse age for a card's corner: `3m`, `22m`, `7h 59m`, `2d 4h`. Under a

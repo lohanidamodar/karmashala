@@ -10,7 +10,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
 import 'package:karmashala_remote/remote.dart';
-import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

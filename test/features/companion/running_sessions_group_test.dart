@@ -15,8 +15,7 @@ import 'package:karmashala/src/features/companion/presentation/project_sessions_
 import 'package:karmashala/src/features/companion/presentation/running_sessions_group.dart';
 import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
-import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
-import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;

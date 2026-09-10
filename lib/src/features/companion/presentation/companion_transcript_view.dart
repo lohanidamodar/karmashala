@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../sessions/presentation/chat_transcript.dart';
-import '../../sessions/presentation/markdown_message.dart';
+import 'package:karmashala_ui/transcript.dart';
 import 'package:karmashala_remote/companion.dart';
 
 /// The phone's transcript, drawn newest-first: reversed, so offset zero *is*

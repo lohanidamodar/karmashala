@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/remote.dart';
-import '../../sessions/presentation/activity_strip.dart';
 import '../application/companion_providers.dart';
+import 'package:karmashala_ui/rows.dart';
 
 /// What this session is doing right now, above the composer, from the desktop's
 /// own `sessionActivityFrom`; draws nothing before the host has answered.

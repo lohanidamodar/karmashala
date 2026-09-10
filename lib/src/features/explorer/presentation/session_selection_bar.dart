@@ -5,8 +5,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/bulk_session_delete.dart';
 import '../application/session_selection.dart';
 import 'bulk_delete_dialog.dart';
-import 'explorer_row.dart';
-
+import 'package:karmashala_ui/rows.dart';
 /// The strip between the search box and the tree while selection mode is on:
 /// the count, including rows out of sight, and the way out. Its own
 /// `ConsumerWidget` so ticking a row rebuilds this strip and that row only.

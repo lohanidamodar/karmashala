@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_ui/rows.dart';
 
 /// The desktop's status vocabulary for a session the host described — same
 /// glyphs, words and semantic colours as [agentStatusAppearance].

@@ -6,7 +6,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
-import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
 import 'package:karmashala_remote/remote.dart';

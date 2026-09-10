@@ -5,7 +5,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:highlight/highlight.dart' show highlight, Node;
 import 'package:markdown/markdown.dart' as md;
 
-import 'package:karmashala_ui/tokens.dart';
+import '../design_tokens.dart';
 import 'package:karmashala_session/transcript.dart';
 
 /// What tells a link this app made out of a bare path from one the author

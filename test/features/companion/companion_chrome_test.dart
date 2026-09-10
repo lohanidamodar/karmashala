@@ -20,7 +20,7 @@ import 'package:karmashala/src/features/companion/presentation/pairing/pairing_p
 import 'package:karmashala/src/features/companion/presentation/pairing/scan_qr_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/pairing/short_code_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
-import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -30,6 +30,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_ui/rows.dart';
 
 /// A clock the test moves by hand, so the elapsed times are the test's own
 /// arithmetic rather than the wall clock's.
