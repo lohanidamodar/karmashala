@@ -54,12 +54,8 @@ extension TerminalSessionLifetime on TerminalSessionsController {
     persistStructure();
   }
 
-  /// Every pane holding **restored agent history** — what "resume all" acts on,
-  /// in the order the user laid them out.
-  ///
-  /// **Detached panes are absent**: they belong to the background list, and
-  /// counting them here would put one session in two dialogs offering different
-  /// verbs. Shell panes are absent — see `shouldResumeRatherThanRestart`.
+  /// Every pane holding **restored agent history** — what "resume all" acts on.
+  /// Detached panes are absent: they are the background list's, not this one's.
   List<String> restoredAgentPanes() => [
     for (final tab in _tabs)
       for (final paneId in tab.layout.panes)
@@ -73,12 +69,8 @@ extension TerminalSessionLifetime on TerminalSessionsController {
         instance.liveness.value == PaneLiveness.restored;
   }
 
-  /// Starts a process in [paneId], replaying its buffer above the new one, and
-  /// does nothing for a pane that is already live.
-  ///
-  /// The only way a pane the launch declined to restart gets a process, which
-  /// is what keeps restarting the app from re-executing a build or an agent
-  /// behind the user's back. What a launch does start is `shouldRestartOnLaunch`.
+  /// Starts a process in [paneId]; nothing for one already live — the only way
+  /// a pane the launch declined to restart ever gets one.
   void startPane(String paneId) {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return;
@@ -125,11 +117,8 @@ extension TerminalSessionLifetime on TerminalSessionsController {
     _focusActivePane();
   }
 
-  /// The MCP flags a pane started **now** should carry, never the ones it was
-  /// started with before: every value in them belongs to one run of the app, and
-  /// replaying them made the agent refuse to start with "MCP config file not
-  /// found". Empty is the ordinary answer — a pane without its tools is a
-  /// smaller loss than a pane that will not open.
+  /// The MCP flags a pane started **now** carries, never the recorded run's:
+  /// replaying those made the agent refuse with "MCP config file not found".
   List<String> _liveMcpArgumentsFor(AgentPaneLaunch launch) {
     try {
       return ref.read(agentPaneMcpArgumentsProvider)(launch);

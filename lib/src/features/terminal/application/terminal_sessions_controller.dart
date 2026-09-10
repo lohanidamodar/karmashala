@@ -55,12 +55,8 @@ part 'terminal_sessions_lifetime.dart';
 part 'terminal_sessions_persistence.dart';
 part 'terminal_sessions_restore.dart';
 
-/// Manages open terminal tabs, the split tree inside each, which pane has focus,
-/// and persisting the whole layout so it survives a restart.
-///
-/// The tab list and instances are the controller's own **fields**, not [state]:
-/// Riverpod forbids reading `state` in `build` and `onDispose`, and restore and
-/// the final snapshot run in exactly those two places.
+/// Manages open terminal tabs, the split tree in each, focus, and persisting
+/// the layout. Tabs are **fields**, not [state] — `build`/`onDispose` need them.
 class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   final List<TerminalTab> _tabs = [];
   String? _activeTabId;
@@ -196,12 +192,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return _snapshot();
   }
 
-  /// Ends every pane's process and completes when the kills have landed.
-  ///
-  /// `ref.onDispose`'s teardown is synchronous, so on Windows the
-  /// `taskkill /PID <pid> /T /F` each pane spawns was still in flight when
-  /// `windowManager.destroy()` ended the process and orphaned whatever ran
-  /// inside the panes. Idempotent; the container's teardown stands down after.
+  /// Ends every pane's process and awaits the kills: `ref.onDispose` is
+  /// synchronous, so `taskkill` was still in flight when the process ended.
   Future<void> shutdownProcesses() async {
     if (_processesShutDown) return;
     _processesShutDown = true;

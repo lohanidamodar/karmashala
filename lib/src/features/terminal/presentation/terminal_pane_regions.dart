@@ -1,20 +1,12 @@
-// **What one tab's split tree actually draws** — the region, and the four
-// shapes a pane takes: a document, an empty slot, a dormant pane under its
-// status bar, a live one under its recording banner.
-//
-// A `part` because `_TerminalPaneStackState` is private and an extension on it
-// can only be written inside its own library.
+// **What one tab's split tree draws** — the region, and the four shapes a pane
+// takes. A `part` because `_TerminalPaneStackState` is private.
 
 part of 'terminal_panel.dart';
 
 /// See the file comment: one region, and the pane it is showing.
 extension _TerminalPaneRegions on _TerminalPaneStackState {
-  /// One region: its header, and the one pane it is showing.
-  ///
-  /// **Only the front pane is built** — a hidden pane's instance is untouched,
-  /// so bringing it forward costs a build and nothing else. **The header is
-  /// skipped where it would say nothing**: one region holding one pane is
-  /// already named by the workbench strip.
+  /// One region: its header, and the one pane it is showing. **Only the front
+  /// pane is built**, and the header is skipped where it would say nothing.
   Widget _buildRegion(
     PaneGroup group,
     TerminalTab tab,
@@ -140,13 +132,8 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
               },
             ),
             Expanded(
-              // Watches *which object* is behind this pane: the stack watches
-              // the tab topology, which `startPane`'s instance swap does not
-              // move, so the pane went on rendering a disposed instance. See
-              // [terminalPaneInstanceProvider].
-              //
-              // Falls back to [instance] rather than dropping the pane: the
-              // provider can only disagree while a rebuild is in flight.
+              // Watches which object is behind this pane: `startPane`'s swap
+              // moves no tab, so the stack's own watch cannot see it.
               child: Consumer(
                 builder: (context, ref, _) {
                   final live =

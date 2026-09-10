@@ -167,13 +167,8 @@ class TerminalSearchState {
   }
 }
 
-/// Drives find for the pane the bar was opened against and, when asked, for
-/// every other pane in the layout.
-///
-/// The open pane is scanned in full on every keystroke; the rest are swept one
-/// pane per turn of the event loop, after a debounce, capped at
-/// [kCrossPaneScanLines] each — so no keystroke costs more than one pane's
-/// scan however many are open. `terminal_search_cost_test.dart` asserts it.
+/// Drives find for the open pane on every keystroke, and sweeps the rest one
+/// pane per turn of the event loop — so no keystroke costs more than one scan.
 class TerminalSearchController extends Notifier<TerminalSearchState> {
   /// The controller holding this search's highlights, so they can be dropped
   /// when the selection moves to another pane or the bar closes. One reference
@@ -535,12 +530,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     }
   }
 
-  /// Paints up to [kMaxSearchHighlights] hits **in the pane holding the current
-  /// match**, that one in its own colour.
-  ///
-  /// Only that pane, because `RenderTerminal` walks every search highlight on
-  /// every frame; and only that many, in a window that slides to keep the
-  /// selected hit inside it. Colours and anchors are xterm2's.
+  /// Paints up to [kMaxSearchHighlights] hits in the pane holding the current
+  /// match — `RenderTerminal` walks every highlight on every frame.
   void _applyHighlights() {
     final match = _currentMatch();
     final target = match == null ? null : _instanceFor(match.paneId);

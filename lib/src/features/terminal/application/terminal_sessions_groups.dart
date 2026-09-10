@@ -38,12 +38,8 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     return group.activePaneId;
   }
 
-  /// Divides the focused group along [axis], leaving the new group **empty**
-  /// and focused; null when there is nothing to divide.
-  ///
-  /// The unit is the whole middle workspace, not one tab's terminal area. **A
-  /// split still starts nothing**, and while the empty group has focus there is
-  /// no active tab — the honest answer to "what am I typing into".
+  /// Divides the focused group along [axis], leaving the new group **empty** and
+  /// focused with no active tab — the honest answer to "what am I typing into".
   String? splitWorkspace(SplitAxis axis) {
     final tree = _workspace;
     final group = _focusedGroup;
@@ -211,10 +207,7 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
   }
 
   /// Brings the workspace tree back in step with [_tabs], so a dozen tab verbs
-  /// need know nothing about groups: a lost tab leaves its group, an unseen one
-  /// joins the focused group, and a group left with nothing collapses.
-  ///
-  /// Replaced only when it actually changed — consumers compare by identity.
+  /// need know nothing about groups. Replaced only when it actually changed.
   void _reconcileWorkspace() {
     final live = {for (final tab in _tabs) tab.id};
     var tree = _workspace;

@@ -4,19 +4,12 @@ part of 'terminal_sessions_controller.dart';
 /// budgeted autosave tick. The shape is written now, synchronously, every time;
 /// the scrollback text waits for the autosave — see [persistStructure].
 extension TerminalLayoutPersistence on TerminalSessionsController {
-  /// The **teardown** save: the whole layout, re-encoding whatever moved. It is
-  /// the last write before the process ends, so anything it skips is gone.
-  ///
-  /// Refuses to write an empty layout over a stored one when no user action
-  /// accounts for the emptiness — see [_userClosedSinceRestore]. Structural
-  /// changes use [persistStructure]; no database wired up means no write.
+  /// The **teardown** save — the last write before the process ends. Refuses to
+  /// write an empty layout over a stored one, see [_userClosedSinceRestore].
   void persistLayout() => _persist(refreshScrollback: true);
 
-  /// Writes the layout's **shape**, reusing the encoding each pane already has
-  /// and leaving it dirty, so a structural change never pays the ~5 ms per busy
-  /// pane that re-encoding a full durable window costs. [saveDirtyScrollback]
-  /// refreshes the text about a second later on the catch-up cadence; a pane
-  /// the store has never seen is encoded here rather than assumed.
+  /// Writes the layout's **shape** only, reusing each pane's existing encoding:
+  /// re-encoding costs ~5 ms per busy pane, and the autosave owes that anyway.
   void persistStructure() {
     if (_heldLayoutSaves > 0) {
       _layoutSaveOwed = true;
@@ -25,13 +18,8 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
     _persist(refreshScrollback: false);
   }
 
-  /// Holds the structural save until [body] finishes, then writes it once, so a
-  /// bulk verb costs one layout write rather than one per step.
-  ///
-  /// The **publish** is deliberately not held: a bulk resume yields between
-  /// panes, and it is the publish that stops a view rendering the instance just
-  /// disposed. [persistLayout] is not held either — a quit inside a bulk verb
-  /// must still write everything on the way out.
+  /// One layout write for a whole bulk verb. The publish is deliberately not
+  /// held: a view must stop rendering an instance the moment it is disposed.
   Future<T> withOneLayoutSave<T>(Future<T> Function() body) async {
     _heldLayoutSaves++;
     try {
@@ -109,11 +97,8 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
     if (_dirty.add(paneId)) _dirtySince[paneId] = _uptime.elapsed;
   }
 
-  /// Gives a pane the encoding of the history it starts from and leaves it
-  /// dirty. Without it the structural save that follows re-encodes the whole
-  /// buffer to rediscover text the store already has — 2.9-5.8 ms for one pane
-  /// at a full durable window, on the UI isolate inside the button's
-  /// `onPressed`.
+  /// Gives a pane the encoding of the history it starts from, so the next
+  /// structural save does not re-encode it — 2.9-5.8 ms on the UI isolate.
   void _seedEncoding(String paneId, String? scrollback) {
     if (scrollback == null) return;
     _encoded[paneId] = scrollback;
@@ -138,11 +123,8 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
     );
   }
 
-  /// Re-encodes the panes whose buffers changed, **for at most [budget] of
-  /// main-isolate time**, returning the pane ids written. The cap is what makes
-  /// a tick cost the same at one pane and at the hundred-pane scale target;
-  /// what is left stays dirty for the next tick. At least one pane is always
-  /// written, so a pane costing more than the budget still makes progress.
+  /// Re-encodes changed panes for at most [budget] of main-isolate time, which
+  /// is what makes a tick cost the same at one pane and at a hundred.
   List<String> saveDirtyScrollback({
     Duration budget = kScrollbackAutosaveBudget,
   }) {
@@ -178,12 +160,8 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
     return written;
   }
 
-  /// This pane's scrollback, encoding only if its buffer moved — the cache is
-  /// what keeps a save proportional to what changed rather than what is open.
-  ///
-  /// With [refresh] false the cache is used **even for a dirty pane** and the
-  /// pane stays dirty; a pane with nothing cached is still encoded, because a
-  /// save never invents text it does not have. See [persistStructure].
+  /// This pane's scrollback, encoded only if its buffer moved. With [refresh]
+  /// false a dirty pane keeps its cache and stays dirty ([persistStructure]).
   String _scrollbackOf(
     String paneId,
     TerminalInstance instance, {
@@ -210,13 +188,8 @@ extension TerminalLayoutPersistence on TerminalSessionsController {
     return encoded;
   }
 
-  /// A tab as a stored row. The directory stored is where the pane **ended up**
-  /// (the shell's OSC 7), so a relative path in the scrollback that comes back
-  /// with it still resolves.
-  ///
-  /// An **empty region** stores no pane and restore drops its leaf — a reboot
-  /// has already taken away whatever was going in it. A **document** stores a
-  /// pane anyway, under [kDocumentProfileId], because it survives a reboot.
+  /// A tab as a stored row, holding the directory the pane **ended up** in
+  /// (OSC 7), so a relative path in its scrollback still resolves.
   StoredTerminalTab _storedTab(TerminalTab tab, {required bool refresh}) {
     return StoredTerminalTab(
       id: tab.id,

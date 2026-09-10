@@ -111,13 +111,8 @@ class TabLivenessDot extends StatelessWidget {
   }
 }
 
-/// **The marker on a tab whose pane is running an agent**, in the same glyphs
-/// [agentStatusAppearance] gives the Explorer card and the tray.
-///
-/// Drawn **instead of** [TabLivenessDot], never beside it: one glyph, one
-/// meaning. Colour is never the only carrier — each state has its own shape and
-/// tooltip. `unknown` is drawn rather than hidden, or the absence of a marker
-/// would mean both "plain shell" and "agent nothing can read".
+/// **The marker on a tab whose pane is running an agent**, drawn *instead of*
+/// [TabLivenessDot]: one slot, one glyph, and never colour as the only carrier.
 class TabAgentStatusDot extends StatelessWidget {
   const TabAgentStatusDot({required this.status, super.key});
 

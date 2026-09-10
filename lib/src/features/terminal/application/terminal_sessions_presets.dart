@@ -44,12 +44,8 @@ extension TerminalPresetVerbs on TerminalSessionsController {
     return TerminalPreset(id: id, name: name, tabs: tabs, activeTab: active);
   }
 
-  /// Opens [preset] as fresh tabs, and reports what it could not open.
-  ///
-  /// **The tab that ends up in front starts; the rest declare** — a preset that
-  /// launched nine processes would be worse than no preset. A profile this
-  /// machine no longer has is skipped and named, unlike [_adoptRestored]: for
-  /// something chosen by name, that is more use than a pane that will not start.
+  /// Opens [preset] as fresh tabs, and reports what it could not open. **The
+  /// front tab starts; the rest declare** — nine processes would be worse.
   TerminalPresetOpening openPreset(TerminalPreset preset) {
     final available = {
       for (final profile in ref.read(terminalProfilesProvider)) profile.id,

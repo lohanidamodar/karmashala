@@ -4,13 +4,8 @@ import 'package:xterm2/xterm.dart';
 /// What `Ctrl+V` sends when there is nothing to paste: the key itself.
 const String kPasteKeyToProgram = '\x16';
 
-/// Pastes the clipboard into [terminal], or hands `Ctrl+V` to the program.
-///
-/// **Not xterm's paste**: its `PasteTextIntent` reads `text/plain` only, so a
-/// screenshot on the clipboard pasted nothing *and* consumed the key, and an
-/// agent CLI that reads the image itself on `^V` never learned a paste was
-/// asked for. The chord is claimed only when there is text — which needs no way
-/// to read an image, since an image is a clipboard with no text on it.
+/// Pastes the clipboard into [terminal], or hands `Ctrl+V` to the program:
+/// xterm's own paste reads `text/plain`, so it ate the key on an image.
 Future<void> pasteIntoTerminal(
   Terminal terminal, {
   TerminalController? controller,

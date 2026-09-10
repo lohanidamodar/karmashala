@@ -1,8 +1,5 @@
-// **The pane's right-click menu, and the two captures on it** — the terminal's
-// door into the Todos and Notes an agent reaches through `todo_add`/`note_add`.
-//
-// A `part` because `_TerminalPaneStackState` is private and an extension on it
-// can only be written inside its own library.
+// **The pane's right-click menu, and the two captures on it.** A `part`
+// because `_TerminalPaneStackState` is private.
 
 part of 'terminal_panel.dart';
 

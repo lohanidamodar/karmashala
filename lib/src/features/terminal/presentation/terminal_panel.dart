@@ -55,13 +55,8 @@ part 'terminal_pane_menu.dart';
 part 'terminal_pane_regions.dart';
 part 'terminal_toolbar.dart';
 
-/// The terminal's panes: the search bar over the active tab's split tree.
-///
-/// Only the last [kMountedTabBudget] tabs stay mounted in the [IndexedStack].
-/// The bound is the point — `IndexedStack` is preservation, not virtualization,
-/// and handing it every tab cost 5,291 render objects and a 65 ms tab switch at
-/// 100 tabs. An unmounted tab is rebuilt against the same live
-/// `TerminalInstance`, so it keeps its process, buffer and scrollback.
+/// The terminal's panes: the search bar over the active tab's split tree. Only
+/// [kMountedTabBudget] tabs stay mounted — all of them cost 65 ms a tab switch.
 class TerminalPaneStack extends ConsumerStatefulWidget {
   const TerminalPaneStack({
     this.groupId,

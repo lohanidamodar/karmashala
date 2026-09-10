@@ -26,12 +26,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
-  /// Opens the Settings tab, or brings the one already open forward.
-  ///
-  /// **One tab, however many times it is asked for**: Settings is one document
-  /// over one store, so a second would be the same page disagreeing with
-  /// itself. Ordinary in every other respect — what its pane holds is a
-  /// property of the pane id, see [kSettingsPaneId].
+  /// Opens the Settings tab, or brings the open one forward: it is one document
+  /// over one store, so a second tab would be the same page disagreeing.
   String openSettingsTab() {
     final open = _tabContaining(kSettingsPaneId);
     if (open != null) {
@@ -145,12 +141,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
     }
   }
 
-  /// Moves tab [tabId] to position [toIndex], sliding the rest along, and
-  /// returns whether anything moved.
-  ///
-  /// **Only the order.** It does not activate the tab it moved, because
-  /// [activateTab] restarts the panes a tab was left holding and tidying a
-  /// strip must not spawn a shell.
+  /// Moves tab [tabId] to [toIndex] and returns whether anything moved. It does
+  /// not activate it: [activateTab] restarts panes, and tidying must not spawn.
   bool reorderTab(String tabId, int toIndex) {
     // Within its own group: [toIndex] is a position in the strip the chip was
     // dragged along, and every group has a strip of its own.
@@ -171,10 +163,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
       closeTabs([id], detach: detach);
 
   /// Closes every tab in [ids] at once — one publish and one save whatever the
-  /// count, which a loop over [closeTab] would not be.
-  ///
-  /// [activate] names the tab to leave in front when the active one is among
-  /// those closed; without it the keyboard lands on whichever tab is last.
+  /// count. [activate] names the tab to leave in front if the active one goes.
   void closeTabs(
     Iterable<String> ids, {
     bool detach = true,

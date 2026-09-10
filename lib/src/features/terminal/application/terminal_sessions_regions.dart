@@ -9,11 +9,7 @@ part of 'terminal_sessions_controller.dart';
 /// invariant it all rests on is stated once, on [isEmptySlot].
 extension TerminalPaneRegions on TerminalSessionsController {
   /// Divides the active tab's focused pane along [axis], leaving the new region
-  /// **empty**, and focuses it. Returns null when there is no tab or the
-  /// focused pane is itself an empty region.
-  ///
-  /// **A split starts nothing** — it divides space, and the user says what goes
-  /// in the room ([openInSlot], [moveTabIntoSlot]).
+  /// **empty** — a split starts nothing. Null when there is nothing to divide.
   String? splitPane(SplitAxis axis) {
     final tab = _activeTab;
     if (tab == null) return null;
@@ -79,11 +75,8 @@ extension TerminalPaneRegions on TerminalSessionsController {
   /// no pane, such as opening a shell or the palette's *Terminal view*.
   void showTerminalHere() => _showFace(_focusedGroupId, terminal: true);
 
-  /// The mirror of [showTerminalForPane], for text arriving from somewhere the
-  /// user is not — a transcript is not mounted until something asks for it.
-  ///
-  /// **A pane is required**: with no pane, falling back to the focused group
-  /// would flip a group showing B into B's chat because text arrived for A.
+  /// The mirror of [showTerminalForPane]. **A pane is required**: falling back
+  /// to the focused group would flip a group showing B into B's chat.
   void revealConversationForPane(String paneId) =>
       _showFace(groupOfPane(paneId) ?? _focusedGroupId, terminal: false);
 

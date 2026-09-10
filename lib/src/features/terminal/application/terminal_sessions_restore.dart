@@ -8,11 +8,8 @@ part of 'terminal_sessions_controller.dart';
 /// and a process or a stored buffer for each pane. Defensive at every step,
 /// because a corrupt row must never make the terminal unopenable.
 extension TerminalLayoutRestore on TerminalSessionsController {
-  /// Recreates the stored layout, each pane a **dormant** buffer except those
-  /// `shouldRestartOnLaunch` accepts. A restarted pane is built here rather than
-  /// started afterwards, because nothing may publish during `build` and the
-  /// scrollback would otherwise be parsed twice. What will not rebuild is
-  /// dropped, never thrown on.
+  /// Recreates the stored layout, each pane **dormant** unless
+  /// `shouldRestartOnLaunch` accepts it. Built here: `build` may not publish.
   void _restoreLayout() {
     // Whatever the previous life of this controller decided about closing
     // things, this one starts owing the store the layout it just read.
@@ -137,13 +134,8 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     return true;
   }
 
-  /// Gives [pane] a process again, replaying its stored scrollback above it.
-  /// The same factory as everywhere else, so a shell that will not spawn
-  /// degrades to an [ErrorTerminalInstance] rather than a blank buffer
-  /// pretending to be a shell.
-  ///
-  /// False — and the caller falls back to the dormant pane — if the factory
-  /// *throws*: a layout must not be lost because one pane could not start.
+  /// Gives [pane] a process again above its stored scrollback, degrading to an
+  /// [ErrorTerminalInstance]; false only if the factory itself *throws*.
   bool _adoptRestarted(StoredTerminalPane pane, TerminalProfile profile) {
     final TerminalInstance instance;
     // Only the build is guarded, so a refusal is always a pane that was never

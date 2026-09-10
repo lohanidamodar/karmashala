@@ -73,12 +73,8 @@ class ScrollbackAutosave {
     _cancel(handle);
   }
 
-  /// Brings the next tick forward to [catchUpInterval], for work that arrives
-  /// **between** ticks — a structural save's deferred scrollback would
-  /// otherwise wait out a full [interval] that is already armed.
-  ///
-  /// A no-op while a catch-up tick is armed, so repeated calls cannot keep
-  /// pushing the tick out.
+  /// Brings the next tick forward to [catchUpInterval], for work arriving
+  /// between ticks. A no-op while one is armed, so it cannot be pushed out.
   void catchUpSoon() {
     if (!_running || _catchingUp) return;
     final handle = _handle;

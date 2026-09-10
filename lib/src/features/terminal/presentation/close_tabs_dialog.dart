@@ -13,12 +13,8 @@ enum BulkCloseChoice {
   keepRunning,
 }
 
-/// Asks before a bulk close that would take a running session with it.
-///
-/// **Only the bulk closes ask**: closing one tab is a view action, but clearing
-/// the deck would quietly park a dozen live agents still burning tokens and
-/// holding ports, with only a badge to say so — hence ending as the default.
-/// Null when the user backs out; not shown at all when nothing is live.
+/// Asks before a bulk close that would take a running session with it — only
+/// the bulk closes ask, because clearing the deck would park live agents.
 Future<BulkCloseChoice?> confirmBulkTabClose(
   BuildContext context, {
   required int tabs,

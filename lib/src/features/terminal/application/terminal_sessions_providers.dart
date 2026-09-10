@@ -117,12 +117,8 @@ final terminalPaneTitleProvider = Provider.autoDispose
           .titleForPane(paneId);
     });
 
-/// Which face each workspace group's active tab is showing: `true` for its
-/// terminal, `false` for its conversation, defaulting to the terminal.
-///
-/// **Per group, not per window**: three agents side by side must be able to
-/// show three transcripts at once. One notifier holding a map rather than a
-/// family, so [forget] can prune a group that collapsed.
+/// Which face each workspace group's active tab shows, defaulting to the
+/// terminal. **Per group, not per window**: three transcripts must fit at once.
 class TerminalFacesController extends Notifier<Map<String, bool>> {
   @override
   Map<String, bool> build() => const {};

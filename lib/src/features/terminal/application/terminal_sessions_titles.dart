@@ -98,11 +98,8 @@ extension TerminalPaneTitles on TerminalSessionsController {
     return result;
   }
 
-  /// Every executable this pane was started *through*, lowercased and without
-  /// its directory, so a title merely reciting one can be refused. Asked of
-  /// `ptyLaunchFor` so those names cannot drift from what is actually spawned,
-  /// in the Windows reading: an image path arriving as a window title is a
-  /// ConPTY behaviour, and a POSIX host has no wrapper to be named after.
+  /// Every executable this pane was started *through*, so a title merely
+  /// reciting one can be refused — an image path as a window title is ConPTY.
   Set<String> _launcherNames(TerminalInstance instance) {
     // An agent pane never consults OSC at all — see [_titleForPane].
     if (instance.agentLaunch != null) return const {};

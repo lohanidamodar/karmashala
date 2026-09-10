@@ -288,11 +288,8 @@ class TerminalActions {
     if (picked != null) scrollPaneTo(instance, picked);
   }
 
-  /// Terminal-wide shortcuts, through `TerminalView.onKeyEvent` — **the only
-  /// hook the app's own chords have**, because keys bubble upward and xterm
-  /// reports every one as handled, turning an unclaimed `Ctrl+B` into `^B`.
-  /// Asks [handleAppChordFromTerminal] and nothing else, which
-  /// `pane_chord_registry_test.dart` holds it to.
+  /// Terminal-wide shortcuts — **the only hook the app's chords have**: xterm
+  /// reports every key as handled, so an unclaimed `Ctrl+B` is typed as `^B`.
   KeyEventResult onPaneKey(FocusNode node, KeyEvent event) {
     // Every keystroke in a pane arrives here, and only a modified one can be a
     // chord.

@@ -1,8 +1,5 @@
 // **The floating handle on a pane of a split** — the grip that starts the
-// [PaneDrag], and the two verbs that used to live in a per-region header.
-//
-// A `part` because `_PaneFloatingActions` is private; `paneDragHandleKey`
-// travels with it, since a test aiming at the grip aims at this widget.
+// [PaneDrag]. A `part` because `_PaneFloatingActions` is private.
 
 part of 'terminal_panel.dart';
 

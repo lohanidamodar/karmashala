@@ -1,8 +1,5 @@
-// **The drop target over a pane** — the four edge zones and the "Drop to split"
-// overlay, alive only while something is being dragged. A **tab** dropped here
-// divides the workspace group; a **pane** divides the tab.
-//
-// A `part` because both types are private.
+// **The drop target over a pane** — four edge zones and a "Drop to split"
+// overlay. A **tab** dropped here divides the group; a **pane** divides the tab.
 
 part of 'terminal_panel.dart';
 

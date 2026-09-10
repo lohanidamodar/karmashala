@@ -21,13 +21,8 @@ class PaneExit {
   final int? exitCode;
 }
 
-/// The last pane exit. One immutable value read with `ref.listen`, so a
-/// subscriber hears about it at the write rather than at the next frame.
-///
-/// **Only a process that stopped by itself reaches here**: closing, ending and
-/// quitting all dispose the instance, and the liveness listener is dropped
-/// first, so the `exited` a disposal writes is announced to nobody. Structural
-/// rather than a flag — `pane_exit_ending_test.dart` holds it in place.
+/// The last pane exit. **Only a process that stopped by itself reaches here**:
+/// a disposal drops the liveness listener first, so its `exited` tells nobody.
 class PaneExitSignal extends Notifier<PaneExit?> {
   @override
   PaneExit? build() => null;

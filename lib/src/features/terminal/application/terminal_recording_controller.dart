@@ -112,12 +112,8 @@ class TerminalRecordingState {
   );
 }
 
-/// Starts, stops and renders terminal recordings. Bound to the container, not a
-/// widget's `State`, so a recording survives its pane going cold.
-///
-/// **A cast is not redactable**: SGR escapes interleave mid-word, so any
-/// substring pattern is defeated by a colour and rewriting inside an escape
-/// would corrupt the replay. The save dialog says so instead.
+/// Starts, stops and renders terminal recordings. **A cast is not redactable**:
+/// SGR escapes interleave mid-word, defeating any substring pattern.
 class TerminalRecordingController extends Notifier<TerminalRecordingState> {
   @override
   TerminalRecordingState build() => const TerminalRecordingState();
