@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.20.1 (2026-09-10)**, and what
+This file records **1.1.0 (2026-08-31) through 1.20.2 (2026-09-10)**, and what
 is on `main` past it. Anything before 1.1.0 is not recorded — no release notes
 were written for those versions and this file does not invent them.
 
@@ -16,7 +16,10 @@ installs claim the same version name.
 
 ---
 
-## Unreleased
+## 1.20.2 — 2026-09-10 (build 38)
+
+**A day of repair, and the phone learned to find things.** Schema head is still
+**v48**.
 
 - **SSH panes reach the session host.** The deploy wrote to a literal `$HOME`
   over SFTP and every pane fell back to tmux; the home is resolved once now.
