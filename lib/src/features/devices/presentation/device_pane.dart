@@ -9,7 +9,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../../core/media/video_support_provider.dart';
-import '../../../core/util/file_picking.dart' show PickerQuiet;
+import 'package:karmashala_ui/picking.dart' show PickerQuiet;
 import '../application/device_clipboard_bridge.dart';
 import '../application/device_providers.dart';
 import '../application/device_recording_controller.dart';

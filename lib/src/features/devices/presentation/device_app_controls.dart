@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import '../application/device_app_actions.dart';
 import 'package:karmashala_devices/devices.dart';
 
@@ -17,7 +17,8 @@ class DeviceAppControls extends ConsumerStatefulWidget {
   final AndroidDevice? device;
 
   /// A seam for the host's file dialog. On Windows the picker runs on the
-  /// isolate's own thread — see `file_picking.dart` — so a test never opens it.
+  /// isolate's own thread — see `karmashala_ui/picking.dart` — so a test never
+  /// opens it.
   final Future<XFile?> Function()? pickFile;
 
   @override

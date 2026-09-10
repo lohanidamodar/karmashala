@@ -3,12 +3,12 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_core/logging.dart';
-import 'package:karmashala/src/core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 
 /// The freeze itself is out of reach from here: it happens on the platform
 /// thread inside `IFileOpenDialog::Show`, and a Dart test has no platform
 /// thread to block. What *is* reachable — and is the whole reason
-/// `file_picking.dart` exists — is whether the announcement has reached the
+/// this library exists — is whether the announcement has reached the
 /// **file** by the time the picker is asked for. If it has not, a run that
 /// freezes there leaves nothing behind, which is what happened on 2026-09-04
 /// and what sent an investigation looking for a crash that never occurred.

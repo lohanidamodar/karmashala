@@ -23,7 +23,8 @@ dependencies:
   # `AgentActivityStatus`, the five states a status glyph is drawn for.
   agent_cli:
     path: ../agent_cli
-  # `linksInText`, behind LinkableText's span builder.
+  # `linksInText`, behind LinkableText's span builder, and the `Diagnostics`
+  # a picker flushes its announcement through before the dialog goes up.
   karmashala_core:
     path: ../karmashala_core
   # The values the rows draw: `SessionLink` for lineage, `SessionDelivery`
@@ -36,6 +37,8 @@ dependencies:
   flutter_markdown_plus: ^1.0.7
   highlight: ^0.7.0
   markdown: ^7.3.1
+  # Every "Browse…" in the app; see `picking.dart` for why there is one copy.
+  file_selector: ^1.1.0
   # The QR matrix QrPainter paints.
   qr: ^4.0.0
   # Opening a link LinkableText found.

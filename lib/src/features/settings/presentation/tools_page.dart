@@ -12,7 +12,7 @@ import '../../browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/application/environment_health.dart'
     show HealthLevel;

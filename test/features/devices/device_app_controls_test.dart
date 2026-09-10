@@ -5,7 +5,7 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala/src/features/devices/application/device_claims.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala_devices/devices.dart';
@@ -150,7 +150,7 @@ void main() {
   testWidgets('a typed path installs, and no dialog is opened', (
     tester,
   ) async {
-    // The rule `core/util/file_picking.dart` states: every Browse surface also
+    // The rule `karmashala_ui's picking.dart` states: every Browse surface also
     // accepts a typed path, because on Windows a picker that never appears
     // leaves nothing to press. This was the last surface without one.
     await pump(tester);

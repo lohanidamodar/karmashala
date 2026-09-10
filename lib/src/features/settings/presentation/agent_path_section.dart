@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
 import 'package:agent_cli/discovery.dart';
@@ -94,7 +94,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
 
   /// Browse is the convenience; the field is the way out. On Windows
   /// `file_selector` blocks the Dart isolate's own thread, so a busy isolate
-  /// never shows the dialog — see `core/util/file_picking.dart`.
+  /// never shows the dialog — see `karmashala_ui's picking.dart`.
   Future<void> _browse() async {
     final file = await pickOneFile(
       what: 'an agent executable',

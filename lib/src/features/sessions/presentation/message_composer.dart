@@ -6,7 +6,7 @@ import 'package:pasteboard/pasteboard.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 
 /// A pasted/attached image, kept on disk so its path can be handed to the agent.
 class _Attachment {

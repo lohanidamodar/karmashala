@@ -1,6 +1,6 @@
 // **The isolate is asked to be still while a picker is up.**
 //
-// `core/util/file_picking.dart` records the measurement this is built from: on
+// `karmashala_ui's picking.dart` records the measurement this is built from: on
 // 2026-09-04, occupying the isolate for 25 s starting 50 ms after `openFile()`
 // left the `#32770` "Open" window at `visible=0` and both it and the app's own
 // window answering `IsHungAppWindow` — the picker created and never shown, and
@@ -18,7 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala/src/core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala/src/features/devices/presentation/device_app_controls.dart';
 import 'package:karmashala_devices/devices.dart';
 

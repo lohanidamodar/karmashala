@@ -9,7 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:agent_cli/process.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';

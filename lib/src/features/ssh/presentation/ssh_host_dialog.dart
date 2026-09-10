@@ -5,7 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:agent_cli/process.dart';
 import '../application/ssh_connection_providers.dart';
