@@ -12,26 +12,8 @@ import '../../environments/application/environments_controller.dart';
 import '../../sessions/domain/session_resume.dart';
 import '../../agents/presentation/usage_chip.dart';
 
-/// What the selected accounts have left, shown where the fan-out is confirmed.
-///
-/// A fan-out starts several sessions at once, and the app already knows how much
-/// of each account's quota is gone — it just never said so at the moment that
-/// spends it. This puts the number beside the button.
-///
-/// Three rules shape it:
-///
-/// - **It warns, it never forbids.** Nothing here can disable the launch, and
-///   the strip is deliberately a sibling of the button row rather than
-///   something the button reads. The user decides.
-/// - **It never blocks the dialog.** Each account's lookup is its own
-///   [agentUsageProvider], watched as an [AsyncValue]; while one is in flight
-///   the row says so and every other control stays live.
-/// - **"Not recorded" is an answer.** An account whose usage cannot be read says
-///   that, in those words. It is never shown as 0%, never as 100%, and the row
-///   is never quietly dropped.
-///
-/// The words, the thresholds and the reset wording mirror Settings → Agents on
-/// purpose: a percentage should mean one thing everywhere in the app.
+/// What the selected accounts have left, beside the button that spends it. It
+/// warns and never forbids, never blocks the dialog, and says "not recorded".
 class FanOutUsageStrip extends ConsumerWidget {
   const FanOutUsageStrip({required this.installations, super.key});
 
@@ -307,14 +289,8 @@ class _AccountUsage extends ConsumerWidget {
   }
 }
 
-/// The window closest to running out — the one a fan-out hits first — and the
-/// reading it carries.
-///
-/// **Only windows that carry one.** [UsageWindow.percent] is null where the
-/// endpoint named a window and measured nothing for it, and such a window can
-/// never be the tightest: there is nothing to compare and nothing to draw. Null
-/// here means this account reported no number at all, which the row says in
-/// words.
+/// The window closest to running out, and its reading. Only windows that carry
+/// one: a null percent can never be the tightest, and null here means none did.
 ({UsageWindow window, double percent})? _tightest(AgentUsage usage) {
   ({UsageWindow window, double percent})? tightest;
   for (final window in usage.windows) {

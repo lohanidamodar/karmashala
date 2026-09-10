@@ -8,12 +8,8 @@ import '../application/comparison_providers.dart';
 import '../domain/comparison.dart';
 import 'comparison_chrome.dart';
 
-/// Every fan-out that has been run, newest first.
-///
-/// This is the surface the feature was missing: before it, a comparison existed
-/// only while its dialog was open. A row is deliberately three lines, like the
-/// session cards in the MonoCode reference — prompt, then the agents with their
-/// diff stats, then age and outcome.
+/// Every fan-out that has been run, newest first. Before it a comparison
+/// existed only while its dialog was open.
 class ComparisonList extends ConsumerWidget {
   const ComparisonList({required this.onOpen, required this.onNew, super.key});
 

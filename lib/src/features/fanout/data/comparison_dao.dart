@@ -3,11 +3,8 @@ import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
 import '../domain/comparison.dart';
 
-/// Data-access for persisted fan-out comparisons. Hand-written SQL, no codegen.
-///
-/// Reads always return a comparison with its candidates attached: a comparison
-/// without them is not a thing anyone wants, and two round trips per row was the
-/// only alternative.
+/// Data-access for persisted fan-out comparisons. Reads always return a
+/// comparison with its candidates attached; the alternative was two round trips.
 class ComparisonDao {
   ComparisonDao(this._db);
 

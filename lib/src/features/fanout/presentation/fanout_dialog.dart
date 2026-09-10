@@ -14,11 +14,8 @@ import 'comparison_list.dart';
 import 'comparison_view.dart';
 import 'fanout_usage_strip.dart';
 
-/// The fan-out surface: past comparisons, a new one, and one open.
-///
-/// Launching used to *become* the result view and the result view died with the
-/// dialog. It now opens on the list, because a comparison is a thing you return
-/// to — the launch simply selects the one it just made.
+/// The fan-out surface: past comparisons, a new one, and one open. It opens on
+/// the list, because a comparison is a thing you return to.
 class FanOutDialog extends ConsumerStatefulWidget {
   const FanOutDialog({this.initialComparisonId, super.key});
 
@@ -106,11 +103,8 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
         : ref
               .watch(agentInstallationDaoProvider)
               .getByEnvironment(repo.path.environmentId);
-    // 28 of margin on every side is comfortable on a desktop-sized window and
-    // wasteful on the 720x560 minimum, where it spends a tenth of the height on
-    // nothing. The requested size is clamped for the same reason: asking for
-    // 1180x780 inside a smaller window only tells Flutter to shrink it, and the
-    // number then lies to anyone reading this.
+    // 28 of margin is comfortable on a desktop window and wasteful at 720x560.
+    // The size is clamped because asking for more only tells Flutter to shrink it.
     final screen = MediaQuery.sizeOf(context);
     final inset = screen.height < 700 || screen.width < 900 ? 8.0 : 28.0;
     return Dialog(
