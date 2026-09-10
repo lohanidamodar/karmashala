@@ -1,4 +1,4 @@
-import '../devices/application/device_fleet.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 

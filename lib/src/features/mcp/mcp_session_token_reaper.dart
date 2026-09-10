@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../devices/application/device_claims.dart';
+import 'package:karmashala_devices/providers.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
 import 'launcher_control_server.dart';

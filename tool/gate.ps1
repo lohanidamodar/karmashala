@@ -172,15 +172,25 @@ $map = [ordered]@{
   }
   devices = @{
     pkg  = 'packages/karmashala_devices'
+    # A Flutter package since the pane joined it: the widgets are the larger
+    # half now, so its own suites run under `flutter test`. Measured, over the
+    # same 690 pure-Dart tests: 29 s under `dart test` against 33-40 s under
+    # `flutter test`, and one tester start costs 17 s — so a second package to
+    # keep the core pure would have cost more than it saved.
+    flutter = $true
     # `test/features/devices` whole: what is left in it is the app's half —
-    # the providers and controllers, the pane and its widgets, the pane tree
-    # golden, and the three suites over the MCP device-tool family
-    # (`device_tools_cross_platform`, `device_ui_tools`,
-    # `device_locating_policy`), which live beside the devices they drive
-    # rather than under `test/features/mcp`. The tool schemas golden is the
-    # one golden outside the folder that reaches the package: the device tools
-    # are served over its types.
+    # the pane tree golden, the two settings-bound slimming suites and the
+    # simulator list (their subject is the binding, which the app owns), the
+    # recording banner (the proof that `RevealInFileManager` satisfies the
+    # package's revealer port), the terminal/mirror focus guard, and the four
+    # suites over the MCP device-tool family (`device_tools_cross_platform`,
+    # `device_ui_tools`, `device_locating_policy`, `device_lock`), which live
+    # beside the devices they drive rather than under `test/features/mcp`.
+    # `flutter_loop` reads the claim registry the app binds. The tool schemas
+    # golden is the one golden outside the folder that reaches the package:
+    # the device tools are served over its types.
     app  = @('test/features/devices',
+             'test/features/flutter_apps/flutter_loop_test.dart',
              'test/features/mcp/tool_schemas_golden_test.dart')
     owns = @('lib/src/features/devices', 'test/features/devices')
   }
@@ -278,7 +288,10 @@ $map = [ordered]@{
     # `StatusDot` in the workbench tree, `DesktopMenuItem` and
     # `DesktopMenuDivider` in the terminal panel. The device pane, tool
     # schemas, bound frames and session launches goldens reach the package
-    # mechanically but record nothing of its.
+    # mechanically but record nothing of its. `picking.dart` joined this
+    # package with the devices pane — eight units call it and its `PickerQuiet`
+    # has one registrant, so there may only be one copy; its own suite came
+    # with it, and the eight callers are covered where they live.
     app  = @('test/app/theme', 'test/app/widgets',
              'test/app/ui_text_scale_test.dart',
              'test/app/shell/pane_header_test.dart',

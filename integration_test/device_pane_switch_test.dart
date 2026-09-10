@@ -15,10 +15,10 @@
 
 import 'dart:io';
 
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
-import 'package:karmashala/src/features/devices/presentation/device_stream_status.dart';
+import 'package:karmashala_devices/pane.dart';
+import 'package:karmashala_devices/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

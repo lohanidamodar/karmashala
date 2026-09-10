@@ -39,7 +39,7 @@ import 'package:agent_cli/read.dart';
 /// distribution. A synchronous Dart file operation has no timeout, so that wait
 /// was the distribution's to set and the isolate's to serve — on the thread the
 /// window is painted on, and the thread a native file dialog runs its modal
-/// loop on (`core/util/file_picking.dart`: a picker created while the isolate is
+/// loop on (`karmashala_ui's picking.dart`: a picker created while the isolate is
 /// busy is created and never shown, and the window goes Not Responding).
 ///
 /// So this file asserts **counts**, never milliseconds:

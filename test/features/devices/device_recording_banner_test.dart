@@ -5,12 +5,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_recording_banner.dart';
+import 'package:karmashala_devices/widgets.dart';
 
 import '../../support/fake_command_runner.dart';
 
@@ -55,6 +55,9 @@ Future<_StubRecorder> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // The app's half of `karmashala_devices`: its clock, its runner
+        // factory, its settings and its shell, behind the package's ports.
+        ...deviceBindings,
         deviceRecordingProvider.overrideWith(() => recorder),
         devicesProvider.overrideWith((ref) async => devices),
         // Composed by hand rather than left to the app's provider, which

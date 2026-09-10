@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_media/media.dart';
 import '../../core/media/video_support_provider.dart';
-import '../devices/application/device_recording_controller.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import '../terminal/application/terminal_recording_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';

@@ -10,7 +10,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';

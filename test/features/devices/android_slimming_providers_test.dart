@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
+import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 
@@ -53,6 +54,9 @@ ProviderContainer _container({
 }) {
   final container = ProviderContainer(
     overrides: [
+      // The app's half of `karmashala_devices`: its clock, its runner
+      // factory, its settings and its shell, behind the package's ports.
+      ...deviceBindings,
       settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
       androidSlimmingServiceProvider.overrideWithValue(slimming),
     ],

@@ -10,7 +10,7 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/util/file_picking.dart';
+import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_companion/widgets.dart';
 import 'package:karmashala_companion/screens.dart';

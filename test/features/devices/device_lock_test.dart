@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/devices/application/device_claims.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -24,7 +24,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
-import 'device_claims_test.dart' show MovableClock;
+import '../../support/fakes.dart' show MovableClock;
 
 /// The device lock, driven the way two agents would actually collide with each
 /// other: two MCP callers, each holding its own per-session credential, both
@@ -109,6 +109,9 @@ void main() {
 
     container = ProviderContainer(
       overrides: [
+        // The app's half of `karmashala_devices`: its clock, its runner
+        // factory, its settings and its shell, behind the package's ports.
+        ...deviceBindings,
         ...fakeTerminalOverrides(database: db),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: adb),
