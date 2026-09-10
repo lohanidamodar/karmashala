@@ -20,6 +20,8 @@ Primary goals:
 - Prefer practical solutions over over-engineering.
 - Keep changes small, reviewable, and aligned with the existing structure.
 - Make responsive behavior part of each UI change, not a final polish step.
+- keep comments concise and relevant and only when necessary
+- keep comments focused on why something is done, not what is done
 
 Out of scope unless explicitly requested:
 
@@ -28,6 +30,8 @@ Out of scope unless explicitly requested:
 - New packages that duplicate existing project capabilities
 - Publishing, deploying, signing, or uploading builds
 - Modifying secrets, signing files, API keys, credentials, or production configs
+- writing long verbose comments that are not necessary
+- Avoid adding comments that state the obvious or repeat the code.
 
 ---
 
