@@ -1,6 +1,7 @@
 import 'package:agent_cli/discovery.dart' as agent_cli;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_core/paths.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
@@ -151,3 +152,26 @@ class NoGitFiles implements GitFiles {
 
 /// The one every test shares; see [NoGitFiles].
 const noGitFiles = NoGitFiles();
+
+/// A disk on which every recorded path opens and nothing is a reparse point.
+///
+/// The launcher checks the agent's executable before it spawns anything
+/// (CLAUDE.md §20), and the fixtures spell paths like `C:\Users\me\.bin` that
+/// no machine has — so without this every suite that starts a session would be
+/// refused, and would be refused differently on a host that happened to have
+/// one of them. Tests that are *about* the check describe their own disk.
+class EveryPathOpens implements PathProbe {
+  const EveryPathOpens();
+
+  @override
+  bool? fileExists(String path) => true;
+
+  @override
+  bool isLink(String path) => false;
+
+  @override
+  String? linkTarget(String path) => null;
+}
+
+/// The one every test shares; see [EveryPathOpens].
+const everyPathOpens = EveryPathOpens();

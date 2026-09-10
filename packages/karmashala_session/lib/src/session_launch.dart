@@ -137,4 +137,48 @@ class SessionLaunchRequest {
   /// An empty terminal region this in-app launch should occupy. Null, stale or
   /// already filled fall back to a new tab rather than failing the launch.
   final String? targetPaneId;
+
+  /// The same request against a re-read [installation]. The launch-time path
+  /// check hands back the row a repair moved, and the spawn must use that one.
+  SessionLaunchRequest withInstallation(AgentInstallation installation) =>
+      SessionLaunchRequest(
+        repository: repository,
+        installation: installation,
+        title: title,
+        purpose: purpose,
+        surface: surface,
+        useWorktree: useWorktree,
+        existingWorktree: existingWorktree,
+        workingDirectory: workingDirectory,
+        additionalRepositories: additionalRepositories,
+        resumeExternalSessionId: resumeExternalSessionId,
+        restartSessionId: restartSessionId,
+        firstMessage: firstMessage,
+        systemPromptFile: systemPromptFile,
+        parentSessionId: parentSessionId,
+        parentLink: parentLink,
+        forkExternalSessionId: forkExternalSessionId,
+        permissionOverride: permissionOverride,
+        modelOverride: modelOverride,
+        view: view,
+        targetPaneId: targetPaneId,
+      );
 }
+
+/// The plain words for a launch whose agent executable no longer opens: which
+/// agent, the path that failed, and the one lever that corrects it.
+///
+/// Two sentences and not one, because "nothing is there" and "there but out of
+/// reach" call for opposite actions (CLAUDE.md §20).
+String agentExecutableRefusal({
+  required String agentName,
+  required String path,
+  required ExecutableReachability reachability,
+}) => reachability == ExecutableReachability.unreachable
+    ? '$agentName cannot be started: $path leads through a link this machine '
+          'will not follow, and looking again just now did not resolve it. '
+          'Set the path the executable is actually at in '
+          'Settings → Agents → Executables.'
+    : '$agentName cannot be started: nothing opens at $path, and looking '
+          'again just now did not find it anywhere else. Install the CLI, or '
+          'set the path yourself in Settings → Agents → Executables.';

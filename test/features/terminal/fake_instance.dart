@@ -5,6 +5,8 @@ import 'package:karmashala/src/features/agents/application/agent_usage_providers
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/paths/path_probe_provider.dart';
+import 'package:karmashala_core/paths.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala_git/git.dart';
@@ -304,8 +306,13 @@ fakeTerminalOverrides({
   Duration usagePollFloor = Duration.zero,
   bool frameGatedProbes = false,
   GitFiles? gitFiles,
+  PathProbe? pathProbe,
 }) {
   return [
+    // No disk by default here either: a launch reads the agent's executable
+    // before it spawns (CLAUDE.md §20), and the fixtures' paths are on no
+    // machine. A test that is *about* the check hands over its own disk.
+    pathProbeProvider.overrideWithValue(pathProbe ?? everyPathOpens),
     // Off by default for the same reason and in the same words as
     // `deliveryPollIntervalProvider` below — see [headlessProbeGate]. The one
     // test that is *about* the gate asks for the real one.
