@@ -48,20 +48,30 @@ void main() {
     ) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [
+          // Idle on purpose: a running session is pinned above the index
+          // (running_sessions_group.dart), and this test is about the
+          // project rows.
           summary(
             's1',
             title: 'Fix the login flow',
             project: 'popupbits',
             projectId: 'p1',
             projectPath: '/w/popupbits',
+            status: CompanionSessionStatus.idle,
           ),
-          summary('s2', project: 'popupbits', projectId: 'p1'),
+          summary(
+            's2',
+            project: 'popupbits',
+            projectId: 'p1',
+            status: CompanionSessionStatus.idle,
+          ),
           summary(
             's3',
             title: 'Port the parser',
             project: 'karmashala',
             projectId: 'p2',
             projectPath: '/w/karmashala',
+            status: CompanionSessionStatus.idle,
           ),
         ],
       );
@@ -198,8 +208,23 @@ void main() {
     ) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [
-          summary('s1', title: 'Alpha work', project: 'alpha', projectId: 'p1'),
-          summary('s2', title: 'Beta work', project: 'beta', projectId: 'p2'),
+          // Idle on purpose: a running session is pinned above the index
+          // (running_sessions_group.dart), and this test is about the
+          // project rows.
+          summary(
+            's1',
+            title: 'Alpha work',
+            project: 'alpha',
+            projectId: 'p1',
+            status: CompanionSessionStatus.idle,
+          ),
+          summary(
+            's2',
+            title: 'Beta work',
+            project: 'beta',
+            projectId: 'p2',
+            status: CompanionSessionStatus.idle,
+          ),
         ],
       );
       await pumpPhone(
@@ -225,8 +250,23 @@ void main() {
     ) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [
-          summary('s1', title: 'Alpha work', project: 'alpha', projectId: 'p1'),
-          summary('s2', title: 'Beta work', project: 'beta', projectId: 'p2'),
+          // Idle on purpose: a running session is pinned above the index
+          // (running_sessions_group.dart), and this test is about the
+          // project rows.
+          summary(
+            's1',
+            title: 'Alpha work',
+            project: 'alpha',
+            projectId: 'p1',
+            status: CompanionSessionStatus.idle,
+          ),
+          summary(
+            's2',
+            title: 'Beta work',
+            project: 'beta',
+            projectId: 'p2',
+            status: CompanionSessionStatus.idle,
+          ),
         ],
       );
       await pumpPhone(
@@ -373,8 +413,23 @@ void main() {
     testWidgets('dark mode renders both levels', (tester) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [
-          summary('s1', title: 'Alpha work', project: 'alpha', projectId: 'p1'),
-          summary('s2', title: 'Beta work', project: 'beta', projectId: 'p2'),
+          // Idle on purpose: a running session is pinned above the index
+          // (running_sessions_group.dart), and this test is about the
+          // project rows.
+          summary(
+            's1',
+            title: 'Alpha work',
+            project: 'alpha',
+            projectId: 'p1',
+            status: CompanionSessionStatus.idle,
+          ),
+          summary(
+            's2',
+            title: 'Beta work',
+            project: 'beta',
+            projectId: 'p2',
+            status: CompanionSessionStatus.idle,
+          ),
         ],
       );
       await pumpPhone(

@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/project_card.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
+import 'companion_search.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
 import 'add_project_screen.dart';
 import 'project_group.dart';
 import 'project_sessions_screen.dart';
+import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
 /// The phone's first tab: **the host's projects**, one per row, each opening
@@ -33,11 +36,40 @@ import 'start_session_screen.dart';
 ///
 /// The host's order is the order, here and everywhere: [groupByProject]
 /// partitions, it never sorts.
-class SessionListScreen extends ConsumerWidget {
+///
+/// **Finding** is a filter over that same snapshot and nothing more — see
+/// `companion_search.dart`. Typing sends no frame, so what the field can find
+/// is exactly what the phone was already holding, and the empty state says how
+/// old that is.
+class SessionListScreen extends ConsumerStatefulWidget {
   const SessionListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SessionListScreen> createState() => _SessionListScreenState();
+}
+
+class _SessionListScreenState extends ConsumerState<SessionListScreen> {
+  final _search = TextEditingController();
+
+  /// Exactly what is in the field. [companionSearchQuery] folds it for the
+  /// matchers; this is what the clear button and the empty state quote.
+  String _raw = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _onQuery(String value) => setState(() => _raw = value);
+
+  void _clearQuery() {
+    _search.clear();
+    _onQuery('');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final sessions = ref.watch(companionSessionsProvider);
     final link = ref.watch(companionLinkProvider).asData?.value;
     final hostName =
@@ -46,6 +78,14 @@ class SessionListScreen extends ConsumerWidget {
     final projects = ref.watch(companionProjectsProvider);
     final canAdd = ref.watch(companionGatewayProvider).capabilities.has(Capability.addProject);
     final canStart = ref.watch(companionGatewayProvider).capabilities.has(Capability.startSession);
+
+    // Offered only when there is something to search: a field over a phone
+    // that is still connecting, or over a desktop with no projects, is a
+    // control that can only ever answer "nothing".
+    final searchable =
+        (sessions.asData?.value ?? const <CompanionSessionSummary>[])
+            .isNotEmpty ||
+        (projects.asData?.value ?? const <RemoteWorkspaceProject>[]).isNotEmpty;
 
     // A Scaffold of its own so the tab can carry a floating action: the shell
     // owns the app bar and the navigation, and this adds neither.
@@ -58,7 +98,20 @@ class SessionListScreen extends ConsumerWidget {
               label: const Text('Actions'),
             )
           : null,
-      body: _body(context, ref, sessions, projects, link, hostName),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (searchable)
+            CompanionSearchField(
+              controller: _search,
+              query: _raw,
+              onChanged: _onQuery,
+            ),
+          Expanded(
+            child: _body(context, ref, sessions, projects, link, hostName),
+          ),
+        ],
+      ),
     );
   }
 
@@ -70,6 +123,7 @@ class SessionListScreen extends ConsumerWidget {
     CompanionLinkState? link,
     String hostName,
   ) {
+    final query = companionSearchQuery(_raw);
     return companionAsync(
       sessions,
       loading: () => const CompanionSkeletonList(lines: 2),
@@ -88,34 +142,70 @@ class SessionListScreen extends ConsumerWidget {
               onRetry: () => _retryProjects(ref),
             );
           }
-          final metadata = projects.asData?.value ?? const [];
-          if (metadata.isNotEmpty) return _projectIndex(context, metadata, const []);
-          return _empty(context, ref, link, hostName);
+          if ((projects.asData?.value ?? const <RemoteWorkspaceProject>[])
+              .isEmpty) {
+            return _empty(context, ref, link, hostName);
+          }
         }
-        final groups = projects.asData?.value == null
+        final metadata = projects.asData?.value;
+        final groups = metadata == null
             ? groupByProject(list)
-            : mergeProjectsAndSessions(projects.asData!.value, list);
+            : mergeProjectsAndSessions(metadata, list);
+        final shown = companionMatchingGroups(groups, query);
         if (groups.length == 1 && groups.single.sessions.isNotEmpty) {
-          final only = groups.single;
+          final only = shown.firstOrNull;
+          if (only == null || only.sessions.isEmpty) return _noMatch();
+          // Lifted out of the list rather than copied above it: one screen,
+          // one row per session.
+          final split = partitionByRunning(only.sessions);
           return CompanionSessionList(
-            sessions: only.sessions,
-            header: ProjectHeaderCard(group: only),
+            sessions: split.rest,
+            header: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ProjectHeaderCard(group: only),
+                RunningSessionsGroup(sessions: split.running),
+              ],
+            ),
             bottomInset: companionFabGutter,
           );
         }
-        return _projectIndex(context, projects.asData?.value ?? const [], list);
+        if (shown.isEmpty) return _noMatch();
+        // The index lists projects, so there is nothing here to lift: the
+        // running sessions are pinned above a list they are not already in,
+        // and each says which project it belongs to.
+        final running = [
+          for (final group in shown) ...partitionByRunning(group.sessions).running,
+        ];
+        return _projectIndex(
+          context,
+          shown,
+          header: running.isEmpty
+              ? null
+              : RunningSessionsGroup(sessions: running, showProject: true),
+        );
       },
     );
   }
 
+  /// Nothing matched — which is a statement about the snapshot in hand and the
+  /// four fields it was searched over, never about the desktop.
+  Widget _noMatch() => CompanionNotice.noMatch(
+    query: _raw.trim(),
+    searched: 'project names and paths, and session titles and agents',
+    age: companionSnapshotAge(
+      ref.watch(companionSessionsReceivedAtProvider),
+      ref.read(clockProvider).nowUtc(),
+    ),
+    onClear: _clearQuery,
+  );
+
   Widget _projectIndex(
     BuildContext context,
-    List<RemoteWorkspaceProject> metadata,
-    List<CompanionSessionSummary> sessions,
-  ) {
-    final groups = metadata.isEmpty
-        ? groupByProject(sessions)
-        : mergeProjectsAndSessions(metadata, sessions);
+    List<CompanionProjectGroup> groups, {
+    Widget? header,
+  }) {
+    final offset = header == null ? 0 : 1;
     return ListView.separated(
       // Clear of the floating action button, which hovers over this list
       // and covered the last project's row at Insets.xl; and no wider
@@ -124,14 +214,15 @@ class SessionListScreen extends ConsumerWidget {
         context,
         const EdgeInsets.only(bottom: companionFabGutter),
       ),
-      itemCount: groups.length,
+      itemCount: groups.length + offset,
       separatorBuilder: (context, index) => Divider(
         height: 1,
         thickness: 1,
         color: Theme.of(context).colorScheme.outlineVariant,
       ),
       itemBuilder: (context, index) {
-        final group = groups[index];
+        if (index < offset) return header!;
+        final group = groups[index - offset];
         return ProjectHeaderCard(
           group: group,
           onTap: () => Navigator.of(context).push(
@@ -150,7 +241,7 @@ class SessionListScreen extends ConsumerWidget {
   /// clears.
   static void _retry(WidgetRef ref) {
     ref.read(companionGatewayProvider).reconnect();
-    ref.invalidate(companionSessionsProvider);
+    ref.invalidate(companionSessionsSnapshotProvider);
   }
 
   static void _retryProjects(WidgetRef ref) {

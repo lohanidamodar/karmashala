@@ -3,15 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
+import 'companion_search.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
 import 'project_group.dart';
+import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
 /// One project's sessions, under that project's own name.
@@ -38,6 +41,24 @@ class ProjectSessionsScreen extends ConsumerStatefulWidget {
 
 class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   late String _key = widget.projectKey;
+  final _search = TextEditingController();
+
+  /// The field's own text. The project this screen is open on is never
+  /// filtered away by it — see [companionMatchingGroups]'s `keepKey`.
+  String _raw = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _onQuery(String value) => setState(() => _raw = value);
+
+  void _clearQuery() {
+    _search.clear();
+    _onQuery('');
+  }
 
   Future<void> _switchProject(List<CompanionProjectGroup> groups) async {
     final picked = await companionSheet<String>(
@@ -88,8 +109,16 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
             projects.asData!.value,
             sessions.asData?.value ?? const <CompanionSessionSummary>[],
           );
-    final group = merged.where((g) => g.key == _key).firstOrNull;
+    final query = companionSearchQuery(_raw);
+    // Filtered with `keepKey`: the project this screen is about survives a
+    // query it does not match, with its own sessions still narrowed — the
+    // alternative is telling the user their project is gone because they
+    // typed a word.
+    final visible = companionMatchingGroups(merged, query, keepKey: _key);
+    final group = visible.where((g) => g.key == _key).firstOrNull;
     final scheme = Theme.of(context).colorScheme;
+    // The switcher lists every project the host holds, filtered or not: it is
+    // the way sideways, not a second view of the search.
     final canSwitch = merged.length > 1;
 
     return Scaffold(
@@ -126,7 +155,18 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const LinkBanner(),
-            Expanded(child: _body(context, sessions, projects, group, scheme)),
+            // Only when there is something to search: a field over a project
+            // with no sessions can only ever answer "nothing".
+            if (group != null && merged.any((g) => g.sessions.isNotEmpty))
+              CompanionSearchField(
+                controller: _search,
+                query: _raw,
+                onChanged: _onQuery,
+                hintText: 'Search sessions',
+              ),
+            Expanded(
+              child: _body(context, sessions, projects, group, scheme, query),
+            ),
           ],
         ),
       ),
@@ -142,6 +182,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
     AsyncValue<List<RemoteWorkspaceProject>> projects,
     CompanionProjectGroup? group,
     ColorScheme scheme,
+    String query,
   ) {
     if (group != null) {
       return Column(
@@ -160,24 +201,33 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           ),
           Expanded(
             child: group.sessions.isEmpty
-                ? CompanionNotice(
-                    icon: AppIcons.chat,
-                    title: 'No sessions yet',
-                    body: 'Start a session in ${group.name} from this desktop.',
-                    actionLabel: ref
-                        .read(companionGatewayProvider)
-                        .capabilities
-                        .has(Capability.startSession)
-                        ? 'Start a session'
-                        : null,
-                    onAction: () => Navigator.of(context).push(
-                      companionRoute<void>(
-                        context,
-                        (_) => StartSessionScreen(projectId: group.projectId),
-                      ),
-                    ),
-                  )
-                : CompanionSessionList(sessions: group.sessions),
+                // An active query is why the list is empty; saying "no
+                // sessions yet" about a project that has them would be the
+                // wrong sentence and would hide the way out of the filter.
+                ? (query.isEmpty
+                      ? CompanionNotice(
+                          icon: AppIcons.chat,
+                          title: 'No sessions yet',
+                          body:
+                              'Start a session in ${group.name} from this '
+                              'desktop.',
+                          actionLabel:
+                              ref
+                                  .read(companionGatewayProvider)
+                                  .capabilities
+                                  .has(Capability.startSession)
+                              ? 'Start a session'
+                              : null,
+                          onAction: () => Navigator.of(context).push(
+                            companionRoute<void>(
+                              context,
+                              (_) =>
+                                  StartSessionScreen(projectId: group.projectId),
+                            ),
+                          ),
+                        )
+                      : _noMatch(group))
+                : _list(group.sessions),
           ),
         ],
       );
@@ -211,12 +261,38 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
         error: failure,
         onRetry: () {
           ref.read(companionGatewayProvider).reconnect();
-          ref.invalidate(companionSessionsProvider);
+          ref.invalidate(companionSessionsSnapshotProvider);
         },
       );
     }
     return const CompanionSkeletonList();
   }
+
+  /// This project's sessions, the running ones lifted to the top under their
+  /// own header. Lifted rather than copied: a session appears once on a
+  /// screen, and within each part the host's order is untouched.
+  Widget _list(List<CompanionSessionSummary> sessions) {
+    final split = partitionByRunning(sessions);
+    return CompanionSessionList(
+      sessions: split.rest,
+      header: split.running.isEmpty
+          ? null
+          : RunningSessionsGroup(sessions: split.running),
+    );
+  }
+
+  /// Nothing in this project matched — over the two fields a session is known
+  /// by, in the snapshot the phone is already holding, whose age is named
+  /// because that is the only thing the result is a statement about.
+  Widget _noMatch(CompanionProjectGroup group) => CompanionNotice.noMatch(
+    query: _raw.trim(),
+    searched: 'the session titles and agents in ${group.name}',
+    age: companionSnapshotAge(
+      ref.watch(companionSessionsReceivedAtProvider),
+      ref.read(clockProvider).nowUtc(),
+    ),
+    onClear: _clearQuery,
+  );
 }
 
 /// The app bar's title: the project's name, and — when there is somewhere to
