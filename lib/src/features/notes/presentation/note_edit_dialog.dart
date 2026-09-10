@@ -7,16 +7,8 @@ import '../../todos/presentation/project_menu.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
 
-/// Opens an empty note editor and keeps whatever comes back.
-///
-/// Shared by the Notes panel's own **+** and by the palette's "New note",
-/// because those are two doors into one act and the owner could not find
-/// either: *"about notes, how to add notes, where can we add notes?" … "it's
-/// not intuitive"*. One function, so a second door cannot drift into filing
-/// notes differently from the first.
-///
-/// Pre-filed under whatever scope the Notes panel is showing, so writing a
-/// note while looking at one project files it there without a second decision.
+/// Opens an empty note editor and keeps whatever comes back. Shared by the
+/// panel's **+** and the palette, so a second door cannot file notes differently.
 Future<Note?> showNewNoteDialog(BuildContext context, WidgetRef ref) =>
     _composeNote(
       context,
@@ -25,15 +17,8 @@ Future<Note?> showNewNoteDialog(BuildContext context, WidgetRef ref) =>
       projectId: ref.read(noteScopeProvider).projectForNewItems,
     );
 
-/// Keeps text captured from somewhere else — a terminal selection — as a note,
-/// after the user has read it.
-///
-/// The third door into [_composeNote] rather than a second implementation, and
-/// it differs from the panel's own **+** in exactly one thing: what it arrives
-/// pre-filed under. A capture is filed under the project it *came from*, and
-/// under nothing at all when it came from a plain shell — never under whatever
-/// the Notes panel happens to be filtered to, which is a fact about a panel the
-/// user was not looking at.
+/// Keeps text captured from somewhere else as a note. It differs from the
+/// panel's **+** in one thing: a capture is filed under where it came from.
 Future<Note?> showCapturedNoteDialog(
   BuildContext context,
   WidgetRef ref, {
@@ -60,11 +45,8 @@ Future<Note?> _composeNote(
   String? sourceSessionId,
   String? sourceRepositoryId,
 }) async {
-  // Everything is read from [ref] **before** the dialog is awaited. The
-  // palette's copy of this call hands in the `ref` of a widget that is
-  // dismissed on the way to the dialog, and a `WidgetRef` is only as alive as
-  // its element; the controller it hands back belongs to the container and
-  // outlives both.
+  // Everything is read from [ref] **before** the dialog is awaited: a
+  // `WidgetRef` is only as alive as its element, and the palette's is dismissed.
   final notes = ref.read(notesProvider.notifier);
   final now = ref.read(clockProvider).nowUtc();
   final edit = await NoteEditDialog.show(
@@ -105,11 +87,8 @@ class NoteEdit {
   final String? projectId;
 }
 
-/// Edits a note's title, body and filing.
-///
-/// A dialog rather than an inline field because the panel it opens from is
-/// 240px at its narrowest, and a note is a paragraph about to be handed to an
-/// agent — it deserves room to be read before it is sent.
+/// Edits a note's title, body and filing. A dialog rather than an inline field
+/// because the panel is 240px at its narrowest and a note is a paragraph.
 class NoteEditDialog extends ConsumerStatefulWidget {
   const NoteEditDialog({required this.note, super.key});
 

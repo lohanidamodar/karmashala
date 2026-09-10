@@ -39,11 +39,8 @@ class ProjectDao {
     );
   }
 
-  /// Files [id] under [workspaceId], or unassigns it when that is null.
-  ///
-  /// Its own statement rather than a read-modify-[update], so moving a project
-  /// between contexts cannot rewrite its name or root on the way — and so the
-  /// cost of the move is one `UPDATE`, whatever else the row holds.
+  /// Files [id] under [workspaceId], or unassigns it when null. Its own
+  /// statement, so a move cannot rewrite the project's name or root on the way.
   void setWorkspace(String id, String? workspaceId) {
     _db.execute('UPDATE projects SET workspace_id = ? WHERE id = ?;', [
       workspaceId,

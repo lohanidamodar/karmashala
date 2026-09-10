@@ -18,25 +18,16 @@ final notesEnabledProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider.select((s) => s.notesEnabled)),
 );
 
-/// Every note, newest first, kept in memory so the panel rebuilds on a write.
-///
-/// The list is the state rather than a revision counter over the DAO: notes are
-/// few and small, and a surface that re-reads the table on every frame of a
-/// resize is a surface that reads the table for no reason.
+/// Every note, newest first, kept in memory so the panel rebuilds on a write —
+/// notes are few and small, and a resize must not re-read the table per frame.
 class NotesController extends Notifier<List<Note>> {
   @override
   List<Note> build() => ref.watch(noteDaoProvider).list();
 
   NoteDao get _dao => ref.read(noteDaoProvider);
 
-  /// Keeps [body] **exactly as given**. Callers pass the message's own words;
-  /// nothing here trims a conversation into a gist. See [Note].
-  ///
-  /// An unspecified [projectId] follows the source repository's project, which
-  /// is the whole reason capturing from a transcript files anything at all.
-  /// [inheritProjectFromSource] is how a caller says *file this under nothing*
-  /// — the one thing a nullable `String` cannot say for itself, since null
-  /// there already means "you decide".
+  /// Keeps [body] **exactly as given**; nothing here trims a message into a
+  /// gist. [inheritProjectFromSource] is how a caller says *file this under nothing*.
   Note capture({
     required String body,
     String? title,
@@ -67,19 +58,14 @@ class NotesController extends Notifier<List<Note>> {
     return note;
   }
 
-  /// The project a note captured from [repositoryId] belongs to.
-  ///
-  /// Filing follows the repository because a repository belongs to exactly one
-  /// project, so this is a lookup rather than a guess — the same rule the v33
-  /// backfill applied to every note taken before the column existed.
+  /// The project a note captured from [repositoryId] belongs to — a lookup, not
+  /// a guess, since a repository belongs to exactly one project.
   String? _projectOf(String? repositoryId) => repositoryId == null
       ? null
       : ref.read(repositoryDaoProvider).getById(repositoryId)?.projectId;
 
-  /// Applies the user's edit. An empty title clears it, putting the note back
-  /// to being named by its first line. [projectId] is the filing the dialog
-  /// came back with — null means "no project", which is a choice, so this is
-  /// the one field an edit can clear by leaving it out.
+  /// Applies the user's edit. An empty title clears it; [projectId] null means
+  /// "no project", a choice, so it is the one field an edit can clear.
   void edit(
     String id, {
     required String body,
@@ -145,9 +131,7 @@ final notesProvider = NotifierProvider<NotesController, List<Note>>(
 );
 
 /// Which project's notes the panel is showing. Its own controller rather than
-/// one shared with Todos: the two panels are looked at for different reasons,
-/// and a filter set in one silently narrowing the other is a surprise nobody
-/// asked for.
+/// one shared with Todos: a filter set in one must not narrow the other.
 class NoteScopeController extends Notifier<ProjectScope> {
   @override
   ProjectScope build() => ProjectScope.all;

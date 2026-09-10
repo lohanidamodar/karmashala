@@ -91,10 +91,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
             context,
             host: host,
           );
-          // `mounted` as well as null: the dialog is awaited, and a `setState`
-          // on a State the user has since dismissed throws. The local branch
-          // below has always checked it; this one crossed an await over SFTP,
-          // which is the slower of the two.
+          // `mounted` as well as null: this branch crosses an await over SFTP, and a
+          // `setState` on a State the user has since dismissed throws.
           if (dir == null || !mounted) return;
           setState(() {
             _folderController.text = dir;
@@ -111,13 +109,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       }
     }
 
-    // The local fallback, and the only branch that opens a *native* picker —
-    // hence `pickOneDirectory`, which announces itself to the log and flushes
-    // before asking. A native picker runs its modal loop on the platform
-    // thread, which is the Dart isolate's thread, so a busy isolate leaves it
-    // created and never shown with the window Not Responding; the announcement
-    // is what names the button when that happens. The SSH branch above needs
-    // none of it — a remote browse is a Flutter dialog over SFTP.
+    // The only branch that opens a *native* picker — hence `pickOneDirectory`,
+    // which announces itself and flushes the log before the isolate is taken.
     final dir = await pickOneDirectory(what: 'a project folder');
     if (dir == null || !mounted) return;
     setState(() {

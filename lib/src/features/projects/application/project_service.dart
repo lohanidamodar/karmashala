@@ -61,10 +61,8 @@ class ProjectService {
   final CommandRunnerFactory? runnerFactory;
   final PathTranslator translator;
 
-  /// Creates a project rooted at [root] named [name], discovers Git repositories
-  /// beneath it, and persists everything. The whole operation is atomic only at
-  /// the row level; discovery failures propagate as
-  /// [RepositoryDiscoveryException] before any repository rows are written.
+  /// Creates a project rooted at [root], discovers Git repositories beneath it
+  /// and persists everything. Discovery failures throw before any row is written.
   Future<ProjectCreationResult> createProjectByDiscovery({
     required String name,
     required EnvironmentPath root,
@@ -98,12 +96,8 @@ class ProjectService {
     return ProjectCreationResult(project: project, repositories: repositories);
   }
 
-  /// Creates a project for [target] from a folder picked on the Windows host.
-  ///
-  /// The native folder picker always yields a Windows-accessible path
-  /// ([windowsScanPath]) — a drive path or a `\\wsl.localhost\…` UNC — so
-  /// discovery scans there, then the project root and each repository are bound
-  /// to [target] (translated into the WSL namespace when [target] is WSL).
+  /// Creates a project for [target] from a folder picked on the Windows host —
+  /// discovery scans there, then the rows are bound to (and translated for) [target].
   Future<ProjectCreationResult> createProjectForEnvironment({
     required String name,
     required String windowsScanPath,
@@ -152,11 +146,8 @@ class ProjectService {
     return ProjectCreationResult(project: project, repositories: repositories);
   }
 
-  /// Creates a project in [target] environment, optionally cloning [gitRepoUrl].
-  ///
-  /// If [gitRepoUrl] is provided and [targetPath] is empty:
-  /// - For SSH/WSL: defaults to `~/karmashala/<repoName>`.
-  /// - For Windows/local: throws [RepositoryDiscoveryException] prompting for a destination path.
+  /// Creates a project in [target], optionally cloning [gitRepoUrl]. With an
+  /// empty [targetPath]: SSH/WSL default to `~/karmashala/<repoName>`, local throws.
   Future<ProjectCreationResult> createProject({
     required String name,
     required ExecutionEnvironment target,

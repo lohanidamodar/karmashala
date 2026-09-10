@@ -7,23 +7,8 @@ import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/notification_request.dart';
 import '../../sessions/application/session_actions.dart';
 
-/// Deletes CLI session files **behind** the workspace change that asked for it,
-/// and tells the user what it could not remove.
-///
-/// Deleting a project used to do this work inline: the dialog's `await` held
-/// the UI isolate for one full store-index pass per session, and a file that
-/// could not be deleted was swallowed by a bare `catch (_)`. So a project of 33
-/// sessions froze the app, and anything left behind was left behind silently.
-///
-/// **Small and local on purpose.** The app has no job system and this is the
-/// one action that needs one, so this is a set of in-flight futures with an
-/// explicit teardown rather than a general queue.
-///
-/// **The workspace rows go first, the store second, and that order is
-/// deliberate.** Removing a project from the workspace is reversible — the CLI
-/// stores can be re-imported — while deleting an agent's own transcript is not.
-/// So the reversible half happens immediately, where the user can see it, and
-/// the irreversible half runs behind it and reports what actually happened.
+/// Deletes CLI session files **behind** the workspace change that asked for
+/// it: the reversible half happens at once, the irreversible half reports back.
 class CliStorePurgeRunner {
   CliStorePurgeRunner(this._ref);
 
@@ -40,11 +25,8 @@ class CliStorePurgeRunner {
   /// the row it deleted is already gone — but a test can assert on it.
   int get pending => _running.length;
 
-  /// Completes when every purge started so far has finished.
-  ///
-  /// The teardown hook and the test's wait. A loop rather than a single
-  /// `Future.wait`, because reporting a failure can outlive the batch that
-  /// raised it.
+  /// Completes when every purge started so far has finished. A loop rather than
+  /// one `Future.wait`, because reporting a failure can outlive its batch.
   Future<void> get settled async {
     while (_running.isNotEmpty) {
       await Future.wait(_running.toList());
@@ -90,12 +72,8 @@ class CliStorePurgeRunner {
     await _report(projectName, report);
   }
 
-  /// Tells the user once, naming what is still on disk.
-  ///
-  /// Both surfaces the app already has for a background failure: the log — which
-  /// is what every other background failure here uses, and what the in-app Logs
-  /// panel renders — and the OS toast, which is the only channel that reaches
-  /// someone who has looked away. Neither is new machinery.
+  /// Tells the user once, naming what is still on disk — the log and the OS
+  /// toast, the only channel that reaches someone who has looked away.
   Future<void> _report(String projectName, CliDeleteReport report) async {
     final failures = report.failures;
     final named = failures.take(3).map((f) => f.label).toList();

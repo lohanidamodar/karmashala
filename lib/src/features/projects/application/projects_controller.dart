@@ -24,10 +24,8 @@ import 'project_providers.dart';
 import 'project_service.dart';
 import 'project_service_provider.dart';
 
-/// Holds the list of persisted projects and drives project creation.
-///
-/// Reads are synchronous (SQLite), so the state is the plain project list; it is
-/// refreshed explicitly after mutations.
+/// Holds the list of persisted projects and drives project creation. Reads are
+/// synchronous, so the state is the plain list, refreshed after mutations.
 class ProjectsController extends Notifier<List<Project>> {
   final Map<String, Future<ImportSummary>> _syncs = {};
 
@@ -70,20 +68,8 @@ class ProjectsController extends Notifier<List<Project>> {
     }
   }
 
-  /// The **one** CLI-store import of this app's life, run after the first
-  /// frame (`AppLifecycle.importCliSessions`).
-  ///
-  /// It used to run on every project expand *and* every project selection, and
-  /// each run was a full walk of every store — so a workspace of five projects
-  /// paid five concurrent walks of the owner's 663-file Claude store across
-  /// `\\wsl.localhost`, with the Explorer's spinner up for all of it. That is
-  /// the "what is it loading on every expand?" the owner profiled.
-  ///
-  /// Every repository in the workspace, in one pass, because the walk is per
-  /// *store* and not per project: doing it project by project would read the
-  /// same store once per project. What is left for the user is the per-project
-  /// **Refresh CLI sessions**, which is the same import narrowed to one
-  /// project's repositories.
+  /// The **one** CLI-store import of this app's life, run after the first frame.
+  /// One pass over every store, because the walk is per store, not per project.
   Future<ImportSummary> importCliSessionsOnce() {
     return _lifecycleImport ??= _import(
       () => ref.read(repositoryDaoProvider).getAll(),
@@ -158,13 +144,8 @@ class ProjectsController extends Notifier<List<Project>> {
     return summary;
   }
 
-  /// Creates a project for [targetEnvironmentId] from a Windows-host folder
-  /// [windowsPath] (a drive or `\\wsl.localhost\…` path the picker returned),
-  /// binding the project and its repositories to the chosen environment.
-  ///
-  /// [workspaceId] is whatever the dialog was showing when the user pressed
-  /// create — a suggestion they left alone, one they changed, or nothing. It is
-  /// written once, here, and no existing project is touched.
+  /// Creates a project for [targetEnvironmentId] from a Windows-host folder,
+  /// binding it and its repositories to that environment.
   Future<ProjectCreationResult> createInEnvironment({
     required String name,
     required String windowsPath,
@@ -218,14 +199,7 @@ class ProjectsController extends Notifier<List<Project>> {
   }
 
   /// Re-runs repository discovery over [projectId]'s root and records anything
-  /// new. Returns the repositories that were added.
-  ///
-  /// [ProjectService.rediscover] has existed since the discovery work and had
-  /// never had a caller: a project scanned once kept whatever it found then, so
-  /// a repository cloned into it afterwards stayed invisible. The Explorer's
-  /// tree now depends on this being reachable — a session working in a folder
-  /// with no `repositories` row is drawn as "not scanned yet", and this is the
-  /// action that turns such a row into a real one.
+  /// new. Without it a repository cloned in after the first scan stays invisible.
   Future<List<Repository>> rediscover(String projectId) async {
     final project = ref.read(projectDaoProvider).getById(projectId);
     if (project == null) {
@@ -247,16 +221,9 @@ class ProjectsController extends Notifier<List<Project>> {
           projectEnvironment: environment,
           windows: windows,
         );
-    // A rescan is also the moment to notice what has *gone*. It only ever
-    // added, so a worktree deleted from the command line stayed in the table
-    // for ever — offered in every picker, stat'd by every cost the tree pays.
-    //
-    // **Not awaited**, and that is the point: the caller asked what the scan
-    // *found*, and retirement answers a different question by probing the
-    // filesystem once per checkout — which over a stopped distribution's UNC
-    // blocks for seconds each. Making the rescan wait on it would stall the
-    // very screen the user is watching for a fact nobody asked for. It bumps
-    // the revision itself when it changes something.
+    // A rescan is also the moment to notice what has gone. **Not awaited**: it
+    // probes once per checkout, which over a stopped distro's UNC blocks for
+    // seconds each, and the caller asked what the scan *found*.
     unawaited(_retireMissingCheckouts(projectId, project, environment, windows));
     if (added.isNotEmpty) {
       // New repositories may already have CLI history behind them, and the
@@ -269,9 +236,7 @@ class ProjectsController extends Notifier<List<Project>> {
   }
 
   /// Drops the rows whose directories are provably gone, and says nothing when
-  /// it cannot tell. The service refuses to retire anything unless the project
-  /// root itself answered present, so a stopped distro or an unmounted drive
-  /// cannot delete a workspace.
+  /// it cannot tell — the project root itself must have answered present.
   Future<void> _retireMissingCheckouts(
     String projectId,
     Project project,
@@ -299,23 +264,8 @@ class ProjectsController extends Notifier<List<Project>> {
     }
   }
 
-  /// Removes [projectId] from the workspace. The database cascades to its
-  /// repositories, sessions, events and imported sessions. Clears any selection
-  /// that pointed into the deleted project.
-  ///
-  /// When [deleteCliSessions] is set, the project's imported CLI sessions are
-  /// also deleted from the originating agents' on-disk stores (Claude/Codex
-  /// history) — **after** this returns, by [CliStorePurgeRunner], which reports
-  /// anything it could not remove.
-  ///
-  /// The workspace half is synchronous and the store half is not, and the split
-  /// is the point. This used to delete the store files inline, one session at a
-  /// time: a store-index pass, a `DELETE` and a signal fan-out **each**, all on
-  /// the UI isolate, so a project of 33 sessions decoded 289 index records,
-  /// rewrote the Codex index 33 times and woke every watcher of the session list
-  /// 34 times before the row disappeared. Now the row goes at once, the store is
-  /// purged in one pass per store behind it, and the whole thing publishes once.
-  /// See `project_delete_cost_test.dart`.
+  /// Removes [projectId]; the database cascades. With [deleteCliSessions] the
+  /// agents' own store files go too, *after* this returns, in one pass per store.
   Future<void> deleteProject(
     String projectId, {
     bool deleteCliSessions = false,
@@ -349,10 +299,8 @@ class ProjectsController extends Notifier<List<Project>> {
         .start(projectName: project?.name ?? 'The project', sessions: imported);
   }
 
-  /// Whether the selected session — native, imported — sits in [repoIds].
-  ///
-  /// Asked *before* the project row goes, because the cascade takes the answer
-  /// with it.
+  /// Whether the selected session sits in [repoIds]. Asked *before* the project
+  /// row goes, because the cascade takes the answer with it.
   ({bool session, bool imported}) _selectionInto(Set<String> repoIds) {
     final session = ref.read(selectedSessionIdProvider);
     final imported = ref.read(selectedImportedSessionIdProvider);
@@ -368,12 +316,8 @@ class ProjectsController extends Notifier<List<Project>> {
     );
   }
 
-  /// Drops any selection that pointed into the project just deleted.
-  ///
-  /// The two session halves are new here only in *where* they happen: they used
-  /// to ride along inside the per-session delete, which meant they ran only when
-  /// "delete session files" was ticked — so removing a project without it left
-  /// the app selecting a session whose row the cascade had taken.
+  /// Drops any selection that pointed into the project just deleted. These used
+  /// to ride inside the per-session delete, so they ran only when files went too.
   void _clearSelections(
     String projectId,
     Set<String> repoIds,
@@ -405,10 +349,8 @@ class ProjectsController extends Notifier<List<Project>> {
 final projectsControllerProvider =
     NotifierProvider<ProjectsController, List<Project>>(ProjectsController.new);
 
-/// Whether a project's root folder no longer exists on disk. Resolves the
-/// Windows-reachable path (a `\\wsl.localhost\…` UNC form for WSL projects) and
-/// checks it. Defaults to "not missing" while loading or if it can't be
-/// resolved, so the UI never falsely flags a project.
+/// Whether a project's root folder no longer exists on disk. Defaults to "not
+/// missing" while loading or unresolvable, so the UI never falsely flags one.
 final projectPathMissingProvider = FutureProvider.autoDispose
     .family<bool, Project>((ref, project) async {
       final environmentDao = ref.read(executionEnvironmentDaoProvider);
@@ -447,21 +389,13 @@ class SelectedProjectController extends Notifier<String?> {
   @override
   String? build() => null;
 
-  /// Selecting a project scans nothing.
-  ///
-  /// It used to start a full CLI-store import — so every click in the Explorer,
-  /// and every expand (which selects too), walked every store again. The import
-  /// runs once after the first frame now, and on demand from the project row's
-  /// **Refresh CLI sessions**.
+  /// Selecting a project scans nothing. It used to start a full CLI-store
+  /// import, so every click and expand walked every store again.
   void select(String? id) => state = id;
 }
 
-/// When the CLI stores were last read, and for which project.
-///
-/// §19's rule, applied to a list that can now be out of date: a reading is
-/// shown with its age, and *no* reading says so rather than saying nothing.
-/// Before the first-frame import lands, [all] is null and the Explorer says the
-/// stores have not been checked instead of implying the tree is current.
+/// When the CLI stores were last read, and for which project. §19: a reading
+/// is shown with its age, and *no* reading says so rather than saying nothing.
 class CliSessionsChecked {
   const CliSessionsChecked({this.all, this.byProject = const {}});
 
