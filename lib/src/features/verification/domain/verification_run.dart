@@ -3,11 +3,8 @@ import 'verification_artifact.dart';
 import 'verification_step.dart';
 import 'verification_target.dart';
 
-/// What the run concluded.
-///
-/// [inconclusive] is a first-class answer, not a missing one: an agent that
-/// could not reach the page, or whose device went away mid-run, must be able to
-/// say so rather than pick between a pass and a fail it did not observe.
+/// What the run concluded. [inconclusive] is a first-class answer: an agent
+/// that never reached the page must not pick a pass or fail it did not observe.
 enum VerificationVerdict {
   pass('Pass'),
   fail('Fail'),
@@ -26,11 +23,8 @@ enum VerificationVerdict {
   }
 }
 
-/// A recorded attempt to prove that something works.
-///
-/// The unit an agent hands to a human: what was verified, what was done to it,
-/// what was captured, and what the agent concluded. A run with no verdict is
-/// still open — it is being recorded right now, or it was abandoned.
+/// A recorded attempt to prove that something works. A run with no verdict is
+/// still open — being recorded right now, or abandoned.
 class VerificationRun {
   const VerificationRun({
     required this.id,
@@ -51,19 +45,11 @@ class VerificationRun {
   final String title;
   final VerificationTarget target;
 
-  /// The session this run belongs to, or null when it was started outside one.
-  ///
-  /// Deliberately a plain column and **not** a foreign key: evidence must
-  /// outlive the session that produced it, and `sessions/` is another owner's
-  /// table. Reading the session's title is a lookup, not a join.
+  /// The session this run belongs to, or null. A plain column, never a foreign
+  /// key: evidence must outlive the session.
   final String? sessionId;
 
-  /// The session that recorded this run and signed off on its verdict, or
-  /// null for a row written before attribution existed.
-  ///
-  /// Distinct from [sessionId], which says whose *work* is under test. When
-  /// the two are equal the verdict is self-reported; that is the common case
-  /// today, and saying so is the point.
+  /// Who recorded the run and signed off; equal to [sessionId] is self-graded.
   final String? producedBySessionId;
 
   final DateTime startedAt;
@@ -79,7 +65,6 @@ class VerificationRun {
   final List<VerificationStep> steps;
   final List<VerificationArtifact> artifacts;
 
-  /// Whether the verifier was the author, someone else, or unrecorded.
   VerdictAttribution get attribution => VerdictAttribution.of(
     producerSessionId: producedBySessionId,
     subjectSessionId: sessionId,

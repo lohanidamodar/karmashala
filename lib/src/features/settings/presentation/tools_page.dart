@@ -31,24 +31,10 @@ import 'settings_section.dart';
 
 /// Settings → Tools: the external apps sessions are handed to, and the MCP
 /// bridge that lets an agent drive Karmashala back.
-///
-/// ## Why the page is banded
-///
-/// Four blocks in a column all looked like one list of unrelated settings, and
-/// the two questions they actually answer are different in kind. "Which
-/// program opens this" is a preference. "Can an agent reach Karmashala at all"
-/// is a measurement (§19), and "may it run JavaScript in my logged-in browser"
-/// is a decision only a person can make. Bands say which is which before the
-/// reader has to work it out from the controls.
-///
-/// The order is a progression: what we hand work to, whether an agent can get
-/// in, what it can call once it is in, and the one thing it cannot do until
-/// you say so.
 class ToolsPage extends StatelessWidget {
   const ToolsPage({super.key});
 
-  /// The band headings, in order — named here so a test can hold the page to
-  /// them without restating the strings and drifting from the page.
+  /// The band headings, in order — named here so a test can hold the page.
   static const List<String> categories = [
     'External apps',
     'Agent access',
@@ -94,12 +80,7 @@ class ToolsPage extends StatelessWidget {
   }
 }
 
-/// One band of the Tools page: a heading, a line saying what the band is
-/// about, and the sections under it.
-///
-/// A heavier heading than [SettingsSection]'s label deliberately — the two are
-/// nested, and a band whose title looked like a section title would read as a
-/// fifth section rather than as the thing three of them sit inside.
+/// One band of the Tools page, headed heavier than [SettingsSection]'s label.
 class ToolsCategory extends StatelessWidget {
   const ToolsCategory({
     required this.title,
@@ -138,8 +119,7 @@ class ToolsCategory extends StatelessWidget {
   }
 }
 
-/// The external terminal app used to resume sessions: a detected terminal or
-/// a custom executable (browse or paste path).
+/// The external terminal sessions resume in: a detected one, or a custom path.
 class TerminalAppSection extends ConsumerStatefulWidget {
   const TerminalAppSection({super.key});
 
@@ -183,11 +163,8 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
     final controller = ref.read(settingsControllerProvider.notifier);
     final detected =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-    // The dropdown value must match exactly one item, so clamp the saved
-    // selection to a currently-valid option. The saved terminal can be missing
-    // from `detected` while the async probe is still loading (or if it was
-    // uninstalled); without this clamp DropdownButtonFormField throws and the
-    // settings screen flashes a red error until the probe resolves.
+    // Clamp to a valid option: the saved terminal can be absent from
+    // `detected` while the probe loads, and DropdownButtonFormField throws.
     final validIds = <String>{for (final t in detected) t.id, 'custom'};
     final saved = settings.defaultSystemTerminalId;
     final current = (saved != null && validIds.contains(saved))
@@ -260,8 +237,7 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
   }
 }
 
-/// The code editor used by "open in editor" on projects: a detected editor
-/// (VS Code, Zed) or a custom executable (browse or paste path).
+/// The editor "open in editor" uses: a detected one, or a custom path.
 class CodeEditorSection extends ConsumerStatefulWidget {
   const CodeEditorSection({super.key});
 
@@ -375,8 +351,7 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
   }
 }
 
-/// The MCP bridge status: whether an agent can drive Karmashala through its
-/// own tools, and which tools are exposed.
+/// The MCP bridge status: can an agent drive Karmashala, and with what.
 class McpBridgeSection extends ConsumerWidget {
   const McpBridgeSection({super.key});
 
@@ -398,20 +373,11 @@ class McpBridgeSection extends ConsumerWidget {
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.sm),
-          // **This used to read "Tools available — the MCP bridge is
-          // installed" whenever the file existed.** On 2026-09-03 it said so
-          // for over an hour while every agent session on this machine had no
-          // Karmashala tools at all: WSL's interop handler had gone, and the
-          // perfectly good file could not be spawned by the process that
-          // needed it. So the claim is now a measurement or it is nothing —
-          // the bridge is started and made to complete an MCP handshake, and
-          // until that has happened this says it has not.
+          // A completed handshake, not the file's existence: on 2026-09-03
+          // WSL's interop handler went and a good file would not spawn.
           _BridgeVerdict(check: bridge, report: report),
-          // The other half of "can an agent drive this app": the bridge being
-          // installed says nothing about whether the app is willing to answer
-          // it. When hardening fails the server withholds privileged RPC
-          // deliberately, and the tools above simply stop working — silently,
-          // unless this says so.
+          // An installed bridge says nothing about the app answering it: a
+          // hardening failure withholds privileged RPC, silently.
           if (control.failedClosed) ...[
             const SizedBox(height: Insets.xs),
             Row(
@@ -438,22 +404,8 @@ class McpBridgeSection extends ConsumerWidget {
                 child: Text(detail, style: theme.textTheme.bodySmall),
               ),
           ],
-          // And the third half of it: hooks. A skipped environment costs every
-          // session in it the two states only a hook can report — awaiting
-          // approval, and failed — for the whole run. That used to be one line
-          // in a log file, so nine sessions ran on disk probes all day with
-          // nothing on screen saying the app had quietly stopped being able to
-          // tell you your agent was blocked.
-          //
-          // **Three states, not two, and the first one is new.** The sweep runs
-          // after the first frame now rather than before the window
-          // (`AppLifecycle.installAgentHooks`), so there is a real moment early
-          // in a launch when the answer is *not yet*. An empty report used to
-          // be indistinguishable from a clean one, which would have put this
-          // panel's silence — read as "the hooks are fine" — on screen during
-          // exactly the window in which they are not. §19's rule is that an
-          // unobserved state gets `unknown`'s icon and the neutral colour, so
-          // it does.
+          // A skipped environment loses the two states only a hook reports,
+          // and a sweep that has not run yet is `unknown`, not clean (§19).
           if (!hooks.swept) ...[
             const SizedBox(height: Insets.sm),
             const _HookNote.unknown(
@@ -463,9 +415,7 @@ class McpBridgeSection extends ConsumerWidget {
               'as soon as it has.',
             ),
           ],
-          // A store home that never answered. Not the same claim as a skip and
-          // deliberately not dressed as one: what is on disk there was never
-          // observed, so this says so rather than guessing either way.
+          // Never observed, so it says so rather than guessing either way.
           for (final entry in hooks.unknownByEnvironment.entries)
             _HookNote.unknown(
               'Status callbacks for '
@@ -492,17 +442,9 @@ class McpBridgeSection extends ConsumerWidget {
 }
 
 
-/// One line about the hook sweep.
-///
-/// Two constructors rather than a colour argument, because which one a row gets
-/// is the claim it is making and not a styling choice. [_HookNote.skipped] says
-/// *we know these callbacks are not there*; [_HookNote.unknown] says *we do not
-/// know*, in `HealthLevel.unknown`'s own icon and the neutral colour — the same
-/// vocabulary the system-health panel uses, so an admission of ignorance is not
-/// read as a quieter failure. §19 of `CLAUDE.md` is the rule.
+/// One line about the hook sweep. A constructor per claim, not a colour (§19).
 class _HookNote extends StatelessWidget {
-  /// An observed failure of the callback path, worded and coloured exactly as
-  /// it was before the unknown case existed.
+  /// An observed failure of the callback path.
   const _HookNote.skipped(this.text) : _unknown = false;
 
   /// A reading nobody took.
@@ -540,12 +482,8 @@ class _HookNote extends StatelessWidget {
   }
 }
 
-/// The MCP bridge's verdict on the settings page, from the same reading the
-/// System health panel shows.
-///
-/// One source deliberately: two surfaces each running their own probe could
-/// report different things about one file, which is a smaller copy of the bug
-/// that made this feature necessary.
+/// The MCP bridge's verdict, from the same reading the System health panel
+/// shows — one probe, so two surfaces cannot disagree about one file.
 class _BridgeVerdict extends ConsumerWidget {
   const _BridgeVerdict({required this.check, required this.report});
 
@@ -638,33 +576,15 @@ class _BridgeVerdict extends ConsumerWidget {
   }
 }
 
-/// An example path in the shape this host actually uses.
-///
-/// The hint read `C:\path\to\editor.exe` everywhere, which on a Mac is an
-/// example of something the field will not accept.
+/// An example path in this host's shape — `C:\path\to\...` is wrong on a Mac.
 String _hostPathHint(String what) {
   if (Platform.isWindows) return r'C:\path\to\' '$what.exe';
   if (Platform.isMacOS) return '/Applications/My$what.app/Contents/MacOS/$what';
   return '/usr/local/bin/$what';
 }
 
-/// Settings → Tools → Browser: the one browser capability an agent cannot have
-/// until a person hands it over.
-///
-/// ## Why the grant lives here and not in a prompt
-///
-/// The obvious design is a dialog on the first `browser_evaluate`. It is worse
-/// than it looks. The agent may be working while nobody is at the machine, so
-/// the dialog blocks a turn on a person who is not there; and a prompt that
-/// appears mid-flow is a prompt that gets approved without being read, which is
-/// how consent becomes a formality. A switch on a settings page is a decision
-/// someone makes deliberately, in a place they can come back to — which is the
-/// same place they will look when they want it back.
-///
-/// It is per project, and the switch names the project, because that is the
-/// unit the developer thinks in. The gate resolves a call's project from the
-/// calling session's checkout, falling back to the checkout the Explorer is
-/// pointed at — see `browser_consent_providers.dart`.
+/// Settings → Tools → Browser: a per-project consent switch rather than a
+/// prompt on first `browser_evaluate` — the agent may run with nobody there.
 class BrowserConsentSection extends ConsumerWidget {
   const BrowserConsentSection({super.key});
 
@@ -673,9 +593,7 @@ class BrowserConsentSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final projects = ref.watch(projectsControllerProvider);
     final store = ref.watch(browserConsentStoreProvider);
-    // The store reads storage on every call rather than holding state, so that
-    // a grant taken back here is in force on the very next tool call. The cost
-    // is that there is nothing for the UI to watch — hence the revision.
+    // The store reads storage per call, so there is nothing to watch.
     ref.watch(browserConsentRevisionProvider);
 
     return SettingsSection(
@@ -710,10 +628,7 @@ class BrowserConsentSection extends ConsumerWidget {
                   );
                   return SettingsSwitchRow(
                     label: 'Run JavaScript in the page — ${project.name}',
-                    // The date is the whole reason a grant is a record rather
-                    // than a boolean: "I allowed this at some point" and "I
-                    // allowed this on the 3rd" are different things to a person
-                    // deciding whether to take it back.
+                    // The date is why a grant is a record, not a boolean.
                     help: grant == null
                         ? 'Not allowed. Agents working in this project cannot '
                               'call browser_evaluate.'
@@ -745,20 +660,8 @@ class BrowserConsentSection extends ConsumerWidget {
 }
 
 
-/// Settings → Tools → Agent tools: the skills this app has written into the
-/// agent CLIs on this machine.
-///
-/// **Three claims, and each is a different kind of statement.** What is
-/// installed is read off disk by the sweep, not assumed from having written
-/// it. For which agent, because a skill goes into one CLI's own skills root
-/// and a machine has more than one. And the age of the reading, because §19's
-/// rule is that a measurement without its age is a claim — the sweep runs once
-/// a launch and nothing polls, so what is on screen can be hours old and must
-/// say so.
-///
-/// The button is the other half of writing into somebody's home: the code that
-/// wrote the directories is the code that removes them, and it is reachable
-/// from the same place that says they are there.
+/// The skills written into the agent CLIs here, read off disk by the
+/// once-a-launch sweep and shown with the age of that reading (§19).
 class AgentSkillsSection extends ConsumerWidget {
   const AgentSkillsSection({super.key});
 

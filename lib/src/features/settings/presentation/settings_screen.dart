@@ -22,36 +22,18 @@ import 'settings_nav.dart';
 import 'terminal_pages.dart';
 import 'tools_page.dart';
 
-/// Settings, as a master-detail page: a compact section nav on the left (with
-/// a filter box and arrow-key navigation), the selected section's content on
-/// the right, constrained to a readable width instead of one skinny column
-/// lost in a wide window.
-///
-/// At compact widths (a small window, the phone form factor) the same nav
-/// becomes a drill-down list: pick a section, get its page, back out with the
-/// app bar. The selected section lives on this state, so resizing across the
-/// breakpoint keeps your place.
-///
-/// **Mounted, never pushed.** The desktop draws it as a workbench tab
-/// ([SettingsTabView]); the window-matrix tests mount it directly. It used to
-/// carry a `show` that pushed it as a full-screen `MaterialPageRoute`, which
-/// covered the menu bar, the tab strip and the very panes half of these
-/// settings are about — the backlog item this page's shape now answers.
-/// Nothing needed that route kept: there is no first-run flow, and the phone
-/// has its own `CompanionSettingsScreen`.
+/// Settings as a master-detail page, drilling down to one section at compact
+/// widths. Mounted as a workbench tab ([SettingsTabView]), never pushed: a
+/// route would cover the menu bar, the tab strip and the panes it configures.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({this.initialSection, this.onSectionChanged, super.key});
 
-  /// The section to land on — how menu items and quick open deep-link
-  /// ("agents" from an agent entry, and so on). Changing it moves the page,
-  /// so a deep link into a Settings tab that is already open lands on its
-  /// section rather than leaving the user where they were.
+  /// The section to land on — how menu items and quick open deep-link. Changing
+  /// it moves a Settings tab that is already open onto that section.
   final SettingsSectionId? initialSection;
 
-  /// Told which section the user moved to, and told `null` when a compact
-  /// window backs out to the list. How the workbench tab keeps the page
-  /// outside a `State` it drops every time another tab is on screen — see
-  /// [SettingsTabView].
+  /// Told which section the user moved to, and `null` when a compact window
+  /// backs out — how [SettingsTabView] keeps the page outside a dropped `State`.
   final ValueChanged<SettingsSectionId?>? onSectionChanged;
 
   @override
@@ -62,16 +44,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late SettingsSectionId _selected =
       widget.initialSection ?? SettingsSectionId.appearance;
 
-  /// Whether the compact layout is showing a section rather than the list.
-  /// Deep links open straight into their section.
+  /// Whether the compact layout shows a section; a deep link opens into one.
   late bool _openOnCompact = widget.initialSection != null;
 
   @override
   void didUpdateWidget(SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.initialSection == oldWidget.initialSection) return;
-    // A deep link arriving at a screen that is already up. Null is the compact
-    // list rather than a section, which is what backing out writes.
+    // A deep link at a screen already up; null is the compact list.
     _selected = widget.initialSection ?? _selected;
     _openOnCompact = widget.initialSection != null;
   }
@@ -98,16 +78,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final showingSection = !compact || _openOnCompact;
         return Scaffold(
           appBar: AppBar(
-            // A page header, not a chrome row: `Chrome.titleBar` is the
-            // shell's 30px strip and a back button plus a title does not sit
-            // in it.
+            // A page header, not a chrome row: `Chrome.titleBar` is 30px.
             toolbarHeight: 44,
-            // **The only way back is a step inside the page.** There used to
-            // be a second `BackButton` here that popped the route this page
-            // was pushed as; the page is a workbench tab now, so there is no
-            // route to pop and an implied one would pop the app's own. The
-            // way *out* of Settings is the way out of any tab — close it, or
-            // pick another.
+            // A workbench tab: an implied leading button would pop the
+            // app's own route.
             automaticallyImplyLeading: false,
             leading: compact && _openOnCompact
                 ? BackButton(onPressed: _backToList)
@@ -128,12 +102,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          // Each scrolling column is its own traversal group. Reading order
-          // alone sorts on *global* position, which broke Tab twice: side by
-          // side it treated the rail and the content as one flow and bounced
-          // between them, and once the content had scrolled its negative
-          // coordinates sorted it above the app bar, so the ring never came
-          // back to the back button.
+          // Each scrolling column is its own traversal group: reading order
+          // sorts on global position, so scrolled content outranks the app bar.
           body: compact
               ? FocusTraversalGroup(
                   child: showingSection
@@ -166,8 +136,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// The selected section's page, scrolled, and held to a readable width — the
-/// space a wide window adds goes to margin, not to 900px-long switch rows.
+/// The selected section's page, held to a readable width — a wide window adds
+/// margin, not 900px-long switch rows.
 class _SectionContent extends StatelessWidget {
   const _SectionContent({required this.section});
 
@@ -176,8 +146,7 @@ class _SectionContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      // A fresh scroll position per section, not one shared offset that
-      // leaves the next section opened halfway down.
+      // A fresh scroll position per section, not one shared offset.
       key: PageStorageKey('settings-${section.name}'),
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.xl,
@@ -201,14 +170,10 @@ class _SectionContent extends StatelessWidget {
     SettingsSectionId.tools => const ToolsPage(),
     SettingsSectionId.agents => const AgentsPage(),
     SettingsSectionId.permissions => const PermissionsPage(),
-    // Agents are listed under the environment they are installed in: the same
-    // CLI on the Windows host and on a build box are two independent
-    // installations.
+    // Agents list under their environment: one CLI on two hosts is two.
     SettingsSectionId.automations => const AutomationsPage(),
     SettingsSectionId.worktrees => const WorktreeSetupPage(),
-    // Two blocks, because they answer two questions about the same list: what
-    // was *found* in each environment, and — under it — the one thing a person
-    // may have to say themselves.
+    // Two blocks: what was found, and what a person may have to say.
     SettingsSectionId.environments => const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

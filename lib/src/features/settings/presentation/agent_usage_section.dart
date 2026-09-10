@@ -13,8 +13,8 @@ import '../../sessions/domain/session_resume.dart';
 import 'agent_label.dart';
 import 'settings_section.dart';
 
-/// Usage / limits per agent installation (Claude + Codex): fetched on demand
-/// from the vendor OAuth endpoints using the token each install already stores.
+/// Usage / limits per agent installation, fetched on demand from the vendor
+/// OAuth endpoints with the token each install already stores.
 class UsageSection extends StatelessWidget {
   const UsageSection({required this.installations, super.key});
 
@@ -57,14 +57,12 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
   @override
   void initState() {
     super.initState();
-    // The chip and this card are one account, so the card opens on whatever was
-    // last read — with its age. A blank card was hiding a number the app
-    // already had, and "Check usage" was spending a request to learn it again.
+    // The card opens on whatever was last read, with its age: a blank one was
+    // hiding a number the app already had.
     final service = ref.read(agentUsageServiceProvider);
     _usage = service.remembered(widget.installation);
-    // And why it is not moving, if it is not: a card that looked untroubled
-    // while the chip showed a stalled reading is how the two surfaces came to
-    // disagree about one account.
+    // And why it is not moving: a card that looked untroubled beside a stalled
+    // chip is how the two surfaces came to disagree about one account.
     _failure = service.pendingPause(widget.installation);
   }
 
@@ -79,8 +77,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
       final usage = await service.fetch(widget.installation, environments);
       if (mounted) setState(() => _usage = usage);
     } on UsageException catch (e) {
-      // The reading survives the failure that follows it — losing a number you
-      // had is worse than showing an old one that says how old it is.
+      // The reading survives the failure after it: an aged number beats none.
       if (mounted) {
         setState(() {
           _failure = e;
@@ -159,20 +156,15 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
             ],
             if (usage != null) ...[
               const SizedBox(height: Insets.xs),
-              // The age, always, and never only when something failed: a
-              // reading that is not live must not look live, which is the rule
-              // `AgentStatusReport.evidenceAt` and the system health panel are
-              // both written to.
+              // The age, always, not only on failure: a reading that is not
+              // live must not look live.
               Text(
                 'Checked ${describeAge(ref.read(clockProvider).nowUtc().difference(usage.fetchedAt))}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: SemanticColors.of(context).neutral,
                 ),
               ),
-              // The sign-in's own lifetime, when the store names one. Said as
-              // itself and never as a window's reset: for an account that
-              // reports no quota it is most of what this card knows, and it is
-              // the thing the user can act on when the reading stops arriving.
+              // The sign-in's own lifetime, never dressed as a quota reset.
               if (usage.tokenExpiresAt case final expiry?)
                 Text(
                   _signInLine(
@@ -199,14 +191,8 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
   }
 }
 
-/// **Why there is no fresh number**, in the words each failure deserves.
-///
-/// Four situations used to arrive as one red sentence, and the user can act
-/// differently on every one: a rate limit needs them to stop asking, an expired
-/// token needs them to run the agent once, an unreachable endpoint needs
-/// nothing at all. The icon and the colour follow the same rule the system
-/// health panel is built to — neutral for "nobody's fault", and never a red
-/// mark on something that is merely waiting.
+/// **Why there is no fresh number**, in each failure's own words — and never a
+/// red mark on something that is merely waiting.
 class _FailureLine extends StatelessWidget {
   const _FailureLine({required this.failure});
 
@@ -222,8 +208,7 @@ class _FailureLine extends StatelessWidget {
         AppIcons.pauseCircle,
         semantic.attention,
       ),
-      // Not red either: the vendor is unwell, the user did nothing wrong, and
-      // the app is already waiting it out.
+      // Not red either: the vendor is unwell and the app is waiting it out.
       UsageFailureKind.serverBusy => (
         AppIcons.warningCircle,
         semantic.attention,
@@ -246,8 +231,7 @@ class _FailureLine extends StatelessWidget {
                 usageFailureHeadline(failure.kind),
                 style: theme.textTheme.bodySmall?.copyWith(color: colour),
               ),
-              // The service's own sentence, verbatim: it is the half that says
-              // what to do — run the agent once, wait two minutes, or nothing.
+              // The service's own sentence: it is the half that says what to do.
               Text(failure.message, style: theme.textTheme.bodySmall),
             ],
           ),
@@ -267,10 +251,7 @@ class _UsageBar extends StatelessWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final percent = window.percent;
-    // A window the endpoint named and measured nothing for — every Antigravity
-    // tier. **No bar**, because a bar is a quantity and an empty one reads as
-    // an empty quota; the words go where the percentage would, in the neutral
-    // colour the health panel gives an unknown.
+    // A window measured for nothing. No bar: an empty one reads as no quota.
     if (percent == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: Insets.xs),
@@ -339,11 +320,8 @@ String _relativeReset(DateTime when) {
   return 'in ${diff.inMinutes}m';
 }
 
-/// **When the sign-in behind a reading lapses**, in this card's words.
-///
-/// Read against the app's clock rather than [DateTime.now], because it is the
-/// one line here a test can pin — and because an expiry that has already passed
-/// is not "soon", it is the thing the user has to go and fix.
+/// **When the sign-in behind a reading lapses**, in this card's words. Read
+/// against the app's clock, not [DateTime.now], so a test can pin it.
 String _signInLine(DateTime expiry, DateTime now) {
   final left = expiry.difference(now);
   if (left <= Duration.zero) {

@@ -5,12 +5,8 @@ import 'package:flutter/services.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 
-/// The sections of the settings screen — the master list of the master-detail.
-///
-/// An enum so a caller can deep-link (`openSettingsTab(ref,
-/// section: SettingsSectionId.agents)`) without knowing how the page lays
-/// itself out. Keywords feed the nav's filter box, so "font" finds Terminal
-/// and "zoom" finds Appearance.
+/// The sections of the settings screen. An enum so a caller can deep-link
+/// without knowing the layout; keywords feed the nav's filter box.
 enum SettingsSectionId {
   appearance('Appearance', AppIcons.circleHalf, [
     'theme',
@@ -41,11 +37,8 @@ enum SettingsSectionId {
     'keys',
     'integration',
   ]),
-  // Its own row rather than a block under Terminal: the library is a list the
-  // user curates, like Notes and the SSH hosts, and the complaint that put it
-  // here was that it "doesn't live anywhere" — which a section three scrolls
-  // down inside Terminal would not answer. Next to Terminal, though, because a
-  // snippet is a line typed into one.
+  // Its own row, not a block under Terminal: a curated list, and one three
+  // scrolls down is not found.
   snippets('Snippets', AppIcons.bookBookmark, [
     'snippet',
     'snippets',
@@ -83,9 +76,8 @@ enum SettingsSectionId {
     'accept edits',
     'sessions',
   ]),
-  // Beside Permissions, because the mode an automation runs under is the rule
-  // that decides whether it may run at all: a mode that stops to ask is
-  // refused on a trigger with nobody there to answer.
+  // Beside Permissions: a mode that stops to ask is refused on a trigger with
+  // nobody there to answer.
   automations('Automations', AppIcons.clockCounterClockwise, [
     'automation',
     'automations',
@@ -99,9 +91,7 @@ enum SettingsSectionId {
     'checks',
     'verification',
   ]),
-  // Beside Environments rather than under Agents: what it configures is a
-  // *checkout*, and where a setup command runs is decided by that checkout's
-  // environment.
+  // Beside Environments, not Agents: it configures a checkout.
   worktrees('Worktrees', AppIcons.gitBranch, [
     'worktree',
     'worktrees',
@@ -174,13 +164,8 @@ enum SettingsSectionId {
   }
 }
 
-/// The compact section list on the left of the settings screen (and the whole
-/// screen at phone widths): a filter box over one row per section.
-///
-/// Keyboard: the rows are ordinary focus stops, and while any of them has
-/// focus, Up/Down move the *selection* — the content pane follows immediately,
-/// the way a settings sidebar is expected to behave. The filter field keeps
-/// its arrow keys for the caret because the handler wraps only the list.
+/// The compact section list: a filter box over one row per section. Up/Down
+/// move the selection while a row has focus; the filter keeps its own arrows.
 class SettingsNav extends StatefulWidget {
   const SettingsNav({
     required this.selected,
@@ -188,8 +173,7 @@ class SettingsNav extends StatefulWidget {
     super.key,
   });
 
-  /// The section whose row is highlighted, or null when none is (the phone
-  /// list before a section is opened).
+  /// The highlighted section, or null (the phone list before one is opened).
   final SettingsSectionId? selected;
 
   final ValueChanged<SettingsSectionId> onSelect;
@@ -258,8 +242,7 @@ class _SettingsNavState extends State<SettingsNav> {
         ),
         Expanded(
           child: Focus(
-            // A key handler, not a focus stop: it hears the arrows bubbling up
-            // from whichever row has focus.
+            // A key handler, not a focus stop: arrows bubble up to it.
             canRequestFocus: false,
             skipTraversal: true,
             onKeyEvent: _onListKey,

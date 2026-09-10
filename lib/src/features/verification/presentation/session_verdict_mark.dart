@@ -6,26 +6,16 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/verification_providers.dart';
 import '../domain/session_verdict.dart';
 
-/// The one way a surface says whether a session's work was ever checked.
-///
-/// Built to sit in a line of facts — the delivery strip's, and the session
-/// bar's — so it is a glyph and a label at `labelSmall`, the same shape as the
-/// stage beside it, and it takes its size from the theme rather than naming
-/// one.
-///
-/// **It always draws.** A mark that rendered nothing when nothing had been
-/// checked would be indistinguishable, in the row, from a mark that had checked
-/// and found nothing wrong — the same argument [AttributionMark] makes for
-/// never hiding an unrecorded verifier, and the reason this widget exists at
-/// all rather than an `if (verdict != null)` in the strip.
+/// The one way a surface says whether a session's work was ever checked. It
+/// always draws: a mark that rendered nothing when nothing had been checked
+/// would look, in the row, like one that checked and found nothing wrong.
 class SessionVerdictMark extends ConsumerWidget {
   const SessionVerdictMark({required this.sessionId, super.key});
 
   final String sessionId;
 
-  /// Colour carries no state on its own — the label beside it says the same
-  /// thing in words — but it must not lie either. Every state that is *not* a
-  /// verdict takes the neutral colour: an absence is not a finding.
+  /// Every state that is *not* a verdict takes the neutral colour: an absence
+  /// is not a finding, and the label beside it says so in words.
   static Color _colourOf(BuildContext context, SessionVerdictState state) {
     final semantic = SemanticColors.of(context);
     return switch (state) {

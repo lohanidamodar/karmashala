@@ -12,8 +12,6 @@ class VerificationDao {
 
   final AppDatabase _db;
 
-  // --- Runs ------------------------------------------------------------------
-
   void insertRun(VerificationRun run) {
     _db.execute(
       'INSERT INTO verification_runs '
@@ -39,12 +37,9 @@ class VerificationDao {
     );
   }
 
-  /// Closes a run with its verdict. The only update a finished run ever gets —
-  /// steps and artifacts are append-only, so evidence cannot be edited after
-  /// the fact.
-  /// [producedBySessionId] names the session signing off. `COALESCE` rather
-  /// than a plain assignment: a caller that cannot name itself must not erase
-  /// the producer recorded when the run was started.
+  /// Closes a run with its verdict — the only update a finished run gets, since
+  /// steps and artifacts are append-only. `COALESCE` on [producedBySessionId]:
+  /// a caller that cannot name itself must not erase the recorded producer.
   void finishRun(
     String id, {
     required DateTime finishedAt,
@@ -66,7 +61,6 @@ class VerificationDao {
     );
   }
 
-  /// Attaches (or detaches) a session after the fact.
   void updateSessionId(String id, String? sessionId) {
     _db.execute('UPDATE verification_runs SET session_id = ? WHERE id = ?;', [
       sessionId,
@@ -101,8 +95,7 @@ class VerificationDao {
     ).copyWith(steps: stepsFor(id), artifacts: artifactsFor(id));
   }
 
-  /// The most recent run that is still open, if any. Used to re-adopt a run
-  /// after a restart rather than silently starting a second one.
+  /// The most recent open run — re-adopted after a restart, not duplicated.
   VerificationRun? openRun() {
     final rows = _db.query(
       'SELECT * FROM verification_runs WHERE finished_at IS NULL '
@@ -111,11 +104,7 @@ class VerificationDao {
     return rows.isEmpty ? null : _runFromRow(rows.first);
   }
 
-  /// Runs whose id starts with [prefix], newest first.
-  ///
-  /// A full UUID is a lot to ask a caller to retype, so `verification_get`
-  /// accepts a short prefix the way git accepts a short hash — and this is what
-  /// lets it say "that prefix matches three runs" instead of guessing.
+  /// Runs whose id starts with [prefix] — what lets a caller refuse, not guess.
   List<VerificationRun> findByPrefix(String prefix) {
     if (prefix.trim().isEmpty) return const [];
     final rows = _db.query(
@@ -129,8 +118,6 @@ class VerificationDao {
   void deleteRun(String id) {
     _db.execute('DELETE FROM verification_runs WHERE id = ?;', [id]);
   }
-
-  // --- Steps -----------------------------------------------------------------
 
   void insertStep(String runId, VerificationStep step) {
     _db.execute(
@@ -175,8 +162,6 @@ class VerificationDao {
     );
     return (rows.first['n'] as int?) ?? 0;
   }
-
-  // --- Artifacts -------------------------------------------------------------
 
   void insertArtifact(VerificationArtifact artifact) {
     _db.execute(
@@ -226,8 +211,7 @@ class VerificationDao {
           serial: (row['target_serial'] as String?) ?? '',
           packageName: row['target_package'] as String?,
         ),
-        // A change stores no address, so there is no column to read back —
-        // see `VerificationTarget.change`.
+        // A change stores no address, so there is no column to read back.
         VerificationTargetKind.change => const VerificationTarget.change(),
         VerificationTargetKind.browser => VerificationTarget.browser(
           (row['target_url'] as String?) ?? '',

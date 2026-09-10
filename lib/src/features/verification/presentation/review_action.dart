@@ -6,29 +6,9 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../application/review_session_service.dart';
 
-/// The one control that starts an independent review, wherever a verdict is
-/// shown.
-///
-/// One widget rather than a button per surface, because the interesting part is
-/// not the button — it is the **refusal**. This control is disabled far more
-/// often than it is pressed (one agent installed, an agent that takes no
-/// opening prompt, a session already two spawns deep), and each surface writing
-/// its own version of "greyed out" is how a machine with one CLI on it comes to
-/// look like a broken feature. Here there is exactly one place where a reason
-/// becomes a tooltip, and [ReviewOffer.refusal] is never null when the button
-/// is dead.
-///
-/// **No confirmation step**, unlike the handoff dialog, and the difference is
-/// principled rather than a shortcut: a handoff can carry a permission mode
-/// *across* to another agent, so the user has to read what it will do before it
-/// happens. A review is capped by `carryReviewPermission` and can only ever be
-/// less permissive than the session it checks, so there is nothing a
-/// confirmation would protect against. The cap's own sentence is the tooltip.
-///
-/// What it does guarantee is narrower and worth stating: **an agent starts on a
-/// press and on nothing else.** Drawing this control, or watching the offer
-/// behind it, starts nothing; and where there is a real choice of reviewer the
-/// press opens a menu, so a stray click cannot pick one for you.
+/// The one control that starts an independent review. One widget because the
+/// interesting part is the refusal: [ReviewOffer.refusal] is never null when
+/// the button is dead, and there is no confirmation step to write twice.
 class ReviewAction extends ConsumerStatefulWidget {
   const ReviewAction({
     required this.sessionId,
@@ -38,25 +18,17 @@ class ReviewAction extends ConsumerStatefulWidget {
     super.key,
   });
 
-  /// The session whose work is to be checked.
   final String sessionId;
 
-  /// What the work claims to do, in the words it was claimed in — a fan-out
-  /// prompt, a user's own sentence. Null renders as "not recorded" in the
-  /// brief rather than being invented here.
+  /// What the work claims to do, in the words it was claimed in. Null renders
+  /// as "not recorded" in the brief rather than being invented here.
   final String? claim;
 
   /// Draw for a narrow column: shorter labels, same behaviour.
   final bool compact;
 
-  /// Draw this control in the host's own shape instead of the default button.
-  ///
-  /// The decision stays here — who can be asked, what the refusal says, one
-  /// press or a menu — and only the rectangle moves. The delivery strip needs
-  /// it because that row spent a redesign making every control the same pill
-  /// (see `_BarAction`), and an `OutlinedButton` dropped into it would be the
-  /// fourth shape that redesign removed. A second copy of the *logic* is what
-  /// this widget's doc exists to prevent; a second copy of the padding is not.
+  /// Draw this control in the host's own shape; only the rectangle moves, the
+  /// decision stays here.
   final ReviewActionBuilder? builder;
 
   @override
@@ -67,11 +39,8 @@ class ReviewAction extends ConsumerStatefulWidget {
 typedef ReviewActionBuilder =
     Widget Function(BuildContext context, ReviewActionPresentation offer);
 
-/// What the review control says and does right now.
-///
-/// Everything a host needs to draw its own shape, and nothing it could use to
-/// start a review by another route: [onPressed] is the only way in, and it is
-/// the same callback the default button carries.
+/// What the review control says and does right now — everything a host needs to
+/// draw its own shape, and nothing that starts a review except [onPressed].
 class ReviewActionPresentation {
   const ReviewActionPresentation({
     required this.label,
@@ -82,8 +51,7 @@ class ReviewActionPresentation {
   /// The default words, for a host with none of its own.
   final String label;
 
-  /// Why it cannot be pressed, or what pressing it will do. Never empty — the
-  /// refusal is the whole point of the control when it is dead.
+  /// Why it cannot be pressed, or what pressing it will do. Never empty.
   final String tooltip;
 
   /// Null when nobody can be asked, or while a press is already in flight.
@@ -115,9 +83,7 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
         ),
       );
     } on Object catch (error) {
-      // Every failure here is one the user can act on — no second agent, an
-      // agent that was uninstalled since the menu was built, a depth cap — so
-      // it is said rather than logged.
+      // Every failure here is one the user can act on, so it is said.
       messenger?.showSnackBar(SnackBar(content: Text('$error')));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -125,10 +91,6 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
   }
 
   /// One press when there is one answer, a menu when there is a real choice.
-  ///
-  /// The doc's "one click" is the case that matters — two agents installed, one
-  /// of them yours — and a menu of one would be a click spent confirming
-  /// something the app already knew.
   Future<void> _press(
     List<ReviewTarget> usable,
     ReviewTarget? preferred,
@@ -147,8 +109,7 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
         overlay.size.width - origin.dx - box.size.width,
         0,
       ),
-      // Ordered so the first entry is the one worth pressing: a different
-      // model, where there is one.
+      // First entry is the one worth pressing: a different model, if any.
       items: [
         for (final target in [
           ?preferred,
@@ -158,9 +119,7 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
             value: target,
             label: target.agentName,
             icon: AppIcons.robot,
-            // What this reviewer would really be, in the permission carry's own
-            // words. It is the reason to pick one over the other, so it is on
-            // the row rather than behind a hover.
+            // The reason to pick one reviewer over another: not behind a hover.
             detail: _tooltipFor(target),
             detailMaxLines: 3,
           ),
@@ -169,9 +128,7 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
     if (chosen != null) await _start(chosen);
   }
 
-  /// What pressing this will actually do, in the words the permission carry
-  /// uses — plus the one thing a second installation of the same agent does not
-  /// buy you.
+  /// What pressing this will do, in the permission carry's own words.
   String _tooltipFor(ReviewTarget target) => [
     if (target.isSameAgent)
       'Another ${target.agentName} installation — a different session, so the '
@@ -194,8 +151,7 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
           ? (only == null
                 ? 'Ask another agent to read this diff and record a verdict.'
                 : _tooltipFor(only))
-          // Never null when the button is dead: the reason is the whole point
-          // of the control in this state.
+          // Never null when the button is dead — the reason is the point.
           : offer.refusal ?? 'No other agent can be asked to check this work.',
       onPressed: offer.isPossible && !_busy
           ? () => _press(usable, offer.preferred)

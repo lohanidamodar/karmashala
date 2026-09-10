@@ -9,25 +9,15 @@ import '../domain/verification_target.dart';
 import 'verification_service.dart';
 
 /// The `verification_*` tools an agent sees, mapped onto [VerificationService].
-///
-/// Same two rules as the browser tools, for the same reasons (Loop 34, Loop 39):
-///
-/// * **One text block, not a JSON map.** The bridge pretty-prints a map, and a
-///   run rendered as JSON costs several times what the same run costs as lines.
-/// * **Prune by default.** `verification_get` returns summaries; step detail,
-///   file contents and screenshots are opt-in. A run with twelve screenshots is
-///   a very expensive default.
+/// One text block, not a JSON map the bridge would pretty-print, and pruned by
+/// default: step detail, file contents and screenshots are opt-in.
 class VerificationTools {
   const VerificationTools(this._service, {this.callerSessionId});
 
   final VerificationService _service;
 
-  /// The session whose agent is making the call, from the bridge's
-  /// `callerSessionId` (itself `kSessionIdEnvironmentVariable`).
-  ///
-  /// The producer of everything recorded here. Null only when the caller runs
-  /// outside a Karmashala session, and then the run stays honestly
-  /// unattributed rather than borrowing an id from somewhere else.
+  /// The calling agent's session; null outside one, and the run stays
+  /// unattributed.
   final String? callerSessionId;
 
   /// Whether [tool] belongs to this set.
@@ -50,8 +40,6 @@ class VerificationTools {
     }
   }
 
-  // --- Recording -------------------------------------------------------------
-
   Future<Object?> _start(Map<String, dynamic> args) async {
     final url = _string(args['url']);
     final serial = _string(args['serial']);
@@ -64,8 +52,7 @@ class VerificationTools {
         'has the serials.',
       );
     }
-    // Counted rather than compared pairwise: three kinds have three ways to be
-    // asked for two of them, and a run verifies one thing.
+    // Counted, not compared pairwise: a run verifies exactly one thing.
     if ([url != null, serial != null, isChange].where((set) => set).length > 1) {
       throw const VerificationException(
         'A run verifies one thing: pass url, serial or change, not several.',
@@ -77,10 +64,8 @@ class VerificationTools {
         ? VerificationTarget.browser(url)
         : VerificationTarget.device(serial: serial!, packageName: package);
 
-    // `sessionId` is whose work is being verified; the caller is who is doing
-    // the verifying. They default to the same session — the self-graded case
-    // this attribution exists to make visible — and diverge the moment an
-    // agent verifies someone else's work by naming it.
+    // `sessionId` is whose work is verified, the caller is who verifies; equal
+    // by default, which is the self-graded case attribution exposes.
     final subjectSessionId = _string(args['sessionId']) ?? callerSessionId;
     final run = await _service.start(
       target: target,
@@ -152,8 +137,6 @@ class VerificationTools {
           'images: true) to look at the screenshots yourself.',
     ]);
   }
-
-  // --- Reading ---------------------------------------------------------------
 
   Future<Object?> _list(Map<String, dynamic> args) async {
     final runs = _service.list(
@@ -277,8 +260,6 @@ class VerificationTools {
       {'type': 'text', 'text': lines.join('\n')},
     ]);
   }
-
-  // --- Rendering -------------------------------------------------------------
 
   static String _runLine(VerificationRun run) =>
       '${_verdictMark(run).padRight(7)}  ${run.id}  ${run.title}  '

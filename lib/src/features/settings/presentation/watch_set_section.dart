@@ -7,37 +7,24 @@ import '../../notifications/application/session_status_registry.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// How much of the watch set the status registry is reaching, as the last cycle
-/// measured it — `null` until a cycle has run.
-///
-/// A `StreamProvider` over the registry's own edge-triggered report, so the row
-/// repaints when the measurement moves and not once every 1.2-second cycle.
+/// How much of the watch set the status registry reaches, as the last cycle
+/// measured it — `null` until one has run. Edge-triggered, so the row does not
+/// repaint every 1.2-second cycle.
 final sessionStatusCoverageProvider =
     StreamProvider.autoDispose<SessionStatusCoverage?>(
       (ref) => ref.watch(sessionStatusRegistryProvider).coverageReports,
     );
 
-/// Settings → Diagnostics: **is anything silently not being watched?**
-///
-/// The P0 behind this was a status watcher that capped its watch set at 60
-/// sessions, and the reason it survived to production is that nobody could
-/// tell. Membership is uncapped now and the probe rotation reserves a share
-/// priority traffic cannot take, so coverage is guaranteed by construction —
-/// but a guarantee nobody can observe fails the same way the next time somebody
-/// adds a limit for a good reason. This is where a person can see it without a
-/// debugger or a log file.
-///
-/// The modern shape of the same bug is not "we stopped watching", it is "we are
-/// watching and never getting round to it", which is why the rotation period is
-/// a row of its own rather than a detail.
+/// Settings → Diagnostics: **is anything silently not being watched?** A status
+/// watcher once capped its watch set at 60 sessions and nobody could tell;
+/// coverage is by construction now, but only a guarantee someone can see holds.
 class WatchSetSection extends ConsumerWidget {
   const WatchSetSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    // Loading and "no cycle has run" are the same fact to a reader: nothing has
-    // been measured that this could show.
+    // Loading and "no cycle has run" are the same fact to a reader.
     final coverage = ref.watch(sessionStatusCoverageProvider).asData?.value;
 
     return SettingsSection(
@@ -94,11 +81,8 @@ class WatchSetSection extends ConsumerWidget {
     );
   }
 
-  /// What the other half of the watch set costs, and whether it is keeping up.
-  ///
-  /// `neverProbed` is deliberately phrased as *queued*: a session waiting its
-  /// turn has an entry, a status and a place in the rotation, and reading that
-  /// number as a loss is how someone "fixes" a healthy rotation.
+  /// `neverProbed` is phrased as *queued*: read as a loss, someone would
+  /// "fix" a healthy rotation.
   static String _probeHelp(SessionStatusCoverage coverage) {
     if (coverage.probeCandidates == 0) {
       return 'Every watched session reports its own status, so nothing has to '

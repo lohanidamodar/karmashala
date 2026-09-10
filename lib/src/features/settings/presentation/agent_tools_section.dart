@@ -4,42 +4,9 @@ import '../../../app/theme/design_tokens.dart';
 import '../../mcp/mcp_tool_catalogue.dart';
 import 'settings_section.dart';
 
-/// Settings → Tools → Agent tools: every tool the MCP bridge serves, in its
-/// family, with a line saying what it does.
-///
-/// ## What was here before
-///
-/// The same 94 names, as a `Wrap` of chips. Complete and useless: nothing said
-/// what any of them did, nothing said which belonged together, and a reader
-/// asking "can it drive my phone" had to read the whole wall and infer it from
-/// prefixes. The names come from the served schemas either way — what is added
-/// is the grouping and the line, both of which live in `mcp_tool_catalogue`
-/// under a test, so the list cannot rot the first time somebody adds a tool.
-///
-/// ## Read-only, no-undo and moves-attention, and not the other two
-///
-/// The catalogue carries five axes. Three of them are facts a person acts on —
-/// *this changes nothing*, *this cannot be undone*, and *this takes over what I
-/// am looking at* — and they are the three shown. `idempotentHint` answers "is
-/// a retry safe", which is something a client decides on its own with nobody
-/// watching; and `openWorldHint` marks exactly the device, browser and
-/// Flutter-app families, so as a tag it would repeat the heading above it on
-/// about forty rows. Both still travel in `tools/list`, and the guides
-/// `instructions` serves print all five.
-///
-/// The third tag is the one a reader of this page cannot get anywhere else.
-/// Read-only and no-undo can both be guessed from a tool's name about half the
-/// time; that `browser_pick` will front their browser and wait on them, or that
-/// `device_boot` selects a simulator in the pane, cannot be.
-///
-/// ## No switches
-///
-/// It is a listing, not a control panel. Whether a tool can be turned off is a
-/// product decision nobody has made, and a switch that does nothing is worse
-/// than no switch.
-///
-/// It watches no provider: everything on it is compiled into the binary, so
-/// the section costs nothing until a family is opened and nothing after.
+/// Every tool the MCP bridge serves, grouped and described from
+/// `mcp_tool_catalogue` (under a test, so it cannot rot). Three of its five
+/// axes are shown; the other two say nothing a reader of this page needs.
 class AgentToolsSection extends StatelessWidget {
   const AgentToolsSection({super.key});
 
@@ -67,12 +34,7 @@ class AgentToolsSection extends StatelessWidget {
   }
 }
 
-/// One family, collapsed until asked for.
-///
-/// Collapsed because this section sits under three other blocks on the Tools
-/// page and ninety-four unfurled rows would bury them — and because the reader
-/// arrives looking for a family ("can it touch my phone?") rather than for a
-/// tool they could already name.
+/// One family, collapsed: ninety-four unfurled rows would bury the page.
 class _Family extends StatelessWidget {
   const _Family({required this.category, required this.tools});
 
@@ -83,8 +45,7 @@ class _Family extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ExpansionTile(
-      // The settings page has no cards; the tile's own outline and fill would
-      // be the only ones on it.
+      // The settings page has no cards; this tile's would be the only one.
       shape: const Border(),
       collapsedShape: const Border(),
       tilePadding: EdgeInsets.zero,
@@ -130,8 +91,7 @@ class _ToolRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // A Wrap, not a Row: the marks follow the name at any text scale
-            // rather than squeezing it.
+            // A Wrap, not a Row: marks follow the name at any text scale.
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: Insets.sm,
@@ -151,24 +111,16 @@ class _ToolRow extends StatelessWidget {
   }
 }
 
-/// One mark beside a tool name.
-///
-/// A constructor per mark rather than a colour argument, the way `_HookNote` on
-/// this page does it: which mark a row gets is the claim it makes, not a
-/// styling choice. Each one says its own words as well as wearing its own
-/// colour — §5's rule that state is never carried by colour alone.
+/// One mark beside a tool name. A constructor per mark, not a colour argument,
+/// and each says its own words: colour alone never carries state (§5).
 class _Mark extends StatelessWidget {
   /// Changes nothing, anywhere.
   const _Mark.readOnly() : _text = 'read-only', _color = _MarkColor.neutral;
 
-  /// There is no undo for what it removes, overwrites or ends. Worded as the
-  /// consequence rather than as `destructiveHint`'s name: the reader is
-  /// deciding whether to worry, not reading a spec.
+  /// No undo for what it removes or ends — the consequence, not the hint's name.
   const _Mark.noUndo() : _text = 'no undo', _color = _MarkColor.danger;
 
-  /// It raises a window, switches what is on screen, or stops and asks the
-  /// person to point at something. The attention colour rather than the danger
-  /// one: being interrupted is not the same as losing work.
+  /// It raises a window or waits on the person. Attention, not danger.
   const _Mark.movesAttention()
     : _text = 'moves attention',
       _color = _MarkColor.attention;

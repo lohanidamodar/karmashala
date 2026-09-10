@@ -4,19 +4,8 @@ import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
 import 'relay_mode.dart';
 
-/// Per-agent permission preferences for new vs. existing sessions.
-///
-/// Each is a canonical `PermissionSelection` in **that agent's own
-/// vocabulary** — `mode=manual`, `approval=on-request;sandbox=workspace-write`
-/// — because there is no longer a shared set of modes to hold here.
-///
-/// **Null is the shipped answer, and it does not mean "pass nothing".** It
-/// means "use the mode this agent declares as its default", which is a real
-/// selection with real flags. That is the one place this differs from
-/// [Settings.defaultModels], where absence genuinely does mean no flag: passing
-/// no permission flag is the failure the whole per-agent model exists to
-/// remove, since an unflagged Claude Code session starts in `auto` on some
-/// accounts.
+/// Per-agent permission preferences in each agent's own vocabulary. Null means
+/// "use the mode that agent declares as its default", never "pass no flag".
 class AgentPermissions {
   const AgentPermissions({this.newSessions, this.existingSessions});
 
@@ -40,13 +29,7 @@ class AgentPermissions {
         existingSessions: _selection(json['existingSessions']),
       );
 
-  /// Reads a stored preference, translating the three values written before
-  /// per-agent modes existed.
-  ///
-  /// A settings file is not migrated by SQL, so the aliases live here — the
-  /// same three the v35 migration rewrites session rows with. They are
-  /// agent-agnostic on purpose: this map is keyed by agent id, and the caller
-  /// resolves the alias against that agent's own axes.
+  /// Reads a stored preference; the caller resolves any legacy alias itself.
   static String? _selection(Object? value) {
     if (value is! String || value.isEmpty) return null;
     return value;
@@ -116,9 +99,7 @@ class Settings {
     this.logBufferSize = kDefaultLogBufferCapacity,
   });
 
-  /// The terminal font size the app shipped with — the hardcoded 13 the pane
-  /// used before this was a setting. The default must stay exactly this value:
-  /// the terminal pixel goldens are painted at it.
+  /// Must stay exactly 13: the terminal pixel goldens are painted at it.
   static const double defaultTerminalFontSize = 13.0;
   static const double minTerminalFontSize = 8.0;
   static const double maxTerminalFontSize = 28.0;
@@ -127,278 +108,131 @@ class Settings {
   static const double minUiTextScale = 0.9;
   static const double maxUiTextScale = 1.5;
 
-  /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
-  /// session, or `null` for none. Kept in sync with
-  /// [defaultAgentInstallationId].
+  /// The `AgentDescriptor.id` pre-selected for a new session, or `null`.
   final String? defaultAgent;
 
-  /// The specific installation chosen as default (e.g. Claude on WSL vs Claude
-  /// on Windows), by installation id. Preferred over [defaultAgent] when the
-  /// installation is still present; falls back to the kind otherwise.
+  /// The default installation by id; preferred over [defaultAgent] while present.
   final String? defaultAgentInstallationId;
 
-  /// Per-agent permission preferences, keyed by `AgentDescriptor.id` (defaults
-  /// to "ask" when absent).
+  /// Per-agent permission preferences, keyed by `AgentDescriptor.id`.
   final Map<String, AgentPermissions> permissions;
 
-  /// Per-agent default models, keyed by `AgentDescriptor.id`.
-  ///
-  /// **Absence is the answer, not a missing one.** A key that is not here means
-  /// "let the agent choose": no `--model` is passed and the CLI starts on
-  /// whatever it is configured to use, which is the state every session was in
-  /// before this setting existed. Writing a null down instead would make the
-  /// shipped default look like a value somebody picked.
+  /// Per-agent default models; an absent key passes no `--model` at all.
   final Map<String, String> defaultModels;
 
-  /// The `flutter` executable a person named for an execution environment,
-  /// keyed by `ExecutionEnvironment.id`.
-  ///
-  /// **The one thing about a Flutter SDK that is stored at all.** Everything
-  /// else — where PATH found it, what version answered — is a *reading*, taken
-  /// again when it has aged out and never persisted (`FlutterSdkReadings`).
-  /// This is the opposite kind of fact: a statement a person made, which no
-  /// measurement may overrule (§20's third rule).
-  ///
-  /// Kept here rather than on the `execution_environments` row on purpose:
-  /// discovery upserts that table on every launch out of objects that carry no
-  /// hand-set path, so a column there would need a conflict clause somebody
-  /// must remember not to widen. A different store makes "never overruled by a
-  /// sweep" structural instead of remembered.
-  ///
-  /// Absence means "look on PATH", which is what every environment did before
-  /// this existed.
+  /// A hand-set `flutter` per `ExecutionEnvironment.id`, kept off the table
+  /// discovery upserts so no sweep can overrule it (§20); absent means PATH.
   final Map<String, String> flutterSdkPaths;
 
-  /// The app theme preference.
   final AppThemeMode themeMode;
 
-  /// Id of the [TerminalProfile] new terminals open with, or `null` to use the
-  /// first available (PowerShell). Stored as an id so it survives across runs.
+  /// Id of the [TerminalProfile] new terminals open with; `null` is the first.
   final String? defaultTerminalProfileId;
 
-  /// Keep the system (and display) awake while the app runs.
   final bool keepAwake;
 
-  /// Hide to the system tray on window close instead of quitting.
   final bool closeToTray;
 
-  /// Launch the app automatically when the user logs in.
   final bool autoStart;
 
-  /// Switch off the iOS Simulator's unused background services when starting
-  /// one. macOS only; inert everywhere else.
-  ///
-  /// On by default. A stock iOS 26 simulator boots ~358 launchd services to
-  /// serve a user who is not there, and a developer pays for all of them in
-  /// memory and boot time.
+  /// Switch off the iOS Simulator's ~358 idle launchd services. macOS only.
   final bool simulatorSlimming;
 
-  /// The [SlimmingCategory] ids to leave running, by id.
-  ///
-  /// Stored as the *exceptions* rather than the selection, so a category added
-  /// in a later release is slimmed by default rather than silently spared by
-  /// everyone's saved preference.
+  /// The [SlimmingCategory] ids to leave running — exceptions, not a selection.
   final List<String> simulatorSlimmingKept;
 
-  /// Slim an Android emulator when starting one from the device pane.
-  ///
-  /// On by default, but only the two harmless layers are on with it — see
-  /// [androidSlimmingEnabled]. Inert on a machine with no Android SDK.
+  /// Slim an Android emulator on start; only [androidSlimmingEnabled] comes on.
   final bool androidSlimming;
 
-  /// The [AndroidSlimmingCategory] ids to apply, by id.
-  ///
-  /// Stored as the *selection*, which is the opposite of
-  /// [simulatorSlimmingKept] and deliberately so: a category added in a later
-  /// release must do nothing until somebody ticks it, because the ones that
-  /// could be added are package groups and an app update has no business
-  /// disabling Play services on an emulator by itself.
+  /// The [AndroidSlimmingCategory] ids to apply — a selection, not exceptions.
   final List<String> androidSlimmingEnabled;
 
-  /// [AndroidGpuMode.id] for the renderer emulators start with.
-  ///
-  /// A string rather than the enum so the stored value survives a mode this
-  /// build does not know; [AndroidGpuMode.byId] falls back to automatic.
+  /// [AndroidGpuMode.id] for the renderer; a string, so unknown modes survive.
   final String androidEmulatorGpu;
 
-  /// Persisted width of the Explorer pane and the detail sidebar.
   final double explorerPaneWidth;
   final double detailSidebarWidth;
 
-  /// Compact UI density (denser lists/controls) when true.
   final bool compactDensity;
 
-  /// Last window size, restored on launch (null until first saved).
   final double? windowWidth;
   final double? windowHeight;
 
-  /// The external terminal app used to resume sessions ("open in terminal"):
-  /// a detected terminal id (`windowsTerminal`, …), the sentinel
-  /// `custom`, or `null` to use the first detected one.
+  /// The terminal for "open in terminal": a detected id, `custom`, or `null`.
   final String? defaultSystemTerminalId;
 
-  /// Path to a custom terminal executable, used when
-  /// [defaultSystemTerminalId] is `custom`.
+  /// Custom terminal executable, when [defaultSystemTerminalId] is `custom`.
   final String? customTerminalPath;
 
-  /// The code editor used to open a project/folder ("open in editor"): a
-  /// detected editor id (`vscode`, `zed`), the sentinel `custom`, or `null` to
-  /// use the first detected one.
+  /// The editor for "open in editor": a detected id, `custom`, or `null`.
   final String? defaultCodeEditorId;
 
-  /// Path to a custom editor executable, used when [defaultCodeEditorId] is
-  /// `custom`.
+  /// Custom editor executable, when [defaultCodeEditorId] is `custom`.
   final String? customEditorPath;
 
-  /// The global hotkey that summons the window with quick open up, as the
-  /// encoded JSON of a `hotkey_manager` HotKey. `null` means the built-in default
-  /// (Ctrl+Alt+Space). Stored as an opaque string so this domain stays free of
-  /// the hotkey package.
+  /// The launcher hotkey as `hotkey_manager` JSON; `null` is Ctrl+Alt+Space.
   final String? launcherHotkeyJson;
 
-  /// Whether the global launcher hotkey is registered at all.
   final bool launcherHotkeyEnabled;
 
-  /// Per-chord answers to "does a focused terminal pane give this key to the
-  /// app, or to the shell?", keyed by the chord's label (`Ctrl+K`). A chord
-  /// with no entry keeps the default declared in `shellChords`.
-  ///
-  /// A map rather than a list because the question has two directions: `Ctrl+B`
-  /// is the tmux prefix and ships going to the shell, and someone who does not
-  /// live in tmux may well want it back for the Explorer.
+  /// Per-chord "app or shell?" answers; absent keeps the `shellChords` default.
   final Map<String, bool> terminalChordOverrides;
 
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
-  /// Session ids (native or imported) the user has pinned within their project;
-  /// pinned sessions sort above the rest. Stored as metadata — the sessions
-  /// themselves stay sourced live from the CLI agents.
+  /// Pinned session ids, sorted above the rest. Metadata only.
   final List<String> pinnedSessionIds;
 
-  /// Inject OSC 133 shell integration into new terminals, giving command
-  /// boundaries, exit codes and durations.
-  ///
-  /// Off by default and read at pane-launch time. A shell that fails to start
-  /// is a much worse outcome than a missing feature, so this stays opt-in.
+  /// Inject OSC 133 into new terminals. Opt-in: a failed shell is worse.
   final bool shellIntegrationEnabled;
 
-  /// Give a process back, at launch, to the panes that were running when the
-  /// app last closed.
-  ///
-  /// The owner's report, twice: *"why when app restart the active pane doesn't
-  /// automatically resume the session? why must i tap start again"*, and *"if
-  /// there were active panes on last close start all those panes on active
-  /// tab"*. So this is **on** by default; someone who wants a quiet launch
-  /// turns it off and every pane comes back as replayed history with a Start
-  /// button, exactly as it did before.
-  ///
-  /// Deliberately not [autoStart], which is "launch the app when the user logs
-  /// in" and has nothing to do with panes. What it does and does not cover is
-  /// in `shouldRestartOnLaunch` — in particular it never starts an agent pane.
+  /// Restore last close's live panes at launch; never an agent pane.
   final bool restoreLivePanes;
 
-  /// Whether a local pane's process belongs to the **session host** rather than
-  /// to this app.
-  ///
-  /// Off, and the default matters: with it off nothing changes at all — every
-  /// pane is the `flutter_pty` child it has always been. With it on, a pane's
-  /// shell is started by `karmashala_host` and outlives this app, so a crash
-  /// stops taking every agent with it and reopening a pane resumes its session
-  /// from the byte it last rendered.
-  ///
-  /// The cost of that is what keeps it off by default: there is no OSC 133 on
-  /// the host path, so a host-backed pane reports no command boundaries and
-  /// `terminal_run` will not claim an exit code for a command typed into one.
+  /// Run a local pane's shell under `karmashala_host` so it outlives the app.
+  /// Off by default: there is no OSC 133 on that path, so a host-backed pane
+  /// reports no command boundaries and `terminal_run` claims no exit code.
   final bool hostBackedLocalPanes;
 
-  /// The imported terminal colour theme, as `<format>:<path>` (for example
-  /// `warp:C:\\Users\\a\\...\\nord.yaml`), or `null` for the built-in theme.
-  ///
-  /// The identity is stored rather than the resolved colours, so editing the
-  /// theme file is picked up. A file that later disappears or breaks falls back
-  /// to the built-in theme with a readable error.
+  /// The imported terminal theme as `<format>:<path>`, or `null` for built-in.
   final String? terminalThemeSource;
 
-  /// Whether the mobile-companion host runs. Off by default: nothing listens,
-  /// nothing dials, until the user turns it on.
+  /// Whether the mobile-companion host runs. Off: nothing listens or dials.
   final bool remoteAccessEnabled;
 
-  /// The relay the host dials, or `null` for the PopupBits default. Stored as
-  /// text so this domain stays free of the remote feature.
+  /// The relay the host dials, or `null` for the PopupBits default.
   final String? remoteRelayUrl;
 
-  /// Whether remote access runs through the embedded local relay or a hosted
-  /// one. Hosted by default, matching what existed before the choice did.
+  /// The embedded local relay or a hosted one; hosted by default.
   final RelayMode remoteRelayMode;
 
-  /// The port the embedded local relay binds. The default matches the relay
-  /// package's own (pinned by a test there, so the two cannot drift).
+  /// The embedded relay's port; the default matches the relay package's own.
   final int localRelayPort;
 
-  /// Overall UI text scale (1.0 = 100%), applied at the app root through
-  /// `MediaQuery`'s textScaler so menus, dialogs and tooltips follow too.
-  /// Multiplies the OS text scale rather than replacing it.
+  /// Overall UI text scale (1.0 = 100%); multiplies the OS scale, not replaces.
   final double uiTextScale;
 
-  /// The terminal grid's font size, separate from [uiTextScale] on purpose:
-  /// terminal density and UI legibility are different preferences.
+  /// The terminal grid's font size, separate from [uiTextScale] on purpose.
   final double terminalFontSize;
 
-  /// Whether the Notes feature is offered at all: the note affordance under
-  /// each message, and the Notes surface on the side-panel rail.
-  ///
-  /// On by default, and turning it off **hides the feature, it does not empty
-  /// it** — no note is deleted, and turning it back on brings the same list
-  /// back. A setting that destroyed data would make "I don't need this right
-  /// now" an irreversible decision.
+  /// Whether Notes is offered at all. Off hides it and deletes nothing.
   final bool notesEnabled;
 
-  /// Whether the Explorer folds away a saved section that currently holds
-  /// nothing.
-  ///
-  /// On by default. A seeded section is written collapsed and stays that way,
-  /// so a group with nothing in it costs a full row and says nothing — three
-  /// of them above the tree was the complaint this setting answers. Off
-  /// restores the always-present rows, and with them the property
-  /// `explorer_sections_cost_test.dart` names: with every section folded shut
-  /// the matching graph is not mounted at all.
+  /// Whether the Explorer folds away a saved section that is currently empty.
   final bool hideEmptySections;
 
   /// The `AgentDescriptor.id`s the Explorer is narrowed to, empty for "every
-  /// agent".
-  ///
-  /// A **set** rather than a single choice, because the request this answers
-  /// was "agy only, codex only, claude only, or two of them only" — and a
-  /// **filter** rather than a section rule, because a section groups one row
-  /// into one place while this narrows the whole list. See [AgentFilter].
-  ///
-  /// Persisted, and the reason is in [explorerAgentFilterProvider]: a narrowing
-  /// that reset every launch would be re-applied every launch. What keeps that
-  /// from being a trap is that the Explorer says so out loud — a filled funnel
-  /// in the header naming the agents it is holding back, and a count in place
-  /// of the rows wherever a project has none left.
-  ///
-  /// A `List` rather than a `Set` for the reason [pinnedSessionIds] is one:
-  /// this is what JSON round-trips, and one shape in and out of storage is
-  /// fewer places to disagree.
+  /// agent". Persisted, so the header names what it is holding back.
   final List<String> explorerAgentFilter;
 
-  /// Whether debug mode is on: the root logger drops to `ALL` and the Logs
-  /// panel appears on the side-panel rail.
-  ///
-  /// It does **not** control whether logging happens — warnings and errors are
-  /// recorded either way, because a buffer that starts filling when you open
-  /// the panel is a buffer that makes you reproduce the bug first.
+  /// Debug mode: root logger to `ALL`, Logs panel shown. Never gates logging.
   final bool debugMode;
 
-  /// How much of the log is written to the file on disk.
   final LogVerbosity logVerbosity;
 
-  /// Whether the rotating log file is written at all.
   final bool logToFile;
 
-  /// How many records the in-memory tail keeps.
   final int logBufferSize;
 
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
@@ -409,12 +243,10 @@ class Settings {
   AgentPermissions permissionsFor(String agentId) =>
       permissions[agentId] ?? const AgentPermissions();
 
-  /// The model new sessions on [agentId] start on, or null for "let the agent
-  /// choose" — which passes no model flag at all.
+  /// The model new sessions on [agentId] start on, or null to pass no flag.
   String? defaultModelFor(String agentId) => defaultModels[agentId];
 
-  /// The `flutter` a person named for [environmentId], or null for "look on
-  /// PATH" — which is not the same as "there is none" (§19).
+  /// The `flutter` named for [environmentId], or null for "look on PATH" (§19).
   String? flutterSdkPathFor(String environmentId) =>
       flutterSdkPaths[environmentId];
 
@@ -533,11 +365,7 @@ class Settings {
   Settings withPermissions(String agentId, AgentPermissions value) =>
       copyWith(permissions: {...permissions, agentId: value});
 
-  /// Sets [agentId]'s default model, or with a null [modelId] **removes** it.
-  ///
-  /// Removal rather than a stored null, for the reason [defaultModels] gives:
-  /// "let the agent choose" is the absence of a preference, and a file that
-  /// held one would have to keep answering what that null meant.
+  /// Sets [agentId]'s default model; a null [modelId] removes the key.
   Settings withDefaultModel(String agentId, String? modelId) => copyWith(
     defaultModels: {
       for (final entry in defaultModels.entries)
@@ -546,13 +374,7 @@ class Settings {
     },
   );
 
-  /// Sets [environmentId]'s Flutter executable, or with a blank [path]
-  /// **removes** it, which puts that environment back on PATH.
-  ///
-  /// Removal rather than a stored empty string, for the reason
-  /// [withDefaultModel] gives — and here a stored `' '` would be worse than
-  /// ambiguous: it is a path, so it would be refused for ever with nothing on
-  /// screen to explain why.
+  /// Sets [environmentId]'s Flutter executable; a blank [path] removes the key.
   Settings withFlutterSdkPath(String environmentId, String? path) {
     final trimmed = path?.trim() ?? '';
     return copyWith(
@@ -628,8 +450,7 @@ class Settings {
     for (final m in AppThemeMode.values) {
       if (m.name == json['themeMode']) themeMode = m;
     }
-    // Read whatever agent ids the file holds rather than a fixed list, so a
-    // newly registered agent's preferences survive a round-trip.
+    // Any agent id the file holds, so a new agent survives a round-trip.
     final permissions = <String, AgentPermissions>{};
     final perms = json['permissions'];
     if (perms is Map) {
@@ -641,8 +462,6 @@ class Settings {
         }
       }
     }
-    // Same shape as the permissions above, and for the same reason: whatever
-    // agent ids the file names survive a round-trip, registered here or not.
     final defaultModels = <String, String>{};
     final models = json['defaultModels'];
     if (models is Map) {
@@ -654,10 +473,7 @@ class Settings {
         }
       }
     }
-    // Same shape again, keyed by environment id. An environment that has gone
-    // keeps its entry rather than being pruned here: a distribution that is
-    // merely stopped is not a distribution that was removed (§19), and the id
-    // is stable across a reinstall.
+    // A vanished environment keeps its entry: stopped is not removed (§19).
     final flutterSdkPaths = <String, String>{};
     final sdks = json['flutterSdkPaths'];
     if (sdks is Map) {
@@ -684,17 +500,13 @@ class Settings {
       keepAwake: json['keepAwake'] == true,
       closeToTray: json['closeToTray'] == true,
       autoStart: json['autoStart'] == true,
-      // Absent means a settings file written before this existed, and the
-      // default is on — so `== true` would silently turn slimming off for
-      // every existing install.
+      // `!= false`: absent must read as on, or every install loses slimming.
       simulatorSlimming: json['simulatorSlimming'] != false,
       simulatorSlimmingKept: json['simulatorSlimmingKept'] is List
           ? (json['simulatorSlimmingKept'] as List)
                 .whereType<String>()
                 .toList()
           : kDefaultSlimmingKept,
-      // Absent means a file written before this existed, and the default is on
-      // — the same reasoning as `simulatorSlimming` above.
       androidSlimming: json['androidSlimming'] != false,
       androidSlimmingEnabled: json['androidSlimmingEnabled'] is List
           ? (json['androidSlimmingEnabled'] as List)
@@ -736,12 +548,9 @@ class Settings {
           ? (json['pinnedSessionIds'] as List).whereType<String>().toList()
           : const [],
       shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
-      // `!= false` rather than `== true`: this defaults **on**, so a settings
-      // file written before the key existed has to read as on rather than as
-      // the absent value's `false`.
+      // `!= false`: defaults on, so a file written before the key reads as on.
       restoreLivePanes: json['restoreLivePanes'] != false,
-      // `== true`, not `!= false`: this defaults **off**, so a settings file
-      // written before the key existed reads as off.
+      // `== true`: defaults off, so an older file reads as off.
       hostBackedLocalPanes: json['hostBackedLocalPanes'] == true,
       terminalChordOverrides: {
         if (json['terminalChordOverrides'] is Map)
@@ -763,8 +572,7 @@ class Settings {
       localRelayPort: json['localRelayPort'] is int
           ? json['localRelayPort'] as int
           : 8787,
-      // Clamped on read: a hand-edited 0.1 would make the whole UI unusable,
-      // and Settings is the only screen it could be fixed from.
+      // Clamped on read: a hand-edited 0.1 leaves Settings itself unreadable.
       uiTextScale: (toDouble(json['uiTextScale']) ?? 1.0).clamp(
         minUiTextScale,
         maxUiTextScale,
@@ -788,8 +596,7 @@ class Settings {
           : kDefaultDebugMode,
       logVerbosity: LogVerbosity.fromName(json['logVerbosity']),
       logToFile: json['logToFile'] is bool ? json['logToFile'] as bool : true,
-      // Clamped on read for the same reason as the text scale: a hand-edited
-      // 5,000,000 would be a 40 MB array allocated at launch.
+      // Clamped: a hand-edited 5,000,000 would be a 40 MB array at launch.
       logBufferSize:
           (json['logBufferSize'] is int
                   ? json['logBufferSize'] as int
@@ -887,8 +694,7 @@ class Settings {
       logVerbosity,
       logToFile,
       logBufferSize,
-      // Folded in here rather than added to the outer call, which was already
-      // at `Object.hash`'s limit of 20 arguments.
+      // Folded in: the outer call is already at `Object.hash`'s 20-arg limit.
       Object.hash(
         hostBackedLocalPanes,
         androidSlimming,

@@ -11,10 +11,7 @@ import '../../environments/application/environments_controller.dart';
 import 'settings_section.dart';
 
 /// The active Codex identity per installation and explicitly captured accounts.
-///
-/// Reading is scoped to this mounted settings section and refresh is manual;
-/// this adds no timer, background scan, or vendor request. Usage remains in the
-/// adjacent usage section, which owns its own throttled network request.
+/// Refresh is manual: no timer, no background scan, no vendor request.
 class CodexAccountsSection extends ConsumerWidget {
   const CodexAccountsSection({required this.installations, super.key});
 

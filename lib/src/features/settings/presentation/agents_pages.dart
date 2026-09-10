@@ -25,9 +25,8 @@ class AgentsPage extends ConsumerWidget {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final installations = ref.watch(agentInstallationsControllerProvider);
-    // Offer every discovered installation (e.g. Claude on WSL vs Claude on
-    // Windows), not just the kind. Clamp the saved value so the dropdown never
-    // holds an id with no matching item.
+    // Every discovered installation, not just the kind, and the saved value is
+    // clamped so the dropdown never holds an id with no matching item.
     final currentId =
         installations.any((i) => i.id == settings.defaultAgentInstallationId)
         ? settings.defaultAgentInstallationId

@@ -18,8 +18,8 @@ class SettingsController extends Notifier<Settings> {
   @override
   Settings build() => ref.watch(settingsRepositoryProvider).load();
 
-  /// Turns debug mode on or off. Raises the root logger to `ALL` while on and
-  /// puts it back to `INFO` when off; also what makes the Logs panel appear.
+  /// Turns debug mode on or off: the root logger moves between `ALL` and
+  /// `INFO`, and the Logs panel appears with it.
   void setDebugMode(bool value) {
     state = state.copyWith(debugMode: value);
     _save();
@@ -44,8 +44,8 @@ class SettingsController extends Notifier<Settings> {
     applyDiagnostics();
   }
 
-  /// Pushes the persisted diagnostics preferences at the live sinks. Called on
-  /// every change, and once at bootstrap so a restart restores them.
+  /// Pushes the persisted diagnostics preferences at the live sinks — on every
+  /// change, and once at bootstrap so a restart restores them.
   void applyDiagnostics() => applyDiagnosticsSettings(
     ref.read(diagnosticsProvider),
     debugMode: state.debugMode,
@@ -54,29 +54,21 @@ class SettingsController extends Notifier<Settings> {
     bufferSize: state.logBufferSize,
   );
 
-  /// Turns the Notes feature on or off. Off hides the affordance and the
-  /// panel surface; the notes themselves stay in the database.
+  /// Turns Notes on or off. Off hides it; the notes stay in the database.
   void setNotesEnabled(bool value) {
     state = state.copyWith(notesEnabled: value);
     _save();
   }
 
-  /// Whether the Explorer folds away a saved section holding nothing.
-  ///
-  /// A filter, not a deletion: a hidden section is still saved, still matches,
-  /// and comes back the moment something lands in it.
+  /// Whether the Explorer folds away an empty saved section — a filter, not a
+  /// deletion: it comes back when something lands in it.
   void setHideEmptySections(bool value) {
     state = state.copyWith(hideEmptySections: value);
     _save();
   }
 
-  /// Which agents the Explorer shows, as `AgentDescriptor.id`s.
-  ///
-  /// Empty is "every agent" — see [AgentFilter], where unticking the last one
-  /// is what returns the sidebar to the unfiltered list. Written sorted so two
-  /// identical choices made in a different order are one settings value and not
-  /// two, which is what keeps `Settings ==` from reporting a change nobody
-  /// made.
+  /// Which agents the Explorer shows; empty is "every agent". Written sorted,
+  /// so a reordered identical choice is not a change `Settings ==` reports.
   void setExplorerAgentFilter(Set<String> agentIds) {
     state = state.copyWith(explorerAgentFilter: agentIds.toList()..sort());
     _save();
@@ -107,8 +99,7 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Records which categories to leave running. Takes the full set each time
-  /// rather than a toggle, so the caller cannot get the two out of step.
+  /// Which categories to leave running — the full set, never a toggle.
   void setSimulatorSlimmingKept(List<String> ids) {
     state = state.copyWith(simulatorSlimmingKept: ids);
     _save();
@@ -119,8 +110,7 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Records which Android categories to apply. Takes the full set each time
-  /// rather than a toggle, so the caller cannot get the two out of step.
+  /// Which Android categories to apply — the full set, never a toggle.
   void setAndroidSlimmingEnabled(List<String> ids) {
     state = state.copyWith(androidSlimmingEnabled: ids);
     _save();
@@ -162,7 +152,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Sets the terminal grid's font size, clamped to a usable range.
   void setTerminalFontSize(double size) {
     state = state.copyWith(
       terminalFontSize: size.clamp(
@@ -186,7 +175,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Pins/unpins a project; pinned projects sort to the top.
   void togglePinnedProject(String projectId) {
     final pinned = [...state.pinnedProjectIds];
     if (!pinned.remove(projectId)) pinned.add(projectId);
@@ -194,7 +182,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Pins/unpins a session; pinned sessions sort to the top of their project.
   void togglePinnedSession(String sessionId) {
     final pinned = [...state.pinnedSessionIds];
     if (!pinned.remove(sessionId)) pinned.add(sessionId);
@@ -236,8 +223,7 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Sets the default to a specific installation (or clears it). Keeps
-  /// [Settings.defaultAgent] in sync with the installation's agent id.
+  /// Sets the default installation, keeping [Settings.defaultAgent] in sync.
   void setDefaultAgentInstallation(String? agentId, String? installationId) {
     state = state.copyWith(
       defaultAgent: agentId,
@@ -252,8 +238,8 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Says whether a focused terminal pane hands [label] to the app or to the
-  /// shell, overriding the default declared in `shellChords`.
+  /// Whether a focused pane hands [label] to the app or the shell, over the
+  /// default in `shellChords`.
   void setTerminalChordClaimed(String label, bool claimed) {
     state = state.copyWith(
       terminalChordOverrides: {...state.terminalChordOverrides, label: claimed},
@@ -261,7 +247,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Drops every override, putting the whole skip-list back to its defaults.
   void resetTerminalChordOverrides() {
     state = state.copyWith(terminalChordOverrides: const {});
     _save();
@@ -288,24 +273,14 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Sets the per-agent default model, or with a null [modelId] hands the agent
-  /// back to choosing for itself — no model flag at all.
-  ///
-  /// Null stays a first-class answer here rather than being widened to "some
-  /// model": it is what every session ran under before this setting existed and
-  /// is still the shipped default. See `Settings.defaultModels`.
+  /// Sets the per-agent default model; a null [modelId] passes no flag at all.
   void setDefaultModel(String agentId, String? modelId) {
     state = state.withDefaultModel(agentId, modelId);
     _save();
   }
 
-  /// Sets the `flutter` executable for [environmentId], or with a blank [path]
-  /// puts that environment back on its own PATH.
-  ///
-  /// Measures nothing, and invalidates nothing from here: a save must not
-  /// block on a process, and the readings drop themselves when this map
-  /// changes — `FlutterSdkReadings.build` watches it, which keeps the rule
-  /// beside the readings rather than in every writer of the setting.
+  /// Sets the `flutter` for [environmentId]; a blank [path] puts it back on
+  /// PATH. Measures nothing — `FlutterSdkReadings.build` watches this map.
   void setFlutterSdkPath(String environmentId, String? path) {
     state = state.withFlutterSdkPath(environmentId, path);
     _save();
@@ -321,14 +296,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Applies to the *next* pane, never to the ones already open: an instance is
-  /// built once, and a running shell cannot change which process owns it.
+  /// Applies to the *next* pane: a running shell cannot change its owner.
   void setHostBackedLocalPanes(bool value) {
     state = state.copyWith(hostBackedLocalPanes: value);
     _save();
   }
 
-  /// Sets, or with `null` clears, the imported terminal colour theme.
   void setTerminalThemeSource(String? id) {
     state = state.copyWith(
       terminalThemeSource: id,
@@ -342,7 +315,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Sets, or with `null` clears, the relay the remote-access host dials.
   void setRemoteRelayUrl(String? url) {
     state = state.copyWith(
       remoteRelayUrl: url,
@@ -351,7 +323,6 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Chooses between the embedded local relay and a hosted one.
   void setRemoteRelayMode(RelayMode mode) {
     state = state.copyWith(remoteRelayMode: mode);
     _save();

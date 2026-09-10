@@ -9,14 +9,8 @@ import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
 
 /// Turns what the browser and device services report into a run's steps and
-/// files.
-///
-/// Both sinks are synchronous — a browser verb must not wait on a disk write to
-/// return — so every recorded action is appended to one serialized queue.
-/// [drain] is what a caller awaits before reading the run back, and it is the
-/// only thing standing between "the tool returned" and "the evidence is on
-/// disk". Nothing here throws at the service it is watching: a recorder that
-/// cannot write a file must not turn a successful click into a failed one.
+/// files. Both sinks are synchronous, so writes queue and [drain] is what a
+/// caller awaits; nothing here throws at the service it is watching.
 class VerificationRecorder {
   VerificationRecorder(
     this._dao,
@@ -35,8 +29,7 @@ class VerificationRecorder {
   var _ordinal = 0;
   Future<void> _queue = Future<void>.value();
 
-  /// Failures the recorder itself hit, surfaced when the run is finished rather
-  /// than thrown at whatever was being recorded.
+  /// Failures the recorder hit, surfaced at finish rather than thrown.
   final List<String> problems = [];
 
   String get runId => run.id;
@@ -44,9 +37,6 @@ class VerificationRecorder {
   /// Everything queued has been written.
   Future<void> drain() => _queue;
 
-  // --- Sinks -----------------------------------------------------------------
-
-  /// Installed on `BrowserService.actionSink` for the duration of a run.
   void recordBrowser(BrowserAction action) => _append(
     kind: _browserKind(action.verb),
     summary: action.summary,
@@ -60,7 +50,6 @@ class VerificationRecorder {
     slug: action.verb,
   );
 
-  /// Installed on `AdbService.actionSink` for the duration of a run.
   void recordDevice(DeviceAction action) => _append(
     kind: _deviceKind(action.verb),
     summary: action.summary,
@@ -86,8 +75,7 @@ class VerificationRecorder {
     slug: 'note',
   );
 
-  /// A file collected outside any action — the console log, the closing
-  /// screenshot. Attached to no step, because nothing the agent did produced it.
+  /// A file collected outside any action, so attached to no step.
   void attach({
     required VerificationArtifactKind kind,
     required String label,
@@ -117,8 +105,6 @@ class VerificationRecorder {
     });
   }
 
-  // --- Writing ---------------------------------------------------------------
-
   void _append({
     required VerificationStepKind kind,
     required String summary,
@@ -131,11 +117,8 @@ class VerificationRecorder {
   }) {
     final ordinal = ++_ordinal;
     final at = _now();
-    // The step lands now, not on the queue. `sqlite3` writes on this isolate,
-    // so by the time a browser or device verb returns, what it did is already
-    // durable — a run that dies mid-way still has everything up to that point,
-    // and a caller reading the run back immediately sees the step it just took.
-    // Only the *files* are queued, because bytes on disk are genuinely async.
+    // The step lands now, not on the queue: `sqlite3` writes on this isolate,
+    // so a verb's step is durable by the time it returns. Only files queue.
     _dao.insertStep(
       run.id,
       VerificationStep(
@@ -179,8 +162,7 @@ class VerificationRecorder {
     });
   }
 
-  /// Chains [work] onto the queue, keeping order and swallowing its failure
-  /// into [problems].
+  /// Chains [work] onto the queue, swallowing its failure into [problems].
   void _enqueue(Future<void> Function() work) {
     _queue = _queue.then((_) async {
       try {

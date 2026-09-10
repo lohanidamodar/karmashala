@@ -8,8 +8,7 @@ import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'settings_section.dart';
 
-/// Settings → Permissions: per-agent permission preferences for new and
-/// existing sessions.
+/// Settings → Permissions: per-agent preferences for new and existing sessions.
 class PermissionsPage extends ConsumerWidget {
   const PermissionsPage({super.key});
 
@@ -68,9 +67,7 @@ class _PermissionCard extends StatelessWidget {
             Text(descriptor.displayName, style: theme.textTheme.titleSmall),
             const SizedBox(height: Insets.sm),
             if (!support.isKnown)
-              // The disabled-with-a-reason rule, at the one place a default is
-              // set: an agent whose modes nobody has established offers no
-              // dropdowns rather than three that would do nothing.
+              // An agent whose modes are unestablished offers no dropdowns.
               Text(
                 unknownAgentReason(descriptor.displayName),
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -78,10 +75,7 @@ class _PermissionCard extends StatelessWidget {
                 ),
               )
             else ...[
-              // One picker per axis per purpose. Codex has two axes, so its
-              // card draws four controls — which is why this wraps instead of
-              // sitting in a Row: four dropdowns across do not fit the 720px
-              // minimum window, let alone at 1.3x text.
+              // One picker per axis per purpose: Codex's four do not fit a Row.
               for (final (label, selection, onChanged) in [
                 ('New sessions', newSelection, onNew),
                 ('Existing sessions', existingSelection, onExisting),
@@ -111,10 +105,7 @@ class _PermissionCard extends StatelessWidget {
               ],
             ],
             const SizedBox(height: Insets.xs),
-            // Says which way the precedence runs, because the natural reading
-            // of a settings screen is the opposite one: these are the modes a
-            // session starts under **until it chooses**, and a session that has
-            // chosen keeps its own when this changes.
+            // Which way precedence runs: a session that chose keeps its own.
             Text(
               'Defaults for sessions that have not chosen a mode of their own. '
               'A mode picked on a session keeps that session, even after this '
@@ -153,9 +144,8 @@ class _PermissionCard extends StatelessWidget {
     );
   }
 
-  /// One axis of one purpose. Writing back the **whole** selection rather than
-  /// the changed axis keeps the other axis where the user left it — a sandbox
-  /// picked here must not silently reset the approval policy beside it.
+  /// One axis of one purpose, writing back the whole selection so the other
+  /// axis is not silently reset.
   Widget _axisDropdown(
     AgentPermissionAxisOptions axis,
     PermissionSelection selection,
@@ -171,8 +161,7 @@ class _PermissionCard extends StatelessWidget {
           DropdownMenuItem(
             value: option.id,
             enabled: option.isSelectable,
-            // Per row rather than per selection: this page picks one axis at a
-            // time, and the row's own rung is what its name should say.
+            // Per row, not per selection: this page picks one axis at a time.
             child: Text(option.pairedLabel, overflow: TextOverflow.ellipsis),
           ),
       ],

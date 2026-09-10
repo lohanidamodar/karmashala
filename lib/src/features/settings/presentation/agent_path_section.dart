@@ -13,30 +13,9 @@ import '../../sessions/domain/session_resume.dart' show describeAge;
 import 'agent_label.dart';
 import 'settings_section.dart';
 
-/// Settings → Agents: where each installed agent's executable is, whether it
-/// still opens, and a field to point it somewhere else.
-///
-/// **It reports what was measured, and says when.** Before this the app had no
-/// opinion at all about a stored path: it was written once by the first scan
-/// and spawned forever after. Codex self-updated, moved behind a junction chain
-/// Windows refuses to traverse, and every launch failed with a
-/// `ProcessException` while Settings showed a healthy-looking Codex row. §19's
-/// rule applies here as much as to the Tools panel — three states, because
-/// three different things need doing:
-///
-/// * **opens** — nothing to do;
-/// * **not found** — install the CLI, or point this at it;
-/// * **cannot be reached** — the file is somewhere the OS will not let this
-///   app go. Installing it again will not help; a path that avoids the link
-///   will.
-///
-/// **The version beside each path is a reading too, and it shows its age.** It
-/// used to render as a bare number, written by the workspace's first scan and
-/// never re-read: the app said Claude Code 2.1.252 while the binary answered
-/// 2.1.263, and nothing here could tell those apart. A refresh rate cannot fix
-/// that — the reader has no way to know which reading they are looking at — so
-/// the number carries when it was taken and says outright when it is old
-/// enough to have been overtaken. See `describeVersionReading`.
+/// Settings → Agents: each agent's executable, whether it still opens, and a
+/// field to repoint it. "Not found" and "cannot be reached" are separate
+/// states because they want opposite actions; every reading shows its age.
 class AgentPathSection extends ConsumerWidget {
   const AgentPathSection({super.key});
 
@@ -59,9 +38,7 @@ class AgentPathSection extends ConsumerWidget {
         children: [
           Text(
             repair.hasChecked
-                // The age of the reading, per §19: a check is a measurement,
-                // and a measurement with no timestamp invites more trust than
-                // it has earned.
+                // Per §19: a measurement with no timestamp is over-trusted.
                 ? '${repair.summary} Checked '
                       '${describeAge(ref.watch(clockProvider).nowUtc().difference(repair.checkedAt!))}.'
                 // And never a claim of health that was not observed at all.
@@ -79,16 +56,13 @@ class AgentPathSection extends ConsumerWidget {
   }
 }
 
-/// One installation's path: what it is, whether it opened, who chose it, and a
-/// field to change it.
+/// One installation's path: what it is, whether it opened, and who chose it.
 class _ExecutableRow extends ConsumerStatefulWidget {
   const _ExecutableRow({required this.installation, this.reading});
 
   final AgentInstallation installation;
 
-  /// The last reading for this row, when the check produced one. Null means it
-  /// was not among the rows the check reported on — which for a healthy
-  /// workspace is every row.
+  /// The last reading for this row, or null when the check skipped it.
   final AgentPathReading? reading;
 
   @override
@@ -104,8 +78,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
   @override
   void didUpdateWidget(_ExecutableRow old) {
     super.didUpdateWidget(old);
-    // A repair moved the row under the user. Follow it, unless they are part
-    // way through typing something else.
+    // A repair moved the row; follow it unless they are mid-edit.
     final stored = widget.installation.executable.path;
     if (old.installation.executable.path != stored &&
         _path.text == old.installation.executable.path) {
@@ -119,15 +92,9 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
     super.dispose();
   }
 
-  /// Browse is the convenience; the field is the way out.
-  ///
-  /// That order is deliberate and measured: on Windows `file_selector` shows
-  /// its dialog synchronously on the platform thread, which in the Flutter
-  /// Windows embedder is the thread the Dart isolate runs on, so a busy
-  /// isolate leaves the dialog created and never shown and the window "Not
-  /// Responding". `pickOneFile` is the shared, announced entry point every
-  /// Browse in this app goes through — see `core/util/file_picking.dart`, which
-  /// documents the measurement and why a typed path must always work.
+  /// Browse is the convenience; the field is the way out. On Windows
+  /// `file_selector` blocks the Dart isolate's own thread, so a busy isolate
+  /// never shows the dialog — see `core/util/file_picking.dart`.
   Future<void> _browse() async {
     final file = await pickOneFile(
       what: 'an agent executable',
@@ -161,8 +128,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
       environmentLabelForIdProvider(install.environmentId),
     );
     final status = _status(widget.reading);
-    // A version is entirely a measurement, and these CLIs self-update. The
-    // number never appears here without the age of the reading behind it.
+    // These CLIs self-update, so the number never appears without its age.
     final version = describeVersionReading(
       install,
       now: ref.watch(clockProvider).nowUtc(),
@@ -183,8 +149,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // Which state the row is in, so it is never a mystery why a
-              // repair did or did not touch it.
+              // Which state the row is in, so a skipped repair is no mystery.
               Text(
                 install.executableByUser ? 'set by you' : 'auto-detected',
                 style: theme.textTheme.bodySmall,
@@ -192,8 +157,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
             ],
           ),
           const SizedBox(height: Insets.xs),
-          // A field and two buttons do not fit a phone width or 150% text, so
-          // the buttons drop under the field rather than overflowing it.
+          // A field and two buttons do not fit a phone width or 150% text.
           LayoutBuilder(
             builder: (context, constraints) {
               final field = TextField(
@@ -270,8 +234,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
   /// The sentence for a row that is not simply fine, or null when it is.
   static String? _status(AgentPathReading? reading) => switch (reading
       ?.reachability) {
-    // The distinction the whole feature exists for. "Not installed" and
-    // "installed somewhere I cannot reach" imply opposite actions.
+    // The distinction the feature exists for: opposite actions.
     ExecutableReachability.unreachable =>
       'Installed, but this path cannot be reached — it leads through a link '
           'this machine will not follow. Set the path the executable is '

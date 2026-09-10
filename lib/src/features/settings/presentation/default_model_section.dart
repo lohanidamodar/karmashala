@@ -10,15 +10,8 @@ import 'agent_label.dart';
 import 'settings_section.dart';
 
 /// Settings → Agents → DEFAULT MODEL: the model new sessions on each agent
-/// start on.
-///
-/// The permission defaults' twin, one field over, and stored the same way: a
-/// per-agent preference the launcher reads live, so a session that never
-/// chose moves when this moves and a session that chose does not.
-///
-/// **"Let the agent choose" is a real setting and the shipped one.** It passes
-/// no `--model` at all, which is what every session ran under before this
-/// existed; an agent is never forced to name a model here.
+/// start on, read live so a session that never chose moves when this moves.
+/// "Let the agent choose" is the shipped setting and passes no `--model`.
 class DefaultModelSection extends ConsumerWidget {
   const DefaultModelSection({super.key});
 
@@ -26,9 +19,8 @@ class DefaultModelSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
-    // An agent nobody has recorded models for gets no card, for the reason
-    // `ModelChip` gives about drawing no chip: a menu of guesses is worse than
-    // no menu.
+    // An agent nobody has recorded models for gets no card: a menu of guesses
+    // is worse than no menu.
     final descriptors = [
       for (final descriptor in AgentRegistry.builtIn.descriptors)
         if (descriptor.launch.model.isKnown) descriptor,

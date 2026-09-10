@@ -17,18 +17,12 @@ import 'settings_section.dart';
 import 'watch_set_section.dart';
 
 /// Settings → Diagnostics: the debug-mode switch, and what happens to the log.
-///
-/// **Why the switch is not just "show me a panel".** `AppLogger.debug` maps to
-/// `Logger.fine`, which is below the root logger's normal `INFO` floor — so a
-/// toggle that only revealed a panel would reveal an empty one. Turning debug
-/// mode on drops the root level to `ALL`; turning it off restores `INFO`.
-/// Warnings and errors are recorded either way, which is why the panel has
-/// history the moment it is opened.
+/// `AppLogger.debug` is `Logger.fine`, below the root's `INFO` floor, so the
+/// switch drops the root to `ALL` rather than revealing an empty panel.
 class DiagnosticsPage extends ConsumerWidget {
   const DiagnosticsPage({super.key});
 
-  /// The buffer sizes offered. Anything is storable; these are the three
-  /// answers to "how far back do you need to see".
+  /// The buffer sizes offered; anything is storable, these are the three asked.
   static const _bufferSizes = [1000, kDefaultLogBufferCapacity, 20000];
 
   @override
@@ -121,27 +115,16 @@ class DiagnosticsPage extends ConsumerWidget {
           ),
         ),
         const _PersistenceSection(),
-        // Last because it is the one section that reads rather than sets. See
-        // [WatchSetSection] for what it is answering.
+        // Last: the one section that reads rather than sets.
         const WatchSetSection(),
       ],
     );
   }
 }
 
-/// Whether terminal scrollback is being written as fast as it is produced.
-///
-/// Reads rather than sets, like [WatchSetSection]. It exists because "the app
-/// feels like it is falling behind" was a report nobody could answer: the
-/// autosave's cadence, its 8 ms budget and the dirty set were all internal, so
-/// whether writes were keeping up was invisible until a layout came back
-/// missing text.
-///
-/// Sampled on build rather than watched. The dirty set moves on the terminal's
-/// hot path — every notification of every pane — and a settings page that
-/// rebuilt with it would put a repaint behind each one. Reopening the section,
-/// or any other rebuild of the page, takes a fresh reading; that is enough for
-/// a number whose whole use is "is this falling?".
+/// Whether terminal scrollback is written as fast as it is produced. Sampled
+/// on build, like [WatchSetSection] reads: the dirty set moves on the
+/// terminal's hot path, so watching it repaints behind every notification.
 class _PersistenceSection extends ConsumerWidget {
   const _PersistenceSection();
 
@@ -151,9 +134,7 @@ class _PersistenceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Never *creates* the controller: on a machine where the terminal has not
-    // been opened, building it here would restore a whole layout to answer
-    // a diagnostics question.
+    // Never *creates* the controller: that would restore a whole layout.
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.exists(terminalSessionsControllerProvider)) {
       return const SettingsSection(
@@ -211,11 +192,8 @@ class _PersistenceSection extends ConsumerWidget {
   }
 }
 
-/// Where the files are, and a button that opens the folder.
-///
-/// The app support directory is the correct home for them — the same place the
-/// database and the IPC socket live — and it is somewhere nobody would ever
-/// find, so it is spelled out and there is a button.
+/// Where the files are, and a button that opens the folder: app support is the
+/// right home and one nobody would find.
 class _LogFolderRow extends ConsumerWidget {
   const _LogFolderRow();
 
