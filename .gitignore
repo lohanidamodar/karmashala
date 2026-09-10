@@ -31,6 +31,8 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+# `flutter test` inside a workspace member writes its tester assets here.
+packages/*/build/
 /coverage/
 
 # Symbolication related
