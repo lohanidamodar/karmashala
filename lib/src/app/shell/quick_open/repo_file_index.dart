@@ -10,8 +10,7 @@ import '../../../features/file_explorer/application/file_explorer_providers.dart
 import '../../../features/sessions/application/session_ui_providers.dart';
 
 /// Folders never worth indexing. Walking `node_modules` once costs more than
-/// everything else in a repository put together, and nothing in it is a file
-/// the user meant to open.
+/// everything else in a repository put together.
 const _skippedDirectories = {
   '.git',
   '.dart_tool',
@@ -70,27 +69,12 @@ class RepoIndexStats {
 }
 
 /// Walks a repository and keeps what it found current.
+/// Walks a repository and keeps what it found current.
 ///
-/// **Bounded on purpose.** A quick-open index that walks an unbounded tree is a
-/// quick-open index that hangs on somebody's home directory. Every walk stops
-/// at [maxFiles], [maxDirectories], [maxDepth] and [maxDuration], skips the
-/// folders above and every symlink, and yields to the event loop on a time
-/// budget so a large repository never blocks a frame.
-///
-/// The file bound alone was not enough. A tree of twenty thousand empty
-/// directories trips none of it — there are no files to count — and the walk
-/// used to grind through all of them.
-///
-/// **Fresh on purpose, too.** The index used to be walked once per root and
-/// then trusted for the lifetime of the process, which in an ADE means files an
-/// agent wrote a minute ago are not findable and files it deleted still are.
-/// Now a cached root is only trusted for [refreshInterval], and a
-/// [DirectoryChangeWatcher] marks it stale the moment anything under it moves.
-///
-/// Staleness never walks by itself. Marking a root stale is free; the re-walk
-/// happens the next time somebody calls [index], which is to say the next time
-/// quick open is actually open and looking. A repository nobody is searching
-/// costs one OS watch handle and nothing else.
+/// Bounded on purpose — [maxFiles], [maxDirectories], [maxDepth] and
+/// [maxDuration], no symlinks, yielding on a time budget. A cached root is
+/// trusted for [refreshInterval] and marked stale by a [DirectoryChangeWatcher];
+/// staleness never walks by itself, the next [index] call does.
 class RepoFileIndex {
   RepoFileIndex({
     this.maxFiles = 6000,
@@ -110,16 +94,12 @@ class RepoFileIndex {
   /// Directories the walk may visit. The bound the old walk was missing.
   final int maxDirectories;
 
-  /// A last-resort valve for a tree that is slow rather than large — a network
-  /// share, a cold spinning disk. The count bounds above are the ones that
-  /// normally stop a walk, and they are the deterministic ones; this is here so
-  /// that a pathological filesystem cannot hold the UI isolate for a minute.
+  /// A last-resort valve for a tree that is slow rather than large. The count
+  /// bounds are the deterministic ones that normally stop a walk.
   final Duration maxDuration;
 
-  /// How long a completed walk is trusted with no other signal. This is the
-  /// whole freshness story on a platform with no recursive watch, and a
-  /// backstop everywhere else for the changes a watch can miss (buffer
-  /// overflow, network drives, a root replaced wholesale).
+  /// How long a completed walk is trusted with no other signal — the whole
+  /// story where there is no recursive watch, a backstop where there is.
   final Duration refreshInterval;
 
   /// Watches are an OS resource, so the number of roots holding one is capped
@@ -133,13 +113,9 @@ class RepoFileIndex {
   final Map<String, Future<List<IndexedFile>>> _inFlight = {};
   final Map<String, int> _generation = {};
 
-  /// Roots touched while a walk was running, against the generation of the
-  /// walk that was running at the time.
-  ///
-  /// The generation is the whole point. A change noticed during walk *n* says
-  /// nothing about walk *n+1*, which started afterwards and therefore already
-  /// read the changed tree; marking that later result stale would send the
-  /// index round the loop again for nothing.
+  /// Roots touched while a walk was running, against that walk's generation:
+  /// a change noticed during walk *n* says nothing about walk *n+1*, which
+  /// started afterwards and has already read the changed tree.
   final Map<String, int> _dirtyAt = {};
 
   /// Watched roots, least recently indexed first.
@@ -150,9 +126,8 @@ class RepoFileIndex {
 
   var _disposed = false;
 
-  /// Emits a root whenever what is known about it changed: a walk landed, or
-  /// something on disk made the cached answer stale. Quick open listens while
-  /// it is open so a file created behind the dialog shows up in it.
+  /// Emits a root whenever what is known about it changed. Quick open listens
+  /// while it is open, so a file created behind the dialog shows up in it.
   Stream<String> get changes => _changes.stream;
 
   /// How this index learns about changes, for a diagnostic or a test.
@@ -175,9 +150,7 @@ class RepoFileIndex {
   }
 
   /// Indexes [root] if what is cached is not fresh, reusing an in-flight walk.
-  ///
-  /// Cheap to call on every keystroke: a fresh root returns its cached list
-  /// without touching the filesystem.
+  /// Cheap on every keystroke: a fresh root never touches the filesystem.
   Future<List<IndexedFile>> index(String root) {
     if (_disposed) return Future.value(cached(root));
     _ensureWatch(root);
@@ -202,12 +175,9 @@ class RepoFileIndex {
     return index(root);
   }
 
-  /// Marks [root] stale without throwing away what is known about it.
-  ///
-  /// This is the call a mutation path wants: the cached list stays available
-  /// for an instant first frame, and the next [index] re-walks. [invalidate] is
-  /// the blunter version, for when the cached answer is not merely old but
-  /// wrong — the root itself moved.
+  /// Marks [root] stale without throwing away what is known about it — the call
+  /// a mutation path wants. [invalidate] is the blunter version, for a root
+  /// whose cached answer is wrong rather than merely old.
   void touch(String root) {
     if (_inFlight.containsKey(root)) _dirtyAt[root] = _generation[root]!;
     final entry = _entries[root];
@@ -237,12 +207,8 @@ class RepoFileIndex {
     }
   }
 
-  /// Abandons any walk of [root] in progress.
-  ///
-  /// Quick open calls this when it closes: a walk nobody is waiting for should
-  /// not keep spending the UI isolate. Whatever the walk had already found is
-  /// kept as a stale partial when nothing better is cached, so the next open
-  /// still has something to draw immediately.
+  /// Abandons any walk of [root] in progress. What it had already found is kept
+  /// as a stale partial when nothing better is cached.
   void cancel(String root) {
     _generation[root] = (_generation[root] ?? 0) + 1;
     _inFlight.remove(root);
@@ -283,12 +249,8 @@ class RepoFileIndex {
     }
   }
 
-  /// Whether a changed path sits under one of the folders the walk skips.
-  ///
-  /// This filter is the difference between a watch that costs nothing and a
-  /// watch that re-walks the repository every time a build writes a file: a
-  /// recursive watch reports all of `build/` and `.dart_tool/`, none of which
-  /// the index would have looked at anyway.
+  /// Whether a changed path sits under one of the folders the walk skips — the
+  /// difference between a free watch and one that re-walks on every build.
   bool _isSkippedPath(String root, String path) {
     if (!path.startsWith(root)) return false;
     for (final segment in _segments(path.substring(root.length))) {
@@ -310,9 +272,8 @@ class RepoFileIndex {
 
   static bool _isSeparator(int code) => code == 0x2F || code == 0x5C;
 
-  /// The last path segment, without allocating a `RegExp` and a list per entry
-  /// the way `path.split(RegExp(r'[\\/]')).last` did — on a twenty-thousand
-  /// entry tree that was twenty thousand throwaway regular expressions.
+  /// The last path segment, without the `RegExp` and list per entry that
+  /// `path.split(RegExp(r'[\\/]')).last` allocated.
   static String _lastSegment(String path) {
     for (var i = path.length - 1; i >= 0; i--) {
       if (_isSeparator(path.codeUnitAt(i))) return path.substring(i + 1);
@@ -357,16 +318,12 @@ class RepoFileIndex {
         // cannot see is simply not findable.
         continue;
       }
-      // Deterministic truncation. Which files survive a bound must not depend
-      // on the order the filesystem happened to hand them back, or the same
-      // repository indexes differently on two machines and a missing result
-      // becomes unreproducible.
+      // Deterministic truncation: which files survive a bound must not depend
+      // on the order the filesystem happened to hand them back.
       entries.sort((a, b) => a.path.compareTo(b.path));
       for (final entity in entries) {
-        // With `followLinks: false` every symlink and every Windows junction
-        // arrives as a `Link`, whatever it points at. Skipping them is what
-        // stops a link back up the tree from making the walk a cycle, and what
-        // stops one into `C:\` from making it a scan of the disk.
+        // With `followLinks: false` every symlink and junction arrives as a
+        // `Link`; skipping them is what stops a cycle, or a scan of `C:\`.
         if (entity is Link) continue;
         final name = _lastSegment(entity.path);
         if (name.isEmpty) continue;
@@ -387,10 +344,9 @@ class RepoFileIndex {
           ),
         );
       }
-      // Give the frame back on a time budget rather than a directory count. A
-      // fixed "every 24 directories" pays for a timer hop even when the last
-      // twenty-four were instant, and skips one when a single directory took
-      // eighty milliseconds — exactly backwards.
+      // Give the frame back on a time budget rather than a directory count: a
+      // fixed count pays for a hop after twenty-four instant directories and
+      // skips one after a single directory that took eighty milliseconds.
       if (sinceYield.elapsedMilliseconds >= _yieldBudgetMs) {
         sinceYield.reset();
         await Future<void>.delayed(Duration.zero);
@@ -417,9 +373,8 @@ class RepoFileIndex {
       ),
       walkedAt: _now(),
     );
-    // Something moved under us while *this* walk was reading, so what we just
-    // built is already known to be behind. Publish it — a nearly-right list
-    // beats an empty one — but do not let it look fresh.
+    // Something moved under us while *this* walk was reading. Publish it — a
+    // nearly-right list beats an empty one — but do not let it look fresh.
     entry.stale = _dirtyAt.remove(root) == generation;
     _entries[root] = entry;
     _emit(root);
@@ -468,14 +423,9 @@ class _Indexed {
 
 /// One index for the app, so opening quick open twice does not walk twice.
 ///
-/// The two signals listened to here are the app's own mutation notices, and
-/// both notifiers build to a constant with no dependencies — listening costs
-/// nothing and cannot drag a database into a test that only wanted an index.
-/// `sessionsRevisionProvider` covers create, stop, archive, handoff and fork;
-/// `checkpointsRevisionProvider` is bumped by the checkpoint recorder at the
-/// end of an agent turn, which is precisely when an agent has stopped writing
-/// files. Everything else — a checkout, a merge, a verification run, an agent
-/// editing through a terminal the app never sees — arrives through the watcher.
+/// The two revisions listened to build to a constant with no dependencies, so
+/// listening cannot drag a database into a test that only wanted an index.
+/// Everything they do not cover arrives through the watcher.
 final repoFileIndexProvider = Provider<RepoFileIndex>((ref) {
   final index = RepoFileIndex();
   ref.onDispose(index.dispose);

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// A thin draggable divider that reports drag deltas — used to resize the
-/// desktop panes (Explorer, detail sidebar) and the terminal dock.
+/// A thin draggable divider that reports drag deltas, for the desktop panes.
 ///
 /// [axis] is the direction the handle *moves* in: [Axis.horizontal] is a
-/// vertical bar dragged left/right (the default, and what the pane dividers
-/// use); [Axis.vertical] is a horizontal bar dragged up/down.
+/// vertical bar dragged left/right; [Axis.vertical] is dragged up/down.
 class ResizeHandle extends StatelessWidget {
   const ResizeHandle({
     required this.onDelta,

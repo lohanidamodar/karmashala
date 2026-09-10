@@ -1,13 +1,9 @@
 part of 'workbench.dart';
 
-// The tab strip: the row itself, the scrolling rail inside it, and the way to
-// every tab the rail cannot show.
-
 /// One tab in the strip.
 ///
 /// The chip is a closure, not a widget: at a hundred tabs the strip must build
-/// only the five or six on screen, and a list of built chips would be exactly
-/// the eager `ListView(children: [...])` the performance audit named.
+/// only the five or six on screen.
 class _StripTab {
   const _StripTab({required this.active, required this.chip});
 
@@ -15,25 +11,11 @@ class _StripTab {
   final Widget Function() chip;
 }
 
-/// The workbench tab strip.
+/// The workbench tab strip — terminal tabs and nothing else.
 ///
-/// **What overflow is for.** The app is built for a hundred live terminals
-///, and a horizontal strip is hopeless at a hundred
-/// tabs however well it scrolls — so the answer to "I cannot reach my tabs"
-/// cannot be better scrolling. It is [TabPicker]: a filterable list of every
-/// tab, reached from a button that appears exactly when the strip stops being
-/// enough. The chevrons either side are the answer to the *other* half of the
-/// complaint — that reaching a tab two along needed a horizontal mouse wheel —
-/// and they only earn their place while the overflow is mild.
-///
-/// **Only tabs.** A selected session used to get a conversation chip here as
-/// well as a toggle in the same row, so one tap in the Explorer looked like two
-/// things opening. Its controls live under the surface now (see [_SessionBar]);
-/// this is terminal tabs and nothing else.
-///
-/// What is left beside them — the terminal's own toolbar with **new tab** in
-/// it, focus mode — sits outside the scrolling region, so no number of tabs can
-/// push the way to make another one off the end of the strip.
+/// A horizontal strip is hopeless at a hundred tabs however well it scrolls, so
+/// overflow is [TabPicker] rather than better scrolling; the chevrons only earn
+/// their place while it is mild. The new-tab verb sits outside the scroll.
 class _TabStrip extends ConsumerWidget {
   const _TabStrip({required this.groupId, required this.groupFocused});
 
@@ -52,11 +34,8 @@ class _TabStrip extends ConsumerWidget {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final group = groupId;
 
-    // The strip is where a pane goes to stop being in a split. Dragging a pane
-    // by its grip and dropping it here is the same verb as the pane menu's
-    // "Move pane to a new tab" and the palette's — the gesture the whole
-    // redesign turns on, because a drag that only goes one way leaves whatever
-    // it moved stranded.
+    // The strip is where a pane goes to stop being in a split — the same verb
+    // as the pane menu's "Move pane to a new tab" and the palette's.
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) => switch (details.data) {
         PaneDrag(:final paneId) => sessions.isPaneInSplit(paneId),
@@ -91,10 +70,8 @@ class _TabStrip extends ConsumerWidget {
                   tabs: tabs,
                   width: constraints.maxWidth,
                   activeIndex: tabs.indexWhere((tab) => tab.active),
-                  // The toolbar's own verb, reached the way the toolbar reaches
-                  // it. A second way to make a tab would be a second place for
-                  // the default profile and the selected repository's directory
-                  // to be decided.
+                  // The toolbar's own verb: a second way to make a tab would be
+                  // a second place to decide the profile and the directory.
                   onNewTab: () {
                     final terminal = TerminalActions(ref);
                     terminal.open(terminal.defaultProfile());
@@ -114,11 +91,8 @@ class _TabStrip extends ConsumerWidget {
                 ),
               ),
             ),
-            // Nothing else. Every verb that used to sit here — find, snippets,
-            // the two splits, the new-terminal pair — asked no question a group
-            // could answer that "the focused one" could not, and seven controls
-            // repeated in a 286px group were the whole of why the bar below
-            // overflowed. They are in the title bar now. See [ShellTitleBar].
+            // Nothing else. Every verb that used to sit here is in the title
+            // bar now — seven repeated in a 286px group overflowed the bar.
             const SizedBox(width: Insets.xs),
           ],
         ),
@@ -128,12 +102,9 @@ class _TabStrip extends ConsumerWidget {
 
   /// Every tab in the strip, left to right.
   ///
-  /// **The shape of the strip, and nothing that happens inside a tab.** Watched
-  /// narrowly on purpose: the whole [TerminalSessionsState] is republished
-  /// whenever any pane's process dies, and at a hundred panes a process exiting
-  /// is the common event — so watching it here rebuilt every chip in the strip
-  /// for a dot that moved in one of them. Liveness is subscribed to per tab, by
-  /// [_TabChip].
+  /// Watched narrowly: the whole [TerminalSessionsState] republishes whenever
+  /// any pane's process dies, which would rebuild every chip in the strip.
+  /// Liveness is subscribed to per tab, by [_TabChip].
   List<_StripTab> _tabs(WidgetRef ref) {
     final group = groupId;
     final tabs = group == null
@@ -165,16 +136,12 @@ class _TabStrip extends ConsumerWidget {
 }
 
 /// The part of the tab strip no chip covers, so a test can aim at it.
-///
-/// Named rather than found by geometry because "the empty space" is the whole
-/// subject of the gesture: a test that computed the coordinate itself would
-/// stop testing the rule the moment the rule changed.
+/// Named rather than found by geometry: "the empty space" is the subject of the
+/// gesture, and a computed coordinate would stop testing the rule.
 const kTabStripEmptySpace = Key('tab-strip/empty-space');
 
-/// The narrowest rail that can still draw both paging chevrons beside a tab.
-///
-/// One tab at its floor ([kMinTabWidth]) plus the two 30px icon buttons. Below
-/// this the chevrons are dropped — see [_TabRailState.build].
+/// The narrowest rail that can still draw both paging chevrons beside a tab:
+/// one tab at its floor ([kMinTabWidth]) plus the two 30px icon buttons.
 const double _chevronsFitFrom = kMinTabWidth + 60;
 
 /// The scrolling part of the strip, and the affordances for what will not fit.
@@ -189,9 +156,8 @@ class _TabRail extends StatefulWidget {
 
   final List<_StripTab> tabs;
 
-  /// The room the tabs have, which decides how wide each draws and whether
-  /// there is overflow at all. A field rather than something read from the
-  /// context so a resize is a *prop change* the state can react to.
+  /// The room the tabs have. A field rather than something read from the
+  /// context, so a resize is a *prop change* the state can react to.
   final double width;
 
   final int activeIndex;
@@ -211,17 +177,9 @@ class _TabRailState extends State<_TabRail> {
 
   /// The strip's scroll position, and only while exactly one viewport owns it.
   ///
-  /// `hasClients` is not that question. It is true the moment *any* viewport is
-  /// attached, and for one frame there are two: the strip changes shape when it
-  /// starts overflowing — a bare `ListView` becomes a row with chevrons around
-  /// it — which moves the list to a new slot, and the outgoing viewport does not
-  /// detach until that frame ends. `ScrollController.position` is
-  /// `positions.single`, so it threw `Bad state: Too many elements` out of the
-  /// chevron's builder on every launch, which is where the strip first learns
-  /// it has overflowed.
-  ///
-  /// Null for that frame means the chevrons are drawn disabled, which is what
-  /// they already do before the first layout.
+  /// `hasClients` is not that question: for the one frame the strip changes
+  /// shape two viewports are attached, and `positions.single` threw `Too many
+  /// elements`. Null for that frame draws the chevrons disabled.
   ScrollPosition? get _onePosition =>
       _scroll.positions.length == 1 ? _scroll.positions.first : null;
 
@@ -250,24 +208,16 @@ class _TabRailState extends State<_TabRail> {
     super.dispose();
   }
 
-  /// Reveals the active tab and refreshes the chevrons once the frame this
-  /// change belongs to has been laid out.
-  ///
-  /// Deferred for the reason quick open defers its own reveal: until the list
-  /// has been laid out the scroll extents still describe the *previous* one,
-  /// and clamping a target against those is how a strip ends up scrolled
-  /// somewhere nobody asked for.
+  /// Reveals the active tab and refreshes the chevrons once the frame has been
+  /// laid out: until then the extents still describe the *previous* list.
   void _afterLayout() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(_revealActive);
     });
   }
 
-  /// Scrolls the active tab into view.
-  ///
-  /// The one thing a plain scrolling row does not do for itself, and the reason
-  /// `Ctrl+PageUp`/`Ctrl+PageDown` were half-useless: stepping to a tab you
-  /// cannot see is stepping to nowhere.
+  /// Scrolls the active tab into view — the one thing a plain scrolling row
+  /// does not do, and why `Ctrl+PageUp`/`PageDown` were half-useless.
   void _revealActive() {
     final index = widget.activeIndex;
     final position = _onePosition;
@@ -309,19 +259,9 @@ class _TabRailState extends State<_TabRail> {
       itemBuilder: (context, index) => widget.tabs[index].chip(),
     );
     if (!metrics.overflowing) return _overEmptySpace(list, metrics.extent);
-    // The chevrons are the first thing to go when the rail itself runs out of
-    // room, and this is not a preference — it is the only arrangement that
-    // fits. Their own doc says they earn their place "while the overflow is
-    // mild"; below [_chevronsFitFrom] the overflow is not mild, it is the rail
-    // being squeezed to less than one tab by whatever shares the strip with it,
-    // and a row of `chevron + Expanded + chevron + picker` needs ~100px of
-    // chrome to draw. Built anyway it overflowed by 8.8px in a 640-wide window
-    // — a striped bar across the tab strip, from adding one control at the
-    // other end of the row.
-    //
-    // The picker stays at every width: it is "the only affordance here that
-    // still works at a hundred", and the chevrons only page a list it can
-    // filter.
+    // The chevrons are the first thing to go when the rail runs out of room:
+    // below [_chevronsFitFrom] a `chevron + Expanded + chevron + picker` row
+    // needs ~100px of chrome, and overflowed by 8.8px in a 640-wide window.
     final chevrons = widget.width >= _chevronsFitFrom;
     return Row(
       children: [
@@ -333,27 +273,9 @@ class _TabRailState extends State<_TabRail> {
     );
   }
 
-  /// [list], with the strip's oldest unwritten gesture laid over whatever room
-  /// the tabs did not use: **double-click the empty space to open a tab**, as
-  /// VS Code, every browser and most terminals do.
-  ///
-  /// A sibling over the leftover pixels, and deliberately **not** a detector
-  /// wrapped around the rail. An ancestor `onDoubleTap` joins the gesture arena
-  /// for every pointer that lands on a chip, and it breaks the chip twice over:
-  /// a double-click on a tab would open a new one instead of activating it,
-  /// and — worse, because it is silent — every *single* click on a tab would
-  /// wait out the 300 ms double-tap window before the chip's own `onTap` could
-  /// win the arena. Here it covers only pixels no chip occupies, which is
-  /// exactly the target the gesture is about.
-  ///
-  /// `Stack` hit-tests its children topmost-first and stops at the first that
-  /// answers, so the list keeps every pointer over a chip and this keeps the
-  /// rest. The `DragTarget` around the whole strip is an *ancestor* and stays
-  /// on the hit-test path either way, so dropping a pane on the empty space
-  /// still turns it into a tab.
-  ///
-  /// Only reached when the tabs fit. An overflowing rail has no empty space by
-  /// definition, and the arm above returns the row of chevrons instead.
+  /// [list], with **double-click the empty space to open a tab** laid over the
+  /// room the tabs did not use. A sibling, not a detector around the rail: an
+  /// ancestor `onDoubleTap` makes every single click on a chip wait out 300 ms.
   Widget _overEmptySpace(Widget list, double extent) {
     final free = widget.width - extent * widget.tabs.length;
     // Half a pixel of slack: a rail whose tabs exactly fill it has no target,
@@ -368,12 +290,8 @@ class _TabRailState extends State<_TabRail> {
           top: 0,
           bottom: 0,
           right: 0,
-          // Two gestures over the same pixels, and they do not compete: the
-          // double-click is a pointer gesture and the drop is resolved by the
-          // drag avatar's own hit test. The target is the *outer* of the two so
-          // the detector underneath still answers the hit that puts both of
-          // them on the path — and a pane is refused here so it carries on up
-          // to the strip's target and becomes a tab, as it always has.
+          // Two gestures over the same pixels, and they do not compete. A pane
+          // is refused here so it carries on up to the strip's target.
           child: DragTarget<TerminalDrag>(
             onWillAcceptWithDetails: (details) => details.data is TabDrag,
             onAcceptWithDetails: (details) {
@@ -386,9 +304,8 @@ class _TabRailState extends State<_TabRail> {
               onDoubleTap: widget.onNewTab,
               child: candidate.isEmpty
                   ? const SizedBox.expand()
-                  // Against the last chip rather than out in the middle of the
-                  // empty room: the mark says where the tab lands, and it lands
-                  // immediately after the tabs, not where the pointer is.
+                  // Against the last chip rather than the middle of the empty
+                  // room: the tab lands immediately after the tabs.
                   : _markedForDrop(
                       context,
                       const SizedBox.expand(),
@@ -406,13 +323,9 @@ class _TabRailState extends State<_TabRail> {
     builder: (context, _) {
       final position = _onePosition;
       // A position exists from the moment the controller is attached, but its
-      // pixels and extents do not exist until the viewport has been laid out —
-      // and reading `maxScrollExtent` before then throws. Both chevrons are
-      // simply off for that one frame.
-      //
-      // Half a pixel of slack at the ends: a scroll that has arrived can sit a
-      // rounding error short, and a chevron that stays enabled at the end is a
-      // button that does nothing.
+      // pixels and extents do not until layout, and reading `maxScrollExtent`
+      // before then throws. Half a pixel of slack: an arrived scroll can sit
+      // a rounding error short of the end.
       final can =
           position != null &&
           position.hasPixels &&
@@ -420,9 +333,7 @@ class _TabRailState extends State<_TabRail> {
           (forward
               ? position.pixels < position.maxScrollExtent - 0.5
               : position.pixels > 0.5);
-      // Shaped like the terminal toolbar's buttons at the other end of the
-      // strip rather than like a tab's own close button: these are chrome that
-      // acts on the strip, and they are the two the mouse aims at most.
+      // Shaped like the toolbar's buttons: chrome that acts on the strip.
       return IconButton(
         tooltip: forward ? 'Later tabs' : 'Earlier tabs',
         icon: Icon(

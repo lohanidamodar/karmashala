@@ -33,22 +33,14 @@ import '../../features/settings/application/settings_controller.dart';
 /// The right-hand side panel: a permanent icon rail plus a body that exists
 /// only while a surface is open.
 ///
-/// **Why a rail and not a tab strip.** The surfaces here are *tools applied to
-/// the work*, not the work itself — a diff, a device mirror, a browser. A tab
-/// strip claims they are peers of the thing in the workbench, and it grew a new
-/// tab every time a tool was added until six of them switched through one `int`.
-/// A rail scales down the other way: it is one column of glyphs, it says which
-/// tool is open, and closing the panel leaves [Chrome.rail] of chrome instead of
-/// a 240px pane the user is not looking at.
+/// A rail rather than a tab strip: these are tools applied to the work, not
+/// peers of it, and closing leaves [Chrome.rail] of chrome instead of a pane.
 class SidePanel extends ConsumerWidget {
   const SidePanel({super.key});
 
-  /// The glyph for each surface. **Every one of these must be legible as a
-  /// different thing at 16px** — the rail is seven unlabelled icons in a 34px
-  /// column, so a near-miss is a surface nobody can find. Inbox and Info were
-  /// `warning-circle` and `info`: a circle with a `!` above a circle with an
-  /// `i`, which is why the owner could not see the worktree viewer at all.
-  /// `side_panel_test.dart` pins that they stay distinct.
+  /// The glyph for each surface. **Every one must be legible as a different
+  /// thing at 16px** — the rail is unlabelled icons in a 34px column, so a
+  /// near-miss is a surface nobody can find; `side_panel_test.dart` pins it.
   static IconData iconFor(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => AppIcons.tray,
     SidePanelSurface.changes => AppIcons.gitDiff,
@@ -120,11 +112,9 @@ class _SidePanelRail extends ConsumerWidget {
         color: scheme.surfaceContainerLow,
         border: Border(left: BorderSide(color: scheme.outlineVariant)),
       ),
-      // The glyphs scroll rather than overflow. Fourteen of them at 32px need
-      // ~450px, and the smallest window the app supports leaves the rail less
-      // than that — a column that simply overflowed would drop the last
-      // surfaces off the bottom of a 720x560 window with a yellow bar over
-      // them. Nothing scrolls while they fit.
+      // The glyphs scroll rather than overflow: fourteen at 32px need ~450px,
+      // and the smallest window the app supports leaves the rail less than
+      // that. Nothing scrolls while they fit.
       child: SingleChildScrollView(
         primary: false,
         child: Column(
@@ -167,13 +157,9 @@ class _RailButton extends StatelessWidget {
   /// How many things are waiting behind this glyph; 0 draws nothing.
   final int badge;
 
-  /// What the tooltip says: the surface's name, then the keystroke that reaches
-  /// it. Eight unlabelled glyphs in a 34px column are only findable if hovering
-  /// one teaches something, and the thing worth teaching is the chord — a rail
-  /// you have to reach for with the mouse every time is a rail you stop using.
-  ///
-  /// The chord is read out of [shellChords] rather than typed here, so a
-  /// rebinding cannot leave the tooltip advertising a key that does nothing.
+  /// The surface's name, then the keystroke that reaches it: an unlabelled glyph
+  /// is only findable if hovering teaches the chord. Read out of [shellChords],
+  /// so a rebinding cannot leave the tooltip advertising a dead key.
   String _tooltip() {
     final head = [
       surface.label,
@@ -288,12 +274,9 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
               width: width,
               child: Material(
                 color: scheme.surface,
-                // Every surface here can be closed from its header, whether
-                // the header is the panel's or the surface's own. The button
-                // is handed down rather than assembled here, because the five
-                // surfaces that draw their own header build its actions from
-                // their own providers and pulling that up would make this
-                // panel watch five features to add one glyph.
+                // Every surface here can be closed from its header, whether the
+                // header is the panel's or the surface's own — handed down, so
+                // the panel need not watch five features to add one glyph.
                 child: PaneCloseAction(
                   tooltip:
                       'Close panel  ·  '
@@ -348,9 +331,8 @@ class _ChangesSurface extends ConsumerWidget {
   );
 }
 
-/// The header the panel draws for a surface that has none of its own. The
-/// close button is not listed here: it comes from the [PaneCloseAction] around
-/// the body, which is the same one the other five surfaces wear.
+/// The header the panel draws for a surface that has none of its own. The close
+/// button comes from the [PaneCloseAction] around the body, not from here.
 class _SidePanelHeader extends StatelessWidget {
   const _SidePanelHeader({required this.surface});
 

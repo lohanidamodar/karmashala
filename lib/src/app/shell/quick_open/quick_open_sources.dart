@@ -53,11 +53,8 @@ import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'repo_file_index.dart';
 
-/// Per-group priors, added to every match in that group.
-///
-/// Small on purpose. These decide what an *empty* query lists first and break
-/// near-ties between kinds; they must never let a weakly-matched session
-/// outrank an exactly-matched command, which is what a large prior would do.
+/// Per-group priors, added to every match in that group. Small on purpose: a
+/// large one would let a weak session match outrank an exact command match.
 const _sessionWeight = 24.0;
 const _workspaceWeight = 14.0;
 
@@ -69,31 +66,23 @@ const _branchWeight = 8.0;
 const _agentWeight = 4.0;
 const _commandWeight = 2.0;
 
-/// A snippet is the user's own text, so it outranks an app verb by a hair on an
-/// empty query — but only by a hair, for the reason above: a large prior would
-/// let a weakly-matched snippet beat an exactly-matched command.
+/// The user's own text, so it outranks an app verb — by a hair only.
 const _snippetWeight = 3.0;
 
-/// Below every snippet, so `$` lists the library first and the two ways to
-/// *manage* it last. They live in the snippets group rather than under Commands
-/// precisely so that `$` on an empty library still offers somewhere to go.
+/// Below every snippet, so `$` lists the library first and the ways to manage
+/// it last — in this group, so `$` on an empty library still offers a way in.
 const _snippetAdminWeight = 0.5;
 
-/// Just under an open tab. A preset is a tab you are *about* to have, so on an
-/// empty query the tabs that exist come first and the shapes that could exist
-/// come next — but ahead of a project, for the same reason a tab is.
+/// Just under an open tab: a preset is a tab you are *about* to have, so what
+/// exists comes first and what could exist comes next.
 const _presetWeight = 16.0;
 
 /// Below a session, above a project: a shell tab is a place you are already
 /// working, but it is not a piece of work in its own right.
 const _tabWeight = 18.0;
 
-/// Just under a session's own row.
-///
-/// A conversation hit and the session it is in are the same destination, so
-/// when a query matches both the session's title *and* something said inside
-/// it, the titled row should be the one on top — it is the thing the user
-/// named.
+/// Just under a session's own row: a conversation hit and the session it is in
+/// are one destination, and the titled row is the thing the user named.
 const _conversationWeight = 22.0;
 
 /// How much the most recent session is worth over the oldest.
@@ -103,12 +92,9 @@ const _recencySpread = 12.0;
 /// but not much: quick open's whole point is reaching what is *not* on screen.
 const _selectedRepoBoost = 10.0;
 
-/// Builds everything quick open can find.
-///
-/// Every [QuickOpenItem.onSelect] delegates to the code that already owns that
-/// jump — `focusWatchedSession` for sessions, the side panel controller for
-/// surfaces, the dialogs for the actions. Quick open is a second way in, never
-/// a second implementation.
+/// Builds everything quick open can find. Every [QuickOpenItem.onSelect]
+/// delegates to the code that already owns that jump: a second way in, never a
+/// second implementation.
 class QuickOpenSources {
   QuickOpenSources({
     required this.ref,
@@ -170,11 +156,8 @@ class QuickOpenSources {
         shortcut: 'Ctrl+Shift+N',
         onSelect: () => NewProjectDialog.show(context),
       ),
-      // Ungated. The dialog picks its own destination now — a project and a
-      // checkout inside it — so "nothing is selected" is no longer a reason to
-      // hide the command, and neither is an empty workspace: with no projects
-      // at all the dialog says so and offers the one thing that would help,
-      // which teaches more than a command that silently is not there.
+      // Ungated: the dialog picks its own project and checkout, and with no
+      // projects at all it says so rather than being silently absent.
       _command(
         'New session…',
         icon: AppIcons.chatCircleDots,
@@ -188,14 +171,8 @@ class QuickOpenSources {
           icon: AppIcons.gitBranch,
           onSelect: () => FanOutDialog.show(context),
         ),
-      // The two things you write for yourself, listed as **verbs**.
-      //
-      // Both surfaces were already here as places — "Notes  ·  Side panel" —
-      // and the owner still asked *"how to add notes, where can we add
-      // notes?"*, then *"it's not intuitive"*. A place only answers the
-      // question if you already know its name; "New note" is what somebody
-      // types when they do not. Each one opens its surface on the way, so the
-      // palette teaches where the thing lives instead of only doing it once.
+      // Listed as verbs, not places: "Notes · Side panel" only answers if you
+      // already know the name. Each opens its surface on the way.
       if (ref.read(notesEnabledProvider))
         _command(
           'New note…',
@@ -243,11 +220,8 @@ class QuickOpenSources {
         onSelect: () =>
             ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere(),
       ),
-      // The tabs listed below are only the ones that are *nothing but* tabs
-      // (see [_openTabs]), and finding one that way means knowing its name.
-      // This is the other question — "show me my tabs" — and it opens the
-      // strip's own picker, which holds every tab including the ones running a
-      // session.
+      // [_openTabs] lists only the tabs that are *nothing but* tabs; this is
+      // the other question — "show me my tabs" — and opens the strip's picker.
       _command(
         'Switch terminal tab…',
         subtitle: 'Every open tab, by name, session or directory',
@@ -256,11 +230,8 @@ class QuickOpenSources {
         onSelect: () => TabPicker.show(context, terminalTabEntries),
       ),
       ..._restoredSessionCommands(),
-      // Moving a tab into a split, and taking a pane back out, are drags —
-      // and a feature reachable only by dragging is one some people cannot
-      // reach at all. Same two verbs, no mouse. Listed only when they have
-      // somewhere to act: a command that is always offered and usually inert
-      // is noise in a palette this size.
+      // The drag-only layout verbs, without a mouse. Listed only when they
+      // have somewhere to act: always offered and usually inert is noise.
       ..._splitCommands(),
       _command(
         'Toggle Explorer',
@@ -300,10 +271,8 @@ class QuickOpenSources {
         keywords: const ['mcp', 'bridge', 'wsl', 'interop', 'disk', 'adb'],
         onSelect: () => EnvironmentHealthDialog.show(context),
       ),
-      // Beside "Check system health" on purpose, and built the same way: a
-      // reading taken when asked, shown with its age, acted on only where it
-      // is certain. This one is about the workspace rather than the machine —
-      // rows whose agent has no record of the conversation they name.
+      // About the workspace rather than the machine: rows whose agent has no
+      // record of the conversation they name.
       _command(
         'Review sessions with no conversation',
         subtitle: 'Rows an agent cannot resume — remove them, or start a '
@@ -328,17 +297,8 @@ class QuickOpenSources {
     ];
   }
 
-  /// The keyboard's way to the sessions a restart left dormant.
-  ///
-  /// Listed only when there are some, by the rule [_splitCommands] states: a
-  /// command that is always offered and usually inert is noise in a palette
-  /// this size. It is inert most of the time by design — a window whose
-  /// sessions are all running has nothing to resume — and this is exactly the
-  /// day it is not.
-  ///
-  /// It opens the dialog rather than resuming outright, because that is where
-  /// the list of what is about to be started lives, and starting four agents
-  /// is not something to do from a single keystroke without showing which.
+  /// The keyboard's way to the sessions a restart left dormant; listed only
+  /// when there are some, and it opens the dialog rather than resuming outright.
   List<QuickOpenItem> _restoredSessionCommands() {
     final count = ref.read(restoredAgentPanesProvider).length;
     if (count == 0) return const [];
@@ -362,20 +322,9 @@ class QuickOpenSources {
     ];
   }
 
-  /// The keyboard's way to do everything the chrome can be dragged or clicked
-  /// to do about layout.
-  ///
-  /// Every drop target and every split button has an entry, because a feature
-  /// reachable only by dragging is one some people cannot reach at all — and
-  /// since the split buttons moved to the title bar, where a compact window
-  /// keeps only the `+`, this is the route that is always there.
-  ///
-  /// **Two structures, two vocabularies, and every title says which.** A
-  /// *group* is a division of the whole middle workspace: its own tab strip,
-  /// its own content and its own status bar, holding **tabs**. A *region* is a
-  /// division inside one tab, holding **panes**. `WorkspaceLayout` states the
-  /// pair once; these titles use the same two words and nothing else, because
-  /// "move a tab into this split" named neither.
+  /// The keyboard's way to every layout verb the chrome can be dragged to do.
+  /// A *group* divides the workspace and holds tabs; a *region* divides one tab
+  /// and holds panes — the titles here use those two words and nothing else.
   List<QuickOpenItem> _splitCommands() {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final emptyGroup = sessions.emptyWorkspaceGroup();
@@ -459,16 +408,8 @@ class QuickOpenSources {
 
   // --- contexts -----------------------------------------------------------
 
-  /// Switching the project list's context, from the palette.
-  ///
-  /// A context is a filter, and a filter you have to find a menu for is a
-  /// filter you leave switched on. These are the same three answers the scope
-  /// bar offers — everything, one context, the ones in none — reachable by
-  /// typing their names.
-  ///
-  /// **"All projects" is one of them, and is listed first.** Getting back to
-  /// everything is the move people make most, and a way out that is harder to
-  /// reach than the way in is how a project ends up looking lost.
+  /// Switching the project list's context from the palette. "All projects" is
+  /// listed first: the way out must not be harder to reach than the way in.
   List<QuickOpenItem> _contexts() {
     final workspaces = ref.read(workspacesControllerProvider);
     if (workspaces.isEmpty) return const [];
@@ -575,17 +516,9 @@ class QuickOpenSources {
 
   // --- sessions ------------------------------------------------------------
 
-  /// Native and imported sessions across every project, **most recently
-  /// active first** — the same order and the same reading the Explorer's
-  /// sidebar and the phone's list use.
-  ///
-  /// The whereabouts shown here are the **free** ones — where the session was
-  /// started, and whether a pane of ours is running it right now. So is the
-  /// age: `sessionLastActiveProvider` reads the status registry's own cached
-  /// report, which costs a map lookup. It used to cost a transcript stat per
-  /// session, which is why this list drew no time at all — paying that for
-  /// every session in the workspace on every keystroke would have been a
-  /// filesystem sweep.
+  /// Native and imported sessions across every project, most recently active
+  /// first. Only *free* whereabouts are shown: `sessionLastActiveProvider` is a
+  /// map lookup, where a transcript stat per session would be a disk sweep.
   List<QuickOpenItem> _sessions() {
     final sessionDao = ref.read(sessionDaoProvider);
     final importedDao = ref.read(importedSessionDaoProvider);
@@ -619,9 +552,8 @@ class QuickOpenSources {
               id: 'session/${session.id}',
               group: QuickOpenGroup.sessions,
               title: session.title,
-              // The age of the newest reading, in the app's own words, or
-              // nothing at all when we hold none — never "just now" for a
-              // session we cannot speak for (§19).
+              // The age of the newest reading, or nothing when we hold none —
+              // never "just now" for a session we cannot speak for (§19).
               subtitle: [where, agent, ?note, ?lastActive.label(now)].join(' · '),
               detail: session.status.name,
               icon: AppIcons.chatCircle,
@@ -668,9 +600,8 @@ class QuickOpenSources {
       }
     }
 
-    // Recency is a rank, not a duration: the most recently active session is
-    // worth [_recencySpread] over the stalest whether that gap is an hour or a
-    // year. A session we hold no reading for ranks below every one we do.
+    // Recency is a rank, not a duration: the newest is worth [_recencySpread]
+    // over the stalest whether the gap is an hour or a year.
     entries.sort((a, b) => compareByLastActive(a.order, b.order));
     final last = entries.length - 1;
     return [
@@ -706,17 +637,8 @@ class QuickOpenSources {
     );
     ref.read(shellControllerProvider.notifier).focusPane(ShellPane.detail);
 
-    // And actually open it. Picking a session by name is a request to be *in*
-    // it, not to be shown a screen offering to put you in it — the owner asked
-    // why resuming from here stopped at "No terminal of ours is running this
-    // session" with a button, when they had already said which session they
-    // wanted. Focusing alone left that screen as the answer.
-    //
-    // [ExplorerActions.openNative] is the same action the Explorer's own click
-    // runs, and it decides between reattach, resume and select — so a session
-    // already running in a pane is reattached rather than started twice, and
-    // one that cannot be resumed still just gets selected, leaving the
-    // placeholder to explain why.
+    // And actually open it: picking a session by name is a request to be *in*
+    // it. `openNative` decides between reattach, resume and select.
     final result = await _open(openId, imported: imported);
     final message = result.message;
     if (message == null || !context.mounted) return;
@@ -737,36 +659,9 @@ class QuickOpenSources {
 
   // --- conversations ------------------------------------------------------
 
-  /// One row per conversation something was *said* in.
-  ///
-  /// The one thing in the palette that reads a transcript's body. Fed by
-  /// `ConversationIndexDao.search`, which the dialog runs as the user types;
-  /// this only turns the hits into rows, so nothing here touches the disk or
-  /// re-runs the query.
-  ///
-  /// Built **apart from [build]** because the query changes on every keystroke
-  /// and the rest of the palette does not: re-running every source per
-  /// character would put a `SELECT * FROM sessions` per repository behind each
-  /// one.
-  ///
-  /// **The hits are collapsed per conversation**, because the question is
-  /// "which conversation was that in", not "which of the eleven times I said
-  /// it". The first hit's excerpt is the subtitle and the rest become a count.
-  ///
-  /// **Nothing here asks the filesystem anything.** A conversation whose
-  /// worktree has been removed, whose repository has moved, or whose transcript
-  /// has been deleted is still a row you can open — §20's rule, and a stated
-  /// requirement: a stored path is state, whether it resolves is a
-  /// measurement, and a measurement is not something a search result may be
-  /// filtered on. Opening it goes through the same `_focusSession` a clicked
-  /// session row uses, which *selects first* and then tries to resume, so a
-  /// conversation that cannot be resumed still lands on screen read-only with
-  /// the placeholder saying why.
-  ///
-  /// A hit whose conversation neither table knows about is dropped: the index
-  /// keeps rows for a session row that has since been deleted, and there is
-  /// nothing left to open. See the DEFERRED note — pruning belongs on the
-  /// delete path.
+  /// One row per conversation something was *said* in, from
+  /// `ConversationIndexDao.search` — hits collapsed per conversation, and never
+  /// filtered on the filesystem, so a row whose worktree is gone still opens.
   List<QuickOpenItem> conversations(
     List<ConversationHit> hits,
     String query, {
@@ -798,9 +693,7 @@ class QuickOpenSources {
           title: title,
           subtitle: hit.excerpt,
           // The age of the reading, not of the conversation: the index is only
-          // as current as the trigger that last read that transcript, and §19
-          // says a surface must be able to admit that rather than imply the
-          // answer is live.
+          // as current as the trigger that last read that transcript (§19).
           detail: [
             if (matches > 1) '$matches matches',
             agent,
@@ -808,12 +701,8 @@ class QuickOpenSources {
               'indexed ${describeAge(at.difference(hit.indexedAt!))}',
           ].join('  ·  '),
           icon: AppIcons.chatCircleDots,
-          // **FTS5 has already decided this row matches**, and the palette's
-          // fuzzy scorer must not overrule it: an excerpt built around a
-          // prefix match rarely contains the typed characters in order, so
-          // `scoreItem` would drop half of what the index found. Carrying the
-          // query itself as a keyword is what makes every hit survive ranking,
-          // at the keyword weight — below a title match, which is right.
+          // FTS5 has already decided this row matches; carrying the query as a
+          // keyword stops the fuzzy scorer dropping an excerpt that lacks it.
           keywords: [query, agent],
           weight: _conversationWeight,
           onSelect: () => dismiss(
@@ -827,23 +716,9 @@ class QuickOpenSources {
 
   // --- open terminal tabs --------------------------------------------------
 
-  /// The terminal tabs nothing else here can reach.
-  ///
-  /// A tab running one of our sessions is *already* in this list as that
-  /// session — picking it reattaches and focuses its pane — so listing it again
-  /// would only put one destination in the results twice. What is left is the
-  /// tabs that are only tabs: a shell, a build, a dev server. Those had no entry
-  /// in quick open at all, which meant the tab strip was the one way to reach
-  /// one by name, and a strip is hopeless at a hundred.
-  ///
-  /// This is why the strip's own picker needed no chord of its own: `Ctrl+K`
-  /// was already the way to find things by name, and it now finds these too.
-  /// Saved workbench shapes, under `~`.
-  ///
-  /// A preset is a *shape*, so the row says how big it is rather than what is
-  /// running in it — there is nothing running in it. Opening one may leave
-  /// panes out when a profile has gone from this machine, and the message says
-  /// which; see [presetOpenedMessage].
+  /// Saved workbench shapes, under `~`. A preset is a *shape*, so the row says
+  /// how big it is; opening one may leave panes out when a profile has gone
+  /// from this machine, and the message says which.
   List<QuickOpenItem> _presets() {
     final presets = ref.read(terminalPresetsProvider);
     final shell = ref.read(shellControllerProvider.notifier);
@@ -876,6 +751,8 @@ class QuickOpenSources {
     return '$tabs · $panes';
   }
 
+  /// The terminal tabs nothing else here can reach: one running a session of
+  /// ours is already listed as that session, so it is skipped here.
   List<QuickOpenItem> _openTabs() {
     final terminals = ref.read(terminalSessionsControllerProvider);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
@@ -934,8 +811,7 @@ class QuickOpenSources {
   ];
 
   /// A file with uncommitted changes opens in the diff we already render; any
-  /// other opens in the configured editor, which is what tapping it in the
-  /// Files surface does. Either way the panel shows where you landed.
+  /// other opens in the configured editor. Either way the panel follows.
   Future<void> _openFile(IndexedFile file, {required bool changed}) async {
     final panel = ref.read(sidePanelProvider.notifier);
     if (changed) {
@@ -1031,27 +907,8 @@ class QuickOpenSources {
   // --- command snippets ----------------------------------------------------
 
   /// The saved commands that fit the terminal the user is in, plus the two ways
-  /// to manage the library.
-  ///
-  /// **The pane is resolved here, once, while the palette is being built** —
-  /// see [resolveSnippetTarget]. That is the whole of "the active terminal":
-  /// the palette is a dialog, so by the time a row is activated the keyboard is
-  /// in a search field, but `activeTab.focusedPaneId` is controller state that a
-  /// dialog never touches. Capturing it at build rather than re-reading it at
-  /// select means a pane that dies under the open palette cannot silently
-  /// redirect the command into whichever pane the controller refocused; the
-  /// captured id is checked again by `insertSnippet` and reported if it has
-  /// gone.
-  ///
-  /// **Filtered to the pane's own shell**, not to the host platform: a WSL
-  /// one-liner is absent from a PowerShell pane on the very same machine, and
-  /// an untagged snippet is everywhere. There is no SSH case because there is
-  /// no SSH pane — `terminalProfilesFor` only ever produces PowerShell, Command
-  /// Prompt, a WSL distribution or a POSIX shell, and `EnvironmentKind.ssh`
-  /// belongs to sessions and commands rather than to a PTY. Someone who types
-  /// `ssh` *inside* a pane has changed what the far end is in a way nothing here
-  /// can observe, which is precisely when an untagged snippet is the honest
-  /// answer.
+  /// to manage the library. The pane is captured at build, not re-read at
+  /// select; filtering is by the pane's own shell, and untagged fits anywhere.
   List<QuickOpenItem> _snippets() {
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final state = ref.read(terminalSessionsControllerProvider);
@@ -1078,11 +935,8 @@ class QuickOpenSources {
           weight: _snippetWeight,
           onSelect: () => dismiss(() => _insert(snippet, target)),
         ),
-      // **Filtering is right; silence about it is not.** The rule above is
-      // deliberate, but a library of shell-tagged snippets in a pane that fits
-      // none of them produced an empty palette and no reason — which reads as
-      // "my snippet is gone". Two sentences, because a pane whose shell is
-      // unknown is a different fact from one that runs a different shell.
+      // Filtering is right; silence about it is not — a library that fits no
+      // pane produced an empty palette, which reads as "my snippet is gone".
       if (fitting.length < all.length)
         QuickOpenItem(
           id: 'snippet/hidden',
@@ -1148,21 +1002,9 @@ class QuickOpenSources {
     )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// **The notifier is resolved before the `await`, and has to be.**
-  ///
-  /// [dismiss] pops the palette *before* running the action, so by the time the
-  /// user presses Save in the editor — several frames and a whole typing
-  /// session later — `_QuickOpenState` is long unmounted. Riverpod 3's
-  /// `ConsumerStatefulElement._assertNotDisposed` **throws** on `ref.read` then;
-  /// it is a real `throw` and not an assert, so a release build does it too.
-  /// The add never ran, the snippet was never written to the dao and never
-  /// entered state, and the user's snippet was *lost* rather than stale — which
-  /// is why waiting for a refresh never brought it back. Through the terminal
-  /// toolbar's snippet button, this is the most discoverable way to add one.
-  ///
-  /// Same discipline as [_openFile] above, which hoists its messenger for the
-  /// same reason: after an `await`, nothing that belongs to the widget is
-  /// still there to ask.
+  /// The notifier is resolved before the `await`, and has to be: [dismiss] pops
+  /// the palette first, and Riverpod 3's `_assertNotDisposed` really throws on a
+  /// `ref.read` from an unmounted element — in release too, losing the snippet.
   Future<void> _newSnippet(SnippetTarget? target) async {
     final snippets = ref.read(commandSnippetsProvider.notifier);
     final draft = await SnippetEditorDialog.show(

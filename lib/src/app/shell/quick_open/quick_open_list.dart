@@ -3,34 +3,21 @@ import 'package:flutter/material.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/design_tokens.dart';
 
-/// Row geometry for every filtered list in the shell.
-///
-/// Fixed so a list can be scrolled to an arbitrary selection without waiting
-/// for it to be laid out — a keyboard-driven list that can only reveal rows it
-/// has already built is a list that jumps.
+/// Row geometry for every filtered list in the shell. Fixed, so a list can be
+/// scrolled to a selection it has not laid out yet.
 const double quickOpenRowHeight = 42.0;
 
 /// [quickOpenRowHeight] at the reader's text size.
 ///
-/// The constant is the height at 1.0. A row holds a title over a subtitle, so
-/// at Windows' "make text bigger" the two lines outgrew the fixed box and every
-/// visible row overflowed by 5px — nine identical complaints in one frame. The
-/// row height has to scale for the same reason the text does; what must stay
-/// constant is that every row is the *same* height, which is what lets the
-/// scroll math above address a row it has never built.
-///
-/// Every user of the constant goes through here, so a list and the arithmetic
-/// that scrolls it can never disagree about how tall a row is.
+/// The constant is the height at 1.0; at Windows' "make text bigger" the two
+/// lines outgrew the fixed box and every visible row overflowed by 5px. What
+/// must stay constant is that every row is the *same* height.
 double quickOpenRowHeightOf(BuildContext context) =>
     MediaQuery.textScalerOf(context).scale(quickOpenRowHeight);
 
 /// The offset a scroll view must move to so the band starting at [leading] and
-/// [extent] long is inside the viewport, or `null` when it already is.
-///
-/// The one piece of arithmetic behind "keep the selection visible", shared by
-/// quick open's result list and the workbench tab strip so a keyboard-driven
-/// list and a chord-driven tab strip cannot drift apart. Clamped to the real
-/// extents, which is what stops a reveal from scrolling past the end.
+/// [extent] long is inside the viewport, or `null` when it already is. Clamped
+/// to the real extents, which is what stops a reveal scrolling past the end.
 double? revealOffset({
   required ScrollPosition position,
   required double leading,
@@ -77,10 +64,8 @@ class QuickOpenSearchField extends StatelessWidget {
 }
 
 /// One row of a filtered list: a glyph, a title with the matched characters
-/// picked out, where it lives, and a trailing note or control.
-///
-/// Takes plain fields rather than a result object so the same row draws quick
-/// open's results and the tab picker's tabs — one row design, two lists.
+/// picked out, where it lives, and a trailing note or control. Plain fields, so
+/// quick open's results and the tab picker's tabs share one row design.
 class QuickOpenRow extends StatelessWidget {
   const QuickOpenRow({
     required this.icon,

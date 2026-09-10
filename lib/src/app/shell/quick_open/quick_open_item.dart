@@ -5,10 +5,8 @@ import 'fuzzy_match.dart';
 /// The kinds of thing quick open can find, in the order they are listed when
 /// nothing separates them.
 ///
-/// A group is not a filter tab: results are ranked across all of them and the
-/// group is only how the list is *read*. The order here is the tie-break for
-/// two groups whose best match scored the same, and it is deliberate — a
-/// session is a piece of work, a file is a place inside one.
+/// A group is not a filter tab: results are ranked across all of them, and this
+/// order only breaks a tie between two groups whose best match scored the same.
 enum QuickOpenGroup {
   attention('Needs you'),
   tabs('Open tabs'),
@@ -28,14 +26,8 @@ enum QuickOpenGroup {
 
   final String label;
 
-  /// The sigil that restricts quick open to this group, if it has one.
-  ///
-  /// `$` for snippets because that is what a prompt looks like, and because it
-  /// is the one character on the list that a shell user already reads as "a
-  /// command follows". `?` for conversations because the question this group
-  /// answers is *"where did I decide this?"*. `~` for presets on the same
-  /// reasoning as `$`: it is what a shell writes for the place you go back to,
-  /// and a preset is the workbench you go back to.
+  /// The sigil that restricts quick open to this group, if it has one. `$` and
+  /// `~` are what a shell already writes for a command and for home.
   String? get sigil => switch (this) {
     QuickOpenGroup.commands => '>',
     QuickOpenGroup.sessions => '#',
@@ -47,12 +39,8 @@ enum QuickOpenGroup {
   };
 }
 
-/// One findable thing.
-///
-/// [onSelect] is a closure rather than a description of an action because every
-/// jump already has exactly one implementation somewhere else in the app — the
-/// Explorer's select, `focusWatchedSession`, the side panel controller. Quick
-/// open is a second *way in*, never a second implementation.
+/// One findable thing. [onSelect] is a closure because every jump already has
+/// exactly one implementation elsewhere: a second way *in*, not a second one.
 class QuickOpenItem {
   const QuickOpenItem({
     required this.id,
@@ -103,11 +91,8 @@ class QuickOpenResult {
   final List<int> titlePositions;
 }
 
-/// A query, with a leading sigil peeled off.
-///
-/// `>build` searches only commands, `#login` only sessions, `/shell.dart` only
-/// files. A sigil on its own lists that group, which is how the whole command
-/// list stays browsable now that it shares the surface with everything else.
+/// A query, with a leading sigil peeled off: `>build` searches only commands.
+/// A sigil on its own lists that group, which keeps the command list browsable.
 class QuickOpenQuery {
   const QuickOpenQuery({required this.text, this.only});
 
@@ -131,9 +116,8 @@ class QuickOpenQuery {
   }
 }
 
-/// How much a match in each field is worth. A hit in the title is what the user
-/// meant; a hit in the subtitle ("the repository is called that") is real but
-/// weaker, and a keyword hit is the weakest thing that should still surface.
+/// How much a match in each field is worth: a title hit is what the user meant,
+/// a subtitle hit is real but weaker, a keyword hit is the weakest that counts.
 const _titleWeight = 1.0;
 const _subtitleWeight = 0.55;
 const _keywordWeight = 0.42;
@@ -173,13 +157,10 @@ class QuickOpenSection {
   final List<QuickOpenResult> results;
 }
 
-/// Ranks [items] against [query] and buckets them into sections.
-///
-/// Sections are ordered by their **best** result, not by a fixed hierarchy, so
-/// typing a file name puts Files at the top and typing a session title puts
-/// Sessions there. The enum order only breaks ties. Within a section results
-/// are ranked, then capped: a hundred matching files below one matching session
-/// would bury it.
+/// Ranks [items] against [query] and buckets them into sections, ordered by
+/// their **best** result rather than a fixed hierarchy; the enum order only
+/// breaks ties. Each section is capped, so a hundred files cannot bury one
+/// matching session.
 List<QuickOpenSection> rankQuickOpen(
   QuickOpenQuery query,
   List<QuickOpenItem> items, {

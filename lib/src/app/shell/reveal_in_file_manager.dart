@@ -42,16 +42,10 @@ class RevealOutcome {
 
 /// Shows a path in the host's file manager.
 ///
-/// **One helper, because there is one hard part.** Every path in Karmashala is
-/// an [EnvironmentPath] — a path *plus the environment that owns it* — and the
-/// file manager only exists on the host. A repository checked out in WSL is
-/// `/home/me/src/app` to the agent running in it and `\\wsl.localhost\Ubuntu\
-/// home\me\src\app` to Explorer, and the mapping between the two belongs in
-/// [PathTranslator], not in each menu item that wants to open a folder.
-///
-/// Nothing here is "open with the default program". A remote path over SSH has
-/// no host spelling at all, and [canReveal] says so before a menu item offers
-/// it — an entry that always fails is worse than no entry.
+/// The hard part is that every path here is an [EnvironmentPath] and the file
+/// manager only exists on the host, so the mapping belongs in [PathTranslator].
+/// A remote SSH path has no host spelling at all, and [canReveal] says so before
+/// a menu offers an entry that would always fail.
 class RevealInFileManager {
   const RevealInFileManager({
     required this.host,
@@ -77,20 +71,16 @@ class RevealInFileManager {
   static final _windowsPath = RegExp(r'^([A-Za-z]:[\\/]|\\\\)');
 
   /// [path] spelled the way the host's file manager must be given it, or null
-  /// when the host has no way to reach it: a remote path, an unknown
-  /// environment, a WSL distribution with no name recorded, or a path that
-  /// cannot be a path in the environment it claims to belong to.
+  /// when the host has no way to reach it.
   String? hostPathFor(EnvironmentPath path) {
     final owner = environmentFor(path.environmentId);
     if (owner == null) return null;
     if (owner.kind == EnvironmentKind.ssh) return null;
     if (owner.kind == EnvironmentKind.windowsNative) {
-      // A POSIX-absolute path carrying a Windows environment id is a record
-      // that does not describe a real location — `git worktree list` reports
-      // one for a worktree that was created from inside WSL. Guessing which
-      // machine `/mnt/c/...` meant is the implicit conversion `PathTranslator`
-      // exists to forbid, so this answers "no" rather than handing Explorer
-      // something it will refuse.
+      // A POSIX-absolute path with a Windows environment id describes no real
+      // location — `git worktree list` reports one for a worktree created
+      // inside WSL — and guessing which machine it meant is the implicit
+      // conversion `PathTranslator` exists to forbid.
       return _windowsPath.hasMatch(path.path) ? path.path : null;
     }
     try {
@@ -111,11 +101,8 @@ class RevealInFileManager {
   bool canReveal(EnvironmentPath path) =>
       fileManager != null && hostPathFor(path) != null;
 
-  /// Opens the host's file manager on [path].
-  ///
-  /// [select] highlights the entry inside its parent folder — right for a file,
-  /// wrong for a folder you want opened. Windows Explorer and Finder can do it;
-  /// `xdg-open` cannot, and quietly opens the folder instead.
+  /// Opens the host's file manager on [path]. [select] highlights the entry
+  /// inside its parent folder; `xdg-open` cannot, and opens the folder instead.
   Future<RevealOutcome> reveal(
     EnvironmentPath path, {
     bool select = false,
@@ -137,8 +124,7 @@ class RevealInFileManager {
     }
     try {
       // The exit code is deliberately ignored: `explorer.exe` returns 1 even
-      // when it opens the window, so treating non-zero as failure would report
-      // an error on every successful reveal.
+      // when it opens the window.
       await host.run(_requestFor(manager, hostPath, select: select));
       return const RevealOutcome.opened();
     } on CommandException catch (e) {
@@ -178,11 +164,8 @@ class RevealInFileManager {
   };
 }
 
-/// The app's [RevealInFileManager], on the host runner.
-///
-/// The environment lookup is a callback rather than a read at construction so
-/// composing this never opens the database — only actually revealing something
-/// does.
+/// The app's [RevealInFileManager], on the host runner. The environment lookup
+/// is a callback so composing this never opens the database.
 final revealInFileManagerProvider = Provider<RevealInFileManager>(
   (ref) => RevealInFileManager(
     host: ref.watch(hostCommandRunnerProvider),
