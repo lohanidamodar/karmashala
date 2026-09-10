@@ -14,9 +14,8 @@ import '../../terminal/data/system_terminal_service.dart';
 import '../application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 
-/// History for an imported CLI session, rendered like the chat transcript. Typing
-/// a message resumes the session in place (it becomes a live session and the
-/// imported entry is replaced) — or open it in an external terminal.
+/// History for an imported CLI session, rendered like the chat transcript.
+/// Typing a message resumes it in place, replacing the imported entry.
 class ImportedSessionView extends ConsumerStatefulWidget {
   const ImportedSessionView({required this.sessionId, super.key});
 
@@ -114,9 +113,8 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                 for (final m in messages)
                   ChatMessage(role: m.role, text: m.text, tool: m.tool),
               ],
-              // An imported session records paths in the environment it ran
-              // in; an image read in WSL needs its host form before `dart:io`
-              // here can open it.
+              // An imported session records paths in the environment it ran in;
+              // an image read in WSL needs its host form before `dart:io` can.
               resolveHostPath: (path) => ref
                   .read(editorActionsProvider)
                   .windowsPathFor(

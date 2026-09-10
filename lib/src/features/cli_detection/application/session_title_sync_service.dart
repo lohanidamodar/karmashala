@@ -5,51 +5,11 @@ import '../../sessions/domain/session_status.dart';
 import 'package:agent_cli/read.dart';
 
 /// The titles the app writes itself, and therefore the ones a CLI may replace.
-///
-/// `'New session'` is what `ExplorerActions.startSession` stamps on a session
-/// started from a `+`; `'Session'` is `SessionLauncher`'s fallback for a blank
-/// one. An agent's display name is what `SessionAdoptionService` writes when the
-/// store had nothing to offer at the moment it adopted the pane. All three mean
-/// "nobody has named this yet", which is precisely when the CLI's own name is
-/// better than what is on screen.
+/// All of them mean "nobody has named this yet".
 const Set<String> kAppGeneratedSessionTitles = {'New session', 'Session'};
 
-/// Copies a CLI's own name for a conversation into the session row that runs it.
-///
-/// **This is the rename bug, and it was never Antigravity-specific.** The owner
-/// ran `/rename test me now` inside `agy`; the CLI recorded it and the sidebar
-/// went on saying "New session"
-///. The app's own rename works —
-/// it was never asked. What the app had never had, for *any* agent, is a path by
-/// which a CLI-side title reaches an already-launched native session row:
-/// app-launched rows are titled at creation and only
-/// `SessionActions.renameNative` ever changed them, and `SessionAdoptionService`
-/// carries a title only for a session it adopts, only at the moment it adopts
-/// it. Claude Code's `/rename` and Codex's thread name were just as invisible;
-/// Antigravity is where a user is most likely to rename in the CLI, because its
-/// in-app affordances are the thinnest.
-///
-/// ## Which title wins
-///
-/// The CLI's, but only while the app has no name of its own to lose. A row is
-/// **waiting for a name** when its title is still one the app generated
-/// ([kAppGeneratedSessionTitles], the agent's display name, or nothing at all),
-/// and it stays waiting while it carries a name this service wrote and its
-/// session is still running — so a second `/rename` in the CLI lands too.
-///
-/// The moment the user renames in the app, the row stops waiting, permanently:
-/// their title is neither a placeholder nor the one we last wrote. That is the
-/// one direction this must never get wrong. A conversation renamed in the CLI
-/// *and* in the app is a genuine conflict, and the answer is the name typed into
-/// the app the user is looking at.
-///
-/// ## What it costs
-///
-/// A store scan, and only when [wantsStoreSweep] — the same shape as
-/// `SessionAdoptionService` and `SessionStatusRegistry._resolvePaths`, and for
-/// the same reason: a workspace whose sessions all carry names the user chose
-/// pays nothing at all, and a stopped session stops being watched rather than
-/// buying a scan forever.
+/// Copies a CLI's own name into the session row running it, but only while the
+/// row carries a name the app generated. A user's own rename stops it for good.
 class SessionTitleSyncService {
   SessionTitleSyncService({
     required this.sessionDao,
@@ -67,9 +27,8 @@ class SessionTitleSyncService {
   /// Called with each row this renamed, so the workspace can redraw.
   final void Function(String sessionId, String title)? onRenamed;
 
-  /// sessionId → the CLI title this service last wrote there, for this run.
-  /// Diagnostics now rather than policy: whether a title is the user's is
-  /// recorded on the row itself, so it survives a restart.
+  /// sessionId → the CLI title this service last wrote there, this run.
+  /// Diagnostics only: whether a title is the user's is recorded on the row.
   final Map<String, String> _written = {};
 
   /// Store scans actually run — the cost claim.
@@ -103,10 +62,8 @@ class SessionTitleSyncService {
     for (final row in waiting) {
       final match = byConversation[row.externalSessionId];
       if (match == null) continue;
-      // `title`, never `displayTitle`. The fallback there is the first user
-      // message, which is a preview: a fine label on a card, and a lie in a
-      // rename, because the user did not choose it and writing it would settle
-      // the row against the real name arriving later.
+      // `title`, never `displayTitle`: that falls back to the first user
+      // message, and writing a preview would settle the row against a real name.
       final title = match.title?.trim() ?? '';
       if (title.isEmpty || title == row.title) continue;
       sessionDao.updateTitle(row.id, title);
@@ -124,10 +81,8 @@ class SessionTitleSyncService {
   ];
 
   bool _waitingForAName(Session row) {
-    // The user typed this one. The only thing that ever stops the sync, and
-    // now the *recorded* one: this used to be inferred from [_written], which
-    // lives only as long as the app does — so after a restart every title
-    // looked user-set and a second `/rename` was never copied in again.
+    // The user typed this one — recorded on the row, not inferred in memory,
+    // or a restart makes every title look user-set.
     if (row.titleByUser) return false;
     final title = row.title.trim();
     if (title.isEmpty) return true;
@@ -135,19 +90,8 @@ class SessionTitleSyncService {
     for (final descriptor in agents.descriptors) {
       if (title == descriptor.displayName) return true;
     }
-    // Otherwise the name came from the CLI, so it stays the CLI's to change —
-    // but only while the session is running. A stopped session has no CLI to be
-    // renamed in, and leaving it waiting would buy a store scan on every slow
-    // slot for the rest of the app's run; resuming it makes it running again.
-    //
-    // **This is affordable only because the scan is incremental.** Every
-    // running session with a CLI name is permanently waiting here, so
-    // [wantsStoreSweep] is true for as long as one is running and the sweep
-    // runs on every slow slot. That is the price of a second `/rename`
-    // landing, and it is a fair one against `ClaudeStoreReader`'s cache — a
-    // repeat scan of an unchanged store reads **zero bytes**, measured. If that
-    // cache is ever removed, this returns to re-decoding the whole store
-    // forever, which is the lag it was reported as.
+    // A CLI name stays the CLI's to change, but only while the session runs: a
+    // stopped one would buy a store scan on every slot for ever.
     return row.status == SessionStatus.running;
   }
 }

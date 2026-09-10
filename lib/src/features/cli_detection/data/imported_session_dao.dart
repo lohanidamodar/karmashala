@@ -2,48 +2,15 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/read.dart';
 
-/// Data-access for imported CLI sessions. Hand-written SQL, no codegen.
-///
-/// ## One conversation, one row
-///
-/// Two tables can hold a record of the same CLI session: `imported_sessions`,
-/// which is history read off the agent's own store, and `sessions`, whose
-/// `external_session_id` names the conversation a live row is running. Resuming
-/// an imported session produces the second while the first still exists, and
-/// the Explorer drew both — one conversation, two cards, with the CLI itself
-/// reporting a single session.
-///
-/// **The tie is resolved here, at the source, rather than filtered in each
-/// view.** A conversation that has a native row is *superseded*: the native row
-/// can resume, rename, fork and hand off, reaches the same transcript through
-/// the same id, and carries the title and repository the imported record was
-/// created with — so it is strictly the better representation and the imported
-/// one has nothing left to add. Every list read below excludes superseded rows
-/// and [insertIfAbsent] refuses to write one, which is what makes this
-/// impossible to forget in a new caller.
-///
-/// The superseded row is **hidden, not deleted**. It costs nothing, and it is
-/// what history falls back to if the native row is ever removed — deleting a
-/// user's record to fix a display bug is the wrong trade.
-///
-/// [getById] and [getByExternal] are deliberately *not* filtered: those are
-/// identity lookups, used to resolve a selection, to dedupe an import, and by
-/// adoption to find the record it is replacing. A caller *opening* a record by
-/// id wants [supersedingSessionId] instead — see its own doc.
+/// Data-access for imported CLI sessions. A conversation a native `sessions`
+/// row records is *superseded*: hidden from every list here, never deleted.
 class ImportedSessionDao {
   ImportedSessionDao(this._db);
 
   final AppDatabase _db;
 
-  /// The one fact supersession turns on: a `sessions` row recording the same
-  /// conversation. Written once, and every read below is built from it, so the
-  /// list filter, the insert guard and the id resolution cannot drift apart.
-  ///
-  /// A row with a NULL `external_session_id` matches nothing — SQL equality
-  /// against NULL is never true — which is exactly right: a session whose
-  /// conversation id has not been discovered yet (Codex keeps a null id until
-  /// `LaunchedSessionAttributionService` sweeps the store) represents no
-  /// history, so it must hide none.
+  /// The one fact supersession turns on, written once so every read agrees.
+  /// A NULL `external_session_id` matches nothing, which hides no history.
   static const String _nativeRowFor =
       'SELECT s.id FROM sessions s WHERE s.external_session_id = ';
 
@@ -52,20 +19,8 @@ class ImportedSessionDao {
   static const String _notSuperseded =
       'NOT EXISTS (${_nativeRowFor}imported_sessions.external_id)';
 
-  /// The native session row that has taken conversation [externalId] over, or
-  /// null when nothing has.
-  ///
-  /// The other half of the rule: [_notSuperseded] hides the record, and this
-  /// says what to open *instead*. A surface that resolves an id someone is
-  /// holding — a phone's stale list, a saved selection, a notification — needs
-  /// both, because hiding a row from a list does not stop anyone asking for it
-  /// by id. The owner's report was exactly that: a session opened on the phone
-  /// "rendered a session that's not running", read-only history for a
-  /// conversation live in a pane on the desktop.
-  ///
-  /// Newest first, matching `SessionDao.getByExternalSessionId`: if two rows
-  /// ever record one conversation, the one that started last is the one
-  /// running it.
+  /// The native row that took conversation [externalId] over, or null. Hiding a
+  /// record from a list does not stop anyone opening it by id — open this.
   String? supersedingSessionId(String externalId) {
     final rows = _db.query(
       '$_nativeRowFor? ORDER BY s.created_at DESC LIMIT 1;',
@@ -132,14 +87,8 @@ class ImportedSessionDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// conversationId → the repository it belongs to, for every record still
-  /// showing as history.
-  ///
-  /// The counterpart of `SessionDao.repositoryIdsById`, and for the same
-  /// reader: the Explorer's placement map wants two columns, and building an
-  /// [ImportedSession] to read them costs twelve columns and two ISO parses a
-  /// row. The `NOT EXISTS` stays, so a conversation a native row has taken over
-  /// is placed once — by the native row — rather than twice.
+  /// conversationId → its repository, for every record still showing as history.
+  /// Two columns rather than a built [ImportedSession] per row.
   Map<String, String> repositoryIdsById() {
     final rows = _db.query(
       'SELECT id, repository_id FROM imported_sessions WHERE $_notSuperseded;',
@@ -152,12 +101,6 @@ class ImportedSessionDao {
 
   /// How many conversations under [repositoryIds] still show as history — the
   /// same rows [getByRepository] would return, counted rather than built.
-  ///
-  /// A project header wants the number and nothing else, and building the rows
-  /// to take `.length` of them cost twelve columns and a date parse each. The
-  /// `NOT EXISTS` stays: a conversation a native row has taken over is not a
-  /// second entry in the count, and a header that disagreed with the list
-  /// below it would be worse than a slow one.
   int countByRepositories(Iterable<String> repositoryIds) {
     final ids = repositoryIds.toSet().toList();
     if (ids.isEmpty) return 0;

@@ -15,9 +15,8 @@ class PendingNotification {
   final WatchedSession session;
   final NotificationReason reason;
 
-  /// What the agent is waiting *on*. See [AgentStatusTransition.waiting]: the
-  /// reason says the user is held up, this says whether anything is actually
-  /// there to confirm.
+  /// What the agent is waiting *on*: the reason says the user is held up, this
+  /// says whether anything is actually there to confirm.
   final AgentWaitKind waiting;
 
   /// The agent's own words, when the source that reported this carried any.
@@ -70,12 +69,8 @@ class NotificationPayload {
   }
 }
 
-/// Turns everything that happened inside one coalescing window into at most one
-/// interruption.
-///
-/// Three agents finishing within five seconds is one event as far as the user
-/// is concerned, so it becomes one toast that names them, not three that fight
-/// for the same corner of the screen.
+/// Turns everything inside one coalescing window into at most one interruption:
+/// three agents finishing become one toast that names them, not three.
 class NotificationCoalescer {
   const NotificationCoalescer({this.maxNamed = 3, this.maxQuoted = 120});
 
@@ -89,8 +84,7 @@ class NotificationCoalescer {
     if (events.isEmpty) return null;
 
     // One line per session: a session that finished and then asked for approval
-    // inside the same window is one thing that happened, described by its
-    // latest state.
+    // in the same window is one thing, described by its latest state.
     final latest = <String, PendingNotification>{};
     for (final event in events) {
       latest['${event.session.key}'] = event;
@@ -127,10 +121,8 @@ class NotificationCoalescer {
     return NotificationRequest(title: title, body: body);
   }
 
-  /// The session, and what the agent said about it when it said anything.
-  ///
-  /// No evidence means the label alone, exactly as before. A toast that
-  /// invented a description would be worse than one that admits it has none.
+  /// The session, and what the agent said about it. No evidence means the label
+  /// alone: a toast that invented a description is worse than a bare one.
   String _body(PendingNotification event) {
     final quoted = evidenceLine(event.evidence, max: maxQuoted);
     return quoted == null
@@ -138,15 +130,8 @@ class NotificationCoalescer {
         : '${event.session.label} — $quoted';
   }
 
-  /// **`needsInput` is two different sentences.** Claude Code's `Notification`
-  /// hook fires for a permission prompt *and* for its 60-second idle nudge, and
-  /// both are honestly `awaitingApproval` — the user is held up either way.
-  /// Only the wait kind separates them, and saying "needs your approval" for
-  /// the nudge sent the owner back to look for a button that was never drawn:
-  /// *"I come back and there's nothing to approve."*
-  ///
-  /// An unrecorded wait kind takes the weaker sentence. A surface that cannot
-  /// tell must not be the one to claim there is a decision waiting.
+  /// `needsInput` is two sentences: Claude's `Notification` hook fires for a
+  /// permission prompt and for its 60s idle nudge; unrecorded takes the weaker.
   String _headline(NotificationReason reason, AgentWaitKind waiting) =>
       switch (reason) {
     NotificationReason.finished => 'Agent finished',

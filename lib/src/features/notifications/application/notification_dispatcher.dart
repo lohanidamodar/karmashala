@@ -4,30 +4,12 @@ import '../data/notification_presenter.dart';
 import '../domain/notification_policy.dart';
 import '../domain/notification_request.dart';
 
-/// How long an event that means *something is waiting on you* may be held.
-///
-/// Short enough to read as immediate — under a second is the threshold where a
-/// toast still feels like a consequence of what the agent just did — and wide
-/// enough to absorb a fan-out batch whose agents all reach an approval prompt
-/// together, so the common burst is still one interruption.
+/// How long an event that means *something is waiting on you* may be held —
+/// under a second still reads as immediate, and absorbs a fan-out burst.
 const Duration kUrgentNotificationWindow = Duration(milliseconds: 750);
 
-/// Collects notification-worthy events and delivers **at most one** toast per
-/// coalescing window.
-///
-/// The watcher already batches everything it sees in a single poll, so the
-/// window's job is to also absorb events that land in adjacent polls. Three
-/// agents finishing within a few seconds become one notification that names
-/// them, not three fighting for the same corner of the screen.
-///
-/// **Every event has its own deadline, and the earliest one pending wins.**
-/// `b8d22af` made a hook reach the registry, the tray and the inbox as it
-/// lands; the toast — the one surface that reaches a user who has looked away —
-/// still waited the full window, so an agent blocked on a permission prompt was
-/// the most time-sensitive thing this app reports and the slowest to say so.
-/// A blocked agent now waits [urgentWindow] and a finished turn waits [window],
-/// whichever of them arrived first. Coalescing is untouched: a shorter deadline
-/// moves *when* the window closes, never how much it collected.
+/// Collects notification-worthy events and delivers at most one toast per
+/// window. Every event has its own deadline, and the earliest pending wins.
 class NotificationDispatcher {
   NotificationDispatcher({
     required this.presenter,
@@ -38,10 +20,8 @@ class NotificationDispatcher {
 
   final NotificationPresenter presenter;
 
-  /// How long to keep collecting a turn ending before delivering. Trailing
-  /// rather than leading: it costs up to [window] of latency and buys the
-  /// guarantee that a burst is exactly one interruption. Nobody is blocked on
-  /// a finished turn, so it can afford the wait.
+  /// How long to keep collecting a turn ending before delivering. Trailing, so
+  /// a burst is exactly one interruption; nobody is blocked on a finished turn.
   final Duration window;
 
   /// The same, for an agent that is *stopped* — waiting on an approval, or
@@ -52,9 +32,8 @@ class NotificationDispatcher {
 
   final List<PendingNotification> _pending = [];
 
-  /// Time since the first event in this window, so deadlines set by different
-  /// events are comparable. A stopwatch rather than wall-clock reads: this must
-  /// not be moved by the system clock changing under a laptop that woke up.
+  /// Time since the first event in this window. A stopwatch, not wall-clock:
+  /// the system clock moving under a woken laptop must not shift a deadline.
   final Stopwatch _waiting = Stopwatch();
 
   /// The earliest deadline anything pending asked for, measured on [_waiting].
@@ -75,9 +54,8 @@ class NotificationDispatcher {
     final elapsed = _waiting.elapsed;
     final due = elapsed + windowFor(event.reason);
     final current = _due;
-    // Only ever brought forward. A finished turn arriving behind an approval
-    // must not extend the wait, and one arriving behind another must not
-    // restart it — a chatty workspace would otherwise never close the window.
+    // Only ever brought forward: a later event must not extend or restart the
+    // wait, or a chatty workspace would never close the window.
     if (current != null && current <= due) return;
     _due = due;
     _timer?.cancel();

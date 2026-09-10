@@ -11,68 +11,30 @@ import '../domain/agent_session_key.dart';
 import '../domain/watched_session.dart';
 
 /// How often the registry recomputes every known session's status.
-///
-/// Inherited from the per-card poller this replaces, so a badge is no less
-/// responsive than it was — the difference is that there is now one of these
-/// for the whole app instead of one per rendered row.
 const Duration kStatusCycleInterval = Duration(milliseconds: 1200);
 
-/// How many sessions may be given a *fallback probe* — the disk half of a
-/// status — in one cycle.
-///
-/// The only budget that matters. Hooks and terminal grids are already in
-/// memory, so every session gets those every cycle whatever the workspace's
-/// size; a transcript read is the one cost that grows with the session count,
-/// so it is the one thing rationed. At the default cycle that is ~20 probes a
-/// second, and a probe whose file has not changed is a `stat` and nothing else.
+/// How many sessions get a *fallback probe* — a transcript read — per cycle.
+/// The only cost that grows with the session count, so the only one rationed.
 const int kStatusProbeBudget = 24;
 
-/// How many probes may be in flight at once.
-///
-/// Bounded rather than serial: Loop 87's audit found the old watcher awaiting
-/// each transcript in a `for` loop, so one slow file pushed the whole pass past
-/// its own interval and the first session in the list always won. Bounded
-/// rather than unbounded: a `Future.wait` over everything is how you turn a
-/// slow disk into a thousand open handles.
+/// How many probes may be in flight at once. Serial lets one slow file blow
+/// the cycle; unbounded turns a slow disk into a thousand open handles.
 const int kStatusProbeConcurrency = 4;
 
 /// How long between full CLI-store scans looking for transcripts we do not have
-/// a path for yet.
-///
-/// One scan for the whole app, not one per session per tick. The thing being
-/// waited for — the agent writing its first turn — happens once, seconds to
-/// minutes after launch, and never again.
+/// a path for yet. One scan for the whole app, not one per session per tick.
 const Duration kTranscriptSearchInterval = Duration(seconds: 10);
 
 /// How recently a session's status must have changed for it to count as
 /// "recently active" when the probe budget is being shared out.
 const Duration kStatusRecentlyActiveWindow = Duration(seconds: 60);
 
-/// The most often a hook naming a session we do not track may force a full
-/// cycle.
-///
-/// A hook for a session already tracked is answered in place, in O(1), with no
-/// rationing at all — that is the whole point of the event path. The one case
-/// that needs the loader is a session the workspace has not enumerated yet
-/// (adoption, or a CLI that has just announced its own id), and that is a
-/// once-per-session event. The floor is here so a hook naming a session that
-/// *never* becomes tracked cannot turn the cheap path into a polling loop.
+/// The most often a hook naming an untracked session may force a full cycle,
+/// so a hook for a session that never becomes tracked cannot become a poll.
 const Duration kHookCycleFloor = Duration(seconds: 1);
 
-/// How long the fallback rotation may take to come back round to a session
-/// before the registry says so in the log.
-///
-/// It limits nothing — crossing it drops no session and changes no behaviour.
-/// It is the point at which the *fallback* has stopped being a fallback: a
-/// transcript reading two minutes old is not something anyone should be reading
-/// a badge from, and a workspace large enough to cause that should be visible
-/// as a line in the log rather than felt as badges that are quietly wrong.
-///
-/// Hook-backed sessions never wait for the rotation, so crossing this says
-/// precisely "the unhooked half of this workspace has outgrown the budget" —
-/// which is the thing the 60-session cap did, and did in silence. At the
-/// default budget it stays quiet through the audit's whole 500-session tier and
-/// speaks up somewhere past eight hundred sessions with no hooks installed.
+/// How long the fallback rotation may take before the registry says so in the
+/// log. It limits nothing: crossing it drops no session and changes nothing.
 const Duration kProbeRotationCeiling = Duration(minutes: 2);
 
 /// One session's current status, as the registry holds it.
@@ -93,10 +55,6 @@ class SessionStatusEntry {
 
   /// When this session's transcript was last read, or `null` for one that has
   /// never needed a disk read (a hook answered) or has not had its turn yet.
-  ///
-  /// The distinction that makes "not sampled this cycle" different from "no
-  /// longer watched": an entry with an old [lastProbedAt] still has a status,
-  /// and a session that leaves the registry has no entry at all.
   final DateTime? lastProbedAt;
 
   /// Whether the last probe could not read the file. Buys priority next cycle.
@@ -105,15 +63,8 @@ class SessionStatusEntry {
   AgentSessionKey get key => session.key;
 }
 
-/// How much of the watch set one cycle actually reached.
-///
-/// The registry guarantees coverage by construction — membership is uncapped,
-/// and the probe rotation reserves a share that priority traffic cannot take.
-/// But the 60-session cap reached production and survived there because
-/// **nobody could tell**, and a guarantee no one can observe fails the same way
-/// the next time somebody adds a limit for a good reason. This is the
-/// observation: what is watched, what the primary path answered for free, and
-/// how far behind the rationed half is.
+/// How much of the watch set one cycle actually reached. Coverage is
+/// guaranteed by construction; this exists so it can also be observed.
 class SessionStatusCoverage {
   const SessionStatusCoverage({
     required this.tracked,
@@ -125,12 +76,10 @@ class SessionStatusCoverage {
     required this.rotationPeriod,
   });
 
-  /// Every session the registry holds a status for — the number that used to be
-  /// silently sixty.
+  /// Every session the registry holds a status for.
   final int tracked;
 
-  /// How many a hook answered, which is the primary path's real share of this
-  /// workspace and the part that owes the rotation nothing.
+  /// How many a hook answered — the part that owes the rotation nothing.
   final int hookAnswered;
 
   /// How many still need the disk before they can say anything.
@@ -139,22 +88,16 @@ class SessionStatusCoverage {
   /// How many candidates this cycle read.
   final int probed;
 
-  /// Candidates whose transcript has never been read. Queued, not lost: they
-  /// have an entry, a status and a place in the rotation. Still above zero
-  /// after a full [rotationPeriod] means something is stuck rather than merely
-  /// waiting its turn.
+  /// Candidates whose transcript has never been read — queued, not lost. Still
+  /// above zero after a full [rotationPeriod] means something is stuck.
   final int neverProbed;
 
   /// Candidates whose last read failed. These buy priority next cycle, so a
   /// number that stays high is a permission or a path problem, not a queue.
   final int probeFailures;
 
-  /// The guaranteed worst case for coming back round to any one candidate, or
-  /// `null` when the budget is too small to rotate at all.
-  ///
-  /// Computed from the *reserved* share rather than the whole budget, because
-  /// that is the part no amount of priority traffic can take — so it is a
-  /// promise that holds however busy the workspace is, not a best case.
+  /// Worst case for coming back round to any one candidate; `null` when the
+  /// budget cannot rotate — measured on the reserved share, not the whole one.
   final Duration? rotationPeriod;
 
   /// Whether the fallback has stopped being one. See [kProbeRotationCeiling].
@@ -226,36 +169,8 @@ class SessionStatusCycle {
   final int scans;
 }
 
-/// The one place a session's status lives.
-///
-/// Before Loop 87 there were three status pipelines: a per-card 1.2-second
-/// `StreamProvider` loop (one *per rendered row*, each capable of starting its
-/// own full CLI-store scan), an always-on 5-second notification watcher, and
-/// the checkpoint recorder riding on the first. Rendering a row created work;
-/// scrolling the Explorer changed how much polling the app did; and the watcher
-/// truncated its own watch set at 60 sessions, so session 61 was never observed
-/// at all.
-///
-/// This owns all of it for every known session:
-///
-/// * **hook reports** and **terminal grids** — already in memory, so they are
-///   read for *every* session on *every* cycle. Nothing is capped by list
-///   position, because nothing about these costs anything to include. A hook
-///   does not even wait for a cycle: [hookReported] folds it in as it lands and
-///   publishes it on [hookChanges], which is what makes hooks the primary path
-///   and the cycle below the fallback.
-/// * **transcript paths** — resolved once, centrally, by one store scan shared
-///   by every session that still needs one.
-/// * **fallback probes** — the disk half, and the only rationed part: a fair
-///   rotation with a per-cycle budget, so the cost is O(budget) rather than
-///   O(sessions).
-/// * **last known state** — kept for a session the rotation did not reach, so a
-///   session returning to the sampled set is not mistaken for a first
-///   observation and its transition is not suppressed.
-///
-/// Deliberately not a `Notifier` and free of Flutter: everything it needs from
-/// the app arrives as a function, so the whole loop can be driven at 500
-/// sessions in a plain test.
+/// The one place a session's status lives: hooks and grids for every session
+/// every cycle, transcript probes rationed behind them. Flutter-free by design.
 class SessionStatusRegistry {
   SessionStatusRegistry({
     required this.statusService,
@@ -278,8 +193,7 @@ class SessionStatusRegistry {
   final AgentStatusService statusService;
   final AgentRegistry agents;
 
-  /// Every session worth holding a status for. Uncapped on purpose — see the
-  /// class comment; the budget lives on probes, not on membership.
+  /// Every session worth holding a status for. Uncapped: the budget is on probes.
   final List<WatchedSession> Function() loadSessions;
 
   final Clock clock;
@@ -293,16 +207,8 @@ class SessionStatusRegistry {
   /// The CLI session ids and workspace row ids currently on screen.
   final Set<String> Function()? visibleSessionIds;
 
-  /// Work that wants this registry's cycle rather than a ticker of its own.
-  ///
-  /// Called once per cycle, after the statuses are published, with
-  /// `mayScanStores` true at most once per [transcriptSearchInterval] — the
-  /// same rationing the transcript search gets, because it is the same cost:
-  /// one pass over every CLI store on disk.
-  ///
-  /// Session adoption is the caller (`SessionAdoptionService`). It rides here
-  /// so that noticing a pane has become an agent session cannot become a second
-  /// polling loop beside the one this class exists to have removed.
+  /// Work that rides this cycle rather than starting a ticker of its own, with
+  /// `mayScanStores` true at most once per [transcriptSearchInterval].
   final Future<void> Function(bool mayScanStores)? onCycle;
 
   final AgentStateFileStatusSource stateFileSource;
@@ -369,10 +275,8 @@ class SessionStatusRegistry {
   /// [hookCycleFloor].
   int hookCycles = 0;
 
-  /// The most recent *cycle's* entries.
-  ///
-  /// A snapshot of that pass, so a status a hook changed since is visible
-  /// through [reportForKey] and [hookChanges] rather than here.
+  /// The most recent *cycle's* entries — a snapshot, so a status a hook changed
+  /// since shows through [reportForKey] and [hookChanges], not here.
   List<SessionStatusEntry> get entries => _last.entries;
 
   int get trackedCount => _tracked.length;
@@ -385,15 +289,8 @@ class SessionStatusRegistry {
   AgentStatusReport? reportForOpenId(String openId) =>
       _byOpenId[openId]?.report;
 
-  /// The status of one workspace row, and every later change to it.
-  ///
-  /// Starts nothing: no timer, no scan, no disk read. A hundred badges are a
-  /// hundred subscriptions to one broadcast stream that the app's single status
-  /// cycle already feeds.
-  ///
-  /// Always yields immediately — [fallback] when the registry has never seen
-  /// the session — so a consumer awaiting the first value cannot hang on a row
-  /// the loader does not (yet) consider watchable.
+  /// The status of one workspace row and every later change. Starts nothing, and
+  /// always yields immediately ([fallback] if unseen) so a first await cannot hang.
   Stream<AgentStatusReport> reportsFor(
     String openId, {
     AgentStatusReport? fallback,
@@ -409,19 +306,16 @@ class SessionStatusRegistry {
           observedAt: clock.nowUtc(),
         );
 
-    // A `Stream.multi` rather than an `async*` generator, because a generator
-    // suspended in `await for` only notices a cancellation at its next yield —
-    // and this one can legitimately sit silent for hours. A hundred badges
-    // being torn down must not each wait for a status to change first.
+    // `Stream.multi`, not `async*`: a generator suspended in `await for` only
+    // notices cancellation at its next yield, and this can sit silent for hours.
     return Stream<AgentStatusReport>.multi((controller) {
       var last = current();
       controller.add(last);
       final subscription = _changes.stream.listen(
         (_) {
           final next = current();
-          // Only when the *evidence* moved. A cycle that reconfirms a status is
-          // not a rebuild: at a hundred rows that is the difference between a
-          // silent app and eighty widget rebuilds a second.
+          // Only when the *evidence* moved: a cycle that reconfirms a status
+          // must not become eighty widget rebuilds a second.
           if (_sameEvidence(last, next)) return;
           last = next;
           controller.add(next);
@@ -432,17 +326,8 @@ class SessionStatusRegistry {
     });
   }
 
-  /// [coverage] now, and again whenever a cycle measures something different.
-  ///
-  /// The log line is edge-triggered for the reason [_measure] gives, and a UI
-  /// needs the same discipline for the same reason: this runs every 1.2
-  /// seconds, and a row that repainted on each of them would be a ticker rather
-  /// than a readout. Yields immediately — `null` before the first cycle — so
-  /// "nothing measured yet" is a state a reader can render rather than a wait.
-  ///
-  /// `Stream.multi` rather than a generator, exactly as in [reportsFor]: this
-  /// can sit silent for a long time, and a cancellation must not wait for the
-  /// next value.
+  /// [coverage] now, and again only when a cycle measures something different —
+  /// this runs every 1.2s, so repainting per cycle is a ticker, not a readout.
   Stream<SessionStatusCoverage?> get coverageReports =>
       Stream<SessionStatusCoverage?>.multi((controller) {
         var last = coverage;
@@ -459,28 +344,12 @@ class SessionStatusRegistry {
         controller.onCancel = subscription.cancel;
       });
 
-  /// Sessions a hook just changed the status of, as the callback lands.
-  ///
-  /// The event path. `AgentStatusWatcher` listens here so an approval request
-  /// reaches the tray, the inbox and the toast pipeline immediately instead of
-  /// at its next pass, which demotes polling to what it should always have
-  /// been: the fallback for agents whose hooks are not installed.
+  /// Sessions a hook just changed the status of, as the callback lands — the
+  /// event path `AgentStatusWatcher` listens on so approvals do not wait a pass.
   Stream<SessionStatusEntry> get hookChanges => _hookChanges.stream;
 
-  /// A hook callback just landed for [key]. Fold it in now.
-  ///
-  /// This is the cheap half of a cycle, for one session, run out of turn. A
-  /// hook outranks every other source (`AgentStatusService`'s precedence), so
-  /// answering it needs no disk, no store scan and not even the session's
-  /// terminal — a map lookup and the precedence, and nothing else.
-  ///
-  /// Publishes only when the evidence actually moved, so a chatty agent's
-  /// stream of tool-use callbacks costs a lookup each and wakes nobody.
-  ///
-  /// A [key] the registry does not track yet is the one case that needs the
-  /// loader: it asks for a cycle instead, rationed by [hookCycleFloor]. The
-  /// latency that costs is only ever a session's *first* hook, which the
-  /// notification policy suppresses as a first observation anyway.
+  /// Folds a hook callback in now, out of turn: no disk, no scan, no terminal.
+  /// An untracked [key] asks for a cycle instead, rationed by [hookCycleFloor].
   void hookReported(AgentSessionKey key) {
     if (_disposed) return;
     hookReports++;
@@ -522,18 +391,13 @@ class SessionStatusRegistry {
     if (next != null && now.isBefore(next)) return;
     _nextHookCycle = now.add(hookCycleFloor);
     hookCycles++;
-    // Fire and forget, and quietly: this runs inside an agent's hook callback,
-    // and a cycle that cannot enumerate sessions must not come back as an
-    // unhandled error in the HTTP handler that fired it. The periodic cycle
-    // meets the same failure with somewhere to report it.
+    // Quietly: this runs inside an agent's hook callback, and a failed cycle
+    // must not surface as an unhandled error in the HTTP handler that fired it.
     unawaited(cycle().catchError((Object _) => _last));
   }
 
-  /// Recomputes every watched session's status, spends this cycle's probe
-  /// budget, and publishes.
-  ///
-  /// Re-entrant callers join the pass already running rather than starting a
-  /// second one against a half-updated snapshot.
+  /// Recomputes every watched session's status and publishes. Re-entrant callers
+  /// join the pass already running rather than racing a half-updated snapshot.
   Future<SessionStatusCycle> cycle() {
     final running = _inFlight;
     if (running != null) return running;
@@ -547,8 +411,7 @@ class SessionStatusRegistry {
     final now = clock.nowUtc();
     final sessions = loadSessions();
 
-    // 1. Every session, from the sources that are already in memory. No cap:
-    //    a hook report is a map lookup and a grid read is a live buffer.
+    // Every session, from memory. No cap: a hook is a lookup, a grid a buffer.
     final seen = <AgentSessionKey>{};
     for (final session in sessions) {
       seen.add(session.key);
@@ -568,12 +431,10 @@ class SessionStatusRegistry {
         _tracked.values.map((t) => MapEntry(t.session.openId, t)),
       );
 
-    // 2. One store scan for everyone still missing a transcript path.
     final scans = await _resolvePaths(now);
     // A shutdown can land inside that scan; nothing below may touch the app.
     if (_disposed) return _last;
 
-    // 3. The rationed half.
     final candidates = [
       for (final tracked in _tracked.values)
         if (tracked.wantsProbe && tracked.statePath != null) tracked,
@@ -598,13 +459,8 @@ class SessionStatusRegistry {
     return _last;
   }
 
-  /// Counts what this cycle reached and says so when the answer changed shape.
-  ///
-  /// Everything here is edge-triggered. This runs every 1.2 seconds, so a line
-  /// per cycle would bury the log it exists to make readable; what is worth a
-  /// line is the watch set changing size and the rotation crossing
-  /// [kProbeRotationCeiling] in either direction — a log that once warned must
-  /// not read as though it still is.
+  /// Counts what this cycle reached; logs only on an edge — at 1.2s a line per
+  /// cycle would bury the log it exists to make readable.
   SessionStatusCoverage _measure(int probed) {
     var hookAnswered = 0;
     var candidates = 0;
@@ -647,13 +503,8 @@ class SessionStatusRegistry {
     return next;
   }
 
-  /// The guaranteed worst case for coming back round to one of [candidates].
-  ///
-  /// Measured against the reserved share, not the whole budget: the reserve is
-  /// the part priority traffic can never take, so this is a bound that holds
-  /// however busy the workspace is. `null` when the budget is too small to
-  /// reserve anything, which is a registry that cannot promise to rotate at
-  /// all.
+  /// Worst case for coming back round to one of [candidates], measured on the
+  /// reserved share so it holds however busy the workspace is; `null` if none.
   Duration? _rotationPeriod(int candidates) {
     if (candidates <= probeBudget) return interval;
     final reserve = probeBudget >= 2 ? math.max(1, probeBudget ~/ 3) : 0;
@@ -661,11 +512,8 @@ class SessionStatusRegistry {
     return interval * ((candidates + reserve - 1) ~/ reserve);
   }
 
-  /// Runs [onCycle], deciding whether this is the cycle that may pay for a
-  /// store scan.
-  ///
-  /// Wrapped, because the work here is a *passenger* on a status cycle: a
-  /// caller that throws must not stop badges updating.
+  /// Runs [onCycle], deciding whether this cycle may pay for a store scan.
+  /// Wrapped: a passenger that throws must not stop badges updating.
   Future<void> _runCycleWork(DateTime now) async {
     final work = onCycle;
     if (work == null || _disposed) return;
@@ -682,11 +530,8 @@ class SessionStatusRegistry {
     }
   }
 
-  /// Begins cycling. One timer for the whole app — the point of the exercise.
-  ///
-  /// Started by `AgentStatusWatcher`, which is started by the app's system
-  /// integration. A rendered badge never calls this: subscribing to a status
-  /// must not be what makes the app do work.
+  /// Begins cycling — one timer for the whole app. Started by
+  /// `AgentStatusWatcher`; a rendered badge must never call this.
   void start() {
     if (_timer != null) return;
     _timer = Timer.periodic(interval, (_) => unawaited(cycle()));
@@ -707,10 +552,8 @@ class SessionStatusRegistry {
     unawaited(_hookChanges.close());
   }
 
-  /// Forgets resolved transcript paths, so the next cycle looks again.
-  ///
-  /// For a caller that knows the stores changed underneath us — a re-import, a
-  /// new execution environment. Nothing polls for this.
+  /// Forgets resolved transcript paths so the next cycle looks again — for a
+  /// caller that knows the stores changed underneath us. Nothing polls for this.
   void invalidateTranscriptPaths() {
     _nextTranscriptSearch = null;
     for (final tracked in _tracked.values) {
@@ -808,15 +651,8 @@ class SessionStatusRegistry {
     return 1;
   }
 
-  /// Chooses this cycle's probes: priority first, then a fair rotation, with a
-  /// reserved share the priority tier can never take.
-  ///
-  /// The reservation is the whole fairness argument. Priority alone starves —
-  /// thirty visible sessions and a budget of twenty-four means session
-  /// thirty-one is never read, which is the 60-cap bug wearing a different hat.
-  /// With a third of the budget reserved for "whoever was probed longest ago",
-  /// every eligible session is reached within `ceil(M / reserve)` cycles no
-  /// matter how much priority traffic there is.
+  /// This cycle's probes: priority first, then a rotation on a reserved third of
+  /// the budget, so every candidate is reached within `ceil(M / reserve)` cycles.
   List<_Tracked> _select(List<_Tracked> candidates, DateTime now) {
     if (candidates.length <= probeBudget) return candidates;
 
@@ -904,9 +740,7 @@ class SessionStatusRegistry {
 }
 
 /// Whether two reports say the same thing about the same evidence.
-///
-/// `observedAt` is deliberately excluded: it moves every cycle and means only
-/// "we looked again", which is not news to anybody.
+/// `observedAt` is excluded: it moves every cycle and only means "we looked".
 bool _sameEvidence(AgentStatusReport a, AgentStatusReport b) =>
     a.status == b.status &&
     a.source == b.source &&
@@ -959,9 +793,8 @@ class _Tracked {
 
   String get sortKey => session.key.toString();
 
-  /// Whether the CLI has announced this session's own id. A native session the
-  /// agent has not named yet is keyed by its workspace row id, which no
-  /// transcript will ever match — so it must not keep asking for store scans.
+  /// Whether the CLI has announced this session's own id. A session keyed by its
+  /// workspace row id matches no transcript, so it must not ask for store scans.
   bool get isNamedByItsCli =>
       session.imported || session.key.sessionId != session.openId;
 

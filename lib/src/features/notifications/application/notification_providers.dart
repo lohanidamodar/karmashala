@@ -57,11 +57,8 @@ final notificationSettingsControllerProvider =
       NotificationSettingsController.new,
     );
 
-/// Whether the app window currently has OS focus.
-///
-/// Written by `SystemIntegrationService`, which is the one object already
-/// listening to window events. Defaults to focused: the app shows its window on
-/// launch, and assuming focus is the quiet answer.
+/// Whether the app window currently has OS focus. Defaults to focused: the app
+/// shows its window on launch, and assuming focus is the quiet answer.
 class WindowFocusController extends Notifier<bool> {
   @override
   bool build() => true;
@@ -98,9 +95,8 @@ final sessionAttentionProvider =
       SessionAttentionController.new,
     );
 
-/// Bumped when something outside the window asks for it to be brought forward —
-/// a clicked toast. `SystemIntegrationService` listens and raises the window;
-/// this feature has no business calling `window_manager` itself.
+/// Bumped when something outside the window asks for it to be brought forward.
+/// `SystemIntegrationService` listens; this feature never calls `window_manager`.
 class WindowRaiseRequestController extends Notifier<int> {
   @override
   int build() => 0;
@@ -113,13 +109,8 @@ final windowRaiseRequestProvider =
       WindowRaiseRequestController.new,
     );
 
-/// Where a notification is actually delivered.
-///
-/// Windows is the platform this was verified on; macOS and Linux go down the
-/// same code path but were not exercised.
-/// Anywhere else falls back to silence. Constructing the presenter is cheap and
-/// safe: it does not touch the platform channel until the first
-/// [NotificationPresenter.show].
+/// Where a notification is actually delivered. Verified on Windows only; macOS
+/// and Linux share the path untested, and anywhere else falls back to silence.
 final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
   if (!DesktopNotificationPresenter.isSupportedHere) {
     return const NoopNotificationPresenter();
@@ -156,22 +147,15 @@ final watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
   ),
 );
 
-/// The one status registry. Everything that shows or reacts to an agent's
-/// status reads this: the badges, the whereabouts age, the approval card, the
-/// checkpoint recorder, the tray, the inbox and the toasts.
-///
-/// Created lazily and cycled only once `AgentStatusWatcher.start()` starts it,
-/// so reading a status never starts the app doing work.
+/// The one status registry — everything that shows or reacts to a status reads
+/// it. Cycled only by `AgentStatusWatcher.start()`; reading starts nothing.
 final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
   final registry = SessionStatusRegistry(
     statusService: ref.watch(agentStatusServiceProvider),
     agents: ref.watch(agentRegistryProvider),
     loadSessions: () => ref.read(watchedSessionLoaderProvider).load(),
     clock: ref.watch(clockProvider),
-    // The pane's own screen, for the sessions that have one. The watcher used
-    // to have no access to this at all, which is why the ambient pipeline could
-    // report `unknown` for a session whose badge could read "needs you" off the
-    // terminal right beside it.
+    // The pane's own screen, for the sessions that have one.
     readTail: (session) {
       if (session.imported) return const [];
       return sessionTerminalTailForPane(
@@ -184,18 +168,15 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
     // registry's own slow interval — not one per badge per tick.
     resolveTranscripts: () => ref.read(sessionTranscriptLocatorProvider).index(),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
-    // Session adoption rides the status cycle rather than starting a ticker of
-    // its own: watching panes for `claude` at a prompt is free and happens
-    // every cycle, and the CLI-store scan it falls back to shares the slow slot
-    // the transcript search already pays for.
+    // Adoption rides this cycle rather than starting a ticker of its own; its
+    // store scan shares the slow slot the transcript search already pays for.
     onCycle: (mayScanStores) async {
       final adoption = ref.read(sessionAdoptionServiceProvider);
       adoption.observePanes();
       if (!mayScanStores) return;
       await adoption.sweep();
-      // The same slot, for the same reason: reconciling a session row against
-      // its CLI's store is disk work, and it is gated on there being a row
-      // waiting for it — see `cliStoreSyncRunnerProvider`.
+      // The same slot, for the same reason: disk work, gated on a row waiting
+      // for it — see `cliStoreSyncRunnerProvider`.
       await ref.read(cliStoreSyncRunnerProvider)();
     },
   );
@@ -221,14 +202,8 @@ final agentStatusWatcherProvider = Provider<AgentStatusWatcher>((ref) {
   return watcher;
 });
 
-/// Hands one hook callback to the status registry, which is what makes hooks
-/// the primary status path rather than something a poll later discovers.
-///
-/// Called by `/agent-hook` once the receiver has recorded the report. Reading
-/// the registry starts nothing — it cycles only once `AgentStatusWatcher`
-/// starts it — so this is safe on a callback that must never block the agent
-/// that fired it. Takes a container for the same reason
-/// [visibleAgentSessionIds] does: the caller holds one, not a `Ref`.
+/// Hands one hook callback to the status registry — the primary status path.
+/// Reading the registry starts nothing, so this cannot block the calling agent.
 void reportAgentHook(
   ProviderContainer container, {
   required String agentId,
@@ -240,13 +215,8 @@ void reportAgentHook(
       .hookReported(AgentSessionKey(agentId, sessionId));
 }
 
-/// The session ids currently rendered in the app, in every key the status
-/// pipeline might hold them under.
-///
-/// The selection providers hold workspace row ids; the status pipeline is keyed
-/// by the CLI's own session id when the agent has announced one and by the row
-/// id when it has not, so both are contributed. Takes a container rather than a
-/// `Ref` so `SystemIntegrationService`, which only holds one, can call it too.
+/// The session ids currently rendered, under every key the status pipeline
+/// might hold them: the workspace row id and the CLI's own session id.
 Set<String> visibleAgentSessionIds(ProviderContainer container) {
   final read = container.read;
   final ids = <String>{};
@@ -267,8 +237,7 @@ Set<String> visibleAgentSessionIds(ProviderContainer container) {
 }
 
 /// Selects a session so the app shows it, walking up to its repository and
-/// project the way the command palette does — selecting a session alone leaves
-/// the explorer pointing somewhere else.
+/// project — selecting a session alone leaves the explorer pointing elsewhere.
 void focusWatchedSession(
   ProviderContainer container, {
   required String openId,

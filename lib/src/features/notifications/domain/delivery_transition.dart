@@ -1,12 +1,8 @@
 import '../../sessions/domain/session_delivery.dart';
 import 'watched_session.dart';
 
-/// One session's delivery state, and what it was the last time it was read.
-///
-/// The shape [AgentNotificationPolicy.newsInDelivery] needs, and the reason the
-/// classifier can stay a pure function: whether a red build is *news* depends
-/// entirely on whether it was already red, and nothing but the caller knows
-/// that.
+/// One session's delivery state, and what it was the last time it was read —
+/// whether a red build is *news* depends on whether it was already red.
 class DeliveryTransition {
   const DeliveryTransition({
     required this.session,
@@ -16,9 +12,8 @@ class DeliveryTransition {
 
   final WatchedSession session;
 
-  /// The previous reading, or null when this is the first one — which counts as
-  /// "nothing was true", so a change that happened while the app was closed is
-  /// still news the first time it is seen.
+  /// The previous reading, or null on the first — which counts as "nothing was
+  /// true", so a change made while the app was closed is still news once.
   final SessionDelivery? from;
 
   final SessionDelivery to;

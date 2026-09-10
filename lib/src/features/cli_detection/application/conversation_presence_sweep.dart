@@ -7,55 +7,25 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/read.dart';
 import 'cli_detection_providers.dart';
 
-/// One reading of every CLI store, able to answer [ConversationPresence] for
-/// any number of conversations without touching the disk again.
-///
-/// The bulk counterpart of `conversationPresenceProvider`, and deliberately the
-/// **same rule** rather than a second opinion:
-///
-/// * found in *any* located store → [ConversationPresence.present], because
-///   finding the conversation anywhere at all is proof it exists, and a user
-///   who moved a repository between WSL and Windows must not have their history
-///   called missing;
-/// * only the store belonging to the session's own environment may say
-///   [ConversationPresence.absent] — it is the one the agent would have written
-///   to;
-/// * everything else is [ConversationPresence.unknown].
-///
-/// The two must agree, because they are asked about the same rows for opposite
-/// reasons: the single-row probe decides whether to *refuse a resume*, and this
-/// one decides what to *offer for deletion*. A sweep that called something
-/// absent which the resume path would have found would be offering a live
-/// conversation up for removal.
-///
-/// **Why a snapshot object and not a provider per row.** A `family` provider
-/// would make each row a cache entry and each cache entry a scan; this is one
-/// pass, held by value, whose cost is O(stores × agents with a store format)
-/// and flat in the number of rows asked about. It is never built on a timer and
-/// never on app start — see [conversationPresenceSweepProvider].
+/// One reading of every CLI store, answering [ConversationPresence] for any
+/// number of conversations — the same rule as `conversationPresenceProvider`.
 class ConversationPresenceSweep {
   const ConversationPresenceSweep({
     required this.idsByEnvironmentAndAgent,
     required this.checkedAt,
   });
 
-  /// Nothing was read at all. Every question answers
-  /// [ConversationPresence.unknown], which is the honest state for a machine
-  /// whose stores could not be located.
+  /// Nothing was read at all, so every question answers
+  /// [ConversationPresence.unknown].
   ConversationPresenceSweep.empty(DateTime checkedAt)
     : this(idsByEnvironmentAndAgent: const {}, checkedAt: checkedAt);
 
-  /// `'<environmentId>/<agentId>'` → the conversation ids that store holds, or
-  /// `null` for a store that told us nothing.
-  ///
-  /// A key with a `null` value is the case that matters: the store was located
-  /// and *asked*, and could not answer. Distinguishing that from an absent key
-  /// is what keeps an unreachable WSL share out of the delete list.
+  /// `'<environmentId>/<agentId>'` → the ids that store holds, `null` when it
+  /// was asked and could not answer — which keeps a dead share out of a delete.
   final Map<String, Set<String>?> idsByEnvironmentAndAgent;
 
   /// When this reading was taken. Rendered with `describeAge` wherever it is
-  /// shown, for the reason §19 gives: a reading that is not live must not look
-  /// live.
+  /// shown: a reading that is not live must not look live (§19).
   final DateTime checkedAt;
 
   /// How many stores answered. Zero means this sweep proves nothing.
@@ -93,21 +63,15 @@ class ConversationPresenceSweep {
   }
 }
 
-/// Reads every located store once, on demand.
-///
-/// A `Provider` returning a function rather than a `FutureProvider`, for the
-/// third rule in §19: probes cost real work and must never run because
-/// something watched them. Nothing here is built when the app starts, when a
-/// row is drawn, or on a tick — it runs when a user asks a question that needs
-/// it.
+/// Reads every located store once, on demand. A function, not a `FutureProvider`
+/// — a probe costs real work and must never run because something watched it.
 final conversationPresenceSweepProvider =
     Provider<Future<ConversationPresenceSweep> Function()>((ref) {
       return () async {
         final now = ref.read(clockProvider).nowUtc();
         final registry = ref.read(agentRegistryProvider);
-        // Only agents that keep a store we know how to read. An agent with no
-        // format contributes no key, so every question about it answers
-        // `unknown` rather than being judged against a store nobody read.
+        // Only agents with a store format we can read; anything else adds no
+        // key, so every question about it answers `unknown`.
         final formats = <String, AgentStoreFormat>{
           for (final descriptor in registry.descriptors)
             if (descriptor.store case final spec?)

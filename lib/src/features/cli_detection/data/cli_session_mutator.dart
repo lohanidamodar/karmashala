@@ -9,11 +9,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'codex_app_servers.dart';
 
-/// What a batched delete could not remove, in the words a notification uses.
-///
-/// [label] is a session's own title, or the store index when a whole group's
-/// index could not be rewritten — so the report reads as a list of things left
-/// behind rather than as a stack trace.
+/// What a batched delete could not remove. [label] is the session's own title,
+/// or the store index, so the report reads as a list rather than a stack trace.
 class CliDeleteFailure {
   const CliDeleteFailure({required this.label, required this.error});
 
@@ -39,39 +36,22 @@ class CliDeleteReport {
   bool get isComplete => failures.isEmpty;
 }
 
-/// Renames and deletes detected CLI sessions, matching what each CLI itself
-/// does (ported from the reference Karmashala CLI):
-///
-/// * **Claude** rename appends a `{"type":"custom-title",…}` line (what
-///   `/rename` writes); delete removes the `.jsonl` and any `~/.claude/sessions`
-///   resume-index entry.
-/// * **Codex** rename asks the running CLI, over its app-server, to do it —
-///   see [_renameCodex] for why the file this used to write is the wrong place.
-///   Delete still prunes `<codexHome>/session_index.jsonl` and removes the
-///   rollout file: that file is a mirror Codex ignores when *reading a name*,
-///   but pruning it is how a deleted session stops being listed by us.
+/// Renames and deletes detected CLI sessions the way each CLI does it — see
+/// [_renameCodex] for why Codex is asked rather than written to.
 class CliSessionMutator {
   CliSessionMutator();
 
   static final _log = AppLogger.named('cli.sessionMutator');
 
-  /// **What a delete actually costs the store.** Counted rather than timed, the
-  /// same way `ClaudeStoreReader.bytesRead` is: the unit that matters here is
-  /// index work, and it is countable directly.
-  ///
-  /// [storeScans] is the number of times a whole store index was walked or
-  /// read; [indexEntriesRead] the records decoded out of one; [indexWrites] the
-  /// index files rewritten; [transcriptsDeleted] the session files removed.
+  /// What a delete actually costs the store, counted rather than timed: index
+  /// walks, records decoded, index files rewritten, transcripts removed.
   int storeScans = 0;
   int indexEntriesRead = 0;
   int indexWrites = 0;
   int transcriptsDeleted = 0;
 
-  /// Renames one session in its CLI's own store.
-  ///
-  /// [codex] is how a Codex rename reaches the CLI that owns the name. Without
-  /// one a Codex rename cannot happen at all — it is logged and skipped, never
-  /// faked by writing a file Codex ignores.
+  /// Renames one session in its CLI's own store. Without [codex] a Codex rename
+  /// is skipped, never faked by writing a file Codex ignores.
   Future<void> rename(
     DetectedSession session,
     String newTitle, {
@@ -89,32 +69,16 @@ class CliSessionMutator {
         : _renameClaude(session, title);
   }
 
-  /// Deletes one session, throwing if it could not be removed.
-  ///
-  /// The single-session form of [deleteAll], and implemented as one so the two
-  /// cannot come to treat a store differently.
+  /// Deletes one session, throwing if it could not be removed. Implemented as
+  /// [deleteAll] of one, so the two cannot treat a store differently.
   Future<void> delete(DetectedSession session) async {
     final report = await deleteAll([session]);
     final failure = report.failures.firstOrNull;
     if (failure != null) throw failure.error;
   }
 
-  /// Deletes every session in [sessions], **walking each store's index once**
-  /// rather than once per session.
-  ///
-  /// That is the whole point of the batch. Deleting one Claude session lists
-  /// `<claudeHome>/sessions` and decodes every entry in it; deleting one Codex
-  /// session reads, decodes and rewrites the whole `session_index.jsonl`. Done
-  /// per session that is quadratic in the size of the store — 33 sessions out
-  /// of the owner's workspace decoded 289 index records and rewrote the Codex
-  /// index 33 times. Grouped, it is one pass per store.
-  ///
-  /// **Never throws.** A transcript that could not be deleted, or an index that
-  /// could not be rewritten, comes back in the report so the caller can tell
-  /// the user what was left behind — and so one bad file cannot abandon the
-  /// rest of the batch. This is the one operation in the app that reaches
-  /// outside it irreversibly, so what it did and what it could not do are
-  /// reported rather than inferred.
+  /// Deletes every session in [sessions], walking each store's index once
+  /// rather than once per session. Never throws: what failed comes back listed.
   Future<CliDeleteReport> deleteAll(Iterable<DetectedSession> sessions) async {
     final groups = <(String, String), List<DetectedSession>>{};
     for (final session in sessions) {
@@ -227,26 +191,8 @@ class CliSessionMutator {
 
   // --- Codex ----------------------------------------------------------------
 
-  /// Asks Codex itself to name the thread.
-  ///
-  /// **`<codexHome>/session_index.jsonl` is a derived mirror Codex writes and
-  /// never reads.** Established by planting a sentinel in it under a scratch
-  /// `CODEX_HOME`: `thread/list` ignored it (with `useStateDbOnly` either way)
-  /// and left it untouched, while a sentinel planted in `state_5.sqlite`'s
-  /// `threads.name` *was* returned. So the rewrite this method used to do
-  /// looked right locally and was overwritten by Codex's next naming event —
-  /// the reported bug. Nothing here touches that file any more.
-  ///
-  /// `thread/name/set` is the authoritative write. Verified round-trip against
-  /// the owner's own store: it answered `{}`, `threads.name` held the new name,
-  /// **and** Codex appended a fresh `session_index.jsonl` line itself — so the
-  /// app's file-based read path stays correct without this method writing one.
-  ///
-  /// Best-effort, and silent about it beyond a log line: the local rename is
-  /// already applied and on screen, and a Codex that is absent, unreachable or
-  /// too old must not undo something the user can see. What it must not do is
-  /// write the mirror instead, which would put a name on screen that Codex is
-  /// about to overwrite — the failure this whole change exists to remove.
+  /// Asks Codex itself to name the thread. `session_index.jsonl` is a mirror
+  /// Codex writes and never reads, so writing it there would be overwritten.
   Future<void> _renameCodex(
     DetectedSession session,
     String title,

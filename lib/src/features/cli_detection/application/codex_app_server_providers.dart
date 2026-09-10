@@ -10,11 +10,8 @@ import '../../sessions/application/session_signals.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../data/codex_app_servers.dart';
 
-/// The app's live `codex app-server` connections, one per environment.
-///
-/// Lazy twice over: the pool starts nothing, and a connection is only spawned
-/// by the first call made on it. Disposed with the scope so quitting leaves no
-/// `codex` process behind.
+/// The app's live `codex app-server` connections, one per environment. Lazy
+/// twice over, and disposed with the scope so quitting leaves no `codex`.
 final codexAppServersProvider = Provider<CodexAppServers>((ref) {
   final servers = CodexAppServers(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
@@ -31,9 +28,8 @@ final codexAppServersProvider = Provider<CodexAppServers>((ref) {
           row.agentInstallationId,
           () => installations.getById(row.agentInstallationId)?.agentId,
         );
-        // A title the user typed here is never replaced — the same rule the
-        // slow title sync keeps. Codex owns the name only until someone
-        // renames the row in Karmashala.
+        // A title the user typed here is never replaced: Codex owns the name
+        // only until someone renames the row in Karmashala.
         if (agentId != AgentIds.codex ||
             row.title == update.name ||
             row.titleByUser) {

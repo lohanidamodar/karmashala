@@ -37,29 +37,12 @@ class StoreScanChunk {
   final List<DetectedSession> sessions;
 
   /// Which isolate walked the store — [kStoreScanIsolateName] when the worker
-  /// did. Reported rather than assumed: "off the UI isolate" is the whole claim
-  /// and a claim nobody can read is one nobody can check.
+  /// did. Reported rather than assumed, so the claim can be checked.
   final String isolate;
 }
 
-/// Reads CLI stores somewhere other than the isolate that draws.
-///
-/// Runs [StoreScanRequest]s as a **queue of per-CLI jobs**, Claude then Codex
-/// then Antigravity, one at a time, streaming each job's sessions back as it
-/// finishes.
-///
-/// **One worker, not one per CLI.** Isolates do not make I/O-bound work
-/// parallel — Dart's async I/O already interleaves, and three isolates walking
-/// three stores contend on the same 9p boundary and finish no sooner, for three
-/// spawn costs. The isolate is here to keep several thousand stream events off
-/// the isolate that paints, which one worker does as well as three. It is also
-/// the structure that scales: the next agent is one more descriptor and one
-/// more job, not a new isolate with a new lifecycle.
-///
-/// Everything else follows `IsolateProcessSpawner`, which is the house pattern:
-/// created on first use so a launch that never scans pays nothing, plain data
-/// both ways, and a fall back to running inline when the host refuses an
-/// isolate — a laggy scan beats no sessions.
+/// Reads CLI stores somewhere other than the isolate that draws: one worker for
+/// a queue of per-CLI jobs — isolates do not make I/O-bound work parallel.
 abstract interface class StoreScanRunner {
   Stream<StoreScanChunk> scan(StoreScanRequest request);
   Future<void> shutdown();
@@ -115,9 +98,8 @@ class IsolateStoreScanRunner implements StoreScanRunner {
     StoreScanRequest request,
     StreamController<StoreScanChunk> out,
   ) async {
-    // No stores, no isolate. A host with no CLI installed never creates the
-    // worker at all, the way `IsolateProcessSpawner` never creates its own on a
-    // launch that runs no command.
+    // No stores, no isolate: a host with no CLI installed never creates the
+    // worker at all.
     if (request.stores.isEmpty) {
       await out.close();
       return;
@@ -231,9 +213,8 @@ class IsolateStoreScanRunner implements StoreScanRunner {
   }
 }
 
-/// The app-wide store-scan worker. Lazy in two layers, like
-/// `sharedProcessSpawner`: Dart creates the object on first read, the object
-/// creates its isolate on first scan.
+/// The app-wide store-scan worker. Lazy in two layers: Dart creates the object
+/// on first read, the object creates its isolate on first scan.
 final IsolateStoreScanRunner sharedStoreScanRunner = IsolateStoreScanRunner();
 
 /// The queue itself: jobs in registry order, one at a time, a chunk each.
@@ -241,10 +222,8 @@ Stream<StoreScanChunk> runStoreScanJobs(
   StoreScanRequest request,
   CliDetectionService detection,
 ) async* {
-  // Resolved on the main isolate and carried in `CliStore`: the worker builds
-  // the runner and spawns Codex itself, because a live `Process` cannot cross
-  // an isolate boundary and a ~1 s `CreateProcessW` must not be on the isolate
-  // that draws.
+  // Resolved on the main isolate and carried in `CliStore`: a live `Process`
+  // cannot cross an isolate boundary, and `CreateProcessW` costs ~1 s.
   final appServers = CliDetectionService.codexAppServersIn(request.stores);
   for (final job in detection.jobsFor(request.stores)) {
     final sessions = await detection.runJob(

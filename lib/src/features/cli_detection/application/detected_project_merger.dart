@@ -1,12 +1,8 @@
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 
-/// Merges detected sessions into projects keyed by a **canonical path**, so the
-/// same folder seen via different CLIs and environments (e.g. Codex
-/// `/mnt/g/dev/x` and Claude `G:\dev\x`) collapses into one project. WSL
-/// `/mnt/<drive>` paths are folded to their Windows-drive form; everything is
-/// compared case-insensitively. Real sessions and SDK-spawned subagents are
-/// separated.
+/// Merges detected sessions into projects keyed by a canonical path, so the
+/// same folder seen through different CLIs and environments is one project.
 List<DetectedProject> mergeDetectedProjects(
   List<DetectedSession> sessions,
   Map<String, ExecutionEnvironment> environmentsById, {
@@ -58,9 +54,7 @@ List<DetectedProject> mergeDetectedProjects(
 }
 
 /// The canonical `(mergeKey, displayPath)` for a path in [env] — the same
-/// normalization the merger uses, exposed so other features (e.g. auto-import
-/// matching) can compute a project's key. WSL `/mnt/<drive>` folds to its
-/// Windows-drive form; comparison is case-insensitive.
+/// normalization the merger uses, exposed for other features.
 (String, String) canonicalProjectPath(
   EnvironmentPath path,
   ExecutionEnvironment? env, [

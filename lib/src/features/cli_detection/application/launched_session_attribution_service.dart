@@ -10,75 +10,15 @@ import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
 
 /// How long after a session row is written its CLI's conversation may have
-/// begun and still be that session's.
-///
-/// The row is written *before* the process is spawned, so the conversation
-/// always starts later — the question is how much later. In the owner's own
-/// rollout the gap was 4.7 seconds through a WSL shell; two minutes is room for
-/// a cold distro and a slow disk without reaching back to a conversation from
-/// earlier in the day. It is not the only guard — the directory must match and
-/// the match must be unambiguous — but it is the one that keeps "unambiguous"
-/// meaningful in a folder somebody works in all day.
+/// begun and still be that session's — the row is written before the spawn.
 const Duration kLaunchedAttributionWindow = Duration(minutes: 2);
 
-/// How far *before* the row a conversation may have begun and still be it.
-///
-/// Only clock skew: the two timestamps come from different clocks — ours and
-/// the CLI's, which under WSL is a different kernel — and a second or two of
-/// disagreement should not lose a session its name.
+/// How far *before* the row a conversation may have begun and still be it —
+/// only clock skew: ours and the CLI's, a different kernel under WSL.
 const Duration kLaunchedAttributionSkew = Duration(seconds: 5);
 
-/// Writes the CLI's conversation id onto a session **we launched** for an agent
-/// that would not accept one.
-///
-/// ## The bug this is
-///
-/// > "i started new session with codex, and started conversation. sessions
-/// > explorer has the updated session with conv title, but the tabbar is still
-/// > showing new session and when trying to open notification from inbox it
-/// > show the session as not active weird"
-///
-/// One session, three disagreements, one cause: the row's
-/// `external_session_id` was null and stayed null. `SessionLauncher` says so
-/// itself — "Agents that cannot be told (Codex) keep a null id until something
-/// discovers it" — and nothing did. `SessionAdoptionService` has the store scan
-/// that could, but it deliberately only ever looks at panes the app did *not*
-/// launch (`AdoptablePane.hostsLaunchedSession`), because its job is to write a
-/// row, not to complete one. `AntigravitySessionAttributionService` completes
-/// rows, but is gated on `agy`'s store.
-///
-/// Everything downstream of that id then failed together, and each failure is
-/// one of the owner's three:
-///
-/// * `SessionTitleSyncService` skips a row with no id — it matches the store on
-///   `externalSessionId` — so the **tab strip** kept the launcher's
-///   "New session" while Codex's own thread name sat in `session_index.jsonl`.
-/// * `ImportedSessionDao` hides an imported record when a native row holds the
-///   same conversation. With no id nothing was superseded, so the **Explorer**
-///   drew the read-only import beside the live row — that is the card wearing
-///   the conversation's title.
-/// * `SessionLauncher.hostedLive` joins a conversation to a pane by that id, so
-///   opening the **inbox** notification — which is filed against the imported
-///   record, the only one of the two with a transcript to read — found no live
-///   pane for it and said the session was not active.
-///
-/// ## The rule
-///
-/// A conversation in the store is this row's when it is the **only** answer:
-/// same agent, same directory, begun inside the row's window, and not already
-/// held by another row — with only one such row waiting in that directory.
-/// Anything less is refused, in words, rather than guessed at, because the
-/// losing side of a coin toss is a user's session pointing at somebody else's
-/// conversation.
-///
-/// ## Cost
-///
-/// One store scan, shared with the title sync that runs immediately after it on
-/// the same slot (`cliStoreSyncRunnerProvider`), and only while
-/// [wantsStoreSweep] — a workspace whose sessions all know their conversation
-/// pays nothing at all. Unlike adoption there is no attempt cap: a pane can sit
-/// at its prompt for an hour before the user types, and Codex writes no rollout
-/// until they do.
+/// Writes the CLI's conversation id onto a session we launched for an agent
+/// that would not accept one — and only when the store's answer is unambiguous.
 class LaunchedSessionAttributionService {
   LaunchedSessionAttributionService({
     required this.sessionDao,
@@ -111,8 +51,7 @@ class LaunchedSessionAttributionService {
   final void Function(Session session, String conversationId)? onAttributed;
 
   /// sessionId → why nothing was written, in words. Diagnostics only: what a
-  /// *user* sees about a session with no id comes from the resume path, which
-  /// describes the store as it is when they ask.
+  /// user sees comes from the resume path, which re-reads the store.
   final Map<String, String> _refusals = {};
 
   /// Store scans actually run — the cost claim.
@@ -144,8 +83,6 @@ class LaunchedSessionAttributionService {
       for (final environment in environmentDao.getAll())
         environment.id: environment,
     };
-    // The app's existing idempotence rule, borrowed from
-    // `SessionAdoptionService`: the CLI's id is the key, and one conversation is
     final held = sessionDao.heldExternalSessionIds();
 
     // Grouped by agent and directory, because that pair is all the store knows:
@@ -160,8 +97,7 @@ class LaunchedSessionAttributionService {
       final group = entry.value;
       if (group.length > 1) {
         // Two sessions started into one folder, and the store cannot say which
-        // rollout belongs to which process. Attributing either would be a coin
-        // toss whose losing side resumes the other session's conversation.
+        // rollout is which. Attributing either would be a coin toss.
         for (final candidate in group) {
           _refusals[candidate.session.id] =
               '${group.length} sessions with no conversation id are running in '
@@ -206,8 +142,7 @@ class LaunchedSessionAttributionService {
       for (final session in detected)
         if (session.cli == candidate.agentId &&
             // A store that cannot say when a conversation began cannot answer
-            // this question at all, and a match on directory alone would take
-            // whatever the folder was last used for.
+            // this; directory alone takes what the folder was last used for.
             session.startedAt != null &&
             !session.startedAt!.toUtc().isBefore(from) &&
             !session.startedAt!.toUtc().isAfter(to) &&
@@ -225,31 +160,23 @@ class LaunchedSessionAttributionService {
     };
     final candidates = <_Candidate>[];
     for (final row in sessionDao.getUnattributed()) {
-      // Only a running session. A stopped one has no CLI writing a conversation
-      // to find, and leaving it waiting would buy a store scan on every slot
-      // for the rest of the app's run; `SessionActions` recovers an id for one
-      // of those at the moment the user asks to resume it, which is when the
-      // question is actually being asked.
+      // Only a running session: a stopped one would buy a store scan on every
+      // slot for ever. `SessionActions` recovers its id at resume instead.
       if (row.status != SessionStatus.running) continue;
 
       final descriptor = _descriptorFor(row);
       if (descriptor == null) continue;
-      // The capability that makes this rule applicable, rather than the name of
-      // an agent: an agent we *could* have told its id was told at launch, and
-      // a row of its with none is a fork or a failed launch — not something to
-      // infer from a directory.
+      // Keyed on the capability, not an agent name: a row for an agent we could
+      // have told its id is a fork or a failed launch, not something to infer.
       if (descriptor.launch.sessionIdAssignment.isSupported) continue;
-      // Antigravity is excluded by ownership, not by capability.
-      // `AntigravitySessionAttributionService` has strictly better evidence for
-      // those rows — `agy` prints its own resume command into our pane — and
-      // its own refusal rules for when it does not.
+      // Antigravity is excluded by ownership: its own service has better
+      // evidence — `agy` prints its resume command into our pane.
       if (descriptor.store?.format == AgentStoreFormat.antigravityStore) {
         continue;
       }
 
-      // The order of decreasing certainty `sessionWorkingDirectoryOf` uses:
-      // where the process was started, then its worktree, then the repository
-      // root — which is where a row written before schema v22 would have run.
+      // Decreasing certainty, as `sessionWorkingDirectoryOf` does: where the
+      // process started, then its worktree, then the repository root.
       final directory =
           row.workingDirectory ??
           row.worktree ??

@@ -10,15 +10,8 @@ enum AttentionKind {
   /// Ended in error.
   failed;
 
-  /// What [status] is asking of the user *right now*, or `null` when it is
-  /// asking nothing.
-  ///
-  /// Derived from [AgentNotificationPolicy.reasonForStatus] rather than spelled
-  /// again: the tray's waiting list and the toast must agree about what an
-  /// agent's status means and disagree only about whether it is worth
-  /// interrupting for. A turn that merely *finished* is news, not a hold-up, so
-  /// it answers `null` here — that is the whole of the difference, and it is
-  /// visible in one place.
+  /// What [status] is asking of the user right now, or `null`. Derived from
+  /// [AgentNotificationPolicy.reasonForStatus] so the two cannot disagree.
   static AttentionKind? forStatus(AgentActivityStatus status) =>
       switch (AgentNotificationPolicy.reasonForStatus(status)) {
         NotificationReason.needsInput => AttentionKind.needsInput,
@@ -28,10 +21,7 @@ enum AttentionKind {
 }
 
 /// One session currently waiting on the user, as listed in the tray menu.
-///
-/// This is *state*, not an event: it is derived from what sessions are doing
-/// right now, so it survives a missed notification and is not gated on window
-/// focus. A tray icon is ambient; a toast is an interruption.
+/// State, not an event: it survives a missed toast and ignores window focus.
 class SessionAttention {
   const SessionAttention({required this.session, required this.kind});
 

@@ -47,12 +47,8 @@ final conversationIndexDaoProvider = Provider<ConversationIndexDao>(
   (ref) => ConversationIndexDao(ref.watch(databaseProvider)),
 );
 
-/// Keeps the conversation index in step with the transcripts on disk.
-///
-/// Nothing starts it. It is queued by the two triggers the app already fires —
-/// `SessionAdoptionService` adopting a session and `SessionTitleSyncService`
-/// renaming one — and drained by [cliStoreSyncRunnerProvider] on the store slot
-/// that is already open. See the service's own doc for why there is no timer.
+/// Keeps the conversation index in step with the transcripts on disk. Nothing
+/// starts it: it is queued by adoption and rename, drained on the store slot.
 final conversationIndexerProvider = Provider<ConversationIndexer>(
   (ref) => ConversationIndexer(
     dao: ref.watch(conversationIndexDaoProvider),
@@ -82,12 +78,8 @@ final projectImportServiceProvider = Provider<ProjectImportService>(
   ),
 );
 
-/// Where every CLI-store walk in the app happens.
-///
-/// One long-lived worker isolate, shared by auto-import, "Detect CLI sessions"
-/// and the status registry's store slot, so no two of them can be walking the
-/// same 9p share on the isolate that draws. A test overrides this with an
-/// inline runner (or a canned one) and never spawns anything.
+/// Where every CLI-store walk in the app happens: one long-lived worker
+/// isolate, so nothing walks a 9p share on the isolate that draws.
 final storeScanRunnerProvider = Provider<StoreScanRunner>(
   (ref) => sharedStoreScanRunner,
 );
@@ -114,9 +106,7 @@ final autoImportRunnerProvider = Provider<AutoImportRunner>(
 );
 
 /// Adopts agent sessions the user started by hand in one of our own panes.
-///
-/// Cycled by `SessionStatusRegistry` (see `sessionStatusRegistryProvider`) and
-/// poked by `/agent-hook`; it starts nothing itself.
+/// Cycled by `SessionStatusRegistry` and poked by `/agent-hook`; starts nothing.
 final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
   return SessionAdoptionService(
     sessionDao: ref.watch(sessionDaoProvider),
@@ -138,14 +128,11 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
     },
     scanStores: () => scanCliStores(ref),
     onAdopted: (session) {
-      // A row appearing in the tree is exactly what the revision counter is
-      // for.
       ref
           .read(sessionsRevisionProvider.notifier)
           .changed(SessionChange.created(session.id));
-      // And a conversation entering the workspace is the first of the two
-      // moments the index is built on. Queuing costs a map entry; the store
-      // slot this adoption is running on drains it a line later.
+      // A conversation entering the workspace is one of the two moments the
+      // index is built on; queuing costs a map entry.
       final conversation = session.externalSessionId;
       if (conversation != null) {
         ref.read(conversationIndexerProvider).want(conversation);
@@ -155,10 +142,7 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
 });
 
 /// Writes the Antigravity conversation id onto the session row that is on it.
-///
-/// `agy` neither accepts an id nor writes one anywhere a scan could match, so
-/// without this an app-launched Antigravity session is a phantom: a row nothing
-/// can resume, rename from the store, or find again.
+/// `agy` neither accepts an id nor writes one where a scan could match it.
 final antigravityAttributionServiceProvider =
     Provider<AntigravitySessionAttributionService>((ref) {
       return AntigravitySessionAttributionService(
@@ -169,11 +153,8 @@ final antigravityAttributionServiceProvider =
         locateStores: () async => ref
             .read(cliStoreLocatorProvider)
             .locate(ref.read(executionEnvironmentDaoProvider).getAll()),
-        // **Deliberately not `adoptablePanes`' live-only rule.** `agy` prints
-        // its resume hint as it *exits*, so the pane holding the strongest
-        // signal is a dead one. A `restored` pane is still refused: its buffer
-        // is the previous run's replayed history, and an id read out of that
-        // describes a conversation from before the restart.
+        // Not `adoptablePanes`' live-only rule: `agy` prints its resume hint
+        // as it exits. `restored` is refused — that buffer is replayed history.
         readPaneTail: (paneId, lines) {
           final instance = ref
               .read(terminalSessionsControllerProvider.notifier)
@@ -194,15 +175,7 @@ final antigravityAttributionServiceProvider =
     });
 
 /// Moves the selection off the read-only history a native row has just
-/// superseded, and onto the row itself.
-///
-/// A row learning its conversation id hides the imported record for that
-/// conversation from every list (`ImportedSessionDao`) — but not from the
-/// detail pane, which resolves a selection by id and would go on showing the
-/// transcript. That is the state the owner's inbox notification left them in:
-/// reading history for a session running in a pane behind it, with nothing on
-/// screen saying so. Both records name the same repository, so the project and
-/// repository selections are already right and only the leaf moves.
+/// superseded — the detail pane resolves by id and would go on showing it.
 void followSupersededHistory(Ref ref, String sessionId, String conversationId) {
   final selected = ref.read(selectedImportedSessionIdProvider);
   if (selected == null) return;
@@ -215,20 +188,13 @@ void followSupersededHistory(Ref ref, String sessionId, String conversationId) {
 }
 
 /// Copies a CLI's own name for a conversation into the session row running it.
-///
-/// The rename the owner reported: `/rename` typed into `agy`, "New session"
-/// still in the sidebar. Nothing in the app read a title *back* out of a CLI
-/// store for any agent — see the service's own doc.
 final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) {
   return SessionTitleSyncService(
     sessionDao: ref.watch(sessionDaoProvider),
     agents: ref.watch(agentRegistryProvider),
     scanStores: () => ref.read(cliStoreScanPassProvider).read(),
-    // **The bump that fires on a timer.** The store sweep runs whether or not
-    // the user is doing anything, so this one narrow fact used to wake all
-    // twenty-eight watchers of the revision counter — several of them with a
-    // full `SELECT * FROM sessions` on the UI isolate. It says only what it
-    // knows: this row is called something else now.
+    // This fires on a timer, so it says only what it knows: a narrow rename
+    // bump, not a wake of every watcher of the revision counter.
     onRenamed: (sessionId, _) {
       ref
           .read(sessionsRevisionProvider.notifier)
@@ -236,10 +202,8 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
       ref
           .read(terminalSessionsControllerProvider.notifier)
           .notifyTitleChanged();
-      // The second moment the index is built on: the CLI wrote a name into its
-      // own store, which is the app's existing evidence that the conversation's
-      // transcript has moved. One row read, on a rename, which is rare — the
-      // sync only reaches here for a row it actually changed.
+      // The other moment the index is built on: a CLI writing a name is the
+      // app's evidence that the transcript moved. One row read, on a rename.
       final conversation = ref
           .read(sessionDaoProvider)
           .getById(sessionId)
@@ -252,13 +216,7 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
 });
 
 /// Writes the CLI's conversation id onto a session we launched for an agent
-/// that would not accept one.
-///
-/// Codex is that agent today: `SessionLauncher` records a null id and, in its
-/// own words, the row "keep[s] a null id until something discovers it". Nothing
-/// did — the store scan that could belongs to `SessionAdoptionService`, which
-/// only ever looks at panes the app did *not* launch. See the service's own doc
-/// for the three symptoms one missing id produced.
+/// that would not accept one — Codex today, launched with a null id.
 final launchedSessionAttributionServiceProvider =
     Provider<LaunchedSessionAttributionService>((ref) {
       return LaunchedSessionAttributionService(
@@ -268,11 +226,8 @@ final launchedSessionAttributionServiceProvider =
         environmentDao: ref.watch(executionEnvironmentDaoProvider),
         agents: ref.watch(agentRegistryProvider),
         scanStores: () => ref.read(cliStoreScanPassProvider).read(),
-        // A row that has just learned which conversation it is on changes what
-        // the strip, the tree and the inbox each say about it.
-        // Same tidy-up as the launched attributor's: a row that has just taken
-        // over a conversation supersedes its history everywhere except a
-        // selection already pointing at it.
+        // A row that just took over a conversation supersedes its history
+        // everywhere except a selection already pointing at it.
         onAttributed: (session, conversationId) {
           followSupersededHistory(ref, session.id, conversationId);
           ref
@@ -282,15 +237,8 @@ final launchedSessionAttributionServiceProvider =
       );
     });
 
-/// One store scan, shared by the passengers on a single store slot.
-///
-/// Attribution and the title sync ask the disk the same question —
-/// [scanCliStores] lists and parses every session file in every store, which on
-/// the owner's machine is a hundred-odd files over `\\wsl.localhost` — and on
-/// the slot where a session learns its conversation, *both* want the answer.
-/// Reading it twice for one slot would be pure waste, so the pass is opened and
-/// closed around them by [cliStoreSyncRunnerProvider] and nothing outside that
-/// holds it.
+/// One store scan shared by the passengers on a single store slot: attribution
+/// and the title sync ask the disk the same expensive question.
 final cliStoreScanPassProvider = Provider<CliStoreScanPass>(
   (ref) => CliStoreScanPass(() => scanCliStores(ref)),
 );
@@ -301,10 +249,8 @@ class CliStoreScanPass {
 
   final Future<List<DetectedSession>> Function() _scan;
 
-  /// The scan this pass has already started, if any. Held as the *future*, so
-  /// two readers in one pass share the work rather than the result of it — a
-  /// second caller that arrives before the first has finished still waits on
-  /// the one read.
+  /// The scan this pass started, held as the *future* so a second caller that
+  /// arrives before the first finishes still waits on the one read.
   Future<List<DetectedSession>>? _inFlight;
 
   Future<List<DetectedSession>> read() => _inFlight ??= _scan();
@@ -313,30 +259,19 @@ class CliStoreScanPass {
   void end() => _inFlight = null;
 }
 
-/// Reconciles session rows against what the CLI stores now say.
-///
-/// Exposed as a function provider, like [autoImportRunnerProvider], so the
-/// status registry's store slot has one line to run and a test can drive the
-/// whole chain through the real providers. The order is stated here rather than
-/// assumed at the call site: attribution learns a conversation id, and the title
-/// sync can only match a row that has one.
+/// Reconciles session rows against what the CLI stores now say. The order is
+/// load-bearing: attribution learns an id, the title sync can only match one.
 final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
   return () async {
-    // Attribution first: it is what gives a row the CLI id the title sync has
-    // to match on, so a session learning its conversation this slot is renamed
-    // in the same one rather than the next.
-    //
-    // Antigravity's needs no store scan — it reads one JSON file per store and
-    // the pane's own screen — so it runs outside the pass.
+    // Antigravity's attribution needs no store scan — one JSON file per store
+    // and the pane's own screen — so it runs outside the pass.
     await ref.read(antigravityAttributionServiceProvider).attribute();
     final pass = ref.read(cliStoreScanPassProvider);
     try {
       await ref.read(launchedSessionAttributionServiceProvider).attribute();
       await ref.read(sessionTitleSyncServiceProvider).sync();
-      // Last, and only for what the two above have queued. `drain` returns
-      // before touching anything when nothing is wanted, so an idle slot pays
-      // nothing — and when something is wanted it reads the pass rather than
-      // opening a second walk.
+      // Only for what the two above queued; `drain` returns before touching
+      // anything when nothing is wanted, and reads the pass when it is.
       await ref.read(conversationIndexerProvider).drain(pass.read);
     } finally {
       // Whatever happened, the next slot must see the disk as it is then.
@@ -345,10 +280,8 @@ final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
   };
 });
 
-/// Every tracked pane, in the shape adoption reads them.
-///
-/// Read-only over the terminal layout's own published state: adoption never
-/// holds a pane, opens one or changes one.
+/// Every tracked pane, in the shape adoption reads them — read-only over the
+/// terminal layout's published state.
 List<AdoptablePane> adoptablePanes(Ref ref) {
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
   final state = ref.read(terminalSessionsControllerProvider);
@@ -365,19 +298,15 @@ List<AdoptablePane> adoptablePanes(Ref ref) {
           lastCommandId: instance.commandBlocks?.tracker.latest?.id,
           lastCommandLine: instance.commandBlocks?.tracker.latest?.command,
           // `latest` keeps reporting a finished block until the next prompt is
-          // drawn, so without this a CLI that has already exited still looks
-          // like one sitting at its prompt.
+          // drawn, so without this an exited CLI looks like one at its prompt.
           lastCommandRunning:
               instance.commandBlocks?.tracker.latest?.isRunning ?? true,
         ),
   ];
 }
 
-/// One pass over every CLI store, flattened to the sessions it found.
-///
-/// Reads through [storeScanRunnerProvider], so the status registry's slow slot
-/// walks the stores on the worker isolate like everything else. Unnarrowed:
-/// attribution and the title sync are looking for rows they have no path for.
+/// One pass over every CLI store, flattened to the sessions it found. Walks on
+/// the worker isolate, and unnarrowed: callers have no path to narrow by.
 Future<List<DetectedSession>> scanCliStores(Ref ref) async {
   final environments = ref.read(executionEnvironmentDaoProvider).getAll();
   final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
@@ -395,10 +324,8 @@ final cliStoreLocatorProvider = Provider<CliStoreLocator>(
   (ref) => CliStoreLocator(
     runnerFor: ref.watch(runnerResolverProvider),
     registry: ref.watch(agentRegistryProvider),
-    // So a located Codex store carries how to reach its app-server. The rows
-    // are read here, on the isolate that has a database, and cross to the scan
-    // worker as plain data; watching the controller rather than snapshotting
-    // the DAO is what keeps a Codex detected later from being missed.
+    // So a located Codex store carries how to reach its app-server. Watching
+    // the controller, not the DAO, keeps a later Codex from being missed.
     installations: ref.watch(agentInstallationsControllerProvider),
   ),
 );
@@ -415,20 +342,8 @@ typedef ConversationPresenceProbe =
       required String conversationId,
     });
 
-/// The one place "does this conversation exist" is answered.
-///
-/// A seam, like `sessionDirectoryPresentProvider`: production reads the store,
-/// tests substitute an answer. And like that one, **the safe answer is the
-/// permissive one** — every failure below resolves to
-/// [ConversationPresence.unknown], because a resume refused on a store we could
-/// not read is a worse bug than the one this exists to catch.
-///
-/// [environmentId] is where the session runs, and only *that* environment's
-/// store may say [ConversationPresence.absent]: it is the one the agent would
-/// have written to. The other located stores are still asked, because finding
-/// the conversation anywhere at all is proof it exists, and a user who moved a
-/// repository between WSL and Windows should not have their history called
-/// missing.
+/// The one place "does this conversation exist" is answered. Failure and every
+/// other environment's store say `unknown`: a wrongly refused resume is worse.
 final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
   return ({
     required AgentDescriptor descriptor,
@@ -480,15 +395,13 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
     state = await AsyncValue.guard(_load);
   }
 
-  /// Reads every store, unnarrowed and on the worker isolate: this door's whole
-  /// job is to find projects the workspace has never heard of, so it is the one
-  /// caller that must not narrow to the repositories it already has.
+  /// Reads every store, unnarrowed: this door's job is to find projects the
+  /// workspace has never heard of, so it must not narrow to what it has.
   Future<List<DetectedProject>> _load() async {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
     final sessions = await scanCliStores(ref);
-    // Deliberately no freshness stamp. This listed the stores; it imported
-    // nothing, and the stamp means "your session list was brought up to date",
-    // not "somebody looked". Claiming otherwise is the §19 lie.
+    // Deliberately no freshness stamp: this listed the stores and imported
+    // nothing, and the stamp means "brought up to date", not "somebody looked".
     return mergeDetectedProjects(sessions, {
       for (final e in environments) e.id: e,
     });

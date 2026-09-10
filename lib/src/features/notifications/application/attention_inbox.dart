@@ -10,29 +10,13 @@ import '../domain/inbox_item.dart';
 import 'notification_providers.dart';
 
 /// Holds the attention inbox and keeps it honest about what the user has seen.
-///
-/// Three inputs, and none of them is a timer of its own:
-///
-/// * the **watcher**, through `AgentStatusWatcher.onInbox`, wired in
-///   `notification_providers.dart`;
-/// * the **selection**, so an item retires when its source is looked at;
-/// * the **follow-up store**, through `openFollowUpsProvider` — what sessions
-///   left behind when they ended. Listened to rather than watched: a change in
-///   the store must fold into the list, not rebuild the notifier and throw away
-///   everything the poll has put there.
-///
-/// "Looked at" means *selected while the window has focus* — the same reading
-/// `AgentNotificationPolicy` already uses for "the session on screen", because
-/// a session selected behind a browser is not being looked at and clearing its
-/// inbox entry there would lose exactly the thing the inbox exists for.
+/// "Looked at" is selected while the window has focus, as the policy reads it.
 class AttentionInboxController extends Notifier<AttentionInbox> {
   @override
   AttentionInbox build() {
     ref.listen(selectedSessionIdProvider, (_, _) => _syncViewed());
-    // Going to the tab is looking at it. The selection above is only ever set
-    // by the Explorer, quick open and the inbox itself — clicking a tab sets
-    // nothing — so without this an item retired "on viewing" never retired for
-    // the most ordinary way of arriving at a session.
+    // Going to the tab is looking at it: clicking a tab sets no selection, so
+    // without this an item retired "on viewing" missed the ordinary route.
     ref.listen(foregroundTerminalPaneIdsProvider, (_, _) => _syncViewed());
     ref.listen(selectedImportedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
@@ -41,9 +25,8 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
       // A follow-up for the session already on screen is not news either.
       _syncViewed();
     });
-    // Seeded from the same provider the listener above watches, so a workspace
-    // whose sessions ended while the app was closed opens with them listed
-    // rather than waiting for something to change first.
+    // Seeded from the same provider, so sessions that ended while the app was
+    // closed are listed at open rather than waiting for a change.
     return AttentionInbox.empty.syncFollowUps(ref.read(openFollowUpsProvider));
   }
 
@@ -57,11 +40,8 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
 
   void markAllSeen() => state = state.markAllSeen();
 
-  /// Takes an item off the list for good.
-  ///
-  /// A follow-up is resolved in its **table** as well, and it has to be: the
-  /// session row that raised it goes on saying `failed` forever, so an item
-  /// removed only from this list would be back on the next sweep.
+  /// Takes an item off the list for good. A follow-up is resolved in its table
+  /// too, or the next sweep files it again.
   void dismiss(String id) {
     if (followUpRowIdIn(id) case final rowId?) {
       ref.read(followUpServiceProvider).dismissRow(rowId);
@@ -79,13 +59,8 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     state = state.viewed({item.session.openId});
   }
 
-  /// Reveals the next session that needs you, and reports whether there was
-  /// one.
-  ///
-  /// Goes through [open] rather than reaching for `focusWatchedSession`
-  /// itself: an item opened by the chord must be marked viewed exactly as one
-  /// clicked in the list is, or walking the cycle would leave every row unread
-  /// behind it.
+  /// Reveals the next session that needs you. Goes through [open] so a chord
+  /// marks an item viewed exactly as a click does.
   bool openNext() {
     final next = state.nextAfter(
       ref.read(selectedSessionIdProvider) ??
@@ -106,10 +81,8 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     if (native != null) open.add(native);
     final imported = ref.read(selectedImportedSessionIdProvider);
     if (imported != null) open.add(imported);
-    // Targeted, not the whole placement map. Four providers already re-read
-    // every session row when the list changes shape, and `session_start_cost
-    // _test` asserts a fifth does not appear — so this asks about the panes on
-    // screen and nothing else.
+    // Targeted, not the whole placement map: `session_start_cost_test` asserts
+    // no fifth provider re-reads every session row.
     final panes = ref.read(foregroundTerminalPaneIdsProvider);
     if (panes.isNotEmpty) {
       for (final row in ref.read(sessionDaoProvider).getByPaneIds(panes)) {
@@ -126,12 +99,8 @@ final attentionInboxProvider =
       AttentionInboxController.new,
     );
 
-/// The one attention count in the app.
-///
-/// The status bar, the side panel's rail badge and the tray badge all read
-/// this, so they cannot disagree. Loop 42's tray counted the *current*
-/// attention set instead, which is a different number the moment a finished
-/// turn is waiting or a watched session goes quiet.
+/// The one attention count in the app — the status bar, the rail badge and the
+/// tray all read this, so they cannot disagree.
 final attentionCountProvider = Provider<int>(
   (ref) => ref.watch(attentionInboxProvider).unseen,
 );

@@ -9,18 +9,8 @@ import '../data/store_scan_worker.dart';
 import 'detected_project_merger.dart';
 import 'project_import_service.dart';
 
-/// Scans the CLI stores and imports any existing sessions whose folder matches a
-/// repository. Idempotent (dedupes by `(cli, externalId)`).
-///
-/// **Runs once per app lifecycle**, after the first frame, plus whenever the
-/// user asks — see `ProjectsController.importCliSessionsOnce`. It used to run
-/// on every project expand *and* every project selection, which on a workspace
-/// of five projects meant five concurrent walks of every store on the isolate
-/// that draws.
-///
-/// The walk itself happens on the store-scan worker isolate, as a queue of
-/// per-CLI jobs, and rows are written as each job lands rather than after the
-/// slowest one.
+/// Scans the CLI stores and imports sessions whose folder matches a repository.
+/// Idempotent, once per app lifecycle, and walked on the store-scan worker.
 class SessionAutoImportService {
   SessionAutoImportService({
     required this.locator,
@@ -47,10 +37,8 @@ class SessionAutoImportService {
   final Clock clock;
   final PathTranslator translator;
 
-  /// Whether to read only the Claude store directories the given repositories
-  /// encode to. Off makes this read every directory, which is what a machine
-  /// whose Claude build encodes paths differently would need — see
-  /// [claudeStoreDirectoryName] for how the rule was verified.
+  /// Whether to read only the Claude store directories these repositories encode
+  /// to. Off reads every directory, for a build that encodes paths differently.
   final bool narrowClaudeStore;
 
   Future<ImportSummary> importForRepositories(List<Repository> repos) async {
@@ -59,9 +47,8 @@ class SessionAutoImportService {
     final stores = await locator.locate(environments);
     final byId = {for (final e in environments) e.id: e};
 
-    // Exact canonical paths, so a session that ran in a **subfolder** of a
-    // repository is not filed under it: it canonicalises to its own key and
-    // becomes its own project, which is what the CLI's own store already says.
+    // Exact canonical paths, so a session that ran in a *subfolder* of a
+    // repository becomes its own project, as the CLI's own store already says.
     final byKey = <String, Repository>{};
     final directories = <String>{};
     for (final repo in repos) {
@@ -102,9 +89,8 @@ class SessionAutoImportService {
       );
       final repo = byKey[key];
       if (repo == null) continue;
-      // A session started in Karmashala also appears in the CLI store. Keep the
-      // native row as the single representation instead of importing a
-      // duplicate history row beside it.
+      // A session started in Karmashala also appears in the CLI store; the
+      // native row stays the single representation.
       if (sessionDao.getByExternalSessionId(session.sessionId) != null) {
         continue;
       }
@@ -129,12 +115,8 @@ class SessionAutoImportService {
     return imported;
   }
 
-  /// Every way a CLI could have written this folder's path down.
-  ///
-  /// The same folding [canonicalProjectPath] does, in the other direction: a
-  /// repository on `/mnt/c/…` in WSL is `C:\…` to a Claude Code run from
-  /// Windows, and both stores are read. Selected by [EnvironmentKind], never by
-  /// a platform check, so a macOS build simply yields the one spelling.
+  /// Every way a CLI could have written this folder down: `/mnt/c/…` in WSL is
+  /// `C:\…` to a Windows Claude Code, and both stores are read.
   Iterable<String> _spellings(EnvironmentPath path, ExecutionEnvironment? env) {
     final trimmed = path.path.replaceAll(RegExp(r'[\\/]+$'), '');
     final out = <String>{trimmed};
