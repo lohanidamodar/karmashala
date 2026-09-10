@@ -27,7 +27,7 @@
 
 .PARAMETER Package
   A key of the map below. Every one of the ten — `core`, `media`,
-  `agent_cli`, `browser`, `devices`, `remote`, `session`, `git`,
+  `agent_cli`, `browser`, `devices`, `mcp`, `remote`, `session`, `git`,
   `flutter_apps` and `terminal_core` — is extracted and cut over: the app
   holds no copy of any of them.
 
@@ -189,6 +189,26 @@ $map = [ordered]@{
              'test/features/mcp/tool_schemas_golden_test.dart',
              'test/features/remote/bound_frames_golden_test.dart')
     owns = @('lib/src/features/sessions', 'test/features/sessions')
+  }
+  mcp = @{
+    pkg  = 'packages/karmashala_mcp'
+    # `test/features/mcp` whole: what is left in it is the app's half — the
+    # twenty handlers that serve the app's own types through the injected
+    # container, the control server that assembles the served surface, and its
+    # hardening — including the tool schemas golden, which pins that whole
+    # surface and so cannot leave the app. Four suites outside the folder reach
+    # the package: the two system-health ones (the bridge is probed, §19), the
+    # skill installer (the skills are the package's), the handshake-file
+    # permissions the vault locks its key with, and the settings section that
+    # counts the catalogue.
+    app  = @('test/features/mcp',
+             'test/features/environments/system_health_test.dart',
+             'test/features/environments/system_health_dialog_test.dart',
+             'test/features/agents/agent_skill_installation_service_test.dart',
+             'test/features/env_secrets/env_vault_test.dart',
+             'test/features/env_secrets/local_key_cipher_test.dart',
+             'test/features/settings/agent_tools_section_test.dart')
+    owns = @('lib/src/features/mcp', 'test/features/mcp')
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
