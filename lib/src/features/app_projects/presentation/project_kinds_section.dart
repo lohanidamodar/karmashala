@@ -8,19 +8,8 @@ import '../domain/established.dart';
 import '../domain/project_descriptor.dart';
 import '../domain/project_kind.dart';
 
-/// Settings → Environments: **what Karmashala can do with each kind of app
-/// project**, and what it refuses to claim.
-///
-/// The whole section is data off `builtInProjectDescriptors`, so it cannot
-/// drift from what the tool does — a row here is the same `Established` field
-/// the build reads, rendered. Nothing is measured by opening this page: no
-/// process is spawned, no directory is walked, and there is nothing here that
-/// could be stale, because a descriptor is a claim about a toolchain rather
-/// than a reading of this machine.
-///
-/// **A target nobody ran shows its reason where the command would be.** That
-/// is the point of the page: iOS is written out in full — the command, the
-/// artifact, the id — and every line of it says unchecked. No button.
+/// Settings → Environments: what Karmashala can do with each kind of project.
+/// All data off `builtInProjectDescriptors`, and nothing is measured to show it.
 class ProjectKindsSection extends StatelessWidget {
   const ProjectKindsSection({super.key});
 
@@ -137,7 +126,6 @@ class _FieldLine extends StatelessWidget {
   final String label;
   final Established<Object> value;
 
-  /// What to show when the field is measured.
   final String measured;
 
   @override
@@ -188,8 +176,7 @@ class _FieldLine extends StatelessWidget {
                   ),
                 ),
                 // What it *would* be, kept visibly apart from what anything
-                // ran. It is here so the spec can be reviewed before there is
-                // a machine to run it on — never as an offer.
+                // ran — here so the spec can be reviewed, never as an offer.
                 if (value.sketch.isNotEmpty)
                   Text(
                     'Would be: ${value.sketch}',

@@ -8,32 +8,9 @@ import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'flutter_app_providers.dart';
 
-/// Every running Flutter app this workspace can reach, and the connections to
-/// them.
-///
-/// **A registry, not a connection.** This workspace splits into groups so
-/// several things run side by side, and a Flutter desktop build, an Android
-/// build on the mirrored phone and an iOS Simulator build are all normal at
-/// once. Each is its own row with its own connection, its own console and its
-/// own answer to "can this be hot reloaded"; a surface that acts on one names
-/// which one.
-///
-/// **Three readers, and none of them asks the user for anything.** A run this
-/// app started writes a `--vmservice-out-file`; every other `flutter run` on
-/// this machine is found through the Dart Tooling Daemon it starts, which
-/// records its own address on disk and hands over each attached app's VM
-/// service URI, token and all; an app on a device is found by
-/// `AndroidAppDiscovery` from the line the VM prints to the log. Only a run on
-/// another machine still needs an address pasted.
-///
-/// **Nothing polls.** Discovery is two directory subscriptions, a daemon event
-/// stream and an explicit look; a connection reports its own death through
-/// `FlutterAppLink.done`. There is no timer anywhere in this file, and the
-/// first look happens when a surface opens or a caller asks — never at
-/// start-up, which nothing here is worth adding to.
+/// Every running Flutter app this workspace can reach: independent rows found
+/// through out-files, the tooling daemon and device logs, never by polling.
 class AttachedApps extends Notifier<FlutterAppRegistry> {
-  // `FlutterAppLink` logs through `package:logging` now that it lives in
-  // `karmashala_flutter_apps`; the app's root handler receives the same lines.
   AttachedApps({Logger? logger}) : _logger = logger ?? Logger('flutter_apps');
 
   final Logger _logger;
@@ -44,25 +21,16 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
   VmServiceUriDirectory? _directory;
   Future<void>? _looking;
 
-  /// Rows a discovery is opening a connection for right now.
-  ///
-  /// Two announcements of one app can arrive a microtask apart — a daemon
-  /// event and a sweep — and both would pass the "already attached" check
-  /// while the first handshake is still in flight. One connection per app.
+  /// Rows a discovery is opening a connection for right now: a daemon event
+  /// and a sweep can both pass the "already attached" check. One per app.
   final Set<String> _connecting = <String>{};
 
-  /// One open conversation per tooling daemon, keyed by its pid. Held open so
-  /// an app that starts later in an IDE's long-lived daemon arrives as an
-  /// event — the pid file does not change when it does.
+  /// One open conversation per tooling daemon, kept open so an app started
+  /// later in a long-lived daemon arrives as an event.
   final Map<int, DtdLink> _daemons = <int, DtdLink>{};
 
-  /// Whether this notifier is still alive.
-  ///
-  /// A link's teardown finishes *after* the container that owns this notifier
-  /// is disposed — closing a connection is asynchronous — so every callback a
-  /// link can fire has to be able to find out that there is no longer any
-  /// state to write. Riverpod raises on a `Ref` used past disposal, and the
-  /// answer is to stop rather than to catch it.
+  /// Whether this notifier is still alive. A link's teardown finishes after
+  /// the container is disposed, and Riverpod raises on a `Ref` used past that.
   var _mounted = true;
 
   @override
@@ -94,12 +62,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
   List<AppLogRecord> consoleOf(String id) =>
       _links[id]?.console ?? const <AppLogRecord>[];
 
-  /// Looks for running apps: reads the discovery directory, attaches to
-  /// anything new and re-measures anything that was unreachable.
-  ///
-  /// Runs when a surface opens and when someone asks. Concurrent calls share
-  /// one sweep rather than racing each other into two connections to the same
-  /// app.
+  /// Looks for running apps: attaches to anything new and re-measures anything
+  /// unreachable. Concurrent calls share one sweep rather than racing.
   Future<void> look() => _looking ??= _look().whenComplete(() {
     _looking = null;
   });
@@ -133,9 +97,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       for (final app in state.apps) app.id: app,
     };
 
-    // Every file becomes a row. A row already attached is left alone: the
-    // connection is the reading, and re-opening it would cost the app a
-    // handshake for no new information.
+    // A row already attached is left alone; re-opening it buys no information.
     for (final file in files) {
       final id = AttachedApp.idFor(file.uri);
       final existing = rows[id];
@@ -154,8 +116,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       );
     }
 
-    // Every app a daemon names becomes a row too. Same rule as a file: one
-    // already attached keeps its connection.
+    // Same rule as a file: one already attached keeps its connection.
     for (final found in daemonApps) {
       final id = AttachedApp.idFor(found.app.uri);
       final existing = rows[id];
@@ -163,9 +124,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       rows[id] = _rowForDaemonApp(found);
     }
 
-    // A file-backed row whose file is gone is dropped; a hand-attached row is
-    // kept, because the user's intent did not disappear with a file they never
-    // wrote.
+    // A hand-attached row survives: the user's intent did not disappear with a
+    // file they never wrote.
     final paths = files.map((file) => file.path).toSet();
     rows.removeWhere(
       (id, app) =>
@@ -191,8 +151,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     );
 
     for (final app in rows.values) {
-      // Skipped when a daemon event is already opening this one: the sweep and
-      // the event can name the same app, and it gets one connection.
+      // Skipped when a daemon event is already opening this one.
       if (app.reachability == AppReachability.unchecked &&
           _connecting.add(app.id)) {
         try {
@@ -210,8 +169,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     if (_watch != null) return;
     _watch = directory.changes().listen(
       (_) {
-        // Coalesced by `_looking`: a single `flutter run` writes its file in
-        // more than one event and each one asks the same question.
+        // Coalesced by `_looking`: one run writes its file in several events.
         look();
       },
       onError: (Object error) =>
@@ -235,11 +193,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
         );
   }
 
-  /// Every app the tooling daemons on this machine currently know about.
-  ///
-  /// A daemon that cannot be reached is **dropped rather than reported**: its
-  /// pid file outlives a crash, so an unreachable one is ordinary and saying
-  /// so would put somebody else's dead process in this app's error surface.
+  /// Every app the tooling daemons on this machine know about. An unreachable
+  /// daemon is dropped, not reported: its pid file outlives a crash.
   Future<List<_DaemonApp>> _readDaemons() async {
     final DtdChannelOpener open;
     final List<DtdInstance> instances;
@@ -287,11 +242,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     return found;
   }
 
-  /// An app announced in a device log, reachable here through [hostUri].
-  ///
-  /// [serial] is the device it is on, kept as the row's source so the pane can
-  /// say *which* phone. Offered once: an address already attached is left
-  /// alone rather than handshaken again.
+  /// An app announced in a device log, reachable through [hostUri]; [serial]
+  /// becomes the row's source. Offered once — an attached address is left be.
   Future<void> offerFromDevice({
     required Uri hostUri,
     required String serial,
@@ -327,8 +279,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     if (!_mounted) return;
     final row = _rowForDaemonApp((app: app, daemon: daemon));
     final existing = state.byId(row.id);
-    // Offered once. A second announcement of an app already attached would
-    // cost the app a handshake and tell us nothing new.
+    // Offered once: a second announcement of an attached app tells us nothing.
     if (existing != null && existing.isAttached) return;
     if (!_connecting.add(row.id)) return;
     _replace(row);
@@ -353,11 +304,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     return parts.isEmpty ? 'a Flutter app' : parts.last;
   }
 
-  /// Attaches to an address the user typed or an agent handed over.
-  ///
-  /// Idempotent: attaching to an app that is already attached returns the row
-  /// it already has, so a retry after a lost reply cannot open two
-  /// connections.
+  /// Attaches to an address the user typed or an agent handed over. Idempotent,
+  /// so a retry after a lost reply cannot open two connections.
   Future<AttachedApp> attach(String rawUri) async {
     final uri = normaliseVmServiceUri(rawUri);
     if (uri == null) {
@@ -397,10 +345,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
 
   Future<AttachedApp> _connect(AttachedApp app) async {
     try {
-      // The clock is read once and handed over: the link outlives a `read`,
-      // and a closure over `ref` would throw the moment the container that
-      // owns this notifier is disposed — which is exactly when a link is
-      // still finishing its teardown.
+      // The clock is read once and handed over: a closure over `ref` would
+      // throw the moment the container is disposed, mid-teardown.
       final clock = ref.read(clockProvider);
       final link = await FlutterAppLink.attach(
         app.uri,
@@ -425,9 +371,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
         clearDetail: true,
       );
       _replace(attached);
-      // A reload service can appear or vanish after we attach — the tool
-      // registers on its own connection and can detach — so the row follows
-      // the link rather than freezing what was true at the handshake.
+      // A reload service can come and go after the handshake, so the row
+      // follows the link rather than freezing what was true then.
       link.servicesChanged.listen((_) => _refreshServices(app.id));
       return attached;
     } on FlutterAppException catch (error) {
@@ -532,15 +477,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     );
   }
 
-  /// The one sentence that says how an app becomes visible.
-  ///
-  /// §19's "say what to do about it" — and there is now almost nothing to do.
-  /// It used to ask the user to add `--vmservice-out-file` pointed at a folder
-  /// under *this app's* application-support directory, which was the wrong
-  /// thing to ask twice over: it rewrote somebody else's command, and it
-  /// pointed it into another program's private folder. The out-file is still
-  /// how a run **Karmashala starts** is found, because Karmashala writes that
-  /// flag itself; nobody else is asked for it.
+  /// The one sentence saying how an app becomes visible (§19). The out-file is
+  /// only for runs Karmashala starts; nobody else is asked to add the flag.
   String get attachHint =>
       'A run Karmashala started, a "flutter run" started anywhere else on this '
       'machine, and an app on a connected Android device are all found on '
@@ -571,10 +509,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     await link.hotRestart();
   }
 
-  /// Closes our connection to [id] without touching the app.
-  ///
-  /// A file-backed row comes back on the next look — which is right: the app
-  /// is still running and the file still says so.
+  /// Closes our connection to [id] without touching the app; a file-backed row
+  /// comes back on the next look, because the app is still running.
   Future<void> detach(String id) async {
     final link = _links.remove(id);
     await link?.dispose();
@@ -622,15 +558,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     return link.tail(limit: limit, sources: sources);
   }
 
-  /// Turns the running app's widget-select mode on, waits for the user to tap
-  /// and reads back what the framework selected.
-  ///
-  /// The tap does not come through Karmashala at all. On the mirrored device
-  /// a touch already reaches the phone through scrcpy's control socket, and on
-  /// a desktop build the user clicks the window; the framework hit-tests it,
-  /// picks the nearest widget written in the project and pushes a `navigate`
-  /// event. So this app does **no** hit-testing, owns no overlay and needs no
-  /// coordinate mapping: two service extension calls and a read.
+  /// Arms widget-select mode, waits for the user's tap and reads back what the
+  /// framework selected — no hit-testing, overlay or coordinate mapping here.
   Future<WidgetSelection> pickWidget(
     String? id, {
     Duration timeout = const Duration(minutes: 2),
@@ -656,8 +585,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     }
 
     final picked = Completer<WidgetSourceLocation>();
-    // Subscribed before select mode is armed, so a fast tap cannot land in the
-    // gap between the two.
+    // Subscribed before select mode is armed, so a fast tap cannot be lost.
     final subscription = link.navigations.listen((location) {
       if (!picked.isCompleted) picked.complete(location);
     });
@@ -665,10 +593,8 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       await link.setWidgetSelectMode(enabled: true);
       final location = await picked.future.timeout(timeout);
       final selection = await link.selectedWidget();
-      // The `navigate` event carries the location and no identity, and the
-      // read carries the identity and the location. Preferring the read means
-      // one description; falling back to the event means a pick still
-      // succeeds when the read did not.
+      // The read carries identity and location; the event is the fallback so a
+      // pick still succeeds when the read did not.
       return selection ??
           WidgetSelection(
             description: 'the widget at ${location.asEditorTarget}',

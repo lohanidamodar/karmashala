@@ -36,32 +36,19 @@ typedef ProjectBuildOutcome = ({
 
 /// What is on disk where the artifact was meant to land, with its age.
 typedef ProjectArtifactReading = ({
-  /// The artifact's absolute path in that environment's own spelling, or null
-  /// when there is nothing there.
+  /// The artifact's absolute path in that environment's spelling, or null.
   String? path,
 
-  /// From the build's own `output-metadata.json`. Null when it has not been
-  /// written, which is "not yet" rather than "there is none".
+  /// From the build's own `output-metadata.json`; null is "not yet" rather
+  /// than "there is none".
   String? applicationId,
 
   /// What was read and what it said, so the caller can disagree.
   String note,
 });
 
-/// The build half of a project's lifecycle: detect the kind, run the kind's
-/// own build command in a visible pane, and read back what it produced.
-///
-/// **Descriptor-driven, so a second framework is a row and not a feature.**
-/// Nothing below knows the word "Gradle" except where it has to spell a
-/// wrapper's file name; the command, the artifact and the application id all
-/// come off `ProjectDescriptor`, and the kind that has none is refused in
-/// words.
-///
-/// **It never installs or launches.** The fourteen `device_*` tools are
-/// framework-agnostic already and are the whole device surface; a second path
-/// from here would be the duplicate the backlog item refuses. What this
-/// returns is the artifact path and the application id — the two arguments
-/// `device_install_app` and `device_launch_app` take.
+/// The build half of a project's lifecycle: detect the kind, run its build
+/// command in a pane, read back the artifact. It never installs or launches.
 class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
   @override
   List<ProjectBuildRun> build() => const <ProjectBuildRun>[];
@@ -78,10 +65,7 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
   }
 
   /// What kind of project is at [project], and the specific reason when it is
-  /// none.
-  ///
-  /// Costs a few file reads in that environment and nothing else. Runs when
-  /// somebody asks — never on a rebuild and never on a tick (§19).
+  /// none. A few file reads in that environment, and only when asked (§19).
   Future<({ProjectReading? project, String? note})> scan(
     EnvironmentPath project,
   ) async {
@@ -181,9 +165,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
       );
     }
 
-    // The tool, resolved per environment. This is the one place a spec's
-    // `tool` becomes a real executable, and every route through it is §17's:
-    // never a bare name we hope resolves, never a global gradle.
+    // The one place a spec's `tool` becomes a real executable, and every route
+    // through it is §17's: never a bare name, never a global gradle.
     final String executable;
     switch (spec.tool) {
       case ProjectBuildTool.flutterSdk:
@@ -239,10 +222,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
         );
     }
 
-    // A guard on the *data*, not on detection: a spec whose command still
-    // carries the placeholder has nothing to put in it. Detection never hands
-    // back a native Android reading without a module, so this fires only if a
-    // descriptor and a kind are ever wired up wrong.
+    // A guard on the data, not on detection: a spec whose command still carries
+    // the placeholder fires this only if a descriptor is wired up wrong.
     final module = reading.androidModule;
     final needsModule = spec.command.value!.any(
       (part) => part.contains(ProjectBuildSpec.modulePlaceholder),
@@ -271,13 +252,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     );
   }
 
-  /// Builds [project] for [target] in a visible pane, in the repository's own
-  /// environment.
-  ///
-  /// Started, not awaited — the same shape as the Flutter loop and the
-  /// worktree setup hook. A cold Gradle build downloads a toolchain and has no
-  /// bound; holding a tool call on it would be a hang, and running it out of
-  /// sight is the failure the visible pane exists to remove.
+  /// Builds [project] for [target] in a visible pane, started rather than
+  /// awaited: a cold Gradle build downloads a toolchain and has no bound.
   Future<ProjectBuildOutcome> start(
     EnvironmentPath project,
     ProjectTarget target, {
@@ -355,12 +331,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     return (preflight: const ProjectBuildPreflight.clear(), run: run);
   }
 
-  /// What the build produced, read from the build's own record.
-  ///
-  /// `output-metadata.json` is the source, because it is the one answer that
-  /// came from the toolchain rather than from our parse of somebody's build
-  /// script — see `apk_output_metadata.dart` for the three sources that were
-  /// crossed and agreed.
+  /// What the build produced, read from `output-metadata.json` — the one answer
+  /// that came from the toolchain rather than from our parse of a build script.
   Future<ProjectArtifactReading> artifactOf(ProjectBuildRun run) async {
     final environment = ref
         .read(executionEnvironmentDaoProvider)
@@ -427,7 +399,6 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     };
   }
 
-  /// The live build of [target] for [directory], if there is one.
   ProjectBuildRun? liveBuildFor(String directory, ProjectTarget target) {
     for (final run in state.reversed) {
       if (run.target != target) continue;
@@ -456,11 +427,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     return ended;
   }
 
-  /// Ends the process in [paneId].
-  ///
-  /// `endSession` rather than `closePane`: the default there detaches a live
-  /// process and keeps it alive, which for a Gradle build would leave a daemon
-  /// writing the artifact nobody is watching.
+  /// Ends the process in [paneId] with `endSession`, not `closePane`, which
+  /// would detach and leave a Gradle daemon writing the artifact unwatched.
   Future<ProjectBuildRun?> stop(String paneId) async {
     final run = byPane(paneId);
     if (run == null) return null;
@@ -496,8 +464,7 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     kind: environment.kind,
   );
 
-  /// Two spellings of the same directory, compared the way the filesystem
-  /// would.
+  /// Two spellings of the same directory, compared as the filesystem would.
   static bool _sameDirectory(String a, String b) =>
       a.replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/+$'), '') ==
       b.replaceAll('\\', '/').toLowerCase().replaceAll(RegExp(r'/+$'), '');

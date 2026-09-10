@@ -7,19 +7,8 @@ import '../../../core/util/clock_provider.dart';
 import '../application/session_media_providers.dart';
 import 'session_media_list.dart';
 
-/// The Media side-panel surface.
-///
-/// Asked for in one line: *"may be we can create a media sidebar that shows all
-/// the media from current session in descending order?"* — and the reason it
-/// was asked for is the sentence before it, *"where can i see this image
-/// preview in the terminal? i can't see it"*. A picture pasted into the
-/// terminal is recorded as base64 with no path, and the transcript's preview
-/// draws from paths, so there was nowhere at all to see it.
-///
-/// Everything expensive happens behind [sessionMediaProvider], which is
-/// `autoDispose`: the scan runs while this is on screen and stops the moment it
-/// is closed. Nothing here reads a file — this app freezes when work lands on
-/// the UI thread.
+/// The Media side-panel surface. Everything expensive is behind
+/// [sessionMediaProvider], which is `autoDispose`; nothing here reads a file.
 class SessionMediaPanel extends ConsumerWidget {
   const SessionMediaPanel({super.key});
 
@@ -50,9 +39,8 @@ class SessionMediaPanel extends ConsumerWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-      // The stream is written not to fail, but a surface that shows a red box
-      // where a list of pictures should be is worse than one that says what
-      // happened.
+      // The stream is written not to fail, but a red box where a list of
+      // pictures should be is worse than a sentence saying what happened.
       error: (error, _) => PanePlaceholder(
         message: 'Could not read this session: $error',
         icon: AppIcons.image,

@@ -11,11 +11,8 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/automation_providers.dart';
 import '../domain/project_check.dart';
 
-/// The preconditions the unattended gate refuses without.
-///
-/// **On the same page as the automations, deliberately.** Every refusal a
-/// person meets when arming one points at this section, and a setting whose
-/// refusal is three screens away from its fix is a setting nobody finds.
+/// The preconditions the unattended gate refuses without, on the automations'
+/// own page: a refusal three screens from its fix is a setting nobody finds.
 class ProjectChecksSection extends ConsumerWidget {
   const ProjectChecksSection({super.key});
 

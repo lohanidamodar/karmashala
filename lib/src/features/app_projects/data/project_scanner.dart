@@ -6,18 +6,8 @@ import 'package:agent_cli/process.dart';
 import '../domain/gradle_project.dart';
 import '../domain/project_detection.dart';
 
-/// Reads the handful of files a project kind is decided by, in that
-/// checkout's own environment, and hands the text to the pure decision.
-///
-/// **The same split as `FlutterProjectScanner`, for the same reason.** The
-/// local host is read with `dart:io`, which costs no subprocess; a
-/// distribution or another machine is read through the [CommandRunner] that
-/// environment already has, because there is nothing else that can see it.
-/// Both feed one `detectProject`.
-///
-/// **It runs when someone asks.** Nothing here is on a timer: a detection
-/// costs a few reads locally and a few round trips over SSH, so the answer
-/// carries the time it was taken and is re-taken on demand (§19).
+/// Reads the files a project kind is decided by, in that checkout's own
+/// environment: `dart:io` locally, a [CommandRunner] elsewhere, and only on ask.
 class ProjectScanner {
   ProjectScanner({required this.runner, required this.kind});
 
@@ -26,11 +16,8 @@ class ProjectScanner {
 
   p.Context get _context => usesWindowsPaths(kind) ? p.windows : p.posix;
 
-  /// What kind of project sits at [directory] — and, when none does, the
-  /// specific reason where there is one.
-  ///
-  /// Both come out of the same file map, so the refusal cannot describe a
-  /// directory other than the one that was read.
+  /// What kind of project sits at [directory], and the specific reason when
+  /// none does — both off one file map, so the refusal names the right one.
   Future<({ProjectReading? project, String? note})> readAt(
     EnvironmentPath directory,
   ) async {

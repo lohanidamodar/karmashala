@@ -23,18 +23,8 @@ import 'automation_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
 
-/// Settings → Automations: where an agent run is armed, paused, deleted, and
-/// where "did it run last night" is answered.
-///
-/// **A Settings page rather than a side-panel surface.** A surface is a thing
-/// you work *in* beside a session; an automation is configuration you set once
-/// and then read the record of, which is the shape Worktrees and Environments
-/// already have. What earns its place beside the settings is the run list: the
-/// person who armed a nightly sweep comes back to this page to find out
-/// whether it ran, so the record and the switch that made it are on one card.
-///
-/// **Arming is a human action here and nowhere else.** No MCP tool serves it —
-/// `mcp_tool_catalogue.dart` says so and a test holds the served names to it.
+/// Settings → Automations: where a run is armed, paused, deleted, and where
+/// "did it run last night" is answered. Arming happens here and nowhere else.
 class AutomationsPage extends ConsumerWidget {
   const AutomationsPage({super.key});
 
@@ -244,11 +234,8 @@ class AutomationCard extends ConsumerWidget {
   }
 }
 
-/// What the card says about when this fires, and when it next will.
-///
-/// **Never "next run in 18 hours" for a schedule this build cannot read.** An
-/// unparsable expression says so, and a paused automation says it is paused
-/// rather than naming a time it will not keep.
+/// What the card says about when this fires. Never "next run in 18 hours" for a
+/// schedule this build cannot read, and a paused one says it is paused.
 String describeSchedule(Automation automation, {required DateTime now}) {
   final schedule = automation.schedule;
   if (schedule.isOnce) {

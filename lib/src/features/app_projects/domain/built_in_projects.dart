@@ -2,15 +2,8 @@ import 'established.dart';
 import 'project_descriptor.dart';
 import 'project_kind.dart';
 
-/// What Karmashala knows about each [ProjectKind], as **data**.
-///
-/// The list is also the detection order, and that order is load-bearing: a
-/// Flutter app and a React Native app both carry an `android/` directory whose
-/// module applies `com.android.application`, so either would answer to the
-/// native-Android markers if it were asked first. Narrowest first.
-///
-/// A kind may be missing from this list. It then gets detection and nothing
-/// else, which is the honest outcome for a framework nobody here has built.
+/// What Karmashala knows about each [ProjectKind], as data. Also the detection
+/// order, narrowest first; a kind missing from it gets detection only.
 const List<ProjectDescriptor> builtInProjectDescriptors = <ProjectDescriptor>[
   _flutter,
   _reactNative,
@@ -26,15 +19,8 @@ ProjectDescriptor? descriptorFor(ProjectKind kind) {
   return null;
 }
 
-/// Flutter, re-expressed as the first descriptor.
-///
-/// **This changes nothing about the Flutter loop.** `FlutterLoopController`
-/// still runs `pub get`, `run`, `analyze` and `test` through the visible-pane
-/// opener exactly as it did, and `flutter_project.dart` still owns detection.
-/// What is new is the row: the *artifact* half of Flutter — build an APK,
-/// install it, launch it — was never written down anywhere, and writing it
-/// down here is what makes a second framework a descriptor instead of a second
-/// feature.
+/// Flutter, re-expressed as the first descriptor. Nothing about the Flutter
+/// loop changes; what is new is the artifact half, written down as a row.
 const _flutter = ProjectDescriptor(
   kind: ProjectKind.flutter,
   summary:
@@ -87,21 +73,8 @@ const _flutter = ProjectDescriptor(
 );
 
 
-/// Native Android: a Gradle build whose settings script includes a module
-/// applying `com.android.application`.
-///
-/// **Measured against a project made for the measurement, because this
-/// machine has none.** Every Android project on this disk is a Flutter app —
-/// including this repository's own `android/`, which is a Flutter *host
-/// module*: its settings script `includeBuild`s `flutter_tools/gradle`,
-/// applies `dev.flutter.flutter-plugin-loader`, reads `flutter.sdk` out of
-/// `local.properties`, and ships no `gradlew` or `gradlew.bat` at all, because
-/// Flutter drives Gradle through its own tooling. So it is not a usable native
-/// fixture, and `gradleSettingsIsFlutterHost` exists to keep it out of this
-/// path rather than build somebody's Flutter app behind their back.
-///
-/// A throwaway minimal native project was built instead, through the Windows
-/// toolchain, and deleted after. The evidence on each field is that run.
+/// Native Android: a Gradle build with a `com.android.application` module,
+/// measured against a throwaway project — every `android/` here is Flutter's.
 const _nativeAndroid = ProjectDescriptor(
   kind: ProjectKind.nativeAndroid,
   summary:
@@ -147,29 +120,15 @@ const _nativeAndroid = ProjectDescriptor(
             'that id, through the same adb the device tools run.',
       ),
     ),
-    // No iOS spec at all, rather than an unchecked one. An Android project has
-    // no iOS target — writing a row that says "unchecked" would claim there is
-    // something here nobody got round to.
+    // No iOS spec at all rather than an unchecked one: an Android project has
+    // no iOS target, and a row saying "unchecked" would claim otherwise.
   ],
 );
 
 
 
-/// React Native and Expo: **detected, and nothing more, because there is
-/// nothing here to measure against.**
-///
-/// The backlog item's own rule — do not build it until there is a React Native
-/// project on this machine — and it was checked rather than assumed. On
-/// 2026-09-09 the projects folder held six `package.json` files, every one of
-/// them a SvelteKit landing site; none named `react-native` or `expo`, and
-/// there is no `metro.config.js` or Expo `app.json` anywhere under it. So
-/// every field below says unchecked, and the sketch is what it would be rather
-/// than what anybody ran.
-///
-/// Detection still earns its keep, and it earns it *before* native Android: a
-/// React Native project carries an `android/` whose module applies
-/// `com.android.application`, so without this row it would be built as a bare
-/// Gradle project and the JavaScript bundle would be missing from the APK.
+/// React Native and Expo: detected only, with no such project here to measure.
+/// Detection still runs before native Android, whose markers its `android/` has.
 const _reactNative = ProjectDescriptor(
   kind: ProjectKind.reactNative,
   summary:
@@ -227,19 +186,8 @@ const String _noReactNativeHere =
     'anywhere — so nobody has run this. Detection works; the build is refused '
     'rather than offered as a button nobody ran.';
 
-/// Native iOS: an Xcode project with a shared scheme, and **every field
-/// unchecked on purpose**.
-///
-/// The shape is written out in full — the scheme `xcodebuild` would be pointed
-/// at, the simulator artifact it would leave, the `Info.plist` key the bundle
-/// id comes out of — because a spec that cannot be read cannot be reviewed,
-/// and the day somebody has a Mac this is what they check against. It is in
-/// `sketch` rather than in `value`, so nothing can run it and the UI has
-/// nothing to offer. **No button nobody ran.**
-///
-/// Detection works, and that alone is worth having: the fourteen `device_*`
-/// tools drive a simulator already, so an iOS checkout that says what it is
-/// can still be installed onto one from an artifact built by hand.
+/// Native iOS: every field unchecked on purpose, its shape written into
+/// `sketch` so it can be reviewed and nothing can run it.
 const _nativeIos = ProjectDescriptor(
   kind: ProjectKind.nativeIos,
   summary:

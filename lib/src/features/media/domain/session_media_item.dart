@@ -1,47 +1,29 @@
-/// One picture a session produced or was shown.
-///
-/// The request this exists for, in the owner's words: *"where can i see this
-/// image preview in the terminal? i can't see it, may be we can create a media
-/// sidebar that shows all the media from current session in descending
-/// order?"*
-///
-/// The transcript already draws a picture for one of the three ways a session
-/// acquires one — a tool call whose input names an image file
-/// (`TranscriptImagePreview`). The owner had hit the other two, which carry
-/// bytes and **no path at all**, so there was nothing on disk for that widget
-/// to point at and it drew nothing. A [SessionMediaItem] is the shape all three
-/// arrive in once the scan has resolved them: something with a name, a time,
-/// and either a file to draw or an honest reason there is none.
+/// One picture a session produced or was shown: a name, a time, and either a
+/// file to draw or an honest reason there is none.
 library;
 
-/// How a picture got into the conversation. Not decoration: it is what the
-/// panel says instead of a path when there is no path, and it decides whether
-/// [SessionMediaItem.path] needs translating out of the agent's environment.
+/// How a picture got into the conversation: what the panel says when there is
+/// no path, and whether [SessionMediaItem.path] needs translating.
 enum SessionMediaOrigin {
-  /// A tool call read an image file. The path is real, written in the *agent's*
-  /// environment, and the file is nearly always still there.
+  /// A tool call read an image file. The path is real and written in the
+  /// *agent's* environment.
   read('Read'),
 
-  /// A human put a picture into the conversation. The owner's case: pasting
-  /// into the terminal records
-  /// `{"type":"image","source":{"type":"base64",…}}` and no path anywhere.
+  /// A human put a picture into the conversation: base64 in the record and no
+  /// path anywhere.
   pasted('Pasted'),
 
-  /// A tool answered with a picture — `device_screenshot`,
-  /// `browser_screenshot`, `browser_capture`. Only the first of those also
-  /// leaves a copy in the temp directory, so the block in the record is the one
-  /// source that covers all three.
+  /// A tool answered with a picture. Only `device_screenshot` also leaves a
+  /// copy in temp, so the block in the record is the one source for all three.
   captured('Captured');
 
   const SessionMediaOrigin(this.label);
 
-  /// What the panel calls this kind of item.
   final String label;
 }
 
-/// The extensions the scan will write out and the preview will open. The same
-/// set `looksLikeImagePath` accepts, because an extracted file that widget
-/// refuses is a file nobody can see.
+/// The extensions the scan writes and the preview opens — the same set
+/// `looksLikeImagePath` accepts, or the file would be one nobody can see.
 const Map<String, String> kMediaTypeExtensions = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -51,21 +33,14 @@ const Map<String, String> kMediaTypeExtensions = {
   'image/bmp': 'bmp',
 };
 
-/// The biggest single picture the panel will move to disk and hand a decoder.
-///
-/// Mirrors `kMaxImagePreviewBytes` in the transcript's preview, deliberately:
-/// a file the preview would refuse to draw is not worth extracting, and a
-/// decode allocates roughly `width * height * 4` bytes whatever the file
-/// weighs. Kept here rather than imported so `data/` does not depend on a
-/// widget.
+/// The biggest single picture the panel will move to disk. Mirrors
+/// `kMaxImagePreviewBytes`, kept here so `data/` does not depend on a widget.
 const int kMaxSessionMediaBytes = 12 * 1024 * 1024;
 
-/// How many pictures the panel keeps. A long session is unbounded and the
-/// extracted copies are real files on disk, so something has to say when to
-/// stop; the newest are the ones anybody scrolls to.
+/// How many pictures the panel keeps: a long session is unbounded and the
+/// extracted copies are real files.
 const int kSessionMediaCap = 60;
 
-/// One item in the media panel.
 class SessionMediaItem {
   const SessionMediaItem({
     required this.id,
@@ -80,62 +55,47 @@ class SessionMediaItem {
     this.pasteId,
   });
 
-  /// Stable for the life of the transcript: it is derived from where in the
-  /// file the picture was recorded, and a transcript is appended to, never
-  /// rewritten in the middle. That is also what lets an extracted copy be found
-  /// again without decoding anything.
+  /// Stable for the life of the transcript: derived from where in the file the
+  /// picture was recorded, which is why a copy is found again without decoding.
   final String id;
 
   final SessionMediaOrigin origin;
 
-  /// Where in the transcript this was recorded — higher is newer. The panel
-  /// sorts on this rather than on [at], because a transcript line without a
-  /// timestamp is common and an item with no time must still land in the right
-  /// place.
+  /// Where in the transcript this was recorded — higher is newer. Sorted on
+  /// rather than [at], because a line without a timestamp is common.
   final int sequence;
 
   /// The file to draw, or null when there is nothing drawable — see [problem].
   final String? path;
 
-  /// Whether [path] was written by the agent and therefore needs translating
-  /// into a path this process can open (`/mnt/c/…` → `C:\…`). False for the
-  /// copies the scan writes itself: those are already host paths, and putting
-  /// one through a WSL translator would corrupt a path that is already right.
+  /// Whether [path] was written by the agent and so needs translating
+  /// (`/mnt/c/…` → `C:\…`). False for the scan's own copies.
   final bool fromAgentEnvironment;
 
-  /// The tool that produced or read it, when one did.
   final String? toolName;
 
-  /// When the transcript says it happened, when the transcript says.
   final DateTime? at;
 
   /// The size of the picture, when it is known without decoding it.
   final int? bytes;
 
   /// Why there is no [path]. Set instead of dropping the item: a picture the
-  /// panel cannot show is still a picture the session had, and saying so beats
-  /// a list that silently omits things.
+  /// panel cannot show is still one the session had.
   final String? problem;
 
-  /// The number the CLI printed into the pane for this picture — the `6` in
-  /// `[Image #6]` — or null for one it never numbered.
-  ///
-  /// Read out of the transcript's own `imagePasteIds`, never inferred from
-  /// [sequence]: the two do not agree, and `session_image_reference.dart`
-  /// records the evidence for that. Only a paste ever has one; a `Read` result
-  /// or a tool's screenshot is not something the user can name on screen.
+  /// The `6` in `[Image #6]`, or null. Read out of `imagePasteIds`, never
+  /// inferred from [sequence]; only a paste ever has one.
   final int? pasteId;
 
-  /// The name to show. The file name where there is one, and what the item
-  /// *is* where there is not — a paste has no name and inventing one would be
-  /// worse than saying "Pasted image".
+  /// The name to show: the file name where there is one, and what the item *is*
+  /// where there is not.
   String get label => switch (origin) {
     SessionMediaOrigin.read => _basename(path) ?? 'Image',
     SessionMediaOrigin.pasted => 'Pasted image',
     SessionMediaOrigin.captured => shortToolName ?? 'Screenshot',
   };
 
-  /// The tool's name without the MCP routing prefix nobody reads:
+  /// The tool's name without the MCP routing prefix:
   /// `mcp__karmashala__device_screenshot` is `device_screenshot`.
   String? get shortToolName {
     final name = toolName;

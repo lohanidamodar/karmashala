@@ -1,20 +1,5 @@
 /// How one field of a [ProjectDescriptor] came to be known — §19 as a type.
-///
-/// A descriptor is a table of claims about somebody's toolchain: the command
-/// that builds, where the artifact lands, how the application id is read. Each
-/// of those is one of three things, and collapsing them into a plain value is
-/// the confident false statement CLAUDE.md §19 exists to delete, moved into a
-/// data table.
-///
-/// * [measured] — somebody ran the toolchain and read the answer. [evidence]
-///   is the command and what it printed, so the claim can be re-checked
-///   against a future version instead of being trusted because it is written
-///   down. Same rule as `AgentPermissionValue.evidence`.
-/// * [absent] — there is nothing to measure. A native Android app has no live
-///   debug channel; that is a fact about Android, not a gap in our knowledge.
-/// * [unchecked] — nobody here could run it. `xcodebuild` needs a Mac and
-///   `release-build.yml` has no macOS job. **Not a zero**, and never rendered
-///   as one.
+/// [unchecked] is never a zero; [absent] means there is nothing to measure.
 enum EstablishedState {
   measured,
   absent,
@@ -23,10 +8,8 @@ enum EstablishedState {
   bool get isMeasured => this == EstablishedState.measured;
 }
 
-/// A value that carries how it was established, or the reason it was not.
-///
-/// [T] is bound to [Object] so `value != null` is a sound discriminator: a
-/// measured field always has a value and the other two never do.
+/// A value that carries how it was established, or the reason it was not. [T]
+/// is bound to [Object] so `value != null` is a sound discriminator.
 class Established<T extends Object> {
   /// Somebody ran it. [evidence] is what was run and what came back.
   const Established.measured(T this.value, {required this.evidence})
@@ -41,11 +24,8 @@ class Established<T extends Object> {
       evidence = '',
       sketch = '';
 
-  /// Nobody here could run it. [reason] names what it would take, and
-  /// [sketch] is what the field *would* be — written down so it can be
-  /// reviewed, and deliberately not put in [value] where something could run
-  /// it. That separation is the whole point: iOS gets a complete, readable
-  /// spec and no button.
+  /// Nobody here could run it. [sketch] is what the field would be, kept out of
+  /// [value] where something could run it.
   const Established.unchecked(this.reason, {this.sketch = ''})
     : state = EstablishedState.unchecked,
       value = null,
@@ -62,16 +42,13 @@ class Established<T extends Object> {
   /// Why there is no value. Empty when there is one.
   final String reason;
 
-  /// What this field would be, for an unchecked one. **Never a value.**
-  /// Nothing reads it to act; it exists so a reviewer can check the shape
-  /// before anybody has a machine to run it on.
+  /// What this field would be, for an unchecked one. **Never a value** —
+  /// nothing reads it to act; it exists so a reviewer can check the shape.
   final String sketch;
 
   bool get isMeasured => state.isMeasured;
 
-  /// The one sentence a refusal is written from: what is missing and why.
-  ///
-  /// Empty when measured, because then nothing is being refused.
+  /// The one sentence a refusal is written from. Empty when measured.
   String get refusal => reason;
 
   Map<String, Object?> toJson() => <String, Object?>{

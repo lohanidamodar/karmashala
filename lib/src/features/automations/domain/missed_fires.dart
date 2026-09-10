@@ -1,29 +1,16 @@
-/// What to do about occurrences that came round while the app was not running.
-///
-/// **The failure this exists to remove**: close the laptop at 17:00, open it at
-/// 09:00, and the 03:00 daily simply never happened and left no trace — the
-/// page still read *"next run in 18 hours"*, which is true and useless.
-///
-/// The policy, and it is the item's own words: **at most one catch-up run, for
-/// the newest missed occurrence only, inside a grace window; everything older
-/// becomes a `missed` row with a reason.** Replaying a night's backlog the
-/// moment a laptop opens would be worse than missing it.
-///
-/// Pure, so the sweep and anything that wants to explain a miss read one rule.
+/// What to do about occurrences that came round while the app was down: one
+/// catch-up for the newest, inside a grace window; the rest become `missed`.
 library;
 
 import 'automation.dart';
 import 'cron_schedule.dart';
 
-/// How late an occurrence may be and still be run on wake.
-///
-/// One constant for both schedule kinds on purpose: a cron and a one-shot must
-/// not disagree about what "just missed it" means.
+/// How late an occurrence may be and still be run on wake. One constant for
+/// both schedule kinds, so a cron and a one-shot cannot disagree.
 const Duration kMissedFireGrace = Duration(minutes: 15);
 
-/// Ceiling on how many occurrences are counted. A minutely automation and a
-/// fortnight of downtime is 20,000 iterations to report a number nobody reads
-/// precisely; past this the reason says "at least N".
+/// Ceiling on how many occurrences are counted — a minutely automation over a
+/// fortnight is 20,000 iterations; past this the reason says "at least N".
 const int kMaxCountedMisses = 500;
 
 /// What a boot should do about one automation.
@@ -45,7 +32,6 @@ class CatchUpMissedFire extends MissedFireDecision {
     this.older,
   });
 
-  /// The occurrence that will be run.
   final DateTime scheduledFor;
 
   /// How many occurrences were missed in all, this one included.
@@ -79,12 +65,8 @@ class MissedFires extends MissedFireDecision {
   final Duration lateBy;
 }
 
-/// What to do about [automation] on wake.
-///
-/// [since] is the last moment this install was watching it: the newest
-/// occurrence it recorded anything about, floored at when the automation was
-/// armed. Without that floor, arming a brand-new automation would "discover"
-/// every occurrence since the epoch.
+/// What to do about [automation] on wake. [since] is floored at when it was
+/// armed, or a new automation would "discover" every occurrence since 1970.
 MissedFireDecision missedFireDecision({
   required AutomationSchedule schedule,
   required DateTime since,
@@ -133,10 +115,8 @@ MissedFireDecision missedFireDecision({
       scheduledFor: newest,
       missedCount: missedCount,
       capped: capped,
-      // Everything older than the one being run is still a miss, and it is
-      // recorded as one — openrun folds this into the catch-up's note, which
-      // leaves a night of skipped runs visible only as a sentence on the row
-      // that *did* run.
+      // Everything older than the one being run is still a miss and is recorded
+      // as one, rather than folded into the catch-up's note.
       older: missedCount > 1
           ? MissedFires(
               scheduledFor: occurrences[missedCount - 2],
@@ -170,8 +150,7 @@ String missedFireReason(MissedFires missed) {
       'if you still want it.';
 }
 
-/// The note a catch-up run carries, so the audit says why it happened off
-/// schedule.
+/// The note a catch-up run carries, so the audit says why it was off schedule.
 String caughtUpReason(CatchUpMissedFire decision) {
   final count = _countLabel(decision.missedCount, decision.capped);
   return 'Karmashala was not running when this was due — $count were missed. '

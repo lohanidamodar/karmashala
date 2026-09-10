@@ -2,12 +2,8 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
-/// The one armed timer the scheduler owns, behind a seam.
-///
-/// **A seam because a test must fire it, never wait for it.** Counting work is
-/// deterministic; timing it is a flake looking for a busy machine, and the
-/// whole point of this feature is behaviour at 03:00 on a machine nobody is
-/// watching. `AppLifecycle` takes an injected `Stopwatch` for the same reason.
+/// The one armed timer the scheduler owns, behind a seam so a test can fire it
+/// rather than wait for it — timing is a flake looking for a busy machine.
 abstract interface class AutomationTimer {
   /// Replaces whatever was armed with one shot [delay] from now.
   void arm(Duration delay, void Function() onFire);
@@ -33,10 +29,8 @@ class WallClockAutomationTimer implements AutomationTimer {
   }
 }
 
-/// A timer a test drives by hand.
-///
-/// [armedFor] is what the scheduler asked for — the assertion that says "it
-/// armed for the next occurrence" without a single millisecond being waited.
+/// A timer a test drives by hand. [armedFor] is what the scheduler asked for,
+/// so "it armed for the next occurrence" is asserted without waiting.
 class ManualAutomationTimer implements AutomationTimer {
   Duration? armedFor;
   void Function()? _onFire;
