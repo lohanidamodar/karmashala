@@ -2,14 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// One hook payload a spooling agent wrote, as this app reads it back.
-///
-/// [firedAt] is the spool file's own mtime, not when this app got round to
-/// reading it, which is what makes the spool safe to leave lying around: a
-/// payload from before an unclean exit is drained carrying its real age, so
-/// `AgentStatusService`'s five-minute window discards it instead of announcing
-/// a stale status as news. Falls back to now only when the mtime cannot be
-/// read.
+/// One hook payload a spooling agent wrote. [firedAt] is the file's own mtime,
+/// so one written before an unclean exit is drained carrying its real age.
 class AgentHookSpoolEvent {
   const AgentHookSpoolEvent({
     required this.agentId,
@@ -27,40 +21,13 @@ class AgentHookSpoolEvent {
   final DateTime firedAt;
 }
 
-/// Reads and clears the payloads a WSL agent's hook script wrote.
-///
-/// The other half of `AgentHookInstaller`'s spool transport. The script writes a
-/// `.part` file and one `mv`, so a file with the `.json` name is always whole.
-///
-/// **Every payload is deleted once it has been read**, whether it parsed or not:
-/// a file this cannot understand will not become understandable, and leaving it
-/// would grow the directory for the one reason the script's own cap cannot
-/// see.
+/// Reads and clears the payloads a WSL agent's hook script wrote. Every payload
+/// is deleted once read, parsed or not; a `.json` name is always a whole file.
 class AgentHookSpool {
   const AgentHookSpool();
 
-  /// Everything waiting in [directory], oldest first, up to [limit] — and
-  /// removed from disk as it is read.
-  ///
-  /// Ordered by mtime because order is the one thing a hook stream cannot afford
-  /// to lose: `PreToolUse` and `Stop` the wrong way round leave a finished
-  /// session reading `working` until the next event. Ties fall back to the file
-  /// name, which the script makes unique per firing process. [limit] bounds one
-  /// drain rather than the directory, so a backlog from an unclean exit is
-  /// spread over ticks.
-  ///
-  /// **Asynchronous on purpose**: every path here is a `\\wsl.localhost` UNC
-  /// path served by a plan9 daemon *inside* the distribution, and a synchronous
-  /// Dart file operation has no timeout, so one that does not come back holds
-  /// the isolate — which `AgentHookSpoolDrainer` would meet every 400 ms.
-  /// Measured 2026-09-04 on the owner's machine, distribution warm: `exists`
-  /// 1 ms, `list` 16 ms, and 84 ms for a name that is not a distribution at all.
-  /// Nothing here is slow *when it answers*; the reason to be off the isolate is
-  /// the case where it does not.
-  ///
-  /// Never throws: a directory that is gone, a distribution that stopped
-  /// answering mid-listing and a file deleted between the listing and the read
-  /// all mean "nothing more this tick".
+  /// Everything waiting in [directory], oldest first, up to [limit], removed as
+  /// it is read. Ordered by mtime, never throws, and never synchronous.
   Future<List<AgentHookSpoolEvent>> drain(
     Directory directory, {
     int limit = 64,
@@ -110,14 +77,8 @@ class AgentHookSpool {
     return events;
   }
 
-  /// One spool file's contents: `agent=` and `event=` headers, a blank line,
-  /// then the agent's payload verbatim.
-  ///
-  /// Headers rather than a file name because the event names are the agent's and
-  /// the payload is somebody else's JSON, and neither has business being escaped
-  /// into a path. The blank line terminates the headers, so a payload starting
-  /// with `event=` cannot be read as one. `null` unless both headers are
-  /// present.
+  /// `agent=` and `event=` headers, a blank line, then the payload verbatim —
+  /// the blank line terminates, so a payload starting `event=` is not one.
   AgentHookSpoolEvent? parse(String raw, {required DateTime firedAt}) {
     var agentId = '';
     var event = '';

@@ -19,25 +19,12 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   List<AgentInstallation> build() =>
       ref.watch(agentInstallationDaoProvider).getAll();
 
-  /// Re-probes every known environment and reconciles what is on record with
-  /// what is actually installed.
-  ///
-  /// The **recovery path**, and the only one: it deliberately ignores the
-  /// [AgentProbeLog] that `discoverUnprobed` uses to skip any pair ever searched
-  /// for — one bad first run recorded a miss for all three agents in `windows`
-  /// and left `codex.exe`, on the PATH the whole time, permanently invisible.
-  /// Found and unknown is added, a changed version is updated in place keeping
-  /// its id, and a row this sweep asked about and did not find is removed.
-  ///
-  /// An environment that could not be reached is reconciled against *nothing*: a
-  /// stopped WSL distribution answers `command -v` exactly like a running one
-  /// with no agents installed.
+  /// Re-probes and reconciles every environment — the **recovery path**, which
+  /// ignores [AgentProbeLog]; an unreachable one reconciles against nothing.
   Future<AgentDiscoveryReport> discoverAll() => _sweep();
 
-  /// One reconciling sweep. [only] narrows it to `environmentId -> agentIds`;
-  /// null means every agent in every environment. The startup repair and
-  /// Settings' "Detect agents" are this same code at two scopes rather than two
-  /// implementations that can drift.
+  /// One reconciling sweep; [only] narrows it to `environmentId -> agentIds`.
+  /// The startup repair and "Detect agents" are this code at two scopes.
   Future<AgentDiscoveryReport> _sweep({
     Map<String, Set<String>>? only,
   }) async {
@@ -51,12 +38,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final hostEnvironment = ref.read(hostEnvironmentProvider);
     final pathProbe = ref.read(agentCliPathProbeProvider);
 
-    // **Every environment is asked at once, and written in order.** The probes
-    // are independent, but awaiting them one at a time held the rescan spinner
-    // for the sum of them rather than the longest. Only the reaching-out is
-    // concurrent: `_reconcile` mints ids from one generator, `_readingsFor`
-    // re-reads what the previous environment's reconcile just wrote, and the
-    // probe log is a database.
+    // Every environment at once, written back in order: awaiting them one at a
+    // time held the rescan spinner for the sum rather than the longest.
     final asked = [
       for (final environment in environments)
         if (only == null ||
@@ -110,8 +93,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       );
 
       // Only for an environment that answered, and only the agents actually
-      // asked about: recording a probe we did not perform is what turns one bad
-      // moment into a permanent state.
+      // asked about: a probe we did not perform becomes a permanent state.
       if (environment.kind != EnvironmentKind.ssh) {
         for (final id
             in wanted ?? {for (final d in registry.descriptors) d.id}) {
@@ -125,9 +107,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     return AgentDiscoveryReport(reports);
   }
 
-  /// Why one environment could not even be asked, kept between [_sweep]'s two
-  /// halves. Carried rather than raised, because a `Future.wait` fails on the
-  /// first error and would throw away every reachable environment's answer.
+  /// Why one environment could not even be asked. Carried rather than raised,
+  /// because a `Future.wait` fails on the first error and loses the rest.
   final _failures = <String, String>{};
 
   /// One environment, asked. `null` when the runner could not be built at all;
@@ -158,18 +139,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     }
   }
 
-  /// Brings the stored installations for one environment into line with what
-  /// [probe] just found there.
-  ///
-  /// [readings] is what the local filesystem said about each stored row's
-  /// executable, and it decides two things: a row whose executable is
-  /// **unreachable** is never deleted — a junction chain the OS will not
-  /// traverse answers a probe exactly like an uninstalled CLI — and a row whose
-  /// path a **human set**, and which still works, is left alone even when the
-  /// sweep found the agent somewhere else.
-  ///
-  /// [probedIds] narrows which stored rows this sweep is evidence about; null
-  /// means the whole registry.
+  /// Reconciles one environment's rows against [probe]: an **unreachable**
+  /// executable is never deleted, and a working human-set path is never moved.
   EnvironmentScanReport _reconcile({
     required ExecutionEnvironment environment,
     required EnvironmentProbe probe,
@@ -191,9 +162,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     // below does not judge a row that was just moved or deliberately kept.
     final consumed = <String>{};
 
-    // A hand-set path that was not *observed* broken is the user's answer to
-    // "where is it", and a sweep does not overrule it. Unchecked counts as
-    // working on purpose: a WSL or SSH path cannot be stat-ed from here.
+    // A hand-set path not *observed* broken is the user's answer, and a sweep
+    // does not overrule it. Unchecked counts as working: WSL cannot be stat-ed.
     bool isPinned(AgentInstallation row) =>
         row.executableByUser && (readings[row.id]?.isUsable ?? true);
 
@@ -231,9 +201,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       ];
       final pinned = elsewhere.where(isPinned).toList();
       if (pinned.isNotEmpty) {
-        // Not a second row for the same agent in the same environment: the
-        // user already answered this, and asking again is how an explicit
-        // decision gets quietly undone.
+        // Not a second row for the same agent here: the user already answered,
+        // and asking again is how an explicit decision gets undone.
         consumed.add(pinned.first.id);
         pinnedPaths.add(pinned.first);
         present.add(pinned.first);
@@ -242,10 +211,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
 
       final moved = elsewhere.isEmpty ? null : elsewhere.first;
       if (moved != null && dao.updatePath(moved.id, path, byUser: false)) {
-        // **In place, keeping the id.** Settings pin the default agent by id
-        // and every session row references it, so a CLI that moved must stay
-        // the same installation; delete-and-insert silently unpicked the
-        // default.
+        // **In place, keeping the id.** Settings pin the default agent by id,
+        // so delete-and-insert silently unpicked the user's choice.
         consumed.add(moved.id);
         movedPaths.add(
           AgentPathChange(
@@ -286,9 +253,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       present.add(installation);
     }
 
-    // Only rows for agents this sweep actually asked about. A row for a
-    // descriptor the registry no longer carries, or one a narrowed sweep did not
-    // probe, was not searched for, so nothing here is evidence about it.
+    // Only rows for agents this sweep actually asked about — a row it did not
+    // probe was not searched for, so nothing here is evidence about it.
     final probed =
         probedIds ??
         {for (final descriptor in registry.descriptors) descriptor.id};
@@ -313,10 +279,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         continue;
       }
 
-      // Genuinely uninstalled, and nothing replaced it. The row goes only if
-      // nothing depends on it: `sessions` references it `ON DELETE RESTRICT`,
-      // and that raise, thrown from the middle of this loop, used to abort the
-      // entire sweep.
+      // Genuinely uninstalled. It goes only if nothing depends on it: that
+      // `ON DELETE RESTRICT` raise used to abort the entire sweep.
       if (dao.deleteIfUnreferenced(row.id)) {
         removed.add(row);
       } else {
@@ -348,9 +312,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     );
   }
 
-  /// [row] as [recordVersion] just stored it, so the in-memory state and the
-  /// database say the same thing about the number and its age. A null [version]
-  /// leaves the row untouched: a probe that could not answer is not a reading.
+  /// [row] as [recordVersion] just stored it. A null [version] leaves the row
+  /// untouched: a probe that could not answer is not a reading.
   AgentInstallation _asRead(
     AgentInstallation row,
     String? version,
@@ -359,10 +322,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       ? row
       : row.copyWith(version: version, versionReadAt: clock.nowUtc());
 
-  /// What the local filesystem says about each stored installation in
-  /// [environment], keyed by installation id. Empty for an environment that is
-  /// not this machine — a WSL or SSH path is spelled for *its* disk, so a stat
-  /// of ours is not evidence about it either way.
+  /// What the local filesystem says about each stored installation here, keyed
+  /// by id. Empty off this machine: a WSL path is spelled for *its* disk.
   Map<String, ExecutableReading> _readingsFor(
     ExecutionEnvironment environment,
     AgentInstallationDao dao,
@@ -377,8 +338,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
   }
 
   /// Reads every stored installation's executable, newest reading wins. One
-  /// stat per local row and nothing else — no subprocess, no `where`, no version
-  /// probe — which is what makes it affordable on every launch.
+  /// stat per local row and no subprocess, which is why a launch can afford it.
   List<AgentPathReading> readStoredPaths() {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
@@ -401,21 +361,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     ];
   }
 
-  /// Checks every stored installation's executable and repairs the rows whose
-  /// path no longer opens.
-  ///
-  /// A stored path rots with nothing noticing: Codex self-updated to a versioned
-  /// standalone layout and turned the stable path its own installer advertises
-  /// into a chain of junctions Windows refuses to traverse, so every launch
-  /// failed with a `ProcessException` and nothing ever revisited the row. Cheap
-  /// enough for every launch — one `existsSync` per local installation, no
-  /// subprocess — and only the rows that actually failed are re-probed.
-  ///
-  /// Repair is [_sweep] narrowed, so the row follows its executable *keeping its
-  /// id*; a repair that finds nothing keeps the row, because one at a wrong path
-  /// can be corrected by hand and no row at all cannot. [full] re-probes every
-  /// agent in every environment instead — what Settings' "Detect agents" runs,
-  /// and this same method so the button and the startup check cannot disagree.
+  /// Repairs the stored rows whose path no longer opens — Codex's self-update
+  /// hid its binary behind junctions. [full] re-probes everything instead.
   Future<AgentPathRepairReport> repairBrokenPaths({bool full = false}) async {
     final clock = ref.read(agentCliClockProvider);
     final broken = [
@@ -434,9 +381,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     }
     final scan = await _sweep(only: full ? null : scope);
 
-    // Re-read rather than infer: the sweep may have moved a row, replaced it or
-    // found nothing, and only the filesystem can say which. Keyed by
-    // **installation id**, which a repair preserves — keying by
+    // Re-read rather than infer, and keyed by **installation id**: keying by
     // `(agent, environment)` would collapse two installations into one row.
     final after = {
       for (final reading in readStoredPaths())
@@ -463,23 +408,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     );
   }
 
-  /// Re-reads the version of every stored installation whose recorded reading
-  /// has aged out of [kVersionReadingFreshFor], in the row's **own**
-  /// environment, and returns the numbers that actually moved.
-  ///
-  /// A version is entirely a measurement and these CLIs self-update: the app
-  /// said Claude Code 2.1.252 for a binary answering 2.1.263, launch after
-  /// launch, because only a manual "Detect agents" ever wrote it again. A probe
-  /// is a subprocess, so the launch is *when* we are allowed to ask and the
-  /// reading's age decides *whether* it is worth asking — a workspace whose
-  /// readings are fresh spawns nothing, and five launches in an hour re-read
-  /// once.
-  ///
-  /// An **SSH** row is never asked, because probing one means dialling somebody's
-  /// machine; no row is deleted on a failed reading; a local row already observed
-  /// missing is not spawned at; and a probe that could not answer leaves the
-  /// number *and* its timestamp alone, so the label still admits it may be wrong.
-  /// Nothing here touches a path — that is [repairBrokenPaths]' job.
+  /// Re-reads the version of every row aged out of [kVersionReadingFreshFor],
+  /// in its own environment; SSH is never asked, a failed read writes nothing.
   Future<List<AgentVersionChange>> refreshStaleVersions() async {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
@@ -545,10 +475,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     return changes;
   }
 
-  /// What the CLI at [row] answers, or null when it did not answer. One process,
-  /// and only ever the executable already on record. Through the environment's
-  /// [CommandRunner] rather than `Process.run`, which is charged to the isolate
-  /// that draws before its future even exists.
+  /// What the CLI at [row] answers, or null when it did not. Through the
+  /// environment's [CommandRunner], never `Process.run`, which the UI pays for.
   Future<String?> _readVersion(
     CommandRunner runner,
     AgentInstallation row,
@@ -567,10 +495,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     }
   }
 
-  /// Points one installation at [path], recording that a human chose it, so a
-  /// later sweep will not quietly move it — it is still repaired if it stops
-  /// working. Returns false when another installation of the same agent in the
-  /// same environment already holds [path], which the table forbids.
+  /// Points one installation at [path] and records that a human chose it, so a
+  /// sweep will not move it. False when another row already holds [path].
   bool setExecutablePath(String installationId, String path) {
     final dao = ref.read(agentInstallationDaoProvider);
     final trimmed = path.trim();
@@ -580,17 +506,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     return ok;
   }
 
-  /// Probes only the `(agent, environment)` pairs nobody has ever searched for,
-  /// and returns the installations that search turned up.
-  ///
-  /// This is what makes an agent added by an *app upgrade* visible: discovery
-  /// used to run once, when the workspace was created, so `antigravity` in 1.1.4
-  /// stayed invisible until the user found "Discover agents" in Settings.
-  /// Already searched means an installation row for the pair, or an
-  /// [AgentProbeLog] entry — which is how a *miss* stops repeating. SSH
-  /// environments are skipped and deliberately **not** recorded as searched, so
-  /// the manual per-environment scan can still do it. The cost is
-  /// self-extinguishing: one process per genuinely-new pair, once.
+  /// Probes only the pairs nobody has ever searched for, which is what makes an
+  /// agent added by an app upgrade visible. SSH is skipped and not recorded.
   Future<List<AgentInstallation>> discoverUnprobed() async {
     final dao = ref.read(agentInstallationDaoProvider);
     final registry = ref.read(agentRegistryProvider);
@@ -654,9 +571,8 @@ final agentInstallationsControllerProvider =
       AgentInstallationsController.new,
     );
 
-/// Resolves the default installation to use from [installs]: the specific one
-/// pinned by [defaultInstallationId] if still present, else the first
-/// installation of [defaultAgentId], else `null`.
+/// The default installation from [installs]: [defaultInstallationId] if still
+/// present, else the first of [defaultAgentId], else `null`.
 AgentInstallation? resolveDefaultInstallation(
   List<AgentInstallation> installs, {
   String? defaultInstallationId,

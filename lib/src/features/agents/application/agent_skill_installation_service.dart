@@ -56,9 +56,8 @@ class AgentSkillInstallation {
 class AgentSkillInstallationReport {
   const AgentSkillInstallationReport(this.results, {this.checkedAt});
 
-  /// **Before any sweep has finished**, which is not a sweep that found nothing.
-  /// The panel says the skills are not installed *yet* rather than saying
-  /// nothing, which would read as "they are there".
+  /// **Before any sweep has finished** — not a sweep that found nothing.
+  /// Saying nothing at all would read as "they are there".
   static const AgentSkillInstallationReport unswept =
       AgentSkillInstallationReport(<AgentSkillInstallation>[]);
 
@@ -102,15 +101,8 @@ final agentSkillInstallationReportProvider =
       AgentSkillInstallationReport
     >(AgentSkillInstallationReportController.new);
 
-/// Writes Karmashala's skills into the agent CLIs at startup, and takes them
-/// back out when asked.
-///
-/// Deliberately thinner than [AgentHookInstallationService]: a skill has no
-/// address, so nothing is unreachable; no token, so nothing is retired on the
-/// way out; and no config file of the user's to splice, so nothing here can lose
-/// the race that made hook entries constants. What it keeps is the shape — every
-/// located store, every agent that declares a skills root, one row each, bounded
-/// so a `\\wsl.localhost` share that stops answering costs one row.
+/// Writes Karmashala's skills into the agent CLIs at startup. Thinner than
+/// [AgentHookInstallationService]: no address, no token, no config to splice.
 class AgentSkillInstallationService {
   AgentSkillInstallationService(
     this._ref, {
@@ -122,8 +114,7 @@ class AgentSkillInstallationService {
        _skills = skills ?? kKarmashalaSkills;
 
   /// The same ten seconds [AgentHookInstallationService.defaultStoreBudget]
-  /// argues for: the first touch of a WSL store home over the share starts a
-  /// stopped distribution, so the honest failure here is slow, not broken.
+  /// argues for: a first touch starts a distro, so slow is the honest failure.
   static const Duration defaultStoreBudget = Duration(seconds: 10);
 
   final Ref _ref;
@@ -135,10 +126,8 @@ class AgentSkillInstallationService {
   /// them at once. Cleared each sweep; see [abandon].
   final List<SkillSweepDeadline> _deadlines = <SkillSweepDeadline>[];
 
-  /// Stops every sweep in flight from touching the filesystem again — **what
-  /// shutdown calls instead of awaiting**. Each `SKILL.md` is staged and renamed
-  /// and the bytes are constant, so there is nothing half-written to finish and
-  /// no grace period is owed.
+  /// Stops every sweep in flight — **what shutdown calls instead of awaiting**.
+  /// Each `SKILL.md` is staged and renamed, so nothing is left half-written.
   void abandon() {
     for (final deadline in _deadlines) {
       deadline.giveUp();
@@ -156,12 +145,8 @@ class AgentSkillInstallationService {
     ),
   );
 
-  /// Removes every skill [installAll] wrote. The complete removal, for a user
-  /// who wants this app out of their agents' configuration.
-  ///
-  /// Nothing calls this on the way out, by decision: a skill has no volatile
-  /// half, and putting identical bytes back next start is the race
-  /// `AgentHookInstaller` was rewritten to avoid.
+  /// Removes every skill [installAll] wrote. Nothing calls it on the way out: a
+  /// skill has no volatile half, so rewriting it every launch is only a risk.
   Future<List<AgentSkillInstallation>> uninstallAll() => _forEachStore(
     verb: 'uninstall',
     removing: true,
@@ -195,9 +180,8 @@ class AgentSkillInstallationService {
     final installer = _ref.read(agentSkillInstallerProvider);
     final registry = _ref.read(agentRegistryProvider);
 
-    // Every (agent, store home) pair at once: the pairs are independent — each
-    // agent declares its own root — and one of them is commonly a share whose
-    // latency belongs to a distribution rather than to this app.
+    // Every (agent, store home) pair at once: they are independent, and one is
+    // commonly a share whose latency belongs to a distribution, not to us.
     final pending = <Future<AgentSkillInstallation>>[];
     for (final store in stores) {
       for (final descriptor in registry.descriptors) {
@@ -240,8 +224,7 @@ class AgentSkillInstallationService {
     _storeBudget,
     onTimeout: () {
       // **The wait is what the bound ends; the work has to be told.** Otherwise
-      // the install goes on creating directories under a store home the app has
-      // already reported as unknown.
+      // it goes on creating directories under a home reported as unknown.
       deadline.giveUp();
       final budget = _storeBudget.inSeconds >= 1
           ? '${_storeBudget.inSeconds}s'
@@ -266,8 +249,7 @@ class AgentSkillInstallationService {
   );
 
   /// One (agent, store home) pair. Never throws: every escape becomes a row,
-  /// because the directory is somebody's real home and the launch goes on
-  /// without it.
+  /// because the directory is somebody's real home.
   Future<AgentSkillInstallation> _oneStore({
     required String verb,
     required bool removing,
@@ -308,9 +290,8 @@ class AgentSkillInstallationService {
         skills: _skills,
       );
       final absent = !await installer.storeIsPresent(home);
-      // A removal is complete when nothing of ours is left, so it declares
-      // nothing and the count it reports is what survived — which is zero, or
-      // a file we could not delete.
+      // A removal declares nothing, so the count it reports is what survived —
+      // zero, or a file we could not delete.
       final declared = removing ? 0 : _skills.length;
       return AgentSkillInstallation(
         agentId: descriptor.id,

@@ -2,18 +2,8 @@ import 'dart:convert';
 
 import '../../../core/database/app_database.dart';
 
-/// Which `(agent, environment)` pairs this workspace has ever *searched* for.
-///
-/// An agent with no entry here and no installation row has never been looked
-/// for, which is not the same as looked for and not found — and only the first
-/// is worth spawning a process for. Without it, discovery is a single scan at
-/// workspace creation, which is how `antigravity` shipped in 1.1.4 and went
-/// unseen.
-///
-/// Stored as one JSON object in app metadata rather than a table: it holds
-/// single digits of entries, and a schema migration would buy nothing a map
-/// cannot answer. Unreadable content reads as "nothing has been probed", which
-/// costs one extra sweep and can never suppress one.
+/// Which `(agent, environment)` pairs this workspace has ever *searched* for —
+/// never looked for is not the same as looked for and not found.
 class AgentProbeLog {
   const AgentProbeLog(this._db);
 
@@ -46,9 +36,8 @@ class AgentProbeLog {
   bool hasProbed(String agentId, String environmentId) =>
       read()[agentId]?.containsKey(environmentId) ?? false;
 
-  /// Records that [agentId] was searched for in [environmentId] at [at],
-  /// whether or not it was found. A miss is the more valuable of the two: it is
-  /// what stops the next launch spawning the same process again.
+  /// Records that [agentId] was searched for in [environmentId], found or not.
+  /// A miss is the valuable half: it stops the next launch spawning again.
   void record(String agentId, String environmentId, DateTime at) {
     final log = read();
     final forAgent = {...?log[agentId], environmentId: at.toIso8601String()};

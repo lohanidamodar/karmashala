@@ -3,12 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:agent_cli/discovery.dart';
 
 /// Ambient state: what the last check of the stored agent paths established.
-///
-/// Written by whoever ran it — the startup check in `AppLifecycle`, and
-/// Settings' "Detect agents" — so both surfaces read one reading rather than
-/// keeping two that can disagree. The initial value says nothing has been
-/// checked, which is not the same as a check that found nothing wrong
-/// (CLAUDE.md §19).
+/// Unchecked is not the same as checked and found nothing wrong.
 class AgentPathRepairController extends Notifier<AgentPathRepairReport> {
   @override
   AgentPathRepairReport build() => const AgentPathRepairReport.unchecked();

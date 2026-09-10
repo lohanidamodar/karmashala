@@ -4,22 +4,8 @@ import 'agent_hook_receiver.dart';
 import 'agent_state_file_status_source.dart';
 import 'terminal_grid_status_source.dart';
 
-/// Answers "what is this agent session doing?" from the sources we have.
-///
-/// Precedence:
-///
-/// 1. a hook callback newer than [hookFreshness];
-/// 2. the terminal grid, **but only when it says `awaitingApproval` or
-///    `failed`**;
-/// 3. the agent's own state file;
-/// 4. the terminal grid for anything else;
-/// 5. [AgentActivityStatus.unknown].
-///
-/// Step 2 is the one that needs explaining. A transcript structurally cannot
-/// express "a modal is on screen waiting for you" and a screen can, so the grid
-/// may *escalate* to a state no source but a hook could produce, and is
-/// otherwise the last resort. Without that split, an agent sitting on an
-/// approval dialog reports `working` from a transcript that stopped mid-turn.
+/// Answers "what is this agent session doing?": a fresh hook, then the grid but
+/// only for `awaitingApproval`/`failed`, then the state file, then the grid.
 class AgentStatusService {
   AgentStatusService({
     required this.registry,
@@ -92,15 +78,13 @@ class AgentStatusService {
       grid.status == AgentActivityStatus.awaitingApproval ||
       grid.status == AgentActivityStatus.failed;
 
-  /// Whether the transcript still has to be consulted once [hook] and [grid] are
-  /// known — the one expensive question, asked separately so a scheduler can
-  /// decide whether this session is worth a disk read.
+  /// Whether the transcript still has to be read once [hook] and [grid] are
+  /// known — asked separately, because it is the one expensive question.
   bool needsStateFile(AgentStatusReport? hook, AgentStatusReport? grid) =>
       hook == null && !(grid != null && escalates(grid));
 
   /// The precedence itself, with every source already gathered. Does no I/O, so
-  /// a registry holding a cached [state] report can recompute as often as it
-  /// likes.
+  /// a cached [state] can be recomposed as often as it likes.
   AgentStatusReport compose({
     required AgentStatusQuery query,
     required DateTime now,

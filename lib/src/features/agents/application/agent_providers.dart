@@ -16,12 +16,8 @@ final agentRegistryProvider = Provider<AgentRegistry>(
   (ref) => AgentRegistry.builtIn,
 );
 
-/// The host process's environment variables.
-///
-/// Behind a provider so tests can be hermetic: discovery expands the
-/// descriptors' declared Windows install paths against this, and a test that
-/// silently inherited the developer's real `%LOCALAPPDATA%` would probe
-/// different files on different machines.
+/// The host process's environment variables, behind a provider so a test cannot
+/// silently inherit the developer's real `%LOCALAPPDATA%`.
 final hostEnvironmentProvider = Provider<Map<String, String>>(
   (ref) => Platform.environment,
 );

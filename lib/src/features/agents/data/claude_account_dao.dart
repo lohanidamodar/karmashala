@@ -13,9 +13,8 @@ class ClaudeAccountDao {
   /// Inserts [account], or replaces the existing row with the same natural
   /// identity `(email, organization_uuid)`.
   ClaudeAccount upsert(ClaudeAccount account) {
-    // SQLite considers NULL values distinct in UNIQUE constraints, so the
-    // table constraint alone cannot deduplicate accounts whose organization is
-    // unknown. Resolve the natural identity explicitly and retain its row id.
+    // SQLite counts NULLs as distinct in a UNIQUE constraint, so the table
+    // alone cannot deduplicate an account whose organization is unknown.
     final existing = _db.query(
       'SELECT id FROM claude_accounts '
       'WHERE email = ? AND organization_uuid IS ? LIMIT 1;',

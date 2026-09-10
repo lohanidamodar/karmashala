@@ -5,21 +5,14 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import 'package:agent_cli/descriptors.dart';
 
-/// One row of a model menu: a model to run on, or the row that names no model
-/// at all.
-///
-/// A type of its own rather than a nullable `String` because `PopupMenuButton`
-/// reads a null selection as a *dismissal* and never calls `onSelected` for it,
-/// so the "no model" row written as a null value would have looked right and
-/// done nothing. It lives here because Settings' "let the agent choose" and
-/// `ModelChip`'s "follow the Settings default" are one null through two menus.
+/// One row of a model menu. A type rather than a nullable `String` because
+/// `PopupMenuButton` reads a null selection as a dismissal and ignores it.
 @immutable
 class ModelChoice {
   const ModelChoice(this.modelId);
 
-  /// Name no model here. On a session that reads as "follow the Settings
-  /// default"; in Settings, as "let the agent choose" — no `--model` passed at
-  /// all. One constant, because it is one value whoever is being asked.
+  /// Name no model here: "follow the Settings default" on a session, "let the
+  /// agent choose" in Settings. One constant, because it is one value.
   static const followDefault = ModelChoice(null);
 
   final String? modelId;
@@ -32,19 +25,8 @@ class ModelChoice {
   int get hashCode => modelId.hashCode;
 }
 
-/// A menu of the models one agent can be put on, with "let the agent choose" as
-/// its first row.
-///
-/// `PermissionModePicker`'s twin, and the same control as `ModelChip`'s menu on
-/// a different surface: both build their rows from [modelOptionsFor], so what is
-/// offered cannot differ between Settings and a running session. Handed its
-/// options and its selection because it describes an agent's default rather than
-/// a session.
-///
-/// **Only models the descriptor can express are selectable** — the rest are
-/// listed, disabled and say why, because a default nobody can pass is a setting
-/// that lies every time it is read. **Naming no model is a row, not an empty
-/// selection**: first, always selectable, and the shipped default.
+/// A menu of the models one agent can be put on. Rows come from
+/// [modelOptionsFor]; one the descriptor cannot express is shown but disabled.
 class ModelPicker extends StatelessWidget {
   const ModelPicker({
     required this.options,
@@ -146,11 +128,8 @@ class ModelPicker extends StatelessWidget {
   }
 }
 
-/// Why [descriptor]'s model cannot be set at all, or null when it can.
-///
-/// A settings card has to say it once, above the control, or the only place that
-/// honesty lives is behind a click. Read off the same [modelOptionsFor] rows the
-/// menu draws, so the two cannot word it differently.
+/// Why [descriptor]'s model cannot be set at all, or null when it can — off the
+/// same [modelOptionsFor] rows the menu draws, so the two cannot differ.
 String? modelNotSettableReason(AgentDescriptor? descriptor) {
   if (descriptor == null || descriptor.launch.model.isSupported) return null;
   return modelOptionsFor(descriptor)

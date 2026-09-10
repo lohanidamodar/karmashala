@@ -10,22 +10,13 @@ import 'package:agent_cli/read.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';
 
-/// How to continue [session] when the app has no conversation id recorded for
-/// it, or `null` when this agent has nothing of the kind to offer — not a
-/// refusal, but "the question does not apply", so the caller keeps whatever it
-/// already says.
+/// How to continue [session] when no conversation id is recorded, or `null` —
+/// not a refusal, but "does not apply", so the caller keeps what it says.
 typedef AntigravityResumePlanner =
     Future<AntigravityResumePlan?> Function(Session session);
 
 /// The one place a session with no CLI id is asked whether it can be continued
-/// anyway.
-///
-/// Both surfaces that used to say *"No resumable CLI session id could be found"*
-/// come through here. For Antigravity that sentence was simply wrong: `agy`
-/// records the conversation each directory last used in
-/// `cache/last_conversations.json` — the file it resolves `--continue` through —
-/// so the app could read the conversation it was refusing to open. The judgement
-/// stays in `planAntigravityResume`; this provider supplies the workspace.
+/// anyway: `agy` records each directory's last conversation, so it often can.
 final antigravityResumePlannerProvider = Provider<AntigravityResumePlanner>((
   ref,
 ) {
@@ -38,8 +29,7 @@ final antigravityResumePlannerProvider = Provider<AntigravityResumePlanner>((
         ? null
         : ref.read(agentRegistryProvider).byId(agentId);
     // Asked of the descriptor, never of an agent's name: this route needs a
-    // store whose `{directory: conversation}` map can be read. Claude Code and
-    // Codex have no directory-scoped "latest" to name before opening it.
+    // store whose `{directory: conversation}` map can be read.
     if (descriptor == null ||
         descriptor.store?.format != AgentStoreFormat.antigravityStore) {
       return null;
@@ -60,9 +50,7 @@ final antigravityResumePlannerProvider = Provider<AntigravityResumePlanner>((
           .locate(environments);
       for (final store in stores) {
         // Only the environment the session runs in: `agy` writes its store
-        // beside the process, so a Windows install's entries say nothing about a
-        // directory inside WSL, and matching them opens a stranger's
-        // conversation.
+        // beside the process, and matching them opens a stranger's chat.
         if (store.environmentId != directory.environmentId) continue;
         final home = store.homesByAgentId[descriptor.id];
         if (home == null) continue;
@@ -100,9 +88,7 @@ String? conversationIn(AntigravityResumePlan plan) => switch (plan) {
 };
 
 /// What to tell the user before continuing a conversation the app was never
-/// given the id of. It **names its target**: a fallback that can say which
-/// conversation it is about to open is not a guess, which is the difference
-/// between this and Codex's `--last` picker.
+/// given the id of. It **names its target**, which is why it is not a guess.
 String antigravityContinueNotice(String conversationId, String directory) =>
     'Antigravity never told this session its conversation id. Continuing '
     '$conversationId, the conversation its store records for $directory.';

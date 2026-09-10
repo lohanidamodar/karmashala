@@ -4,8 +4,7 @@ import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/descriptors.dart';
 
 /// The latest hook-reported status per `(agentId, sessionId)`. In memory only:
-/// hooks describe what is happening right now, and a restart legitimately means
-/// "we no longer know".
+/// a restart legitimately means "we no longer know".
 class AgentHookReports {
   final Map<String, AgentStatusReport> _byKey = {};
 
@@ -33,14 +32,8 @@ class AgentHookReceiver {
   final AgentHookReports reports;
   final Clock clock;
 
-  /// Classifies a callback. Never throws: an unknown agent, an unrecognised
-  /// event or an unparseable body all resolve to `unknown` rather than an error,
-  /// because a hook must never block the agent that fired it.
-  ///
-  /// [observedAt] is when the agent fired, for a transport that knows. HTTP does
-  /// not — the callback *is* the arrival — and leaves it null; the spool does,
-  /// because a payload drained now may have been written before this app
-  /// started, and stamping it "now" would announce a stale status as news.
+  /// Classifies a callback; never throws, because a hook must not block the
+  /// agent. [observedAt] is the spool's real fire time — HTTP leaves it null.
   AgentStatusReport handle({
     required String? agentId,
     required String? event,
@@ -50,9 +43,8 @@ class AgentHookReceiver {
     final id = agentId ?? '';
     final name = event ?? '';
     final spec = id.isEmpty ? null : registry.byId(id)?.hooks;
-    // Decoded once and walked by path from here on: several fields come off the
-    // one payload, and re-parsing per field grew the cost of a callback with how
-    // much of it we understood.
+    // Decoded once and walked by path: several fields come off the one payload,
+    // and re-parsing per field grew a callback's cost with what we understood.
     final payload = _decode(body);
     final sessionId = spec == null
         ? ''
@@ -63,28 +55,22 @@ class AgentHookReceiver {
         ? ''
         : _stringAt(spec.eventKindPath, payload);
     final declared = kind.isEmpty ? null : spec!.eventKindMeaning[kind];
-    // A subtype the agent named and we do not recognise is `unknown`, not the
-    // event's default: `Notification` defaults to `awaitingApproval`, and its
-    // subtypes include a successful login and an MCP elicitation result.
+    // A subtype we do not recognise is `unknown`, not the event's default:
+    // `Notification` covers a successful login as well as an approval.
     final declaredStatus = kind.isEmpty
         ? spec?.eventStatus[name] ?? AgentActivityStatus.unknown
         : declared?.status ?? AgentActivityStatus.unknown;
     // **The turn ended; the session did not.** Claude Code fires a real `Stop`
-    // on the main thread the moment a `Task` subagent is launched, and wakes the
-    // session with a fresh `UserPromptSubmit` when the worker reports back — so
-    // trusting the event name announces "Agent finished" tens of minutes early.
-    // The payload says which it is.
+    // when a `Task` subagent launches, so the payload decides, not the name.
     final status = _inFlight(spec, name, payload)
         ? AgentActivityStatus.working
         : declaredStatus;
-    // The agent's own description of what it wants or of what it just did, when
-    // its hooks carry one. Decoding it only for the session id is why an
-    // approval could be announced but never explained.
+    // The agent's own words, when its hooks carry any. Decoding them only for
+    // the session id is why an approval could be announced but not explained.
     final message = spec == null ? '' : _messageIn(spec, payload, declared);
 
     // **What the agent said about the session, not about the turn.** A subtype
-    // the payload carries answers for itself, and only an event with no subtype
-    // falls back to the spec's per-event table.
+    // answers for itself; only an event without one falls back to the table.
     final ending = kind.isEmpty ? spec?.eventEnding[name] : declared?.ending;
 
     final report = AgentStatusReport(
@@ -96,10 +82,8 @@ class AgentHookReceiver {
       detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
       ending: ending,
-      // Only a session that stopped *for the user* has anything to be waiting
-      // on. Otherwise the prose rules would run over a finished turn's own
-      // summary, and an agent that wrote "it needs your permission" in a
-      // sentence would have claimed an open prompt on the strength of it.
+      // Only a session that stopped *for the user* is asked: otherwise an agent
+      // writing "it needs your permission" would claim an open prompt.
       waiting: spec == null || status != AgentActivityStatus.awaitingApproval
           ? AgentWaitKind.unrecorded
           : kind.isEmpty
@@ -110,11 +94,8 @@ class AgentHookReceiver {
     return report;
   }
 
-  /// What [message] says the agent is waiting on, per [spec]'s own rules. The
-  /// event name cannot answer this: Claude Code's `Notification` fires both for
-  /// a permission request and for a turn waiting on the user. An unmatched
-  /// message stays [AgentWaitKind.unrecorded], because the fallback is what
-  /// decides whether a button that types Enter is offered.
+  /// What [message] says the agent is waiting on — `Notification` covers both a
+  /// permission request and a finished turn, so no match means `unrecorded`.
   AgentWaitKind _waitKind(AgentHookSpec spec, String message) {
     if (message.isEmpty) return AgentWaitKind.unrecorded;
     final lower = message.toLowerCase();
@@ -124,12 +105,8 @@ class AgentHookReceiver {
     return AgentWaitKind.unrecorded;
   }
 
-  /// The agent's own words in [payload], per [spec]'s candidate paths — first
-  /// non-empty wins, and a path that is absent on this event is not a failure.
-  /// Falls back to [AgentHookMeaning.fallbackMessage] when the payload carries
-  /// no prose of its own: Antigravity's event *name* is the whole message
-  /// (`Execution failed`), and without it those events would reach the user as
-  /// a session name alone.
+  /// The agent's own words in [payload], first non-empty path winning, else
+  /// [AgentHookMeaning.fallbackMessage]: Antigravity's name *is* its message.
   static String _messageIn(
     AgentHookSpec spec,
     Object? payload,
@@ -142,11 +119,8 @@ class AgentHookReceiver {
     return declared?.fallbackMessage ?? '';
   }
 
-  /// Whether [event]'s payload says work this session is waiting on is still
-  /// running, per [spec]'s [AgentHookSpec.inFlightPath]. Only a **non-empty
-  /// list** counts: a missing key, an empty list and any other shape all mean
-  /// "nothing said so", which is the answer an agent that never sends the field
-  /// has to get.
+  /// Whether [event]'s payload says awaited work is still running. Only a
+  /// **non-empty list** counts, so an agent that never sends the field is safe.
   static bool _inFlight(AgentHookSpec? spec, String event, Object? payload) {
     final path = spec?.inFlightPath[event];
     if (path == null || path.isEmpty) return false;
@@ -174,15 +148,8 @@ class AgentHookReceiver {
     return value;
   }
 
-  /// The string at [path] in the decoded [payload], or `''` for a missing key, a
-  /// non-string value or an unparseable body — all of which the caller renders
-  /// as nothing rather than as a placeholder.
-  ///
-  /// A **list of one string** reads as that string: Antigravity sends the
-  /// working directory as `workspacePaths`, a one-entry JSON array, and without
-  /// this `cwdPath` reads nothing and adoption falls back to the wrong pane.
-  /// Narrow on purpose — only where the path's own destination is a list whose
-  /// first element is a string.
+  /// The string at [path], or `''` when the agent did not tell us. A **list of
+  /// one string** reads as that string — Antigravity's `workspacePaths` array.
   static String _stringAt(List<String> path, Object? payload) {
     final value = _valueAt(path, payload);
     if (value is String) return value;

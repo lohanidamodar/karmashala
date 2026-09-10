@@ -7,10 +7,8 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:agent_cli/descriptors.dart';
 
-/// The model one session will run on, and everything a control needs to say so.
-/// A value with `==` rather than a record, because it is what `ref.watch`
-/// compares: a state that never equals itself would repaint the chip on every
-/// session signal.
+/// The model one session will run on. A value with `==` rather than a record,
+/// because a state that never equals itself repaints on every session signal.
 @immutable
 class SessionModelState {
   const SessionModelState({
@@ -31,9 +29,8 @@ class SessionModelState {
   /// model flag, the agent's own default".
   final String? modelId;
 
-  /// What the per-agent default in Settings names, or null for "let the agent
-  /// choose" — carried so the menu can say what "follow the default" resolves to
-  /// without reading the setting twice.
+  /// What the per-agent default in Settings names, carried so the menu can say
+  /// what "follow the default" resolves to without reading the setting twice.
   final String? defaultModelId;
 
   /// Whether [modelId] came from the default rather than from a choice made for
@@ -59,15 +56,8 @@ class SessionModelState {
       Object.hash(sessionId, descriptor, modelId, defaultModelId, inherited);
 }
 
-/// The model [sessionId] runs on, resolved by [SessionLauncher] and by nothing
-/// else.
-///
-/// **Watches three concerns and not `title`.** Deliberately not `status` either:
-/// whether the agent is idle decides what a *click* does, not what the chip
-/// says, and a chip that woke on every status transition would tick through
-/// every turn of every session for a label that never changed. And not
-/// `SessionSignals.forSession`, which wakes on `title` — the CLI store sweep
-/// renames rows on a timer with nobody doing anything.
+/// The model [sessionId] runs on, resolved by [SessionLauncher] alone. Watches
+/// three concerns, and deliberately neither `status` nor `title`.
 final sessionModelProvider = Provider.autoDispose
     .family<SessionModelState?, String>((ref, sessionId) {
       ref.watchSessionKinds(const {
@@ -79,9 +69,8 @@ final sessionModelProvider = Provider.autoDispose
           .read(sessionLauncherProvider)
           .effectiveModelFor(sessionId);
       if (effective == null) return null;
-      // And the one setting this chip follows, selected rather than watched
-      // whole: a window resize writes settings too. The value still comes out of
-      // the launcher's resolution above; this only decides *when* to resolve.
+      // The one setting this chip follows, selected rather than watched whole:
+      // a window resize writes settings too. This only decides *when*.
       final agentId = effective.descriptor?.id;
       ref.watch(
         settingsControllerProvider.select(

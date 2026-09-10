@@ -5,12 +5,8 @@ import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 
-/// Data-access for [AgentInstallation] rows. Hand-written SQL, no codegen.
-///
-/// `UNIQUE(agent_kind, environment_id, executable_path)` is what makes each
-/// `(agent, environment, executable)` one independent installation.
-/// `agent_kind` is read straight through as [AgentInstallation.agentId], so an
-/// unrecognised agent loads rather than throwing.
+/// Data-access for [AgentInstallation] rows. Hand-written SQL, no codegen;
+/// `UNIQUE(agent_kind, environment_id, executable_path)` is the row identity.
 class AgentInstallationDao {
   AgentInstallationDao(this._db);
 
@@ -76,16 +72,8 @@ class AgentInstallationDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// Records what the CLI at this installation answered, and **when it was
-  /// asked**. An upgraded CLI keeps its row and its id, which is what settings
-  /// pin as the default agent.
-  ///
-  /// [readAt] is written on every reading, including one that confirms the
-  /// stored number: a confirmed reading is a fresh reading, and the old
-  /// `updateVersion` left it looking as old as before. A null [version] is
-  /// refused rather than written — discovery can locate a binary and fail to run
-  /// `--version`, and storing that as "no version" would erase a number we knew
-  /// for an answer we never got.
+  /// Records what the CLI answered and **when it was asked** — a confirmed
+  /// reading is a fresh reading. A null [version] is refused, never written.
   void recordVersion(String id, String? version, {required DateTime readAt}) {
     if (version == null) return;
     _db.execute(
@@ -95,14 +83,8 @@ class AgentInstallationDao {
     );
   }
 
-  /// Moves an installation to [path], keeping its row and its id: the id is what
-  /// settings pin as the default agent and what every session row references, so
-  /// an executable that moved must not become a new installation.
-  ///
-  /// [byUser] records who chose it, so a later sweep knows whether it may pick a
-  /// different path. Returns `false` when [path] is already taken in this
-  /// environment by another row for the same agent, because merging two rows is
-  /// a decision for the caller that can see both.
+  /// Moves an installation to [path], keeping its id, since settings and every
+  /// session row reference it. `false` when another row already holds [path].
   bool updatePath(String id, String path, {required bool byUser}) {
     try {
       _db.execute(
@@ -120,11 +102,8 @@ class AgentInstallationDao {
     _db.execute('DELETE FROM agent_installations WHERE id = ?;', [id]);
   }
 
-  /// Moves every session recorded against installation [from] onto [to].
-  ///
-  /// An agent that moved on disk is the same agent. Left alone, its sessions
-  /// point at a row that is about to go, which is both unresumable and
-  /// undeletable: `sessions.agent_installation_id` is `ON DELETE RESTRICT`.
+  /// Moves every session recorded against installation [from] onto [to]:
+  /// `sessions.agent_installation_id` is `ON DELETE RESTRICT`.
   void repointSessions({required String from, required String to}) {
     _db.execute(
       'UPDATE sessions SET agent_installation_id = ? '
@@ -133,13 +112,8 @@ class AgentInstallationDao {
     );
   }
 
-  /// Deletes [id] unless something still points at it, and says whether it went.
-  ///
-  /// Asked first rather than deleted and caught: `sessions` references this table
-  /// `ON DELETE RESTRICT`, and that `SqliteException(1811)` thrown from the
-  /// middle of a re-detection sweep used to abort the whole run, leaving the app
-  /// reporting *no agents at all* because one uninstalled CLI could not be
-  /// tidied away.
+  /// Deletes [id] unless something still points at it, and says whether it
+  /// went. Asked first: that `ON DELETE RESTRICT` raise aborted whole sweeps.
   bool deleteIfUnreferenced(String id) {
     final referencing = _db.query(
       'SELECT 1 FROM sessions WHERE agent_installation_id = ? LIMIT 1;',

@@ -8,13 +8,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_status_providers.dart';
 
-/// Drains the spool directories a file-reporting agent writes its hook payloads
-/// into, and applies each payload exactly as the HTTP route applies a callback.
-///
-/// Started by the lifecycle owner once the install sweep has said which
-/// directories exist; on a machine with no such environment that list is empty
-/// and the timer never starts. It lives here rather than beside the other hook
-/// providers because putting it there made two files import each other.
+/// Drains the spool directories a file-reporting agent writes into, applying
+/// each payload exactly as the HTTP route does. An empty list starts no timer.
 final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
   final logger = AppLogger.named('agent-hooks');
   final drainer = AgentHookSpoolDrainer(
@@ -31,15 +26,8 @@ final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
   return drainer;
 });
 
-/// Everything one hook callback does, whichever transport carried it — the
-/// loopback `POST /agent-hook` or a WSL agent's spool file. The three steps below
-/// are the whole of what "a hook arrived" means, and a second copy of them is how
-/// the two transports would come to disagree.
-///
-/// Takes a container rather than a `Ref` because `LauncherControlServer` holds
-/// one and has no `Ref` to offer. **Never throws**: over HTTP a failure would
-/// stall the agent that fired it, and over the spool it would stop the drain for
-/// every other event in the tick.
+/// Everything one hook callback does, whichever transport carried it — a second
+/// copy of these steps is how the two would come to disagree. **Never throws.**
 AgentStatusReport applyAgentHookCallback(
   ProviderContainer container, {
   required String? agentId,
@@ -57,8 +45,7 @@ AgentStatusReport applyAgentHookCallback(
         observedAt: observedAt,
       );
   // A callback naming a session we have no row for may be one the user started
-  // by hand in one of our own panes. Synchronous and O(1) once a session has
-  // been decided about.
+  // by hand in one of our own panes. Synchronous and O(1) once decided.
   try {
     container
         .read(sessionAdoptionServiceProvider)
@@ -70,9 +57,8 @@ AgentStatusReport applyAgentHookCallback(
   } on Object catch (error) {
     logger?.warning('Session adoption from a hook failed: $error');
   }
-  // The status pipeline's *primary* input. A hook is authoritative and already
-  // in memory, so the registry folds it in here rather than a poll discovering
-  // it up to five seconds later.
+  // The status pipeline's *primary* input: a hook is authoritative and already
+  // in memory, so folding it in here beats a poll five seconds later.
   try {
     reportAgentHook(
       container,
@@ -82,9 +68,8 @@ AgentStatusReport applyAgentHookCallback(
   } on Object catch (error) {
     logger?.warning('Applying a hook report to the registry failed: $error');
   }
-  // The durable half, and the only thing in the app that writes an *ending* onto
-  // a session row. Almost every callback carries none, so this is a null check
-  // on the common path.
+  // The durable half, and the only thing that writes an *ending* onto a session
+  // row. Almost every callback carries none, so this is usually a null check.
   try {
     container
         .read(sessionOutcomeWriterProvider)

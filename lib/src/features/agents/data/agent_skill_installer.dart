@@ -4,30 +4,16 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/descriptors.dart';
 
-/// Writes Karmashala's skills into an agent CLI's own skills root, and takes
-/// exactly those back out again.
-///
-/// Two rules of `agent_skill_support.dart` are enforced here rather than argued.
-/// **A re-install writes nothing**: every file is read before it is written and
-/// skipped when the bytes match. **Uninstall removes exactly what was written**:
-/// a `SKILL.md` carrying [karmashalaSkillMarker] goes, and its directory only if
-/// it is then empty — a file the user put beside ours keeps the folder.
-///
-/// The skills root itself is left behind either way: all three CLIs document it
-/// and any of them may have created it.
+/// Writes Karmashala's skills into an agent CLI's skills root and takes exactly
+/// those back out: a `SKILL.md` carrying [karmashalaSkillMarker], and no more.
 class AgentSkillInstaller {
   const AgentSkillInstaller();
 
   /// The file every skill directory is identified by.
   static const String fileName = 'SKILL.md';
 
-  /// Where [descriptor] reads skills, given its store home in this environment —
-  /// or `null` when it declares no root, or no store to derive the home from.
-  ///
-  /// The home is the store home with [AgentStoreSpec.homeDirectoryName]'s
-  /// segments taken back off, exactly how `CliStoreLocator` built it, which is
-  /// what lets one `\\wsl.localhost` store home answer without this class
-  /// knowing which environment it is in.
+  /// Where [descriptor] reads skills, or `null` when it declares none. Derived
+  /// by stripping [AgentStoreSpec.homeDirectoryName] back off the store home.
   String? rootFor(AgentDescriptor descriptor, String storeHome) {
     final support = descriptor.skills;
     final store = descriptor.store;
@@ -44,9 +30,8 @@ class AgentSkillInstaller {
   Future<bool> storeIsPresent(String storeHome) =>
       Directory(storeHome).exists();
 
-  /// Writes one directory per skill. Returns whether every one of them is on
-  /// disk spelling the bytes this build generates — **read back, never
-  /// assumed**, because only a reported skip ever gets investigated.
+  /// Writes one directory per skill; returns whether every one is on disk
+  /// spelling this build's bytes — **read back, never assumed**.
   Future<bool> install({
     required AgentDescriptor descriptor,
     required String storeHome,
@@ -56,9 +41,8 @@ class AgentSkillInstaller {
     final root = rootFor(descriptor, storeHome);
     if (root == null || skills.isEmpty) return false;
     for (final skill in skills) {
-      // Checked before each one rather than once at the top: a sweep is given up
-      // on *while* it runs, and the skill after the slow one is the one that
-      // would land in a directory nobody owns any more.
+      // Checked before each one, not once at the top: a sweep is given up on
+      // *while* it runs, and the next skill would land in nobody's directory.
       if (deadline?.isAbandoned ?? false) break;
       final file = File(p.join(root, skill.name, fileName));
       try {
@@ -78,9 +62,8 @@ class AgentSkillInstaller {
     return present.length == skills.length;
   }
 
-  /// The skills whose `SKILL.md` is on disk **right now**, spelling this build's
-  /// bytes. Separate from [install] because two of three written is a real state
-  /// and `installed: false` with no number is not enough to act on.
+  /// The skills whose `SKILL.md` is on disk **right now**. Separate, because
+  /// two of three written is a real state a bare `false` cannot report.
   Future<Set<String>> installedSkills({
     required AgentDescriptor descriptor,
     required String storeHome,
@@ -100,10 +83,8 @@ class AgentSkillInstaller {
     return found;
   }
 
-  /// Removes every skill this app wrote under [descriptor]'s root. Returns
-  /// whether anything changed. Matches on [karmashalaSkillMarker] and never on
-  /// the directory name, so a skill of ours the user renamed still goes and one
-  /// of theirs that collides with our name stays.
+  /// Removes every skill this app wrote under [descriptor]'s root. Matches on
+  /// [karmashalaSkillMarker], never the directory name, so a rename still goes.
   Future<bool> uninstall({
     required AgentDescriptor descriptor,
     required String storeHome,
@@ -137,14 +118,8 @@ class AgentSkillInstaller {
     return changed;
   }
 
-  /// Written to a staged file and renamed over the real one, so a sweep cut off
-  /// mid-flight leaves either the old skill or the new one and never half a
-  /// `SKILL.md` for a CLI to discover.
-  ///
-  /// [deadline] is checked before the pair and never between them: giving up
-  /// *between* the write and the rename would leave a `.tmp` beside the skill —
-  /// litter no CLI reads, and in a test a file landing in a directory `tearDown`
-  /// is already walking.
+  /// Staged and renamed, so a sweep cut off mid-flight never leaves half a
+  /// `SKILL.md`; [deadline] is checked before the pair and never between them.
   Future<void> _writeIfChanged(
     File file,
     String contents,
