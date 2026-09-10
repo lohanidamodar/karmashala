@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/shell/pane_scaffold.dart';
-import '../../../app/theme/app_icons.dart';
+import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/icons.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/session_media_providers.dart';
 import 'session_media_list.dart';

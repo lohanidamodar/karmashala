@@ -5,8 +5,7 @@ import '../features/settings/application/settings_controller.dart';
 import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
 import 'shell/app_shell.dart';
-import 'theme/app_theme.dart';
-import 'theme/ui_text_scale.dart';
+import 'package:karmashala_ui/theme.dart';
 
 /// Root application widget: theming and the desktop shell. The `ProviderScope`
 /// is installed in `main.dart`, with the database override.

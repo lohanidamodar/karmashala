@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_icons.dart';
-import '../../theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// Row geometry for every filtered list in the shell. Fixed, so a list can be
 /// scrolled to a selection it has not laid out yet.

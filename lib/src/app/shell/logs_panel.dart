@@ -7,8 +7,8 @@ import 'package:logging/logging.dart';
 
 import '../../core/logging/diagnostics_providers.dart';
 import 'package:karmashala_core/logging.dart';
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// The live log tail, inside the app: a counter polled on a timer rather than a
 /// listener, because a busy channel emits faster than the frame budget.

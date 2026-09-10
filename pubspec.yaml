@@ -28,6 +28,7 @@ workspace:
   - packages/karmashala_session
   - packages/karmashala_ssh
   - packages/karmashala_terminal_core
+  - packages/karmashala_ui
   - packages/local_ipc
 
 dependencies:
@@ -90,6 +91,10 @@ dependencies:
   # (docs/PACKAGE_SPLIT_2.md, Revision 2).
   karmashala_terminal_core:
     path: packages/karmashala_terminal_core
+  # The design system: tokens, the Phosphor glyph table, the assembled theme
+  # and the desktop chrome every surface wears.
+  karmashala_ui:
+    path: packages/karmashala_ui
   # Git and GitHub as values plus the readers and parsers that produce them.
   # Built beside the app in phase A — nothing under `lib/` imports it yet
   # (docs/PACKAGE_SPLIT.md §2).

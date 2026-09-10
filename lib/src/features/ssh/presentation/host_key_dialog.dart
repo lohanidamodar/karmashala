@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ssh/connection.dart';
 
 /// The public-key file whose fingerprint should match [keyType]. An algorithm

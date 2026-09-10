@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/project_card.dart';
 import 'package:karmashala_remote/remote.dart';

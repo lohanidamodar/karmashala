@@ -1,8 +1,7 @@
-import 'package:karmashala/src/app/theme/app_icons.dart';
-import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/app/widgets/desktop_menu.dart';
-import 'package:karmashala/src/app/widgets/row_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/checkout_row.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_row.dart';

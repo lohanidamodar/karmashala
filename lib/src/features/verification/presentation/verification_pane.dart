@@ -5,9 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../app/shell/pane_scaffold.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/evidence_reader.dart';

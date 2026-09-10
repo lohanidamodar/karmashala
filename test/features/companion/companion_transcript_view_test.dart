@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../explorer/presentation/session_card.dart' show compactAge;
 import '../../sessions/presentation/transcript_image_preview.dart';
 import '../domain/session_media_item.dart';

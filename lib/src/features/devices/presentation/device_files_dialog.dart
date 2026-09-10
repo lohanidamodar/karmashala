@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../../core/clipboard/host_clipboard.dart';
 import '../../../core/util/file_picking.dart';
 import '../application/device_file_actions.dart';

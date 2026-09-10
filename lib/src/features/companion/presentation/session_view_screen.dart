@@ -3,8 +3,8 @@ import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/id_generator_provider.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/delivery.dart';

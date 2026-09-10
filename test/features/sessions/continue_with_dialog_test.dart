@@ -7,7 +7,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/continue_with_dialog.dart';
-import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

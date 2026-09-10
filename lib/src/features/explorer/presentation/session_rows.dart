@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_dialog.dart';
-import '../../../app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/menus.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';

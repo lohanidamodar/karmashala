@@ -1,5 +1,5 @@
-import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/presentation/attribution_mark.dart';
 import 'package:flutter/material.dart';

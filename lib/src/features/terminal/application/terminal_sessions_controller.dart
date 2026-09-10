@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/widgets/keyboard_capture.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../env_secrets/application/env_secrets_controller.dart';

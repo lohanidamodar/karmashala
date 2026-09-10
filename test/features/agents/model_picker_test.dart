@@ -1,5 +1,5 @@
-import 'package:karmashala/src/app/theme/app_icons.dart';
-import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/model_picker.dart';
 import 'package:flutter/material.dart';

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
 
 /// A menu of the permission modes one agent really has. Rows come from

@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/shell/pane_scaffold.dart';
+import 'package:karmashala_ui/panes.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_menu.dart';
-import '../../../app/widgets/row_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';

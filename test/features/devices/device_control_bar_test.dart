@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/features/devices/presentation/device_controls.dart';
 
 /// The manners every device control shares, on either platform.

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../terminal/application/terminal_theme_controller.dart';
 import '../../terminal/data/theme_discovery.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

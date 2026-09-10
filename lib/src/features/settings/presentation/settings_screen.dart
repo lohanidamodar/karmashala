@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../automations/presentation/automations_page.dart';
 import '../../../app/shell/app_shell.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
 import '../../app_projects/presentation/project_kinds_section.dart';

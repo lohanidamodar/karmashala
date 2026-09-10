@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'device_touch_surface.dart';
 

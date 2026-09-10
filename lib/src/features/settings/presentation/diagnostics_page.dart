@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';

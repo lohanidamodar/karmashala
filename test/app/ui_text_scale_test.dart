@@ -1,7 +1,7 @@
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/app_shell.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/app/theme/ui_text_scale.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';

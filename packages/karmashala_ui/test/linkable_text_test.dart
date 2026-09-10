@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/widgets/linkable_text.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// **A link has to win the tap without taking it.**
 ///

@@ -241,7 +241,7 @@ void main() {
         '\x1b[32m00:29 +1546 ~2: All tests passed!\x1b[0m\r\n'
         'PS C:\\src\\karmashala\\karmashala-app> git status --short\r\n'
         '\x1b[33m M\x1b[0m lib/src/app/shell/app_shell.dart\r\n'
-        '\x1b[33m M\x1b[0m lib/src/app/theme/app_theme.dart\r\n'
+        '\x1b[33m M\x1b[0m packages/karmashala_ui/lib/src/app_theme.dart\r\n'
         '\x1b[32m??\x1b[0m lib/src/app/shell/side_panel.dart\r\n'
         'PS C:\\src\\karmashala\\karmashala-app> ',
       );

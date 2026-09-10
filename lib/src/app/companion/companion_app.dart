@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
-import '../theme/design_tokens.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'companion_shell.dart';
 
 /// Root widget of the companion build: the desktop's theme, the phone's shell,

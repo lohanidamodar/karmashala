@@ -1,5 +1,5 @@
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
-import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';

@@ -1,4 +1,4 @@
-import 'package:karmashala/src/app/shell/pane_scaffold.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';

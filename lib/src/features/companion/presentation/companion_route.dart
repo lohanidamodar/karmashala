@@ -5,7 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 Route<T> companionRoute<T>(BuildContext context, WidgetBuilder builder) {
   final duration = MediaQuery.disableAnimationsOf(context)

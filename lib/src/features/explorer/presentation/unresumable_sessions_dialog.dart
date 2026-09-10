@@ -3,11 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_dialog.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../core/widgets/reveal_on_focus.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_session/resume.dart';
 import '../application/unresumable_sessions.dart';
 

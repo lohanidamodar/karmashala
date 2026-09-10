@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/markdown_message.dart';
 import 'package:karmashala_remote/companion.dart';

@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/widgets/keyboard_capture.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_keyboard_surface.dart';
 import 'package:xterm2/xterm.dart';

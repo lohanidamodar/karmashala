@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/side_panel_state.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';

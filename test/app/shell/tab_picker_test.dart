@@ -1,6 +1,6 @@
 import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
-import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

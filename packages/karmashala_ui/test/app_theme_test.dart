@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/app/theme/app_icons.dart';
-import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 
 /// The theme answers for whole widget classes, so a call site never has to.
 ///

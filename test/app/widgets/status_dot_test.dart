@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/app/widgets/status_dot.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/panes.dart';
 
 import '../../support/window_matrix.dart';
 

@@ -11,27 +11,41 @@ import 'package:flutter_test/flutter_test.dart';
 /// debt is *textual*, and a widget test would have to render every screen to
 /// find one badge.
 void main() {
-  final lib = Directory('lib');
+  // The app and the design system it is drawn with: the tokens and the chrome
+  // left for `karmashala_ui`, and a sweep that stopped at `lib/` would stop
+  // guarding exactly the files that define the ramp.
+  final roots = [Directory('lib'), Directory('packages/karmashala_ui/lib')];
 
-  /// Source of every `.dart` under `lib/`, with `//` comments removed — a rule
-  /// quoted in prose is documentation, not debt.
+  /// Where a size may be named. Everywhere else borrows a style.
+  const themeLayer = {
+    'packages/karmashala_ui/lib/src/app_icons.dart',
+    'packages/karmashala_ui/lib/src/app_theme.dart',
+    'packages/karmashala_ui/lib/src/design_tokens.dart',
+    'packages/karmashala_ui/lib/src/ui_text_scale.dart',
+  };
+
+  /// Source of every `.dart` under [roots], with `//` comments removed — a
+  /// rule quoted in prose is documentation, not debt.
   Map<String, String> sources() {
-    expect(
-      lib.existsSync(),
-      isTrue,
-      reason: 'run from the package root: lib/ was not found',
-    );
+    for (final root in roots) {
+      expect(
+        root.existsSync(),
+        isTrue,
+        reason: 'run from the app root: ${root.path} was not found',
+      );
+    }
     return {
-      for (final file in lib.listSync(recursive: true).whereType<File>())
-        if (file.path.endsWith('.dart'))
-          file.path.replaceAll(r'\', '/'): file
-              .readAsStringSync()
-              .split('\n')
-              .map((line) {
-                final comment = line.indexOf('//');
-                return comment == -1 ? line : line.substring(0, comment);
-              })
-              .join('\n'),
+      for (final root in roots)
+        for (final file in root.listSync(recursive: true).whereType<File>())
+          if (file.path.endsWith('.dart'))
+            file.path.replaceAll(r'\', '/'): file
+                .readAsStringSync()
+                .split('\n')
+                .map((line) {
+                  final comment = line.indexOf('//');
+                  return comment == -1 ? line : line.substring(0, comment);
+                })
+                .join('\n'),
     };
   }
 
@@ -55,7 +69,7 @@ void main() {
     expect(
       hits(
         RegExp(r'(?<![A-Za-z])Icons\.'),
-        skip: (path) => path.endsWith('app/theme/app_icons.dart'),
+        skip: (path) => path.endsWith('karmashala_ui/lib/src/app_icons.dart'),
       ),
       isEmpty,
       reason: 'add the glyph to AppIcons and use it',
@@ -114,8 +128,7 @@ void main() {
     expect(
       hits(
         pattern,
-        skip: (path) =>
-            path.startsWith('lib/src/app/theme/') || debt.contains(path),
+        skip: (path) => themeLayer.contains(path) || debt.contains(path),
       ),
       isEmpty,
       reason: 'use a theme text style or MonoStyles instead of a literal size',
@@ -124,7 +137,7 @@ void main() {
     // that the pattern is still finding sizes at all. Without this an empty
     // debt set and a broken matcher look identical from the outside.
     expect(
-      hits(pattern).where((h) => h.startsWith('lib/src/app/theme/')),
+      hits(pattern).where((h) => themeLayer.contains(h.split(':').first)),
       isNotEmpty,
       reason: 'the fontSize sweep found nothing anywhere — it has stopped '
           'guarding rather than been satisfied',

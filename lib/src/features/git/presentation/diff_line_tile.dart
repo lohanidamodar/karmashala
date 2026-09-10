@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_git/git.dart';
 
 /// One row of a unified diff — the only place one is drawn. Colour is never the

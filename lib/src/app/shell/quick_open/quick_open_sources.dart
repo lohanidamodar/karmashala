@@ -41,7 +41,7 @@ import '../../../features/terminal/presentation/terminal_panel.dart';
 import '../../../features/todos/application/todos_providers.dart';
 import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
-import '../../theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
 import '../side_panel_state.dart';

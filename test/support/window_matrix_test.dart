@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/widgets/reveal_on_focus.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import 'window_matrix.dart';
 

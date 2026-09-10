@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../checkpoints/application/checkpoint_service.dart';
 import '../application/automation_undo.dart';
 import '../domain/automation_run.dart';
