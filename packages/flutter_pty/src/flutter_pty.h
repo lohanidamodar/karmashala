@@ -51,6 +51,16 @@ FFI_PLUGIN_EXPORT int pty_getpid(PtyHandle *handle);
 // thread's allocation, and the handle. Idempotent; the handle must not be used
 // afterwards. Added by this fork -- upstream has no way to release a pty, so a
 // finished pane stranded a descriptor and a thread for the life of the process.
+//
+// **Returns immediately on every platform, and on Windows that is a contract
+// rather than an observation.** Releasing a Windows pty means
+// `ClosePseudoConsole`, which does not return until the console host has gone,
+// and the host does not go while the child tree it is attached to lives -- so
+// on Windows this hands the release to a detached worker thread and comes
+// back. A caller may call it from a UI thread, an isolate that must keep
+// producing frames, or a shutdown step with a budget; none of them will wait
+// for a process. What the worker has not finished when the process ends is
+// left to the OS, which is the right answer at that point anyway.
 FFI_PLUGIN_EXPORT void pty_destroy(PtyHandle *handle);
 
 FFI_PLUGIN_EXPORT char *pty_error(void);

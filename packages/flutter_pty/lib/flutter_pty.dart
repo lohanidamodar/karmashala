@@ -221,6 +221,14 @@ class Pty {
   ///
   /// Safe whether or not the child has exited, and safe to call twice. Calling
   /// anything else on this [Pty] afterwards does nothing.
+  ///
+  /// **Returns immediately.** On Windows the native release is
+  /// `ClosePseudoConsole`, which does not return until the console host behind
+  /// the pty has gone -- and the host does not go while the child tree lives,
+  /// so a pane whose child ignored the kill used to block whichever thread
+  /// called this, forever. `pty_destroy` hands that work to a detached thread;
+  /// this call is the request, not the completion, and there is deliberately
+  /// nothing to await. See `src/flutter_pty.h`.
   void destroy() {
     if (_destroyed) return;
     // Read while the handle is still valid: `kill` asks for it, and a caller

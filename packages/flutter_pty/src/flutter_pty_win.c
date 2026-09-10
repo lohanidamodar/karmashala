@@ -499,17 +499,24 @@ FFI_PLUGIN_EXPORT int pty_getpid(PtyHandle *handle)
     return (int)handle->dwProcessId;
 }
 
-// Releases the pty. Idempotent; the handle must not be used afterwards.
+// Releases the pseudoconsole, the output pipe and the handle itself. Runs on a
+// detached worker thread, and that is the whole point of it existing.
 //
-// ClosePseudoConsole is the documented way to end a ConPTY session, and it also
-// unblocks the reader: its ReadFile fails once the console is gone, so the read
-// thread falls out of its loop and frees its own allocation.
-FFI_PLUGIN_EXPORT void pty_destroy(PtyHandle *handle)
+// `ClosePseudoConsole` does not return until the console host behind the pty
+// has gone, and that host is a child of *this* process rather than of the
+// shell -- so killing the pane's process tree does not settle it, and a child
+// that ignores the kill (a WSL session whose Linux side keeps running is the
+// ordinary case) holds it open indefinitely. On 2026-09-10 that call was on
+// the stack of the app's blocked main thread in a minidump of a hang the owner
+// had to end from Task Manager. A synchronous call that never returns takes
+// the isolate with it, so no Dart-side timeout can rescue it either.
+//
+// Nothing joins this thread: the caller is told the pty is gone the moment
+// `pty_destroy` returns, and whatever the console host does afterwards is
+// between it and the OS.
+static DWORD WINAPI close_console_thread(LPVOID arg)
 {
-    if (handle == NULL)
-    {
-        return;
-    }
+    PtyHandle *handle = (PtyHandle *)arg;
 
     if (handle->hPty != NULL)
     {
@@ -517,12 +524,14 @@ FFI_PLUGIN_EXPORT void pty_destroy(PtyHandle *handle)
         handle->hPty = NULL;
     }
 
-    if (handle->inputWriteSide != NULL)
-    {
-        CloseHandle(handle->inputWriteSide);
-        handle->inputWriteSide = NULL;
-    }
-
+    // After the console, never before. The reader thread is blocked in
+    // `ReadFile` on this exact handle, and closing it from another thread
+    // leaves that read holding a handle *value* the kernel is free to reissue
+    // to the next opener -- the Win32 shape of the fd-recycling hazard the
+    // POSIX half of this plugin carries a self-pipe to avoid. Waiting for
+    // `ClosePseudoConsole` first is what makes the reader's exit the ordinary
+    // case rather than a race, and costs nothing now that no isolate is
+    // waiting for any of it.
     if (handle->outputReadSide != NULL)
     {
         CloseHandle(handle->outputReadSide);
@@ -530,6 +539,47 @@ FFI_PLUGIN_EXPORT void pty_destroy(PtyHandle *handle)
     }
 
     free(handle);
+
+    return 0;
+}
+
+// Releases the pty. **Returns immediately**; see close_console_thread for what
+// finishes afterwards and why it cannot be done here.
+//
+// The handle must not be used afterwards -- ownership passes to the worker.
+FFI_PLUGIN_EXPORT void pty_destroy(PtyHandle *handle)
+{
+    if (handle == NULL)
+    {
+        return;
+    }
+
+    // Safe on this thread, and worth doing here rather than on the worker:
+    // nothing blocks on the input write side, closing it gives the child EOF
+    // on its stdin, one more reason for it to leave -- and it is released now
+    // rather than whenever the console host finally goes.
+    if (handle->inputWriteSide != NULL)
+    {
+        CloseHandle(handle->inputWriteSide);
+        handle->inputWriteSide = NULL;
+    }
+
+    HANDLE thread = CreateThread(NULL, 0, close_console_thread, handle, 0, NULL);
+
+    if (thread == NULL)
+    {
+        // No worker to hand it to. The console, the output pipe and the handle
+        // are left to the OS, which reclaims all three when the process ends --
+        // deliberately, and not a fallback to closing it here. Blocking the
+        // calling thread is the failure this function exists to prevent, and a
+        // machine too short of resources to start a thread is the last place to
+        // do it.
+        return;
+    }
+
+    // Not a cancel: this drops our reference so the kernel can reclaim the
+    // thread when it returns. Nothing ever joins it. Win32's pthread_detach.
+    CloseHandle(thread);
 }
 
 FFI_PLUGIN_EXPORT char *pty_error()
