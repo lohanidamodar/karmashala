@@ -1,8 +1,6 @@
 /// The wire protocol shared by the desktop host, the relay client and the
-/// mobile companion.
-///
-/// Pure Dart on purpose: no Flutter, no `dart:io`, no plugins, so the relay
-/// tooling and any future non-Flutter implementation can depend on it.
+/// mobile companion. Pure Dart on purpose: no Flutter, no `dart:io`, no
+/// plugins, so a non-Flutter implementation can depend on it.
 library;
 
 import 'dart:convert';
@@ -96,37 +94,21 @@ enum Capability {
   receiveNotifications('receive_notifications', 1 << 4),
 
   /// Read the desktop's projects and installed agents, and start a session in
-  /// one of them.
-  ///
-  /// The only capability that makes the desktop *originate* work rather than
-  /// observe or answer it, which is why it is its own bit rather than a second
-  /// meaning for [sendPrompt]: a phone paired before this existed holds a
-  /// bitset without it and is refused, in words, for ever — nothing already
-  /// granted quietly grows into permission to start processes.
+  /// one of them. Its own bit rather than a second meaning for [sendPrompt]: a
+  /// phone paired before this existed is refused, in words, for ever.
   startSession('start_session', 1 << 5),
 
   /// Add an existing local desktop folder as a project.
   addProject('add_project', 1 << 6),
 
-  /// Read what a session is **doing right now**: the tool calls and subagents
-  /// it has issued and not yet answered.
-  ///
-  /// Its own bit rather than a second meaning for [readTranscript], and the
-  /// reason is the same one [startSession] states. A transcript is what a
-  /// session has already said; this is a live read of the machine — which
-  /// commands are running on it at this moment, and under what description a
-  /// delegated agent was launched. A phone paired before this existed holds a
-  /// bitset without it and is refused, in words, for ever.
+  /// Read what a session is **doing right now**: the calls it has issued and
+  /// not yet answered. Its own bit for the reason [startSession] states — a
+  /// phone paired before this existed is refused, in words, for ever.
   viewActivity('view_activity', 1 << 7),
 
-  /// Put a **file** on the desktop's disk and name its path to an agent.
-  ///
-  /// Its own bit, and the widest gap yet between it and anything already
-  /// granted. [sendPrompt] carries words the phone typed; this writes bytes the
-  /// phone chose into the host's filesystem and then tells a CLI to open them.
-  /// A phone paired before this existed holds a bitset without it and is
-  /// refused, in words, for ever — nothing already granted quietly grows into
-  /// permission to write to this machine.
+  /// Put a **file** on the desktop's disk and name its path to an agent. Its
+  /// own bit, and the widest gap yet from anything already granted: a phone
+  /// paired before this existed is refused, in words, for ever.
   sendAttachment('send_attachment', 1 << 8);
 
   const Capability(this.wire, this.bit);
@@ -141,9 +123,8 @@ enum Capability {
   };
 }
 
-/// A set of [Capability] as the bitset carried in the pairing payload.
-///
-/// Bits this build does not know are preserved on round-trip but grant nothing.
+/// A set of [Capability] as the bitset carried in the pairing payload. Bits
+/// this build does not know are preserved on round-trip but grant nothing.
 class CapabilitySet {
   const CapabilitySet(this.bits);
 
@@ -238,13 +219,9 @@ enum FrameType {
     capability: Capability.receiveNotifications,
   ),
 
-  /// What could be started here: projects, their checkouts, and the agents
-  /// actually installed where each checkout lives.
-  ///
-  /// Gated on [Capability.startSession] rather than on `view_sessions`
-  /// because it says more than the session rows do — every project on the
-  /// machine, whether or not anything has ever run in it — and it exists for
-  /// exactly one purpose, which is to make [sessionStart] a real choice.
+  /// What could be started here: projects, checkouts and the agents installed
+  /// where each lives. Gated on [Capability.startSession] rather than
+  /// `view_sessions`, because it names every project on the machine.
   workspaceList(
     'workspace.list',
     origin: FrameOrigin.companion,
@@ -271,47 +248,26 @@ enum FrameType {
     capability: Capability.startSession,
   ),
   /// **What one session is doing right now** — asked for by the phone, and
-  /// stated by the host whenever the answer changes.
-  ///
-  /// [FrameOrigin.either], which only [error] is otherwise, and for a
-  /// deliberate reason: one fact travelling both ways is one payload shape and
-  /// one capability. The phone asks when it opens a session or comes back from
-  /// a reconnect; the host states it unprompted from the same transcript read
-  /// the poll sweep already pays for, so nothing here adds a read or a timer.
-  ///
-  /// An unsolicited frame is sent only to a device holding
-  /// [Capability.viewActivity]. A request from one that does not is refused
-  /// with a sentence — the frame exists so an old pairing hears a `not
-  /// permitted` naming `view_activity`, rather than reading a live answer as
-  /// silence.
+  /// stated by the host whenever the answer changes. [FrameOrigin.either], so
+  /// one fact is one payload shape and one capability; an unsolicited frame
+  /// goes only to a device holding [Capability.viewActivity].
   sessionActivity(
     'session.activity',
     origin: FrameOrigin.either,
     capability: Capability.viewActivity,
   ),
-  /// **Ask to send a file**, before any of it has crossed the link.
-  ///
-  /// The whole point of a separate frame: the host answers *here* — with the
-  /// media types the session's agent will actually look at, and the byte cap —
-  /// so a refusal costs one small frame rather than the megabytes of a photo
-  /// the desktop was never going to be able to use. The phone already knows
-  /// the same answer from [FrameOrigin.host]'s session rows; this is the
-  /// re-check, because a row can be minutes old and the agent behind it can
-  /// have changed.
+  /// **Ask to send a file**, before any of it has crossed the link, so a
+  /// refusal costs one small frame rather than the megabytes of a photo. A
+  /// re-check, because a session row can be minutes old.
   attachmentBegin(
     'attachment.begin',
     origin: FrameOrigin.companion,
     capability: Capability.sendAttachment,
   ),
 
-  /// One slice of the file, base64 in the envelope, answered before the next
-  /// is sent.
-  ///
-  /// Chunked because an envelope stops at [kMaxEnvelopeBytes] and a photo off
-  /// a phone is several times that. Answered one at a time on purpose: the
-  /// outbound queue drops its **oldest** frame on overflow, so a fire-and-
-  /// forget upload could lose a slice out of the middle and commit a corrupt
-  /// file. A chunk that is not acknowledged is a chunk that did not land.
+  /// One slice of the file, base64 in the envelope, answered before the next is
+  /// sent. Answered one at a time because the outbound queue drops its
+  /// **oldest** frame on overflow: an unacknowledged chunk did not land.
   attachmentChunk(
     'attachment.chunk',
     origin: FrameOrigin.companion,
@@ -322,27 +278,15 @@ enum FrameType {
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),
   approvalRequested('approval.requested', origin: FrameOrigin.host),
 
-  /// That approval is no longer waiting — for whatever reason.
-  ///
-  /// The other half of [approvalRequested], and missing until the owner hit
-  /// what its absence costs: a card on the phone offering approve and deny
-  /// for a decision the desktop had already made. The phone was told when a
-  /// request appeared and never told when it went away, so answering it
-  /// anywhere else left the card orphaned and actionable.
-  ///
-  /// Same principle [pairingRevoked] states: the phone cannot work this out
-  /// for itself, and silence reads exactly like a desktop that is merely
-  /// busy. Saying it outright turns a guess into a fact.
+  /// That approval is no longer waiting — for whatever reason. Without it, a
+  /// request answered anywhere else left the phone's card orphaned and
+  /// actionable, and silence reads like a desktop that is merely busy.
   approvalResolved('approval.resolved', origin: FrameOrigin.host),
   hostStatus('host.status', origin: FrameOrigin.host),
 
-  /// The host has revoked this pairing; nothing more will be answered.
-  ///
-  /// Sent because the phone cannot otherwise tell. Over a relay the *link*
-  /// survives a revoke — the host closes its own runtime, but the phone's relay
-  /// socket stays up — so a request after it simply goes unanswered, and
-  /// silence is indistinguishable from a busy desktop. Saying it outright turns
-  /// a guess into a fact.
+  /// The host has revoked this pairing; nothing more will be answered. Over a
+  /// relay the phone's socket survives the revoke, so silence would otherwise
+  /// be indistinguishable from a busy desktop.
   pairingRevoked('pairing.revoked', origin: FrameOrigin.host),
 
   /// The answer to a request, correlated by `id`.
@@ -460,11 +404,9 @@ class RendezvousId {
   String toString() => 'RendezvousId($value)';
 }
 
-/// The one JSON envelope carried inside every sealed frame.
-///
-/// `seq` is the sender's per-direction frame number; it is the same number the
-/// sealing layer stamps inside the sealed payload, so a receiver can check the
-/// two agree.
+/// The one JSON envelope carried inside every sealed frame. `seq` is the
+/// sender's per-direction frame number, stamped again inside the sealed payload
+/// so a receiver can check the two agree.
 class Envelope {
   Envelope({
     required this.seq,
@@ -603,36 +545,19 @@ bool _bytesEqual(Uint8List a, Uint8List b) {
   return true;
 }
 
-/// Raw bytes carried by one `attachment.chunk`.
-///
-/// Sized backwards from [kMaxEnvelopeBytes], which is the hard stop, with room
-/// for everything that sits on top of the bytes themselves: base64 costs four
-/// characters per three bytes, the envelope adds its own JSON, and the sealing
-/// layer adds a nonce, a tag and a sequence. 128 KiB encodes to 174,764
-/// characters — about a sixth of the cap — which is deliberately conservative
-/// rather than maximal: every frame on a device's chain queues behind the
-/// transcript sweep, and one that occupies most of an envelope is the shape of
-/// payload that starved this link before (see `kRemoteTranscriptPageMax`).
+/// Raw bytes carried by one `attachment.chunk`, sized backwards from
+/// [kMaxEnvelopeBytes]: base64 costs four characters per three bytes, and the
+/// envelope and the seal add their own. Deliberately conservative — a frame
+/// occupying most of an envelope is the shape that starved this link before.
 const int kAttachmentChunkBytes = 128 * 1024;
 
-/// The largest file one attachment will carry.
-///
-/// The same number `kMaxSessionMediaBytes` uses for the biggest picture this
-/// app will move to disk and hand a decoder, so a file the phone can send is
-/// one the desktop's own media surfaces can already draw. It is 96 chunks, and
-/// the phone shows the count as it goes rather than pretending a 12 MB upload
-/// over a relay is instant.
+/// The largest file one attachment will carry — the same number
+/// `kMaxSessionMediaBytes` uses, so a file the phone can send is one the
+/// desktop's own media surfaces can already draw. It is 96 chunks.
 const int kMaxAttachmentBytes = 12 * 1024 * 1024;
 
-/// The most messages one `transcript.get` will carry.
-///
-/// A conversation is opened at its end, so the tail is what a reader wants, and
-/// a whole transcript is not something a frame can hold: the largest in this
-/// repo is 53 MB of JSONL and produced a result the phone never finished
-/// receiving. A caller that wants an earlier window asks for it with `after`.
-///
-/// **Every** page is bounded by it, including one asked for with `after` — a
-/// resume from a cursor used to answer with the whole remainder, which is the
-/// same frame nobody could receive wearing a different name. A page that could
-/// not carry everything says so with `hasNewer`, and the reader asks again.
+/// The most messages one `transcript.get` will carry. **Every** page is bounded
+/// by it, including one asked for with `after`: a resume from a cursor used to
+/// answer with the whole remainder, which no link could carry. A page that
+/// could not carry everything says so with `hasNewer`.
 const int kRemoteTranscriptPageMax = 300;

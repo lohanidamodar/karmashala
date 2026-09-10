@@ -1,9 +1,6 @@
-/// Pairing, host and phone together, over a real loopback LAN link.
-///
-/// The QR payload round-trips, both ends derive the same key, the confirm
-/// round-trip gates persistence, the secret is single-use and the code
-/// expires. No internet, no relay: the transports are Loop 64's LAN pair on
-/// 127.0.0.1.
+/// Pairing, host and phone together, over a real loopback LAN link: the QR
+/// payload round-trips, both ends derive the same key, the confirm round-trip
+/// gates persistence, the secret is single-use and the code expires.
 library;
 
 import 'dart:typed_data';

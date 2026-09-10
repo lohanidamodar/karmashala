@@ -1,26 +1,16 @@
-/// The relays one paired host can be met at, and how the phone chooses
-/// between them.
-///
-/// **A relay is a meeting place, never an identity.** The rendezvous both ends
-/// use is HKDF-derived from the device key ([rendezvousFor]), not from the
-/// relay URL, and every frame is sealed under that same key. So trying several
-/// relays is safe: a wrong — or hostile — relay simply has nobody at the
-/// rendezvous, and cannot impersonate the host because it holds no key. That
-/// property is what this file rests on, and nothing here may ever let a relay
-/// URL feed identity, key derivation or trust.
+/// The relays one paired host can be met at, and how the phone chooses between
+/// them. **A relay is a meeting place, never an identity**: the rendezvous is
+/// HKDF-derived from the device key, not the URL, so a wrong — or hostile —
+/// relay simply has nobody at it. Nothing here may ever let a relay URL feed
+/// identity, key derivation or trust.
 library;
 
-/// Guards against a runaway list: a host that announced nonsense, or a QR
-/// carrying a hundred relays, must not turn a reconnect into a phone book.
-/// The HEAD is kept, because every list here is already in priority order —
-/// the relay in hand first, then the host's own announcement order — so a
-/// truncation drops the least useful tail and never the address being used.
+/// Guards against a runaway list. The HEAD is kept, because every list here is
+/// already in priority order, so a truncation drops the least useful tail.
 const int kMaxRelayCandidates = 6;
 
 /// How long a relay that just refused a phone is left alone. Mirrors the LAN
-/// scout's grudge (`kLanRetryCooldown`) so the two paths forget at the same
-/// rate: long enough that a phone at home stops dialling a dead internet
-/// relay on every reconnect, short enough that a blip heals within minutes.
+/// scout's grudge (`kLanRetryCooldown`) so the two paths forget at one rate.
 const Duration kRelayCandidateCooldown = Duration(minutes: 2);
 
 /// One relay this phone may find its host at, with what happened last time.
@@ -99,14 +89,10 @@ class RelayCandidate {
   String toString() => 'RelayCandidate($url)';
 }
 
-/// The order a reconnect dials relays in: last known good first, then the rest
-/// of the saved set in the order it was learned, then [fallback] — the app's
-/// configured default hosted relay — as a last resort.
-///
-/// Candidates cooling from a recent failure are dropped, so a phone at home
-/// does not re-dial a dead internet relay every cycle. If that would leave
-/// nothing to try, the one that failed longest ago comes back: the phone must
-/// always have somewhere to go.
+/// The order a reconnect dials relays in: last known good first, then the saved
+/// set in the order it was learned, then [fallback]. Candidates cooling from a
+/// recent failure are dropped — unless that would leave nothing to try, when
+/// the one that failed longest ago comes back.
 List<Uri> orderRelayCandidates(
   List<RelayCandidate> saved, {
   required Uri fallback,
@@ -152,14 +138,10 @@ List<Uri> orderRelayCandidates(
   return List.unmodifiable(ordered.values);
 }
 
-/// Folds the relay set a host just announced into what this phone has saved.
-///
-/// The announcement is the truth about where the host listens *now*, so it
-/// replaces the set — that is how a DHCP move retires a stale
-/// `ws://<old-ip>:<port>` and how a hosted relay switched on last month
-/// arrives. Health carries over for URLs that survive, so a candidate does not
-/// forget it works every time the host says hello. An EMPTY announcement
-/// changes nothing: a host mid-restart must not strand a paired phone.
+/// Folds the relay set a host just announced into what this phone has saved:
+/// the announcement replaces the set, and health carries over for URLs that
+/// survive. An EMPTY announcement changes nothing — a host mid-restart must not
+/// strand a paired phone.
 List<RelayCandidate> mergeRelayCandidates(
   List<RelayCandidate> saved,
   List<Uri> announced,
@@ -205,13 +187,9 @@ List<Uri> relayUrisFrom(Object? json) {
 }
 
 /// Whether [url] names a relay on the phone's own network: loopback, a private
-/// IPv4 range, or a link-local or unique-local IPv6 address.
-///
-/// **Not a trust judgement of any kind.** This file's header says why: a relay
-/// is a meeting place, never an identity, and nothing here may ever let a URL
-/// feed key derivation or trust. This answers one operational question — how
-/// far away the meeting place is — because the wait before dialling a desktop
-/// on the same table again should not be the wait an internet relay deserves.
+/// IPv4 range, or a link-local or unique-local IPv6 address. **Not a trust
+/// judgement of any kind** — it answers only how far away the meeting place is,
+/// so a desktop on the same table is not made to wait out an internet relay's delay.
 bool isLocalRelay(Uri url) {
   final host = url.host.toLowerCase();
   if (host.isEmpty) return false;
@@ -241,10 +219,8 @@ bool isLocalRelay(Uri url) {
 }
 
 /// A `host:port` LAN hint as the host announced it, or null when it is not one.
-///
-/// A discovery hint only — it may be stale the moment DHCP moves, and proving
-/// who answers there is still the sealed hello's job. Loopback is refused: a
-/// phone dialling 127.0.0.1 would be dialling itself.
+/// A hint only, and proving who answers there is still the sealed hello's job.
+/// Loopback is refused: a phone dialling 127.0.0.1 would be dialling itself.
 ({String host, int port})? parseLanHint(String? hint) {
   if (hint == null || hint.isEmpty) return null;
   final colon = hint.lastIndexOf(':');

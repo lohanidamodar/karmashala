@@ -35,9 +35,8 @@ class _Watched<T> {
   }
 }
 
-/// The id a scripted pairing that named no host gets, so a fake phone still
-/// has one addressable connection. Host ids are 16 bytes of hex on the wire,
-/// so the scripted ones are too — [DeviceId.parse] accepts nothing else.
+/// The id a scripted pairing that named no host gets. Host ids are 16 bytes of
+/// hex on the wire, so the scripted ones are too — [DeviceId.parse] insists.
 String fakeHostId(int index) =>
     'fa4e${index.toRadixString(16).padLeft(4, '0')}'.padRight(32, '0');
 
@@ -53,17 +52,9 @@ DeviceId? _deviceId(String hostId) {
   }
 }
 
-/// The scripted gateway.
-///
-/// Constructed unpaired by default — the first-run experience. Use
-/// [FakeCompanionGateway.paired] for a phone already talking to a host, and
-/// the mutators ([setSessions], [setLink], [appendMessage], [raiseApproval],
-/// [emitAttention]) to drive the UI from a test. Actions are recorded in
-/// [sentPrompts] and [answeredApprovals].
-///
-/// Multi-host: pass [connections] for a phone with several saved desktops and
-/// [sessionsByHost] for what each one holds, so a test can watch [switchTo]
-/// swap the whole session list.
+/// The scripted gateway. Constructed unpaired by default — the first-run
+/// experience; [FakeCompanionGateway.paired] gives a phone already talking to a
+/// host, and the mutators drive the UI from a test.
 class FakeCompanionGateway implements CompanionGateway {
   FakeCompanionGateway({
     CompanionPairing? pairing,
@@ -222,8 +213,7 @@ class FakeCompanionGateway implements CompanionGateway {
   int reconnectRequests = 0;
 
   /// Every presence this companion reported, in order. A *call*, not a frame:
-  /// the real gateway drops one that says nothing new, which is where "one
-  /// frame per change" is decided.
+  /// the real gateway drops one that says nothing new.
   final presenceReports = <CompanionPresence>[];
 
   /// Every host id the UI asked to switch to, in order.
@@ -255,8 +245,7 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<DateTime?> get linkSinceStates => _linkSince.stream;
 
-  /// Settable, so a screen test can drive the banner's honest-reason line —
-  /// and watched, because on a real phone the reason arrives on its own, with
+  /// Settable and watched: on a real phone the reason arrives on its own, with
   /// no link-state change under it for a surface to rebuild on.
   @override
   String? get linkTrouble => _trouble.value;

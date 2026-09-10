@@ -25,11 +25,9 @@ extension _GatewayApprovals on RemoteCompanionGateway {
     _stampAttention(request.sessionId, CompanionAttentionKind.needsYou);
   }
 
-  /// Takes a card off the screen and says why.
-  ///
-  /// The nothing-to-do case is deliberately silent: a `session.changed` for a
-  /// session that was never asking must not announce a resolution the reader
-  /// never saw a request for.
+  /// Takes a card off the screen and says why. The nothing-to-do case is
+  /// deliberately silent: a `session.changed` for a session that was never
+  /// asking must not announce a resolution the reader never saw a request for.
   void _retireApproval(String sessionId, CompanionApprovalOutcome outcome) {
     final pending = _approvalOf(sessionId);
     if (pending.value == null) return;

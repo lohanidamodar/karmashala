@@ -5,19 +5,10 @@ part of 'remote_companion_gateway.dart';
 // each loser is torn down before the next is tried.
 
 extension _GatewayDial on RemoteCompanionGateway {
-  /// Design §3's priority order, widened by Loop 83 to a *set* of relays:
-  ///
-  /// 1. every fresh LAN candidate the beacon found;
-  /// 2. the host's own LAN hint from `host.status`, when the beacon found
-  ///    nothing — a network that eats multicast still has a direct path;
-  /// 3. the last relay that actually worked;
-  /// 4. the rest of the saved relays, skipping any still cooling from a recent
-  ///    failure;
-  /// 5. the app's configured default hosted relay, as a last resort.
-  ///
-  /// First success wins and is remembered as the last-known-good; each loser
-  /// is torn down before the next is tried, so only one dial is ever in
-  /// flight. Returns a connected client, or null when nobody answered.
+  /// The dial order: every fresh LAN candidate, the host's own LAN hint, the
+  /// last relay that worked, the rest of the saved set (skipping any still
+  /// cooling), then the configured default. First success wins and is
+  /// remembered; only one dial is ever in flight. Null when nobody answered.
   Future<CompanionClient?> _dialAnyPath() async {
     final scout = lan;
     if (scout != null) {
@@ -55,12 +46,9 @@ extension _GatewayDial on RemoteCompanionGateway {
   Future<List<Uri>> _relayOrder() async {
     final record = _record;
     if (record == null) return const [];
-    // The saved candidates, plus anything the host has announced since that
-    // has not been written down yet. An announcement is only persisted once a
-    // link reaches `connected` — the opening greeting has to wait for the
-    // client to write its own record, or that write would clobber it — so an
-    // announcement heard during a connect that then failed is real knowledge
-    // sitting in memory with nothing to dial it.
+    // The saved candidates, plus anything the host has announced since that has
+    // not been written down yet: an announcement is persisted only once a link
+    // reaches `connected`, or the write would clobber the client's own record.
     final announced = _lastHostStatus?.relays ?? const <Uri>[];
     return orderRelayCandidates(
       announced.isEmpty
@@ -87,22 +75,11 @@ extension _GatewayDial on RemoteCompanionGateway {
     return scout.inCooldown(candidate) ? null : candidate;
   }
 
-  /// One LAN candidate, walked across the generation window.
-  ///
-  /// The counters drift — that is what the window is for, and the relay path
-  /// has always probed forward through it. The direct path named exactly one
-  /// generation, and a host that has moved on closes the link the moment the
-  /// hello names a rendezvous it is no longer holding ("lan hello for an
-  /// unknown rendezvous", in the desktop's own log). With a two-minute cooldown
-  /// stamped on each refusal that is not a blip: the direct path stays dead
-  /// until some relay connection happens to resynchronise the counters.
-  ///
-  /// The walk costs nothing in the ordinary failure, because it is taken only
-  /// on the host's own answer to a rendezvous it is not holding: it accepts the
-  /// socket, reads the hello, and **hangs up**. Nobody home is one dial, and so
-  /// is a stranger — which accepts the socket and then says nothing at all,
-  /// holding it open until the attempt times out. Only "took the socket and
-  /// then dropped it" is worth asking again at the next generation.
+  /// One LAN candidate, walked across the generation window: the counters
+  /// drift, and a host that has moved on hangs up on a hello naming a
+  /// rendezvous it no longer holds, leaving the direct path dead behind a
+  /// two-minute cooldown. Only "took the socket and then dropped it" is worth
+  /// asking again at the next generation; nobody home is one dial either way.
   Future<CompanionClient?> _dialLan(
     LanPathScout scout,
     DiscoveredHost host,

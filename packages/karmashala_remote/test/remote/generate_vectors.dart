@@ -1,8 +1,7 @@
-/// Regenerates `remote_test_vectors.json`.
-///
-/// Run it only when the key schedule or the sealed frame format is meant to
-/// change — the committed vectors are what stop the host and the companion
-/// drifting apart, so a diff here is a protocol change.
+/// Regenerates `remote_test_vectors.json`. Run it only when the key schedule or
+/// the sealed frame format is meant to change — the committed vectors are what
+/// stop the host and the companion drifting apart, so a diff here is a protocol
+/// change.
 ///
 /// ```
 /// dart run test/remote/generate_vectors.dart

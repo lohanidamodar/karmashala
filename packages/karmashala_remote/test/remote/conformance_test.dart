@@ -1,8 +1,5 @@
-/// One scenario, run over the direct LAN path and over the relay path.
-///
-/// Anything that passes here is true of the transport the companion will use at
-/// home and of the one it will use from mobile data, which is the whole point of
-/// keeping the sealing above the transport.
+/// One scenario, run over the direct LAN path and over the relay path — which
+/// is the whole point of keeping the sealing above the transport.
 library;
 
 import 'dart:convert';

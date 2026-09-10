@@ -1,15 +1,7 @@
-/// Gap recovery is paged but **complete**.
-///
-/// The failure these pin is the quiet one. A phone that came back after a long
-/// absence asked for everything after its cursor and the host answered with the
-/// whole remainder — one frame, past the envelope cap, that no transport could
-/// carry. The request timed out, the turns were never re-offered, and what the
-/// reader saw was a session that had gone quiet rather than a delivery that had
-/// failed.
-///
-/// So every page is bounded, at both ends, and a page that could not carry
-/// everything says `hasNewer`. Recovery is finished when, and only when, that
-/// reads false — never when a page happens to come back short.
+/// Gap recovery is paged but **complete**. A phone that came back after a long
+/// absence used to be answered with the whole remainder — one frame past the
+/// envelope cap that no transport could carry — and the reader saw a session
+/// that had gone quiet. Recovery finishes only when `hasNewer` reads false.
 library;
 
 import 'package:test/test.dart';
@@ -164,9 +156,8 @@ void main() {
     test('growth past a page is carried a page at a time, saying hasNewer',
         () async {
       // A resumed agent replaying its history grows a transcript by thousands
-      // of messages between two polls. Sent whole it built a frame past the
-      // envelope cap; and because the cursor moves only on a delivered frame,
-      // the very same frame was rebuilt and refused on every poll after it.
+      // of messages between two polls; sent whole it built a frame past the cap
+      // that was then rebuilt and refused on every poll after it.
       final harness = Harness();
       harness.fake.transcripts['s1'] = conversation(5);
       await harness.watch('s1');

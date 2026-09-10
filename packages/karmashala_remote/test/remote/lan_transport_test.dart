@@ -158,10 +158,8 @@ void main() {
 
   test('the queue is bounded in BYTES too, and says so when it drops',
       () async {
-    // A count is not a size. At the frame cap, 256 frames is a quarter of a
-    // gigabyte held for one phone that walked out of range — and the frames
-    // most likely to fill the queue are the large ones, a transcript page for
-    // a session that is busy.
+    // A count is not a size: at the frame cap, 256 frames is a quarter of a
+    // gigabyte held for one phone that walked out of range.
     final log = <String>[];
     final phone = dial(maxQueuedBytes: 2500, start: false, onLog: log.add);
 

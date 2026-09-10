@@ -1,10 +1,6 @@
 /// The key schedule: one pairing secret becomes a device key, two direction
-/// keys and a rotating rendezvous id.
-///
-/// Every derivation is HKDF-SHA256 with the same salt and a distinct `info`
-/// label, so no two outputs can ever collide. Loop A supplies the pairing
-/// secret (32 bytes from the QR code, or the SPAKE2 output of a short code);
-/// nothing here ever touches the network.
+/// keys and a rotating rendezvous id. Every derivation is HKDF-SHA256 with the
+/// same salt and a distinct `info` label, so no two outputs can collide.
 library;
 
 import 'dart:typed_data';
@@ -47,10 +43,8 @@ enum ChannelDirection {
 
 final Hkdf _hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: kDeviceKeyBytes);
 
-/// Derives the long-lived key for one paired phone.
-///
-/// The two device ids are bound in a fixed order (host first) so both ends
-/// compute the same key without negotiating anything.
+/// Derives the long-lived key for one paired phone. The two device ids are
+/// bound in a fixed order (host first) so both ends compute the same key.
 Future<SecretKeyData> deriveDeviceKey({
   required List<int> pairingSecret,
   required DeviceId hostId,
@@ -71,12 +65,9 @@ Future<SecretKeyData> deriveDeviceKey({
 }
 
 /// Derives the sealing key for one direction of a device's channel, for
-/// connection [generation] — the same counter [rendezvousFor] uses.
-///
-/// Binding the generation is what lets sequence numbers restart at zero on a
-/// new connection: old frames cannot be replayed into it, because the key they
-/// were sealed under is gone. Within one generation the key is stable, so a
-/// reconnect resumes the same sequence.
+/// connection [generation]. Binding the generation is what lets sequence
+/// numbers restart at zero on a new one and keeps the key stable within one —
+/// so a reconnect resumes the sequence, and old frames cannot be replayed in.
 Future<SecretKeyData> deriveDirectionKey(
   SecretKeyData deviceKey,
   ChannelDirection direction, {
@@ -92,14 +83,9 @@ Future<SecretKeyData> deriveDirectionKey(
   );
 }
 
-/// The relay path this device uses for connection [counter].
-///
-/// Pseudorandom in the device key, so the relay sees an unrelated 16-byte id
-/// every time and cannot link one device's connections to each other. Both ends
-/// derive it from the same key, so no id is ever transmitted.
-///
-/// Both ends persist the counter and bump it after a connection pairs. If they
-/// drift — the host missed a companion's attempt, say — the joining end walks
+/// The relay path this device uses for connection [counter]. Pseudorandom in
+/// the device key, so the relay cannot link one device's connections and no id
+/// is ever transmitted. If the two ends' counters drift, the joining end walks
 /// [rendezvousWindow] forward until it finds the host.
 Future<RendezvousId> rendezvousFor(SecretKeyData deviceKey, int counter) async {
   if (counter < 0) {
@@ -160,9 +146,8 @@ Future<RendezvousId> derivePairingRendezvous(List<int> pairingSecret) async {
   return RendezvousId(Uint8List.fromList(key.bytes));
 }
 
-/// Seals the host's pairing confirm for a phone that does not yet know the
-/// host id (the typed-code path): derived from the secret alone, so opening
-/// it proves secret possession before the id-bound device key can exist.
+/// Seals the host's pairing confirm for a phone that does not yet know the host
+/// id: derived from the secret alone, so opening it proves secret possession.
 Future<SecretKeyData> derivePairingConfirmKey(List<int> pairingSecret) =>
     _derive(
       ikm: pairingSecret,

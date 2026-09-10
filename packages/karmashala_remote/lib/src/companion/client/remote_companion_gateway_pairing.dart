@@ -136,12 +136,9 @@ extension _GatewayPairing on RemoteCompanionGateway {
     }
   }
 
-  /// Design §3 applied to pairing itself: every fresh LAN candidate races the
-  /// relay, the first sealed round-trip wins and the loser's transport is
-  /// closed under it. A dead relay must not sink pairing when the desktop is
-  /// one Wi-Fi hop away — and a dark LAN must not sink it when the relay is
-  /// fine. Only when BOTH legs fail does one combined sentence say which
-  /// failed how.
+  /// Pairing races every fresh LAN candidate against the relay; the first
+  /// sealed round-trip wins and the loser's transport is closed under it. Only
+  /// when BOTH legs fail does one combined sentence say which failed how.
   Future<stored.CompanionPairing> _pairOverAnyPath({
     required Future<stored.CompanionPairing> Function(RemoteTransport link)
     attempt,

@@ -1,16 +1,7 @@
-/// The version-discipline proof for Loop 73's payload additions: agent label,
-/// whereabouts, last activity, delivery stage and the imported flag are
-/// **additive JSON** — an old companion decodes a new host's payload by
-/// ignoring the extras, and a new companion decodes an old host's payload by
-/// answering null/false for what is not there. Both directions are pinned
-/// here, through the raw snapshot and through a sealed-shape envelope.
-///
-/// The presence fields on `notifications.register` are pinned here too, and
-/// they are the first additive change travelling the *other* way — companion
-/// to host — so the same two directions have to be read the other way round: a
-/// new phone's extra keys must not stop an old desktop reading the frame, and
-/// a new desktop must answer "nothing was said" for an old phone rather than
-/// invent a state for it.
+/// The version-discipline proof: the added payload fields are **additive
+/// JSON** — an old companion ignores the extras, a new one answers null/false
+/// for what is not there. The presence fields on `notifications.register` are
+/// pinned here too, travelling the other way, so both directions read both ways.
 library;
 
 import 'package:karmashala_remote/remote.dart';
@@ -294,10 +285,8 @@ void main() {
 
   group("an approval request's wait kind is additive too", () {
     test('an old host names none, and the phone assumes nothing', () {
-      // The bug this field exists for: that host sent approve/deny keys for
-      // any session that had stopped for the user, including one merely
-      // sitting at its own prompt. A new phone can only read what it is told,
-      // and what it is told here is nothing.
+      // The bug this field exists for: that host sent approve/deny keys for any
+      // session stopped for the user, including one merely at its own prompt.
       final request = RemoteApprovalRequest.fromJson(const {
         'sessionId': 's1',
         'evidence': ['Run the tests?'],
@@ -399,12 +388,9 @@ void main() {
   });
 
   group("a transcript's absence gained a second word, additively", () {
-    // The desktop now tells "this agent's store is unreadable" from "no
-    // transcript file for this session", and the wire had one word for both.
-    // A second word is only additive if the phone that has never heard it
-    // still gets a sentence: unknown here reads as null, and null is the hedge
-    // — a welcome screen with starter prompts — which is the exact bug the
-    // field was added to kill. So the coarse word rides beside the refinement.
+    // A second word is only additive if a phone that has never heard it still
+    // gets a sentence: unknown reads as null, and null is the welcome-screen
+    // hedge the field was added to kill. So the coarse word rides beside it.
     const noFile = RemoteTranscriptPage(
       sessionId: 's1',
       messages: [],

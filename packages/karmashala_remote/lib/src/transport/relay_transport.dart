@@ -1,7 +1,5 @@
-/// The relay client, used unchanged by both ends.
-///
-/// Each end opens an outbound WebSocket to `wss://<relay>/v1/<rendezvous>`;
-/// the relay pairs them and forwards frames it cannot read.
+/// The relay client, used unchanged by both ends: each opens an outbound
+/// WebSocket to `wss://<relay>/v1/<rendezvous>` and the relay pairs them.
 library;
 
 import 'dart:async';
@@ -20,9 +18,7 @@ const Duration kDefaultConnectTimeout = Duration(seconds: 15);
 
 /// The relay's "nobody was at the other end" close code — `kCloseNoPeer` in
 /// `packages/relay`, repeated here rather than imported so the phone's
-/// transport does not depend on the relay server. A wire constant, like an
-/// HTTP status: the relay sends it when a rendezvous has held a single lonely
-/// socket for its lone timeout.
+/// transport does not depend on the relay server.
 const int kRelayCloseNoPeer = 4408;
 
 /// An outbound WebSocket to a relay rendezvous, with reconnect and heartbeat.
@@ -60,10 +56,9 @@ class RelayTransport extends ReconnectingTransport {
   final Duration heartbeat;
   final Duration connectTimeout;
 
-  /// The live socket. Deliberately `dart:io`'s own [WebSocket] rather than a
-  /// `WebSocketChannel` wrapper: closing the wrapper's sink does **not** close
-  /// the socket (proved against a real relay — the rendezvous stayed held),
-  /// and a listener the relay still counts is what wedges a re-registration.
+  /// The live socket. `dart:io`'s [WebSocket] rather than a `WebSocketChannel`
+  /// wrapper: closing the wrapper's sink does **not** close the socket, and a
+  /// listener the relay still counts is what wedges a re-registration.
   WebSocket? _socket;
 
   /// Maps a relay base URL onto the rendezvous path, upgrading http(s) to ws(s).
@@ -80,11 +75,8 @@ class RelayTransport extends ReconnectingTransport {
   }
 
   /// The code the relay last hung up with, or null while none has been seen.
-  ///
-  /// [kRelayCloseNoPeer] is information rather than a fault: the relay
-  /// disposes a rendezvous that has held one lonely socket for its lone
-  /// timeout, so that code means "nobody else was ever there" — a different
-  /// thing to tell a user than "the network failed".
+  /// [kRelayCloseNoPeer] means "nobody else was ever there" — a different thing
+  /// to tell a user than "the network failed".
   int? get lastCloseCode => _lastCloseCode;
   int? _lastCloseCode;
 
@@ -95,10 +87,8 @@ class RelayTransport extends ReconnectingTransport {
     ).timeout(connectTimeout);
     socket.pingInterval = heartbeat;
     // Closed while this dial was in flight: `abort()` had no socket to close,
-    // so without this the connection would come up **after** the transport was
-    // gone and hold the rendezvous open. The relay would then pair the host's
-    // next listener with that orphan — one peer talking to itself, with the
-    // phone refused as a third.
+    // so the connection would come up after the transport was gone and hold the
+    // rendezvous, and the relay would pair the next listener with that orphan.
     if (state == TransportState.closed) {
       await socket.close(WebSocketStatus.goingAway, 'closing');
       return;

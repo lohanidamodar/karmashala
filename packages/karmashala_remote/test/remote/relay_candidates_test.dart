@@ -1,12 +1,7 @@
-/// Loop 83's candidate set, proven where it is cheapest: the ordering policy,
-/// the cooldown, the legacy-record migration, and the two-direction wire
-/// compatibility of the payload's additive `relays` field.
-///
-/// The premise the whole loop rests on: a relay is a **meeting place, not an
-/// identity**. The rendezvous is HKDF-derived from the device key and every
-/// frame is sealed under it, so trying a second — or wrong — relay can only
-/// find nobody. Nothing here lets a URL touch identity, keys or trust, and the
-/// last group pins that the derivation ignores relays entirely.
+/// The candidate set, proven where it is cheapest: the ordering policy, the
+/// cooldown, the legacy-record migration and the additive `relays` field's
+/// two-way compatibility. The premise: a relay is a **meeting place, not an
+/// identity**, and the last group pins that the derivation ignores relays.
 library;
 
 import 'dart:typed_data';

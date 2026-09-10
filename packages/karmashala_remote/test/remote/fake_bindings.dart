@@ -71,10 +71,9 @@ class FakeRemoteBindings {
   /// When set, every prompt send throws it.
   Object? promptError;
 
-  /// What one transcript read costs. A real one reads a session's scrollback,
-  /// and the desktop this matters on has a dozen sessions being watched — so
-  /// the sweep that reads them all is the slowest thing the host does, and how
-  /// it is scheduled decides whether the phone is ever answered.
+  /// What one transcript read costs. The sweep that reads every watched session
+  /// is the slowest thing the host does, and how it is scheduled decides
+  /// whether the phone is ever answered.
   Duration transcriptCost = Duration.zero;
 
   /// How many transcript reads the fake has served, so a test can watch the
@@ -93,9 +92,7 @@ class FakeRemoteBindings {
 
   /// When set, every delivery-stage lookup waits on it — a desktop that has
   /// stopped answering, held for exactly as long as the test says rather than
-  /// out-waited with a [stageCost] the phone's request timeout has to lose a
-  /// race to. The margin between those two numbers was tens of milliseconds
-  /// wide and decided several `--concurrency=4` runs.
+  /// out-waited with a [stageCost] the request timeout has to lose a race to.
   Completer<void>? stageGate;
 
   /// When set, every prompt send waits on it — a desktop too busy to answer,
