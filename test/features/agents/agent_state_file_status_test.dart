@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala/src/features/agents/data/agent_state_file_status_source.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

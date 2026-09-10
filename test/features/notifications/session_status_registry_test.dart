@@ -2,9 +2,8 @@ import 'dart:math' as math;
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:karmashala/src/features/agents/data/agent_state_file_status_source.dart';
-import 'package:karmashala/src/features/agents/data/agent_status_service.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';

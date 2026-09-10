@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:karmashala_core/util.dart';
-import '../../agents/data/agent_hook_receiver.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../cli_detection/data/imported_session_dao.dart';
 import '../../sessions/data/session_dao.dart';

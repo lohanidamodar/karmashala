@@ -1,5 +1,5 @@
-import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:karmashala/src/features/agents/data/terminal_grid_status_source.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -4,8 +4,7 @@ import 'dart:math' as math;
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
-import '../../agents/data/agent_state_file_status_source.dart';
-import '../../agents/data/agent_status_service.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/watched_session.dart';

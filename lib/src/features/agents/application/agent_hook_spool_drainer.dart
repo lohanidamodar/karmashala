@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
-import '../data/agent_hook_spool.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
 
 /// One environment's spool directory, as this app can name it.
 class AgentHookSpoolSource {

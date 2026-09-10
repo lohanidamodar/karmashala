@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_skill_installer.dart';
+import 'package:karmashala_agent_reporting/skills.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:path/path.dart' as p;
 

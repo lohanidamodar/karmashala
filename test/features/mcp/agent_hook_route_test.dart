@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
-import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

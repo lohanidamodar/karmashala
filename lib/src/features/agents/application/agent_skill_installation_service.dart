@@ -6,7 +6,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_mcp/instructions.dart';
-import '../data/agent_skill_installer.dart';
+import 'package:karmashala_agent_reporting/skills.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';
 

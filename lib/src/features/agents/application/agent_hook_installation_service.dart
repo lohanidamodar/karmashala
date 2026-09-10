@@ -6,7 +6,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../data/agent_hook_installer.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_providers.dart';

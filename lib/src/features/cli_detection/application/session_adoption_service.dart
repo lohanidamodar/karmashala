@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import '../../agents/data/agent_installation_dao.dart';
-import '../../agents/data/terminal_grid_status_source.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, IdGenerator;
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
