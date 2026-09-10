@@ -345,6 +345,10 @@ class SshTerminalInstance
   Future<bool> _startViaHost() async {
     final access = hostAccess;
     if (access == null) return false;
+    // Asked before anything is deployed: a pane that is staying with tmux must
+    // not cost the machine a seven-megabyte upload it will not use, and the
+    // session it is about to attach to matters more than the upgrade.
+    if (await _keepsItsTmuxSession(access)) return false;
     final HostDeployment deployment;
     try {
       deployment = await access.deployment();
@@ -383,6 +387,49 @@ class SshTerminalInstance
     // app already observes that transition and a poll would be a second,
     // slower, wronger answer to a question already answered.
     _reconnects ??= access.reconnected.listen((_) => unawaited(_reconnectToHost(access)));
+    return true;
+  }
+
+  /// Whether this pane's session is already living under tmux on that machine,
+  /// in which case it stays there whatever the session host can do.
+  ///
+  /// The tmux session and the host session carry the *same* name — see
+  /// [_hostSessionId] — so a pane that took the host path while tmux held that
+  /// name would open a second, empty session beside a running agent and leave
+  /// the agent attached to nothing. There is no migration between the two: the
+  /// child belongs to whichever one spawned it. So only a **new** session, or
+  /// one whose tmux session is gone, moves to the host, and the pane says which
+  /// of the two it is on.
+  Future<bool> _keepsItsTmuxSession(HostSessionAccess access) async {
+    final name = _hostSessionId();
+    final bool? existing;
+    try {
+      existing = await access.hasTmuxSession(name);
+    } on Object catch (e) {
+      _emit(
+        '\x1b[33m[could not ask ${host.address} whether $name is already running '
+        'under tmux ($e), so this pane stays on tmux rather than risk leaving a '
+        'live session behind it.]\x1b[0m\r\n',
+      );
+      return true;
+    }
+    if (existing == null) {
+      // A reading nobody took is not a negative one (§19), and the cost of the
+      // two mistakes is not symmetric: taking the host path wrongly abandons a
+      // running agent, staying on tmux wrongly costs command blocks.
+      _emit(
+        '\x1b[33m[${host.address} did not say whether $name is already running under '
+        'tmux, so this pane stays on tmux.]\x1b[0m\r\n',
+      );
+      return true;
+    }
+    if (!existing) return false;
+    _emit(
+      '\x1b[33m[$name is already running under tmux on ${host.address}; this pane '
+      'attaches to it there rather than opening a second session on the session '
+      'host. tmux does not carry command blocks, links or exit codes — end this '
+      'session and start a new one to move it.]\x1b[0m\r\n',
+    );
     return true;
   }
 
@@ -530,13 +577,13 @@ class SshTerminalInstance
 
   /// The app's own id, not one the host invents: the same pane must find the
   /// same session after a reconnect, and an agent must keep its session across
-  /// pane replacement — the same rule the tmux session name follows.
-  String _hostSessionId() {
-    final raw = agentLaunch?.sessionId != null
-        ? 'karmashala_${agentLaunch!.sessionId}'
-        : 'karmashala_${host.id}_$id';
-    return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-  }
+  /// pane replacement.
+  ///
+  /// Literally [sshTmuxSessionName] rather than the same rule spelled twice.
+  /// The two names being one string is what [_keepsItsTmuxSession] rests on: a
+  /// session cannot be in both places, so the name has to identify it in either.
+  String _hostSessionId() =>
+      sshTmuxSessionName(paneId: id, hostId: host.id, agentSessionId: agentLaunch?.sessionId);
 
   /// What the pane has actually rendered, carried across a link being replaced
   /// so a reconnect neither repeats a byte nor drops one. Updated from the link
@@ -644,7 +691,7 @@ String buildSshTerminalScript({
 }) {
   final cwd = workingDirectory?.trim();
   final hasCwd = cwd != null && cwd.isNotEmpty;
-  final tmuxSessionName = _sshTmuxSessionName(
+  final tmuxSessionName = sshTmuxSessionName(
     paneId: paneId,
     hostId: hostId,
     agentSessionId: agentLaunch?.sessionId,
@@ -686,7 +733,10 @@ fi
 ''';
 }
 
-String _sshTmuxSessionName({
+/// The name one pane's remote session goes by — under tmux, and under the
+/// session host, which use the same string on purpose.
+@visibleForTesting
+String sshTmuxSessionName({
   required String paneId,
   required String hostId,
   String? agentSessionId,

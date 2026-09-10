@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/ssh/data/host_binaries.dart';
 import 'package:karmashala/src/features/ssh/data/host_deploy_target.dart';
@@ -12,6 +13,12 @@ import 'package:karmashala_host/protocol.dart';
 /// a fake exec channel. The real SSH path (SshHostDeployTarget) is *not*
 /// covered by anything: it needs an sshd, and the stand-in WSL distribution
 /// does not run one.
+///
+/// **It is a shell on [run] and an SFTP server on [upload]**, which is the one
+/// asymmetry that matters here. Until 2026-09-10 this fake expanded `$HOME` for
+/// both, so a deploy that wrote every byte to a literal `$HOME/...` — which
+/// `sftp.open` reads as a directory that does not exist — passed the whole
+/// suite while never once installing the host on a real machine.
 class FakeTarget implements HostDeployTarget {
   FakeTarget({this.uname = 'Linux\nx86_64\nldd (GNU libc) 2.43\n'});
 
@@ -19,6 +26,10 @@ class FakeTarget implements HostDeployTarget {
   String get address => 'fake.example';
 
   String uname;
+
+  /// What this machine's shell expands `$HOME` to, and the only place a path
+  /// under it can legitimately come from. Null is a machine that will not say.
+  String? home = '/home/fake';
   final commands = <String>[];
   final uploads = <(String, int)>[];
   final Map<String, RemoteRun> scripted = {};
@@ -47,6 +58,7 @@ class FakeTarget implements HostDeployTarget {
       if (command.contains(entry.key)) return entry.value;
     }
     if (command.startsWith('uname')) return RemoteRun(0, uname, '');
+    if (command.contains(r'echo "$HOME"')) return RemoteRun(0, '${home ?? ''}\n', '');
     if (command.contains('wc -c <')) {
       return RemoteRun(0, existingSize < 0 ? 'missing\n' : '$existingSize\n', '');
     }
@@ -55,6 +67,13 @@ class FakeTarget implements HostDeployTarget {
 
   @override
   Future<void> upload(String remotePath, Uint8List bytes) async {
+    // SFTP has no shell behind it. `sftp.open` takes the path byte for byte,
+    // so a `$HOME` or a `~` in it names a directory nobody ever created and
+    // the server answers SSH_FX_NO_SUCH_FILE — the failure the owner's droplet
+    // took silently for a day.
+    if (remotePath.contains(r'$') || remotePath.contains('~')) {
+      throw SftpStatusError(SftpStatusCode.noSuchFile, 'No such file: $remotePath');
+    }
     final failure = uploadError;
     if (failure != null) throw failure;
     uploads.add((remotePath, bytes.length));
@@ -195,6 +214,67 @@ void main() {
     });
   });
 
+  group('where the files go', () {
+    test('the deploy uploads to the path the shell resolved, not to a literal '
+        r'$HOME', () async {
+      final target = FakeTarget()..home = '/home/dlohani';
+      final deployment = await deployerFor(target).deploy();
+
+      // The bug, exactly: `mkdir` and `wc` expanded it and the upload did not,
+      // so every deploy ended cannotInstall and every pane fell back to tmux.
+      expect(deployment.status, HostDeploymentStatus.ready);
+      expect(
+        target.uploads.single.$1,
+        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+      );
+      expect(deployment.remotePath, '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64');
+      expect(
+        target.commands.where((c) => c.contains(r'$HOME')),
+        // The one place `$HOME` is allowed is the question that resolves it.
+        [r'echo "$HOME"'],
+      );
+      expect(target.commands.any((c) => c.contains('~')), isFalse);
+    });
+
+    test('the home is resolved once, and every path is built from it', () async {
+      final target = FakeTarget()
+        ..home = '/srv/agents/dlohani'
+        ..greet = ((_) => null);
+      await deployerFor(target).deploy();
+
+      expect(target.commands.where((c) => c.contains(r'echo "$HOME"')), hasLength(1));
+      expect(
+        target.commands.firstWhere((c) => c.contains('mkdir -p')),
+        contains("'/srv/agents/dlohani/.karmashala/bin'"),
+      );
+      final start = target.commands.firstWhere((c) => c.contains('setsid nohup'));
+      expect(start, contains("'/srv/agents/dlohani/.karmashala'"));
+      expect(start, contains("'/srv/agents/dlohani/.karmashala/host.log'"));
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('a machine that will not say where its home is uploads nothing', () async {
+      final target = FakeTarget()..home = null;
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.status, HostDeploymentStatus.unknown);
+      expect(deployment.reason, contains(r'echo "$HOME"'));
+      expect(deployment.fallsBackToTmux, isTrue);
+      expect(target.uploads, isEmpty);
+    });
+
+    test('a shell that printed something first is not read as a home', () async {
+      final target = FakeTarget()..home = '/home/dlohani';
+      target.scripted[r'echo "$HOME"'] = const RemoteRun(
+        0,
+        'Welcome to Ubuntu\n/home/dlohani\n',
+        '',
+      );
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.remotePath, startsWith('/home/dlohani/.karmashala/bin/'));
+    });
+  });
+
   group('installing', () {
     test('uploads, chmods, and reports the version it put there', () async {
       final target = FakeTarget();
@@ -203,7 +283,7 @@ void main() {
       expect(deployment.status, HostDeploymentStatus.ready);
       expect(target.uploads.single.$1, contains('karmashala_host-0.1.0-linux-x64'));
       expect(target.uploads.single.$2, 1024);
-      expect(deployment.remotePath, r'$HOME/.karmashala/bin/karmashala_host-0.1.0-linux-x64');
+      expect(deployment.remotePath, '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64');
       expect(deployment.hostVersion, '0.1.0');
       expect(deployment.protocolVersion, kProtocolVersion);
       expect(deployment.observedAt, DateTime.utc(2026, 9, 8, 14, 0));

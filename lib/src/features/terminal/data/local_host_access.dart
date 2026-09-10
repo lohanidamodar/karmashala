@@ -146,6 +146,13 @@ class LocalHostSessionAccess implements HostSessionAccess {
     }
   }
 
+  /// Always false, and it is an observation rather than a stub: nothing on this
+  /// machine's pane path has ever gone through tmux, so there is no session
+  /// here that could be taken away from one. The rule that reads this belongs
+  /// to the SSH pane and its tmux fallback.
+  @override
+  Future<bool?> hasTmuxSession(String name) async => false;
+
   Future<Socket> _connect() => Socket.connect(
     InternetAddress(_paths.socketPath, type: InternetAddressType.unix),
     0,

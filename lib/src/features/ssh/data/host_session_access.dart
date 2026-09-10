@@ -25,6 +25,14 @@ abstract class HostSessionAccess {
   /// A channel to speak the host protocol over.
   Future<RemoteChannel> exec(String command);
 
+  /// Whether a tmux session by this name is already running on the machine.
+  ///
+  /// **Null is not "no" (§19).** A session that already lives in tmux is a
+  /// running agent, and moving it to the session host would open a second,
+  /// empty session under the same id and abandon the first — so a reading we
+  /// could not take keeps the pane where its session already is.
+  Future<bool?> hasTmuxSession(String name);
+
   /// Fires each time the connection to this machine is re-established after
   /// having dropped. A pane re-dials on this; nothing polls for it.
   Stream<void> get reconnected;
@@ -64,6 +72,36 @@ class SshHostSessionAccess implements HostSessionAccess {
 
   @override
   Future<RemoteChannel> exec(String command) => SshHostDeployTarget(_connection).exec(command);
+
+  /// Asked with the *same* predicate the tmux script uses — `has-session -t`,
+  /// prefix matching and all — so this answers the question that actually
+  /// matters: would the fallback attach to something that is already there?
+  ///
+  /// Three markers rather than an exit code, because they mean three different
+  /// things and only one of them is "no session": a machine with no tmux at
+  /// all, a tmux with no such session, and a tmux holding one. Anything else —
+  /// no marker in the output — is a reading nobody took, and answers null.
+  @override
+  Future<bool?> hasTmuxSession(String name) async {
+    final quoted = "'${name.replaceAll("'", r"'\''")}'";
+    final RemoteRun result;
+    try {
+      result = await SshHostDeployTarget(_connection).run(
+        'if ! command -v tmux >/dev/null 2>&1; then echo karmashala-tmux-none; '
+        'elif tmux has-session -t $quoted 2>/dev/null; then echo karmashala-tmux-present; '
+        'else echo karmashala-tmux-absent; fi',
+      );
+    } on Object catch (e) {
+      _logger.debug('${host.address} could not be asked about tmux session $name: $e');
+      return null;
+    }
+    final said = result.stdout;
+    if (said.contains('karmashala-tmux-present')) return true;
+    if (said.contains('karmashala-tmux-absent') || said.contains('karmashala-tmux-none')) {
+      return false;
+    }
+    return null;
+  }
 
   final HostBinarySource binaries;
 
