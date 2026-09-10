@@ -1,6 +1,6 @@
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala_git/git.dart';
-import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala/src/features/mcp/review_thread_tools.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter_test/flutter_test.dart';

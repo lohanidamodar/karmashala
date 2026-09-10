@@ -33,7 +33,7 @@ into the shell and reachable; caveats are stated inline rather than implied.
 - **Status by hook, not by poll.** The agents' own hook scripts report into the
   app; polling is the fallback.
 - **An MCP server of its own** — around 85 tools
-  ([`mcp_tool_catalogue.dart`](lib/src/features/mcp/mcp_tool_catalogue.dart) is
+  ([`mcp_tool_catalogue.dart`](packages/karmashala_mcp/lib/src/mcp_tool_catalogue.dart) is
   the list). Served over HTTP by the app, and over stdio by a separate
   `karmashala_mcp` binary
   ([`mcp_bridge/`](mcp_bridge/bin/karmashala_mcp.dart)). The bridge exists

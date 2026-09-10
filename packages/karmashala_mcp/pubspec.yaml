@@ -1,0 +1,33 @@
+name: karmashala_mcp
+description: >-
+  The tool surface Karmashala serves to agents: the MCP wire format and its
+  Streamable HTTP binding, the catalogue of every tool and what it does to the
+  world, the instruction texts and installed skills, and how an agent is told
+  where the tools are and whether they answer. Not the handlers — those serve
+  the app's own types and stay with them. Pure Dart, so it runs under
+  `dart test` without a `flutter_tester` or a `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `KarmashalaSkill` for what an installed skill is, and the process runner
+  # the bridge probe spawns the compiled bridge with.
+  agent_cli:
+    path: ../agent_cli
+  # `AppLogger` for the endpoint and the handshake file, and the canonical
+  # JSON helpers the launch fingerprint is built from.
+  karmashala_core:
+    path: ../karmashala_core
+  # Locating the bridge executable beside the running app.
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/mcp/mcp_bridge_probe.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

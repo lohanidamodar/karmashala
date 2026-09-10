@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/mcp/agent_skills.dart';
-import 'package:karmashala/src/features/mcp/instructions_tools.dart';
+import 'package:karmashala_mcp/instructions.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 
 /// The skills, held against the two things they claim: that they list the

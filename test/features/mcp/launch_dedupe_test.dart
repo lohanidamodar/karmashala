@@ -7,7 +7,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/mcp/launch_dedupe.dart';
+import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

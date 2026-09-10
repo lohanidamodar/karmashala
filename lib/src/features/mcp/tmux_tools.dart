@@ -12,7 +12,7 @@ import '../repositories/application/repository_providers.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/data/system_terminal_service.dart';
 import 'agent_lookup.dart';
-import 'tmux_orchestration.dart';
+import 'package:karmashala_mcp/launch.dart';
 
 /// Opening several imported sessions as tmux windows in one terminal tab.
 /// `tmux_orchestration.dart` builds the script and knows nothing about this app.

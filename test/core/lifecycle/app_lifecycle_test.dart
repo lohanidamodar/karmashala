@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/agents/application/agent_hook_installati
 import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';

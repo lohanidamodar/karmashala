@@ -5,7 +5,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
-import '../../mcp/agent_skills.dart';
+import 'package:karmashala_mcp/instructions.dart';
 import '../data/agent_skill_installer.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_providers.dart';

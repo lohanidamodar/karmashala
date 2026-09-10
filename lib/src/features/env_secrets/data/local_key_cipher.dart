@@ -13,7 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../mcp/handshake_file_permissions.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'env_value_cipher.dart';
 
 /// Raised when the key exists but cannot be used, or cannot be created.

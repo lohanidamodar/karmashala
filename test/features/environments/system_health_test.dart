@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/environments/application/system_health.d
 import 'package:karmashala/src/features/environments/application/system_health_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/control_server_status.dart';
-import 'package:karmashala/src/features/mcp/mcp_bridge_probe.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
