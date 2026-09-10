@@ -2,16 +2,8 @@ import 'package:agent_cli/process.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import 'ssh_connection.dart';
 
-/// Reads a private key from whichever **local** environment owns its path.
-///
-/// A key path is stored paired with its environment (principle 2), and that
-/// pairing is not decoration: `/home/me/.ssh/id_ed25519` recorded in a WSL
-/// distribution and the same text recorded on the Windows host are two
-/// different files, and the desktop process — which reads with the Windows
-/// API — can only open one of them directly. So a WSL-owned key is translated
-/// to its `\\wsl.localhost\<distro>\…` form before being read, and a remote key
-/// is refused outright: fetching a key over the connection it is meant to
-/// authenticate is not a thing that can work.
+/// Reads a private key from whichever **local** environment owns its path: the
+/// same text in a WSL distro and on Windows are two different files.
 class EnvironmentPrivateKeyReader {
   EnvironmentPrivateKeyReader({
     required this.environments,
@@ -33,9 +25,8 @@ class EnvironmentPrivateKeyReader {
     if (owner == null || owner.kind != EnvironmentKind.wsl) {
       return readLocal(path);
     }
-    // The stored row only stands in for Windows when it really is Windows:
-    // on a POSIX host it describes this machine, which is not where the
-    // distribution's files are.
+    // The stored row only stands in for Windows when it really is Windows: on a
+    // POSIX host it describes this machine, not the distribution's files.
     final stored = environments.getById(localHostEnvironmentId);
     final windows = stored?.kind == EnvironmentKind.windowsNative
         ? stored!
@@ -54,11 +45,8 @@ class EnvironmentPrivateKeyReader {
   }
 }
 
-/// The environments a private key may be recorded in — every local one.
-///
-/// A remote environment is excluded on purpose, and not as a UI nicety: it is
-/// the same rule `readLocalPrivateKey` enforces, applied early enough that the
-/// user is never offered a choice that cannot work.
+/// The environments a private key may be recorded in — every local one. A
+/// remote one is excluded early, so a choice that cannot work is never offered.
 List<ExecutionEnvironment> keyHostingEnvironments(
   List<ExecutionEnvironment> all,
 ) => [

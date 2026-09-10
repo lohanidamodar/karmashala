@@ -1,8 +1,5 @@
-/// A host key Karmashala has been told to trust for one `host:port`.
-///
-/// The stored value is the OpenSSH-style `SHA256:<base64>` fingerprint, not the
-/// key itself: it is all that is needed to detect a substituted key and it is
-/// safe to display to the user verbatim.
+/// A host key trusted for one `host:port`. The stored value is the `SHA256:`
+/// fingerprint, not the key: enough to spot a substitution, safe to display.
 class KnownHostKey {
   const KnownHostKey({
     required this.host,
@@ -91,8 +88,7 @@ class HostKeyPresentation {
 }
 
 /// Raised when a connection is refused because the host key could not be
-/// trusted. Distinct from an auth failure: this is an identity failure and the
-/// user must resolve it deliberately.
+/// trusted. An identity failure, not an auth one: the user must resolve it.
 class HostKeyRejected implements Exception {
   HostKeyRejected(this.presentation);
 

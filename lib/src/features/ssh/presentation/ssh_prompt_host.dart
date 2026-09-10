@@ -5,18 +5,8 @@ import '../application/ssh_prompt_controller.dart';
 import 'host_key_dialog.dart';
 import 'ssh_secret_dialog.dart';
 
-/// Mounts the SSH layer's ability to ask the user anything.
-///
-/// Wrapped around the app's home so that a connection started from *anywhere* —
-/// a settings screen, a background agent discovery — can put a host key
-/// fingerprint in front of the user. While this is mounted, an unknown host is
-/// a question; while it is not, an unknown host is refused, which is exactly the
-/// unattended behaviour Loop 37 chose.
-///
-/// Prompts are shown one at a time, in arrival order: two hosts connecting at
-/// once must not race two dialogs onto the screen, and a user answering the
-/// wrong fingerprint because it appeared under another is the failure mode this
-/// whole feature exists to prevent.
+/// Mounts the SSH layer's ability to ask the user anything. Prompts are shown
+/// one at a time: answering the wrong fingerprint is the failure to prevent.
 class SshPromptHost extends ConsumerStatefulWidget {
   const SshPromptHost({required this.child, super.key});
 
@@ -27,9 +17,8 @@ class SshPromptHost extends ConsumerStatefulWidget {
 }
 
 class _SshPromptHostState extends ConsumerState<SshPromptHost> {
-  /// Held rather than re-read: `ref` is not usable from `dispose`, and detaching
-  /// is the step that must not be skipped — a queue nobody can answer would
-  /// leave every waiting connection hanging.
+  /// Held rather than re-read: `ref` is not usable from `dispose`, and skipping
+  /// the detach leaves waiting connections hanging on a queue nobody answers.
   late final SshPromptController _prompts;
   bool _showing = false;
 

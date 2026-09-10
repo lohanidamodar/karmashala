@@ -6,17 +6,12 @@ import 'package:dartssh2/dartssh2.dart';
 
 import 'package:agent_cli/process.dart';
 
-/// Exit code reported when a remote process ends without one — the connection
-/// dropped, or the server never sent an exit status. It is `ssh(1)`'s own code
-/// for "something went wrong with the connection itself", and it is deliberately
-/// non-zero: a lost link must never read as a command that succeeded.
+/// Exit code when a remote process ends without one. `ssh(1)`'s own code for
+/// the connection itself failing, and non-zero: a lost link is not a success.
 const int kSshConnectionLostExitCode = 255;
 
-/// [ProcessHandle] backed by a `dartssh2` [SSHSession].
-///
-/// The remote side speaks bytes on a channel rather than a `dart:io` pipe, so
-/// this is the SSH counterpart of `IoProcessHandle`: same contract,
-/// line-buffered text in and out, different transport.
+/// [ProcessHandle] backed by a `dartssh2` [SSHSession]: the SSH counterpart of
+/// `IoProcessHandle`, same contract over a channel rather than a pipe.
 class SshProcessHandle implements ProcessHandle {
   SshProcessHandle(this._session);
 
@@ -44,10 +39,8 @@ class SshProcessHandle implements ProcessHandle {
 
   @override
   Future<void> closeStdin() async {
-    // The channel's EOF. `dartssh2` pipes this sink into the channel, so
-    // closing it is what tells the remote process no more input is coming —
-    // `codex exec` and the package's one-shot `ask` wait on stdin forever
-    // without it. Already closed, or a session that is gone, is not an error.
+    // The channel's EOF: closing this sink tells the remote process no more
+    // input is coming, and `codex exec` waits on stdin for ever without it.
     try {
       await _session.stdin.close();
     } on Object {

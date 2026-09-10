@@ -3,10 +3,8 @@ import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
 import '../domain/ssh_host.dart';
 
-/// Data-access for saved [SshHost] rows. Hand-written SQL, no codegen.
-///
-/// Nothing here writes a secret: the table has no password, passphrase or key
-/// column, only the *location* of a key file.
+/// Data-access for saved [SshHost] rows. Nothing here writes a secret: the
+/// table has no password or key column, only the *location* of a key file.
 class SshHostDao {
   SshHostDao(this._db);
 

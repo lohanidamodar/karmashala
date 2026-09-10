@@ -1,36 +1,5 @@
-/// Where a file the phone sends becomes a file on this desktop's disk.
-///
-/// ## The directory is not a new one
-///
-/// It is the one the desktop composer already writes to when someone attaches
-/// an image there — `<temp>/karmashala/attachments` — because the two are the
-/// same act arriving by different doors, and an agent that is handed a path
-/// should not be able to tell which door it came through. Temp rather than the
-/// application support directory on purpose: unlike the media panel's extracted
-/// copies, an attachment only has to outlive the agent's read of it, and a
-/// reboot's sweep is a cleanup nobody has to write.
-///
-/// ## Nothing is a file until a prompt names it
-///
-/// A [begin] opens a `.part` in `incoming/`, chunks are appended to it, and
-/// [commit] is the only thing that ever produces a name an agent is told. So a
-/// link that drops mid-upload leaves bytes that nothing points at and nothing
-/// will ever quote — see [discard], which is what removes them.
-///
-/// ## What deletes what, and what does not
-///
-/// | File | Removed by |
-/// | --- | --- |
-/// | a `.part` | the same device starting another upload, that device's link
-///   ending, and [sweep] at host start |
-/// | a committed `phone_*` | [commit] pruning to the newest [keep] |
-/// | the composer's own `img_*` | **nothing here** — they are not ours |
-///
-/// So a desktop that takes 21 attachments and is never touched again keeps
-/// twenty of them for ever, or until the OS clears its temp directory. That is
-/// stated rather than fixed: at [kMaxAttachmentBytes] each it is a bounded
-/// amount, and deleting a file an agent may still be reading would be the
-/// worse failure.
+/// Where a file the phone sends becomes a file on this disk. Nothing is a file
+/// until [commit] names it; a dropped link leaves a `.part` nothing points at.
 library;
 
 import 'dart:io';
@@ -38,21 +7,15 @@ import 'dart:math';
 
 import 'package:karmashala_remote/remote.dart';
 
-/// How many committed attachments are kept. The newest win, the way
-/// `kSessionMediaCap` picks which pictures the media panel keeps.
+/// How many committed attachments are kept; the newest win.
 const int kCompanionAttachmentKeep = 20;
 
-/// The prefix every committed companion attachment carries.
-///
-/// Load-bearing: it is how the prune tells a file this wrote from the desktop
-/// composer's own `img_*` in the same directory, which is not ours to delete.
+/// The prefix every committed attachment carries: how the prune tells a file
+/// this wrote from the composer's own `img_*`, which is not ours to delete.
 const String kCompanionAttachmentPrefix = 'phone_';
 
-/// The extension written for each media type a session may accept.
-///
-/// The host decides the extension, never the phone: a name off a phone is a
-/// hint, and an agent that opens a file by path opens it by what the name says
-/// it is.
+/// The extension for each media type. The host decides it, never the phone: an
+/// agent opens a file by what the name says it is.
 const Map<String, String> kAttachmentExtensions = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -109,12 +72,8 @@ class CompanionAttachmentStore {
 
   Directory get _incoming => Directory('${root.path}/incoming');
 
-  /// Opens an upload for [deviceId], discarding whatever it left half-sent.
-  ///
-  /// Refuses here — before a byte crosses — for everything that can be known
-  /// from the declaration alone. The caller has already checked the request
-  /// against the session's own [RemoteAttachmentSupport]; this checks what is
-  /// true of any attachment.
+  /// Opens an upload for [deviceId], dropping whatever it left half-sent, and
+  /// refuses before a byte crosses whatever the declaration alone can settle.
   Future<RemoteAttachmentOffer> begin(
     String deviceId,
     RemoteAttachmentBegin request,
@@ -135,9 +94,8 @@ class CompanionAttachmentStore {
     final id = _newId();
     await _incoming.create(recursive: true);
     final file = File('${_incoming.path}/${deviceId}_$id.part');
-    // Truncating rather than appending: an id collision is vanishingly
-    // unlikely and silently prefixing someone else's bytes is not a failure
-    // this should be able to have.
+    // Truncating rather than appending: silently prefixing someone else's bytes
+    // after an id collision is not a failure this should be able to have.
     await file.writeAsBytes(const [], flush: true);
     _inFlight[deviceId] = _Upload(
       id: id,
@@ -151,12 +109,8 @@ class CompanionAttachmentStore {
     );
   }
 
-  /// Appends one chunk, in order, within the declared length.
-  ///
-  /// Out of order is refused rather than buffered. The transport drops its
-  /// **oldest** queued frame under pressure, so a gap here is evidence a slice
-  /// was lost — and a store that silently held chunk 7 waiting for chunk 6
-  /// would turn that into a file with a hole in it.
+  /// Appends one chunk, in order. Out of order is refused, not buffered: the
+  /// transport drops its oldest queued frame, so a gap means a slice was lost.
   Future<void> write(
     String deviceId,
     String uploadId,
@@ -189,12 +143,8 @@ class CompanionAttachmentStore {
     upload.nextSeq++;
   }
 
-  /// Turns [deviceId]'s completed upload into a real file, and answers its
-  /// path.
-  ///
-  /// **The length is checked here**, so a truncated upload can never become
-  /// something an agent is told to read. This is also the only place a
-  /// committed file is deleted, which keeps growth bounded without a timer.
+  /// Turns a completed upload into a real file. **The length is checked here**,
+  /// so a truncated upload never becomes a path an agent is given.
   Future<File> commit(String deviceId, String uploadId) async {
     final upload = _inFlight[deviceId];
     if (upload == null || upload.id != uploadId) {
@@ -226,16 +176,13 @@ class CompanionAttachmentStore {
     try {
       if (await upload.file.exists()) await upload.file.delete();
     } on Object {
-      // A `.part` nothing points at is bytes in a temp directory, not a
-      // correctness problem; [sweep] gets it at the next start.
+      // A `.part` nothing points at is bytes in a temp directory; [sweep] gets
+      // it at the next start.
     }
   }
 
-  /// Clears every abandoned `.part` and prunes committed files to [keep].
-  ///
-  /// Run once as the host starts, which is the one moment there is provably no
-  /// upload in flight: an upload is named by a link, and no link has been made
-  /// yet. Nothing calls this on a timer.
+  /// Clears every abandoned `.part` and prunes to [keep]. Run once as the host
+  /// starts — the one moment there is provably no upload in flight.
   Future<void> sweep() async {
     try {
       if (await _incoming.exists()) await _incoming.delete(recursive: true);
@@ -245,10 +192,8 @@ class CompanionAttachmentStore {
     await _pruneToKeep();
   }
 
-  /// Newest [keep] committed attachments survive; the rest are deleted.
-  ///
-  /// Only ever files this wrote — the composer's own `img_*` sit in the same
-  /// directory and are somebody else's to remove.
+  /// Newest [keep] committed attachments survive. Only ever files this wrote:
+  /// the composer's own `img_*` share the directory and are not ours.
   Future<void> _pruneToKeep() async {
     try {
       if (!await root.exists()) return;
@@ -269,8 +214,8 @@ class CompanionAttachmentStore {
         }
       }
     } on Object {
-      // Same: a prune that could not list the directory is not a reason to
-      // refuse an attachment that already arrived.
+      // Same: a prune that could not list the directory is no reason to refuse
+      // an attachment that already arrived.
     }
   }
 
@@ -282,13 +227,8 @@ class CompanionAttachmentStore {
     return buffer.toString();
   }
 
-  /// A basename the filesystem and the shell can both take, with the host's
-  /// own extension on it.
-  ///
-  /// Everything path-shaped is dropped rather than escaped — a separator, a
-  /// `..`, a drive letter — so no name a phone sends can decide where a byte
-  /// lands. A name that survives to nothing becomes `attachment`, because a
-  /// path an agent cannot pronounce is worse than a generic one.
+  /// A basename the filesystem and the shell can both take. Path-shaped parts
+  /// are dropped, not escaped, so no name a phone sends picks the place.
   static String _safeName(String name, String extension) {
     final base = name.split(RegExp(r'[\\/]')).last;
     final stem = base.contains('.')

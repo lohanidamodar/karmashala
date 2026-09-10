@@ -7,13 +7,8 @@ import 'ssh_connection.dart';
 import 'ssh_host_key_verifier.dart';
 import 'ssh_host_dao.dart';
 
-/// One [SshConnection] per host, reused for the life of the app.
-///
-/// Reuse is not an optimisation here, it is the difference between usable and
-/// not: Karmashala issues many small commands (a `git status`, a handful of
-/// discovery probes) and paying a TCP connect plus a key exchange for each of
-/// them turns a 3 ms local probe into a multi-hundred-millisecond one. Every
-/// runner for the same host shares this pool's connection.
+/// One [SshConnection] per host, reused for the life of the app: a TCP connect
+/// plus a key exchange per command turns a 3 ms probe into hundreds of ms.
 class SshConnectionPool {
   SshConnectionPool({
     required this.hosts,
@@ -36,9 +31,8 @@ class SshConnectionPool {
   final SshSecretPrompt? passwordPrompt;
   final SshSecretPrompt? passphrasePrompt;
 
-  /// How a private key file is read. The default opens it on the Windows host;
-  /// the app supplies one that also understands a key recorded in a WSL
-  /// distribution.
+  /// How a private key file is read. The default opens it on Windows; the app
+  /// supplies one that also understands a key inside a WSL distribution.
   final PrivateKeyReader keyReader;
 
   final Clock clock;

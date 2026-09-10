@@ -12,12 +12,8 @@ import '../domain/remote_directory_entry.dart';
 import '../domain/ssh_host.dart';
 import 'host_key_changed_alert.dart';
 
-/// Browses a host's filesystem over SFTP.
-///
-/// Structured entries from the SFTP subsystem rather than parsed `ls` output,
-/// and every path it produces is an [EnvironmentPath] in `ssh:<hostId>` — a
-/// remote `/home/me/src` is never handed to anything that would open it
-/// locally.
+/// Browses a host's filesystem over SFTP. Every path it produces is an
+/// [EnvironmentPath] in `ssh:<hostId>`, never one something would open here.
 class RemoteFileBrowserDialog extends ConsumerStatefulWidget {
   const RemoteFileBrowserDialog({
     required this.host,

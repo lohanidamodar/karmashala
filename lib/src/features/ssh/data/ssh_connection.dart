@@ -12,21 +12,16 @@ import 'channel_limiter.dart';
 import 'resilient_ssh_socket.dart';
 import 'ssh_host_key_verifier.dart';
 
-/// Asked for a password or a key passphrase when one is needed.
-///
-/// Returning `null` aborts the connection. Whatever is returned is used for a
-/// single connection attempt and never written anywhere.
+/// Asked for a password or a key passphrase. Returning `null` aborts the
+/// connection; whatever is returned is used once and never written anywhere.
 typedef SshSecretPrompt = FutureOr<String?> Function(SshHost host);
 
 /// Reads a private key file. Injected so tests never touch the filesystem and
 /// so a future key store can replace the default without changing callers.
 typedef PrivateKeyReader = Future<String> Function(EnvironmentPath path);
 
-/// Raised when a connection cannot be established or has been lost.
-///
-/// Carrying [cause] lets a caller tell a refused host key ([HostKeyRejected])
-/// from a bad credential from an unreachable host, without any of them being
-/// mistaken for success.
+/// Raised when a connection cannot be established or has been lost. [cause]
+/// tells a refused host key ([HostKeyRejected]) from a bad credential.
 class SshConnectionException implements Exception {
   SshConnectionException(this.message, {this.cause, this.retryable = false});
 
@@ -41,12 +36,8 @@ class SshConnectionException implements Exception {
       'SshConnectionException: $message${cause == null ? '' : ' ($cause)'}';
 }
 
-/// Reads a private key from the local filesystem.
-///
-/// Refuses a path that belongs to a remote environment: a key we would have to
-/// fetch over the very connection it is meant to authenticate is not a key we
-/// can use, and silently reinterpreting a remote path as a local one is exactly
-/// the class of bug principle 2 exists to prevent.
+/// Reads a private key from the local filesystem. Refuses a remote path: a key
+/// fetched over the connection it authenticates is not a key we can use.
 Future<String> readLocalPrivateKey(EnvironmentPath path) async {
   if (path.environmentId.startsWith('ssh:')) {
     throw SshConnectionException(
@@ -61,17 +52,8 @@ Future<String> readLocalPrivateKey(EnvironmentPath path) async {
   return file.readAsString();
 }
 
-/// One live SSH connection to one [SshHost], with its lifecycle.
-///
-/// Everything that runs on a remote host shares a single connection: opening a
-/// TCP socket and doing a key exchange per command would make the many small
-/// probes Karmashala issues unusable over a network. [client] is therefore the
-/// only way in — it returns the existing session, waits for one that is being
-/// established, or reconnects with exponential backoff.
-///
-/// A lost connection is never papered over: [client] throws
-/// [SshConnectionException] rather than handing back a dead session, and
-/// [states] reports the transition so the UI can say so.
+/// One live SSH connection to one [SshHost]. [client] is the only way in — it
+/// reconnects with backoff and throws rather than hand back a dead session.
 class SshConnection {
   SshConnection({
     required this.host,
@@ -98,13 +80,8 @@ class SshConnection {
   /// [reconnectBackoff] between them.
   final int maxAttempts;
 
-  /// How many times a refused channel open is retried before giving up.
-  ///
-  /// A server frees a finished session slightly after the client considers the
-  /// command done, so a burst of short commands can momentarily exceed the
-  /// server's session limit even under [runOnChannel]'s own cap. Waiting a few
-  /// milliseconds and asking again is the correct response; failing a probe
-  /// because the previous one had not finished being cleaned up is not.
+  /// How many times a refused channel open is retried: a server frees a
+  /// finished session slightly late, so a burst can briefly exceed its limit.
   final int channelOpenAttempts;
 
   final ChannelLimiter _commandSlots;
@@ -127,10 +104,8 @@ class SshConnection {
   /// Whether a usable session is open right now.
   bool get isConnected => _client != null && !_client!.isClosed;
 
-  /// The live session, connecting or reconnecting if needed.
-  ///
-  /// Throws [SshConnectionException] when the host cannot be reached, the host
-  /// key is refused, or authentication fails — never returns a closed session.
+  /// The live session, connecting or reconnecting as needed. Throws
+  /// [SshConnectionException] rather than ever return a closed session.
   Future<SSHClient> client() {
     if (_closed) {
       throw SshConnectionException('Connection to ${host.address} is closed.');
@@ -142,20 +117,13 @@ class SshConnection {
     });
   }
 
-  /// Runs [body] on the live session while holding one of this connection's
-  /// channel slots.
-  ///
-  /// Run-to-completion commands go through here so a wide fan-out queues
-  /// instead of exhausting the server's session limit. Long-lived streaming
-  /// sessions deliberately do **not**: they are few, they are the user's
-  /// explicit intent, and queuing one behind another would deadlock.
+  /// Runs [body] holding one channel slot, so a wide fan-out queues instead of
+  /// exhausting the server. Streaming sessions skip it: queuing would deadlock.
   Future<T> runOnChannel<T>(Future<T> Function(SSHClient client) body) =>
       _commandSlots.withSlot(() => _withChannelRetry(body));
 
-  /// Retries [body] when the *channel open* is refused.
-  ///
-  /// Safe to retry because a refused open means nothing ran: `dartssh2` reports
-  /// it before the command is sent, so the body has had no effect.
+  /// Retries [body] when the *channel open* is refused — safe because a refused
+  /// open means nothing ran: `dartssh2` reports it before the command is sent.
   Future<T> _withChannelRetry<T>(
     Future<T> Function(SSHClient client) body,
   ) async {
@@ -246,10 +214,8 @@ class SshConnection {
   }
 
   Future<SSHClient> _connectOnce() async {
-    // Credentials are resolved before the socket is opened: a host with a
-    // missing or unreadable key is a configuration error, and it should say so
-    // immediately rather than after a connect timeout — and never leave a
-    // socket open that it then cannot use.
+    // Credentials are resolved before the socket is opened: a missing key is a
+    // configuration error, and it must not leave a socket it cannot use.
     final identities = await _identities();
 
     final SSHSocket socket;
@@ -275,10 +241,8 @@ class SshConnection {
       handshakeTimeout: connectTimeout,
       authTimeout: connectTimeout,
     );
-    // Listened to immediately, not after authentication: a client that fails to
-    // authenticate also completes `done` with that error, and with nobody
-    // listening it would surface as an unhandled async error instead of the
-    // failure the caller is about to be told about.
+    // Listened to immediately, not after authentication: a failed auth also
+    // completes `done`, and with nobody listening that is an unhandled error.
     unawaited(
       client.done.then(
         (_) => _handleDropped(client, null),
@@ -353,9 +317,8 @@ class SshConnection {
     }
   }
 
-  /// Reports an unusable key by the *type* of the failure only. The exception a
-  /// decoder throws can quote the bytes it choked on, and those bytes are key
-  /// material, so neither its message nor the PEM is ever passed along.
+  /// Reports an unusable key by the *type* of the failure only: a decoder's
+  /// message can quote the bytes it choked on, and those are key material.
   SshConnectionException _undecodableKey(Object error) =>
       SshConnectionException(
         'The private key for ${host.name} could not be decoded '

@@ -5,12 +5,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../domain/ssh_host_key.dart';
 
-/// The public-key file on the server whose fingerprint should match [keyType],
-/// so the dialog can tell the user exactly what to run over there.
-///
-/// Pure, and deliberately conservative: an algorithm we do not recognise gets no
-/// invented filename, because a wrong instruction is worse than none when the
-/// whole point is that the user compares two values.
+/// The public-key file whose fingerprint should match [keyType]. An algorithm
+/// we do not recognise gets no invented filename: a wrong instruction is worse.
 String? hostKeyPublicKeyFile(String keyType) {
   final family = switch (keyType) {
     'ssh-ed25519' => 'ed25519',
@@ -23,17 +19,8 @@ String? hostKeyPublicKeyFile(String keyType) {
   return family == null ? null : '/etc/ssh/ssh_host_${family}_key.pub';
 }
 
-/// Trust-on-first-use, made explicit.
-///
-/// Shows the algorithm and the OpenSSH-style `SHA256:` fingerprint — the two
-/// things the user needs to compare against what the server operator published —
-/// and refuses to enable the accept button until they confirm they have done
-/// that comparison. Trust on first use is fine; a dialog whose default action
-/// trusts a stranger is not, so the safe action is the one that has focus and
-/// the trusting action starts disabled.
-///
-/// Returns `true` only for a deliberate accept. Cancelling, or dismissing,
-/// returns `false`.
+/// Trust-on-first-use, made explicit: the accept button stays disabled until
+/// the user confirms the comparison, and the safe action holds focus.
 class HostKeyTrustDialog extends StatefulWidget {
   const HostKeyTrustDialog({required this.presentation, super.key});
 
@@ -66,9 +53,7 @@ class _HostKeyTrustDialogState extends State<HostKeyTrustDialog> {
     return AlertDialog(
       icon: Icon(AppIcons.warningCircle, color: theme.colorScheme.tertiary),
       title: const Text('Unrecognised host key'),
-      // Scrollable: the fingerprint and the comparison instructions must stay
-      // reachable on a short window, and a clipped fingerprint is a fingerprint
-      // nobody checks.
+      // Scrollable: a clipped fingerprint is a fingerprint nobody checks.
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(

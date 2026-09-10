@@ -9,12 +9,8 @@ import 'host_deploy_target.dart';
 import 'host_deployer.dart';
 import 'ssh_connection.dart';
 
-/// Everything a pane needs from one machine's session host, and the only thing
-/// [SshTerminalInstance] knows about SSH.
-///
-/// One of these per host, not per pane: deploying is an upload and a handshake,
-/// and doing it for every pane on a busy machine would cost a channel and a
-/// round trip each time somebody opened a tab.
+/// Everything a pane needs from one machine's session host. One per host, not
+/// per pane: deploying is an upload and a handshake, too dear to repeat.
 abstract class HostSessionAccess {
   String get address;
 
@@ -25,12 +21,8 @@ abstract class HostSessionAccess {
   /// A channel to speak the host protocol over.
   Future<RemoteChannel> exec(String command);
 
-  /// Whether a tmux session by this name is already running on the machine.
-  ///
-  /// **Null is not "no" (§19).** A session that already lives in tmux is a
-  /// running agent, and moving it to the session host would open a second,
-  /// empty session under the same id and abandon the first — so a reading we
-  /// could not take keeps the pane where its session already is.
+  /// Whether a tmux session of this name is running. **Null is not "no"**:
+  /// moving a live tmux agent would open a second, empty session under its id.
   Future<bool?> hasTmuxSession(String name);
 
   /// Fires each time the connection to this machine is re-established after
@@ -38,11 +30,8 @@ abstract class HostSessionAccess {
   Stream<void> get reconnected;
 }
 
-/// [HostSessionAccess] over the app's connection pool.
-///
-/// The reading is memoised for the life of one connection and thrown away when
-/// that connection drops — which is exactly right, because a machine that went
-/// away may come back rebooted with no host running on it at all.
+/// [HostSessionAccess] over the app's connection pool. The reading is dropped
+/// when the connection drops: a machine may come back rebooted with no host.
 class SshHostSessionAccess implements HostSessionAccess {
   SshHostSessionAccess({
     required this.host,
@@ -73,14 +62,8 @@ class SshHostSessionAccess implements HostSessionAccess {
   @override
   Future<RemoteChannel> exec(String command) => SshHostDeployTarget(_connection).exec(command);
 
-  /// Asked with the *same* predicate the tmux script uses — `has-session -t`,
-  /// prefix matching and all — so this answers the question that actually
-  /// matters: would the fallback attach to something that is already there?
-  ///
-  /// Three markers rather than an exit code, because they mean three different
-  /// things and only one of them is "no session": a machine with no tmux at
-  /// all, a tmux with no such session, and a tmux holding one. Anything else —
-  /// no marker in the output — is a reading nobody took, and answers null.
+  /// Asked with the *same* predicate the tmux script uses, so it answers what
+  /// matters: would the fallback attach to something already there?
   @override
   Future<bool?> hasTmuxSession(String name) async {
     final quoted = "'${name.replaceAll("'", r"'\''")}'";
@@ -145,10 +128,8 @@ class SshHostSessionAccess implements HostSessionAccess {
   }
 }
 
-/// One [HostSessionAccess] per saved host, for the life of the app.
-///
-/// The same reason [SshConnectionPool] exists: the reading and the connection
-/// have the same lifetime, and a second instance would deploy a second time.
+/// One [HostSessionAccess] per saved host: the reading and the connection have
+/// the same lifetime, and a second instance would deploy a second time.
 class HostSessionAccessRegistry {
   HostSessionAccessRegistry({required this.binaries, required this.connectionFor});
 

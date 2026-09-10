@@ -7,11 +7,8 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/known_hosts_controller.dart';
 import 'host_key_changed_alert.dart';
 
-/// The host keys that have been pinned, and the one way to unpin one.
-///
-/// Shown in full — algorithm, fingerprint, when it was trusted — because this
-/// list is the record a user checks against when a host key changes, and a
-/// record you cannot read is not a record.
+/// The host keys that have been pinned, and the one way to unpin one. Shown in
+/// full: this list is the record a user checks when a host key changes.
 class KnownHostsSection extends ConsumerWidget {
   const KnownHostsSection({super.key});
 

@@ -15,11 +15,8 @@ final hostBinarySourceProvider = Provider<HostBinarySource>(
   (ref) => DirectoryHostBinaries.standard(),
 );
 
-/// One [HostSessionAccess] per saved host, for the life of the app.
-///
-/// Kept here rather than built per pane because deploying is an upload and a
-/// handshake: doing it for every tab on a busy machine would cost a channel and
-/// a round trip each time.
+/// One [HostSessionAccess] per saved host, for the life of the app: deploying
+/// is an upload and a handshake, too dear to repeat for every tab.
 final hostSessionAccessRegistryProvider = Provider<HostSessionAccessRegistry>((ref) {
   final registry = HostSessionAccessRegistry(
     binaries: ref.watch(hostBinarySourceProvider),
@@ -29,25 +26,16 @@ final hostSessionAccessRegistryProvider = Provider<HostSessionAccessRegistry>((r
   return registry;
 });
 
-/// How a pane gets at a machine's session host, as one overridable function.
-///
-/// A provider rather than a call, for the same reason
-/// `terminalInstanceFactoryProvider` is one: a test wants to open a real SSH
-/// pane against a host that answers, or one that refuses, without an sshd.
+/// How a pane gets at a machine's session host — a provider, so a test can open
+/// a real SSH pane against a host that answers, or refuses, without an sshd.
 typedef HostSessionAccessLookup = HostSessionAccess? Function(SshHost host);
 
 final hostSessionAccessLookupProvider = Provider<HostSessionAccessLookup>(
   (ref) => (host) => _hostSessionAccessFor(ref, host),
 );
 
-/// The session host for [host], or null when this app cannot reach SSH at all.
-///
-/// Reachability is asked of [ExecutionEnvironmentResolver] rather than answered
-/// again here: a container composed without a connection pool must read the same
-/// way everywhere, and the resolver is the one place that says so. Only
-/// [EnvironmentRefusal.sshUnavailable] blocks — a host row that no environment
-/// names is unusual, not unreachable, and refusing on it would take the host
-/// path away from a machine that works.
+/// The session host for [host], or null when this app cannot reach SSH. Only
+/// [EnvironmentRefusal.sshUnavailable] blocks; an unnamed environment does not.
 HostSessionAccess? _hostSessionAccessFor(Ref ref, SshHost host) {
   // The host binaries only exist on a desktop build; a companion has no
   // filesystem to find them in and no business deploying anything.

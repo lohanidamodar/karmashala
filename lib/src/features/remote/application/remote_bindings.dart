@@ -1,11 +1,5 @@
-/// The production wiring of [RemoteHostBindings]: every function points at
-/// the SAME provider the desktop UI reads, so the phone and the screen can
-/// never tell a different story about one session.
-///
-/// What each one *does* lives with its frame family — the snapshots, the
-/// transcript, the approvals, starting a session, the workspace and the
-/// attachments each have a file of their own beside this one. What is left
-/// here is the registration itself: which function answers which binding.
+/// The production wiring of [RemoteHostBindings]: every function points at the
+/// SAME provider the desktop UI reads, so the two can never disagree.
 library;
 
 import 'dart:io';
@@ -54,10 +48,8 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     deliveryStageFor: (sessionId) =>
         ref.read(remoteDeliveryStageProvider)(sessionId),
     transcriptFor: (sessionId) => remoteTranscriptFor(ref, sessionId),
-    // The composer's own route: `continueSession` types into the live PTY or
-    // resumes the engine session, exactly as the desktop send button does.
-    // Async so an imported-session refusal is a failed future, never a
-    // synchronous escape past a caller's error handling.
+    // The composer's own route. Async so an imported-session refusal is a
+    // failed future, never a synchronous escape past a caller's error handling.
     sendPrompt: (sessionId, text, {attachment}) async {
       final resolved = resolve(sessionId);
       if (resolved.imported != null) {
@@ -141,9 +133,8 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
           'name and an existing absolute local desktop path are required',
         );
       }
-      // Resolve before joining the in-flight map. This both avoids duplicate
-      // filesystem work and makes aliases (including case variants on
-      // Windows) share one operation.
+      // Resolve before joining the in-flight map: aliases (case variants on
+      // Windows included) then share one operation.
       final canonical = await canonicalRemoteProjectPath(path);
       final key = canonicalPathKey(canonical);
       final future = projectAdds.putIfAbsent(

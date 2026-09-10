@@ -1,6 +1,5 @@
 /// What every family of the remote bindings reads, in one place rather than
-/// copied: the two environment probes, the id resolution the snapshot and the
-/// send path both turn on, and the environment badge and name.
+/// copied: the environment probes, the id resolution, and the badge.
 library;
 
 import 'dart:io';
@@ -17,13 +16,8 @@ import '../../explorer/application/session_diff_stat.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/domain/session.dart';
 
-/// Whether a session's working folder is gone from disk — the Explorer's own
-/// "missing" mark, answered synchronously here because `sessions.list` is.
-///
-/// A seam like the probe-shaped lookups in `remote_session_snapshots.dart`:
-/// production touches the filesystem, tests stub it. **False also means "could
-/// not tell"** — a non-Windows path with no translation available is never
-/// flagged, the same fail-safe direction `projectPathMissingProvider` takes.
+/// Whether a session's working folder is gone from disk, answered synchronously
+/// because `sessions.list` is. **False also means "could not tell"**.
 final remoteFolderMissingProvider =
     Provider<bool Function(EnvironmentPath path)>((ref) {
       return (path) {
@@ -53,11 +47,8 @@ final remoteFolderMissingProvider =
       };
     });
 
-/// The branch checked out at a directory, **only if the desktop has already
-/// measured it**. Reads the cached `checkoutStatProvider` answer and starts
-/// no git of its own — the same rule the Explorer's project headers follow, so
-/// listing sessions on a phone never sets off a wave of processes. Null means
-/// "not measured yet", never "no branch".
+/// The branch at a directory **only if the desktop already measured it**: the
+/// cached stat, never a git of our own. Null means "not measured yet".
 final remoteCheckoutBranchProvider =
     Provider<String? Function(EnvironmentPath path)>((ref) {
       return (path) {
@@ -73,13 +64,8 @@ final remoteCheckoutBranchProvider =
       };
     });
 
-/// The desktop's own badge for where a folder lives, by environment id.
-///
-/// Null for the local host, which is badged with nothing, and null for an
-/// environment row the desktop no longer holds — the phone then shows no
-/// badge rather than one that names nothing. Written once here because the
-/// session snapshot, the imported snapshot and `projects.list` all wanted the
-/// same three lines.
+/// The desktop's own badge for where a folder lives. Null for the local host
+/// and for an environment row the desktop no longer holds.
 String? environmentBadgeFor(Ref ref, String? environmentId) {
   if (environmentId == null) return null;
   final environment = ref
@@ -98,27 +84,8 @@ String? environmentNameFor(Ref ref, String? environmentId) {
   return environment == null ? null : environmentLabel(environment);
 }
 
-/// Which record represents [sessionId] **right now**: the live session row, or
-/// read-only CLI history, or neither.
-///
-/// One conversation can have a record in both tables, and `ImportedSessionDao`
-/// resolves the tie: a conversation with a native row is *superseded*, and
-/// every list read there hides the imported record. Hiding a row from a list
-/// does not stop anyone asking for it by id, though, and a phone holds ids: it
-/// lists once and opens later. A Codex conversation id is *discovered* rather
-/// than assigned — `LaunchedSessionAttributionService` writes it on a store
-/// sweep — so there is a real window after launch in which the imported record
-/// is still listed, and a phone that fetched its list inside that window is
-/// holding an id that has since been superseded.
-///
-/// Opening it gave the owner "a session that's not running": the CLI's own
-/// history for a conversation live in a pane on the desktop, with a composer
-/// that refused every prompt as read-only. So the rule is applied on the way
-/// *in* as well: an imported id a native row has taken over resolves to that
-/// row, and the phone reaches the running session with the id it happens to
-/// hold. The supersede test itself is not repeated here — it is asked of
-/// [ImportedSessionDao.supersedingSessionId], the same place the list filter
-/// is written.
+/// Which record represents [sessionId] **right now**: a phone can hold an
+/// imported id a native row has superseded, and it must reach the live session.
 ResolvedRemoteSession resolveRemoteSession(Ref ref, String sessionId) {
   final sessions = ref.read(sessionDaoProvider);
   final native = sessions.getById(sessionId);

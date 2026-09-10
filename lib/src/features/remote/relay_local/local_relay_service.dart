@@ -1,8 +1,5 @@
-/// The embedded local relay: the app runs `RelayServer` in-process so remote
-/// access works on anyone's computer with one click — no hosted relay, no adb.
-///
-/// Never crashes the app: a failed bind, a refused netsh, a machine with no
-/// network are all surfaced as [LocalRelayStatus], not thrown.
+/// The embedded local relay: `RelayServer` in-process, so remote access works
+/// with one click. A bad bind becomes [LocalRelayStatus], never a throw.
 library;
 
 import 'dart:async';
@@ -16,29 +13,15 @@ import 'package:agent_cli/process.dart';
 /// relay package's own default, pinned equal by a test.
 const int kDefaultLocalRelayPort = kDefaultRelayPort;
 
-/// How long the embedded relay lets a socket wait alone at a rendezvous
-/// before hanging up on it. Zero means never, and that is deliberate.
-///
-/// The relay package's two-minute default is right for a SHARED relay, where
-/// a lone socket may be a stranger pinning a rendezvous nobody will ever come
-/// to. This relay runs inside the desktop and serves only it: every socket
-/// waiting alone here is one of this desktop's own rendezvous listeners,
-/// waiting — correctly — for a phone that may be away for hours.
-///
-/// Measured on the owner's machine while the phone would not connect: three
-/// listeners, each evicted and re-dialled every 120.3 seconds, 58 times in a
-/// single run of the app, and the whole `remote:` log for forty minutes was
-/// `a socket is waiting (3 held)` repeating. Each eviction is a window in
-/// which the desktop is absent from its own rendezvous, and a phone arriving
-/// in one finds nobody there.
+/// How long the embedded relay lets a socket wait alone at a rendezvous. Zero —
+/// never — because every lone socket is one of this desktop's own listeners.
 const Duration kLocalRelayLoneTimeout = Duration.zero;
 
 /// The scoped inbound firewall rule the service tries to add on Windows.
 const String kFirewallRuleName = 'Karmashala local relay';
 
-/// The inbound rule the INSTALLER writes, which the app cannot write for
-/// itself without elevation. Program-scoped and `LocalPort: Any`, so it
-/// already covers this relay on whatever port it binds.
+/// The inbound rule the INSTALLER writes, which the app cannot write without
+/// elevation. Program-scoped and `LocalPort: Any`, so any port is covered.
 const String kInstallerFirewallRuleName = 'Karmashala';
 
 /// One interface address the machine could be dialled on.
@@ -235,8 +218,6 @@ class LocalRelayService {
 
   void _log(String message) => onLog?.call('local relay: $message');
 
-  // --- LAN addresses ---------------------------------------------------------
-
   Future<List<LocalRelayEndpoint>> _enumerate(int port) async {
     List<LanInterfaceAddress> addresses;
     try {
@@ -346,11 +327,8 @@ class LocalRelayService {
     }
   }
 
-  // --- Firewall --------------------------------------------------------------
-
-  /// Tries to add the scoped inbound rule via netsh; returns whether the rule
-  /// is believed present. Failing is normal (no admin) and NEVER elevates —
-  /// the caller shows a hint instead.
+  /// Tries to add the scoped inbound rule via netsh. Failing is normal (no
+  /// admin) and NEVER elevates — the caller shows a hint instead.
   Future<bool> _ensureFirewallRule(int port) async {
     final runner = _firewall;
     if (runner == null) return true;
@@ -407,13 +385,8 @@ class LocalRelayService {
         ),
       );
       if (added.ok) return true;
-      // A refused add is not the same as a closed firewall, and saying so
-      // sent the owner after a firewall that was never shut. Measured on
-      // their machine: the app could not write its own rule, logged
-      // "netsh refused the firewall rule (no admin?)", and put "If the phone
-      // can't connect, allow Karmashala in Windows Defender Firewall" on
-      // screen — while the phone was reaching the relay on this very port
-      // and the installer's own rule was allowing it.
+      // A refused add is not a closed firewall: the installer's own rule may
+      // already allow this port, and the hint sends the owner after nothing.
       if (await _programIsAlreadyAllowed(runner)) return true;
       _log('netsh refused the firewall rule (no admin?)');
       return false;
@@ -423,10 +396,8 @@ class LocalRelayService {
     }
   }
 
-  /// Whether an existing inbound rule already names this executable.
-  ///
-  /// Matched on the program path alone: rule names and every label netsh
-  /// prints are localised on a non-English Windows, and the path is not.
+  /// Whether an inbound rule already names this executable. Matched on the path
+  /// alone: every label netsh prints is localised, the path is not.
   Future<bool> _programIsAlreadyAllowed(CommandRunner runner) async {
     final exe = _executablePath ?? Platform.resolvedExecutable;
     try {

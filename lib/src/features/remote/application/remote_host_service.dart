@@ -1,21 +1,5 @@
-/// The host side of remote access: per paired device, a sealed channel bound
-/// to the current rendezvous generation, listened for over the relay and over
-/// the LAN, with revocation enforced and counters persisted.
-///
-/// OFF by default — nothing constructs this until the settings toggle asks
-/// for it, and `AppLifecycle` tears it down inside its budget slice.
-///
-/// ## Generation policy (the loop-64 drift rule, made concrete)
-///
-/// The device row persists ONE counter. The host listens on the relay at the
-/// counter and the next few after it ([kHostRelayListenWindow]); the LAN hello
-/// is matched against the same window. The companion dials its own counter and
-/// probes forward. Whichever generation actually carries traffic is adopted
-/// and persisted, and the window slides up; generations below it are closed.
-/// The companion bumps its counter after a session pairs, so successive
-/// sessions land on fresh rendezvous ids and freshly keyed channels, while a
-/// reconnect inside a session finds the same generation — and the same
-/// sequence numbers — still there.
+/// The host side of remote access: per device, a sealed channel bound to its
+/// rendezvous generation, heard over relay and LAN. OFF until the toggle asks.
 library;
 
 import 'dart:async';
@@ -30,14 +14,12 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/push.dart';
 import 'package:karmashala_remote/host.dart';
 
-/// How many consecutive generations the host listens on per device. Covers a
-/// companion whose counter ran ahead (it bumps after pairing; the host adopts
-/// on traffic); a companion *behind* probes forward on its own side. Drift
+/// How many consecutive generations the host listens on per device. Drift
 /// beyond the window means a restored backup — re-pair.
 const int kHostRelayListenWindow = 3;
 
-/// Builds the relay listener for one rendezvous. A seam: tests point it at an
-/// in-process relay, or swap the transport entirely.
+/// Builds the relay listener for one rendezvous — a seam tests point at an
+/// in-process relay.
 typedef RelayTransportFactory =
     RemoteTransport Function(Uri relay, RendezvousId rendezvous);
 
@@ -75,16 +57,14 @@ class RemoteHostService {
   final DeviceId hostId;
   final RemoteHostBindings bindings;
 
-  /// The configured hosted relay base URL (settings; the PopupBits default
-  /// unless changed). Serves as the fallback for a device row whose stored
-  /// relay is absent or unreadable, and as the default pairing relay.
+  /// The configured hosted relay: the fallback for a device row whose stored
+  /// relay is absent or unreadable, and the default pairing relay.
   final Uri relay;
 
   /// Where the embedded local relay can be dialled right now, or null while
   /// it is stopped — local-relay devices are parked then.
   Uri? _localRelayUrl;
 
-  /// Whether hosted-relay devices are served at all.
   bool _hostedEnabled;
 
   Uri? get localRelayUrl => _localRelayUrl;
@@ -117,7 +97,6 @@ class RemoteHostService {
     onLog: onLog,
   );
 
-  /// One push client per relay URL, built lazily.
   final Map<String, RelayPushClient> _pushClients = {};
 
   RelayPushClient? _pushClientFor(PairedDevice device) {
@@ -134,33 +113,23 @@ class RemoteHostService {
     }
   }
 
-  /// The relay [device]'s **pushes** go to: the one it paired through, which
-  /// is the only relay its phone is known to poll. Null while that relay is
-  /// off — a push nobody can collect is not worth posting.
+  /// The relay [device]'s **pushes** go to: the one it paired through, the only
+  /// relay its phone is known to poll. Null while that relay is off.
   Uri? relayUrlFor(PairedDevice device) {
     if (device.pairedViaLocalRelay) return _localRelayUrl;
     if (!_hostedEnabled) return null;
     return device.hostedRelayUri ?? relay;
   }
 
-  /// Every relay this host is *listening* for [device] on right now.
-  ///
-  /// Since Loop 83 that is every active relay, not only the one the device
-  /// paired through: the phone chooses its own path from its saved candidates,
-  /// so wherever it turns up the host is already waiting. Safe because a relay
-  /// is a meeting place, never an identity — the rendezvous comes from the
-  /// device key and every frame is sealed under it, so an extra listener can
-  /// only ever be met by the one phone that holds that key.
-  ///
-  /// Empty means *parked*: no relay is on, and only a direct LAN link reaches
-  /// this device until one returns.
+  /// Listens on every active relay for [device], not just the paired one: the
+  /// rendezvous comes from the device key, so only that phone can meet it.
   List<Uri> activeRelayUrlsFor(PairedDevice device) {
     final urls = <String, Uri>{};
     final local = _localRelayUrl;
     if (local != null) urls[local.toString()] = local;
     if (_hostedEnabled) {
-      // The relay it paired on AND the configured one, so a phone falling
-      // back to the app default still finds somebody listening.
+      // Plus the configured relay, so a phone falling back to the app default
+      // still finds somebody listening.
       final own = device.hostedRelayUri;
       if (own != null) urls[own.toString()] = own;
       urls[relay.toString()] = relay;
@@ -168,17 +137,13 @@ class RemoteHostService {
     return List.unmodifiable(urls.values);
   }
 
-  /// The relay set announced in `host.status` — what a phone should save as
-  /// its candidates. The same list the listeners are open on, so the phone can
-  /// never be told about a relay nobody is waiting at.
+  /// The relay set announced in `host.status` — the same list the listeners are
+  /// open on, so a phone is never told about a relay nobody is waiting at.
   List<Uri> announcedRelaysFor(PairedDevice device) =>
       activeRelayUrlsFor(device);
 
-  /// `host:port` of the direct LAN listener, when this machine has a LAN
-  /// address to name — taken from the local relay's own URL, which is where
-  /// the address was already discovered. A **hint** for a network that eats
-  /// multicast; loopback is never announced (a phone dialling 127.0.0.1 would
-  /// be dialling itself), and it may be stale the moment DHCP moves.
+  /// `host:port` of the direct LAN listener — a hint for a network that eats
+  /// multicast; loopback is never announced and DHCP can make it stale.
   String? get lanHint {
     final port = _lanServer?.port;
     final host = _localRelayUrl?.host;
@@ -189,9 +154,8 @@ class RemoteHostService {
     return '$host:$port';
   }
 
-  /// Points the service at the currently active relays. Opens and closes
-  /// device listeners to match, and tells every live phone the new set so its
-  /// saved candidates heal without a re-pair; generations are untouched.
+  /// Points the service at the currently active relays and tells every live
+  /// phone the new set, so its saved candidates heal without a re-pair.
   Future<void> updateRelays({
     required Uri? localRelayUrl,
     required bool hostedEnabled,
@@ -201,12 +165,8 @@ class RemoteHostService {
     }
     _localRelayUrl = localRelayUrl;
     _hostedEnabled = hostedEnabled;
-    // The announcement goes FIRST, on the links that are still up. Re-pointing
-    // the listeners closes the very socket a connected phone is holding — when
-    // the local relay's address moves under the desktop (a DHCP renew, a
-    // Wi-Fi band switch, a VPN coming up), announcing afterwards would be
-    // shouting the new address down a line that had just been cut, and the
-    // phone would be left dialling an address nobody is at.
+    // The announcement goes FIRST, on the links still up: re-pointing the
+    // listeners closes the very socket a connected phone is holding.
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
         runtime.run((api) => api.sendHostStatus()),
@@ -286,15 +246,8 @@ class RemoteHostService {
     _lanRoutes.clear();
   }
 
-  // --- Pairing ---------------------------------------------------------------
-
-  /// Shows a new QR: generates the payload, listens on its rendezvous over
-  /// the relay (LAN links route by hello), and persists the device once the
-  /// sealed round-trip proves the key. One pairing at a time; a new call
-  /// cancels the previous code. [relay] overrides the service's own for this
-  /// one code — the pairing dialog's endpoint choice; [relayIsLocal] says the
-  /// chosen endpoint is the embedded local relay, which is what the device
-  /// row remembers (as [kLocalRelayMarker], not the LAN URL of the moment).
+  /// Shows a new QR and persists the device once the sealed round-trip proves
+  /// its key. [relayIsLocal] stores [kLocalRelayMarker], not a LAN URL.
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
@@ -309,9 +262,8 @@ class RemoteHostService {
       relay: pairingRelay,
       hostId: hostId,
       capabilities: capabilities,
-      // The tab's relay stays the payload's `relay` — an older companion
-      // reads that alone — while the QR also names every other relay this
-      // host is serving, so the phone leaves with a set, not one address.
+      // The tab's relay stays the payload's `relay` — an older companion reads
+      // that alone — while the QR names every other relay this host serves.
       relays: [?_localRelayUrl, if (_hostedEnabled) this.relay],
     );
     final session = HostPairingSession(
@@ -356,19 +308,14 @@ class RemoteHostService {
     await cancelPairing();
   }
 
-  // --- Revocation ------------------------------------------------------------
-
-  /// Deletes the device's key, tears down its channels and stops listening
-  /// for it. Its frames are junk from here on: nothing holds a key that can
-  /// open them.
+  /// Deletes the device's key, tears down its channels and stops listening for
+  /// it. Its frames are junk from here on: nothing holds a key that opens them.
   Future<void> revoke(String deviceId) async {
     devices.revoke(deviceId);
     final runtime = _runtimes.remove(deviceId);
     if (runtime != null) {
       // Said before the link is taken away, because afterwards there is nothing
-      // to say it on. A phone that is not listening — asleep, or already gone —
-      // loses nothing: it cannot reconnect either way, since the device key was
-      // just cleared.
+      // to say it on.
       try {
         await runtime.run((api) => api.sendPairingRevoked());
       } on Object catch (error) {
@@ -380,8 +327,6 @@ class RemoteHostService {
     onDevicesChanged?.call();
   }
 
-  // --- Event fan-out ---------------------------------------------------------
-
   /// Something about sessions moved; every connected device re-evaluates its
   /// subscriptions.
   Future<void> notifySessionsChanged() async {
@@ -392,7 +337,7 @@ class RemoteHostService {
   }
 
   /// A session started waiting for approval; devices holding `approve` hear
-  /// about it with the Loop-49 evidence.
+  /// about it.
   Future<void> notifyApprovalRequested(String sessionId) async {
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
@@ -401,19 +346,15 @@ class RemoteHostService {
   }
 
   /// Whether [deviceId]'s phone can hear events right now: a frame arrived on
-  /// its active link since the carrying transport last dropped. (The relay
-  /// closes the host's socket when the peer leaves, so a phone that walked
-  /// away is noticed.)
+  /// its active link since the carrying transport last dropped.
   bool hasLiveLink(String deviceId) => _runtimes[deviceId]?.peerLive ?? false;
 
-  /// Whether [deviceId] is parked: its relay is switched off, so only a direct
-  /// LAN link reaches it. It resumes when that relay comes back — no re-pair,
-  /// no generation change.
+  /// Whether [deviceId] is parked: its relays are off, so only a direct LAN
+  /// link reaches it. It resumes when one returns — no re-pair.
   bool isParked(String deviceId) => _runtimes[deviceId]?.parked ?? false;
 
-  /// Attention news for the phones that are NOT connected: sealed per device
-  /// and posted to the relay's `/v1/push`. A connected phone hears the same
-  /// news as `session.changed` — never both. Best-effort; never throws.
+  /// Attention news for phones with no live link, sealed per device and posted
+  /// to their relay; a connected phone hears `session.changed`. Never throws.
   Future<void> pushAttentionNews({
     required String sessionId,
     required String title,
@@ -431,9 +372,8 @@ class RemoteHostService {
     }
   }
 
-  /// One transcript poll across every device, now. The periodic timer calls
-  /// this; tests call it directly. A device already sweeping swallows the
-  /// tick — see [_DeviceRuntime.sweepTranscripts].
+  /// One transcript poll across every device, now. A device already sweeping
+  /// swallows the tick — see [_DeviceRuntime.sweepTranscripts].
   Future<void> pollTranscriptsNow() async {
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
@@ -441,16 +381,8 @@ class RemoteHostService {
     ]);
   }
 
-  // --- Wiring ----------------------------------------------------------------
-
-  /// Replaces whatever was listening for [device], because a pairing just
-  /// replaced its key.
-  ///
-  /// A runtime holds the device key and the rendezvous derived from it, so
-  /// after a re-pair the old one is listening at addresses nobody will ever
-  /// dial again. Nothing is carried across: a new key means a new rendezvous
-  /// series, a fresh channel and an empty replay window — which is precisely
-  /// what a re-pair is, and why restarting at the first generation is safe.
+  /// Replaces whatever was listening for [device] after a re-pair: a new key
+  /// means a new rendezvous series, so nothing is carried across.
   Future<void> _rebuildRuntime(PairedDevice device) async {
     final previous = _runtimes.remove(device.id);
     if (previous != null) await previous.close();
@@ -523,8 +455,7 @@ class _LanRoute {
 }
 
 /// Everything live for one paired device: its relay listeners — one per
-/// generation in the window, per ACTIVE relay — and, once traffic arrives, the
-/// sealed channel, the session api and the transport that carries its frames.
+/// generation in the window, per active relay — and the active sealed channel.
 class _DeviceRuntime {
   _DeviceRuntime(this.service, this.device, this.key);
 
@@ -532,24 +463,22 @@ class _DeviceRuntime {
   PairedDevice device;
   final SecretKeyData key;
 
-  /// generation → relay URL text → the listener waiting there. The device's
-  /// phone may show up at any of them; whichever carries a frame becomes the
-  /// active link, exactly as a single listener did before.
+  /// generation → relay URL text → the listener waiting there. Whichever
+  /// carries a frame becomes the active link.
   final Map<int, Map<String, RemoteTransport>> _listeners = {};
   final Map<int, Map<String, StreamSubscription<Uint8List>>>
   _listenerSubscriptions = {};
   final Map<int, String> _rendezvousHexByGeneration = {};
 
   /// Generations abandoned by [_retireGeneration], kept so a frame still in
-  /// flight from one of them cannot re-open it. Pruned by [listenFrom] once
-  /// the window has moved a whole width past them.
+  /// flight from one of them cannot re-open it.
   final Set<int> _retired = <int>{};
 
   /// Which relays [_listeners] are dialling; empty while parked.
   List<Uri> _listenerUrls = const [];
 
   /// True while EVERY relay this device could be met on is off: LAN still
-  /// works, the relay listeners are closed, and the settings list can say so.
+  /// works, and the settings list can say so.
   bool get parked => _listenerUrls.isEmpty;
 
   _ActiveLink? _active;
@@ -566,33 +495,16 @@ class _DeviceRuntime {
   /// `Envelope.seq` always matches the sealed sequence.
   Future<void> _chain = Future<void>.value();
 
-  /// What this phone's `session.start` frames have already produced. Held here
-  /// rather than on the api because the retry it exists for arrives on a fresh
-  /// generation, and every generation gets a new api.
+  /// What this phone's `session.start` frames produced. Held here, not on the
+  /// api, because the retry it exists for arrives on a fresh generation.
   final SessionStartLedger<RemoteSessionStarted> _starts = SessionStartLedger<RemoteSessionStarted>();
   final SessionStartLedger<RemoteSessionStarted> _resumes = SessionStartLedger<RemoteSessionStarted>();
   final SessionStartLedger<RemoteWorkspaceProject> _projects = SessionStartLedger<RemoteWorkspaceProject>();
 
-  /// True while a transcript sweep is running for this device.
   bool _sweeping = false;
 
-  /// One transcript sweep for this device, and never two at once.
-  ///
-  /// The sweep reads every subscribed session, and everything for one device
-  /// runs on [_chain]. On a desktop with a dozen watched sessions a sweep
-  /// takes longer than the interval the timer fires on, so queueing each tick
-  /// behind the one still running made the chain grow faster than it could
-  /// ever drain — for ever, since `Timer.periodic` never asks whether the last
-  /// tick finished. The phone's own frames went to the back of that queue:
-  /// its `session.subscribe` timed out at fifteen seconds, and so did the
-  /// `LinkHello` that would have proved there was a link at all, which is why
-  /// a desktop sitting there holding its rendezvous read as "no host at
-  /// generation 2, 3, 4" from the other end.
-  ///
-  /// A tick arriving mid-sweep has nothing to add — the sweep in flight reads
-  /// the same sessions — so it is dropped rather than stacked. And each
-  /// session goes on the chain by itself, so a frame the user just sent waits
-  /// for one transcript read instead of all of them.
+  /// One transcript sweep for this device, never two at once: a sweep outlasts
+  /// the poll interval, and queued ticks grew the chain faster than it drained.
   Future<void> sweepTranscripts() async {
     if (_sweeping || _closed) return;
     _sweeping = true;
@@ -610,15 +522,8 @@ class _DeviceRuntime {
   bool _pushing = false;
   bool _pushAgain = false;
 
-  /// Re-evaluates every subscribed session, coalescing bursts.
-  ///
-  /// The same chain and the same hazard as [sweepTranscripts], but driven by
-  /// session activity rather than a timer — and a desktop with half a dozen
-  /// live agents produces activity in bursts. The push sends only what
-  /// actually moved, so ONE pass after a burst says everything N passes would
-  /// have; a notification arriving mid-pass is remembered and answered by a
-  /// single extra pass, never by a queue N deep that the phone's own frames
-  /// then sit behind.
+  /// Re-evaluates every subscribed session, coalescing bursts: one pass after a
+  /// burst says everything N passes would, and no frame waits behind a queue.
   Future<void> sweepSessionsChanged() async {
     if (_pushing) {
       _pushAgain = true;
@@ -671,10 +576,8 @@ class _DeviceRuntime {
         );
   }
 
-  /// Establishes the generation window `[from, from + window)` and closes
-  /// anything below — the sliding window of the generation policy. LAN routes
-  /// are registered for the whole window unconditionally (a direct link needs
-  /// no relay); relay listeners open only while the device's relay is active.
+  /// Establishes the window `[from, from + window)` and closes anything below.
+  /// LAN routes cover it all; relay listeners open only while a relay is up.
   Future<void> listenFrom(int from) async {
     if (_closed) return;
     _retired.removeWhere((g) => g < from - kHostRelayListenWindow);
@@ -694,13 +597,8 @@ class _DeviceRuntime {
     await syncRelayListeners();
   }
 
-  /// Brings the relay listeners in line with the relays that are up: one per
-  /// generation in the window on EVERY active relay, so whichever candidate
-  /// the phone dials, somebody is already there. A relay that goes away has
-  /// only its own listeners closed; a device is *parked* only when none are
-  /// left. The active sealed channel and the LAN routes survive all of it, so
-  /// a phone on the same network keeps working and a relay that returns picks
-  /// the device back up without touching generations.
+  /// Brings the relay listeners in line with the relays that are up. The active
+  /// channel and the LAN routes survive, so a returning relay costs nothing.
   Future<void> syncRelayListeners() async {
     if (_closed) return;
     final urls = service.activeRelayUrlsFor(device);
@@ -708,7 +606,6 @@ class _DeviceRuntime {
     for (final g in _listeners.keys.toList()) {
       for (final key in _listeners[g]!.keys.toList()) {
         if (want.containsKey(key)) continue;
-        // That relay is off (or moved): its listener is dead weight either way.
         await _closeRelayListener(g, key);
       }
     }
@@ -736,16 +633,11 @@ class _DeviceRuntime {
     if (transport != null) await transport.close();
   }
 
-  /// Abandons [generation] and slides the window onto the next one.
-  ///
-  /// Called when a frame the paired phone genuinely sealed cannot be admitted
-  /// — the phone rebuilt its channel while this end still held the old one.
-  /// Both ends recover by themselves: this end stops listening at the poisoned
-  /// generation, and the phone's probe-forward window finds the successor.
+  /// Abandons [generation] when a frame the phone genuinely sealed cannot be
+  /// admitted; its probe-forward window finds the successor unaided.
   Future<void> _retireGeneration(int generation) async {
     if (_closed) return;
-    // Something already moved the link on; the frame that got us here is
-    // simply late.
+    // Something already moved the link on; this frame is simply late.
     if (_active?.generation != generation) return;
     _retired.add(generation);
     _active = null;
@@ -756,9 +648,8 @@ class _DeviceRuntime {
     final next = generation + 1;
     device = device.copyWith(generation: next);
     service.devices.updateGeneration(device.id, next);
-    // Opens [next, next + window) and closes everything below it, which
-    // includes the socket the confused phone is sitting on — that drop is how
-    // it learns to dial again.
+    // Closes everything below `next`, including the socket the confused phone
+    // is sitting on — that drop is how it learns to dial again.
     await listenFrom(next);
     service.onDevicesChanged?.call();
   }
@@ -779,12 +670,10 @@ class _DeviceRuntime {
     Uint8List frame,
   ) async {
     if (_closed) return;
-    // A generation that has been retired is over. Its listeners are already
-    // closing, and anything still draining out of them must not walk the
-    // window back down to it — `_activate` would happily re-open it.
+    // A retired generation is over: anything still draining out of it must not
+    // walk the window back down — `_activate` would happily re-open it.
     if (_retired.contains(generation)) return;
-    // Revocation is enforced at the door: a revoked row has no key, and its
-    // frames are dropped before anything tries to answer them.
+    // Revocation is enforced at the door: a revoked row has no key.
     final current = service.devices.getById(device.id);
     if (current == null || current.revoked) return;
 
@@ -800,31 +689,13 @@ class _DeviceRuntime {
     try {
       opened = await active.channel.unseal(frame);
     } on SealedFrameException catch (error) {
-      // The tag did not verify, so this frame proves nothing about who sent
-      // it — a stranger at the rendezvous, a relay playing games, a mangled
-      // byte. Drop it and change nothing: letting junk move a generation
-      // would hand anyone who can reach the meeting place a way to rotate a
-      // link at will.
+      // The tag did not verify: letting junk move a generation would let anyone
+      // who can reach the rendezvous rotate a link at will.
       service.onLog?.call('refused a frame: $error');
       return;
     } on SealedChannelException catch (error) {
-      // The tag DID verify, so the paired phone sealed this — but its
-      // sequence is one this channel has already seen, or a wild jump. That
-      // is a phone which rebuilt its channel from zero and came back on a
-      // generation it had already used: its counter bump never reached its
-      // keystore, or it was killed before the write landed.
-      //
-      // Left alone this is the owner's bug. The plaintext `LinkHello` is
-      // answered whatever the channel thinks, so the phone is greeted, calls
-      // itself connected, and then has every single request refused here in
-      // silence — "subscribe … failed: the host did not answer", for ever.
-      //
-      // The channel cannot simply be reset: its replay window is the only
-      // thing standing between a captured frame and being replayed into this
-      // generation. So retire the generation instead. Its successor is keyed
-      // differently (the generation is bound into both direction keys), so
-      // nothing from this one can open there, and the phone's probe-forward
-      // window walks onto it without being told anything.
+      // The tag verified but the sequence repeats: the channel cannot be reset
+      // — its replay window is the only guard — so the generation is retired.
       service.onLog?.call('retiring generation $generation: $error');
       await _retireGeneration(generation);
       return;
@@ -855,7 +726,7 @@ class _DeviceRuntime {
   _ActiveLink _reattach(RemoteTransport transport) {
     final active = _active!;
     // The phone redialled inside a generation: same channel, same sequences,
-    // new socket — the conformance fixture's rule.
+    // new socket.
     active.transport = transport;
     _watchLiveness(transport);
     return active;
@@ -881,8 +752,8 @@ class _DeviceRuntime {
         startLedger: _starts,
         resumeLedger: _resumes,
         projectLedger: _projects,
-        // Read at announcement time, never captured: a relay toggled while
-        // this link is up must be in the very next `host.status`.
+        // Read at announcement time, never captured: a relay toggled while this
+        // link is up must be in the very next `host.status`.
         relays: () => service.announcedRelaysFor(device),
         lanHint: () => service.lanHint,
         send: (type, {id, payload = const {}}) =>
@@ -907,8 +778,8 @@ class _DeviceRuntime {
     return active;
   }
 
-  /// Seals [payload] and puts it on the wire. Answers whether a transport
-  /// took it — see [RemoteSend], and the bookkeeping that depends on it.
+  /// Seals [payload] and puts it on the wire. Answers whether a transport took
+  /// it — see [RemoteSend].
   Future<bool> _sealAndSend(
     _ActiveLink active,
     FrameType type,
@@ -916,8 +787,7 @@ class _DeviceRuntime {
     Map<String, Object?> payload,
   ) async {
     if (_closed || _active != active) return false;
-    // No awaits between reading the sequence and sealing: the two must agree,
-    // and every caller is already serialised on the device chain.
+    // No awaits between reading the sequence and sealing: the two must agree.
     final envelope = Envelope.of(
       type,
       seq: active.channel.nextSendSequence,
@@ -929,25 +799,16 @@ class _DeviceRuntime {
       active.transport.send(sealed);
       return true;
     } on TransportException {
-      // A transport only refuses once it is CLOSED — while it is merely
-      // reconnecting it queues — and an accepted LAN link closes for good the
-      // moment the phone hangs up, because it never redials (the peer does).
-      // So this end can be holding a dead link as the active one for as long
-      // as it takes the phone to send anything, and everything in that window
-      // lands here.
-      //
-      // The relay listeners for this generation are still up and still queue
-      // for the next reconnect. Any of them may be the one the phone comes
-      // back on, so try each until one takes the frame.
+      // A transport refuses only once CLOSED, and an accepted LAN link never
+      // redials, so the active one can be dead; the listeners here still queue.
       for (final fallback
           in _listeners[active.generation]?.values.toList() ??
               const <RemoteTransport>[]) {
         if (identical(fallback, active.transport)) continue;
         try {
           fallback.send(sealed);
-          // Adopt it. The old one is closed for ever, so leaving it in place
-          // means paying this exception — and this search — for every frame
-          // until the phone happens to send one.
+          // Adopt it: leaving the dead one in place pays this exception, and
+          // this search, for every frame until the phone happens to send one.
           active.transport = fallback;
           _watchLiveness(fallback);
           return true;
@@ -955,13 +816,9 @@ class _DeviceRuntime {
           continue;
         }
       }
-      // Name what was lost. Ten anonymous copies of this line in the owner's
-      // log said only that something had gone; which frame it was is the
-      // difference between a stale card and an unanswered request.
       service.onLog?.call('no transport could carry a ${type.wire} frame');
-      // And stop claiming the phone is here. `peerLive` is what decides
-      // whether a notification is pushed instead of shown on a link, and a
-      // link that cannot carry a frame is not one.
+      // `peerLive` decides whether news is pushed instead of sent on a link,
+      // and a link that cannot carry a frame is not one.
       peerLive = false;
       return false;
     }
@@ -971,8 +828,7 @@ class _DeviceRuntime {
     _closed = true;
     peerLive = false;
     // Staged attachment bytes belong to this link. Nothing outside it can name
-    // the upload, so a `.part` that outlives it is bytes nobody will ever
-    // quote — dropped here rather than waiting for the next host start.
+    // the upload, so a `.part` that outlives it is bytes nobody will quote.
     try {
       await service.bindings.discardAttachment(device.id);
     } on Object {

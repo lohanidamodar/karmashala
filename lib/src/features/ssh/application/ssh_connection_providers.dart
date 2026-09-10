@@ -11,13 +11,8 @@ import '../domain/ssh_host.dart';
 import 'ssh_failure.dart';
 import 'ssh_providers.dart';
 
-/// The live lifecycle of the connection to one saved host.
-///
-/// Watching this does **not** dial: `SshConnectionPool.forHostId` builds the
-/// connection object without opening a socket, so a row can show "not
-/// connected" without connecting to say so. The current state is emitted
-/// immediately and then every transition, so a UI that subscribes late still
-/// shows the truth rather than an empty stream that looks like idle.
+/// The live lifecycle of one saved host's connection. Watching does **not**
+/// dial, and the state is emitted at once, so a late subscriber sees the truth.
 final sshConnectionStateProvider = StreamProvider.autoDispose
     .family<SshConnectionState, String>((ref, hostId) {
       final SshConnection connection;
@@ -68,12 +63,8 @@ class SshHostProbe {
   final Duration? elapsed;
 }
 
-/// Connects to [host] once, runs one command, and hangs up.
-///
-/// Built through [SshConnectionPool.create], which deliberately does *not*
-/// register the connection: this is how unsaved settings get verified before
-/// they are written, and how a test never leaves a pooled connection behind for
-/// the rest of the app to inherit.
+/// Connects to [host] once, runs one command, and hangs up. Built through
+/// [SshConnectionPool.create], which does not register the connection.
 Future<SshHostProbe> probeSshHost(SshConnectionPool pool, SshHost host) async {
   final connection = pool.create(host);
   final stopwatch = Stopwatch()..start();

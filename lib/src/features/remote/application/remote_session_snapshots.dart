@@ -1,9 +1,5 @@
-/// What a phone is shown about a session: the two snapshot builders and the
-/// Explorer-ordered walk that answers `sessions.list`.
-///
-/// The snapshots are the desktop card's own wording — the agent label, the
-/// whereabouts note, the badge, the subtitle — computed here so the phone and
-/// the screen beside it cannot describe one session differently.
+/// What a phone is shown about a session, worded as the desktop card words it,
+/// so the phone and the screen beside it cannot describe one differently.
 library;
 
 import 'package:riverpod/riverpod.dart';
@@ -31,9 +27,8 @@ import 'package:karmashala_remote/remote.dart';
 import 'remote_attachment_bindings.dart';
 import 'remote_binding_support.dart';
 
-/// The delivery-stage lookup, split out so tests can stub the one binding
-/// whose production path costs a git/gh probe (`sessionDeliveryProvider` —
-/// the same probe the desktop strip pays for a session on screen).
+/// The delivery-stage lookup, split out so tests can stub the one binding whose
+/// production path costs a git/gh probe.
 final remoteDeliveryStageProvider =
     Provider<Future<String?> Function(String sessionId)>((ref) {
       return (sessionId) async {
@@ -49,9 +44,7 @@ final remoteDeliveryStageProvider =
     });
 
 /// The whereabouts-and-age lookup behind the list payload, split out like the
-/// stage lookup so tests can stub it: production reads
-/// [sessionWhereaboutsProvider] — the same value the desktop card reads —
-/// whose sources include the terminal grid and the agent status providers.
+/// stage lookup so tests can stub it.
 final remoteSessionPresenceProvider =
     Provider<({String? note, DateTime? lastSeen}) Function(String sessionId)>((
       ref,
@@ -124,9 +117,8 @@ RemoteSessionSnapshot remoteSessionSnapshot(
       session.status.name,
     ].join('  ·  '),
     whereabouts: presence.note,
-    // The desktop's `since`, through the one definition every list orders by:
-    // the agent's own newest evidence, or failing that when the row was
-    // created — never the time of our last poll.
+    // The one definition every list orders by: the agent's own newest evidence,
+    // else when the row was created — never our last poll.
     lastActivityAt: (_lastActiveOfSession(ref, session).at ?? session.createdAt)
         .toUtc()
         .toIso8601String(),
@@ -210,13 +202,8 @@ RemoteSessionSnapshot remoteImportedSnapshot(
   );
 }
 
-/// When a session was last active, as the walk reads it.
-///
-/// Through [remoteSessionPresenceProvider] rather than the status registry
-/// directly, because that is the seam the snapshot's own `lastActivityAt` is
-/// built from: the field the phone draws and the order it draws it in come from
-/// one reading, so a phone can never be handed a list ordered by something it
-/// cannot see.
+/// When a session was last active, through [remoteSessionPresenceProvider]: the
+/// field the phone draws and the order it is drawn in come from one reading.
 SessionLastActive _lastActiveOfSession(Ref ref, Session session) =>
     newestLastActive(
       agentEvidenceAt: ref.read(remoteSessionPresenceProvider)(session.id)
@@ -227,8 +214,7 @@ SessionLastActive _lastActiveOfImported(ImportedSession session) =>
     newestLastActive(storeModifiedAt: session.updatedAt);
 
 /// The sessions of one Explorer row, in the order the Explorer draws them:
-/// pinned first, then most recently active, with a lineage's children
-/// following the session they came from.
+/// pinned first, then most recently active, children under their parent.
 List<RemoteSessionSnapshot> _rowSnapshots(
   Ref ref,
   CheckoutSessions sessions,
@@ -276,17 +262,8 @@ List<RemoteSessionSnapshot> _rowSnapshots(
   return [for (final entry in entries) ...entry.rows];
 }
 
-/// Every session, in the **Explorer's own order** — the desktop tree read
-/// top to bottom: pinned projects first, repositories in path order, the
-/// unscanned folders beneath a repository before the repository's own
-/// sessions, and each row's sessions ordered as the cards are.
-///
-/// Deliberately built WITHOUT asking git for worktrees: that is the same
-/// tree the Explorer itself draws while git is still answering (repositories
-/// as peers), and `sessions.list` must not spawn a process per repository.
-/// Placement by deepest containing path is unaffected — it is what puts a
-/// worktree's sessions in the right place — so only the worktree *headings*
-/// are missing, which the phone does not draw anyway.
+/// Every session in the **Explorer's own order**, built WITHOUT asking git for
+/// worktrees: `sessions.list` must not spawn a process per repository.
 List<RemoteSessionSnapshot> listRemoteSessions(Ref ref) {
   final out = <RemoteSessionSnapshot>[];
   final placed = <String>{};
@@ -332,11 +309,8 @@ List<RemoteSessionSnapshot> listRemoteSessions(Ref ref) {
   for (final session in ref.read(sessionDaoProvider).getAll()) {
     if (placed.add(session.id)) out.add(remoteSessionSnapshot(ref, session));
   }
-  // One entry per conversation, like the Explorer: `getAll` — and the
-  // `getByRepository` the ordered walk above reads — both exclude a record a
-  // native row already represents. That filter lives in `ImportedSessionDao`
-  // and must stay the only copy of the rule; a raw read here would put the
-  // same conversation on the phone twice.
+  // One entry per conversation: `ImportedSessionDao` already excludes a record
+  // a native row represents, and a raw read here would list it twice.
   for (final session in ref.read(importedSessionDaoProvider).getAll()) {
     if (placed.add(session.id)) {
       out.add(remoteImportedSnapshot(ref, session));

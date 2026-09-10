@@ -1,9 +1,5 @@
-/// Where an SSH connection is in its lifecycle.
-///
-/// The important distinction is [disconnected] vs [failed]: a dropped link is
-/// retried with backoff, while a refused host key or a rejected credential is
-/// terminal until the user changes something. Neither is ever reported to a
-/// caller as success.
+/// Where an SSH connection is in its lifecycle. [disconnected] is retried with
+/// backoff; [failed] is terminal until the user changes something.
 enum SshConnectionStatus {
   /// No connection has been attempted yet.
   idle,
@@ -22,9 +18,8 @@ enum SshConnectionStatus {
   failed,
 }
 
-/// A snapshot of one connection's lifecycle, safe to log and to display.
-///
-/// [error] is a human-readable reason; credentials never reach it.
+/// A snapshot of one connection's lifecycle, safe to log and display: [error]
+/// is human-readable and credentials never reach it.
 class SshConnectionState {
   const SshConnectionState({
     required this.status,
@@ -67,9 +62,7 @@ class SshConnectionState {
 }
 
 /// Exponential backoff for reconnect attempts, capped so a long outage does not
-/// wander into hour-long waits.
-///
-/// Pure so the schedule is unit-testable without waiting for real time.
+/// wander into hour-long waits. Pure, so the schedule is unit-testable.
 Duration reconnectBackoff(
   int attempt, {
   Duration base = const Duration(milliseconds: 500),

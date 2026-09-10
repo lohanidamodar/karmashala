@@ -1,10 +1,7 @@
 import 'package:agent_cli/process.dart';
 
-/// How Karmashala authenticates to a remote host.
-///
-/// Password auth exists because some hosts allow nothing else, but the password
-/// itself is **never persisted** — it is asked for per connection. Key auth is
-/// the default and the only one that survives a restart unattended.
+/// How Karmashala authenticates to a remote host. A password is **never
+/// persisted** — it is asked for per connection; key auth survives a restart.
 enum SshAuthMethod {
   /// A private key file on a local machine, optionally passphrase-protected.
   privateKey,
@@ -13,12 +10,8 @@ enum SshAuthMethod {
   password,
 }
 
-/// A remote machine Karmashala can run agents on, reached over SSH.
-///
-/// This is **configuration**, not a secret store: it holds the address, the
-/// account, and *where the private key lives* — never a password, never a
-/// passphrase, and never private key material. Those are supplied per
-/// connection through `SshCredentialPrompt` and kept in memory only.
+/// A remote machine reached over SSH. **Configuration**, not a secret store: it
+/// holds *where* the private key lives, never a key, password or passphrase.
 class SshHost {
   const SshHost({
     required this.id,
@@ -49,8 +42,7 @@ class SshHost {
   final SshAuthMethod authMethod;
 
   /// Path to the private key **on a local environment** (principle 2: the path
-  /// carries the environment that owns it — a key at `C:\Users\me\.ssh\id_ed25519`
-  /// is a Windows path, not a remote one). Null for password auth.
+  /// carries the environment that owns it). Null for password auth.
   final EnvironmentPath? privateKey;
 
   /// Optional starting directory for browsing, a path in *this host's*

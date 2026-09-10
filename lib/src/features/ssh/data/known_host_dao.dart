@@ -2,10 +2,8 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/ssh_host_key.dart';
 
-/// Data-access for trusted host keys — Karmashala's `known_hosts`.
-///
-/// One row per `host:port`. Storing at most one key per address is what makes a
-/// changed key detectable at all; see `SshHostKeyVerifier`.
+/// Data-access for trusted host keys — Karmashala's `known_hosts`. One row per
+/// `host:port`, which is what makes a changed key detectable at all.
 class KnownHostDao {
   KnownHostDao(this._db);
 
@@ -26,10 +24,8 @@ class KnownHostDao {
     return rows.map(_fromRow).toList();
   }
 
-  /// Records [key] as trusted, replacing whatever was there.
-  ///
-  /// Callers must only reach this after an explicit user decision — the verifier
-  /// never calls it for a changed key on its own.
+  /// Records [key] as trusted, replacing whatever was there. Only ever reached
+  /// after an explicit user decision — never for a changed key.
   void trust(KnownHostKey key) {
     _db.execute(
       'INSERT INTO ssh_known_hosts '

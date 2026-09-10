@@ -13,18 +13,8 @@ abstract class HostBinarySource {
   Future<List<String>> availableTargets();
 }
 
-/// Binaries named `karmashala_host-<version>-<os>-<arch>`.
-///
-/// In a release they sit beside `karmashala.exe` and `karmashala_mcp.exe` —
-/// `tool/build_release.bat` cross-compiles them into the Release directory the
-/// installer copies wholesale, so no installer change is needed. In a debug run
-/// they come from `host/build/`, which is what `dart compile exe` writes.
-///
-/// Only linux-x64 and linux-arm64 exist. The Windows Dart SDK's `compile exe`
-/// refuses `--target-os=macos` outright — measured 2026-09-08, it answers
-/// "Unsupported target platform macos_arm64. Supported target platforms:
-/// linux_arm, linux_arm64, linux_riscv64, linux_x64" — so a macOS host has no
-/// binary and falls back to tmux, and it is this class that knows it.
+/// Binaries named `karmashala_host-<version>-<os>-<arch>`. Only linux-x64 and
+/// arm64 exist: the Windows Dart SDK refuses `--target-os=macos` outright.
 class DirectoryHostBinaries implements HostBinarySource {
   DirectoryHostBinaries(this.directories);
 
@@ -59,12 +49,8 @@ class DirectoryHostBinaries implements HostBinarySource {
         candidates.add((match.group(1), entity));
       }
       if (candidates.isEmpty) continue;
-      // Every version ever installed accumulates here — the installer copies
-      // the Release directory wholesale and nothing prunes it — so the newest
-      // is what this build means, not whichever the filesystem listed first.
-      // On 2026-09-10 that took 1.20.0 while 1.20.1 lay beside it, and a stale
-      // pick reads as `protocolMismatch` after a protocol bump. The older files
-      // are left exactly where they are.
+      // Every version ever installed accumulates here, so the newest is what
+      // this build means; a stale pick reads as `protocolMismatch`.
       candidates.sort((a, b) => compareFilenameVersions(b.$1, a.$1));
       final (version, file) = candidates.first;
       return HostBinary(
@@ -77,13 +63,8 @@ class DirectoryHostBinaries implements HostBinarySource {
     return null;
   }
 
-  /// Compares two filename versions segment by segment, as numbers.
-  ///
-  /// A string sort puts `1.9.0` above `1.20.1`, which is the whole bug. `null`
-  /// is a file the regex matched without a version and is lowest — it says
-  /// nothing about what it is, so it loses to anything that does. Segments that
-  /// are not plain integers (a `+build` tail) fall back to comparing the text,
-  /// which is a tie-break rather than an ordering claim.
+  /// Compares two filename versions segment by segment, as numbers: a string
+  /// sort puts `1.9.0` above `1.20.1`, which is the whole bug.
   static int compareFilenameVersions(String? a, String? b) {
     if (a == null || b == null) return (a == null ? 0 : 1) - (b == null ? 0 : 1);
     final left = a.split('.');
