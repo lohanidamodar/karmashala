@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
+import 'package:karmashala_core/logging.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../domain/agent_pane_launch.dart';
@@ -130,11 +131,11 @@ abstract interface class ReapableTerminalInstance {
 /// A third narrow interface, for one property: whether tearing this pane down
 /// also releases the console behind it.
 ///
-/// On Windows that release is `ClosePseudoConsole`, and it is **synchronous and
-/// unbounded** — it does not return until the console host behind the pane has
-/// gone, and that host is a child of *this* process rather than of the shell,
-/// so killing the pane's process tree does not settle it. The 2026-09-09 app
-/// soak measured it at 1-22 ms on a good quit and, on 1 cycle in 10, never:
+/// On Windows that release is `ClosePseudoConsole`, and it does not return
+/// until the console host behind the pane has gone — a host that is a child of
+/// *this* process rather than of the shell, so killing the pane's process tree
+/// does not settle it. The 2026-09-09 app soak measured it at 1-22 ms on a good
+/// quit and, on 1 cycle in 10, never:
 ///
 /// ```txt
 ///   PROBE taskkill done       15:10:58.953
@@ -142,18 +143,23 @@ abstract interface class ReapableTerminalInstance {
 ///   (nothing, for the remaining 60 s)
 /// ```
 ///
-/// A synchronous call that never returns takes the isolate with it, so no
-/// shutdown step's `timeout` can fire — a `Duration` is a task for the isolate
-/// that is stuck — and `_quit` never reaches `windowManager.destroy()` or
-/// `exit(0)`. That is both of the two cycles in twenty that ignored `WM_CLOSE`,
-/// and no bound in Dart could have rescued either.
+/// It **used to be synchronous**, and a synchronous call that never returns
+/// takes the isolate with it: no shutdown step's `timeout` can fire, because a
+/// `Duration` is a task for the isolate that is stuck. That is both of the two
+/// cycles in twenty that ignored `WM_CLOSE`, and on 2026-09-10 it is what a
+/// minidump caught the running app's main thread doing after a pane closed
+/// (BACKLOG 1). Since then `pty_destroy` hands the close to a detached native
+/// thread and returns immediately, so nothing in Dart waits for a console host
+/// any more — see `packages/flutter_pty/src/flutter_pty.h`.
 ///
-/// The release is worth doing while the app keeps running: a long session
-/// otherwise accumulates a descriptor and a reader thread per closed pane, and
-/// profiling on 2026-09-03 measured 10 stranded descriptors after 6 closed
-/// panes against a macOS soft limit of 256. It is worth nothing at all when the
-/// process is ending, which is when the OS reclaims every handle for free — so
-/// the quit path says so, and the pane skips it.
+/// This interface survives that fix, because the choice it exists for is not
+/// about blocking. The release is worth doing while the app keeps running: a
+/// long session otherwise accumulates a descriptor and a reader thread per
+/// closed pane, and profiling on 2026-09-03 measured 10 stranded descriptors
+/// after 6 closed panes against a macOS soft limit of 256. It is worth nothing
+/// at all when the process is ending, which is when the OS reclaims every
+/// handle for free and would kill the worker mid-close regardless — so the quit
+/// path says so, and the pane skips it.
 abstract interface class PseudoConsoleOwner {
   /// Leave the pseudoconsole to the OS when this pane is disposed.
   ///
@@ -650,11 +656,7 @@ class PtyTerminalInstance
     //
     // Kept rather than dropped: closing a tab does not have to wait for the
     // kill, but quitting does — see [reaped].
-    _reap = shutdownProcess(
-      kill: _pty.kill,
-      exitCode: _pty.exitCode,
-      // The whole tree, not just the pid: see killWindowsProcessTree.
-      pid: _exited ? null : _pid,
+    //
     // Release the pty itself once the process behind it is gone. Killing the
     // child does not close the master descriptor — the pane's fd and its
     // reader thread outlive it, and a long session accumulates one of each per
@@ -662,14 +664,27 @@ class PtyTerminalInstance
     // descriptors after 6 closed panes; macOS gives a Finder-launched app a
     // soft limit of 256.
     //
-    // After the reap rather than before, so `shutdownProcess` still has a live
-    // pty to ask for `exitCode` while it waits for the child to go quietly. And
-    // not at all when the process is ending: see [PseudoConsoleOwner].
-    ).whenComplete(() {
-      if (_keepPseudoConsole) return;
-      _pty.destroy();
+    // After the reap rather than before, so the shutdown still has a live pty
+    // to ask for `exitCode` while it waits for the child to go quietly. And not
+    // at all when the process is ending: see [PseudoConsoleOwner].
+    _reap = closePaneProcess(
+      kill: _pty.kill,
+      exitCode: _pty.exitCode,
+      // The whole tree, not just the pid: see killWindowsProcessTree.
+      pid: _exited ? null : _pid,
+      // Read at the end, not now: the quit can arrive while this reap is still
+      // in flight, and it is the quit's answer that decides.
+      keepPseudoConsole: () => _keepPseudoConsole,
+      releasePseudoConsole: _pty.destroy,
+    ).then((report) {
+      // The one line that says what a pane close actually did. Whether the tree
+      // was gone when the console was released is the whole question the
+      // 2026-09-10 hang turned on, and a dump was the only way to answer it.
+      _log.info('pane $id: ${report.summary}.');
     });
   }
+
+  static final _log = AppLogger.named('terminal.pane');
 
   /// Set by the shutdown that is about to end this process. See
   /// [PseudoConsoleOwner].

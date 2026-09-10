@@ -420,9 +420,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Disposes every pane, returning the reaps still in flight — one per pane
   /// that owns a process. Callers that can wait should; `ref.onDispose` cannot.
   /// [forExit] is the process ending rather than a pane closing, and the one
-  /// thing it changes is that a pane keeps its pseudoconsole — releasing it is
-  /// a synchronous Windows call that has been measured never returning, which
-  /// on a quit is an app that will not close. See [PseudoConsoleOwner].
+  /// thing it changes is that a pane keeps its pseudoconsole — the OS reclaims
+  /// it for free when the process ends, and the native worker that would close
+  /// it is killed mid-close anyway. See [PseudoConsoleOwner].
   List<Future<void>> _disposeAll({bool forExit = false}) {
     final reaping = <Future<void>>[];
     for (final entry in _instances.entries) {
