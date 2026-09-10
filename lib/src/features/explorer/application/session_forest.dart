@@ -1,4 +1,5 @@
 import '../../sessions/domain/session.dart';
+import '../../sessions/domain/session_last_active.dart';
 import '../../sessions/domain/session_lineage.dart';
 
 /// One session as the tree draws it, with the sessions that came from it
@@ -52,12 +53,21 @@ class SessionNode {
 /// sits at the top level and keeps its link glyph.
 ///
 /// [isPinned] orders the top level the way the flat list always has — pinned
-/// first, then most recently created. Children are never re-ordered by pinning:
-/// a child that jumped above its parent would break the one thing the nesting
-/// is there to show.
+/// first, then, since the sessions were "supposed to be ordered by last active
+/// time", by [lastActive] rather than by when the row was created. Children are
+/// never re-ordered by either: a child that jumped above its parent would break
+/// the one thing the nesting is there to show, and the order the work happened
+/// in is what a lineage is for.
+///
+/// [lastActive] defaults to "we hold no reading", which orders the top level by
+/// `createdAt` exactly as it did before — the tie-break in
+/// [compareByLastActive]. A caller that can answer it passes
+/// `sessionLastActiveProvider`'s lookup, which every other session list reads
+/// too.
 List<SessionNode> buildSessionForest(
   List<Session> sessions, {
   required bool Function(String sessionId) isPinned,
+  SessionLastActive Function(String sessionId) lastActive = _noReading,
 }) {
   if (sessions.isEmpty) return const [];
   final byId = {for (final session in sessions) session.id: session};
@@ -125,7 +135,12 @@ List<SessionNode> buildSessionForest(
     final pinnedA = isPinned(a.id);
     final pinnedB = isPinned(b.id);
     if (pinnedA != pinnedB) return pinnedA ? -1 : 1;
-    return b.createdAt.compareTo(a.createdAt);
+    return compareByLastActive(
+      (lastActive: lastActive(a.id), createdAt: a.createdAt),
+      (lastActive: lastActive(b.id), createdAt: b.createdAt),
+    );
   });
   return [for (final root in roots) nodeFor(root)];
 }
+
+SessionLastActive _noReading(String sessionId) => SessionLastActive.unknown;

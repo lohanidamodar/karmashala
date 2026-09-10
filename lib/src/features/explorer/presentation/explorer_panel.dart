@@ -25,6 +25,8 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/session_last_active_providers.dart';
+import '../../sessions/domain/session_last_active.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/terminal_profile.dart';
@@ -834,19 +836,31 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final pinnedIds = ref
         .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
         .toSet();
+    // The one reading every session list orders by, read once for the whole
+    // row. Costs a map lookup per session — the status registry already holds
+    // these — so it is affordable at the 400 sessions
+    // `session_switch_cost_test` counts.
+    final lastActiveOf = ref.read(sessionLastActiveProvider);
     final forest = buildSessionForest(
       sessions.native,
       isPinned: pinnedIds.contains,
+      lastActive: lastActiveOf.call,
     );
 
-    // Pinned first, then most recently active — the ordering the flat list
-    // always had, now applied to the *top* of each lineage so a child never
-    // floats above the session it came from.
+    // Pinned first, then most recently **active** — applied to the *top* of
+    // each lineage so a child never floats above the session it came from.
+    //
+    // Re-read on rebuild, never on a timer: the order settles when something
+    // the Explorer already watches changes, which is what keeps a list the user
+    // is reading from resorting itself under the cursor.
     final entries =
-        <({DateTime ts, bool pinned, List<Widget> rows})>[
+        <({SessionActivityOrder order, bool pinned, List<Widget> rows})>[
           for (final node in forest)
             (
-              ts: node.session.createdAt,
+              order: (
+                lastActive: lastActiveOf(node.session.id),
+                createdAt: node.session.createdAt,
+              ),
               pinned: pinnedIds.contains(node.session.id),
               rows: _lineageRows(
                 project,
@@ -858,7 +872,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             ),
           for (final imported in sessions.imported)
             (
-              ts: imported.updatedAt ?? imported.createdAt,
+              order: (
+                lastActive: lastActiveOf(
+                  imported.id,
+                  storeModifiedAt: imported.updatedAt,
+                ),
+                createdAt: imported.createdAt,
+              ),
               pinned: pinnedIds.contains(imported.id),
               rows: [
                 ImportedSessionRow(
@@ -875,7 +895,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             ),
         ]..sort((a, b) {
           if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-          return b.ts.compareTo(a.ts);
+          return compareByLastActive(a.order, b.order);
         });
     return [for (final entry in entries) ...entry.rows];
   }

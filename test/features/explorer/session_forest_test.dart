@@ -1,5 +1,6 @@
 import 'package:karmashala/src/features/explorer/application/session_forest.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_last_active.dart';
 import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +34,12 @@ void main() {
   List<SessionNode> forest(
     List<Session> sessions, {
     Set<String> pinned = const {},
-  }) => buildSessionForest(sessions, isPinned: pinned.contains);
+    Map<String, DateTime> activeAt = const {},
+  }) => buildSessionForest(
+    sessions,
+    isPinned: pinned.contains,
+    lastActive: (id) => newestLastActive(agentEvidenceAt: activeAt[id]),
+  );
 
   test('a session the user started has no parent and no glyph', () {
     final nodes = forest([at('a')]);
@@ -157,5 +163,63 @@ void main() {
 
   test('an empty row is empty', () {
     expect(forest(const []), isEmpty);
+  });
+
+  group('the top level is ordered by last activity', () {
+    test('the most recently active row comes first, not the newest one', () {
+      // The owner's report: a session started this morning that has done
+      // nothing must not sit above one started last week that answered a minute
+      // ago.
+      final nodes = forest(
+        [at('stale', minutes: 100), at('busy', minutes: 0)],
+        activeAt: {
+          'stale': testTime.add(const Duration(minutes: 5)),
+          'busy': testTime.add(const Duration(minutes: 90)),
+        },
+      );
+      expect([for (final node in nodes) node.session.id], ['busy', 'stale']);
+    });
+
+    test('a row we hold no reading for sorts below every row we do', () {
+      final nodes = forest(
+        [at('unknown', minutes: 100), at('ancient', minutes: 0)],
+        activeAt: {'ancient': testTime},
+      );
+      expect([for (final node in nodes) node.session.id], [
+        'ancient',
+        'unknown',
+      ], reason: 'unknown is not "idle since the epoch", it is unspoken for');
+    });
+
+    test('with no readings at all the order is what it always was', () {
+      final nodes = forest([at('old', minutes: 0), at('new', minutes: 5)]);
+      expect([for (final node in nodes) node.session.id], ['new', 'old']);
+    });
+
+    test('a pin still outranks every reading', () {
+      final nodes = forest(
+        [at('pinned', minutes: 0), at('busy', minutes: 5)],
+        pinned: {'pinned'},
+        activeAt: {'busy': testTime.add(const Duration(hours: 9))},
+      );
+      expect([for (final node in nodes) node.session.id], ['pinned', 'busy']);
+    });
+
+    test('children keep the order the work happened in', () {
+      // Nesting exists to show where a session came from. Re-ordering a
+      // lineage by recency would put an answer above the question.
+      final nodes = forest(
+        [
+          at('parent', minutes: 0),
+          at('first', parent: 'parent', minutes: 1),
+          at('second', parent: 'parent', minutes: 2),
+        ],
+        activeAt: {'first': testTime.add(const Duration(hours: 9))},
+      );
+      expect([for (final child in nodes.single.children) child.session.id], [
+        'first',
+        'second',
+      ]);
+    });
   });
 }
