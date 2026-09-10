@@ -14,9 +14,7 @@ class SessionChangedFile {
   final String path;
 
   /// [path] as **this host** spells it, or null when it cannot be expressed
-  /// here — an SSH session's path, a WSL path with no distribution recorded, a
-  /// checkpoint's repository-relative path. Null is "not reachable from here as
-  /// written", never "the same as [path]".
+  /// here. Null is "not reachable as written", never "the same as [path]".
   final String? hostPath;
 
   final FileEditKind kind;
@@ -43,10 +41,8 @@ class SessionChangedFile {
   String toString() => 'SessionChangedFile(${kind.name} $display)';
 }
 
-/// Which source answered, and whether it had anything to say. Six members
-/// rather than an empty list and a flag, because "changed no files", "could not
-/// read this session's record" and "this agent keeps no record" are three
-/// different sentences.
+/// Which source answered, and whether it had anything to say. Six members: "no
+/// files", "could not read" and "keeps no record" are three sentences.
 enum SessionChangedFilesOutcome {
   /// A list, out of the agent's own record of its own run.
   fromAgentRecord,
@@ -68,9 +64,8 @@ enum SessionChangedFilesOutcome {
   unknownSession,
 }
 
-/// Why the agent's own record did not answer. Orthogonal to
-/// [SessionChangedFilesOutcome]: git can answer perfectly well while this says
-/// the agent keeps no record, which is the ordinary Antigravity session.
+/// Why the agent's own record did not answer. Orthogonal to the outcome: git
+/// can answer while this says the agent keeps no record.
 enum SessionRecordGap {
   /// It did answer.
   none,
@@ -82,8 +77,7 @@ enum SessionRecordGap {
   recordUnreadable,
 
   /// The session has not named a CLI conversation yet, so there is no record to
-  /// look for. A CLI writes its own id when it starts a turn, not when it
-  /// launches.
+  /// look for. A CLI writes its own id on its first turn, not at launch.
   noConversationYet,
 }
 

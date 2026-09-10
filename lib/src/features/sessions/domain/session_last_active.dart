@@ -16,14 +16,8 @@ enum LastActiveSource {
   none,
 }
 
-/// **When a session was last active, and what says so.**
-///
-/// One definition, shared by every list that orders sessions and every row that
-/// draws the age: two lists disagreeing about which session is freshest is the
-/// bug this type exists to make impossible.
-///
-/// [at] is when the reading was **produced**, never when we looked for it.
-/// Nothing here polls — the readings are ones the app already holds.
+/// **When a session was last active, and what says so** — one definition, so
+/// two lists cannot disagree. [at] is when the reading was *produced*.
 class SessionLastActive {
   const SessionLastActive({required this.at, required this.source});
 
@@ -59,16 +53,8 @@ class SessionLastActive {
   String toString() => 'SessionLastActive(${at ?? 'unknown'}, ${source.name})';
 }
 
-/// The newest of the readings the app holds for one session.
-///
-/// Pure and deliberately so: handed readings, never asking a clock, so the same
-/// inputs order the same way in a test, on the desktop and on the phone.
-/// Passing "now" for a session we know nothing about is the confident false
-/// statement this refuses.
-///
-/// [createdAt] is **not** a reading and is not accepted here: folding it in
-/// would make a year-old row that has never run look as fresh as its birthday.
-/// It is the tie-break in [compareByLastActive] instead.
+/// The newest of the readings the app holds for one session. Pure, never asking
+/// a clock; [createdAt] is not a reading and is only the tie-break.
 SessionLastActive newestLastActive({
   DateTime? agentEvidenceAt,
   DateTime? storeModifiedAt,
@@ -96,8 +82,7 @@ SessionLastActive newestLastActive({
 }
 
 /// The timestamp on a status report, or null when the report is evidence about
-/// nothing. The one place that decision is made, so a source that could tell us
-/// nothing contributes no timestamp rather than the moment we asked it.
+/// nothing — so a silent source contributes no timestamp, not "now".
 DateTime? agentEvidenceAt(AgentStatusReport? report) =>
     report == null || report.source == AgentStatusSource.none
     ? null
@@ -109,10 +94,8 @@ typedef SessionActivityOrder = ({
   DateTime createdAt,
 });
 
-/// **Most recently active first**, with [SessionLastActive.unknown] last and
-/// `createdAt` — newest first — breaking every tie. Unknown sorts last rather
-/// than oldest: a session we hold no reading for has not been idle since the
-/// epoch, and placing it among the stale rows would be a claim we cannot make.
+/// **Most recently active first**, `createdAt` breaking ties. Unknown sorts
+/// last, not oldest: no reading is not "idle since the epoch".
 int compareByLastActive(SessionActivityOrder a, SessionActivityOrder b) {
   final aAt = a.lastActive.at;
   final bAt = b.lastActive.at;

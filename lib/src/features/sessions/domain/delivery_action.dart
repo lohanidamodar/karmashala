@@ -2,14 +2,8 @@ import 'delivery_stage.dart';
 import 'session_delivery.dart';
 import 'package:karmashala_git/github.dart';
 
-/// The delivery strip's actions: one line from a working tree to an archived
-/// worktree, with the next sensible step drawn as the primary one.
-///
-/// Which kind an action is turns on one question: is there anything to decide?
-/// A prompt names work whose *content* a model has to invent — a commit message,
-/// which side of a conflict hunk survives — and is sent into the session
-/// verbatim; an app-owned action is a fixed operation with nothing to decide,
-/// where the app can offer a precondition check and a refusal instead.
+/// The delivery strip's actions, working tree to archived worktree. Which kind
+/// an action is turns on one question: is there anything to decide?
 enum DeliveryAction {
   /// Ungated: an empty index costs one line in the transcript, and gating it on
   /// the working tree would make the button flicker while the agent edits.
@@ -29,16 +23,14 @@ enum DeliveryAction {
   viewChecks(label: 'Checks'),
 
   /// A prompt, and the clearest case for why: a conflict is a question about
-  /// *meaning*, `--ours` and `--theirs` are both usually wrong, and the app
-  /// could not do this if it wanted to.
+  /// *meaning*, and the app could not answer it if it wanted to.
   resolveConflicts(
     label: 'Resolve conflicts',
     prompt: 'Resolve the merge conflicts with the base branch.',
   ),
 
   /// Ours, and the counterpart to [resolveConflicts]: one git command with no
-  /// decision in it, where the interesting part is entirely the preconditions.
-  /// Fails closed — see `DeliveryUpdateService`.
+  /// decision in it. Fails closed — see `DeliveryUpdateService`.
   updateFromBase(label: 'Update'),
 
   /// A prompt: acting on "a reviewer asked for changes" means reading the
@@ -48,9 +40,8 @@ enum DeliveryAction {
     prompt: 'Address the changes the reviewer requested.',
   ),
 
-  /// A prompt, and kept separate from [addressRequestedChanges] because the two
-  /// ask for different work — a blocking verdict versus threads that may each
-  /// want a reply. Never offered together; see [deliveryActionsFor].
+  /// A prompt, kept separate from [addressRequestedChanges]: a blocking verdict
+  /// and open threads are different work. Never offered together.
   resolveReviewComments(
     label: 'Reply to review',
     prompt: 'Address the unresolved review comments.',
@@ -75,8 +66,7 @@ enum DeliveryAction {
   final String label;
 
   /// The text sent into the session, **verbatim**, or null when the app does
-  /// this itself. Read it through [OfferedAction.prompt] rather than directly:
-  /// [merge] varies its wording with what the forge allows.
+  /// this itself. Read it through [OfferedAction.prompt], which [merge] varies.
   final String? prompt;
 
   bool get isPrompt => prompt != null;
@@ -101,10 +91,8 @@ class OfferedAction {
   /// it can; only **established** facts disable an action.
   final String? disabledReason;
 
-  /// A sentence that replaces [DeliveryAction.prompt] for this one offering.
-  /// Exists for [DeliveryAction.merge], whose prompt names the strategy the
-  /// repository actually allows: the enum is const, and the tooltip must show
-  /// the exact sentence that will be sent.
+  /// A sentence that replaces [DeliveryAction.prompt] for this one offering —
+  /// [DeliveryAction.merge], whose prompt names the strategy the forge allows.
   final String? promptOverride;
 
   /// What pressing this sends, or null when the app does it itself.
@@ -130,12 +118,8 @@ class OfferedAction {
       '${disabledReason == null ? '' : ', disabled: $disabledReason'})';
 }
 
-/// The order actions are drawn in after the primary one — the delivery line
-/// itself, so the row reads the same whichever step is highlighted.
-///
-/// Every value of [DeliveryAction] must appear here exactly once: one missing
-/// is silently never drawn, and `delivery_action_test` asserts they stay in
-/// step.
+/// The order actions are drawn in after the primary one. Every [DeliveryAction]
+/// must appear here exactly once; one missing is silently never drawn.
 const _pipeline = [
   DeliveryAction.commit,
   DeliveryAction.push,
@@ -152,14 +136,8 @@ const _pipeline = [
   DeliveryAction.archive,
 ];
 
-/// The exception states, in the order one blocks another, richest first.
-///
-/// Conflicts first, because nothing else can proceed through one; then the two
-/// where a *person* is waiting; then behind-the-base, which is cheap to repeat
-/// but still comes before the stage machine, because every signal after it is
-/// measured against the old base. Agrees with GitHub's own dirty → blocked →
-/// behind → unstable, except that GitHub's "blocked" is one bucket and this
-/// splits it into the parts an agent can act on.
+/// The exception states, in the order one blocks another, richest first — the
+/// two where a *person* waits outrank behind-the-base, which is cheap to redo.
 const _blockers = [
   DeliveryAction.resolveConflicts,
   DeliveryAction.addressRequestedChanges,
@@ -167,17 +145,8 @@ const _blockers = [
   DeliveryAction.updateFromBase,
 ];
 
-/// What the strip offers for [delivery], primary first.
-///
-/// Pipeline prompts **over**-offer: a withheld one hides the feature, an
-/// unnecessary one costs a click and one sentence in the transcript. Exception
-/// prompts **under**-offer, because `Resolve conflicts` on a branch with no
-/// conflict is a false statement about the branch — and an exception offered
-/// speculatively would outrank the true next step. Ours fail closed: disabled
-/// with a readable reason rather than hidden.
-///
-/// An archived session offers no prompts and none of the app's own writes — its
-/// worktree is gone. Only the two browser links survive.
+/// What the strip offers for [delivery], primary first. Pipeline prompts
+/// over-offer; exception prompts under-offer, a false one outranking the truth.
 List<OfferedAction> deliveryActionsFor(SessionDelivery? state) {
   final delivery = state ?? SessionDelivery.unknown;
   final pr = delivery.pullRequest;
@@ -245,16 +214,12 @@ bool _offersOpenPullRequest(SessionDelivery delivery) {
 }
 
 /// Whether there is a base to update *from* and evidence the branch needs it.
-///
-/// The local base check is not a formality: `isBehindBase` can fire on GitHub's
-/// word alone, and GitHub's base is a name on the remote. With no local base the
-/// button's only possible outcome is "unknown revision".
+/// GitHub's base is a name on the remote; with no local ref the merge cannot run.
 bool _offersUpdateFromBase(SessionDelivery delivery) =>
     delivery.baseBranch != null && delivery.isBehindBase;
 
-/// Why updating from the base would not be safe, or null when it is. All three
-/// are checks the app can make and a prompt could not be trusted to, ordered by
-/// what the user can do something about first.
+/// Why updating from the base would not be safe, or null when it is — three
+/// checks the app can make and a prompt could not be trusted to.
 String? _updateBlocker(SessionDelivery delivery) {
   if (delivery.hasConflict) {
     return 'The branch already conflicts with its base; resolve that first.';
@@ -268,24 +233,16 @@ String? _updateBlocker(SessionDelivery delivery) {
   return null;
 }
 
-/// The sentence `Merge` sends, naming a strategy the repository allows.
-///
-/// Naming nothing is the safe answer and stays the default: when the forge did
-/// not tell us, `gh pr merge` falls back to the repository's own default.
-/// Naming `squash` at a repository with squash merging off fails on the forge
-/// after the agent has already spent a turn on it.
+/// The sentence `Merge` sends, naming a strategy the repository allows. Naming
+/// nothing is the default: `squash` at a repo with it off fails after a turn.
 String _mergePrompt(SessionDelivery delivery) {
   final strategy = delivery.mergeStrategies.preferredLabel;
   if (strategy == null) return DeliveryAction.merge.prompt!;
   return 'Merge the pull request with a $strategy.';
 }
 
-/// Why merging would not work, or null when nothing established says so.
-///
-/// Only one reason is ever shown, so the order is the whole of the decision.
-/// `BLOCKED` is read *last*: it covers every branch-protection rule GitHub has
-/// and names none of them, and every open pull request in a protected
-/// repository reports it (all three of `cli/cli`'s open PRs, 2026-09-02).
+/// Why merging would not work, or null when nothing established says so. Only
+/// one reason ever shows, and `BLOCKED` is read last — it names no rule.
 String? _mergeBlocker(SessionDelivery delivery, PullRequestSnapshot pr) {
   if (pr.isDraft) return 'The pull request is still a draft.';
   if (pr.hasConflict) return 'GitHub reports a merge conflict.';
@@ -303,21 +260,16 @@ String? _mergeBlocker(SessionDelivery delivery, PullRequestSnapshot pr) {
     return 'This repository allows no merge strategy.';
   }
   if (pr.mergeStateStatus == MergeStateStatus.blocked) {
-    // `BLOCKED` names no rule, so a second call asks the base branch's
-    // protection which rules it carries. A token without admin rights gets a
-    // 403 on `/protection` — the ordinary case, not an error — and falls back.
+    // `BLOCKED` names no rule, so a second call asks the base branch's own
+    // protection. A 403 there is the ordinary case, and falls back.
     return delivery.branchProtection.describeFor(pr) ??
         'GitHub is blocking this merge; open the pull request to see why.';
   }
   return null;
 }
 
-/// The next sensible step, given how far the work has got.
-///
-/// Uncommitted work beats everything; then the exception states in [_blockers]'
-/// order, because the stage machine below reads how far the work travelled and
-/// has no way to ask what is in the way. A step that is offered but **blocked**
-/// still becomes primary — a disabled `Merge` says both what comes next and why.
+/// The next sensible step, given how far the work has got. A step that is
+/// offered but **blocked** still becomes primary, reason and all.
 DeliveryAction? _primaryFor(
   SessionDelivery delivery,
   Map<DeliveryAction, String?> reasons,
@@ -334,8 +286,7 @@ DeliveryAction? _primaryFor(
   }
 
   // Draft → ready, deliberately after everything above: a draft's one benefit
-  // is that nobody is asked to look yet, so this fires only once nothing is
-  // left to fix — green checks, or a repository with no checks at all.
+  // is that nobody is asked to look yet, so nothing may be left to fix.
   final checks = delivery.pullRequest?.checks.state;
   if (offered(DeliveryAction.markReady) &&
       (checks == ChecksState.passing || checks == ChecksState.none)) {

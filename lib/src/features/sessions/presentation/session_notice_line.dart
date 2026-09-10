@@ -8,8 +8,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/session_notice.dart';
 
 /// Draws whatever one session currently has to say, inside that session's own
-/// bar. It takes the room it needs and gives it back, so the bar does not carry
-/// an empty strip around waiting for a notice.
+/// bar. It takes the room it needs and gives it back.
 class SessionNoticeLine extends ConsumerStatefulWidget {
   const SessionNoticeLine({required this.sessionId, super.key});
 
@@ -29,9 +28,8 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
     super.dispose();
   }
 
-  /// Starts the clock over whenever a different notice arrives, and stops it
-  /// when the last one goes. The clock lives here so it cannot outlive what it
-  /// is timing: a disposed bar takes its timer with it.
+  /// Starts the clock over on a new notice and stops it on the last. It lives
+  /// here so it cannot outlive what it is timing: a disposed bar takes it.
   void _watchClock(SessionNotice? notice) {
     if (identical(notice, _showing)) return;
     _showing = notice;
@@ -87,9 +85,8 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                   color: accent,
                 ),
                 const SizedBox(width: Insets.sm),
-                // Wraps rather than ellipsises: these messages name a cost the
-                // user cannot see coming, and a cost cut off at one line is
-                // worse than not saying it, because it still looks complete.
+                // Wraps rather than ellipsises: these name a cost the user
+                // cannot see coming, and a cut sentence still looks complete.
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 1),
@@ -105,9 +102,8 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                   const SizedBox(width: Insets.sm),
                   TextButton(
                     onPressed: () {
-                      // Cleared here rather than by the action, so every future
-                      // action gets it free: the offer is gone the moment it is
-                      // taken, and whatever it does next posts its own outcome.
+                      // Cleared here rather than by the action, so the offer is
+                      // gone the moment it is taken and every action gets it.
                       ref
                           .read(sessionNoticesProvider.notifier)
                           .dismiss(sessionId);

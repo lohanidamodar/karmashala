@@ -2,26 +2,15 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/decision_record.dart';
 
-/// Data-access for the **append-only** decision record (schema v23).
-///
-/// [append] and two reads, with no update and no delete: the record's value is
-/// that what was decided cannot later be quietly revised into what is
-/// convenient now, and it is read by an agent that was not there and has no way
-/// to check it.
-///
-/// A second write of an identical decision appends a **second row** rather than
-/// rewriting the first — deciding the same thing twice is two acts.
+/// Data-access for the **append-only** decision record (schema v23). No update
+/// and no delete; a second identical decision appends a second row.
 class DecisionRecordDao {
   DecisionRecordDao(this._db);
 
   final AppDatabase _db;
 
-  /// Appends [decision] to its session's record, assigning the next sequence
-  /// number, and returns it with that number and its database id filled in.
-  ///
-  /// Sequenced inside a transaction against a unique index, so two writers
-  /// cannot both claim position 4 — which is what makes the chain readable as
-  /// an order rather than a bag.
+  /// Appends [decision], assigning the next sequence number and returning it
+  /// filled in. Sequenced in a transaction, so two writers cannot share a slot.
   DecisionRecord append(DecisionRecord decision) {
     return _db.transaction(() {
       final rows = _db.query(
@@ -54,9 +43,8 @@ class DecisionRecordDao {
     });
   }
 
-  /// Every decision recorded for [sessionId], **oldest first**: the early ones
-  /// are the constraints everything since was built on, and reading them in
-  /// reverse would present the conclusions before the rules they follow from.
+  /// Every decision recorded for [sessionId], **oldest first**: reading them in
+  /// reverse presents conclusions before the rules they follow from.
   List<DecisionRecord> forSession(String sessionId) {
     final rows = _db.query(
       'SELECT * FROM session_decisions WHERE session_id = ? ORDER BY sequence;',

@@ -10,20 +10,8 @@ import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 import '../application/session_signals.dart';
 
-/// The composer's permission control: the mode this session will run under, and
-/// a menu of the modes its agent can actually be put into.
-///
-/// It shows the *effective* mode, resolved by the same `SessionLauncher` call
-/// the launcher makes; only modes the descriptor can express are selectable;
-/// and a session following the Settings default says so and can go back, which
-/// is what stops the first pick being irreversible. Changing it never touches
-/// the running process — the policy is read off the command line at startup —
-/// so the chip offers a restart and never performs one without saying what it
-/// costs.
-///
-/// One row of the permission menu: a value on one axis, or the Settings
-/// default. A type of its own rather than a nullable selection because
-/// `PopupMenuButton` reads a null selection as a *dismissal*.
+/// One row of the composer's permission menu, and the control it belongs to. A
+/// type, not a nullable selection: `PopupMenuButton` reads null as a dismissal.
 @immutable
 class PermissionChoice {
   const PermissionChoice(this.axisId, this.valueId);
@@ -98,8 +86,7 @@ class PermissionModeChip extends ConsumerWidget {
           ),
       itemBuilder: (context) => [
         // First, and its own row: the default is where every session starts and
-        // the only state that follows a later change to that setting. It names
-        // what it resolves to *today* — the question the menu was opened with.
+        // the only state that follows a later change. It names today's answer.
         DesktopMenuDetailItem<PermissionChoice>(
           value: PermissionChoice.followDefault,
           selected: effective.inherited,
@@ -149,7 +136,6 @@ class PermissionModeChip extends ConsumerWidget {
           ),
           // The composer bar's one flexible cell is the delivery strip, not
           // this, so an unbounded chip overflows the row at the minimum window.
-          // A third of the width; past that it gives up a qualifier's tail.
           constraints: BoxConstraints(
             maxWidth: MediaQuery.sizeOf(context).width / 3,
           ),
@@ -187,8 +173,7 @@ class PermissionModeChip extends ConsumerWidget {
               for (final qualifier in [
                 if (effective.inherited) 'default',
                 // A mode this build does not name, substituted down to the
-                // agent's default. Said on the face rather than only on hover:
-                // the user set something else.
+                // agent's default — on the face, because the user set another.
                 if (effective.unrecognised) 'unrecognised',
               ]) ...[
                 const SizedBox(width: Insets.xs),
@@ -269,9 +254,8 @@ class PermissionModeChip extends ConsumerWidget {
     final notices = ref.read(sessionNoticesProvider.notifier);
     final running = launcher.livePaneFor(sessionId) != null;
 
-    // Asked **before** the row is written, so Cancel leaves the session exactly
-    // as the user found it. Writing first and offering to undo would already
-    // have recorded a session that bypasses prompts, and a resume would honour it.
+    // Asked **before** the row is written, so Cancel leaves the session as the
+    // user found it: writing first would record a session that bypasses.
     if (dangerous) {
       final confirmed = await _confirmDangerous(
         context,
@@ -301,10 +285,8 @@ class PermissionModeChip extends ConsumerWidget {
       sessionId,
       SessionNotice(
         message: running
-            // Names both costs on the face of the message rather than behind
-            // Names both costs on the face of the message: the token one is the
-            // one nobody expects — `--resume` reloads the transcript locally
-            // for nothing, then the next message carries all of it to the model.
+            // Names both costs on the face of the message: the token one is
+            // what nobody expects — `--resume` reloads, then re-sends it all.
             ? '$what — applies the next time this session is '
                   'launched or resumed, not to the agent running now. '
                   'Restarting ends the agent running now, and the next '
@@ -322,14 +304,8 @@ class PermissionModeChip extends ConsumerWidget {
     );
   }
 
-  /// Runs the restart and reports either outcome.
-  ///
-  /// Takes the notices and the launcher rather than a [BuildContext] and a
-  /// [WidgetRef] because both callers outlive the widget; both read from the
-  /// root container, so the outcome still lands in the right session's bar.
-  ///
-  /// [savedLabel] is what was already written to the row: a failed restart must
-  /// still say the choice was kept, or the user picks the mode again.
+  /// Runs the restart and reports either outcome. Takes the notices and the
+  /// launcher, not a [BuildContext]: both callers outlive the widget.
   Future<void> _restart(
     SessionNotices notices,
     SessionLauncher launcher, {
@@ -355,15 +331,8 @@ class PermissionModeChip extends ConsumerWidget {
     }
   }
 
-  /// Confirms a mode that removes the prompts, naming every consequence of
-  /// saying yes.
-  ///
-  /// Three of them when [restarts], and the last two are the ones the user
-  /// cannot see coming: the restart, because the flags are only read at startup
-  /// so a turn in flight is lost; and the tokens, because the next message
-  /// re-sends the accumulated conversation and prompt caching's TTL is minutes.
-  /// With nothing running only bypass applies, and the other two are left out
-  /// rather than softened.
+  /// Confirms a mode that removes the prompts, naming every consequence: the
+  /// bypass, the killed turn, and the tokens the next message re-sends.
   Future<bool?> _confirmDangerous(
     BuildContext context, {
     required String label,
@@ -398,8 +367,7 @@ class PermissionModeChip extends ConsumerWidget {
                   'can stop a command the agent has already decided to run.',
                 ),
                 // The agent's own words for what was picked. For Codex that is
-                // the pair — each unremarkable, together leaving nothing in the
-                // way — which the user has no other way to see.
+                // the pair, which the user has no other way to see.
                 if (detail.isNotEmpty) ...[
                   const SizedBox(height: Insets.md),
                   Text(detail),

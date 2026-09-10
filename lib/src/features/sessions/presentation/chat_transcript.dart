@@ -10,10 +10,8 @@ import 'package:agent_cli/stream.dart';
 import 'markdown_message.dart';
 import 'tool_activity_row.dart';
 
-/// The one row the transcript view writes itself: the line that says a
-/// compaction happened here and how much of the conversation is behind it. Its
-/// own role rather than `agent`, because the rest of the file reads an unknown
-/// role as the agent's and this would put the app's words in the model's mouth.
+/// The row the transcript view writes itself, saying a compaction happened
+/// here. Its own role, because an unknown role is read as the agent's.
 const String kCompactionNoticeRole = 'compaction';
 
 /// A normalized chat message for the transcript view, independent of whether it
@@ -42,22 +40,16 @@ class ChatMessage {
 }
 
 /// Called when the user keeps a message as a note: the message, and its index
-/// in the whole transcript (not the visible window), which the note records as
-/// where it came from.
+/// in the whole transcript — not the visible window — which the note records.
 typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
 
-/// An extra widget to hang under one message's body, given the message and its
-/// index in the whole transcript. Null leaves that row exactly as it was.
-///
-/// A builder rather than a field on [ChatMessage] because what hangs there is a
-/// widget with its own state and reads, and the transcript's message type is
-/// shared with the remote and companion payloads, which have no widgets.
+/// An extra widget to hang under one message's body. A builder rather than a
+/// field on [ChatMessage], which the remote payloads carry and have no widgets.
 typedef MessageDetailBuilder =
     Widget? Function(ChatMessage message, int ordinal);
 
-/// A CLI-style conversation list: user turns, agent replies and tool lines.
-/// Long transcripts start anchored at the newest message and load earlier turns
-/// on demand (a header button, plus auto-load when scrolled to the top).
+/// A CLI-style conversation list. Long transcripts start anchored at the newest
+/// message and load earlier turns on demand.
 class ChatTranscriptView extends StatefulWidget {
   const ChatTranscriptView({
     required this.messages,
@@ -75,8 +67,7 @@ class ChatTranscriptView extends StatefulWidget {
   final String emptyHint;
 
   /// Turns a path an agent wrote into one this process can open — a WSL
-  /// `/mnt/c/…` into its Windows form. Omitted means the paths are already host
-  /// paths; the translation is passed in rather than guessed at here.
+  /// `/mnt/c/…` into its Windows form. Omitted means they are already host paths.
   final String? Function(String path)? resolveHostPath;
 
   /// Where a file path a reader clicked goes — see [MarkdownMessage.onPathTap].
@@ -150,8 +141,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     return Column(
       children: [
         // Its own traversal group so its stops cannot interleave with the
-        // footer's: reading order sorts by rect, and tabbing to a row below the
-        // fold scrolls the list out from under the policy's feet.
+        // footer's: tabbing below the fold scrolls the list under the policy.
         Expanded(
           child: FocusTraversalGroup(
             child: total == 0
@@ -348,26 +338,15 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
   }
 }
 
-/// What the conversation says when it has nothing to say yet: one glyph, one
-/// heading, and the sentence explaining which kind of nothing this is.
-///
-/// The four prompt cards that used to sit here are gone: at the 390x844 pins
-/// all four overflowed their row (by 53, 78, 16 and 16 logical pixels), a card
-/// needs ~393px, and the composer directly below already has the caret. Ctrl+P
-/// and Snippets are the surface for a phrase you reuse, and unlike four frozen
-/// strings they are the user's own; `companion_transcript_view.dart` keeps them
-/// because a phone has no palette.
+/// What the conversation says when it has nothing to say yet. The four prompt
+/// cards that sat here overflowed their row at phone width and are gone.
 class _ChatEmptyState extends StatelessWidget {
   const _ChatEmptyState({required this.hint});
 
   final String hint;
 
-  /// Centred while it fits, scrollable the moment it does not: at the 260px
-  /// this gets in `workbench_test.dart` the column overflowed by 37 logical
-  /// pixels, and a pane is short whenever the window is or a split halves it.
-  ///
-  /// `minHeight` is what keeps the centring — the scroll view hands its child
-  /// unbounded height, so a bare `Center` inside one centres nothing.
+  /// Centred while it fits, scrollable the moment it does not. `minHeight` is
+  /// what keeps the centring: a scroll view hands its child unbounded height.
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => SingleChildScrollView(
@@ -446,10 +425,8 @@ class _ChatMessageTile extends StatelessWidget {
   /// Hung under the body, indented with it: the subagent this row spawned.
   final Widget? detail;
 
-  /// **One rhythm for every role.** Two adjacent messages are always
-  /// `Insets.sm` apart — 4 above and 4 below, meeting in the middle. The old
-  /// per-role values encoded nothing a reader could use: what marks the start
-  /// of a turn is the user card's raised fill, not extra air.
+  /// **One rhythm for every role**: two adjacent messages are always
+  /// `Insets.sm` apart. What marks a turn is the user card's fill, not air.
   static const _tileMargin = EdgeInsets.symmetric(vertical: Insets.xs);
 
   @override
@@ -473,8 +450,7 @@ class _ChatMessageTile extends StatelessWidget {
     final isError = message.role == 'error';
 
     // A tool row's reasoning is only ever the field, never a scan of its text:
-    // 425 of Antigravity's 435 thinking blocks carry only the call beside them,
-    // and a tool row's text means `<thinking>` literally when it contains one.
+    // a tool row's text means `<thinking>` literally when it contains one.
     final (thinking, cleanText) = isAgent
         ? _resolveThinking(message.text, message.thinking)
         : (message.role == 'tool' ? message.thinking?.trim() : null,
@@ -487,10 +463,8 @@ class _ChatMessageTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(Radii.md),
-            // **No border.** `surfaceContainerHigh` is two steps up the ramp
-            // from the page in both brightnesses, so the fill already separates
-            // the card. The tool card keeps its border: its fill is barely a
-            // step from the page and inverts direction between light and dark.
+            // **No border.** `surfaceContainerHigh` already separates the card;
+            // the tool card keeps its border because its fill barely differs.
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: Insets.md,
@@ -653,9 +627,7 @@ class _ChatMessageTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(Radii.md),
           child: Padding(
             // Tighter vertically than the other roles: a tool row is the most
-            // repeated thing in a transcript, so 4px here multiplies by every
-            // call the agent made — and it brought a tool-to-tool boundary into
-            // line with the rest, at 36 logical pixels instead of 46.
+            // repeated thing in a transcript, so 4px multiplies by every call.
             padding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
               vertical: Insets.xs,
@@ -731,11 +703,8 @@ class _ChatMessageTile extends StatelessWidget {
   }
 }
 
-/// Keeps this message as a note, in one tap.
-///
-/// The message's own words become the note — nothing is summarised, and no
-/// dialog asks for a title: the point is that you were mid-thought and did not
-/// want to stop. Titling and editing live in the Notes panel, afterwards.
+/// Keeps this message as a note, in one tap: its own words, nothing summarised
+/// and no dialog — you were mid-thought. Titling lives in the Notes panel.
 class _SaveNoteButton extends StatefulWidget {
   const _SaveNoteButton({required this.onSave});
   final VoidCallback onSave;

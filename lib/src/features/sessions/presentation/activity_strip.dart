@@ -8,19 +8,12 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/session_activity_providers.dart';
 
-/// How often the elapsed times are redrawn. One second, because the numbers are
-/// seconds. The tick is a `setState` on this widget alone and exists only while
-/// there is something to count, so a quiet session pays nothing.
+/// How often the elapsed times are redrawn. A `setState` on this widget alone,
+/// armed only while there is something to count, so a quiet session pays none.
 const Duration kActivityTickInterval = Duration(seconds: 1);
 
-/// **What this session is doing right now**, pinned above the composer: the
-/// calls the agent has issued and not yet answered, and how long each has been
-/// out. **Summary and elapsed, and nothing else** — the reader keeps a bounded
-/// *head* of each result, so there is no live output to stream here.
-///
-/// It draws nothing when nothing is outstanding, but does draw one quiet line
-/// when the session is working and no record can say what on: that empty answer
-/// would otherwise read as "working on nothing". Conversation only.
+/// **What this session is doing right now**, pinned above the composer: summary
+/// and elapsed only. Silent when idle, but never silent about a blind spot.
 class ActivityStrip extends ConsumerStatefulWidget {
   const ActivityStrip({required this.sessionId, super.key});
 
@@ -35,9 +28,8 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
 
   @override
   void dispose() {
-    // Cancelled here, in the widget's own teardown, and not left to a provider
-    // scope: a scope's scheduled auto-dispose is itself cancelled when the tree
-    // unmounts, so a timer parked there outlives everything it was drawn for.
+    // Cancelled in the widget's own teardown, not left to a provider scope: a
+    // scope's auto-dispose is itself cancelled when the tree unmounts.
     _tick?.cancel();
     _tick = null;
     super.dispose();
@@ -56,14 +48,8 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
 
   @override
   Widget build(BuildContext context) {
-    // **Nothing ticks for a surface nobody can see.** A conversation kept
-    // mounted behind the terminal went on calling `setState` once a second,
-    // relaying itself out under every keystroke typed in front of it.
-    //
-    // `Visibility.of`, not `TickerMode.of`: an `IndexedStack` wraps its
-    // unselected children in a `_VisibilityScope` and an `ExcludeFocus` and
-    // nothing else, so the ticker is still enabled down here. Counted in
-    // `test/app/shell/keystroke_cost_test.dart`.
+    // **Nothing ticks for a surface nobody can see.** `Visibility.of`, not
+    // `TickerMode.of`: an `IndexedStack` only wraps a `_VisibilityScope`.
     final visible = Visibility.of(context);
     final now = ref.read(clockProvider).nowUtc();
     final activity = ref.watch(
@@ -127,9 +113,7 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
           child: Row(
             children: [
               // The app's own "working" glyph and colour, so this and the
-              // status badge at the top of the view cannot describe one session
-              // in two visual languages. A subagent gets its own mark — the one
-              // call that is another agent — and keeps it when it is one of many.
+              // status badge cannot describe one session in two languages.
               Icon(
                 subagents > 0 ? AppIcons.robot : AppIcons.circleHalf,
                 size: Chrome.iconSmall,
@@ -160,8 +144,7 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
 }
 
 /// The one line for a session that is working with nothing to say what on.
-/// Neutral rather than "working"-coloured, and no elapsed time: this is an
-/// admission, not a reading, and it must not look like one.
+/// Neutral and no elapsed time: this is an admission, not a reading.
 class _BlindSpotLine extends StatelessWidget {
   const _BlindSpotLine(this.spot);
 
@@ -231,11 +214,8 @@ String describeRunningMix(int total, int subagents) {
 
 String _plural(String word, int count) => count == 1 ? word : '${word}s';
 
-/// How long a call has been out, in the smallest form that stays readable.
-/// **It reaches hours, and it has to**: the longest unanswered tool window in
-/// the owner's Claude Code store is a `Bash` call at 514.8 minutes, which now
-/// reads `8h 34m`. What says a call is running is the session's own live
-/// status, not this arithmetic.
+/// How long a call has been out. **It reaches hours, and it has to**: the
+/// longest in the owner's store is a `Bash` call at 514.8 minutes.
 String formatElapsed(Duration elapsed) {
   final seconds = elapsed.inSeconds;
   if (seconds < 60) return '${seconds}s';

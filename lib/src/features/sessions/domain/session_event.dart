@@ -1,8 +1,5 @@
-/// A single, immutable record in a session's **append-only** event log.
-///
-/// The normalized, protocol-agnostic representation of everything that happens
-/// in a session. Never updated or deleted in normal operation; new state is
-/// expressed by appending.
+/// A single, immutable record in a session's **append-only** event log —
+/// normalized and protocol-agnostic. New state is expressed by appending.
 class SessionEvent {
   const SessionEvent({
     required this.sessionId,

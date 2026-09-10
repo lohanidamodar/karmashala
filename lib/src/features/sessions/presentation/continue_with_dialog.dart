@@ -9,22 +9,13 @@ import '../application/session_handoff_service.dart';
 import '../domain/handoff_packet.dart';
 import '../domain/session_fork.dart';
 
-/// What offering "Continue with…" promises, wherever it is offered from.
-///
-/// One sentence in one place, because three surfaces open this dialog and the
-/// promise is what makes putting it on a row defensible: the row is a shorter
-/// path *to* a confirmation, never a way past one.
+/// What offering "Continue with…" promises, wherever it is offered from. The
+/// row is a shorter path *to* a confirmation, never a way past one.
 const String kContinueWithPromise =
     'Nothing is launched until you have seen what the next agent will be told.';
 
-/// "Continue with…" — move a session to another agent, or branch it.
-///
-/// It exists to make one thing true: **nothing is launched until the user has
-/// seen what the next agent will be told.** A handoff spends the receiving
-/// agent's first turn on that document. It also states, before the launch, the
-/// two things that silently differ between agents: what the permission mode
-/// becomes on the way over — offered as a choice, since the modes on offer are
-/// the target's — and whether a fork is the CLI's own or a written substitute.
+/// "Continue with…" — move a session to another agent, or branch it. Nothing is
+/// launched until the user has seen what the next agent will be told.
 class ContinueWithDialog extends ConsumerStatefulWidget {
   const ContinueWithDialog({required this.sessionId, super.key});
 
@@ -49,10 +40,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   _Mode _mode = _Mode.handoff;
   String? _targetInstallationId;
 
-  /// The mode the user picked, or null while the session's own is carried. Kept
-  /// as the raw pick rather than the resolved mode, because resolution depends
-  /// on the agent and the agent is still changeable:
-  /// [resolveContinuationPermission] re-runs from this one value.
+  /// The mode the user picked, or null while the session's own is carried. The
+  /// raw pick, not the resolved mode: the agent is still changeable.
   PermissionSelection? _chosenMode;
 
   bool _newWorktree = false;
@@ -60,10 +49,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   String? _preview;
   String? _error;
 
-  /// Whether to ask the source session to write its own brief first.
-  ///
-  /// **Off by default**, and that is a decision: it spends a turn of the source
-  /// agent's quota, and running out of that quota is one reason people hand off.
+  /// Whether to ask the source session to write its own brief first. **Off by
+  /// default**: it spends a turn of the quota people hand off to escape.
   bool _askSource = false;
 
   /// What the source agent answered, kept so the preview and the launch spend
@@ -82,9 +69,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
       if (line.trim().isNotEmpty) line.trim(),
   ];
 
-  /// The source agent's brief, asked for at most once whatever happens next.
-  /// Never throws into the caller: a handoff must not be blocked on an agent
-  /// that does not answer, so a failure becomes the sentence the packet prints.
+  /// The source agent's brief, asked for at most once. Never throws into the
+  /// caller: a failure becomes the sentence the packet prints instead.
   Future<HandoffSourceBrief?> _briefFromSource() async {
     if (!_askSource) return null;
     final held = _sourceBrief;
@@ -178,9 +164,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
       ? targets.where((t) => t.isSameAgent).firstOrNull
       : _selected(targets);
 
-  /// What [target] will run under, given whatever has been picked so far.
-  /// `target.permission.requested` is the source session's own mode, so the
-  /// dialog needs nothing else to ask this of any target in the list.
+  /// What [target] will run under, given whatever has been picked so far —
+  /// `target.permission.requested` is all the dialog needs to ask it.
   ContinuationPermission _permissionFor(HandoffTarget target) =>
       resolveContinuationPermission(
         sessionRisk: target.permission.requested,
@@ -205,9 +190,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
     final plan = continuation.plan;
     final target = _selected(targets);
     final focus = _agentInFocus(targets);
-    // The agent already running this session, which is the one being asked for
-    // a brief. Named rather than left as "the previous agent": the row spends
-    // that agent's quota, and the user should know whose.
+    // The agent already running this session, named rather than left as "the
+    // previous agent": the row spends its quota, and the user should know whose.
     final sourceName =
         targets.where((t) => t.isSameAgent).firstOrNull?.agentName ??
         'the previous agent';
@@ -343,9 +327,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
               if (_preview != null) ...[
                 const SizedBox(height: Insets.md),
                 Text(
-                  // Not "as its first message": for an agent that takes a
-                  // system-prompt file the packet arrives as one, and the
-                  // opening message is the instruction alone.
+                  // Not "as its first message": an agent that takes a
+                  // system-prompt file gets the packet as one.
                   'This is exactly what the next agent is told:',
                   style: theme.textTheme.labelSmall,
                 ),
@@ -390,9 +373,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   }
 }
 
-/// The agent picker, with each target's permission consequence beside it.
-/// A target that cannot receive the packet is **listed and disabled**, with the
-/// reason, rather than hidden: a missing option leaves the user hunting for it.
+/// The agent picker, with each target's permission consequence beside it. One
+/// that cannot receive the packet is **listed and disabled**, never hidden.
 class _TargetPicker extends StatelessWidget {
   const _TargetPicker({
     required this.targets,
@@ -404,9 +386,8 @@ class _TargetPicker extends StatelessWidget {
   final List<HandoffTarget> targets;
   final HandoffTarget? selected;
 
-  /// Each row's permission sentence, resolved against the mode picked so far
-  /// rather than the session's alone — otherwise the rows would answer "what
-  /// happens if I go here" for a mode the user has already changed.
+  /// Each row's permission sentence, resolved against the mode picked so far —
+  /// the session's alone would answer for a mode already changed.
   final ContinuationPermission Function(HandoffTarget) permissionFor;
 
   final ValueChanged<HandoffTarget> onChanged;
@@ -476,8 +457,7 @@ class _TargetPicker extends StatelessWidget {
 }
 
 /// The mode the next session will run under, and where that answer came from.
-/// It sits under the agent it belongs to because the two are one question: the
-/// modes on offer are the chosen agent's, and changing agent re-answers both.
+/// It sits under the agent because the modes on offer are that agent's.
 class _PermissionRow extends StatelessWidget {
   const _PermissionRow({
     required this.permission,
@@ -489,9 +469,8 @@ class _PermissionRow extends StatelessWidget {
 
   final ContinuationPermission permission;
 
-  /// The target agent, so the picker can draw *its* axes. Re-run whenever the
-  /// agent changes, which keeps a pick made for one CLI from being shown
-  /// against another's vocabulary.
+  /// The target agent, so the picker can draw *its* axes. Re-run on every agent
+  /// change, so one CLI's pick is never shown against another's vocabulary.
   final AgentDescriptor? descriptor;
 
   /// Whether the mode on offer is the Settings default rather than anything
@@ -502,10 +481,8 @@ class _PermissionRow extends StatelessWidget {
 
   final ValueChanged<PermissionSelection> onChanged;
 
-  /// Where this mode came from, in the one case [ContinuationPermission] cannot
-  /// know about: nobody chose it, here or upstream. "Carried from this session"
-  /// would present a default as a decision, and hide that the new session keeps
-  /// following the setting.
+  /// Where this mode came from in the one case [ContinuationPermission] cannot
+  /// know: nobody chose it, so "carried from this session" would be wrong.
   String get _explanation => followsDefault && !permission.wasChosen
       ? 'Following the $agentName default in Settings, as this session does. '
             'It changes when that setting does. ${permission.carried.summary}'

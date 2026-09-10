@@ -64,8 +64,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   final _composer = TextEditingController();
 
   /// Which delegated agent hangs under which row, by the row's index in the
-  /// whole transcript. Rebuilt from the messages every time they are, and read
-  /// back by [ChatTranscriptView.detailBuilder] later in the same frame.
+  /// whole transcript. Read back by [ChatTranscriptView.detailBuilder].
   final _subagents = <int, SubagentRef>{};
 
   /// Held rather than read in [dispose]: `ref` is unusable once the element is
@@ -94,9 +93,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   }
 
   /// Moves whatever the Notes panel queued for this session into the box.
-  ///
-  /// Appended, not assigned — half-typed text is the user's — and never sent:
-  /// the point of routing a note through here is that the user reads it first.
+  /// Appended, not assigned, and never sent — the user reads it first.
   void _takeQueuedNote() {
     if (_leaving) return;
     final queued = _drafts.take(widget.sessionId);
@@ -127,10 +124,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   }
 
   /// Translates a path the agent wrote into one this process can open, or null
-  /// when the session's environment is unknown.
-  ///
-  /// The agent may be running in WSL while `dart:io` here is the Windows host,
-  /// so `/mnt/c/…/shot.png` has to become `C:\…\shot.png` first.
+  /// when the environment is unknown: a WSL `/mnt/c/…` has to become `C:\…`.
   String? Function(String)? _hostPathResolver() {
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     if (session == null) return null;
@@ -145,11 +139,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
-  /// Where this session's agent was standing.
-  ///
-  /// `Session.workingDirectory` is null for rows written before schema v22 and
-  /// means **unknown**, never "the repository root" — so the fallback is made
-  /// here and out loud rather than read as a claim the row does not make.
+  /// Where this session's agent was standing. Null means **unknown**, never
+  /// "the repository root", so the fallback is made here and out loud.
   EnvironmentPath? _workingDirectory() {
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     if (session == null) return null;
@@ -164,12 +155,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// What a click on a file path in the conversation does.
-  ///
-  /// **It reveals; it does not open** — the Files panel expands to the row and
-  /// selects it, and opening stays a second, deliberate click. Also the only
-  /// place the feature touches a disk: detection is by shape, so a transcript
-  /// full of path-shaped tokens costs no `stat` until somebody asks for one.
+  /// What a click on a file path does: **it reveals; it does not open**. Also
+  /// the only place the feature touches a disk — detection is by shape.
   Future<void> _openPath(String token) async {
     final parsed = tokenForMatch(token);
     final base = _workingDirectory();
@@ -264,8 +251,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     });
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript
-    // (see `SessionTranscriptLocator`): an interactive agent has no structured
-    // stream on stdout. Older sessions still render from the engine's log.
+    // (see `SessionTranscriptLocator`): stdout carries no structured stream.
     final fromPty = session?.surface == SessionSurface.pane;
     final transcript = fromPty
         ? ref
@@ -329,8 +315,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               // rather than opens — see [_openPath].
               onPathTap: _openPath,
               // What the parent's `Task(…)` row never showed. Collapsed and
-              // unread until opened — one real session's turns here come to
-              // 1,485 MiB.
+              // unread until opened — one session's turns came to 1,485 MiB.
               detailBuilder: (message, ordinal) {
                 final reference = _subagents[ordinal];
                 if (reference == null) return null;
@@ -394,10 +379,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
-  /// What to say when there is nothing to render.
-  ///
-  /// Each branch reads the same `sessionTerminalPane` the workbench's own empty
-  /// state reads, so the two surfaces cannot describe one session differently.
+  /// What to say when there is nothing to render. Each branch reads the same
+  /// `sessionTerminalPane` the workbench does, so the two cannot disagree.
   String _emptyHint({
     required bool chatAvailable,
     required SessionChatView reading,
@@ -406,9 +389,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required bool hasTerminal,
   }) {
     if (!chatAvailable) {
-      // The refusal names *why* it is one: "this agent keeps no transcript we
-      // can read" was true of every Antigravity session until one install
-      // turned out to keep one for every conversation.
+      // The refusal names *why* it is one: "keeps no transcript" was true of
+      // every Antigravity session until one install turned out to keep them.
       return hasTerminal
           ? 'No chat view for this session. ${reading.reason} Its terminal is '
                 'the session.'
@@ -428,11 +410,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
-  /// The agent's own transcript as chat messages.
-  ///
-  /// Tool lines are kept: the conversation is where the owner reads what the
-  /// agent did. The subagent a row spawned travels beside the messages rather
-  /// than inside [ChatMessage], which the remote payloads also carry.
+  /// The agent's own transcript as chat messages. The subagent a row spawned
+  /// travels beside them, not inside [ChatMessage], which has no room for it.
   List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) {
     _subagents.clear();
     return chatMessagesFromTranscript(messages, subagents: _subagents);
@@ -464,8 +443,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   }
 
   /// A tool call from the engine's own event log. It cannot yet show what came
-  /// back: `SessionEventTypes.toolResult` is named but nothing emits it, and
-  /// inventing an answer would be worse than admitting there isn't one.
+  /// back: `SessionEventTypes.toolResult` is named and nothing emits it.
   void _addToolCall(List<ChatMessage> out, String payload) {
     try {
       final decoded = jsonDecode(payload);
@@ -500,8 +478,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 }
 
 /// The header's Recap action: asks this session's own CLI what it concluded.
-/// Inert while the CLI is answering — a second press would spend a second turn
-/// on the question already in flight.
+/// Inert while it answers — a second press spends a second turn.
 class _RecapButton extends ConsumerWidget {
   const _RecapButton({required this.sessionId});
   final String sessionId;
@@ -571,12 +548,8 @@ class _OpenInTerminalButton extends ConsumerWidget {
   }
 }
 
-/// The pane [sessionId] can be *shown* in, or null when it has none.
-///
-/// A row keeps its `pane_id` after the pane behind it is gone, so the terminal
-/// must still hold an instance for it. A pane restored from disk counts, and a
-/// launch resumes **into** it rather than opening a second one beside it. The
-/// single answer, so the workbench and the conversation cannot disagree.
+/// The pane [sessionId] can be *shown* in, or null when it has none. A row
+/// keeps its `pane_id` after the pane is gone, so an instance must still exist.
 String? sessionTerminalPane(WidgetRef ref, String sessionId) {
   final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
   if (paneId == null) return null;
@@ -584,15 +557,8 @@ String? sessionTerminalPane(WidgetRef ref, String sessionId) {
   return terminals.instanceFor(paneId) == null ? null : paneId;
 }
 
-/// A CLI transcript as chat messages, with a compacted session's history
-/// shown **once**.
-///
-/// Everything before the last compaction boundary was restated as the summary
-/// that follows it, so drawing both is the same conversation twice — measured
-/// here at 2,793 rows, of which row 1,287 is a 17,795-character summary of the
-/// 1,287 above it, drawn as something the user typed. The cut is here and not
-/// in `readCliTranscript`, which keeps every row for the index and search.
-/// [subagents], when given, is keyed by position in the result.
+/// A CLI transcript as chat messages, with a compacted session's history shown
+/// **once** — the summary restates everything before the last boundary.
 @visibleForTesting
 List<ChatMessage> chatMessagesFromTranscript(
   List<TranscriptMessage> messages, {
@@ -648,8 +614,6 @@ List<ChatMessage> chatMessagesFromTranscript(
 }
 
 /// **Whether a chat view can be built for this session**, as a reading rather
-/// than a fact about the agent: it was a registry question until Antigravity's
-/// transcripts turned out to exist on one install and not the other. Watched
-/// rather than read, so the view redraws when the probe settles.
+/// than a fact about the agent. Watched, so the view redraws when it settles.
 SessionChatView sessionChatView(WidgetRef ref, String sessionId) =>
     ref.watch(sessionChatViewProvider(sessionId));

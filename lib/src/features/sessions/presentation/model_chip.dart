@@ -36,9 +36,8 @@ class ModelChipView {
 
   final String tooltip;
 
-  /// Where the model came from, as a sentence. Its own field rather than only
-  /// baked into [tooltip] so [SessionModelMark] can say the same thing — the
-  /// control and the fact beside it cannot describe one session differently.
+  /// Where the model came from, as a sentence. Its own field so
+  /// [SessionModelMark] can say the same thing rather than a second wording.
   final String origin;
 
   /// Whether the state is one to notice: an agent that cannot be told which
@@ -128,15 +127,8 @@ ModelChipView modelChipViewFor(SessionModelState state) {
   );
 }
 
-/// The model this session runs on, and a menu of the models its agent can
-/// actually be put on.
-///
-/// Shows the *effective* model, resolved by the same `SessionLauncher` call the
-/// launcher makes, so there is no second resolution to drift from. The way-back
-/// row is a [ModelChoice] and not a nullable `String` because `PopupMenuButton`
-/// reads a null selection as a *dismissal* and never calls `onSelected`. A pick
-/// is either sent now or recorded for the next launch and every row says which
-/// — [switchesNow] is a callback because the answer moves with the agent.
+/// The model this session runs on, and a menu of the models its agent can be
+/// put on. The way-back row is a [ModelChoice]: null reads as a *dismissal*.
 class ModelChip extends StatelessWidget {
   const ModelChip({
     required this.view,
@@ -154,8 +146,7 @@ class ModelChip extends StatelessWidget {
   final ModelChipView view;
 
   /// Whether a pick made this instant would reach the session running now,
-  /// asked as the menu opens. See
-  /// [SessionLauncher.liveModelSwitchBlockerFor].
+  /// asked as the menu opens. See [SessionLauncher.liveModelSwitchBlockerFor].
   final bool Function() switchesNow;
 
   final ValueChanged<ModelChoice> onSelected;
@@ -230,9 +221,8 @@ class ModelChip extends StatelessWidget {
                 color: foreground,
               ),
               const SizedBox(width: Insets.xs),
-              // Capped, ellipsised **and** flexible: the cap stops a long real
-              // name dominating a wide window; the `Flexible` makes the name —
-              // not the row — give way when there is no room at all.
+              // Capped, ellipsised **and** flexible: the cap stops a long name
+              // dominating a wide window, the `Flexible` yields the name first.
               Flexible(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxLabelWidth),
@@ -284,8 +274,7 @@ class SessionModelChip extends ConsumerWidget {
   final String sessionId;
 
   /// How much of the model's name to show before ellipsising. The terminal's
-  /// bar asks for less: it shares a row with the delivery actions, which wrap
-  /// rather than shrink, so a pixel here can push `Commit` onto its own line.
+  /// bar asks less: a pixel here can push `Commit` onto a line of its own.
   final double maxLabelWidth;
 
   @override
@@ -297,15 +286,8 @@ class SessionModelChip extends ConsumerWidget {
   );
 }
 
-/// The model a session is **set to** run on, drawn as a fact rather than as a
-/// control.
-///
-/// Two presentations because [SessionModelChip] must compete for room with the
-/// delivery actions, while this is only the name, at every width; both take
-/// their words from [modelChipViewFor]. It refuses to claim the CLI is running
-/// that model: nothing here reads one back out of an agent, and a `/model`
-/// typed into the pane puts the record ahead of the process. So it draws **only
-/// a model we actually named** — `default` in a line of facts would read as one.
+/// The model a session is **set to** run on, drawn as a fact, not a control. It
+/// will not claim the CLI is running it — nothing reads a model back out.
 class SessionModelMark extends ConsumerWidget {
   const SessionModelMark({
     required this.sessionId,
@@ -324,9 +306,8 @@ class SessionModelMark extends ConsumerWidget {
   /// this sits in wraps rather than shrinks, so an uncapped name costs a run.
   final double maxWidth;
 
-  /// Whether [state] names a model this mark is willing to draw. Static because
-  /// it is the *host's* test too: a zero-sized child in the state line's `Wrap`
-  /// would still take a `spacing` on each side and leave a double gap.
+  /// Whether [state] names a model this mark will draw. Static because it is
+  /// the *host's* test too: a zero-sized child still takes its `spacing`.
   static bool namesAModel(SessionModelState? state) =>
       state != null && state.modelId != null && state.support.isSupported;
 
@@ -361,10 +342,8 @@ class SessionModelMark extends ConsumerWidget {
   }
 }
 
-/// The one thing the mark will not vouch for, worded for the agent it is about.
-/// Two sentences rather than one hedge: telling a Codex user that a typed
-/// `/model` is not read back would send them looking for a live switch that
-/// does not exist.
+/// The one thing the mark will not vouch for, worded for the agent. Two
+/// sentences: a Codex user told the first would hunt for a live switch.
 String _modelMarkLimit(SessionModelState state) => state.support.switchesLive
     ? '${state.agentName} is never asked what it is running, so this is what '
           'the session is set to. A /model typed into the terminal, or a '
@@ -374,9 +353,8 @@ String _modelMarkLimit(SessionModelState state) => state.support.switchesLive
           'is running, so this is what the next launch uses — a change made '
           'since this session started is not true of the process now.';
 
-/// [ModelChip] following the focused session. The status bar's chip.
-/// `const` where it is placed, so a rebuild of the row cannot rebuild the chip
-/// and a model change cannot rebuild the row.
+/// [ModelChip] following the focused session. `const` where it is placed, so a
+/// row rebuild cannot rebuild the chip, nor a model change the row.
 class FocusedModelChip extends ConsumerWidget {
   const FocusedModelChip({super.key});
 
@@ -416,8 +394,7 @@ void _apply(
   ModelChoice choice,
 ) {
   // Into the session's own bar: every sentence below is about one session, and
-  // the two chips sit in the same row — one reporting across the bottom of the
-  // window and the other beside the chip would be one event told two ways.
+  // a snackbar beside a chip would be one event told two ways.
   final notices = ref.read(sessionNoticesProvider.notifier);
   final outcome = launcher.setModel(state.sessionId, choice.modelId);
   String label(String id) => state.support.modelFor(id)?.label ?? id;

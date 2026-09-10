@@ -3,36 +3,25 @@
 typedef ParentLookup = String? Function(String sessionId);
 
 /// How far down a spawn chain a session sits, and whether another level is
-/// allowed.
-///
-/// **Walked, never stored**: a stored depth is written once from what the
-/// caller believed, so a re-parented session leaves a number that outlives the
-/// chain it claims to summarise. [maxWalk] guards a chain that should be
-/// acyclic by construction, because the failure it prevents is a **hang**; a
-/// walk past it is [SessionDepthOutcome.cycle], which the caller must treat as
-/// a refusal and not as depth 0.
+/// allowed. **Walked, never stored**; a walk past [maxWalk] is a refusal.
 class SessionDepth {
   const SessionDepth._(this.outcome, this.depth);
 
   final SessionDepthOutcome outcome;
 
-  /// Links between this session and a root. A session with no parent is 0.
-  ///
+  /// Links between this session and a root; 0 for one with no parent.
   /// Meaningless unless [outcome] is [SessionDepthOutcome.ok].
   final int depth;
 
-  /// The deepest a spawned session may itself spawn from: 2. A user's session
-  /// (depth 0) may spawn, those children may spawn, and a depth-2 session may
-  /// not — beyond that a runaway costs tokens faster than anyone notices.
+  /// The deepest a spawned session may itself spawn from: 2. Beyond that a
+  /// runaway costs tokens faster than anyone notices.
   static const int maxDepth = 2;
 
   /// Links to follow before declaring the chain broken rather than long.
   static const int maxWalk = 64;
 
   /// Walks up from [parentSessionId] — the parent of a session that does not
-  /// exist yet — and reports where its child would sit.
-  ///
-  /// Passing `null` means "started by the user", which is depth 0.
+  /// exist yet — and reports where its child would sit. `null` is depth 0.
   static SessionDepth forChildOf(String? parentSessionId, ParentLookup parent) {
     if (parentSessionId == null) {
       return const SessionDepth._(SessionDepthOutcome.ok, 0);

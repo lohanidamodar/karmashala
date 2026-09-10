@@ -1,14 +1,5 @@
-/// **Whether one session has a chat view, read rather than assumed.**
-///
-/// `agentSupportsChatView` is an allowlist of store *formats*, and was the
-/// whole answer until Antigravity's own JSONL transcripts turned out to exist
-/// for 25 of 25 conversations on the WSL install here and 0 of 1 on the Windows
-/// one. Flipping the list to yes replaces an accurate refusal with "it appears
-/// once the agent answers" for a file that never will; leaving it at no hides
-/// transcripts that are already readable.
-///
-/// So the answer is per session and says what it was read from: an unknown is
-/// never a zero, and a reading carries its age.
+/// **Whether one session has a chat view, read rather than assumed**: the
+/// format allowlist is wrong per install, so the answer is per session.
 library;
 
 /// What the answer was read from — six shapes, because they are six different
@@ -23,8 +14,7 @@ enum ChatViewEvidence {
   noSessionRecord,
 
   /// This agent's store keeps its messages in a form nothing here can open, so
-  /// no path can be derived for any session of it. From the registry, so it
-  /// costs nothing and has no age.
+  /// no path can be derived for any session of it. From the registry.
   storeUnreadable,
 
   /// A transcript file for this session is on disk.
@@ -34,15 +24,13 @@ enum ChatViewEvidence {
   /// the conversation and no readable record of it. Antigravity on Windows.
   transcriptAbsent,
 
-  /// The stores were searched and this session's file was not in them, which is
-  /// also what a CLI that has not written its first turn looks like. Not an
-  /// answer either way.
+  /// The stores were searched and this session's file was not in them — also
+  /// what a CLI that has not written its first turn looks like.
   notLocated,
 }
 
 /// One reading of whether a session has a chat view, with its evidence. A value
-/// type with real equality: three surfaces watch it, and a re-read that found
-/// the same thing must leave all three asleep.
+/// type with real equality: three surfaces watch it.
 class SessionChatView {
   /// Nobody has looked yet; [prior] is what the allowlist says about the format.
   const SessionChatView.unread({required this.prior})
@@ -61,9 +49,8 @@ class SessionChatView {
 
   final ChatViewEvidence evidence;
 
-  /// What `agentSupportsChatView` said about the store format. Kept on every
-  /// reading so an unmeasured one can still answer, and so the two can be
-  /// compared where they disagree.
+  /// What `agentSupportsChatView` said about the store format, kept on every
+  /// reading so an unmeasured one can still answer.
   final bool prior;
 
   /// The transcript file this reading is about, when one was named. Evidence,
@@ -85,9 +72,8 @@ class SessionChatView {
 
   bool get isMeasured => evidence != ChatViewEvidence.unread;
 
-  /// Whether this is a refusal that will still hold after the agent answers —
-  /// the **structural** nothing the companion wire carries. A session we merely
-  /// have no id for is not one of these: that gap closes on its own.
+  /// Whether this refusal will still hold after the agent answers — the
+  /// **structural** nothing. A missing id is a gap, and closes on its own.
   bool get keepsNoRecord =>
       evidence == ChatViewEvidence.storeUnreadable ||
       evidence == ChatViewEvidence.transcriptAbsent;

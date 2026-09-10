@@ -1,15 +1,9 @@
-/// What a session's Git objects are called.
-///
-/// Three places built these names by hand, each writing `id.substring(0, 8)`
-/// inline: two *create* the branch and worktree and the third *merges* the
-/// branch, so a change to the shape in one would silently have stopped the
-/// other finding what it made.
+/// What a session's Git objects are called. Three places built these by hand,
+/// two creating the branch and one merging it — one shape, one file.
 library;
 
 /// The short handle a session is known by outside the database: eight
-/// characters of the session id. Tolerant of a shorter id rather than throwing
-/// — `substring(0, 8)` on one is a `RangeError` from deep inside a launch, and
-/// a session id is not this function's to validate.
+/// characters. Tolerant of a shorter id — a `RangeError` mid-launch is worse.
 String sessionShortId(String sessionId) =>
     sessionId.length <= 8 ? sessionId : sessionId.substring(0, 8);
 

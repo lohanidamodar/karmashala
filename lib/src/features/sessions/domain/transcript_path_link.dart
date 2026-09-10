@@ -1,15 +1,5 @@
-/// Finding the file paths in a transcript, **by shape alone**.
-///
-/// Nothing here touches the disk: the transcript is re-parsed on a two-second
-/// poll and a long one holds hundreds of path-shaped tokens. The one stat
-/// happens in the click handler, where "that file is not there" is the right
-/// thing to find out.
-///
-/// A token is a path when it contains a separator and is anchored by a drive or
-/// UNC prefix, a leading `/` with two segments, a `./`, an extension, or a
-/// trailing separator with two of them. One separator is not enough (`and/or`,
-/// `1/2`), a match may not start mid-token (which keeps a URL whole), and `~/…`
-/// is unmatched because expanding `~` needs a HOME we do not have.
+/// Finding the file paths in a transcript, **by shape alone**. Nothing here
+/// touches the disk; the one stat happens in the click handler.
 library;
 
 import 'package:path/path.dart' as p;
@@ -39,10 +29,8 @@ const _tail = '(?:$_dotChar|$_sep)*(?:$_wordChar|$_sep)';
 /// middle of something else — a URL, a longer path, a word, a `~`.
 const _notAfter = r'(?<![\w.+%@:~/\\-])';
 
-/// ...and the mirror of it. Without this a partial match is worse than none:
-/// `he/she/they` would linkify as `he/she/`, because every path-shaped prefix
-/// of a phrase is itself path-shaped. `.` is deliberately absent: a path is
-/// very often the last thing in a sentence.
+/// ...and the mirror of it: without it `he/she/they` would linkify as
+/// `he/she/`. `.` is absent — a path is often the last thing in a sentence.
 const _notBefore = r'(?![\w+%@/\\-])';
 
 /// A trailing `:12` or `:12:5`, as every compiler and `grep -n` prints it.
@@ -104,19 +92,16 @@ TranscriptPathToken tokenForMatch(String matched) {
   );
 }
 
-/// The path token starting exactly at [start] in [source], or null. Anchored
-/// rather than searching, because the markdown inline parser asks position by
-/// position and a search would report a match it cannot consume.
+/// The path token starting exactly at [start] in [source], or null. Anchored,
+/// not searching: the inline parser asks position by position.
 TranscriptPathToken? transcriptPathAt(String source, int start) {
   final match = kTranscriptPathPattern.matchAsPrefix(source, start);
   if (match == null) return null;
   return tokenForMatch(match[0]!);
 }
 
-/// Whether [index] sits inside a markdown link or image **label**, so
-/// `[lib/main.dart](https://…)` stays the link it already is. The parser cannot
-/// tell us — the label's nodes are built before the `]` that wraps them — so
-/// this scans back for an unclosed `[`, only after the pattern has matched.
+/// Whether [index] sits inside a markdown link **label**, so `[a](b)` stays the
+/// link it is. The parser cannot say, so this scans back for an unclosed `[`.
 bool insideMarkdownLabel(String source, int index) {
   var closed = 0;
   for (var i = index - 1; i >= 0; i--) {
@@ -133,19 +118,16 @@ bool insideMarkdownLabel(String source, int index) {
   return false;
 }
 
-/// How paths in [kind] are spelled, for joining and normalising. Not
-/// `storePathContextFor`, which answers where the *store home this host can
-/// reach* is and hands back Windows for WSL; a path an agent writes inside WSL
-/// is POSIX.
+/// How paths in [kind] are spelled. Not `storePathContextFor`, which answers
+/// where the *store* is and hands back Windows for WSL; an agent's is POSIX.
 p.Context transcriptPathContext(EnvironmentKind? kind) =>
     kind != null && usesWindowsPaths(kind) ? p.windows : p.posix;
 
 /// A path spelled the Windows way, whatever environment claims it.
 final _windowsAbsolute = RegExp(r'^([A-Za-z]:[\\/]|\\\\)');
 
-/// [token] resolved against [workingDirectory] — the session's, never the
-/// process's. A relative path in a transcript is relative to where the agent
-/// was standing, and this process's cwd is not that.
+/// [token] resolved against [workingDirectory] — the session's, never this
+/// process's, which is not where the agent was standing.
 String resolveTranscriptPath(
   String token, {
   required String workingDirectory,

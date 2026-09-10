@@ -1,13 +1,9 @@
 /// The document one agent is handed when it takes over another's work.
-///
-/// Provenance is never erased: the recap is quoted and attributed, never
-/// rewritten as if the receiving agent had done the work — and quoted rather
-/// than summarised because no model runs in this path.
+/// Provenance is never erased: the recap is quoted, never model-summarised.
 library;
 
-/// Codex's own compaction prompt, quoted verbatim rather than reworded (read
-/// out of the `codex.exe` 0.153.4 binary on 2026-09-09, beside
-/// `core\src\compact.rs`) — a paraphrase of it is a new prompt nobody has run.
+/// Codex's own compaction prompt, quoted verbatim from the `codex.exe` 0.153.4
+/// binary (2026-09-09): a paraphrase would be a new prompt nobody has run.
 const String kSourceBriefRequest =
     'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff '
     'summary for another LLM that will resume the task.\n'
@@ -18,9 +14,8 @@ const String kSourceBriefRequest =
     'Be concise, structured, and focused on helping the next LLM seamlessly '
     'continue the work.';
 
-/// The brief the source agent wrote, or why there is none. Two states and no
-/// third: a brief asked for and not answered gets a section saying so; nobody
-/// asking leaves [HandoffPacket.sourceBrief] null.
+/// The brief the source agent wrote, or why there is none. Two states: asked
+/// and unanswered gets a section; nobody asking leaves it null.
 class HandoffSourceBrief {
   /// What the agent wrote, in its own words. Quoted, never edited.
   const HandoffSourceBrief.written(String this.text) : notWritten = null;
@@ -83,9 +78,8 @@ class HandoffTurn {
   int get hashCode => Object.hash(speaker, text);
 }
 
-/// One recorded decision, as the packet states it — a local shape, like
-/// [HandoffChange], so the packet renders without a database. The pointer back
-/// to the act is printed, never followed.
+/// One recorded decision, as the packet states it — a local shape so the packet
+/// renders without a database. The pointer to the act is printed, never followed.
 class HandoffDecision {
   const HandoffDecision({
     required this.kind,
@@ -142,9 +136,8 @@ class HandoffDecision {
   );
 }
 
-/// Who may write one section of the packet, and who may only read it. Stated
-/// per section because the answer differs: a quoted recap has no editors (an
-/// edited quotation is not evidence), a dead-end list has one.
+/// Who may write one section of the packet, and who may only read it. Per
+/// section, because a quoted recap has no editors and a dead-end list has one.
 class HandoffSectionOwner {
   const HandoffSectionOwner(this.owner, {this.editors = const []});
 
@@ -162,8 +155,7 @@ class HandoffSectionOwner {
 }
 
 /// One thing the packet asserts, and what backs it. Null evidence renders as
-/// "not checked yet" rather than as an omitted qualifier, because an
-/// unqualified claim is read as a checked one.
+/// "not checked yet": an unqualified claim is read as a checked one.
 class HandoffClaim {
   const HandoffClaim({
     required this.statement,
@@ -198,8 +190,7 @@ class HandoffClaim {
 }
 
 /// Everything the receiving agent is told, and the renderer that says it. Null
-/// renders as a sentence admitting the gap, never as an omitted section — a
-/// missing "Files changed" heading would read as "nothing changed".
+/// renders as a sentence admitting the gap, never as an omitted section.
 class HandoffPacket {
   const HandoffPacket({
     required this.sourceAgentName,
@@ -251,10 +242,8 @@ class HandoffPacket {
   /// recap is a tail and not the whole thing.
   final int omittedTurns;
 
-  /// The session's decision record, oldest first, or **null for "it could not
-  /// be read"**. Unlike [changes], an empty list is not a positive answer: the
-  /// record is written only by explicit acts, so both null and empty render as
-  /// "not recorded", never as "none".
+  /// The session's decision record, oldest first, or **null for "could not be
+  /// read"**. Unlike [changes], empty is not an answer — it renders the same.
   final List<HandoffDecision>? decisions;
 
   /// How many older decisions were left out. Effectively always zero — they are
@@ -264,14 +253,12 @@ class HandoffPacket {
   /// Whatever the user typed as still-open work. Free text, one item per line,
   /// passed through unedited — Karmashala has no idea which of these are done.
   final List<String> unresolvedTasks;
-  /// Approaches already ruled out, or **null for "the record could not be
-  /// read"**. Read the way [decisions] is: an empty list is not "nothing was
-  /// ruled out", and an agent that does not know will spend the turns again.
+  /// Approaches already ruled out, or **null for "could not be read"**. Read
+  /// like [decisions]: an empty list is not "nothing was ruled out".
   final List<HandoffClaim>? deadEnds;
 
   /// The source agent's own handoff summary, or **null when nobody asked**. The
-  /// one part written by a model, defensible only because it is attributed,
-  /// optional, and beside the verbatim quotes rather than instead of them.
+  /// one part written by a model, and it stands beside the quotes, not instead.
   final HandoffSourceBrief? sourceBrief;
 
   /// Whether this packet stands in for a fork the CLI could not perform.
@@ -618,9 +605,7 @@ class HandoffRecapBudget {
   final int maxCharactersPerTurn;
 
   /// The same budget with [spent] characters already gone — how the decision
-  /// record is paid for, making the *recap* the thing that shrinks, because a
-  /// quoted turn is recoverable from the transcript and a decision forty turns
-  /// back is not. Floors at zero; `trimRecap` always keeps the final turn.
+  /// record is paid for, making the *recap* the thing that shrinks.
   HandoffRecapBudget reducedBy(int spent) => HandoffRecapBudget(
     maxCharacters: maxCharacters - spent < 0 ? 0 : maxCharacters - spent,
     maxTurns: maxTurns,
@@ -629,8 +614,7 @@ class HandoffRecapBudget {
 }
 
 /// How much of a decision record a packet carries. A backstop against a
-/// pathological session, not a routine trim: decisions are written only by
-/// explicit acts, so in ordinary use the whole record travels.
+/// pathological session: in ordinary use the whole record travels.
 class HandoffDecisionBudget {
   const HandoffDecisionBudget({
     this.maxCharacters = 4000,
@@ -643,10 +627,8 @@ class HandoffDecisionBudget {
   final int maxCharactersPerDecision;
 }
 
-/// Trims [decisions] (oldest first) to fit [budget], keeping the **most
-/// recent**, and reports how many were dropped and what the rest cost. [cost]
-/// is measured from the rendered text, not estimated, and an over-long decision
-/// is truncated *in the middle* — conclusion at one end, reason at the other.
+/// Trims [decisions] (oldest first) to fit [budget], newest kept, reporting the
+/// drop and the cost. Over-long ones are truncated *in the middle*.
 ({List<HandoffDecision> decisions, int omitted, int cost}) trimDecisions(
   List<HandoffDecision> decisions, [
   HandoffDecisionBudget budget = const HandoffDecisionBudget(),
@@ -690,10 +672,8 @@ class HandoffDecisionBudget {
   );
 }
 
-/// Trims [turns] (oldest first) to fit [budget], keeping the **most recent**,
-/// and reports how many were dropped. Recency wins because the end of a
-/// conversation is where the current state is; an over-long turn is truncated
-/// *in the middle*, since a pasted log has its outcome at the bottom.
+/// Trims [turns] (oldest first) to fit [budget], newest kept. Truncated *in the
+/// middle*: a pasted log has its outcome at the bottom.
 ({List<HandoffTurn> turns, int omitted}) trimRecap(
   List<HandoffTurn> turns, [
   HandoffRecapBudget budget = const HandoffRecapBudget(),

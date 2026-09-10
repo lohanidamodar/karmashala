@@ -29,10 +29,7 @@ import 'continue_with_dialog.dart';
 import 'model_chip.dart';
 
 /// One strip, above the message box, carrying a session's whole delivery
-/// lifecycle: where the work stands, and the next sensible thing to do with it.
-/// The steps the agent should take are **prompts**, sent through the composer's
-/// own `continueSession` so the transcript reports whatever goes wrong; what
-/// the app owns instead reports in a snackbar, which is why it owns few.
+/// lifecycle. The agent's steps are **prompts**; what the app owns, it reports.
 class DeliveryStrip extends ConsumerStatefulWidget {
   const DeliveryStrip({
     required this.sessionId,
@@ -43,15 +40,12 @@ class DeliveryStrip extends ConsumerStatefulWidget {
 
   final String sessionId;
 
-  /// Icon-only pills, for a workspace group too narrow to spell the verbs.
-  /// Five labelled pills are ~440px and five glyphs ~150; the tooltip and the
-  /// semantics label are unchanged, so only the letters go.
+  /// Icon-only pills, for a workspace group too narrow to spell the verbs. Five
+  /// labelled are ~440px against ~150; tooltip and semantics label survive.
   final bool compact;
 
-  /// Whether the strip is drawn in the session bar under the terminal rather
-  /// than above the composer. The bar is already chrome, so the strip brings
-  /// neither rule nor surface and no state line — [DeliveryStateLine] draws the
-  /// facts above it. Both poured into one [Wrap] wrapped into ragged rows.
+  /// Whether the strip is drawn in the session bar under the terminal. The bar
+  /// is already chrome, so no rule, no surface, no [DeliveryStateLine].
   final bool hostedOnTerminal;
 
   @override
@@ -96,9 +90,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     }
   });
 
-  /// Merges the base branch in, and re-reads everything afterwards. No
-  /// confirmation: every outcome is recoverable and the service refuses
-  /// outright where it would not be — a needless dialog teaches dismissal.
+  /// Merges the base branch in, and re-reads afterwards. No confirmation: every
+  /// outcome is recoverable, and a needless dialog teaches dismissal.
   Future<void> _update() => _run(() async {
     final messenger = ScaffoldMessenger.of(context);
     final outcome = await ref
@@ -109,8 +102,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
   });
 
   /// Takes the pull request out of draft. Inline rather than behind a service:
-  /// no precondition the offer did not already check, and one failure mode —
-  /// `gh` said no — reported exactly as `gh` worded it.
+  /// one failure mode, `gh` said no, reported exactly as `gh` worded it.
   Future<void> _markReady(SessionDelivery? delivery) => _run(() async {
     final messenger = ScaffoldMessenger.of(context);
     final number = delivery?.pullRequest?.number;
@@ -137,10 +129,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
   }
 
-  /// Re-reads the delivery state after one of the app's own writes: the poll is
-  /// two minutes wide and neither write goes through the session-revision
-  /// signal, so the strip would keep offering `Update` on a branch that is no
-  /// longer behind. Both keys go — either write can move either half.
+  /// Re-reads the delivery state after one of the app's own writes: neither
+  /// goes through the session-revision signal the two-minute poll watches.
   void _reread() {
     final directory = _directory();
     if (directory == null) return;
@@ -241,9 +231,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
 
   @override
   Widget build(BuildContext context) {
-    // `.value` keeps the previous answer through a refresh, so the strip does
-    // not blink on focus: reading a refresh's `AsyncLoading` as null lost the
-    // state line and collapsed the strip from 131px to 57px.
+    // `.value` keeps the previous answer through a refresh: reading it as null
+    // lost the state line and collapsed the strip from 131px to 57px.
     final delivery = ref.watch(sessionDeliveryProvider(widget.sessionId)).value;
     final actions = ref.watch(sessionDeliveryActionsProvider(widget.sessionId));
     final canContinue = ref
@@ -263,8 +252,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
       ref.watch(sessionVerdictProvider(widget.sessionId)).state,
     );
     // Hidden rather than disabled when nobody can be asked: this strip is on
-    // *every* session, so a dead control reads as a broken feature. The refusal
-    // lives on [ReviewAction]'s own button; short-circuited, it costs 3 lookups.
+    // *every* session, so a dead control reads as a broken feature.
     final review =
         invitation != null &&
             ref.watch(sessionReviewOfferProvider(widget.sessionId)).isPossible
@@ -387,13 +375,8 @@ class _DeliveryState extends StatelessWidget {
   );
 }
 
-/// The same state line, for the session bar under the terminal, read from the
-/// session rather than handed a [SessionDelivery].
-///
-/// **A line of facts, above a row of controls**: at the buttons' weight and in
-/// their run, eight peers read as one undifferentiated spill. Its own widget so
-/// the bar lays the two out itself, and it keeps its own emptiness. Only this
-/// host carries the model — the bar's own chip is dropped under ~820px.
+/// The same state line, for the session bar under the terminal. **Facts above,
+/// controls below**: at the buttons' weight, eight peers read as one spill.
 class DeliveryStateLine extends ConsumerWidget {
   const DeliveryStateLine({required this.sessionId, super.key});
 
@@ -411,9 +394,8 @@ class DeliveryStateLine extends ConsumerWidget {
     // take the line away and move everything laid out around it.
     final delivery = ref.watch(sessionDeliveryProvider(sessionId)).value;
     if (delivery == null) return const SizedBox.shrink();
-    // Whether there is a model to name, and nothing more: the name itself is
-    // the mark's own subscription. Asked here because a mark that drew nothing
-    // would still take a `spacing` on each side and leave a double gap.
+    // Whether there is a model to name, and nothing more — the name is the
+    // mark's own subscription. A mark that drew nothing would still take gaps.
     final hasModel = ref.watch(
       sessionModelProvider(sessionId).select(SessionModelMark.namesAModel),
     );
@@ -434,10 +416,8 @@ class DeliveryStateLine extends ConsumerWidget {
   }
 }
 
-/// What the state line is made of, as separate pieces. A list rather than a
-/// widget because both hosts wrap them in a [Wrap] of their own. [withModel] is
-/// passed rather than decided here because the answer is about the *host* —
-/// only the session bar has no model of its own within reach.
+/// What the state line is made of, as separate pieces — a list, because both
+/// hosts wrap them in a [Wrap] of their own. [withModel] is about the *host*.
 List<Widget> _deliveryFacts(
   BuildContext context,
   SessionDelivery delivery,
@@ -503,9 +483,8 @@ List<Widget> _deliveryFacts(
         '${delivery.aheadOfBase} ahead of ${delivery.baseBranch}',
         style: muted,
       ),
-    // Beside "ahead", because a line saying only how far ahead reads as "up to
-    // date"; in the attention colour because it is a thing to act on. The count
-    // is omitted when zero — "0 behind main" would be a contradiction.
+    // Beside "ahead", because how far ahead alone reads as "up to date". The
+    // count is omitted when zero — "0 behind main" would be a contradiction.
     if (delivery.isBehindBase && delivery.baseBranch != null)
       Text(
         (delivery.behindBase ?? 0) > 0
@@ -572,16 +551,11 @@ class _ActionChip extends StatelessWidget {
 }
 
 /// The vertical padding every control on the session bar's action row draws
-/// with, and why they all sit on one line: with this above and below a single
-/// line of `labelSmall`, the permission chip, [_BarAction] and the view toggle
-/// are the same height at 100% text and at 200%. The number is the chip's own.
+/// with, so all three are the same height at 100% text and at 200%.
 const double kBarControlPad = 3;
 
-/// One action as the session bar draws it: the bar's own pill.
-///
-/// **One weight, one primary** — the same rectangle as the controls at the ends
-/// of the row, with only the next sensible step filled. A Material `ActionChip`
-/// is a stadium sized for a message column. Disabled is drawn, not hidden.
+/// One action as the session bar draws it: the bar's own pill. **One weight,
+/// one primary**, and disabled is drawn rather than hidden.
 class _BarAction extends StatelessWidget {
   const _BarAction({
     required this.icon,
@@ -643,9 +617,8 @@ class _BarAction extends StatelessWidget {
                 Icon(icon, size: Chrome.iconSmall, color: foreground),
                 if (!compact) ...[
                   const SizedBox(width: Insets.xs),
-                  // Flexible so a pill wider than the room left ellipsises
-                  // instead of overflowing: at 200% text "Archive worktree" is
-                  // wider than the gap. Glyph, tooltip and semantics survive.
+                  // Flexible so a pill wider than the room left ellipsises: at
+                  // 200% text "Archive worktree" is wider than the gap.
                   Flexible(
                     child: Text(
                       label,
@@ -669,8 +642,7 @@ class _BarAction extends StatelessWidget {
 }
 
 /// What a delivery action says on hover: why it cannot be pressed, or what
-/// pressing it does. One answer, so the two hosts cannot describe an action
-/// differently.
+/// pressing it does. One answer, so the two hosts cannot disagree.
 String _actionTooltip(OfferedAction offered) {
   final reason = offered.disabledReason;
   if (reason != null) return reason;

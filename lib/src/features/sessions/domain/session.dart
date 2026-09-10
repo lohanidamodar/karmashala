@@ -3,9 +3,8 @@ import 'session_launch.dart';
 import 'session_lineage.dart';
 import 'session_status.dart';
 
-/// A unit of work targeting one repository, run by one agent installation.
-/// Every session records an explicit, per-session choice of whether it runs in
-/// a dedicated Git **worktree** ([useWorktree]) or directly in the repository.
+/// A unit of work targeting one repository, run by one agent installation, with
+/// an explicit per-session choice of worktree or repository root.
 class Session {
   const Session({
     required this.id,
@@ -41,15 +40,8 @@ class Session {
   /// otherwise `null`.
   final EnvironmentPath? worktree;
 
-  /// The directory this session's agent actually runs in.
-  ///
-  /// Deliberately **not** [worktree], which is the more dangerous claim: a
-  /// non-null [worktree] is what `SessionArchiveService` hands to
-  /// `WorktreeService.remove`, so an ordinary cwd there would eventually offer
-  /// to delete the user's own checkout. It does *not* decide whether a resume
-  /// finds the conversation — see `AgentResumeLocality` — but it is what that
-  /// refusal compares against. Null means **unknown**, never the repository
-  /// root: pre-v22 rows are null, and readers fall back themselves.
+  /// The directory this session's agent actually runs in — deliberately **not**
+  /// [worktree], which archiving deletes. Null means unknown, not the root.
   final EnvironmentPath? workingDirectory;
 
   final SessionStatus status;
@@ -63,12 +55,8 @@ class Session {
   /// of spawn depth — see `SessionDepth` for why depth is walked, never stored.
   final String? parentSessionId;
 
-  /// Why [parentSessionId] is set: an agent delegated the work, the user moved
-  /// it to another provider, or the user branched the conversation.
-  ///
-  /// Null-with-no-parent is a root session. Null-*with*-a-parent is a pre-v13
-  /// row whose kind was never recorded — all of them spawns, backfilled by the
-  /// v13 migration, so it should not survive a migrated database.
+  /// Why [parentSessionId] is set. Null *with* a parent is a pre-v13 row, all
+  /// of them spawns, backfilled by the v13 migration.
   final SessionLink? parentLink;
 
   /// The terminal pane this session runs in, for a [SessionSurface.pane]
@@ -82,47 +70,26 @@ class Session {
   /// time; it starts and stops nothing.
   final SessionView view;
 
-  /// The mode **chosen for this session**, or null when nobody ever chose one.
-  ///
-  /// Not "the mode it runs under": that is this resolved against the per-agent
-  /// default by `resolveSessionPermission`. Non-null outranks the default at
-  /// launch, at resume and across a restart; null follows it *live*, as pre-v11
-  /// rows do. Since v35 it is a canonical `PermissionSelection` in the agent's
-  /// own vocabulary, so a value this build cannot name is reported rather than
-  /// swapped. A launch never stamps the resolved default here — that froze every
-  /// session at whatever Settings said, and let the resume path overwrite it.
+  /// The mode **chosen for this session**, or null to follow the per-agent
+  /// default *live*. A launch never stamps the resolved default here.
   final String? permissionMode;
 
-  /// The model **chosen for this session**, as the CLI's own id, or null when
-  /// nobody ever chose one.
-  ///
-  /// Nullable for [permissionMode]'s reason, and the two defaults differ: null
-  /// here means "follow the per-agent default in Settings", and when *that* is
-  /// unset it means "pass no model flag and let the agent start on whatever it
-  /// is configured to use". Both are real states and neither is `sonnet`. A
-  /// launch does not stamp the resolved default here either.
+  /// The model **chosen for this session**, as the CLI's own id, or null to
+  /// follow the default; when that is unset, no model flag is passed at all.
   final String? modelId;
 
   /// When this session's worktree was archived away, if it was. Archiving
-  /// removes the worktree directory and nothing else. Kept apart from [status],
-  /// which records what the agent did, not what was tidied afterwards.
+  /// removes the directory and nothing else — [status] is a separate question.
   final DateTime? archivedAt;
 
   /// Whether the user typed this title in the app — the only reason the rename
-  /// sync leaves a row alone. Recorded rather than remembered: the sync used to
-  /// keep it in memory, so after a restart every title looked user-set and a
-  /// `/rename` in the CLI was never copied in again.
+  /// sync leaves a row alone. Recorded, not remembered: a restart forgot it.
   final bool titleByUser;
 
   bool get isArchived => archivedAt != null;
 
-  /// Whether this session is **over**: there is nothing left for it to hold or
-  /// to be spoken for.
-  ///
-  /// [SessionStatus.unknown] is deliberately not one of them — it means "we
-  /// lost sight of it", and resuming makes the row `running` again. Shared by
-  /// `McpSessionTokenReaper` and `DeviceClaims`, so a session that has stopped
-  /// being speakable-for has also stopped holding phones.
+  /// Whether this session is **over**. [SessionStatus.unknown] is deliberately
+  /// not one: resuming makes the row `running` again.
   bool get isOver =>
       isArchived ||
       status == SessionStatus.completed ||

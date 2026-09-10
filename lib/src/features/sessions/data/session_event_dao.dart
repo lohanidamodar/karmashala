@@ -2,18 +2,15 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/session_event.dart';
 
-/// Data-access for the **append-only** session event log.
-///
-/// Deliberately exposes no update or delete (ADR 0003). [append] assigns the
-/// next per-session sequence number atomically.
+/// Data-access for the **append-only** session event log. No update or delete
+/// (ADR 0003); [append] assigns the next per-session sequence atomically.
 class SessionEventDao {
   SessionEventDao(this._db);
 
   final AppDatabase _db;
 
-  /// Appends an event to its session's log, assigning the next sequence number.
-  /// The input's `seq` is ignored — it is computed here — while `createdAt` is
-  /// taken from the event, which callers stamp.
+  /// Appends an event, assigning the next sequence number. The input's `seq` is
+  /// ignored — computed here — while `createdAt` comes from the event.
   SessionEvent append(SessionEvent event) {
     return _db.transaction(() {
       final maxRows = _db.query(

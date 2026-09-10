@@ -6,30 +6,21 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/stream.dart';
 
-/// How big a file may be before we refuse to hand it to the decoder. A decode
-/// allocates roughly `width * height * 4` bytes whatever the file weighs, and
-/// this runs inside a list that re-parses its source every two seconds.
+/// How big a file may be before we refuse to hand it to the decoder: a decode
+/// allocates `width * height * 4` bytes whatever the file weighs.
 const int kMaxImagePreviewBytes = 12 * 1024 * 1024;
 
 /// The tallest a preview draws inline. Wide images letterbox rather than push
 /// the rest of the conversation off the screen; the viewer shows them whole.
 const double kInlineImageMaxHeight = 220;
 
-/// The frame a preview always occupies, whatever it is holding. The thumbnail
-/// is a *control*, and a control the size of the picture behind it has no size
-/// at all until the decoder finishes; reserving the frame also keeps the row
-/// from jumping under the reader's eyes.
+/// The frame a preview always occupies, whatever it is holding: the thumbnail
+/// is a control, and one sized by its picture has no size until the decode ends.
 const double kInlineImageMinWidth = 120;
 const double kInlineImageMinHeight = 72;
 
-/// The picture behind a transcript row that read an image.
-///
-/// Claude Code records the path — in the **agent's** environment — plus a
-/// base64 copy of the bytes. The bytes are deliberately not what is drawn: one
-/// real transcript carried 96 of them, and the reader would hold every one in
-/// memory on every poll. Every failure degrades to a line of text: a deleted
-/// screenshot, a WSL path against a Windows `dart:io` (hence [resolveHostPath]),
-/// a file too big to decode, or one that is not an image at all.
+/// The picture behind a transcript row that read an image, drawn from the path
+/// rather than the transcript's base64 copy. Every failure degrades to a line.
 class TranscriptImagePreview extends StatefulWidget {
   const TranscriptImagePreview({
     required this.path,
@@ -68,8 +59,7 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   }
 
   /// Stats the file **once per path**, not once per build: the transcript
-  /// rebuilds on every poll, and a `\\wsl.localhost\…` stat costs ~1.2 ms
-  /// against 0.07 ms locally.
+  /// rebuilds on every poll, and a `\\wsl.localhost\…` stat costs ~1.2 ms.
   void _resolve() {
     _file = null;
     _problem = null;
@@ -172,9 +162,8 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   }
 }
 
-/// The degraded form: one quiet line, in place of the picture. It never repeats
-/// the file name — the row above already carries the path, and printing it
-/// twice is the complaint this work started from.
+/// The degraded form: one quiet line in place of the picture. It never repeats
+/// the file name — the row above already carries the path.
 class _Note extends StatelessWidget {
   const _Note({required this.text});
   final String text;

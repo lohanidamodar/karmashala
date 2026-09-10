@@ -6,13 +6,8 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../application/session_status_providers.dart';
 
-/// Icon, colour and words for one [AgentActivityStatus].
-///
-/// The words are not decoration: `unknown` is a real state, and a badge that
-/// showed only a grey dot would be indistinguishable from one that failed to
-/// load. Colour is never the only carrier, and it draws from [SemanticColors]
-/// rather than the neutral scheme — the accent is reserved for selection and
-/// must never read as "this agent is busy".
+/// Icon, colour and words for one [AgentActivityStatus]. The words are not
+/// decoration and colour is never the only carrier; the accent is not used.
 ({IconData icon, String label, Color Function(SemanticColors) colour})
 agentStatusAppearance(AgentActivityStatus status) => switch (status) {
   AgentActivityStatus.working => (
@@ -42,9 +37,8 @@ agentStatusAppearance(AgentActivityStatus status) => switch (status) {
   ),
 };
 
-/// How a status was arrived at, for the tooltip. Saying *which* source answered
-/// is what makes `unknown` actionable — "no source could tell" is a different
-/// problem from "the transcript says idle".
+/// How a status was arrived at, for the tooltip. Naming the source is what
+/// makes `unknown` actionable — "nobody could tell" is not "the store says idle".
 String agentStatusExplanation(AgentStatusReport report) {
   final how = switch (report.source) {
     AgentStatusSource.hook => 'from an installed hook',
@@ -56,10 +50,8 @@ String agentStatusExplanation(AgentStatusReport report) {
   return detail == null || detail.isEmpty ? how : '$how ($detail)';
 }
 
-/// A small live status badge for one session.
-///
-/// Renders `unknown` rather than nothing while the first observation is in
-/// flight, so the row's width does not jump when the answer arrives.
+/// A small live status badge for one session. Renders `unknown` rather than
+/// nothing while the first observation is in flight, so the width holds.
 class AgentStatusBadge extends ConsumerWidget {
   const AgentStatusBadge({
     required this.sessionId,

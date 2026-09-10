@@ -13,22 +13,15 @@ import '../domain/decision_record.dart';
 import '../domain/session_resume.dart' show describeAge;
 
 /// Which session's decision record the panel is describing: the session **on
-/// screen**, not the one last clicked in the Explorer — switching terminal tabs
-/// changes whose record you are reading.
+/// screen**, not the one last clicked in the Explorer.
 final decisionsPanelSessionIdProvider = Provider<String?>(
   (ref) =>
       ref.watch(activePaneSessionIdProvider) ??
       ref.watch(selectedSessionIdProvider),
 );
 
-/// **What this session has settled**, in the words it was settled in.
-///
-/// The record is what `handoff_packet.dart` puts *ahead* of the quoted
-/// transcript, so it is the part of a session that survives being handed over.
-/// Two properties it must not soften: **empty is "not recorded", never "nothing
-/// was decided"**, and it is **append-only** — a reversal is a new row and the
-/// original stays standing. Oldest first, and every row carries the age of its
-/// own writing, because nothing polls.
+/// **What this session has settled**, in the words it was settled in. Empty is
+/// "not recorded", never "nothing was decided"; a reversal is a new row.
 class DecisionRecordPanel extends ConsumerWidget {
   const DecisionRecordPanel({super.key});
 
@@ -177,8 +170,7 @@ class _DecisionRow extends StatelessWidget {
   }
 
   /// Who, when and from what — each part saying "not recorded" rather than
-  /// disappearing, as the packet's attribution line does. An omitted author
-  /// reads as an unattributed fact.
+  /// disappearing, which would read as an unattributed fact.
   static String _attribution(DecisionRecord decision, DateTime now) {
     final origin = decision.originId == null
         ? decision.origin.label
@@ -189,10 +181,8 @@ class _DecisionRow extends StatelessWidget {
   }
 }
 
-/// The kinds a person may write here, and nothing else. A verdict with no
-/// verification run behind it would name a record that does not exist. An
-/// approval *is* offered, unlike the tool's list, because the user granting one
-/// is the user's own statement.
+/// The kinds a person may write here, and nothing else: a verdict with no run
+/// behind it names a record that does not exist. An approval is theirs to give.
 const List<DecisionKind> kHandWritableKinds = <DecisionKind>[
   DecisionKind.constraintAccepted,
   DecisionKind.approachRejected,
@@ -200,9 +190,7 @@ const List<DecisionKind> kHandWritableKinds = <DecisionKind>[
 ];
 
 /// Asks for a decision and appends it through [DecisionRecorder] — the same
-/// recorder every other act goes through, so a hand-written row is stamped by
-/// the same clock and lands in the packet indistinguishably, except for its
-/// origin.
+/// recorder every other act uses, so the row is indistinguishable but for it.
 Future<void> recordDecisionDialog(
   BuildContext context,
   WidgetRef ref,

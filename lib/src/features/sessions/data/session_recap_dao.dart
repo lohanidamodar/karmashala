@@ -2,12 +2,8 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/session_recap.dart';
 
-/// Data-access for the recap one session was asked for (schema v48).
-///
-/// Three methods and no history: [write] replaces the row rather than appending
-/// beside it. `DecisionRecordDao` argues the opposite about decisions, and the
-/// difference is the point — a decision is an act, a recap is a reading, and a
-/// stale reading kept beside a fresh one is two answers to one question.
+/// Data-access for the recap one session was asked for (schema v48). [write]
+/// replaces the row: a recap is a reading, and a stale one is a second answer.
 class SessionRecapDao {
   SessionRecapDao(this._db);
 

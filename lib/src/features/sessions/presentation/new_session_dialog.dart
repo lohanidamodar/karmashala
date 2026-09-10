@@ -18,14 +18,8 @@ import '../application/session_launcher.dart';
 import '../domain/session_launch.dart';
 import 'session_destination_picker.dart';
 
-/// Creates a session **where you say**: pick a project and a checkout inside
-/// it, an agent, a title, and whether to run in a dedicated Git worktree.
-///
-/// **Choosing a destination here does not move the app's selection.** Browsing
-/// and pressing Cancel leaves everything as it was — "start one over there" is
-/// not "I work over there now". **Pressing Start does move it**, because by
-/// then it is no longer a guess: otherwise the pane in front of you and the
-/// panels beside it would describe two different checkouts.
+/// Creates a session **where you say**. Browsing and cancelling leaves the
+/// app's selection alone; pressing Start moves it, it being no longer a guess.
 class NewSessionDialog extends ConsumerStatefulWidget {
   const NewSessionDialog({this.targetPaneId, super.key});
 
@@ -91,9 +85,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         setState(() => _error = 'Choose a terminal to launch in.');
         return;
       }
-      // One call for both branches. In-app and external are the same creation
-      // path with a different surface, so the title, the worktree choice and
-      // the permission mode mean the same thing in both.
+      // One call for both branches: in-app and external are the same creation
+      // path with a different surface, so every field means the same thing.
       final launched = await ref
           .read(sessionLauncherProvider)
           .launch(
@@ -110,9 +103,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               targetPaneId: widget.targetPaneId,
             ),
           );
-      // Now — and only now — the app follows. `selectNative` is the same rule
-      // the Explorer uses when a session row is clicked; the project is set
-      // beside it, and only when it differs, because selecting one scans.
+      // Now — and only now — the app follows, by the rule the Explorer uses
+      // when a row is clicked. Only when the project differs: selecting scans.
       if (ref.read(selectedProjectIdProvider) != repo.projectId) {
         ref.read(selectedProjectIdProvider.notifier).select(repo.projectId);
       }
@@ -194,9 +186,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final destination = _destination;
     final checkout = destination?.checkout;
 
-    // Only the agents installed **where the session will run**. An agent
-    // discovered on Windows is a Windows executable path, and launching it
-    // against a WSL checkout would put an unresolvable path on its command line.
+    // Only the agents installed **where the session will run**: one discovered
+    // on Windows is a Windows path, unresolvable inside a WSL checkout.
     final installations = checkout == null
         ? const <AgentInstallation>[]
         : [
@@ -234,8 +225,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     onChanged: (picked) => setState(() {
                       _destination = picked;
                       // The agent belongs to the environment we are leaving.
-                      // Cleared rather than carried, so the block above
-                      // re-resolves the default for where we are going.
+                      // Cleared so the block above re-resolves the default.
                       _installation = null;
                     }),
                   ),
@@ -264,16 +254,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     )
                   else
                     DropdownButtonFormField<AgentInstallation>(
-                      // Keyed by environment for the reason the checkout
-                      // dropdown is keyed by project: a `FormField` holding the
-                      // old value would assert rather than merely look wrong.
+                      // Keyed by environment for the reason the checkout list
+                      // is keyed by project: a stale `FormField` value asserts.
                       key: ValueKey(
                         'agent-in-${checkout?.path.environmentId ?? ''}',
                       ),
                       initialValue: _installation,
                       // Expanded and ellipsised: the label carries an id, an
-                      // environment and a version, which is wider than the
-                      // field once the user scales text up.
+                      // environment and a version, wider than the field at 200%.
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Agent'),
                       items: [
@@ -283,8 +271,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                             child: Text(
                               '${i.agentId} · '
                               // Not the raw id: it is the literal `windows` on
-                              // every platform, so this dropdown offered
-                              // `codex · windows` on a Mac.
+                              // every platform, so a Mac was offered `windows`.
                               '${ref.watch(environmentLabelForIdProvider(i.environmentId))}'
                               '${i.version == null ? '' : ' (${i.version})'}',
                               overflow: TextOverflow.ellipsis,
@@ -317,8 +304,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   ),
                   if (_external) _terminalPicker(),
                   // Offered for both surfaces: the worktree is created before
-                  // the agent starts, so where its window happens to be makes
-                  // no difference. It used to be reachable from one path of nine.
+                  // the agent starts, so its window makes no difference.
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _useWorktree,

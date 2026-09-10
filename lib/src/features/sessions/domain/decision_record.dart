@@ -1,15 +1,9 @@
 /// A session's **append-only decision record**: what was decided, as opposed to
-/// what was said.
-///
-/// It exists beside the transcript because the turns a handoff packet drops are
-/// disproportionately load-bearing — a decision is made once and thereafter
-/// assumed. **Written only by explicit acts, never inferred from prose**, so a
-/// missing record reads as "not recorded", never as "nothing was decided".
+/// what was said. Written only by explicit acts, never inferred from prose.
 library;
 
 /// What sort of decision a row records. The five the gap analysis named, and no
-/// more: each is something a specific act produces, which keeps the vocabulary
-/// from drifting into a free-text label.
+/// more: a free-text label would mean whatever the last writer wanted.
 enum DecisionKind {
   /// A rule the work is now bound by: a platform, a dependency, an API that
   /// must not change.
@@ -29,10 +23,8 @@ enum DecisionKind {
   /// behind.
   checkpointMarked('Checkpoint marked significant'),
 
-  /// A kind this build does not know — a row from a newer schema, or a
-  /// hand-edited database. Never written, only read, and its own state rather
-  /// than folded into a neighbour: a wrong heading over a real decision is worse
-  /// than admitting the heading could not be read.
+  /// A kind this build does not know. Never written, only read: a wrong heading
+  /// over a real decision is worse than admitting it could not be read.
   unrecognised('Decision (kind not recognised)');
 
   const DecisionKind(this.label);
@@ -46,11 +38,8 @@ enum DecisionKind {
   );
 }
 
-/// The act that produced a decision — the thing a reader would go and look at.
-///
-/// A kind plus an optional id rather than a foreign key, because a decision has
-/// to outlive its origin: a pruned run or a collected checkpoint must not take
-/// it with them. Nothing ever resolves these; rendering prints them and stops.
+/// The act that produced a decision. A kind plus an optional id rather than a
+/// foreign key, because a decision has to outlive its origin.
 enum DecisionOrigin {
   /// The approval prompt on the agent's own screen. Carries **no id**: the
   /// prompt is another program's and is gone once answered.
@@ -65,11 +54,8 @@ enum DecisionOrigin {
   /// An agent calling the `decision_record` tool.
   decisionTool('a `decision_record` call'),
 
-  /// The user writing one down in the app, in the Decisions panel.
-  ///
-  /// Its own origin rather than [decisionTool]'s: who asserted a constraint is
-  /// half of what the packet's reader is weighing. Carries **no id** — there is
-  /// only the row itself.
+  /// The user writing one down in the app. Its own origin rather than
+  /// [decisionTool]'s: who asserted a constraint is what the reader weighs.
   userEntry('the user, written down in the app'),
 
   /// A row in the session event log, by rowid.
@@ -89,10 +75,8 @@ enum DecisionOrigin {
   );
 }
 
-/// One decision, as it was recorded at the moment it was made.
-///
-/// Immutable, and never rewritten — see [DecisionRecordDao], which offers no
-/// update and no delete.
+/// One decision, as it was recorded at the moment it was made. Never rewritten
+/// — see [DecisionRecordDao], which offers no update and no delete.
 class DecisionRecord {
   const DecisionRecord({
     required this.sessionId,
@@ -120,23 +104,20 @@ class DecisionRecord {
 
   final DecisionKind kind;
 
-  /// The decision, **in the words of whoever made it** — an agent's own
-  /// sentence, or its own description of what a keystroke it offered does.
-  /// Never a gist of either.
+  /// The decision, **in the words of whoever made it** — the agent's own
+  /// sentence, or its own description of the keystroke it offered.
   final String summary;
 
   /// More of the same words, when there were more. Optional, and null renders
   /// as nothing rather than as an empty quote.
   final String? detail;
 
-  /// Who decided, in words a reader recognises: "the user", or an agent's
-  /// display name. Words rather than an id because the packet's reader has no
-  /// way to resolve a key. Null is "not recorded", and renders as that.
+  /// Who decided, in words a reader recognises. Words rather than an id: the
+  /// packet's reader cannot resolve a key. Null renders "not recorded".
   final String? decidedBy;
 
-  /// The session whose act wrote this row, when there was one — beside
-  /// [decidedBy] for the reader who does need to resolve something, and null
-  /// for a decision the user made by hand.
+  /// The session whose act wrote this row, beside [decidedBy] for the reader
+  /// who does need to resolve something. Null for one made by hand.
   final String? recordedBySessionId;
 
   final DecisionOrigin origin;

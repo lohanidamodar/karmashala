@@ -10,15 +10,8 @@ import '../application/session_launcher.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 
-/// The pending approval for one session, and the buttons that can answer it.
-///
-/// Pinned above the composer, never spliced into the message list: the
-/// transcript is the agent's own record, and an approval exists only on its
-/// screen. It never describes what is being approved in its own words; it
-/// offers only answers the agent named (Codex names no way to decline, so it
-/// gets no Deny); and it offers keys only when a prompt is actually open —
-/// Claude Code fires the same hook when merely idle, where Approve's Enter
-/// would submit whatever is in the composer.
+/// The pending approval for one session, and the buttons that answer it. It
+/// never words the request itself, and offers only keys the agent named.
 class ApprovalRequestCard extends ConsumerWidget {
   const ApprovalRequestCard({required this.sessionId, super.key});
 
@@ -114,8 +107,7 @@ class _Evidence extends StatelessWidget {
 
     if (report.evidence.isEmpty) {
       // The honest empty state: a hook that carried no message, or a source
-      // that only knows the session has stopped. What it can honestly say
-      // depends on whether a prompt is open — "asking for something" is a claim.
+      // that only knows the session stopped. "Asking for something" is a claim.
       return Text(
         switch (report.waiting) {
           AgentWaitKind.approval =>
@@ -171,10 +163,8 @@ class _Evidence extends StatelessWidget {
   }
 }
 
-/// The notice for a session that has stopped for the user with no prompt open.
-/// Deliberately has no buttons at all rather than disabled ones: every key this
-/// card sends is a keystroke into another program's interface, and there is no
-/// prompt here for one to land on.
+/// The notice for a session stopped for the user with no prompt open. No
+/// buttons at all: every key is a keystroke with nothing here to land on.
 class _NothingToAnswer extends ConsumerWidget {
   const _NothingToAnswer({
     required this.sessionId,
@@ -274,10 +264,8 @@ class _Answers extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 2),
-        // Every button says which key it presses. We are typing into another
-        // program's interface on the user's behalf, and "Approve" alone would
-        // hide that — particularly for Claude Code, where Enter confirms
-        // whichever option is highlighted rather than a fixed "yes".
+        // Every button says which key it presses: we are typing into another
+        // program on the user's behalf, and "Approve" alone would hide that.
         for (final answer in [rules.approve, rules.deny].nonNulls)
           Text(
             '${answer.label}: ${answer.effect}',
@@ -322,8 +310,7 @@ class _Answers extends ConsumerWidget {
 }
 
 /// Reveals the pane so the user can answer anything we could not represent.
-/// Shared by both halves of the card: whatever it can and cannot offer, the
-/// terminal is always the complete answer.
+/// Shared by both halves of the card: the terminal is the complete answer.
 void _openTerminal(WidgetRef ref, String sessionId) {
   final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
   if (paneId != null) {

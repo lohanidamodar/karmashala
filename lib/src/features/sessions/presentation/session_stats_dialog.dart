@@ -10,14 +10,8 @@ import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_stats_providers.dart';
 
-/// What one session has cost, in counts, on demand.
-///
-/// **Counts only, never money.** A dollar figure needs a price table compiled
-/// into the app, and one drifts the moment a model is repriced.
-///
-/// Every number is **computed from the agent's own store**, and the dialog says
-/// so. Nothing is typed into the user's live session to obtain it — see
-/// `SessionStatsService`.
+/// What one session has cost, in counts, on demand. **Counts only, never
+/// money**: a price table drifts the moment a model is repriced.
 class SessionStatsDialog extends ConsumerWidget {
   const SessionStatsDialog({required this.sessionId, super.key});
 
@@ -86,9 +80,8 @@ class _Body extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Two sections, one scroll, never a tab strip: the point is seeing both
-        // at once, and each carries its own provenance because they come from
-        // different books and can honestly disagree.
+        // Two sections, one scroll, never a tab strip: they come from different
+        // books, can honestly disagree, and each carries its own provenance.
         _SessionSection(view: view),
         _LifetimeSection(view: view),
         const SizedBox(height: Insets.md),
@@ -227,9 +220,8 @@ class _LifetimeSection extends StatelessWidget {
         ),
         _StatRow('First activity', formatStatMoment(lifetime.firstActivityAt)),
         _StatRow('Last activity', formatStatMoment(lifetime.lastActivityAt)),
-        // The source's own caveat, in its own words: what these numbers count is
-        // not what the section above counts, and saying so here is cheaper than
-        // a bug report about the two disagreeing.
+        // The source's own caveat, in its own words: these numbers do not count
+        // what the section above counts.
         if (lifetime.note case final note?) ...[
           const SizedBox(height: Insets.xs),
           Text(
@@ -249,9 +241,8 @@ class _Section extends StatelessWidget {
 
   final String label;
 
-  /// Where this section's numbers came from. Per section, never once for the
-  /// dialog: two numbers from two books under one unlabelled heading is how
-  /// someone compares them and concludes we have a bug.
+  /// Where this section's numbers came from. Per section, never once: two books
+  /// under one unlabelled heading read as a bug.
   final String? provenance;
 
   final bool first;
@@ -324,12 +315,8 @@ class _StatRow extends StatelessWidget {
   }
 }
 
-/// The composer's stats control.
-///
-/// In [MessageComposer]'s `chips` slot rather than the status bar: the question
-/// is about *this* session. It hides itself for an agent whose store records
-/// nothing — an affordance that can only say "there is nothing here" is worse
-/// than none.
+/// The composer's stats control, in [MessageComposer]'s `chips` slot because
+/// the question is about *this* session. Hidden where a store records nothing.
 class SessionStatsButton extends ConsumerWidget {
   const SessionStatsButton({required this.sessionId, super.key});
 
@@ -384,8 +371,7 @@ class SessionStatsButton extends ConsumerWidget {
   }
 
   /// Whether this session's agent keeps a store with counts in it. Read rather
-  /// than awaited, so an agent with nothing to show never draws a control that
-  /// opens onto an apology.
+  /// than awaited, so nothing draws a control that opens onto an apology.
   bool _recordsStats(WidgetRef ref) {
     final session = ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return false;
@@ -401,8 +387,7 @@ class SessionStatsButton extends ConsumerWidget {
 }
 
 /// What is printed where a route could not supply a number. A word, not a zero:
-/// "0 tool calls" and "we were never told" are different claims and only one of
-/// them is true.
+/// "0 tool calls" and "we were never told" are different claims.
 const String kStatNotRecorded = 'not recorded';
 
 /// Where the numbers came from, in the dialog's own words.
@@ -440,11 +425,8 @@ String sessionStatsExplanation(
   };
 }
 
-/// Where the lifetime numbers came from, and how far behind they can be.
-///
-/// The staleness sentence is not hedging: on this machine Claude Code's cache
-/// says one session while thirty-eight sit in the store beside it, so an
-/// unlabelled all-time total can be *smaller* than the single session above it.
+/// Where the lifetime numbers came from, and how far behind they can be: the
+/// cache can report fewer sessions than the store beside it holds.
 String lifetimeStatsProvenance(LifetimeStats lifetime, String agentName) {
   final agent = agentName.isEmpty ? 'The agent' : agentName;
   switch (lifetime.source) {

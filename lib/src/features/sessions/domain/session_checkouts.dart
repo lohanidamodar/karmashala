@@ -2,12 +2,8 @@ import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import 'session.dart';
 
-/// Whether a directory a session works in belongs to that session alone.
-///
-/// The distinction is **structural, not statistical**: it is about how the
-/// directory came to exist. A worktree the launcher created for one session can
-/// never be another's; a repository checkout is shared with every session that
-/// has ever run there.
+/// Whether a directory a session works in belongs to that session alone —
+/// **structural, not statistical**: it is about how the directory came to exist.
 enum CheckoutIsolation {
   /// A worktree created for this session. Its own tree, its own index, its own
   /// branch.
@@ -18,14 +14,8 @@ enum CheckoutIsolation {
   shared,
 }
 
-/// One directory a session works in, and what the app can say about who else is
-/// there.
-///
-/// It exists because `SessionLauncher` worktrees `request.repository` and
-/// nothing else: every additional or later-attached repository is linked as a
-/// row pointing at its single main checkout. That is deliberate — see
-/// `SessionRepositoriesService.checkoutsFor` — and this type stops it being
-/// silent.
+/// One directory a session works in, and who else is there. It exists because
+/// `SessionLauncher` worktrees the primary repository and nothing else.
 class SessionCheckout {
   const SessionCheckout({
     required this.repositoryId,
@@ -47,13 +37,8 @@ class SessionCheckout {
 
   final CheckoutIsolation isolation;
 
-  /// The **other** sessions the workspace records as working in [directory]
-  /// right now, newest row order.
-  ///
-  /// Empty is not a promise of solitude: a shell the user opened, an agent
-  /// started outside the app, and a row written before schema v22 are all
-  /// invisible to it. Only an [CheckoutIsolation.isolated] checkout guarantees
-  /// solitude, and there it is git's guarantee rather than this list's.
+  /// The **other** sessions recorded as working in [directory]. Empty is not a
+  /// promise of solitude — only an isolated checkout is that, and git's doing.
   final List<Session> sharedWith;
 
   bool get isShared => isolation == CheckoutIsolation.shared;
@@ -75,17 +60,8 @@ class SessionCheckout {
   }
 }
 
-/// The sessions among [among] whose recorded directory is [directory],
-/// excluding [excluding].
-///
-/// Compared with [samePath] rather than string equality: the same directory
-/// reaches this app spelled three ways — the `repositories` table's
-/// backslashes, `Session.worktree`'s `p.windows.join`, and `git worktree
-/// list`'s forward slashes.
-///
-/// A row that recorded **no** directory is skipped rather than assumed to be at
-/// its repository root, which would let every pre-v22 row claim to be somewhere
-/// it may never have been. The answer can be short; the alternative is wrong.
+/// The sessions among [among] recorded in [directory], excluding [excluding].
+/// [samePath], not `==`: one tree reaches this app spelled three ways.
 List<Session> sessionsWorkingIn(
   EnvironmentPath directory, {
   required String excluding,
