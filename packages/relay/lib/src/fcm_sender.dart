@@ -1,8 +1,6 @@
-/// The real [PushDelivery]: Firebase Cloud Messaging's HTTP v1 API.
-///
-/// Only the relay binary constructs one, and only when the operator points
-/// [kServiceAccountEnvVar] at a service-account JSON file. Nothing here runs
-/// in tests, and nothing else in the relay touches Google.
+/// The real [PushDelivery]: Firebase Cloud Messaging's HTTP v1 API. Built only
+/// by the relay binary, only when [kServiceAccountEnvVar] names a service
+/// account; nothing else in the relay touches Google.
 library;
 
 import 'dart:convert';
@@ -21,9 +19,8 @@ const String kServiceAccountEnvVar = 'RELAY_FCM_SERVICE_ACCOUNT';
 /// Sends opaque payloads through FCM HTTP v1 as data-only messages, so the
 /// phone — never Google, never the relay — decrypts and renders the text.
 class FcmHttpV1Sender implements PushDelivery {
-  /// Parses just enough to know where to send ([projectId]); the credential
-  /// itself is parsed lazily on first use, so constructing this never signs
-  /// anything and never touches the network.
+  /// Parses only [projectId]; the credential is read on first use, so building
+  /// this signs nothing and touches no network.
   FcmHttpV1Sender.fromServiceAccountJson(String json)
     : _credentialsJson = json,
       projectId = _projectIdOf(json);

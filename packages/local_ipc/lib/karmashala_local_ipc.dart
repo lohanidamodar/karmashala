@@ -1,39 +1,9 @@
-/// Owner-only local RPC over a **unix domain socket**, on every platform.
+/// Owner-only local RPC over a unix domain socket, on every platform — Dart
+/// binds `InternetAddressType.unix` on Windows 10 1803+ as well as POSIX.
 ///
-/// ## Why a socket and not a named pipe
-///
-/// This package used to be a Windows named pipe driven by blocking Win32 calls
-/// (`ConnectNamedPipe`, `ReadFile`) on a spawned isolate. That worked, but it
-/// had two costs that a socket does not:
-///
-/// * **It was Windows-only.** `NamedPipeRpcServer.start` threw
-///   `UnsupportedError` anywhere else, so Linux and macOS were left on
-///   authenticated loopback TCP — a transport any local process can connect to.
-/// * **It stopped the app from exiting.** The serving isolate parks forever
-///   inside a blocking FFI call, and a blocking FFI call cannot be interrupted:
-///   `Isolate.kill` does not reach it, and neither does VM shutdown. Loop 48
-///   measured the consequence — with the pipe running, quitting never completed
-///   at all (>120 s, process still alive); with it disabled the same build quit
-///   in 322 ms.
-///
-/// Dart's `ServerSocket`/`Socket` support `InternetAddressType.unix` on Windows
-/// 10 1803+ as well as POSIX, so one async implementation now covers all three
-/// platforms and the VM can shut it down like any other IO.
-///
-/// ## Access control
-///
-/// The socket carries no access control of its own. The boundary is the
-/// **directory the socket sits in**, which the caller must create restricted to
-/// the current user (dray's `0700` model; on Windows an explicit ACL — see
-/// `restrictDirectoryToCurrentUser`). Callers are expected to authenticate on
-/// top of that; the app sends its handshake bearer token in every request.
-///
-/// ## Framing
-///
-/// One request per line, one response per line, UTF-8, newline-delimited.
-/// JSON never contains a raw newline, so a line is a whole message. Both
-/// directions are capped at [kLocalRpcMaxBytes] so a peer cannot make the app
-/// buffer without limit.
+/// The socket has no access control of its own: the boundary is the directory
+/// it sits in, which the caller must restrict to the current user. Framing is
+/// one UTF-8 line per message, capped at [kLocalRpcMaxBytes].
 library;
 
 import 'dart:async';
@@ -49,11 +19,8 @@ const int kLocalRpcMaxBytes = 1024 * 1024;
 /// How long a client waits for the server to answer before giving up.
 const Duration kLocalRpcTimeout = Duration(seconds: 60);
 
-/// Whether this platform can host a unix domain socket at all.
-///
-/// Windows gained `AF_UNIX` in 10 1803; on an older build the bind fails and
-/// the caller has to decide what to do about it, which is why this is advisory
-/// rather than a guard.
+/// Whether this platform can host a unix domain socket at all. Advisory: an
+/// older Windows build passes this and still fails at bind.
 bool get localSocketsSupported =>
     Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
@@ -73,15 +40,11 @@ class LocalRpcServer {
   final ServerSocket _server;
   final LocalRpcHandler _handler;
 
-  /// Binds a socket at [path], serving each request line with [handler].
+  /// Binds a socket at [path], serving each request line with [handler]. The
+  /// parent directory's permissions are the caller's policy, not this one's.
   ///
-  /// The parent directory must already exist and should already be restricted
-  /// to the current user — this does not create or protect it, because "who may
-  /// reach this socket" is the caller's policy, not the transport's.
-  ///
-  /// A socket file left behind by a process that died is removed first, but
-  /// only after probing it: if something is still listening the bind is refused
-  /// rather than silently stealing another instance's address.
+  /// A node left by a crash is removed first, but only after probing it: if
+  /// something still answers the bind is refused rather than stealing it.
   static Future<LocalRpcServer> bind(
     String path,
     LocalRpcHandler handler,
@@ -91,7 +54,6 @@ class LocalRpcServer {
       if (await _isLive(address)) {
         throw StateError('Another process is already serving $path.');
       }
-      // Stale node from a crash. Deleting is safe now that nothing answers.
       try {
         File(path).deleteSync();
       } on FileSystemException {
@@ -118,8 +80,7 @@ class LocalRpcServer {
   }
 
   void _accept(Socket socket) {
-    // One request per connection is all the bridge ever sends, but a client is
-    // free to pipeline: each completed line is answered in turn.
+    // A client may pipeline, so every completed line is answered in turn.
     final reader = _LineReader(kLocalRpcMaxBytes);
     socket.listen(
       (chunk) async {
@@ -166,22 +127,15 @@ class LocalRpcServer {
   /// Stops listening and removes the socket file.
   Future<void> close() async {
     await _server.close();
-    // `ServerSocket.close` unlinks the node itself, but a crash-safe server
-    // should not depend on that having happened.
+    // `ServerSocket.close` unlinks the node itself; not relying on that is free.
     unlink();
   }
 
-  /// Removes the socket node **without waiting for the server to close**.
+  /// Removes the socket node without waiting for the server to close.
   ///
-  /// Separate from [close] so a caller that must guarantee the node is gone
-  /// before it suspends can say so. A shutdown step is bounded, and a bound
-  /// wait that is abandoned leaves the rest of [close] running — so the delete
-  /// has to happen in the synchronous prefix or it happens at an unowned
-  /// moment.
-  ///
-  /// **Unlinking a *bound* node is allowed**, measured on Windows 2026-09-09:
-  /// the file goes at once and the listening socket stays valid until [close].
-  /// Idempotent, and [close] still calls it for callers that do not.
+  /// Unlinking a *bound* node is allowed and immediate (Windows, 2026-09-09),
+  /// so a bounded shutdown can do it in its synchronous prefix rather than
+  /// behind an await it may abandon. Idempotent; [close] calls it too.
   void unlink() {
     try {
       final file = File(path);
@@ -196,11 +150,8 @@ class LocalRpcServer {
 class LocalRpcClient {
   const LocalRpcClient._();
 
-  /// Connects to the socket at [socketPath], sends [request], and returns the
-  /// single response line.
-  ///
-  /// [request] must be one line — every caller sends `jsonEncode` output, which
-  /// never contains a raw newline.
+  /// Connects to [socketPath], sends the one-line [request], and returns the
+  /// single response line. Refuses a request with a newline or over the cap.
   static Future<String> call(
     String socketPath,
     String request, {

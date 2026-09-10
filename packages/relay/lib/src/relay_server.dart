@@ -12,16 +12,10 @@ import 'push_delivery.dart';
 /// Port the relay listens on when nothing says otherwise.
 const int kDefaultRelayPort = 8787;
 
-/// How long a socket waits alone at a rendezvous before it is dropped.
-///
-/// Zero or less means never. That is not a degenerate case: the relay
-/// embedded in the Karmashala desktop serves only that desktop, so every
-/// socket waiting alone on it is one of that desktop's own rendezvous
-/// listeners, waiting for a phone that may be away for hours. Hanging up on
-/// those is the relay evicting its own operator — measured at three
-/// evictions every 120 seconds, indefinitely — and each eviction is a window
-/// in which the desktop is absent from its own rendezvous. A shared relay
-/// keeps a real timeout, because there a lone socket may be a stranger.
+/// How long a socket waits alone at a rendezvous before it is dropped. Zero or
+/// less means never, which is right for the relay embedded in the desktop: a
+/// lone socket there is the desktop's own listener waiting for an absent phone,
+/// and evicting it evicts the operator. A shared relay keeps a real timeout.
 const Duration kDefaultLoneTimeout = Duration(minutes: 2);
 
 /// Largest frame the relay will forward. The app's own envelope cap is 1 MiB;
@@ -191,8 +185,6 @@ class RelayServer {
     }),
     headers: const {'content-type': 'application/json'},
   );
-
-  // --- Push ------------------------------------------------------------------
 
   /// `POST /v1/push/register` `{tag, token, platform}` → 204. The tag is an
   /// opaque client-derived label; the relay stores token-by-tag and nothing

@@ -1,9 +1,6 @@
-/// The delivery boundary behind `/v1/push`.
-///
-/// The relay hands an accepted push request — a stored token and an opaque
-/// payload it cannot read — to one of these. Tests plug in a fake; the binary
-/// plugs in [FcmHttpV1Sender] when an operator configured a service account,
-/// and nothing at all otherwise.
+/// The delivery boundary behind `/v1/push`: the relay hands over a stored token
+/// and a payload it cannot read. Unconfigured by default, which is what makes
+/// `/v1/push` answer 503 while registration keeps working.
 library;
 
 /// Delivers one opaque payload to one device's push service.

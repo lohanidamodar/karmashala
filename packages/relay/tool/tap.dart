@@ -10,8 +10,8 @@
 ///     --capture /tmp/relay-capture.bin
 /// ```
 ///
-/// Not part of the relay. It exists so an operator — or a user who does not
-/// trust the operator — can check the claim rather than take it.
+/// Not part of the relay: it exists so the sealing claim can be checked rather
+/// than taken.
 library;
 
 import 'dart:io';

@@ -2,10 +2,8 @@ import 'dart:typed_data';
 
 import 'package:karmashala_media/media.dart';
 
-/// The H.264 out of an MP4, in the Annex-B shape a remuxer takes back.
-///
-/// Test-only: the app never reads an MP4, it only writes them. This exists so a
-/// round-trip can prove the remux changed no bytes.
+/// The H.264 out of an MP4, in the Annex-B shape a remuxer takes back. Test
+/// only: it exists so a round-trip can prove the remux changed no bytes.
 class Mp4Track {
   const Mp4Track({required this.sequenceHeader, required this.frames});
 
