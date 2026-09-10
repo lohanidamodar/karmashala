@@ -372,6 +372,7 @@ class DeviceStreamSession {
     required this.control,
     required this.videoSize,
     required this.openAccessUnits,
+    required this.setQuiet,
   });
 
   final String serial;
@@ -437,6 +438,35 @@ class DeviceStreamSession {
   /// nobody can see is not accused of being behind. See
   /// [StreamClocks.watching].
   void setWatched(bool value) => mark.watching = value;
+
+  /// Stops taking bytes off the device's socket, and starts again.
+  ///
+  /// For the seconds a **host file dialog** is being created. Everything from
+  /// the socket to the player's HTTP response runs on this isolate — parse,
+  /// mux, write, flush, once per frame — and on Windows that isolate is the
+  /// thread the dialog is built on; see `core/util/file_picking.dart`, whose
+  /// `PickerQuiet` is what calls this.
+  ///
+  /// **Pausing, not stopping**, and the difference is the whole design. The
+  /// subscription is paused, so the socket stays open, the scrcpy server stays
+  /// running, the forward stays registered, the control socket stays writable
+  /// and the player keeps the last frame it decoded — a live view that dropped
+  /// its connection for a file dialog would have traded a freeze for a
+  /// reconnect. The device's own TCP window is what holds the surplus, and it
+  /// is the encoder's queue on the handset that pays, exactly as it does when
+  /// the host is briefly busy for any other reason.
+  ///
+  /// Resuming **rebases the watchdog's clocks**. A quiet window is silence this
+  /// app asked for, and [judgeStream] cannot tell that from a device that has
+  /// stopped answering: without the rebase a picker left open for longer than
+  /// [DeviceStreamService.stallTimeout] would come back to a live view that had
+  /// already condemned itself and begun the restart ladder.
+  ///
+  /// Distinct from [setWatched], which is about a window nobody can *see*: that
+  /// one only stops the watchdog reading silence as a stall, and every byte
+  /// still arrives, is still parsed and is still muxed. This one is about the
+  /// isolate having nothing to do.
+  final void Function(bool quiet) setQuiet;
 
   /// Asks the device to restart video capture, over the control socket.
   ///
@@ -963,6 +993,26 @@ class DeviceStreamService {
           .catchError((Object _) {}),
     );
 
+    // Silence this app asked for. See [DeviceStreamSession.setQuiet].
+    var quiet = false;
+    void setQuiet(bool value) {
+      if (stopped || quiet == value) return;
+      quiet = value;
+      if (value) {
+        socketSubscription.pause();
+        return;
+      }
+      // The gap is not evidence of anything, so no clock may still be pointing
+      // into it when the watchdog next looks. The zeros are left alone: zero
+      // means "has never happened", which the quiet window did not change.
+      final now = DateTime.now().microsecondsSinceEpoch;
+      lastByteUs = now;
+      if (mark.frames > 0) mark.arrivalUs = now;
+      if (mark.writtenUs != 0) mark.writtenUs = now;
+      if (mark.lastInputUs != 0) mark.lastInputUs = now;
+      socketSubscription.resume();
+    }
+
     // The watchdog. It reports what the picture is doing; it does not decide
     // that the stream is broken, because frame silence is what a device with a
     // static screen looks like and tearing the stream down for it is the
@@ -973,6 +1023,9 @@ class DeviceStreamService {
     var probeInFlight = false;
     var lastProbeUs = DateTime.now().microsecondsSinceEpoch;
     final watchdog = Timer.periodic(watchdogInterval, (_) {
+      // Nothing has been let through since the last tick and nothing was meant
+      // to be. Judging the gap would condemn the stream for obeying.
+      if (quiet) return;
       final now = DateTime.now().microsecondsSinceEpoch;
       Duration age(int sinceUs) => Duration(microseconds: now - sinceUs);
       final verdict = judgeStream(
@@ -1140,6 +1193,7 @@ class DeviceStreamService {
       mark: mark,
       control: control,
       videoSize: videoSize,
+      setQuiet: setQuiet,
     );
     // Rotation and resize change the coordinate space touch messages must
     // declare; a stale value makes every later touch vanish silently.

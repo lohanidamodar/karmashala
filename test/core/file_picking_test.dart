@@ -90,6 +90,117 @@ void main() {
     );
   });
 
+  group('PickerQuiet', () {
+    /// A dialog that holds the isolate the way the measured one did, so a hook
+    /// told to be quiet only on a later microtask would not have been told.
+    Future<XFile?> Function({
+      List<XTypeGroup> acceptedTypeGroups,
+      String? confirmButtonText,
+      String? initialDirectory,
+    })
+    occupying(void Function() whileShown) =>
+        ({
+          List<XTypeGroup> acceptedTypeGroups = const [],
+          String? confirmButtonText,
+          String? initialDirectory,
+        }) async {
+          whileShown();
+          return null;
+        };
+
+    test('registrants are stopped before the dialog and started after', () async {
+      final quiet = PickerQuiet();
+      final told = <bool>[];
+      quiet.register(told.add);
+      var toldWhenShown = <bool>[];
+
+      await pickOneFile(
+        what: 'a build to install',
+        quiet: quiet,
+        show: occupying(() => toldWhenShown = [...told]),
+      );
+
+      expect(toldWhenShown, [true]);
+      expect(told, [true, false]);
+      expect(quiet.isQuiet, isFalse);
+    });
+
+    test('the directory picker announces to the same registry', () async {
+      final quiet = PickerQuiet();
+      final told = <bool>[];
+      quiet.register(told.add);
+
+      await pickOneDirectory(
+        what: 'a project folder',
+        quiet: quiet,
+        show: ({String? confirmButtonText, String? initialDirectory}) async =>
+            null,
+      );
+
+      expect(told, [true, false]);
+    });
+
+    test('a hook that throws does not hold the picker or the others', () async {
+      final quiet = PickerQuiet();
+      final told = <bool>[];
+      quiet.register((_) => throw StateError('this subsystem is unwell'));
+      quiet.register(told.add);
+
+      final chosen = await pickOneFile(
+        what: 'a build to install',
+        quiet: quiet,
+        show: occupying(() {}),
+      );
+
+      expect(chosen, isNull);
+      expect(told, [true, false]);
+    });
+
+    test('unregistering while a picker is up releases that hook', () {
+      final quiet = PickerQuiet();
+      final told = <bool>[];
+      final release = quiet.register(told.add);
+
+      final resume = quiet.begin();
+      expect(told, [true]);
+      release();
+      // Never left stopped by a dialog it will not hear finish.
+      expect(told, [true, false]);
+      expect(quiet.registered, 0);
+
+      resume();
+      expect(told, [true, false]);
+    });
+
+    test('registering while a picker is up starts that hook quiet', () {
+      final quiet = PickerQuiet();
+      final told = <bool>[];
+      final resume = quiet.begin();
+
+      quiet.register(told.add);
+      expect(told, [true]);
+
+      resume();
+      expect(told, [true, false]);
+    });
+
+    test('nesting tells each registrant once', () {
+      final quiet = PickerQuiet();
+      final told = <bool>[];
+      quiet.register(told.add);
+
+      final outer = quiet.begin();
+      final inner = quiet.begin();
+      expect(told, [true]);
+
+      inner();
+      expect(told, [true], reason: 'a picker is still up');
+      inner();
+      outer();
+      expect(told, [true, false]);
+    });
+  });
+
   test('a host that refuses the picker is logged, not thrown', () async {
     final chosen = await pickOneFile(
       what: 'a terminal program',
