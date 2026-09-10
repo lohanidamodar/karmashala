@@ -3,18 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/devices/application/device_logcat_session.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala_devices/ports.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
-import 'package:karmashala/src/features/devices/presentation/device_logcat_section.dart';
-import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
+import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_devices/pane.dart';
 
-import '../../support/fake_command_runner.dart';
-import '../../support/fakes.dart';
-import '../../support/fixtures.dart';
+import 'support/fake_command_runner.dart';
+import 'support/fakes.dart';
 
 const _serial = 'emulator-5554';
 
@@ -71,7 +67,7 @@ void main() {
         adbServiceProvider.overrideWithValue(
           AdbService(runner: runner, sdk: _sdk),
         ),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
+        deviceClockProvider.overrideWithValue(FixedClock(testTime)),
       ],
     );
     addTearDown(container.dispose);
@@ -269,7 +265,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          commandRunnerFactoryProvider.overrideWithValue(
+          deviceCommandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
           ),
           androidSdkProvider.overrideWith((ref) async => _sdk),
@@ -283,7 +279,7 @@ void main() {
           hostCanRunSimulatorsProvider.overrideWithValue(false),
           iosSimulatorsProvider.overrideWith((ref) async => const []),
           simulatorBackendProvider.overrideWithValue(null),
-          clockProvider.overrideWithValue(FixedClock(testTime)),
+          deviceClockProvider.overrideWithValue(FixedClock(testTime)),
         ],
         child: MaterialApp(
           theme: AppTheme.light(),

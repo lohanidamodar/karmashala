@@ -19,7 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/picking.dart';
-import 'package:karmashala/src/features/devices/presentation/device_app_controls.dart';
+import 'package:karmashala_devices/widgets.dart';
 import 'package:karmashala_devices/devices.dart';
 
 const _device = AndroidDevice(

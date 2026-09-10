@@ -4,12 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
-import 'package:karmashala/src/features/devices/application/simulator_frames.dart';
-import 'package:karmashala/src/features/devices/application/simulator_live_view.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
+import 'package:karmashala_devices/pane.dart';
 import 'package:agent_cli/process.dart';
 
 /// The toolbar beside the device picker, while a simulator's picture is up.

@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/devices/application/device_file_actions.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
-import '../../support/fake_command_runner.dart';
+import 'support/fake_command_runner.dart';
 import 'fake_scrcpy_control_channel.dart';
 
 /// The file browser's moving parts, without a phone and without a dialog.

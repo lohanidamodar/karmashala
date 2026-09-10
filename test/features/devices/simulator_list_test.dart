@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_section_header.dart';
-import 'package:karmashala/src/features/devices/presentation/simulator_list.dart';
+import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 
@@ -33,6 +33,9 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // The app's half of `karmashala_devices`: its clock, its runner
+        // factory, its settings and its shell, behind the package's ports.
+        ...deviceBindings,
         hostCanRunSimulatorsProvider.overrideWithValue(macOS),
         iosSimulatorsProvider.overrideWith((ref) async => simulators),
         simulatorBackendProvider.overrideWithValue(

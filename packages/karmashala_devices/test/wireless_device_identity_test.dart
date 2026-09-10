@@ -3,10 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
-import '../../support/fake_command_runner.dart';
+import 'support/fake_command_runner.dart';
 
 /// What `adb devices -l` prints with the owner's phone on a cable and a second
 /// one attached over Wi-Fi. A wireless device identifies itself by address, not

@@ -1,11 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala_devices/ports.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
-import '../../support/fake_command_runner.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'support/fake_command_runner.dart';
 
 IosSimulator _sim(String udid, String name, SimulatorState state) =>
     IosSimulator(
@@ -24,7 +23,7 @@ ProviderContainer _container({
 }) {
   final container = ProviderContainer(
     overrides: [
-      commandRunnerFactoryProvider.overrideWithValue(
+      deviceCommandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(),
       ),
       hostCanRunSimulatorsProvider.overrideWithValue(macOS),
@@ -56,7 +55,7 @@ void main() {
       final runner = FakeCommandRunner();
       final container = ProviderContainer(
         overrides: [
-          commandRunnerFactoryProvider.overrideWithValue(
+          deviceCommandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
           ),
           hostCanRunSimulatorsProvider.overrideWithValue(false),
@@ -213,7 +212,7 @@ void _slimmingTests() {
   }) {
     final container = ProviderContainer(
       overrides: [
-        commandRunnerFactoryProvider.overrideWithValue(
+        deviceCommandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(),
         ),
         hostCanRunSimulatorsProvider.overrideWithValue(true),
@@ -275,7 +274,7 @@ void _slimmingTests() {
     final simctl = _RecordingSimctl();
     final container = ProviderContainer(
       overrides: [
-        commandRunnerFactoryProvider.overrideWithValue(
+        deviceCommandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(),
         ),
         hostCanRunSimulatorsProvider.overrideWithValue(true),
@@ -332,7 +331,7 @@ void _headlessTests() {
   ProviderContainer containerWith({required bool headless, required _RecordingSimctl simctl}) {
     final container = ProviderContainer(
       overrides: [
-        commandRunnerFactoryProvider.overrideWithValue(
+        deviceCommandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(),
         ),
         hostCanRunSimulatorsProvider.overrideWithValue(true),

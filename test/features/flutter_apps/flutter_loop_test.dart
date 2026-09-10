@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -105,6 +106,9 @@ void main() {
     );
     container = ProviderContainer(
       overrides: [
+        // The app's half of `karmashala_devices`: its clock, its runner
+        // factory, its settings and its shell, behind the package's ports.
+        ...deviceBindings,
         ...fakeTerminalOverrides(database: db),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),

@@ -3,14 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/devices/application/device_bindings.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
+import 'package:karmashala_devices/pane.dart';
 
 import '../../support/fake_command_runner.dart';
 
@@ -112,6 +111,9 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        // The app's half of `karmashala_devices`: its clock, its runner
+        // factory, its settings and its shell, behind the package's ports.
+        ...deviceBindings,
         // Nothing here may reach a real process: the pane's controls resolve a
         // runner as soon as a ready device exists.
         commandRunnerFactoryProvider.overrideWithValue(

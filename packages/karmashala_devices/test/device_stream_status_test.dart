@@ -1,6 +1,5 @@
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_stream_status.dart';
-import 'package:karmashala/src/features/devices/presentation/device_touch_surface.dart';
+import 'package:karmashala_devices/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -21,7 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_keyboard_surface.dart';
+import 'package:karmashala_devices/widgets.dart';
 import 'package:xterm2/xterm.dart';
 
 class _RecordingSink implements DeviceKeyboardSink {

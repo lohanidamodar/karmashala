@@ -3,12 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/primitives.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/application/wireless_pairing_controller.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/wireless_pairing_dialog.dart';
+import 'package:karmashala_devices/dialogs.dart';
 
-import '../../support/fake_command_runner.dart';
+import 'support/fake_command_runner.dart';
 
 const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);

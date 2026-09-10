@@ -1,16 +1,15 @@
 import 'dart:async';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala_devices/ports.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
-import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
+import 'package:karmashala_devices/pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/fake_command_runner.dart';
+import 'support/fake_command_runner.dart';
 
 const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);
@@ -69,7 +68,7 @@ Future<void> _pump(
     ProviderScope(
       overrides: [
         if (runner != null)
-          commandRunnerFactoryProvider.overrideWithValue(
+          deviceCommandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
           ),
         androidSdkProvider.overrideWith(
@@ -1010,7 +1009,7 @@ void main() {
     ProviderContainer containerFor(FakeCommandRunner runner) {
       final container = ProviderContainer(
         overrides: [
-          commandRunnerFactoryProvider.overrideWithValue(
+          deviceCommandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
           ),
           androidSdkProvider.overrideWith((ref) async => _sdk()),

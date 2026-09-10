@@ -1,9 +1,9 @@
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/devices/application/device_claims.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/fixtures.dart';
+import 'support/fakes.dart';
 
 /// A clock a test moves by hand. Nothing here waits: the claim ages because the
 /// test says it did, which is the only way to assert on a lapse without timing

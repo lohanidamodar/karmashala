@@ -3,11 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/application/wireless_pairing_controller.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
-import '../../support/fake_command_runner.dart';
+import 'support/fake_command_runner.dart';
 
 const _adbPath = r'C:\sdk\platform-tools\adb.exe';
 const _sdk = AndroidSdk(

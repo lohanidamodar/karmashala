@@ -10,13 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/devices/application/device_recording_controller.dart';
-import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala_devices/ports.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/fake_command_runner.dart';
+import 'support/fake_command_runner.dart';
 import 'ts_stream_validator.dart';
 
 /// A clock the test moves by hand, so a recording has a length without the
@@ -242,7 +241,7 @@ void main() {
   }) {
     final made = ProviderContainer(
       overrides: [
-        clockProvider.overrideWithValue(clock),
+        deviceClockProvider.overrideWithValue(clock),
         deviceRecordingDirectoryProvider.overrideWithValue(
           () async => directory.path,
         ),

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/devices/application/device_clipboard_bridge.dart';
-import 'package:karmashala/src/features/devices/presentation/device_clipboard_controls.dart';
-import 'package:karmashala/src/features/devices/presentation/device_controls.dart';
+import 'package:karmashala_devices/providers.dart';
+import 'package:karmashala_devices/widgets.dart';
 
 import 'fake_scrcpy_control_channel.dart';
 

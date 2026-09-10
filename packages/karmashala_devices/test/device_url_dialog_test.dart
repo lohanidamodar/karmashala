@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/devices/presentation/device_controls.dart';
+import 'package:karmashala_devices/widgets.dart';
 
 /// The Open-a-URL dialog, which took the whole app down with it.
 ///

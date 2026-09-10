@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/devices/application/device_clipboard_bridge.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
 import 'fake_scrcpy_control_channel.dart';
