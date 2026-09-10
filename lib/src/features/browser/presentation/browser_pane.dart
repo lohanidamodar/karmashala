@@ -14,10 +14,6 @@ import 'browser_viewport_shot.dart';
 
 /// The browser pane: attach to the Chrome the developer already has open,
 /// drive it, and point at an element to send it to an agent.
-///
-/// The pane exists so this feature is usable without an agent in the loop —
-/// "pick this element and tell Claude about it" is the flow that makes driving
-/// a real browser worth more than a screenshot.
 class BrowserPane extends ConsumerStatefulWidget {
   const BrowserPane({super.key});
 
@@ -185,12 +181,8 @@ class _AddressBar extends StatelessWidget {
             onChanged: onChanged,
             onSubmitted: (_) => onSubmit(),
             style: MonoStyles.body,
-            // No `border` and no `contentPadding` of its own: overriding them
-            // with a bare `OutlineInputBorder()` took Material's 4px radius and
-            // default stroke instead of the app's `Radii.sm` and
-            // `outlineVariant`, so the one text field in this pane was a
-            // different shape and colour from the one in the logs panel beside
-            // it. The theme already says both.
+            // No `border` or `contentPadding` of its own: a bare `OutlineInputBorder()`
+            // takes Material's radius and stroke instead of the app's. The theme says both.
             decoration: const InputDecoration(
               hintText: 'localhost:3000',
               prefixIcon: Icon(AppIcons.globe, size: Chrome.icon),
@@ -223,14 +215,8 @@ class _TabPicker extends ConsumerWidget {
         children: [
           Expanded(
             child: DropdownButtonHideUnderline(
-              // `DropdownButton` is Material 2, and the app's
-              // `dropdownMenuTheme` reaches only Material 3's `DropdownMenu` —
-              // so, left alone, this picker took Material's own defaults: a
-              // ~16 px `titleMedium` label and a 24 px chevron, in a pane whose
-              // status line, address bar and buttons are all `bodySmall` with
-              // `Chrome.icon` glyphs. The tab title had a literal `fontSize:
-              // 12` pinned on it to compensate, which fixed the item text and
-              // left the closed button and the chevron oversized.
+              // `DropdownButton` is Material 2, and `dropdownMenuTheme` reaches only
+              // Material 3's `DropdownMenu` — left alone it takes Material's own defaults.
               child: DropdownButton<String>(
                 isDense: true,
                 isExpanded: true,

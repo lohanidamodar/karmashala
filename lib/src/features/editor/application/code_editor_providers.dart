@@ -47,9 +47,8 @@ class EditorActions {
 
   static const _translator = PathTranslator();
 
-  /// The Windows-host form of [path] (translating WSL paths to their
-  /// `\\wsl.localhost\…` / drive form), or `null` if it can't be resolved.
-  /// Editors and `dart:io` run on the Windows host, so they need a host path.
+  /// The Windows-host form of [path], or `null` when it cannot be resolved —
+  /// editors and `dart:io` run on the Windows host, so they need a host path.
   String? windowsPathFor(EnvironmentPath path) {
     final dao = _ref.read(executionEnvironmentDaoProvider);
     final env = dao.getById(path.environmentId);

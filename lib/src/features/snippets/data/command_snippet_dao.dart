@@ -44,13 +44,8 @@ class CommandSnippetDao {
   void delete(String id) =>
       _db.execute('DELETE FROM command_snippets WHERE id = ?;', [id]);
 
-  /// Every snippet, oldest first.
-  ///
-  /// Insertion order rather than a `position` column: the palette ranks by
-  /// match score and this order only decides what an *empty* query lists, so a
-  /// reorder column would be a schema and an API paid for by one list nobody
-  /// drags. `created_at, id` is stable across a clock that repeats — two
-  /// snippets saved in the same millisecond still have an order.
+  /// Every snippet, oldest first. Insertion order rather than a `position`
+  /// column: only an empty query lists in this order, and nobody drags it.
   List<CommandSnippet> list() => _db
       .query('SELECT * FROM command_snippets ORDER BY created_at, id;')
       .map(_fromRow)

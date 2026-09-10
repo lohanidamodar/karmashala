@@ -10,16 +10,7 @@ final commandSnippetDaoProvider = Provider<CommandSnippetDao>(
 );
 
 /// Every saved snippet, kept in memory so a surface rebuilds on a write.
-///
-/// The list is the state rather than a revision counter over the DAO, for the
-/// reason `NotesController` gives: snippets are few and small, and a surface
-/// that re-reads the table on every frame of a resize is a surface that reads
-/// the table for no reason.
-///
-/// **Nothing on the terminal's hot path watches this.** The toolbar button is
-/// deliberately unconditional — it never asks how many snippets there are — so
-/// writing one rebuilds the palette's sources and nothing in the tab strip. See
-/// `snippet_button_cost_test.dart`, which fails if that changes.
+/// Nothing on the terminal's hot path watches this — `snippet_button_cost_test`.
 class CommandSnippetsController extends Notifier<List<CommandSnippet>> {
   @override
   List<CommandSnippet> build() => ref.watch(commandSnippetDaoProvider).list();

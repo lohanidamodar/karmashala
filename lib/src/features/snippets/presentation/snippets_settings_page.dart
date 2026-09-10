@@ -10,29 +10,16 @@ import '../application/snippet_providers.dart';
 import '../domain/command_snippet.dart';
 import 'snippet_dialogs.dart';
 
-/// Settings → Snippets: the saved commands, somewhere a person can find them.
-///
-/// The library already had two doors — the terminal toolbar and quick open —
-/// and both are *picking* surfaces you have to already know about. Neither is
-/// where anyone looks for "the list of things I have saved", which is Settings,
-/// beside the notes and the SSH hosts and everything else the app keeps on the
-/// user's behalf. This page is that door; the other two stay exactly as they
-/// were.
-///
-/// It is a second **view**, not a second implementation: the form is
-/// [SnippetEditorDialog] and every write goes through
-/// [CommandSnippetsController], so the two surfaces cannot drift apart in what
-/// a snippet is allowed to be.
+/// Settings → Snippets: the saved commands, somewhere a person looks for them.
+/// A second view, not a second implementation — the same dialog and controller.
 class SnippetsSettingsPage extends ConsumerWidget {
   const SnippetsSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    // **Watched, not read.** A snippet saved anywhere else — the library
-    // dialog, the palette's editor, an agent calling `snippet_add` — must
-    // appear here while the page is on screen, with nothing reopened and
-    // nothing restarted. See `snippets_settings_page_test.dart`.
+    // **Watched, not read**: a snippet saved from the library dialog, the palette
+    // or `snippet_add` must appear here with nothing reopened.
     final snippets = ref.watch(commandSnippetsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -79,13 +66,8 @@ class SnippetsSettingsPage extends ConsumerWidget {
   }
 }
 
-/// One saved command, and everything you can do to it.
-///
-/// The buttons stay drawn and stay worded: this is a settings form, not a
-/// dense list, and "Edit" in words is the interface here rather than the
-/// icon-only clutter the row menu exists to remove. What it gains is the other
-/// half of the rule — the same actions on a right-click, `Shift+F10` and the
-/// Menu key, so a habit learned in the panes is not disappointed here.
+/// One saved command. The buttons stay drawn and worded — this is a settings
+/// form — plus the same actions on right-click, `Shift+F10` and the Menu key.
 class _SnippetCard extends ConsumerWidget {
   const _SnippetCard({required this.snippet, super.key});
 
@@ -162,10 +144,8 @@ class _SnippetCard extends ConsumerWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              // A tag from a build that knew more shells than this one matches no
-              // pane at all, by design — see [CommandSnippet.fitsShell]. Nothing
-              // else in the app can say so, because everything else has already
-              // filtered the snippet out.
+              // A tag from a build that knew more shells than this one matches no pane at
+              // all, by design; nothing else in the app can say so.
               if (snippet.hasUnknownShell)
                 Padding(
                   padding: const EdgeInsets.only(top: Insets.xs),
@@ -203,12 +183,8 @@ class _SnippetCard extends ConsumerWidget {
   }
 }
 
-/// Opens the editor for a new snippet and saves what comes back.
-///
-/// The notifier is resolved **before** the dialog is awaited. `ref` is only
-/// usable while its widget is mounted, and a helper written the other way round
-/// is one route pop away from throwing instead of saving — which is exactly
-/// what happens today when the palette's own "New command snippet…" is used.
+/// Opens the editor for a new snippet and saves what comes back. The notifier
+/// is resolved **before** the await: `ref` is dead once the widget unmounts.
 Future<void> _addSnippet(BuildContext context, WidgetRef ref) async {
   final snippets = ref.read(commandSnippetsProvider.notifier);
   final draft = await SnippetEditorDialog.show(context);
@@ -238,11 +214,8 @@ Future<void> _editSnippet(
   );
 }
 
-/// Asks first, the way the SSH hosts section does and the library dialog does not.
-///
-/// The difference is where the button lives rather than what it does: in a
-/// modal you opened to tidy up, a delete is the thing you came for; on a
-/// settings page you are browsing, it sits beside Edit with no undo behind it.
+/// Asks first, unlike the library dialog: on a settings page you are browsing,
+/// a delete sits beside Edit with no undo behind it.
 Future<void> _deleteSnippet(
   BuildContext context,
   WidgetRef ref,

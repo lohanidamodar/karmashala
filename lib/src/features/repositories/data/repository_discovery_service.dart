@@ -31,10 +31,8 @@ const _skippedDirectories = {
   '__pycache__',
 };
 
-/// Discovers Git repositories within a folder.
-///
-/// Read-only: it inspects the filesystem only. It does **not** run `git` or any
-/// other process (that is introduced behind `CommandRunner` in Loop 3).
+/// Discovers Git repositories within a folder. Read-only: it inspects the
+/// filesystem and runs no process.
 abstract interface class RepositoryDiscoveryService {
   /// Returns the Git repositories found under [root], scanning at most
   /// [maxDepth] directory levels below it.
@@ -44,10 +42,8 @@ abstract interface class RepositoryDiscoveryService {
   });
 }
 
-/// [RepositoryDiscoveryService] backed by the local `dart:io` filesystem.
-///
-/// Only valid for paths in the local (Windows-native) environment, since it
-/// reads the host filesystem directly.
+/// [RepositoryDiscoveryService] backed by the local `dart:io` filesystem, so
+/// only valid for paths in the local (Windows-native) environment.
 class LocalRepositoryDiscoveryService implements RepositoryDiscoveryService {
   const LocalRepositoryDiscoveryService();
 
@@ -81,14 +77,8 @@ class LocalRepositoryDiscoveryService implements RepositoryDiscoveryService {
           path: EnvironmentPath(environmentId: environmentId, path: dir.path),
         ),
       );
-      // …and keep going. Until Loop 57 this returned here, on the reasoning
-      // that "nested checkouts are handled by Git". They are not: a hub
-      // repository whose folder holds a dozen cloned projects — which is the
-      // shape of the workspace this app is built in — reported exactly one
-      // repository, and every session in a sub-folder had nowhere to hang but
-      // the hub's own row. A folder with a `.git` in it is a repository whether
-      // or not one of its ancestors is, and the tree needs to be able to say so.
-      // The cost is bounded by [maxDepth] and by [_skippedDirectories].
+      // …and keep going. A folder with a `.git` in it is a repository whether or
+      // not an ancestor is; stopping here reported a hub of clones as one repo.
     }
 
     if (depth >= maxDepth) return;

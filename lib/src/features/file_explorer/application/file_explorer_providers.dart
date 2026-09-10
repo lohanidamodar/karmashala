@@ -24,33 +24,12 @@ final selectedRepoWindowsRootProvider = Provider<String?>((ref) {
   return ref.read(editorActionsProvider).windowsPathFor(repo.path);
 });
 
-/// The shortest gap between two **focus-driven** re-listings.
-///
-/// The same number and the same reasoning as `kDeliveryFocusRefreshInterval`:
-/// focus is not a rare event — a tiling window manager crosses it dozens of
-/// times a minute — so an alt-tab storm must cost one refresh rather than one
-/// per tab.
+/// The shortest gap between two **focus-driven** re-listings: focus is not a
+/// rare event, so an alt-tab storm must cost one refresh rather than one a tab.
 const Duration kFileListingRefreshInterval = Duration(seconds: 30);
 
-/// Ticks when the Files panel's directory listings should be read from disk
-/// again.
-///
-/// **Why this exists.** [directoryListingProvider] is `autoDispose`, which
-/// disposes a listing nobody is watching but caches one that stays on screen
-/// *forever*. The owner deleted twenty-one merged `wt-*` worktrees from disk
-/// and the panel went on offering all twenty-one, because nothing had asked
-/// the filesystem again since the folder was first expanded. A folder that has
-/// gone must stop being offered.
-///
-/// **Why focus rather than a watcher.** `DirectoryChangeWatcher` exists and
-/// Quick Open's index uses it, but every path this panel lists is a WSL path
-/// reached from Windows over 9p, where a recursive `ReadDirectoryChangesW` is
-/// both unreliable and expensive — and the change that prompted this was made
-/// from a shell outside the app, which no in-app signal (`CheckoutMoved` and
-/// friends) would ever have reported. Re-listing when the user comes back to
-/// the window is the cheap version that catches every case: it costs one
-/// listing per *expanded* folder, at most once per
-/// [kFileListingRefreshInterval], and only when somebody is actually looking.
+/// Ticks when the Files panel's listings should be read from disk again.
+/// Focus, not a watcher: these are WSL paths over 9p, changed from outside.
 class FileListingRefreshController extends Notifier<int> {
   /// When the last re-read was asked for. Mounting counts: the listings read
   /// as soon as they are first watched.
@@ -89,22 +68,16 @@ final fileListingRefreshProvider =
       FileListingRefreshController.new,
     );
 
-/// Directory contents for [windowsDir], listed on the Windows host.
-///
-/// Re-read whenever [fileListingRefreshProvider] ticks, which is what keeps a
-/// deleted folder from being offered indefinitely; see that controller for why
-/// the signal is focus and not a filesystem watch.
+/// Directory contents for [windowsDir], listed on the Windows host, re-read
+/// whenever [fileListingRefreshProvider] ticks so a deleted folder stops.
 final directoryListingProvider = FutureProvider.autoDispose
     .family<List<DirEntry>, String>((ref, windowsDir) async {
       ref.watch(fileListingRefreshProvider);
       return ref.read(fileListingServiceProvider).list(windowsDir);
     });
 
-/// What a host path is. Asked **once per click**, never while rendering.
-///
-/// A seam, because that is the claim this feature has to keep: the transcript
-/// decides what to underline on shape alone, and the only `stat` in the whole
-/// path happens here, after the reader has asked for something.
+/// What a host path is. Asked **once per click**, never while rendering — the
+/// transcript underlines on shape alone, and this is the only `stat`.
 typedef HostPathProbe = FileSystemEntityType Function(String hostPath);
 
 final hostPathProbeProvider = Provider<HostPathProbe>(
@@ -124,14 +97,12 @@ final hostPathProbeProvider = Provider<HostPathProbe>(
 class FileRevealTarget {
   const FileRevealTarget({required this.hostPath, required this.isDirectory});
 
-  /// The host path, spelled the way [DirEntry.windowsPath] spells one — the
-  /// listing runs on the host through `dart:io`, so the tree and the target
-  /// have to agree on that.
+  /// The host path, spelled the way [DirEntry.windowsPath] spells one: the
+  /// listing runs on the host, so the tree and the target must agree.
   final String hostPath;
 
-  /// A file is selected; a folder is only opened. Nothing is *opened in an
-  /// editor* either way — the pane already does that when a row is tapped, and
-  /// a second, deliberate click is where that belongs.
+  /// A file is selected; a folder is only opened. Nothing is opened in an
+  /// editor either way — a tap already does that.
   final bool isDirectory;
 
   @override
@@ -156,12 +127,8 @@ enum FileRevealRole {
   target,
 }
 
-/// Where the Files panel has been asked to go, or null.
-///
-/// Held rather than fired as an event because it is *selection*, not an
-/// action: the row stays highlighted after the tree has finished opening, and
-/// a target that arrives while the panel is closed is still there when it
-/// opens. The panel drives itself down to it — see [FileRevealRole].
+/// Where the Files panel has been asked to go, or null. Held rather than
+/// fired: it is selection, and a target set while closed survives to opening.
 class FileRevealController extends Notifier<FileRevealTarget?> {
   @override
   FileRevealTarget? build() => null;
@@ -176,14 +143,8 @@ final fileRevealTargetProvider =
       FileRevealController.new,
     );
 
-/// One host path, in the form two of them can be compared in.
-///
-/// Case-folded because the two hosts this app is used on — Windows and macOS —
-/// have case-insensitive filesystems, and a target that came from a transcript
-/// is spelled by an agent rather than by the listing. On Linux this can in
-/// principle match the wrong one of two files differing only in case; the cost
-/// is selecting the neighbour, and the alternative is failing to select
-/// anything on the two platforms that matter most.
+/// One host path in the form two of them can be compared in. Case-folded for
+/// Windows and macOS; on Linux that can pick the neighbour of a case pair.
 String fileTreeKey(String path) {
   var normalized = path.replaceAll(r'\', '/').toLowerCase();
   while (normalized.length > 1 && normalized.endsWith('/')) {
@@ -199,11 +160,8 @@ bool isUnderFileTreeRoot(String root, String path) {
   return key == rootKey || key.startsWith('$rootKey/');
 }
 
-/// What [entryPath] has to do about [target].
-///
-/// A pure function so a row can ask it inside a `select`: every row runs this
-/// on every change of the target, but only the handful whose answer *changed*
-/// is rebuilt.
+/// What [entryPath] has to do about [target]. Pure, so a row can ask it inside
+/// a `select` and only the handful whose answer changed rebuild.
 FileRevealRole fileRevealRoleFor(
   FileRevealTarget? target,
   String entryPath, {

@@ -51,9 +51,8 @@ class GitHubView extends ConsumerWidget {
                 itemBuilder: (pr) => ListTile(
                   dense: true,
                   leading: const Icon(AppIcons.gitMerge, size: Chrome.icon),
-                  // The number is the link, and `gh` gave us the URL rather
-                  // than us rebuilding it: a URL the server named cannot be
-                  // wrong about its own host.
+                  // The number is the link, and `gh` gave us the URL rather than us rebuilding
+                  // it: a URL the server named cannot be wrong about its own host.
                   title: RemoteLink(
                     text: '#${pr.number} ${pr.title}',
                     url: pr.url,
@@ -161,9 +160,8 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Icon(icon, size: Chrome.icon, color: theme.colorScheme.primary),
           const SizedBox(width: Insets.sm),
-          // `labelSmall`, like every other section header in the app: this one
-          // was `labelLarge` and read as a second title under the pane's own.
-          // Expanded because the pane is 240px wide and the scaler is not.
+          // `labelSmall`, like every other section header: `labelLarge` read as a
+          // second title under the pane's own. Expanded because the pane is 240px.
           Expanded(
             child: Text(
               label.toUpperCase(),

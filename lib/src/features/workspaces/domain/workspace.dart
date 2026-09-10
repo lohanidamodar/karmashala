@@ -1,14 +1,5 @@
-/// One of the user's contexts — Personal, PopupBits, Appwrite, game dev — that
-/// a project may belong to. The level above [Project], and a *scope filter*
-/// rather than a navigation level: it narrows the project list, it does not sit
-/// in the path to a session.
-///
-/// **The word means two things in this app, so the UI uses another one.** "The
-/// workspace" is already everything the user has added — the `Workspace` menu,
-/// "Remove from workspace", `workspace.list` on the wire. That sense is the
-/// older one and stays. This one is *a* workspace, one of four, and is called a
-/// **context** wherever a human reads it. Internal names stay `workspace`
-/// because the schema, the protocol and 400-odd existing call sites do.
+/// One of the user's contexts, the level above [Project] and a *scope filter*
+/// rather than a navigation level. Called a **context** wherever a human reads.
 class Workspace {
   const Workspace({
     required this.id,
@@ -20,18 +11,14 @@ class Workspace {
   final String id;
   final String name;
 
-  /// What the context is for, in the user's own words, or null.
-  ///
-  /// Null is an ordinary state, not a blank to be filled: a name is enough to
-  /// pick a context by. Where a surface has room for a second line it falls
-  /// back to something it can say for free — see `describeWorkspace`.
+  /// What the context is for, in the user's own words, or null. Null is an
+  /// ordinary state: a name is enough to pick a context by.
   final String? description;
 
   final DateTime createdAt;
 
   /// `description: null` cannot be expressed by a copy — that is what
-  /// [clearDescription] is for, and it is the only field here that can be
-  /// removed as well as changed.
+  /// [clearDescription] is for.
   Workspace copyWith({
     String? id,
     String? name,
