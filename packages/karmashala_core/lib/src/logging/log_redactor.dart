@@ -6,7 +6,7 @@ class RedactionRule {
     required this.replacement,
   });
 
-  /// What this rule protects, for the settings screen and for test failures.
+  /// What this rule protects, named for the settings screen and test failures.
   final String name;
 
   final RegExp pattern;
@@ -15,17 +15,10 @@ class RedactionRule {
   /// point of redaction is a log you can still read.
   final String replacement;
 
-  /// One rule that redacts a fixed set of [values] wherever they appear, or
-  /// null when there is nothing to redact.
-  ///
-  /// Unlike every other rule this one keys off the *value* rather than the
-  /// shape of the text around it, which is what makes it able to catch a secret
-  /// nobody thought to name like one — the `named secret` rule below finds
-  /// `ACME_DEPLOY_TOKEN=…` because of the word "token", and would miss
-  /// `ACME_PAT=…` entirely.
-  ///
-  /// Longest first, so a secret that contains a shorter one is replaced whole
-  /// rather than leaving its tail behind.
+  /// One rule redacting a fixed set of [values] wherever they appear, or null
+  /// when there is nothing to redact. Keys off the *value*, not the surrounding
+  /// shape, so it catches a secret nobody named like one; longest first, so a
+  /// secret containing a shorter one does not leave its tail behind.
   static RedactionRule? literalValues(
     Iterable<String> values, {
     required String name,
@@ -50,34 +43,21 @@ class RedactionRule {
   });
 }
 
-/// Strips secrets and the user's name out of a log line.
-///
-/// **Not a UI concern.** `claude-auth`, `claude-accounts`, `ssh.hostkey` and
-/// `remote` handle exactly the material that must not leave the machine, and
-/// this surface adds a *copy* button and a *file on disk*. So redaction runs
-/// once, on the way into the ring buffer, and every consumer — the panel, the
-/// clipboard, the report, the log file — reads the sanitised text. There is no
-/// path to any of them that skips it.
-///
-/// **False positives are the cheap failure.** A rule that redacts a harmless
-/// word costs one confusing line; a rule that misses a token costs a leaked
-/// credential in a pasted issue. Rules are written accordingly.
+/// Strips secrets and the user's name out of a log line, once, on the way into
+/// the ring buffer — every consumer reads the sanitised text and none can skip
+/// it. Rules err towards false positives: a redacted harmless word costs one
+/// confusing line, a missed token costs a credential in a pasted issue.
 class LogRedactor {
   LogRedactor({List<RedactionRule>? rules}) : rules = rules ?? defaultRules;
 
   final List<RedactionRule> rules;
 
-  /// Rules the running app installs, on top of the shipped [rules].
-  ///
-  /// Mutable because what they protect is: the user's own environment secrets
-  /// are not known at construction and change while the app runs. Replaced
-  /// wholesale by `EnvSecretsController` rather than appended to, so a deleted
-  /// secret stops being matched. Empty in every test that does not set it, and
-  /// an empty list costs one loop that does nothing.
+  /// Rules the running app installs on top of the shipped [rules]. Replaced
+  /// wholesale rather than appended to, so a deleted secret stops being matched.
   List<RedactionRule> extraRules = const [];
 
-  /// [input] with every rule applied, in order. Idempotent: redacting an
-  /// already-redacted line is a no-op, so a re-capture cannot mangle text.
+  /// [input] with every rule applied, in order. Idempotent, so a re-capture of
+  /// already-redacted text cannot mangle it.
   String apply(String input) {
     if (input.isEmpty) return input;
     var out = input;
@@ -93,7 +73,7 @@ class LogRedactor {
   /// Null-tolerant [apply], for the optional halves of a record.
   String? applyOrNull(String? input) => input == null ? null : apply(input);
 
-  /// The shipped rules. Adding one is meant to be a two-line change.
+  /// The shipped rules.
   static final List<RedactionRule> defaultRules = [
     // A pasted private key is the worst thing that can end up in a log file.
     RedactionRule(
@@ -140,25 +120,22 @@ class LogRedactor {
       pattern: RegExp(r'\b([Bb]earer|[Bb]asic)\s+[A-Za-z0-9._~+/=-]{8,}'),
       replacement: r'$1 [redacted:token]',
     ),
-    // The wireless-debugging QR payload. Its password is delimited by `;`
-    // rather than assigned to a keyword, so the catch-all below cannot see it;
-    // the service name is kept because that is how one pairing attempt is
-    // followed through a log.
+    // The wireless-debugging QR payload: its password is delimited by `;`
+    // rather than assigned to a keyword, so the catch-all below cannot see it.
     RedactionRule(
       name: 'adb pairing invite',
       pattern: RegExp(r'(WIFI:T:ADB;S:[^;]*;P:)[^;]+', caseSensitive: false),
       replacement: r'$1[redacted]',
     ),
-    // The catch-all: anything spelled like a secret being assigned. Deliberately
-    // a short keyword list — a bare `auth:` would eat ordinary message text.
+    // The catch-all. The keyword list stays short: a bare `auth:` would eat
+    // ordinary message text.
     RedactionRule(
       name: 'named secret',
       pattern: RegExp(
         r'\b(access[_-]?token|refresh[_-]?token|id[_-]?token|token'
         r'|secret|password|passphrase|api[_-]?key|apikey'
         r'|access[_-]?key|session[_-]?key|private[_-]?key'
-        // A space between the two words as well: "pairing code: 123456" is
-        // how a human writes it, and adb's own prompt spells it that way.
+        // A space between the words too: adb's own prompt says "pairing code".
         r'|pairing[_\s-]?code|device[_-]?key|client[_-]?secret)'
         r'(\s*[=:]\s*)'
         r'''("?)([^\s"',;}]{6,})\3''',

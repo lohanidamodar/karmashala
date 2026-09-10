@@ -1,11 +1,8 @@
 import 'package:karmashala_core/paths.dart';
 
 /// A described disk: which files exist, which components are reparse points and
-/// where they lead, and which paths the OS refuses to answer about.
-///
-/// Nothing here touches a real filesystem, so a test can describe the owner's
-/// broken junction chain on any host and the suite never depends on whether
-/// Codex happens to be installed on the machine running it.
+/// where they lead, and which paths the OS refuses to answer about. Touches no
+/// real filesystem, so a junction chain can be described on any host.
 class FakePathProbe implements PathProbe {
   FakePathProbe({
     Set<String> files = const {},
@@ -21,13 +18,10 @@ class FakePathProbe implements PathProbe {
   /// Reparse-point components, mapped to their target.
   final Map<String, String> links;
 
-  /// Paths [fileExists] answers `null` for — the OS declining to say.
-  ///
-  /// A path is also refused when any *component* of it is listed here, because
-  /// a refusal is about the route rather than the leaf. Note that Windows does
-  /// **not** do this for `File.existsSync` behind an untrusted mount point — it
-  /// answers a flat `false`, which is why the junction cases below describe
-  /// `links` and leave this empty.
+  /// Paths [fileExists] answers `null` for — the OS declining to say — and any
+  /// path under them, since a refusal is about the route rather than the leaf.
+  /// Windows does *not* refuse this way behind an untrusted mount point, so the
+  /// junction cases describe `links` and leave this empty.
   final Set<String> refused;
 
   /// Every path this probe was asked about, so a test can count work.

@@ -3,12 +3,8 @@ import 'dart:io';
 import 'package:karmashala_core/logging.dart';
 import 'package:test/test.dart';
 
-/// The line every log opens with.
-///
-/// Its whole job is to be trustworthy: a log that names the wrong version is
-/// worse than one that names none, because the reader stops asking. So the
-/// only assertions here are that it never invents a version and never omits
-/// the facts it genuinely has.
+/// The line every log opens with. The assertions are only that it never invents
+/// a version and never omits a fact it has: a wrong version is worse than none.
 void main() {
   test('names the platform it is actually running on', () {
     final line = buildIdentity();
@@ -18,10 +14,8 @@ void main() {
   });
 
   test('says the version is not recorded rather than guessing one', () {
-    // The suite runs without `--dart-define=KARMASHALA_VERSION`, so this is
-    // the real behaviour of any build that forgets to pass it — which is the
-    // case worth pinning. A future change that substitutes a hardcoded
-    // constant here would pass a version that drifts, silently.
+    // The suite runs without `--dart-define=KARMASHALA_VERSION`, so this pins
+    // what a build that forgets to pass it actually does.
     expect(appVersion, isEmpty, reason: 'no define under test');
     expect(buildIdentity(), contains('version not recorded'));
     expect(buildIdentity(), isNot(contains('1.2.0')));

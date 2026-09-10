@@ -1,10 +1,7 @@
 import 'package:logging/logging.dart';
 
-/// One captured log line, **already redacted**.
-///
-/// Redaction happens on the way in (see [LogRedactor]) rather than in each
-/// consumer, so the panel, the clipboard, the report and the log file all read
-/// the same sanitised text and none of them can be the one that leaks.
+/// One captured log line, **already redacted** — redaction happens on the way
+/// in (see [LogRedactor]), so no consumer can be the one that leaks.
 class LogEntry {
   const LogEntry({
     required this.sequence,
@@ -16,8 +13,8 @@ class LogEntry {
     this.stackTrace,
   });
 
-  /// Monotonic per-run counter. Survives eviction, so "1,204 lines dropped"
-  /// and "is this the same line I was looking at" are both answerable.
+  /// Monotonic per-run counter. Survives eviction, so a dropped-line count and
+  /// line identity stay answerable.
   final int sequence;
 
   final DateTime time;
@@ -30,10 +27,8 @@ class LogEntry {
   final String? error;
   final String? stackTrace;
 
-  /// `12:04:31.907 W remote: message | error=…`
-  ///
-  /// [withDate] adds the day, which the file wants (it outlives a session) and
-  /// the panel does not (every row would carry the same eight characters).
+  /// `12:04:31.907 W remote: message | error=…`. [withDate] adds the day, which
+  /// the file wants because it outlives a session and the panel does not.
   String format({bool withDate = false, bool withStackTrace = false}) {
     final buffer = StringBuffer();
     if (withDate) {

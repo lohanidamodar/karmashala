@@ -1,17 +1,9 @@
 import 'package:test/test.dart';
 import 'package:karmashala_core/util.dart';
 
-/// **One definition of what a URL is, for every surface that shows text.**
-///
-/// The terminal's scanner has been the app's only link recogniser, and it is
-/// the careful one: it trims the punctuation that ends a sentence rather than
-/// the URL, resolves a bare `www.`, and refuses every scheme but http(s)
-/// because terminal output is untrusted. Notes and todos showed plain `Text`
-/// and so had no links at all.
-///
-/// The answer is not a second regex in the notes layer. These primitives moved
-/// down to `core/util` so the terminal keeps using exactly the ones a note now
-/// uses, and a URL cannot come to mean two things in one app.
+/// **One definition of what a URL is, for every surface that shows text** — the
+/// terminal and a note share these primitives, so a URL cannot come to mean two
+/// things in one app.
 void main() {
   group('linksInText', () {
     test('finds a URL in prose, with its offsets', () {
