@@ -8,16 +8,9 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_media/testing.dart';
 
-/// The device path with the operating system's real muxer, and real H.264.
-///
-/// The frames a handset sends are already encoded, so recording one is a
-/// container change. This proves it is only that: the payload the writer put in
-/// the MP4 is the payload it was handed, byte for byte.
-///
-/// **This file used to take the tester process down under load**, until every
-/// open here stopped asking for the hardware encoder. The crash, the fix and
-/// the before/after measurement are recorded once, in
-/// `test/core/media/video_writer_test.dart`.
+/// The device path with the operating system's real muxer, and real H.264: the
+/// frames a handset sends are already encoded, so recording one is a container
+/// change, and this proves it is only that.
 /// The real remuxer, without the vendor MFTs that take the tester down.
 VideoRemuxer _softwareRemuxer({
   required String path,

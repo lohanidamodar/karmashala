@@ -1,19 +1,8 @@
-// Where a gesture made in the live view is sent.
-//
-// The live view always speaks the same continuous language — pointer down,
-// pointer moved, pointer up, in `0..1` fractions of the picture — and the sink
-// decides what that means on the wire. There are two:
-//
-// * [ScrcpyGestureSink] forwards each event as it happens, so the device sees
-//   the same motion the user made. This is the one that makes a slow drag track
-//   the finger and a flick fling.
-// * [AdbGestureSink] cannot: `adb shell input` has no concept of a partial
-//   gesture. It therefore *accumulates* the pointer events and replays them as
-//   one `tap`, `swipe` or held `swipe` on release — exactly the Loop 34
-//   behaviour, moved here so nothing regresses when the control socket is
-//   unavailable.
-//
-// One live view, one wiring, and the fallback is a swap of this object.
+// Where a gesture made in the live view is sent. The pane always speaks the same
+// continuous language — down, moved, up, in `0..1` fractions of the picture —
+// and the sink decides what that means on the wire. [ScrcpyGestureSink] forwards
+// each event; [AdbGestureSink] cannot, because `adb shell input` has no partial
+// gesture, so it accumulates and replays one on release.
 
 import 'dart:math' as math;
 
@@ -33,10 +22,8 @@ enum DeviceGestureTransport {
   /// `adb shell input` — one synthesised gesture on release, ~223 ms.
   adbInput('adb input', false),
 
-  /// WebDriverAgent's HTTP API — one synthesised gesture on release, like
-  /// [adbInput]. XCTest can express a continuous drag, but only as a whole
-  /// action sequence posted at once, so there is still nothing to send while a
-  /// finger is moving.
+  /// WebDriverAgent's HTTP API — one synthesised gesture on release. XCTest can
+  /// express a drag, but only as a whole action sequence posted at once.
   webDriverAgent('WebDriverAgent', false);
 
   const DeviceGestureTransport(this.label, this.isContinuous);
@@ -62,14 +49,7 @@ abstract interface class DeviceGestureSink {
 }
 
 /// Wraps a sink so the live view learns that the user asked for something.
-///
-/// A decorator rather than a callback on each sink: there are four sinks across
-/// two platforms and one seam, and the thing that needs telling — the stream
-/// watching for an answer — is the same for all of them.
-///
-/// [onInput] fires for the events that are a request. A cancel is not one: it
-/// is the gesture being taken away, and the device is not being asked for
-/// anything.
+/// [onInput] fires for the events that are a request; a cancel is not one.
 class ObservedGestureSink implements DeviceGestureSink {
   ObservedGestureSink(this.inner, {required this.onInput});
 
@@ -111,9 +91,8 @@ class ScrcpyGestureSink implements DeviceGestureSink {
 
   final ScrcpyControlConnection connection;
 
-  /// scrcpy's current video size, read afresh for every event: it changes when
-  /// the device rotates, and a stale value means every subsequent touch is
-  /// silently discarded by `PositionMapper.map`.
+  /// scrcpy's current video size, read afresh for every event: a stale value
+  /// after a rotation makes `PositionMapper.map` discard every touch silently.
   final DeviceScreenSize? Function() videoSize;
 
   /// Called when the socket has gone away, so the caller can fall back.
@@ -173,11 +152,9 @@ class ScrcpyGestureSink implements DeviceGestureSink {
   }
 }
 
-/// Replays a gesture through `adb shell input` once it is over.
-///
-/// This is the fallback, and it is honest about what it can do: the device sees
-/// nothing until the finger lifts, and then sees one synthesised gesture. Only
-/// the first pointer is followed — `input` has no multi-touch.
+/// Replays a gesture through `adb shell input` once it is over: the device sees
+/// nothing until the finger lifts. Only the first pointer — `input` has no
+/// multi-touch.
 class AdbGestureSink implements DeviceGestureSink {
   AdbGestureSink({
     required this.adb,
@@ -266,17 +243,10 @@ class AdbGestureSink implements DeviceGestureSink {
 }
 
 
-/// Replays a gesture into a simulator through [SimulatorBackend] on release.
-///
-/// Not continuous, for the same reason [AdbGestureSink] is not: WebDriverAgent
-/// takes a whole action sequence in one POST, so there is nothing to send while
-/// a finger is still moving. The gesture is accumulated and played back when it
-/// ends.
-///
-/// [screen] is in **points**. That is the space WebDriverAgent reports element
-/// frames in and the space it accepts taps in; the pixel size from
-/// `simctl io enumerate` is three times larger on this hardware and every tap
-/// derived from it would land off the bottom of the screen.
+/// Replays a gesture into a simulator through [SimulatorBackend] on release:
+/// WebDriverAgent takes a whole action sequence in one POST, so there is nothing
+/// to send mid-gesture. [screen] is in **points**, not the three-times-larger
+/// pixel size, or every tap lands off the bottom of the screen.
 class SimulatorGestureSink implements DeviceGestureSink {
   SimulatorGestureSink({
     required this.backend,

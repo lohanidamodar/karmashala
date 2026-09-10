@@ -1,11 +1,9 @@
 import 'device_input.dart';
 
-/// A node's rectangle on screen, in **device pixels** — the same coordinate
-/// space `adb shell input tap` uses.
-///
-/// This is the load-bearing field of the whole accessibility tree: every tap an
-/// agent makes by query is derived from it, and a wrong centre point taps the
-/// wrong thing while reporting success. It is therefore parsed strictly.
+/// A node's rectangle on screen, in **device pixels** — the space
+/// `adb shell input tap` uses. Every tap by query is derived from it, and a
+/// wrong centre taps the wrong thing while reporting success, so parsing is
+/// strict.
 class UiBounds {
   const UiBounds({
     required this.left,
@@ -19,11 +17,8 @@ class UiBounds {
   final int right;
   final int bottom;
 
-  /// Parses uiautomator's `[left,top][right,bottom]`.
-  ///
-  /// Returns `null` for anything that is not exactly that shape. Coordinates
-  /// may be negative: a node scrolled above the viewport reports a negative
-  /// top, and that is meaningful information, not corruption.
+  /// Parses uiautomator's `[left,top][right,bottom]`, or null for anything else.
+  /// Coordinates may be negative: a node scrolled above the viewport reports one.
   static UiBounds? parse(String? raw) {
     if (raw == null) return null;
     final match = _pattern.firstMatch(raw.trim());
@@ -52,34 +47,21 @@ class UiBounds {
   ({int x, int y}) get center =>
       (x: (left + right) ~/ 2, y: (top + bottom) ~/ 2);
 
-  /// Whether the centre point lies inside a screen of [screen].
-  ///
-  /// A node scrolled out of the viewport still appears in the dump with
-  /// off-screen bounds; tapping its centre would hit whatever is actually
-  /// there, so callers check this before tapping.
+  /// Whether the centre point lies inside a screen of [screen]. An off-screen
+  /// node still appears in the dump, and tapping it hits whatever is there.
   bool centerIsOnScreen(DeviceScreenSize screen) {
     final c = center;
     return c.x >= 0 && c.y >= 0 && c.x < screen.width && c.y < screen.height;
   }
 
-  /// Whether this node spans nearly the whole screen on both axes.
-  ///
-  /// The shape of a scrim: Android puts a clickable node called `Dismiss`
-  /// behind every modal dialog, covering the display, and tapping it dismisses
-  /// the dialog in front. Nothing a caller names by text is legitimately this
-  /// big, so it is a reason to refuse rather than a ranking signal.
-  ///
-  /// 90% on each axis, not on area: a bottom sheet's barrier can leave a
-  /// sliver of one edge uncovered and is still a barrier, while an ordinary
-  /// full-width row is nowhere near 90% of the *height*.
+  /// Whether this node spans nearly the whole screen on both axes — the shape of
+  /// a scrim, which Android puts behind every dialog. 90% per axis, not on area:
+  /// a barrier can leave a sliver of one edge uncovered and still be one.
   bool coversMostOf(DeviceScreenSize screen, {double fraction = 0.9}) =>
       width >= screen.width * fraction && height >= screen.height * fraction;
 
-  /// Whether ([x], [y]) is inside this rectangle.
-  ///
-  /// Right and bottom are exclusive, the way the device's own hit test is:
-  /// adjacent nodes share an edge, and an inclusive test would put a point on
-  /// that edge inside both of them.
+  /// Whether ([x], [y]) is inside this rectangle. Right and bottom are exclusive,
+  /// the way the device's hit test is: adjacent nodes share an edge.
   bool holds(int x, int y) => x >= left && x < right && y >= top && y < bottom;
 
   /// Area, for picking the innermost of several rectangles over one point.
@@ -105,11 +87,8 @@ class UiBounds {
 }
 
 /// One node of an Android view hierarchy, as `uiautomator dump` describes it.
-///
-/// Every attribute is optional in practice — real dumps omit attributes, emit
-/// them empty, or (on some OEM builds) emit values that are not valid XML — so
-/// strings default to `''` and flags to `false` rather than being nullable.
-/// Callers ask [hasText] rather than testing for null.
+/// Every attribute is optional in practice, so strings default to `''` and flags
+/// to `false`; callers ask [hasText] rather than testing for null.
 class UiNode {
   UiNode({
     this.index = 0,
@@ -168,12 +147,8 @@ class UiNode {
   bool get hasContentDescription => contentDescription.trim().isNotEmpty;
 
   /// What a human would call this node: its text, falling back to its
-  /// content-description.
-  ///
-  /// The fallback is not cosmetic. **Flutter apps put their semantics labels in
-  /// `content-desc` and leave `text` empty**, so a tree of a Flutter app has no
-  /// `text` at all — matching only `text` would find nothing on exactly the
-  /// apps this tool exists to drive.
+  /// content-description. **Flutter apps put their labels in `content-desc` and
+  /// leave `text` empty**, so matching only `text` finds nothing on them.
   String get label => hasText ? text.trim() : contentDescription.trim();
 
   /// `resource-id` with the package prefix removed: `com.app:id/ok` -> `ok`.
@@ -192,12 +167,8 @@ class UiNode {
   bool get isInteractable =>
       clickable || longClickable || scrollable || checkable;
 
-  /// Whether the node is worth showing an agent by default.
-  ///
-  /// A full dump is mostly layout scaffolding — `FrameLayout`s and
-  /// `LinearLayout`s with no text and no behaviour. Keeping only nodes that
-  /// carry information or accept input is what makes the compact listing
-  /// affordable in tokens.
+  /// Whether the node is worth showing an agent by default. A full dump is mostly
+  /// layout scaffolding, and dropping it is what makes the listing affordable.
   bool get isInteresting =>
       hasText || hasContentDescription || isInteractable || password;
 
@@ -210,10 +181,8 @@ class UiNode {
     return d;
   }
 
-  /// Positional path from the root, e.g. `0/3/1`.
-  ///
-  /// Built from real child positions rather than the `index` attribute, which
-  /// some OEM builds report inconsistently.
+  /// Positional path from the root, e.g. `0/3/1`. Built from real child
+  /// positions: some OEM builds report the `index` attribute inconsistently.
   String get path {
     final segments = <int>[];
     var node = this;
@@ -224,11 +193,8 @@ class UiNode {
     return segments.reversed.join('/');
   }
 
-  /// This node and every descendant, in document (pre-)order — which is
-  /// roughly top-to-bottom, left-to-right on screen.
-  ///
-  /// Walked with an explicit stack rather than recursively: this is the hot
-  /// path for every query, and a nested `yield*` chain costs O(depth) per step.
+  /// This node and every descendant, in document order. Walked with an explicit
+  /// stack: this is the hot path, and `yield*` costs O(depth) per step.
   Iterable<UiNode> get selfAndDescendants sync* {
     final stack = <UiNode>[this];
     while (stack.isNotEmpty) {
@@ -247,16 +213,9 @@ class UiNode {
     }
   }
 
-  /// The bounds to tap for this node.
-  ///
-  /// Normally the node's own rectangle. When a node has no area — Compose and
-  /// Flutter both emit zero-sized nodes — the nearest ancestor that does have
-  /// area is used, because that is the thing actually drawn on screen.
-  ///
-  /// Deliberately **not** "the nearest clickable ancestor": inside a scrolling
-  /// list the nearest clickable ancestor is often the list itself, whose centre
-  /// is a completely different row. Tapping a child's own centre lands inside
-  /// its clickable parent anyway, because the child is drawn within it.
+  /// The bounds to tap. The node's own rectangle, or the nearest ancestor with
+  /// area when it has none. Deliberately **not** the nearest clickable ancestor:
+  /// in a list that is the list, whose centre is a different row.
   UiBounds? get tapBounds {
     final own = bounds;
     if (own != null && !own.isEmpty) return own;
@@ -309,12 +268,9 @@ class UiHierarchy {
     return best.key;
   }
 
-  /// Nodes matching [query], best match first.
-  ///
-  /// Ranking matters: `tap(text: "Settings")` on the Settings home screen
-  /// matches both the "Settings" title and "Search settings", and the agent
-  /// means the first one. Exact label matches therefore sort ahead of
-  /// substring matches; ties keep document order.
+  /// Nodes matching [query], best match first. Exact label matches sort ahead of
+  /// substring ones — `tap(text: "Settings")` means the title, not "Search
+  /// settings".
   List<UiNode> find(UiElementQuery query, {int? limit}) {
     final matches = <UiNode>[];
     for (final node in allNodes) {
@@ -342,18 +298,9 @@ class UiHierarchy {
     return found.isEmpty ? null : found.first;
   }
 
-  /// What a tap at ([x], [y]) would land on, or null when nothing covers it.
-  ///
-  /// The smallest rectangle containing the point, which **approximates** the
-  /// platform's own hit test rather than reproducing it — a dump carries no
-  /// z-order, so two overlapping siblings of the same size are a coin toss.
-  /// Smallest-first is the right approximation for the case that matters:
-  /// Android's full-screen `Dismiss` barrier sits behind every dialog, so a
-  /// point on a dialog button resolves to the button and a point beside it
-  /// resolves to the barrier — which is exactly the distinction a caller
-  /// needs to see.
-  ///
-  /// Used to *describe* what is under a coordinate, never to redirect a tap.
+  /// What a tap at ([x], [y]) would land on, or null. The smallest rectangle
+  /// containing the point **approximates** the platform's hit test — a dump has
+  /// no z-order. Used to describe what is under a coordinate, never to redirect.
   UiNode? at(int x, int y) {
     UiNode? best;
     var bestArea = -1;
@@ -370,11 +317,9 @@ class UiHierarchy {
   }
 }
 
-/// A description of the element an agent is looking for.
-///
-/// Every supplied criterion must match (AND). Matching is case-insensitive and
-/// substring-based by default, because an agent reading a screenshot types what
-/// it saw, not the exact string the developer wrote.
+/// A description of the element an agent is looking for. Every criterion must
+/// match; matching is case-insensitive and substring-based by default, because
+/// an agent reading a screenshot types what it saw.
 class UiElementQuery {
   const UiElementQuery({
     this.text,
@@ -437,13 +382,9 @@ class UiElementQuery {
     return true;
   }
 
-  /// 0 when every supplied criterion matches its field exactly, 1 otherwise —
-  /// the sort key that puts "Settings" ahead of "Search settings".
-  ///
-  /// It covers every criterion, not just [text]. Found on a real device:
-  /// `contentDesc: "a"` on a keyboard ranked the clock widget first, because
-  /// its four-line description happens to contain an "a" and it came earlier
-  /// in the tree than the "a" key.
+  /// 0 when every supplied criterion matches exactly, 1 otherwise — the sort key
+  /// that puts "Settings" ahead of "Search settings". It covers every criterion:
+  /// `contentDesc: "a"` once ranked a clock widget above the "a" key.
   int rank(UiNode node) {
     var criteria = 0;
     var exactHits = 0;

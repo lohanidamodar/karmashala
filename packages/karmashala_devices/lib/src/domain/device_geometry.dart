@@ -1,29 +1,17 @@
 import 'device_input.dart';
 
-/// A point inside the live-view widget, in logical pixels.
-///
-/// `dart:ui`'s `Offset` as a plain record: the mapping below is arithmetic on
-/// two doubles, and taking the Flutter type for it would put the whole widget
-/// layer behind a package that otherwise runs under plain `dart test`. The
-/// field names are `Offset`'s, so a caller holding one passes
-/// `(dx: offset.dx, dy: offset.dy)` and reads the same code.
+/// A point inside the live-view widget, in logical pixels. `dart:ui`'s `Offset`
+/// as a plain record, so this package still runs under plain `dart test`; the
+/// field names are `Offset`'s, so a caller passes `(dx: …, dy: …)`.
 typedef WidgetPoint = ({double dx, double dy});
 
 /// The size of the box the picture fills, in logical pixels — `dart:ui`'s
 /// `Size` as a plain record, for the same reason as [WidgetPoint].
 typedef WidgetBox = ({double width, double height});
 
-/// Maps a point in the live-view widget to a device coordinate.
-///
-/// The pane renders the video inside an `AspectRatio` box matching the device's
-/// aspect ratio, with the video filling that box. That is a deliberate design
-/// choice: it means the player never letterboxes internally, so the widget's box
-/// *is* the picture and the mapping is a pure scale — we never have to ask the
-/// video library where it decided to put the image.
-///
-/// Verified against a running emulator: a Settings row centred at device
-/// (954, 338) on a 1080x2400 screen appears at (357.8, 126.8) in a 405x900 pane
-/// and maps back with zero pixel error.
+/// Maps a point in the live-view widget to a device coordinate. The pane renders
+/// the video inside an `AspectRatio` box matching the device, so the player never
+/// letterboxes internally and the mapping is a pure scale.
 ({int x, int y}) widgetPointToDevice({
   required WidgetPoint local,
   required WidgetBox box,
@@ -33,15 +21,10 @@ typedef WidgetBox = ({double width, double height});
   return fractionToDevice(fx: fraction.x, fy: fraction.y, screen: screen);
 }
 
-/// The same mapping stopped one step early, at a resolution-free `0..1`
-/// fraction of the picture.
-///
-/// Gestures are carried in this form because the two transports want different
-/// coordinate spaces for the *same* touch: `adb shell input` wants device
-/// pixels, while scrcpy's control socket wants **video** pixels and rejects
-/// anything else (`PositionMapper.map` compares the declared size against the
-/// video size and silently drops the event when they differ). Converting once,
-/// late, in whichever sink is active keeps a single mapping instead of two.
+/// The same mapping stopped one step early, at a resolution-free `0..1` fraction
+/// of the picture. The two transports want different spaces for the *same* touch
+/// — `adb input` device pixels, scrcpy's socket **video** pixels, which it drops
+/// silently when they differ — so the conversion happens late, in the sink.
 ({double x, double y}) widgetPointToFraction({
   required WidgetPoint local,
   required WidgetBox box,
@@ -67,29 +50,19 @@ typedef WidgetBox = ({double width, double height});
   );
 }
 
-/// How long `input swipe` is asked to hold still for a long press.
-///
-/// Android's own long-press threshold is 500 ms
-/// (`ViewConfiguration.getLongPressTimeout()`); 700 ms clears it comfortably
-/// without making the gesture feel stuck, and leaves room for the ~223 ms the
-/// adb round trip costs before the press even begins.
+/// How long `input swipe` is asked to hold still for a long press. Android's own
+/// threshold is 500 ms; 700 ms clears it without making the gesture feel stuck.
 const Duration kLongPressHoldDuration = Duration(milliseconds: 700);
 
-/// Bounds on the duration handed to `input swipe` for a drag.
-///
-/// Below the floor Android treats the gesture as a fling with an implausible
-/// velocity; above the ceiling a single `input swipe` blocks for that long,
-/// and the user has already let go.
+/// Bounds on the duration handed to `input swipe` for a drag. Below the floor
+/// Android reads a fling with an implausible velocity; above the ceiling the
+/// call blocks for that long, after the user has let go.
 const Duration kMinSwipeDuration = Duration(milliseconds: 60);
 const Duration kMaxSwipeDuration = Duration(milliseconds: 1500);
 
-/// The duration to pass to `input swipe` for a drag the user held for
-/// [held].
-///
-/// This is what separates a flick from a slow drag: `input swipe` interpolates
-/// between two points over the duration given, so the duration *is* the
-/// velocity. Passing a fixed value would make every gesture scroll by the same
-/// amount regardless of how the user moved.
+/// The duration to pass to `input swipe` for a drag the user held for [held].
+/// `input swipe` interpolates over whatever duration it is given, so the
+/// duration *is* the velocity; a fixed one scrolls the same however they moved.
 Duration swipeDurationFor(Duration held) {
   if (held < kMinSwipeDuration) return kMinSwipeDuration;
   if (held > kMaxSwipeDuration) return kMaxSwipeDuration;

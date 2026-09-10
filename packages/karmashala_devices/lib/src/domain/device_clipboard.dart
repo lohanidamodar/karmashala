@@ -1,20 +1,9 @@
 /// One reading of a device's clipboard, and what a write to it produced.
 ///
-/// ## The distinction this file exists for
-///
-/// A clipboard that could not be read is **not** an empty clipboard. On Android
-/// they are one API call apart and look identical from the host: `getPrimaryClip`
-/// answers `null` both when nothing has been copied and when the caller is not
-/// allowed to look. Collapsing them means the app tells the user their phone's
-/// clipboard is empty at the exact moment it has stopped being able to see it —
-/// §19's rule, in the one place where the honest answer is also the useful one,
-/// because "empty" sends them to copy something again and "cannot read" sends
-/// them to the thing that is actually wrong.
-///
-/// So there are three outcomes, never two, and [DeviceClipboardRead] cannot be
-/// constructed without choosing one. There is deliberately no
-/// `DeviceClipboardRead(text)` taking a nullable string: that constructor is
-/// how the two get conflated.
+/// A clipboard that could not be read is **not** an empty clipboard: on Android
+/// `getPrimaryClip` answers `null` both when nothing has been copied and when
+/// the caller may not look. So there are three outcomes, never two, and
+/// [DeviceClipboardRead] cannot be constructed without choosing one.
 library;
 
 /// Which of the three answers a read produced.
@@ -36,11 +25,8 @@ enum DeviceClipboardSource {
   /// Asked for, and answered. As fresh as the round trip.
   requested,
 
-  /// The device volunteered it: scrcpy-server registers an
-  /// `OnPrimaryClipChangedListener` and pushes the new clipboard whenever it
-  /// changes. Nothing polled for this — it is an event — but it is as old as
-  /// the last time the user copied something on the phone, which is why
-  /// [DeviceClipboardRead.observedAt] is shown beside it.
+  /// The device volunteered it: scrcpy-server pushes the clipboard whenever it
+  /// changes. An event, not a poll — but as old as the last copy on the phone.
   pushedByDevice,
 
   /// Nobody has asked and the device has volunteered nothing. The state the
@@ -58,10 +44,8 @@ class DeviceClipboardRead {
     this.reason,
   });
 
-  /// The device answered with [text].
-  ///
-  /// An empty string is routed to [empty] rather than kept as text: the two
-  /// mean the same thing to the device and one of them is easier to say.
+  /// The device answered with [text]. An empty string is routed to [empty]: the
+  /// two mean the same thing to the device and one of them is easier to say.
   factory DeviceClipboardRead.text(
     String text, {
     required DeviceClipboardSource source,
@@ -75,10 +59,8 @@ class DeviceClipboardRead {
           text: text,
         );
 
-  /// The device answered, and there is nothing on its clipboard.
-  ///
-  /// Only ever built from an answer. A timeout, a closed socket and a device
-  /// that refused are [unavailable].
+  /// The device answered, and there is nothing on its clipboard. Only ever built
+  /// from an answer; a timeout, a closed socket or a refusal is [unavailable].
   factory DeviceClipboardRead.empty({
     required DeviceClipboardSource source,
     DateTime? observedAt,
@@ -100,9 +82,8 @@ class DeviceClipboardRead {
     reason: reason,
   );
 
-  /// Nothing has been read yet. Distinct from every other outcome and from
-  /// `null`: the pane needs something to draw before the first read, and what
-  /// it draws must not be a claim about the device.
+  /// Nothing has been read yet. The pane needs something to draw before the
+  /// first read, and what it draws must not be a claim about the device.
   static final DeviceClipboardRead unchecked = DeviceClipboardRead._(
     outcome: DeviceClipboardOutcome.unavailable,
     source: DeviceClipboardSource.none,
@@ -117,12 +98,9 @@ class DeviceClipboardRead {
   /// with no age is a claim about now, which it usually is not.
   final DateTime observedAt;
 
-  /// The clipboard's contents. Non-null exactly when [outcome] is
-  /// [DeviceClipboardOutcome.text].
-  ///
-  /// **User data.** Never logged, never put in a [DeviceAction] summary, and
-  /// never in an error message — see `package:karmashala_core/logging.dart`, which
-  /// cannot help here because clipboard text has no shape to match on.
+  /// The clipboard's contents, non-null exactly when [outcome] is
+  /// [DeviceClipboardOutcome.text]. **User data:** never logged, never in a
+  /// [DeviceAction] summary, never in an error message.
   final String? text;
 
   /// Why the clipboard could not be read. Non-null exactly when [outcome] is
@@ -153,12 +131,9 @@ enum DeviceClipboardWriteOutcome {
   /// The device acknowledged it. The clipboard is what was sent.
   acknowledged,
 
-  /// It was sent and nothing came back.
-  ///
-  /// **Its own outcome, not a failure and not a success.** The bytes left this
-  /// machine; whether the device applied them is unknown. Reporting it as
-  /// either is the same lie in two directions — "copied" for a clipboard that
-  /// may be unchanged, or "failed" for one that probably is not.
+  /// It was sent and nothing came back. **Its own outcome, not a failure and not
+  /// a success:** the bytes left this machine, and what the device did with them
+  /// is unknown.
   unacknowledged,
 
   /// It never left: no control socket, or nothing to send.

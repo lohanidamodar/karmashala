@@ -128,8 +128,7 @@ void main() {
 
     test('a refused step costs only itself', () async {
       // Observed for real: `pm disable-user` on a package the system image does
-      // not carry exits 255 with `Unknown package: ...`. The other two package
-      // groups on the same run have nothing to do with it.
+      // not carry exits 255 with `Unknown package`. The other groups are fine.
       final runner = _booted(
         fail: (request) => request.arguments.contains('animator_duration_scale')
             ? 'Bad value'
@@ -201,9 +200,8 @@ void main() {
 
   group('restore', () {
     test('deletes every managed setting and re-enables only our packages', () async {
-      // `com.android.nfc` was disabled by something else on the emulator this
-      // was measured on. Re-enabling it would be undoing a decision that was
-      // not ours.
+      // `com.android.nfc` was disabled by something else on this emulator.
+      // Re-enabling it would be undoing a decision that was not ours.
       final runner = _booted(
         disabledList:
             'package:com.google.android.gms\n'
@@ -288,9 +286,8 @@ void main() {
     });
 
     test('summarises what is here and what will be left alone', () async {
-      // The line the Restore row shows. Counts rather than names: the decision
-      // it informs is only "press Restore or not", and the unmanaged tail is
-      // said out loud because restore deliberately does not touch it.
+      // The line the Restore row shows. Counts rather than names, and the
+      // unmanaged tail is said out loud because restore does not touch it.
       final runner = FakeCommandRunner(
         responder: (request) {
           final argv = request.arguments.join(' ');

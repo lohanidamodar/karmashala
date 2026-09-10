@@ -3,10 +3,8 @@ import 'package:karmashala_devices/src/data/wda_ui_parsing.dart';
 import 'package:karmashala_devices/src/domain/device_input.dart';
 import 'package:karmashala_devices/src/domain/ui_node.dart';
 
-/// Captured from a real `GET /source?format=json` against an iPhone 17 Pro on
-/// iOS 26.4, trimmed. Note `isVisible` and `isEnabled` are the **strings**
-/// "1"/"0", not JSON booleans, and every element carries both a `frame` string
-/// and a structured `rect`.
+/// Captured from a real `GET /source?format=json` against an iPhone 17 Pro,
+/// trimmed. `isVisible` and `isEnabled` are the **strings** "1"/"0".
 const _source = '''
 {
   "value": {
@@ -79,9 +77,8 @@ void main() {
   });
 
   test('an off-screen element is kept, with the zero frame it really has', () {
-    // WDA reports every element in the tree, including the icons on other
-    // home-screen pages. Those are genuinely not on screen and genuinely
-    // cannot be tapped, which `UiBounds.isEmpty` already says.
+    // WDA reports every element, including icons on other home-screen pages:
+    // genuinely there and genuinely not tappable, which `isEmpty` says.
     final read = parseWdaUiRead(_source);
     final maps = read.hierarchy.allNodes.firstWhere((n) => n.text == 'Maps');
 

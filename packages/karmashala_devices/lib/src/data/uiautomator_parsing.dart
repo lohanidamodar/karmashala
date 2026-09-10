@@ -1,31 +1,13 @@
 import '../domain/ui_node.dart';
 
-/// Parsing for `adb shell uiautomator dump`.
-///
-/// Real dumps are messier than "XML from a well-behaved serializer" suggests,
-/// and every shape below has been observed or is documented in AOSP:
-///
-/// * The command **succeeds with exit code 0 while printing an error** —
-///   `ERROR: could not get idle state.` when the UI never stops animating, and
-///   `ERROR: null root node returned by UiTestAutomationBridge.` when there is
-///   no window (screen off, or a secure surface). Exit status alone is not a
-///   success test.
-/// * A dump taken during a transition can contain a `<hierarchy>` with no
-///   nodes at all.
-/// * Attribute values are not reliably escaped on every OEM build, so a raw
-///   `<`, `>` or `&` can appear inside `text` or `content-desc`. A conforming
-///   XML parser rejects the whole document for that; this one does not care,
-///   because it only ever scans for the closing quote.
-/// * The output can be truncated (the device is pulled, the shell is killed).
-///   Whatever parsed before the cut is returned rather than thrown away.
-///
-/// The parser therefore never throws on structure. It returns what it
-/// understood, and [uiDumpFailure] separately classifies the command's own
-/// output so the caller can retry or explain.
+/// Parsing for `adb shell uiautomator dump`. Real dumps are messier than XML
+/// from a well-behaved serializer: the command **exits 0 while printing an
+/// error**, a dump taken mid-transition can carry no nodes, OEM builds leave
+/// `<`, `>` and `&` unescaped inside attribute values, and the output can be
+/// truncated. So the parser never throws on structure — it returns what it
+/// understood, and [uiDumpFailure] classifies the command's own output.
 
-/// AOSP's success line. The typo is upstream's — `Log.i("UI hierchary dumped
-/// to: " + path)` in `UiAutomatorTestRunner` — so matching it exactly would be
-/// matching a typo; we match the stable part.
+/// AOSP's success line. The typo is upstream's, so we match the stable part.
 const String _dumpedMarker = 'dumped to';
 
 /// Why a `uiautomator dump` invocation did not produce a usable file, or
@@ -43,11 +25,8 @@ class UiDumpFailure {
   String toString() => message;
 }
 
-/// Raised when every attempt to dump the hierarchy failed.
-///
-/// Carries the device's own explanation rather than a generic message, because
-/// "the screen never went idle" and "there is no window" call for completely
-/// different responses from the caller.
+/// Raised when every attempt to dump the hierarchy failed. Carries the device's
+/// own explanation: "never went idle" and "no window" need different responses.
 class UiDumpException implements Exception {
   const UiDumpException(
     this.message, {
@@ -123,9 +102,8 @@ UiHierarchy parseUiAutomatorXml(String xml) {
   final elements = _scanElements(xml);
   if (elements.isEmpty) return UiHierarchy.empty;
 
-  // A dump is `<hierarchy rotation="0"><node .../></hierarchy>`, but be happy
-  // with a bare `<node>` root too — that is what a fragment of a dump looks
-  // like, and it costs one line to accept.
+  // Be happy with a bare `<node>` root too — that is what a fragment of a dump
+  // looks like, and it costs one line to accept.
   final root = elements.first;
   final rotation = int.tryParse(root.attributes['rotation'] ?? '') ?? 0;
   final container = root.tag == 'node' ? null : root;
@@ -160,9 +138,8 @@ UiNode _toNode(_Element element) {
     checkable: flag('checkable'),
     checked: flag('checked'),
     clickable: flag('clickable'),
-    // A device that omits `enabled` is far more likely to have an enabled view
-    // than a disabled one, and treating everything as disabled would make the
-    // enabled-only filter useless.
+    // A device that omits `enabled` is likelier to have an enabled view, and
+    // defaulting to disabled would make the enabled-only filter useless.
     enabled: flag('enabled', fallback: true),
     focusable: flag('focusable'),
     focused: flag('focused'),
@@ -187,12 +164,9 @@ class _Element {
   final List<_Element> children = [];
 }
 
-/// Scans [xml] into a tree of [_Element], returning every element in document
-/// order (so `first` is the root).
-///
-/// Iterative rather than recursive on purpose: an explicit stack makes
-/// truncation free — whatever is still open at end of input is simply closed —
-/// and cannot blow the Dart stack on a pathologically deep tree.
+/// Scans [xml] into a tree of [_Element], in document order (so `first` is the
+/// root). Iterative on purpose: an explicit stack makes truncation free —
+/// whatever is still open at end of input is simply closed.
 List<_Element> _scanElements(String xml) {
   final all = <_Element>[];
   final stack = <_Element>[];
@@ -205,9 +179,8 @@ List<_Element> _scanElements(String xml) {
     i = open + 1;
     if (i >= length) break;
 
-    // Closing tag: pop to the matching element if we can find it, otherwise
-    // pop one level. A mismatched end tag is a broken document, not a reason
-    // to discard everything before it.
+    // A mismatched end tag is a broken document, not a reason to discard
+    // everything before it.
     if (xml[i] == '/') {
       final end = xml.indexOf('>', i);
       if (end < 0) break;
@@ -347,10 +320,7 @@ final RegExp _entityPattern = RegExp(
 );
 
 /// Decodes the five predefined XML entities plus numeric character references.
-///
-/// Anything else — a bare `&`, or `&nbsp;`, which uiautomator has no business
-/// emitting but OEM builds sometimes do — is left exactly as it was, so text
-/// is never silently corrupted.
+/// Anything else is left exactly as it was, so text is never silently corrupted.
 String decodeXmlEntities(String value) {
   if (!value.contains('&')) return value;
   return value.replaceAllMapped(_entityPattern, (match) {

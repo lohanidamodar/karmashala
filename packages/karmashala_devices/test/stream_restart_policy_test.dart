@@ -1,10 +1,6 @@
-// The recovery ladder: which rung, and when.
-//
-// 1.6.0 had one rung — tear the session down and build a new one — and the
-// owner asked the obvious question: "isn't there an automated way to recover it
-// when the user starts interacting, without going through the destructive
-// restart?" There is, and the cheap rungs must be tried first, each given a
-// moment to work before the next is taken as necessary.
+// The recovery ladder: which rung, and when. 1.6.0 had one rung — tear the
+// session down and build a new one — so the cheap rungs must be tried first,
+// each given a moment to work before the next is taken as necessary.
 import 'package:test/test.dart';
 import 'package:karmashala_devices/src/application/stream_restart_policy.dart';
 import 'package:karmashala_devices/src/data/device_stream.dart';
@@ -75,9 +71,8 @@ void main() {
     });
 
     test('a rung is given its moment before the next one is taken', () {
-      // The watchdog re-reports a fault every second. Without this the whole
-      // ladder would be climbed in three ticks, and a video reset needs time
-      // for the device to encode the keyframe it was asked for.
+      // The watchdog re-reports a fault every second; without this the whole
+      // ladder would be climbed in three ticks.
       final policy = StreamRestartPolicy(
         stepGrace: const Duration(seconds: 2),
       );

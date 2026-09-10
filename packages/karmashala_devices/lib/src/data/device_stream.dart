@@ -22,59 +22,30 @@ const String kScrcpyVersion = '4.1';
 const String kScrcpyServerAsset = 'assets/scrcpy/scrcpy-server';
 
 /// Everything this app pushes to a device starts with this, and nothing else
-/// does. `reapOrphans` matches on it, so it must stay distinct from the
-/// `/data/local/tmp/scrcpy-server.jar` a developer's own scrcpy uses.
+/// does: `reapOrphans` matches on it, so it must not match plain scrcpy's jar.
 const String kScrcpyJarPathPrefix = '/data/local/tmp/karmashala-scrcpy-server';
 
-/// The jar path for one session.
-///
-/// One path **per session**, not one for the app, and that is a fix rather than
-/// tidiness. scrcpy-server 4.1 deletes its own jar as it starts (`unlinkSelf`),
-/// so a shared path is gone the moment any server has run: the very next
-/// `app_process` finds no class and aborts with
-/// `ClassNotFoundException: com.genymobile.scrcpy.Server`. That is not a corner
-/// case — [DeviceStreamService.start] makes two attempts in a row
-/// (`control=true`, then `control=false`), and with one path the second could
-/// never work. Reproduced on F6IZLV6LMFT4U4ZT: SIGABRT, adb printing
-/// "Aborted", exit 134.
+/// The jar path for one session. **Per session**, not per app: scrcpy-server 4.1
+/// unlinks its own jar as it starts, so a shared path breaks the next attempt.
 String scrcpyJarPathFor(String scid) => '$kScrcpyJarPathPrefix-$scid.jar';
 
-/// What a **host-side** staged jar is called, before it is pushed.
-///
-/// The name carries a token that is unique per start, for the same reason the
-/// device path does — but here the hazard is worse. This used to be one fixed
-/// file, `karmashala-scrcpy-server-<version>.jar` in the system temp directory,
-/// shared by every start on the machine *and by the tests*, which write four
-/// dummy bytes to it. A test run overlapping a live stream restart therefore
-/// handed a real phone a 4-byte jar, and `app_process` aborted with
-/// `ClassNotFoundException` on a device nobody was testing against.
-///
-/// [kScrcpyHostJarPrefix] deliberately omits the version so [
-/// DeviceStreamService.sweepStagedJars] also collects the old fixed-path file
-/// this replaces.
+/// What a **host-side** staged jar is called, before it is pushed. Unique per
+/// start: a fixed name let a test's 4-byte dummy jar reach a live phone.
 const String kScrcpyHostJarPrefix = 'karmashala-scrcpy-server-';
 
 String scrcpyHostJarName(String token) =>
     '$kScrcpyHostJarPrefix$kScrcpyVersion-$token.jar';
 
-/// How long a staged jar may sit in the staging directory before a later start
-/// treats it as debris.
-///
-/// Age rather than ownership, because a process cannot tell which of these
-/// files another process still needs. A staged jar is read by the `adb push`
-/// of the start that wrote it and deleted immediately after, so it lives for
-/// seconds; an hour is beyond anything a live start could still be holding and
-/// well inside "left behind by a crash".
+/// How long a staged jar may sit before a later start treats it as debris. Age
+/// rather than ownership: no process can tell which of these another still needs.
 const Duration kStagedJarLifetime = Duration(hours: 1);
 
 /// Supplies the scrcpy server jar bytes (the Flutter asset in the app, a
 /// fixture in tests).
 typedef ScrcpyServerBytes = Future<Uint8List> Function();
 
-/// Parses the port adb allocated for `adb forward tcp:0 …`.
-///
-/// Asking adb for port 0 avoids both a bind race and Windows' reserved port
-/// ranges — scrcpy's default 27183 was already unavailable on this machine.
+/// Parses the port adb allocated for `adb forward tcp:0 …`. Port 0 avoids a bind
+/// race and Windows' reserved ranges; scrcpy's 27183 was unavailable here.
 int? parseForwardedPort(String output) {
   for (final line in output.split(RegExp(r'[\r\n]+'))) {
     final port = int.tryParse(line.trim());
@@ -83,14 +54,8 @@ int? parseForwardedPort(String output) {
   return null;
 }
 
-/// Timestamps of the newest frame in flight, so latency can be measured
-/// without instrumenting the socket from outside.
-///
-/// Everything here is microseconds. [ptsUs] is scrcpy's timestamp, which is the
-/// **device's** monotonic clock at capture; [arrivalUs] is the host wall clock
-/// when that frame finished arriving. [basePtsUs] is the timestamp the muxer
-/// rebased the stream onto — what the player calls position zero — so a
-/// player's reported position can be turned back into a device capture time.
+/// Timestamps of the newest frame in flight, all in microseconds. [ptsUs] is the
+/// **device's** monotonic clock at capture; [arrivalUs] is the host wall clock.
 class LiveFrameMark {
   int frames = 0;
   int ptsUs = 0;
@@ -107,13 +72,8 @@ class LiveFrameMark {
   /// Interactions the device has not answered with a frame.
   int unansweredInputs = 0;
 
-  /// Records that the user asked the device for something.
-  ///
-  /// Counts **interactions, not events**: a drag is dozens of pointer moves and
-  /// one request, so anything within [kInputBurst] of the previous event is
-  /// taken to be the same interaction still happening. Without that a single
-  /// swipe would look like fifty unanswered requests and condemn a healthy
-  /// stream on the spot.
+  /// Records that the user asked the device for something. Counts **interactions,
+  /// not events**: a drag within [kInputBurst] is one, not fifty unanswered.
   void noteInput([int? nowUs]) {
     final now = nowUs ?? DateTime.now().microsecondsSinceEpoch;
     if (lastInputUs == 0 || now - lastInputUs > kInputBurst.inMicroseconds) {
@@ -138,14 +98,8 @@ enum DeviceStreamState {
   /// Connected; frames are arriving.
   live,
 
-  /// Connected, and the device is simply not drawing anything new.
-  ///
-  /// **Not a fault, and the whole point of this value.** scrcpy encodes on
-  /// change: a phone left on a home screen sends no frames at all — it asks the
-  /// encoder for `repeat-previous-frame-after`, which the platform honours for
-  /// a short burst and then stops. Treating that silence as a stall is what
-  /// restarted the owner's live view every eleven seconds for nine minutes on
-  /// F6IZLV6LMFT4U4ZT, with no socket closing and no server exiting in the log.
+  /// Connected, and the device is simply not drawing anything new. **Not a
+  /// fault:** scrcpy encodes on change, so a still screen sends no frames at all.
   idle,
 
   /// Bytes are arriving and nothing is decoding out of them. The picture on
@@ -156,13 +110,8 @@ enum DeviceStreamState {
   ended,
 }
 
-/// What one watchdog tick can see, as ages rather than clocks.
-///
-/// Ages, so the rule that reads them is pure and can be put in a table. Three
-/// of the four are about the stream; [sinceInput] and [unansweredInputs] are
-/// about the user, and they are here because they are the only evidence that
-/// distinguishes a device with nothing to say from a live view that has stopped
-/// answering.
+/// What one watchdog tick can see, as ages rather than clocks, so the rule that
+/// reads them is pure. [sinceInput] is the only evidence the user is waiting.
 class StreamClocks {
   const StreamClocks({
     required this.sinceFrame,
@@ -180,12 +129,8 @@ class StreamClocks {
   /// Since any byte arrived, decodable or not.
   final Duration sinceByte;
 
-  /// Since a frame was handed to the video player. **`null` when none ever
-  /// has** — no viewer has connected yet, which is not evidence of anything.
-  ///
-  /// This is the clock 1.6.0 did not read, and the only one that is about what
-  /// the user can actually see. Frames arriving prove the device is drawing;
-  /// only frames *delivered* prove the picture is.
+  /// Since a frame was handed to the video player. **`null` when none ever has**
+  /// — no viewer has connected yet, which is not evidence of anything.
   final Duration? sinceDelivery;
 
   /// Since the user last asked the device to do something. `null` when they
@@ -200,13 +145,8 @@ class StreamClocks {
   /// reporting and the watchdog has nothing to add.
   final bool framesSeen;
 
-  /// Whether the picture is on screen at all.
-  ///
-  /// A minimised window is the case this exists for. The player may stop
-  /// taking frames when nothing is being drawn, which is indistinguishable
-  /// from a player that has seized up — and restarting a stream nobody is
-  /// looking at, over and over, would be the old loop in a place where nobody
-  /// could even see it happening.
+  /// Whether the picture is on screen at all. A minimised window stops taking
+  /// frames, which is indistinguishable from a player that has seized up.
   final bool watching;
 }
 
@@ -217,43 +157,24 @@ class StreamVerdict {
   final DeviceStreamState state;
   final String detail;
 
-  /// How long the thing this verdict is about has been true. The UI uses it to
-  /// stop claiming certainty it does not have: a picture that has not changed
-  /// for four seconds is a quiet device, and one that has not changed for four
-  /// minutes might be anything.
+  /// How long the thing this verdict is about has been true, so the UI can stop
+  /// claiming certainty: four seconds of stillness is not four minutes of it.
   final Duration? since;
 
   @override
   String toString() => 'StreamVerdict($state, $detail)';
 }
 
-/// How long an interaction is given to reach the device and come back.
-///
-/// `adb shell input` alone costs a couple of hundred milliseconds, and a device
-/// under load costs more.
+/// How long an interaction is given to reach the device and come back;
+/// `adb shell input` alone costs a couple of hundred milliseconds.
 const Duration kInputAnswerGrace = Duration(seconds: 3);
 
-/// How many unanswered interactions it takes to condemn a stream.
-///
-/// More than one, deliberately. Tapping somewhere that does nothing is an
-/// ordinary thing to do, and a rule that restarts a working stream over a
-/// single dead tap is the eleven-second loop wearing a new hat.
+/// How many unanswered interactions it takes to condemn a stream. More than one:
+/// tapping somewhere that does nothing is an ordinary thing to do.
 const int kInputPatience = 3;
 
-/// Everything that can condemn a live view, decided in one pure place.
-///
-/// The order is the argument. Frames arriving is checked first because it is
-/// the strongest evidence there is — but it is not enough on its own, because
-/// frames that never reach the player leave the user looking at a picture the
-/// app believes is live. That was the 1.6.0 blind spot: every signal stopped at
-/// the socket.
-///
-/// Then the two silences, which look identical and are not: bytes without
-/// frames is ours to fix, and neither bytes nor frames is a device with nothing
-/// to draw — unless the user has been asking it for something, in which case
-/// its silence is a fault rather than its nature.
-///
-/// Returns `null` when there is nothing to say.
+/// Everything that can condemn a live view, in one pure place; `null` when there
+/// is nothing to say. Frames arriving is not enough — they may never be shown.
 StreamVerdict? judgeStream(
   StreamClocks clocks, {
   required Duration stallTimeout,
@@ -303,20 +224,8 @@ StreamVerdict? judgeStream(
   );
 }
 
-/// A health report for one live view.
-///
-/// Three things look identical on screen — a picture that does not move — and
-/// only one of them is a fault, which is why [state] separates them rather
-/// than lumping them together as "stalled":
-///
-/// - no bytes and no frames: a device with nothing new to show, or a dead
-///   connection. [DeviceStreamState.idle] until the server is found gone.
-/// - bytes but no frames ([bytesArriving]): the stream is alive and we are
-///   failing to decode or present it, which is ours to fix.
-/// - the socket closed or the server exited: nothing more is coming.
-///
-/// Loop 36 found the dead-but-quiet case on a physical device whose scrcpy
-/// server had exited while its `adb forward` entry stayed registered.
+/// A health report for one live view. [state] separates the three things that
+/// look identical on screen; only bytes-without-frames is ours to fix.
 class DeviceStreamHealth {
   const DeviceStreamHealth({
     required this.state,
@@ -348,10 +257,8 @@ class DeviceStreamHealth {
   bool get isHealthy =>
       state == DeviceStreamState.live || state == DeviceStreamState.idle;
 
-  /// Whether this is worth tearing the stream down for.
-  ///
-  /// Only the two states that mean the pipeline is broken — never mere frame
-  /// silence, which is what the device does when nobody is touching it.
+  /// Whether this is worth tearing the stream down for — never mere frame
+  /// silence, which is what a device does when nobody is touching it.
   bool get needsRestart =>
       state == DeviceStreamState.stalled || state == DeviceStreamState.ended;
 
@@ -377,27 +284,12 @@ class DeviceStreamSession {
 
   final String serial;
 
-  /// Opens a fresh MPEG-TS stream of this session's video, for one more
-  /// consumer — the live picture is one, a recording is another.
-  ///
-  /// **A second consumer costs the device nothing.** The frames behind it are
-  /// already parsed and already on a broadcast controller, so there is no
-  /// second capture, no second encode on the handset and no second socket:
-  /// these are the same encoded frames the picture is made of. What is not
-  /// shared is the muxer — continuity counters and the timestamp base belong
-  /// to one output stream — which is why this is a factory rather than a
-  /// stream.
-  ///
-  /// The first event is the container tables; every event after it is one
-  /// access unit, keyframes carrying their SPS/PPS. A consumer that stops
-  /// reading stops the fan-out to itself and nothing else.
+  /// Opens a fresh MPEG-TS stream of this session's video for one more consumer.
+  /// **A second consumer costs the device nothing**; only the muxer is per-stream.
   final MediaStreamFactory openTransportStream;
 
-  /// Opens the same frames as [openTransportStream], unmuxed.
-  ///
-  /// For a recording that wants a container of its own — an MP4 sink takes the
-  /// access units and muxes them itself, so wrapping them in MPEG-TS first
-  /// only to unwrap them would be work for nothing.
+  /// Opens the same frames as [openTransportStream], unmuxed, for a sink that
+  /// muxes its own container.
   final AccessUnitStreamFactory openAccessUnits;
 
   /// Newest frame seen and the timestamps needed to measure lag against it.
@@ -417,67 +309,27 @@ class DeviceStreamSession {
   /// case input falls back to `adb shell input` and nothing else changes.
   final ScrcpyControlConnection? control;
 
-  /// The size of the encoded video, which is **not** the device's screen size:
-  /// `max_size` scales it down. Touch messages must declare this exact size or
-  /// scrcpy's `PositionMapper` drops them without a word. It changes when the
-  /// device rotates, so it is mutable and kept current by the stream.
+  /// The size of the encoded video, which is **not** the screen size: `max_size`
+  /// scales it down, and a touch declaring the wrong size is dropped silently.
   DeviceScreenSize? videoSize;
 
   /// Tears down the socket, the scrcpy process, the tunnel and the HTTP shim.
   final Future<void> Function() onStop;
 
-  /// Tells the stream the user has asked the device for something.
-  ///
-  /// The live view is the only place that knows this, and the watchdog cannot
-  /// judge silence without it: a device nobody is touching sends no frames and
-  /// is perfectly well, while a device being tapped that sends no frames is a
-  /// live view that has stopped working.
+  /// Tells the stream the user has asked the device for something; the watchdog
+  /// cannot judge silence without it.
   void noteInput() => mark.noteInput();
 
   /// Tells the stream whether its picture is on screen at all, so a window
-  /// nobody can see is not accused of being behind. See
-  /// [StreamClocks.watching].
+  /// nobody can see is not accused of being behind.
   void setWatched(bool value) => mark.watching = value;
 
-  /// Stops taking bytes off the device's socket, and starts again.
-  ///
-  /// For the seconds a **host file dialog** is being created. Everything from
-  /// the socket to the player's HTTP response runs on this isolate — parse,
-  /// mux, write, flush, once per frame — and on Windows that isolate is the
-  /// thread the dialog is built on; see `core/util/file_picking.dart`, whose
-  /// `PickerQuiet` is what calls this.
-  ///
-  /// **Pausing, not stopping**, and the difference is the whole design. The
-  /// subscription is paused, so the socket stays open, the scrcpy server stays
-  /// running, the forward stays registered, the control socket stays writable
-  /// and the player keeps the last frame it decoded — a live view that dropped
-  /// its connection for a file dialog would have traded a freeze for a
-  /// reconnect. The device's own TCP window is what holds the surplus, and it
-  /// is the encoder's queue on the handset that pays, exactly as it does when
-  /// the host is briefly busy for any other reason.
-  ///
-  /// Resuming **rebases the watchdog's clocks**. A quiet window is silence this
-  /// app asked for, and [judgeStream] cannot tell that from a device that has
-  /// stopped answering: without the rebase a picker left open for longer than
-  /// [DeviceStreamService.stallTimeout] would come back to a live view that had
-  /// already condemned itself and begun the restart ladder.
-  ///
-  /// Distinct from [setWatched], which is about a window nobody can *see*: that
-  /// one only stops the watchdog reading silence as a stall, and every byte
-  /// still arrives, is still parsed and is still muxed. This one is about the
-  /// isolate having nothing to do.
+  /// Pauses taking bytes off the device's socket, and resumes. For the seconds a
+  /// host file dialog is built on this isolate; resuming rebases the clocks.
   final void Function(bool quiet) setQuiet;
 
-  /// Asks the device to restart video capture, over the control socket.
-  ///
-  /// The cheapest recovery there is: the server drops its encoder and brings a
-  /// new one up on the same sockets, so a fresh codec config and keyframe
-  /// arrive within a frame or two. Nothing is torn down — not the process, not
-  /// the forward, not the sockets, not the player — so the picture does not
-  /// blink and no port churns.
-  ///
-  /// Returns false when there is no control socket to ask down, which is the
-  /// caller's cue that only the destructive steps are available.
+  /// Asks the device to restart video capture over the control socket — the
+  /// cheapest recovery there is. False when there is no control socket to ask.
   bool requestVideoReset() {
     final connection = control;
     if (connection == null) return false;
@@ -521,12 +373,8 @@ class _Tunnel {
   final ScrcpyControlConnection? control;
 }
 
-/// Deploys scrcpy-server to a device and republishes its H.264 output as an
-/// MPEG-TS stream on loopback HTTP.
-///
-/// The indirection through HTTP exists because libmpv cannot open a raw H.264
-/// elementary stream, and because a local URL is the one input every video
-/// player accepts.
+/// Deploys scrcpy-server to a device and republishes its H.264 output as MPEG-TS
+/// on loopback HTTP: libmpv cannot open a raw H.264 elementary stream.
 class DeviceStreamService {
   DeviceStreamService({
     required this.adb,
@@ -546,23 +394,14 @@ class DeviceStreamService {
   final CommandRunner runner;
   final ScrcpyServerBytes serverBytes;
 
-  /// How long the picture may stand still before the stream says so.
-  ///
-  /// It decides what is *reported*, never what is torn down. The comment that
-  /// used to be here claimed a static screen "still sends frames, but slowly";
-  /// it does not send any, which is why this timeout used to end a working
-  /// stream every few seconds.
+  /// How long the picture may stand still before the stream says so. It decides
+  /// what is *reported*, never what is torn down.
   final Duration stallTimeout;
 
   final Duration watchdogInterval;
 
   /// How long frame silence may run before the device is asked whether this
-  /// session's server is still alive.
-  ///
-  /// Silence is normal, so it is not evidence — but it is the moment worth
-  /// spending one `ps` on, because the one failure that produces silence *and*
-  /// no socket event is a server that died leaving its `adb forward` and the
-  /// host-side socket up (Loop 36, on a physical device).
+  /// session's server is alive — the one failure that raises no socket event.
   final Duration livenessProbeInterval;
 
   /// How long an interaction is given to be answered before the live view is
@@ -570,35 +409,21 @@ class DeviceStreamService {
   final Duration inputAnswerGrace;
 
   /// How many times one tunnel attempt probes for a streaming socket, at 300 ms
-  /// apiece. Injectable so a test does not spend six seconds per attempt
-  /// waiting for a port nothing will ever answer on.
+  /// apiece. Injectable so a test does not spend six seconds per attempt.
   final int socketAttempts;
 
-  /// Where the server jar is staged on the host before it is pushed. The
-  /// system temp directory in the app; a per-test directory in tests, so a
-  /// test can neither see nor be seen by a live session's staging.
+  /// Where the server jar is staged on the host before it is pushed; a per-test
+  /// directory in tests, so a test and a live session cannot see each other's.
   final Directory stagingDirectory;
 
   final Logger _logger;
 
   /// Distinguishes concurrent starts inside one process; [pid] distinguishes
-  /// processes. Together they make [scrcpyHostJarName] collision-free without
-  /// a lock.
+  /// processes. Together they make [scrcpyHostJarName] collision-free.
   static int _stageSequence = 0;
 
-  /// Kills scrcpy servers and removes `adb forward` entries left behind by an
-  /// earlier run on [serial].
-  ///
-  /// Both leaks are real and were observed together: on one device the server
-  /// had exited while its forward stayed registered, and on another four
-  /// servers were alive at once because killing the host-side `adb shell` does
-  /// **not** kill the `app_process` it started on the device. Neither is
-  /// self-correcting, so every start begins by clearing them.
-  ///
-  /// A tidy [DeviceStreamSession.stop] is not enough on its own, either: the
-  /// pane's `dispose` cannot await it, so closing the app leaves whatever the
-  /// teardown had not finished. Reaping on the way *in* is the only cleanup
-  /// that always gets to run.
+  /// Kills scrcpy servers and removes `adb forward` entries an earlier run left
+  /// on [serial]. Killing the host-side `adb shell` does not kill `app_process`.
   Future<int> reapOrphans(String serial) async {
     var reaped = 0;
     // The **prefix**, because every session now deploys its own jar: matching
@@ -625,8 +450,6 @@ class DeviceStreamService {
 
   /// Writes the server jar to a path only this start uses, and clears out
   /// whatever earlier starts left behind.
-  ///
-  /// See [kScrcpyHostJarPrefix] for why the path cannot be a fixed one.
   Future<File> _stageServerJar() async {
     await sweepStagedJars();
     final token =
@@ -649,13 +472,8 @@ class DeviceStreamService {
     }
   }
 
-  /// Deletes staged jars older than [kStagedJarLifetime].
-  ///
-  /// Without this the per-start paths would be strictly worse than the fixed
-  /// one they replace: a start that is killed before its `finally` runs — the
-  /// app quitting mid-start, a crash — leaves 700 KB behind, and the fixed path
-  /// at least overwrote itself. Also collects the fixed-path file previous
-  /// builds left in the temp directory; see [kScrcpyHostJarPrefix].
+  /// Deletes staged jars older than [kStagedJarLifetime]: a start killed before
+  /// its `finally` runs leaves 700 KB behind, which a fixed path never did.
   Future<int> sweepStagedJars() async {
     var swept = 0;
     final now = DateTime.now();
@@ -684,26 +502,9 @@ class DeviceStreamService {
     return swept;
   }
 
-  /// Connects the tunnel's sockets, retrying until the server is really
-  /// streaming.
-  ///
-  /// Two hazards, and the order below is the only one that clears both.
-  ///
-  /// **`adb forward` accepts the host-side TCP connection before the
-  /// device-side socket exists**, then closes it. A successful `connect()`
-  /// therefore proves nothing; only bytes do.
-  ///
-  /// **With `control=true` the server sends no video until the control socket
-  /// is also connected.** `DesktopConnection.open` accepts video, then audio,
-  /// then control, and only *then* returns and lets the encoder start. Waiting
-  /// for video bytes before opening the control socket deadlocks: the client
-  /// waits for a byte the server will not send until the client connects again.
-  /// That is not a hypothetical — it is what this loop's first run on a
-  /// physical device did, retrying for ten seconds and reporting the server had
-  /// never started.
-  ///
-  /// So: open both sockets, *then* wait for bytes. Video arriving proves the
-  /// whole handshake, control socket included.
+  /// Opens both sockets, *then* waits for bytes. `adb forward` accepts the host
+  /// side before the device side exists, and `control=true` sends no video until
+  /// the control socket connects — waiting for video first deadlocks.
   Future<({_ServingConnection video, ScrcpyControlConnection? control})?>
   _connectSockets(int port, {required bool withControl, int? attempts}) async {
     final limit = attempts ?? socketAttempts;
@@ -761,44 +562,9 @@ class DeviceStreamService {
     return null;
   }
 
-  /// Capture geometry and rate for one class of device.
-  ///
-  /// The rate is the whole difference between a live view and a laggy one.
-  /// scrcpy asks the **encoder** to accept up to `max_fps`; when the encoder
-  /// cannot sustain that rate the surplus frames queue up inside the device and
-  /// every frame reaches us that much later. Asking for less than the encoder
-  /// can do is not free either — the player holds about three frames, so each
-  /// frame dropped from the rate costs three frame intervals of lag. The right
-  /// setting is therefore *just under* what the device's encoder sustains.
-  ///
-  /// Measured on `emulator-5554` (1080x2400, software encoder) under continuous
-  /// scrolling — device capture to host arrival, and the rate actually
-  /// achieved:
-  ///
-  /// | max_size | max_fps | sustained | arrival p50 | arrival p90 |
-  /// | --- | --- | --- | --- | --- |
-  /// | 1024 | 60 | 13.2 | 1256 ms | 1739 ms |
-  /// | 1024 | 15 | — | 895 ms | 1362 ms |
-  /// | 1024 | 10 | 10.0 | 70 ms | 219 ms |
-  /// | 640 | 60 | 20.0 | 706 ms | 1601 ms |
-  /// | 640 | 30 | 22.7 | 284 ms | 542 ms |
-  /// | 640 | 22 | 19.1 | 116 ms | 265 ms |
-  /// | **640** | **20** | **18.5** | **71 ms** | **176 ms** |
-  ///
-  /// A physical device encodes in hardware and keeps up at 60, so it queues
-  /// nothing and can have the full resolution.
-  ///
-  /// The emulator profile takes the **1024/10** row rather than 640/20. Both
-  /// arrive in the same time — 70 ms against 71 ms at p50, which is what an
-  /// interaction feels — and the encoder's limit is pixels per second, so the
-  /// choice between them is only ever sharpness against smoothness. 640 was
-  /// the wrong side of that: `max_size` caps the **long** edge, so a
-  /// 1344x2992 emulator was being shown at 288x640, scaled 4.7x on each axis
-  /// to fill a pane on a Retina display. Reading a UI beats animating it
-  /// smoothly when the whole point is watching an agent work.
-  ///
-  /// The cost is real and bounded: 18.5 fps drops to 10, and p90 arrival goes
-  /// 176 ms -> 219 ms.
+  /// Capture geometry and rate for one class of device. Measured: asking the
+  /// encoder for more fps than it sustains queues frames on the device and adds
+  /// lag, so the right rate is just under what it can do.
   static const ({int maxSize, int maxFps}) _hardwareEncoder = (
     maxSize: 1024,
     maxFps: 60,
@@ -823,21 +589,12 @@ class DeviceStreamService {
     final captureSize = maxSize ?? profile.maxSize;
     final captureFps = maxFps ?? profile.maxFps;
 
-    // 0. Clear anything a previous run left running or registered.
     await reapOrphans(serial);
 
-    // 1. Stage the jar on the host, at a path only this start knows. Putting it
-    //    on the *device* is [_openTunnel]'s job, per attempt — see
-    //    [scrcpyJarPathFor].
     final hostJar = await _stageServerJar();
 
-    // 2–4. Tunnel, server, sockets. Attempted with the control socket first and
-    // then without it, because enabling control changes the *video* handshake:
-    // a server started with `control=true` streams nothing at all until a
-    // control socket connects. If that cannot be established — an older server,
-    // a device that refuses the second connection — the whole live view would
-    // be lost for the sake of an input upgrade. Falling back to `control=false`
-    // keeps exactly the Loop 27 behaviour, with `adb shell input` for gestures.
+    // Control first, then without it: `control=true` changes the *video*
+    // handshake, and losing the picture for an input upgrade is a bad trade.
     _Tunnel? tunnel;
     var attemptedWithoutControl = false;
     try {
@@ -877,7 +634,6 @@ class DeviceStreamService {
     }
     final socket = connection.socket;
 
-    // 5. Parse, mux, fan out.
     final mark = LiveFrameMark();
     DeviceScreenSize? videoSize;
     final sizes = StreamController<DeviceScreenSize>.broadcast();
@@ -888,26 +644,20 @@ class DeviceStreamService {
     // immediately instead of waiting for the next one.
     ScrcpyFrame? lastKeyFrame;
 
-    // Two clocks, deliberately. `lastByteUs` says the socket is alive;
-    // `mark.arrivalUs` says frames are decoding out of it. When the picture
-    // freezes, which of the two has stopped is the whole diagnosis.
+    // Two clocks: `lastByteUs` says the socket is alive, `mark.arrivalUs` says
+    // frames are decoding out of it. Which of them stopped is the diagnosis.
     var lastByteUs = DateTime.now().microsecondsSinceEpoch;
     final healthController = StreamController<DeviceStreamHealth>.broadcast();
     var lastState = DeviceStreamState.live;
     var lastDetail = '';
 
-    // Set by [stop] before it kills anything, and read by the exit watcher
-    // below. Dart's `Process.kill` reports exit code -1 on Windows, so our own
-    // teardown used to log and *show the user*
-    // "scrcpy-server exited (code -1)" on every stop, restart and device
-    // switch — the exact line that read as the failure in the owner's log.
+    // Set by [stop] before it kills anything. Dart's `Process.kill` reports exit
+    // code -1 on Windows, which used to reach the user as a failure line.
     var stopped = false;
 
     void report(DeviceStreamState state, String detail, [Duration? since]) {
-      // The state machine only ever moves forwards. A stream that has ended
-      // cannot go back to being live, and the watchdog would otherwise call it
-      // healthy again for the second between the socket closing and the frame
-      // clock running out.
+      // The state machine only moves forwards: a stream that has ended must not
+      // read as healthy again while the frame clock runs out.
       if (lastState == DeviceStreamState.ended &&
           state != DeviceStreamState.ended) {
         return;
@@ -1002,9 +752,8 @@ class DeviceStreamService {
         socketSubscription.pause();
         return;
       }
-      // The gap is not evidence of anything, so no clock may still be pointing
-      // into it when the watchdog next looks. The zeros are left alone: zero
-      // means "has never happened", which the quiet window did not change.
+      // No clock may still point into the gap. Zeros are left alone: zero means
+      // "has never happened", which the quiet window did not change.
       final now = DateTime.now().microsecondsSinceEpoch;
       lastByteUs = now;
       if (mark.frames > 0) mark.arrivalUs = now;
@@ -1013,13 +762,8 @@ class DeviceStreamService {
       socketSubscription.resume();
     }
 
-    // The watchdog. It reports what the picture is doing; it does not decide
-    // that the stream is broken, because frame silence is what a device with a
-    // static screen looks like and tearing the stream down for it is the
-    // restart loop this state machine exists to end.
-    //
-    // What it may conclude lives in [judgeStream], which is pure and has the
-    // whole rule in one table. Everything here is clock-reading.
+    // The watchdog reports what the picture is doing; it never decides the stream
+    // is broken. What it may conclude lives in [judgeStream], which is pure.
     var probeInFlight = false;
     var lastProbeUs = DateTime.now().microsecondsSinceEpoch;
     final watchdog = Timer.periodic(watchdogInterval, (_) {
@@ -1078,13 +822,8 @@ class DeviceStreamService {
       );
     });
 
-    // 6. Serve MPEG-TS over loopback.
-    //
-    // The muxing lives here because it is scrcpy-shaped — SPS/PPS republished
-    // ahead of every keyframe, a cached keyframe replayed so a viewer does not
-    // wait for the next one — while the door itself is [LoopbackMediaServer],
-    // which knows nothing about H.264 and is what a second live-view backend
-    // uses too.
+    // The muxing is scrcpy-shaped — SPS/PPS ahead of every keyframe, a cached
+    // keyframe replayed — while [LoopbackMediaServer] knows nothing about H.264.
     Uint8List accessUnitFor(ScrcpyFrame frame, Uint8List? config) =>
         (frame.isKeyFrame && config != null)
         ? Uint8List.fromList([...config, ...frame.data])
@@ -1092,8 +831,7 @@ class DeviceStreamService {
 
     Stream<List<int>> muxedForOneViewer() async* {
       // A fresh muxer per viewer: continuity counters and the timestamp base
-      // belong to one output stream, and replaying packets to a second viewer
-      // would duplicate them.
+      // belong to one output stream.
       final muxer = TsMuxer();
       yield muxer.tables();
 
@@ -1173,9 +911,8 @@ class DeviceStreamService {
       if (!sizes.isClosed) await sizes.close();
       if (!healthController.isClosed) await healthController.close();
       await http.close();
-      // Three separate things have to die, and the first does not imply the
-      // others: killing the host-side `adb shell` leaves the `app_process` it
-      // started running on the device, and the forward outlives both.
+      // Killing the host-side `adb shell` leaves the `app_process` it started
+      // running on the device, and the forward outlives both.
       await server.kill();
       await _killDeviceServers(serial, scid);
       await adb.removeForward(serial, localPort);
@@ -1210,12 +947,8 @@ class DeviceStreamService {
     required int captureFps,
     required bool withControl,
   }) async {
-    // adb picks the port, so we never collide with a reserved range — scrcpy's
-    // default 27183 was already unavailable on this machine.
-    //
-    // The scid must fit a signed 32-bit int: `Options.parse` runs it through
-    // `Integer.parseInt`, and anything larger aborts the server with a
-    // `NumberFormatException` before it prints anything else.
+    // adb picks the port, so we never collide with a reserved range. The scid
+    // must fit a signed 32-bit int or `Options.parse` aborts the server.
     final scid = Random().nextInt(0x7FFFFFFF).toRadixString(16).padLeft(8, '0');
 
     // The jar goes on the device **here**, once per attempt, because the server
@@ -1268,8 +1001,8 @@ class DeviceStreamService {
           'log_level=warn',
           'tunnel_forward=true',
           'audio=false',
-          // Loop 36: the control socket. Note this also changes the video
-          // handshake — see [_connectSockets].
+          // Enabling control also changes the video handshake — see
+          // [_connectSockets].
           'control=${withControl ? 'true' : 'false'}',
           'cleanup=true',
           'send_device_meta=false',
@@ -1277,17 +1010,14 @@ class DeviceStreamService {
           'max_size=$captureSize',
           'video_codec=h264',
           'max_fps=$captureFps',
-          // A keyframe every second. Without this the encoder may go a long
-          // time between keyframes, and a viewer that connects in between has
-          // nothing it can start decoding from.
+          // A keyframe every second, so a viewer connecting between them has
+          // something it can start decoding from.
           'video_codec_options=i-frame-interval=1',
         ],
       ),
     );
-    // Keep what the server says. When it dies it normally explains itself on
-    // stderr, and that explanation used to go only to a log nobody reads — the
-    // pane now shows it, because "the live view stopped" on its own is not a
-    // report anyone can act on.
+    // When the server dies it normally explains itself on stderr; the pane shows
+    // it, because "the live view stopped" is not a report anyone can act on.
     final serverLog = <String>[];
     unawaited(
       server.stderrLines.forEach((line) {
@@ -1321,12 +1051,8 @@ class DeviceStreamService {
     return null;
   }
 
-  /// Whether this session's server is still in the device's process table.
-  ///
-  /// Three answers, not two. `null` is "adb could not tell us", and it is the
-  /// reason this is not a bool: a probe that read an empty process table as
-  /// "the server is gone" would restart the live view every time adb hiccupped
-  /// — the same fault as the stall watchdog, in a new place.
+  /// Whether this session's server is still in the device's process table. Three
+  /// answers: `null` is "adb could not tell us", which is not "gone".
   Future<bool?> _serverStillRunning(String serial, String scid) async {
     final table = await adb.processList(serial);
     if (table.trim().isEmpty) return null;
@@ -1351,12 +1077,8 @@ class DeviceStreamService {
     }
   }
 
-  /// Kills the device-side server for one session.
-  ///
-  /// Matched on `scid=`, which is unique per session, so a second live view on
-  /// the same device — or a scrcpy the developer is running themselves — is
-  /// untouched. The `[d]` is not a typo: it stops the pattern matching the
-  /// `sh -c` that is running `pkill` itself.
+  /// Kills the device-side server for one session, matched on `scid=` so another
+  /// live view is untouched. The `[d]` stops the pattern matching its own `pkill`.
   Future<void> _killDeviceServers(String serial, String scid) async {
     try {
       await runner.run(

@@ -1,32 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
-/// Opens the byte stream one viewer will be served.
-///
-/// Called once per connection, not once per server: a live stream has
-/// per-viewer state — an MPEG-TS muxer's continuity counters and timestamp
-/// base belong to one output stream, and replaying the same packets to a second
-/// viewer would duplicate them.
+/// Opens the byte stream one viewer will be served. Called once per connection:
+/// a muxer's continuity counters and timestamp base belong to one output stream.
 typedef MediaStreamFactory = Stream<List<int>> Function();
 
-/// Serves a live byte stream to a local video player over loopback HTTP.
+/// Serves a live byte stream to a local video player over loopback HTTP, because
+/// libmpv cannot open a raw elementary stream and a local URL is the one input
+/// every video player accepts. Loopback only: what it serves is the user's
+/// screen.
 ///
-/// The indirection exists because libmpv cannot open a raw elementary stream,
-/// and because a local URL is the one input every video player accepts. It is
-/// deliberately ignorant of what the bytes are: the Android live view feeds it
-/// MPEG-TS muxed from scrcpy's H.264, and anything else that can produce a
-/// container libmpv reads can use the same door.
-///
-/// Loopback only, on an ephemeral port. What it serves is the user's screen;
-/// binding anywhere else would put that on the network.
-///
-/// ## The viewer's lifetime is the caller's to end, not this server's
-///
-/// A viewer that vanishes is **not** detected here, and cannot be. Measured on
-/// macOS against a peer socket that had been destroyed: sixty 64 KiB writes to
-/// the `HttpResponse` all reported success, and `response.done` never
-/// completed. There is no failed write to learn from, so a producer is not
-/// stopped by the picture going away — whoever started the stream stops it.
+/// **A viewer that vanishes is not detected here, and cannot be** — writes to a
+/// destroyed peer socket report success and `response.done` never completes — so
+/// whoever started the stream is what stops it.
 class LoopbackMediaServer {
   LoopbackMediaServer._(this._server, this.url, this._viewers);
 
@@ -51,15 +37,9 @@ class LoopbackMediaServer {
         ..bufferOutput = false
         ..headers.contentType = contentType ?? ContentType('video', 'mp2t');
 
-      // A live view's producer normally never ends — the device keeps
-      // encoding until the pane is closed — but one that does end must close
-      // the response, or the player sits waiting on a chunked body that will
-      // never have a last chunk.
-      //
-      // The close has to wait for the last flush. Flushes are deliberately not
-      // awaited per chunk (see below), so at the moment the producer finishes
-      // there may still be bytes on their way to the socket, and closing over
-      // the top of them truncates the stream.
+      // A producer that ends must close the response, or the player waits on a
+      // chunked body that never gets its last chunk. The close waits for the
+      // last flush, or it truncates bytes still on their way to the socket.
       var pending = Future<void>.value();
       var finished = false;
       Future<void> finish() async {
@@ -75,23 +55,16 @@ class LoopbackMediaServer {
 
       final subscription = openStream().listen(
         (chunk) {
-          // Writes are chained rather than issued straight from here. An
-          // `HttpResponse` is an `IOSink`, and a second `flush()` raised while
-          // the first is still in flight throws — which, caught, silently drops
-          // that frame and every frame behind it. The chain also keeps the
-          // bytes in the order the producer emitted them.
-          //
-          // The chain is not awaited by the listener, so a slow socket does not
-          // stall the producer of a live picture; [finish] is what waits for
-          // the tail before closing.
+          // Writes are chained rather than issued from here: a second `flush()`
+          // raised while the first is in flight throws, silently dropping that
+          // frame and every one behind it. The chain is not awaited by the
+          // listener, so a slow socket cannot stall a live picture's producer.
           pending = pending
               .then((_) async {
                 response.add(chunk);
-                // **After** the flush, not before it. `add` only buffers, so
-                // reporting there says a chunk was handed over when a stalled
-                // or dead viewer has taken nothing — and the live view reads
-                // this as "the picture is being updated". A viewer that has
-                // stopped consuming is exactly what it must be able to say.
+                // **After** the flush, not before it: `add` only buffers, so
+                // reporting here would call a chunk delivered that a stalled or
+                // dead viewer has not taken.
                 await response.flush();
                 onChunkWritten?.call();
               })
@@ -126,11 +99,8 @@ class LoopbackMediaServer {
   /// The port bound, for a caller that wants to name it in a log.
   int get port => _server.port;
 
-  /// Stops serving and ends every producer.
-  ///
-  /// Cancelling the producers is not a formality: since a vanished viewer is
-  /// never noticed, this is the only thing that tells a device it can stop
-  /// encoding.
+  /// Stops serving and ends every producer. Not a formality: since a vanished
+  /// viewer is never noticed, this is the only thing that stops the encoding.
   Future<void> close() async {
     final viewers = _viewers.toList();
     _viewers.clear();

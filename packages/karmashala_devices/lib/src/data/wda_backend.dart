@@ -10,24 +10,11 @@ import 'simctl_service.dart';
 import 'wda_locator.dart';
 import 'wda_ui_parsing.dart';
 
-/// [SimulatorBackend] over WebDriverAgent, running inside the simulator.
-///
-/// **Why this and not `idb_companion`.** idb's `video_stream` RPC crashes the
-/// companion outright — facebook/idb#955, two `AsyncIterator`s over one
-/// request stream — so it can drive a simulator but never show one. WDA is also
-/// a fifth the size (5.6 MB against 43 MB) and ships for x86_64 as well as
-/// arm64, so an Intel Mac gets a live view where idb offered none.
-///
-/// It is an XCTest bundle that `simctl install`s into the simulator and runs
-/// *there*, which is what makes it work against a headless `simctl boot` with
-/// no Simulator.app window. Two servers come up with it:
-///
-/// - `:8100` — JSON over HTTP: the element tree, input, window size.
-/// - `:9100` — `multipart/x-mixed-replace` JPEG, which is the live view.
-///
-/// Measured on an iPhone 17 Pro Max / iOS 26.4: ready 2–7s after launch, 8 fps
-/// at defaults and 28 fps once the session settings are raised, full-resolution
-/// 1320x2868 frames.
+/// [SimulatorBackend] over WebDriverAgent, an XCTest bundle `simctl install`s
+/// into the simulator and runs *there*, so it works against a headless boot.
+/// Two servers come up with it: `:8100` JSON over HTTP for the tree, input and
+/// window size, and `:9100` `multipart/x-mixed-replace` JPEG for the live view.
+/// Chosen over `idb_companion`, whose `video_stream` RPC crashes it outright.
 class WdaBackend implements SimulatorBackend {
   WdaBackend({
     required this.runner,
@@ -81,11 +68,9 @@ class WdaBackend implements SimulatorBackend {
     }
 
     await simctl.installApp(udid, wda.appPath);
-    // The ports reach the test bundle through `SIMCTL_CHILD_*`, which is how
-    // `simctl` passes an environment into the process it launches. Set with
-    // `env` rather than on the request, because `CommandRunner` deliberately
-    // carries no environment — every runner it has would have to decide what
-    // that means across a WSL boundary and an SSH one, for this single caller.
+    // The ports reach the test bundle through `SIMCTL_CHILD_*`, set with `env`
+    // rather than on the request: `CommandRunner` carries no environment, and
+    // giving it one would have to mean something across WSL and SSH too.
     await runner.run(
       CommandRequest(
         executable: '/usr/bin/env',
@@ -105,12 +90,9 @@ class WdaBackend implements SimulatorBackend {
     try {
       await _awaitReady();
     } on CommandException catch (error) {
-      // The runner is a *built binary* pinned to one version, so a simulator
-      // whose runtime predates it is a real and ordinary way for this to fail —
-      // and the timeout alone says only that nothing answered, which reads like
-      // a hung machine. Naming the runtime is what turns a runtime swap from a
-      // guess into the obvious next step. Looked up only here, on a path that
-      // has already spent a minute failing.
+      // The runner is a built binary pinned to one version, so a simulator whose
+      // runtime predates it is an ordinary failure — and a bare timeout reads
+      // like a hung machine. Looked up only on a path that has already failed.
       throw CommandException('${error.message}${await _runtimeAdvice(udid)}');
     }
     _attached = udid;
@@ -118,8 +100,7 @@ class WdaBackend implements SimulatorBackend {
   }
 
   /// A sentence naming the simulator's runtime and the runner's version, or
-  /// empty when the runtime cannot be determined — a guess here would send
-  /// somebody after the wrong problem.
+  /// empty when the runtime cannot be determined — a guess misdirects.
   Future<String> _runtimeAdvice(String udid) async {
     String? runtimeName;
     try {
@@ -143,11 +124,8 @@ class WdaBackend implements SimulatorBackend {
         'way.';
   }
 
-  /// Waits for `/status` to say it is ready.
-  ///
-  /// Polled rather than slept: measured between 2 and 7 seconds depending on
-  /// what else the machine is doing, and a fixed wait is either a stall or a
-  /// race.
+  /// Waits for `/status` to say it is ready. Polled rather than slept: measured
+  /// between 2 and 7 seconds, so a fixed wait is either a stall or a race.
   Future<void> _awaitReady({
     Duration timeout = const Duration(seconds: 60),
   }) async {
@@ -169,11 +147,8 @@ class WdaBackend implements SimulatorBackend {
     );
   }
 
-  /// The session id, creating one if there is none.
-  ///
-  /// Most reads need no session — `/status` and `/source` are served without
-  /// one — but input and settings do, and creating it costs a round trip that
-  /// no tap should pay for.
+  /// The session id, creating one if there is none. Most reads need no session,
+  /// but input and settings do, and creating it costs a round trip.
   Future<String> _session() async {
     final existing = _sessionId;
     if (existing != null) return existing;
@@ -207,16 +182,13 @@ class WdaBackend implements SimulatorBackend {
       await simctl.terminateApp(udid, kWdaBundleId);
     } on Object catch (error) {
       // Every kind, not just CommandException: `simctl` reports a refusal as a
-      // StateError, which escaped this and took the ordered shutdown with it —
-      // `detachAll` runs from a provider's dispose during quit.
+      // StateError, which once took the ordered shutdown with it.
       _logger.info('WebDriverAgent was already gone: $error');
     }
   }
 
-  /// Detaches from whatever is attached, if anything.
-  ///
-  /// For teardown paths that cannot ask another provider which simulator was
-  /// in use — see `simulatorBackendProvider`'s `onDispose`.
+  /// Detaches from whatever is attached, if anything. For teardown paths that
+  /// cannot ask another provider which simulator was in use.
   Future<void> detachAll() async {
     final attached = _attached;
     if (attached != null) await detach(attached);
@@ -249,8 +221,7 @@ class WdaBackend implements SimulatorBackend {
   }) async {
     await attach(udid);
     // Framerate and quality are session settings, not stream parameters: the
-    // MJPEG server reads them from the running session, so they have to be set
-    // before the picture is opened rather than passed with it.
+    // MJPEG server reads them from the running session before the picture opens.
     try {
       final session = await _session();
       await _post('/session/$session/appium/settings', {
@@ -266,9 +237,7 @@ class WdaBackend implements SimulatorBackend {
     }
 
     // No proxy and no muxer: this is already `multipart/x-mixed-replace` over
-    // loopback HTTP, which is a container the player opens directly. The
-    // Android path needs `TsMuxer` and `LoopbackMediaServer` because scrcpy
-    // hands over a raw elementary stream; this does not.
+    // loopback HTTP, a container the player opens directly.
     return SimulatorVideoFeed(
       url: Uri.parse('http://127.0.0.1:$mjpegPort'),
       stop: () async {},
@@ -322,9 +291,8 @@ class WdaBackend implements SimulatorBackend {
     await attach(udid);
     final session = await _session();
     final response = await _get('/session/$session/wda/locked');
-    // WebDriverAgent is inconsistent about booleans — `isVisible` and
-    // `isEnabled` come back as the strings "1" and "0" — so this accepts both
-    // rather than trusting the type.
+    // WebDriverAgent is inconsistent about booleans — `isVisible` comes back as
+    // the strings "1" and "0" — so this accepts both rather than the type.
     final value = response['value'];
     return value == true || value == 1 || value == '1';
   }
@@ -344,17 +312,14 @@ class WdaBackend implements SimulatorBackend {
     await attach(udid);
     final session = await _session();
     // Whole strings, not a keycode table: WDA types through XCUITest, so
-    // anything the iOS keyboard can produce travels as itself. That is why
-    // there is no HID map here and no refusal for accented letters or emoji.
+    // anything the iOS keyboard can produce travels as itself.
     await _post('/session/$session/wda/keys', {
       'value': [text],
     });
   }
 
-  /// The USB HID **keyboard** usage page. WebDriverAgent's
-  /// `performIoHidEvent` also reaches the consumer page (`0x0C`), which is
-  /// where volume and Siri live, but nothing routed here needs it: those are
-  /// hardware buttons, and [pressButton] owns those.
+  /// The USB HID **keyboard** usage page. `performIoHidEvent` also reaches the
+  /// consumer page, but volume and Siri are buttons and [pressButton] owns them.
   static const int _hidKeyboardPage = 0x07;
 
   @override
@@ -362,13 +327,8 @@ class WdaBackend implements SimulatorBackend {
     await attach(udid);
     final session = await _session();
     // Session-level, unlike `/wda/homescreen`: the route only exists under a
-    // session, and asking the server for it answers "unknown command".
-    //
-    // The duration is what the device sees the key held for, so it has to be
-    // long enough for the press to register and short enough not to trip
-    // auto-repeat. 10 ms was measured working for arrows, Backspace, Escape and
-    // Return against WebDriverAgent 16.11.4 on an iOS 18.2 simulator; the call
-    // blocks for it, which is why it is not larger.
+    // session. The duration is what the device sees the key held for — long
+    // enough to register, short enough not to trip auto-repeat, and blocking.
     await _post('/session/$session/wda/performIoHidEvent', {
       'page': _hidKeyboardPage,
       'usage': key.hidUsage,
@@ -396,7 +356,6 @@ class WdaBackend implements SimulatorBackend {
     }
   }
 
-  // ---------------------------------------------------------------- HTTP
 
   Future<Map<String, Object?>> _get(String path) async =>
       _decode(await _getRaw(path));

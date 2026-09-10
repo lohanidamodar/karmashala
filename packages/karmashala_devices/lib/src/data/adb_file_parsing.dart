@@ -1,33 +1,16 @@
 import '../domain/device_files.dart';
 
-/// Pure parsers for what an Android shell prints about files.
-///
-/// Free of any process concern, like `adb_output_parsing.dart` beside it, so
-/// the awkward real-world shapes can be covered by fast unit tests — and there
-/// are a lot of awkward shapes. `ls -l` is not one format: toybox (Android 6+),
-/// the older toolbox and busybox each print a different one, the date column
-/// alone has two spellings, and a device that cannot `stat` an entry prints a
-/// row of question marks where the metadata should be.
+/// Pure parsers for what an Android shell prints about files. `ls -l` is not one
+/// format: toybox, toolbox and busybox each print a different one, the date
+/// column alone has two spellings, and an unstattable entry prints `?` columns.
 
-/// Wraps [value] for the **device's** shell.
-///
-/// Needed because `adb shell <words…>` does not pass an argv: adb joins
-/// everything after `shell` with spaces and hands the result to `sh` on the
-/// device, which splits it again. So a path with a space in it arrives as two
-/// arguments unless it is quoted here, and a path with a `;` or a `$` in it
-/// arrives as something else entirely.
-///
-/// Single quotes rather than backslashes because inside them the device's shell
-/// interprets nothing at all — no `$`, no backtick, no glob. The one character
-/// that cannot appear is `'` itself, closed and reopened in the usual way.
-/// Measured against a real device: `it's here.txt` round-trips, and so does
-/// `my file नेपाली.txt`.
+/// Wraps [value] for the **device's** shell. `adb shell <words…>` passes no
+/// argv — adb joins with spaces and `sh` splits again — so a path with a space,
+/// a `;` or a `$` arrives as something else. Single quotes interpret nothing.
 String shellQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 
-/// Why an `ls` produced no listing.
-///
-/// Classified rather than turned into a sentence here, because the sentence
-/// wants the device's name and this file has never heard of one.
+/// Why an `ls` produced no listing. Classified rather than worded here: the
+/// sentence wants the device's name and this file has never heard of one.
 enum LsFailure {
   /// The shell user is not allowed. Most of `/data` on any device.
   permissionDenied,
@@ -38,20 +21,14 @@ enum LsFailure {
   /// Something is, but it is a file.
   notADirectory,
 
-  /// `ls` failed and said something this build does not recognise. Kept apart
-  /// from the three above so the message can quote the device verbatim instead
-  /// of guessing which of them it meant.
+  /// `ls` failed and said something this build does not recognise. Kept apart so
+  /// the message can quote the device verbatim instead of guessing.
   unknown,
 }
 
-/// What went wrong with an `ls`, or null when nothing did.
-///
-/// Decided from the **output**, not only the exit status. `adb shell` did not
-/// forward the remote exit code before Android 7, so a device from before then
-/// reports 0 for a refusal; and even on a modern one a listing can succeed
-/// overall while printing a per-entry error. Reading the text is the only test
-/// that works on every device — the same rule `AdbService.installApk` and
-/// `launchPackage` already follow for their own reasons.
+/// What went wrong with an `ls`, or null when nothing did. Decided from the
+/// **output**: `adb shell` forwarded no remote exit code before Android 7, and
+/// even a modern listing can succeed overall while printing a per-entry error.
 LsFailure? classifyLsFailure(String output, {required bool ok}) {
   final text = output.toLowerCase();
   if (text.contains('permission denied') ||
@@ -73,45 +50,28 @@ LsFailure? classifyLsFailure(String output, {required bool ok}) {
 final _mode = RegExp(r'^([bcdlps-])([rwxsStTl?-]{9})[.+@]?$');
 
 /// The two timestamps `ls` prints, either of which ends the fixed columns and
-/// begins the name.
-///
-/// * toybox and coreutils `--time-style=long-iso`: `2026-09-03 18:52`, with
-///   optional seconds.
-/// * busybox and old toolbox: `Sep  3 18:52`, or `Sep  3  2026` for anything
-///   older than six months — note that this form **has no year** for recent
-///   files, which is why nothing here builds a `DateTime` out of it.
+/// begins the name: `2026-09-03 18:52` from toybox, `Sep  3 18:52` from busybox
+/// — the second omits the year, which is why nothing here builds a `DateTime`.
 final _timestamp = RegExp(
   r'(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)'
   r'|((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+'
   r'(?:\d{4}|\d{1,2}:\d{2}))',
 );
 
-/// The shape a device prints for an entry it could not stat, seen on the
-/// owner's own handset at `/`:
+/// The shape a device prints for an entry it could not stat, seen on the owner's
+/// own handset at `/`:
 ///
 /// ```
 /// d?????????   ? ?      ?             ?                ? data_mirror
 /// l?????????   ? ?      ?             ?                ? init -> ?
 /// ```
 ///
-/// The name is real and the metadata is not. The greedy `(\s+\?)+` stops at the
-/// last question-mark column because the next token is a name, and `init -> ?`
-/// survives intact.
+/// The name is real and the metadata is not.
 final _unstattable = RegExp(r'^\S+(?:\s+\?)+\s+(.+)$');
 
-/// Parses `ls -la <dir>/` from an Android shell into a listing of [directory].
-///
-/// **Defensive by construction.** A line this cannot read becomes a
-/// [SkippedDeviceEntry] carrying the line and the reason, never an exception
-/// and never a row with invented values — a listing that is quietly one short
-/// is the failure mode that costs somebody an afternoon.
-///
-/// The columns between the mode and the name are read positionally *backwards*
-/// from the timestamp rather than by counting from the left, because the count
-/// is not stable: toybox prints a link count and the old toolbox does not, a
-/// device node prints `1, 3` where a size goes, and `ls -Z` inserts an SELinux
-/// context. Anchoring on the two things that never move — a mode word at the
-/// start, a timestamp before the name — reads all of them.
+/// Parses `ls -la <dir>/` into a listing of [directory]. A line this cannot read
+/// becomes a [SkippedDeviceEntry], never an exception and never an invented row.
+/// Columns are read *backwards* from the timestamp: the count is not stable.
 DeviceDirectoryListing parseLsLong(String output, {required String directory}) {
   final entries = <DeviceFileEntry>[];
   final skipped = <SkippedDeviceEntry>[];
@@ -171,11 +131,8 @@ DeviceDirectoryListing parseLsLong(String output, {required String directory}) {
           .split(RegExp(r'\s+'))
           .where((token) => token.isNotEmpty)
           .toList();
-      // The size is the last column before the timestamp *when it is a size*.
-      // Two ways it is not: a device node prints `1, 3` (major, minor) where
-      // the size goes, and an old toolbox prints nothing at all for a
-      // directory. Both must come out null — reporting a `/dev/null` of 3
-      // bytes is exactly the confidently wrong row this parser must not emit.
+      // Not a size when a device node prints `1, 3` (major, minor) there, or
+      // when an old toolbox prints nothing for a directory. Both come out null.
       final deviceNode =
           middle.length >= 2 && middle[middle.length - 2].endsWith(',');
       if (middle.isNotEmpty && !deviceNode) size = int.tryParse(middle.last);
@@ -233,9 +190,8 @@ DeviceDirectoryListing parseLsLong(String output, {required String directory}) {
 
     // `ls -a` includes both, and neither is an entry anybody wants to click.
     if (name == '.' || name == '..') continue;
-    // Some devices print the argument rather than the bare name — `ls -ld` on
-    // a path always does. The listing is of one directory, so the basename is
-    // the only part that is about *this* row.
+    // Some devices print the argument rather than the bare name. The listing is
+    // of one directory, so the basename is the only part about this row.
     final bare = name.contains('/') ? name.split('/').last : name;
     if (bare.isEmpty) continue;
 
@@ -267,11 +223,8 @@ DeviceDirectoryListing parseLsLong(String output, {required String directory}) {
   );
 }
 
-/// Joins a device directory and a name, always with forward slashes.
-///
-/// Not `package:path`: that one uses the **host's** separator, so on Windows —
-/// where this app mostly runs — it would build `\sdcard\DCIM`, which is a
-/// perfectly good Windows path and not a path on any phone.
+/// Joins a device directory and a name, always with forward slashes. Not
+/// `package:path`: on Windows that builds `\sdcard\DCIM`, which is no phone's.
 String devicePathJoin(String directory, String name) {
   if (directory.isEmpty || directory == '/') return '/$name';
   final base = directory.endsWith('/')
@@ -306,28 +259,20 @@ String devicePathBasename(String path) {
 /// /sdcard/x.txt: 1 file pulled, 0 skipped. 0.0 MB/s (17 bytes in 0.011s)
 /// ```
 ///
-/// **That line arrives on stderr, with exit code 0** — measured against a real
-/// device — so a caller that reads only stdout sees nothing at all and one that
-/// treats stderr as failure reports a successful transfer as an error.
+/// **That line arrives on stderr, with exit code 0.**
 int? parseTransferredBytes(String output) {
   final match = RegExp(r'\((\d+)\s+bytes?\s+in\s').firstMatch(output);
   return match == null ? null : int.tryParse(match.group(1)!);
 }
 
-/// Whether a `pull`/`push` actually moved something.
-///
-/// adb's own words, because the exit code is not enough: a pull of a directory
-/// where some children are unreadable exits 0 having skipped them, and the
-/// count is the only place that shows up.
+/// Whether a `pull`/`push` actually moved something — adb's own words, because a
+/// pull whose children were unreadable exits 0 having skipped them.
 bool transferSucceeded(String output) =>
     RegExp(r'\d+\s+files?\s+(pulled|pushed)').hasMatch(output) &&
     !output.contains('adb: error:');
 
-/// The human half of an adb failure, with adb's own prefix taken off.
-///
-/// `adb: error: remote object '/data/x' does not exist` reads better in a
-/// dialog as the sentence after the colon, and the prefix says nothing the
-/// caller does not already know.
+/// The human half of an adb failure, with adb's own `adb: error:` prefix taken
+/// off: the sentence after the colon is what reads well in a dialog.
 String cleanAdbError(String output) {
   final lines = [
     for (final line in output.split(RegExp(r'[\r\n]+')))

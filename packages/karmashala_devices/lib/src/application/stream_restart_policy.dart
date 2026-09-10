@@ -1,10 +1,7 @@
 import '../data/device_stream.dart';
 
-/// How long to wait before each automatic reconnection attempt.
-///
-/// Bounded on purpose. A live view that silently retries forever is the same
-/// failure the watchdog exists to end — the user is told after the last one and
-/// given the button instead.
+/// How long to wait before each automatic reconnection attempt. Bounded: a live
+/// view that silently retries forever is the failure the watchdog exists to end.
 const List<Duration> kStreamReconnectBackoff = [
   Duration(seconds: 1),
   Duration(seconds: 2),
@@ -13,11 +10,8 @@ const List<Duration> kStreamReconnectBackoff = [
   Duration(seconds: 15),
 ];
 
-/// What to try next when the live view has stopped showing the truth.
-///
-/// Ordered by what it costs the user, cheapest first. The owner asked for this
-/// directly: "isn't there an automated way to recover it when the user starts
-/// interacting, without going through the destructive restart?"
+/// What to try next when the live view has stopped showing the truth, ordered by
+/// what it costs the user, cheapest first.
 enum StreamRecovery {
   /// Leave it alone: the stream is fine, a step is still being given its
   /// chance, or the ladder has run out and it is the user's turn.
@@ -56,20 +50,10 @@ class StreamRecoveryStep {
 }
 
 /// Decides whether a health report is worth recovering from, which rung to try,
-/// and how long to wait first.
-///
-/// Pure, and separate from the pane, because the pane cannot be driven in a
-/// widget test — the live view needs a real media_kit `Player`, which needs
-/// libmpv — and this is the rule that misbehaved.
-///
-/// **The escalation is the point.** The counter used to reset on any healthy
-/// report at all, and a stream that recovers for a single frame between
-/// failures is momentarily healthy every time: on F6IZLV6LMFT4U4ZT that turned
-/// five bounded retries into 28 restarts at a flat eleven-second cadence,
-/// because every one of them was attempt number one. A failure now only starts
-/// the count over when the stream it interrupted had been healthy for
-/// [settleAfter] — long enough that this is a new fault rather than the next
-/// beat of the same one.
+/// and how long to wait first. Pure, because the pane it belongs to cannot be
+/// driven in a widget test. **The escalation is the point:** a counter that
+/// reset on any healthy report at all turned five bounded retries into a flat
+/// eleven-second restart loop, because every one was attempt number one.
 class StreamRestartPolicy {
   StreamRestartPolicy({
     this.backoff = kStreamReconnectBackoff,
@@ -84,11 +68,8 @@ class StreamRestartPolicy {
   final Duration settleAfter;
 
   /// How long a rung is given to work before the next fault is taken as proof
-  /// that it did not.
-  ///
-  /// The watchdog re-reports a fault every second, so without this the ladder
-  /// would be climbed in three ticks — and a video reset needs a moment for the
-  /// device to encode the keyframe it was asked for.
+  /// that it did not. The watchdog re-reports every second, so without this the
+  /// ladder is climbed in three ticks.
   final Duration stepGrace;
 
   int _attempt = 0;
@@ -103,16 +84,9 @@ class StreamRestartPolicy {
   /// Whether automatic reconnection has given up and it is the user's turn.
   bool get isExhausted => _attempt >= backoff.length;
 
-  /// The rung to take for this report.
-  ///
-  /// [canResetVideo] is whether a control socket is there to ask down. Without
-  /// one the cheapest rung does not exist, and a session that fell back to
-  /// `adb shell input` has exactly that problem.
-  ///
-  /// [StreamRecovery.none] covers everything that must not be touched: a
-  /// healthy stream — an idle device included — a rung still being given its
-  /// chance, and an incident that has used up its attempts, where trying again
-  /// would be the loop rather than a fix.
+  /// The rung to take for this report. [canResetVideo] is whether a control
+  /// socket is there to ask down. [StreamRecovery.none] covers a healthy stream,
+  /// a rung still being given its chance, and an incident out of attempts.
   StreamRecoveryStep onHealth(
     DeviceStreamHealth health,
     DateTime now, {

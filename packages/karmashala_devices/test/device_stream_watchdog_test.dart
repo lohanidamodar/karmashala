@@ -1,12 +1,7 @@
-// What the watchdog is allowed to call a fault.
-//
-// The bug these cover was reproduced on F6IZLV6LMFT4U4ZT from the app's own
-// log: 28 restarts in nine minutes, every 11 seconds, with the phone awake and
-// sitting on a static screen — and **no** `stream ended` or `scrcpy-server
-// exited` line among them. The restarts were the watchdog calling frame
-// silence a stall, and scrcpy sends no frames at all once the picture stops
-// changing (it asks the encoder for `repeat-previous-frame-after`, which the
-// platform honours only for a bounded burst).
+// What the watchdog is allowed to call a fault. Reproduced from the app's own
+// log: 28 restarts in nine minutes, every 11 seconds, on a static screen with
+// no `stream ended` line among them — scrcpy sends no frames at all once the
+// picture stops changing.
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -17,9 +12,8 @@ import './fake_scrcpy_device.dart';
 void main() {
   group('the watchdog', () {
     test('a screen that stops changing is idle, not a fault', () async {
-      // The reproduction. scrcpy encodes on change: a phone left on a home
-      // screen sends nothing at all, and calling that a stall is what restarted
-      // the owner's live view every eleven seconds for nine minutes.
+      // The reproduction: a phone left on a home screen sends nothing at all,
+      // and calling that a stall is what restarted the view every 11 seconds.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final session = await fakeStreamService(device.runner()).start('F6IZLV6LMFT4U4ZT');
@@ -70,10 +64,8 @@ void main() {
 
     test('a device that will not answer the user is a fault, not idleness',
         () async {
-      // The 1.6.0 report, in one case: "the live view goes stale after some
-      // time and doesn't update when i interact". Silence with nobody asking is
-      // idleness; silence while the user is asking is a live view that has
-      // stopped working, and the two are the same picture on screen.
+      // Silence with nobody asking is idleness; silence while the user is
+      // asking is a live view that has stopped working, and both look the same.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final session = await fakeStreamService(
@@ -139,12 +131,9 @@ void main() {
     });
 
     test('frames the player has stopped taking are a fault', () async {
-      // The failure 1.6.0 had no signal for at all. Everything the old rule
-      // watched is perfect here — server alive, socket open, frames decoding —
-      // and the picture on screen has not moved since the player stopped
-      // consuming. It reported `live` throughout, so nothing was on screen to
-      // say the picture was old: a stale frame that looks live is the one thing
-      // this pane must never show.
+      // Everything the old rule watched is perfect here — server alive, socket
+      // open, frames decoding — and the picture has not moved since the player
+      // stopped consuming. A stale frame that looks live is the worst case.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final session = await fakeStreamService(
@@ -155,9 +144,8 @@ void main() {
       final seen = <DeviceStreamHealth>[];
       session.health.listen(seen.add);
 
-      // A viewer that connects, takes the head, and then stops reading — the
-      // player equivalent of a frozen decoder. Nothing is closed: this is
-      // backpressure, not a disconnection.
+      // A viewer that connects, takes the head and then stops reading. Nothing
+      // is closed: this is backpressure, not a disconnection.
       final viewer = await Socket.connect(session.url.host, session.url.port);
       addTearDown(() async => viewer.destroy());
       final reading = viewer.listen((_) {});
@@ -166,23 +154,17 @@ void main() {
         'Host: 127.0.0.1\r\n\r\n',
       );
       await viewer.flush();
-      // The first bytes a viewer sees are the HTTP head, which the response
-      // writes itself; the delivery clock only starts when one of *our* chunks
-      // has flushed.
+      // The first bytes a viewer sees are the HTTP head; the delivery clock
+      // only starts when one of *our* chunks has flushed.
       for (var i = 0; i < 100 && session.mark.writtenUs == 0; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
       expect(session.mark.writtenUs, greaterThan(0));
       reading.pause();
 
-      // Keep the device sending. Bounded by frames, not by a clock: the write
-      // chain stalls once the socket buffers fill, and a megabyte or two is
-      // past any platform's default.
-      // The *entry that reported the stall*, not whichever arrived last: the
-      // loop stops on the first matching report, but the watchdog keeps
-      // ticking, so a later health entry can land between the loop exiting
-      // and these assertions. Reading `seen.last` made this test fail under
-      // machine load with `live` in hand, having genuinely seen the stall.
+      // Bounded by frames, not by a clock: the write chain stalls once the
+      // socket buffers fill. And the *entry that reported the stall*, not
+      // whichever arrived last — the watchdog keeps ticking after the loop.
       DeviceStreamHealth? stall;
       for (var i = 0; i < 64 && stall == null; i++) {
         device.video.add(scrcpyPacket(131072, ptsUs: 10000 + i, key: true));
@@ -204,10 +186,8 @@ void main() {
 
     test('a frozen picture can be repaired without tearing anything down',
         () async {
-      // The cheapest rung of the ladder, end to end: one byte down the control
-      // socket the app already holds. The server answers it by restarting
-      // video capture — a fresh config and keyframe — with the process, the
-      // forward, both sockets and the player left exactly as they are.
+      // The cheapest rung end to end: one byte down the control socket, with
+      // the process, the forward, both sockets and the player left as they are.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final runner = device.runner();
@@ -277,10 +257,8 @@ void main() {
 
     test('silence outlives the server: the device-side process is checked',
         () async {
-      // Loop 36's failure, and the one case where silence really is death: the
-      // server was gone while its `adb forward` entry — and the host-side
-      // socket — stayed up. The probe is what turns "no frames" into "no
-      // server", and only a process table that actually answered counts.
+      // The one case where silence really is death: the server was gone while
+      // its `adb forward` entry and the host-side socket stayed up.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final session = await fakeStreamService(
@@ -318,9 +296,8 @@ void main() {
     });
 
     test('an adb that cannot answer is not evidence of death', () async {
-      // A probe that treated an empty process table as "the server is gone"
-      // would restart the stream every time adb hiccupped — the same bug in a
-      // new place.
+      // A probe that read an empty process table as "the server is gone" would
+      // restart the stream every time adb hiccupped.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final session = await fakeStreamService(

@@ -1,18 +1,12 @@
 import 'dart:math';
 
 /// The two mDNS service types Android's wireless debugging advertises.
-///
-/// **They are different ports on the same phone.** `adb pair` wants the
-/// pairing one and `adb connect` the connect one, and each refuses the other's
-/// — reusing the pairing port for `connect` is the classic mistake here.
+/// **They are different ports on the same phone**, and each refuses the other's.
 const String kAdbPairingServiceType = '_adb-tls-pairing._tcp';
 const String kAdbConnectServiceType = '_adb-tls-connect._tcp';
 
-/// Whether `adb mdns services` produced a reading at all.
-///
-/// Three values because "nothing is advertising" and "nobody could look" are
-/// different sentences (§19). Collapsing them would report a phone that is
-/// waiting to be paired as absent.
+/// Whether `adb mdns services` produced a reading at all. Three values because
+/// "nothing is advertising" and "nobody could look" are different sentences.
 enum MdnsAvailability {
   /// The daemon answered; the service list is what it says it is.
   available,
@@ -78,13 +72,9 @@ class MdnsScan {
   Iterable<MdnsService> ofType(String type) =>
       services.where((s) => s.type == type);
 
-  /// The service of [type] advertising itself under [name], or null.
-  ///
-  /// Both halves are required because a phone advertises the *same* instance
-  /// name under neither type by accident and under one type deliberately: the
-  /// pairing service carries the name we put in the QR, the connect service
-  /// carries adb's guid. Matching on the name alone would find the pairing port
-  /// when the connect port was asked for.
+  /// The service of [type] advertising itself under [name], or null. Both halves
+  /// are required: matching the name alone finds the pairing port when the
+  /// connect port was asked for.
   MdnsService? find({required String type, required String name}) {
     for (final service in services) {
       if (service.type == type && service.name == name) return service;
@@ -93,11 +83,9 @@ class MdnsScan {
   }
 }
 
-/// The QR that Android's *Pair device with QR code* screen scans.
-///
-/// A Wi-Fi-provisioning string with `T:ADB`: this side invents both halves and
-/// draws the code, the phone advertises `_adb-tls-pairing._tcp` under
-/// [serviceName], and mDNS discovery is how the port to pair against is found.
+/// The QR that Android's *Pair device with QR code* screen scans. A
+/// Wi-Fi-provisioning string with `T:ADB`: this side invents both halves, and
+/// mDNS discovery is how the port to pair against is found.
 class AdbPairingInvite {
   const AdbPairingInvite({required this.serviceName, required this.password});
 
@@ -118,9 +106,8 @@ class AdbPairingInvite {
   /// The shared secret the phone proves it scanned. Never logged.
   final String password;
 
-  /// Alphanumeric only, and deliberately so: the payload below delimits with
-  /// `:` and `;` and escapes with `\`, so a password containing one of those
-  /// would be read as structure by the phone rather than as the secret.
+  /// Alphanumeric only: the payload delimits with `:` and `;` and escapes with
+  /// `\`, so a password containing one would be read as structure.
   static const String _alphabet =
       'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
@@ -211,12 +198,8 @@ class PairingAddress {
   String toString() => argument;
 }
 
-/// How many `adb mdns services` spawns one pairing attempt may cost.
-///
-/// A **count**, not a deadline: the poll runs while a QR is on screen, and what
-/// has to be bounded is the number of processes it creates. At
-/// [kMdnsPollInterval] apiece this covers about two minutes, which is longer
-/// than anyone holds a phone up to a screen.
+/// How many `adb mdns services` spawns one pairing attempt may cost. A **count**,
+/// not a deadline: what has to be bounded is the number of processes.
 const int kMdnsPollBudget = 60;
 
 /// Between two polls. Long enough that the spawns are not a burst, short enough

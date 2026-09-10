@@ -1,28 +1,11 @@
-// Where a keystroke made in the live view is sent.
-//
-// The same shape as `device_gesture_sink.dart` next door, and for the same
-// reason: the pane speaks one language — [DeviceKeyIntent] — and the sink
-// decides what that means on the wire. There are three, and they are not
-// equivalent, so the pane says which is in use.
-//
-// * [ScrcpyKeyboardSink] writes a control message per event: sub-10 ms, carries
-//   Android's meta state, and can express a key being *held*.
-// * [AdbKeyboardSink] shells out to `adb shell input`, ~200 ms per key, and
-//   cannot express a modifier at all — `input keyevent` has no meta argument.
-//   Rather than send a bare `KEYCODE_A` for Ctrl+A (which would type "a" over
-//   the selection the user wanted), it refuses the chord and says so.
-// * [SimulatorKeyboardSink] drives an iOS simulator through the backend seam,
-//   splitting the two halves across two different mechanisms because on iOS
-//   they genuinely are different mechanisms — see the class doc.
+// Where a keystroke made in the live view is sent. The pane speaks one language
+// — [DeviceKeyIntent] — and the sink decides what that means on the wire; the
+// three are not equivalent, so the pane says which is in use.
 //
 // **Every one of them can refuse, and a refusal has to be legible.** A sink
-// says *no* by returning false from [DeviceKeyboardSink.send], and says *why*
-// in [DeviceKeyboardSink.refusal]. The reason is per-sink and per-keystroke
-// rather than a fixed line per transport, because the same sink refuses
-// different keys for different reasons: "iOS has no Page Down" and "a Cmd chord
-// cannot be held across a key press" are not the same sentence, and showing the
-// wrong one is a worse failure than showing none — it sends the user looking
-// for a modifier problem they do not have.
+// returns false from [DeviceKeyboardSink.send] and says why in `refusal`, which
+// is per-keystroke: "iOS has no Page Down" and "a Cmd chord cannot be held" are
+// not the same sentence, and the wrong one sends the user after a fiction.
 
 import '../domain/device_keyboard.dart';
 import '../domain/simulator_backend.dart';
@@ -70,19 +53,13 @@ abstract interface class DeviceKeyboardSink {
   bool send(DeviceKeyIntent intent);
 
   /// Why the most recent [send] returned false, in the words the pane shows.
-  ///
-  /// `null` once a keystroke has gone through, so the bar stops accusing the
-  /// transport of a fault it has recovered from.
-  ///
-  /// A getter rather than a callback because the pane already redraws on the
-  /// same frame it calls [send]: it needs the answer *now*, not next tick, and
-  /// a callback would have to be threaded through every place a sink is built.
+  /// `null` once a keystroke has gone through. A getter rather than a callback:
+  /// the pane redraws on the same frame it calls [send] and needs it now.
   String? get refusal;
 }
 
 /// Wraps a keyboard sink so the live view learns that the user asked for
-/// something. See [ObservedGestureSink]; a keystroke is the same kind of
-/// evidence as a tap.
+/// something — a keystroke is the same evidence as a tap.
 class ObservedKeyboardSink implements DeviceKeyboardSink {
   ObservedKeyboardSink(this.inner, {required this.onInput});
 
@@ -145,10 +122,8 @@ class ScrcpyKeyboardSink implements DeviceKeyboardSink {
     };
     for (final message in messages) {
       if (!connection.send(message)) {
-        // Not a key this transport cannot express — the socket itself has gone.
-        // Named as such, because "that key could not be sent" would read as a
-        // limit of the keyboard rather than a lost connection the pane is about
-        // to fall back from.
+        // Not a key this transport cannot express — the socket itself has gone,
+        // and the pane is about to fall back.
         _refusal = 'The control socket dropped, so that key went nowhere';
         onDropped?.call();
         return false;
@@ -159,12 +134,9 @@ class ScrcpyKeyboardSink implements DeviceKeyboardSink {
   }
 }
 
-/// Replays a keystroke through `adb shell input`.
-///
-/// Honest about what it cannot do. `input keyevent` synthesises a whole press,
-/// so only the *down* is acted on — sending it again on the release would type
-/// every key twice — and a Ctrl/Alt/Meta chord is refused rather than sent
-/// stripped of the modifier that gave it its meaning.
+/// Replays a keystroke through `adb shell input`. Only the *down* is acted on —
+/// `input keyevent` synthesises a whole press — and a Ctrl/Alt/Meta chord is
+/// refused rather than sent stripped of the modifier that gave it meaning.
 class AdbKeyboardSink implements DeviceKeyboardSink {
   AdbKeyboardSink({
     required this.adb,
@@ -214,28 +186,11 @@ class AdbKeyboardSink implements DeviceKeyboardSink {
   }
 }
 
-/// Types into an iOS simulator through the [SimulatorBackend] seam.
-///
-/// **The two halves take two different routes, and that is not an
-/// optimisation.** Measured against WebDriverAgent 16.11.4 on an iOS 18.2
-/// simulator:
-///
-/// * Characters go to [SimulatorBackend.inputText], which is XCUITest's
-///   `typeText`. Anything the iOS keyboard can produce travels as itself —
-///   accents, emoji, whole strings at once — so there is no character table
-///   here and nothing to refuse.
-/// * Named keys go to [SimulatorBackend.pressKey], which is a real HID key
-///   press. They must **not** go through `typeText`: posting the
-///   XCUIKeyboardKey escape for Left Arrow inserts `U+F702` into the focused
-///   field as a literal character instead of moving the caret: "hell" became
-///   "hell" with an invisible `U+F702` appended. Typing private-use garbage
-///   into the user's text field is a worse failure than refusing, and a
-///   silent one.
-///
-/// Like [AdbKeyboardSink], only the **down** is acted on: a press is one whole
-/// down-and-up, so replaying it on the release would type every key twice.
-/// Nothing is ever left held, which is why [DeviceKeyTranslator.releaseAll]'s
-/// up-intents can simply be dropped here.
+/// Types into an iOS simulator through the [SimulatorBackend] seam. The two
+/// halves take two different routes: characters go to [inputText] (XCUITest's
+/// `typeText`), named keys to [pressKey] as real HID presses, because `typeText`
+/// inserts an arrow key's private-use escape as a literal character instead.
+/// Only the **down** is acted on, so nothing is ever left held.
 class SimulatorKeyboardSink implements DeviceKeyboardSink {
   SimulatorKeyboardSink({
     required this.backend,
@@ -247,8 +202,7 @@ class SimulatorKeyboardSink implements DeviceKeyboardSink {
   final String udid;
 
   /// Where a failure that only shows up *after* the request went out is
-  /// reported. The same channel `SimulatorGestureSink` uses, so a WebDriverAgent
-  /// that died mid-session says so once rather than once per key.
+  /// reported, so a dead WebDriverAgent says so once rather than once per key.
   final void Function(Object error)? onError;
 
   @override

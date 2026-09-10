@@ -16,29 +16,18 @@ const int kMaxPesPacketLength = 0xFFFF;
 /// stream id and length, 3 for the flags and header length, 5 for the PTS.
 const int kPesOverhead = 14;
 
-/// How often PAT/PMT are repeated, in stream microseconds.
-///
-/// FFmpeg's own muxer repeats them every 100 ms. Repeating them only on
-/// keyframes is not enough: this emulator emits a keyframe roughly every 4 s
-/// even with `i-frame-interval=1`, so a demuxer that joins the stream (or loses
-/// the tables) waits seconds before it can name the program.
+/// How often PAT/PMT are repeated, in stream microseconds. Repeating them only
+/// on keyframes is not enough: this emulator emits one roughly every 4 s even
+/// with `i-frame-interval=1`.
 const int kTablePeriodUs = 100000;
 
-/// How far the device's clock may jump between two frames and still be taken
-/// as elapsed presentation time.
-///
-/// Beyond this it is a gap in *capture*, not in presentation. scrcpy encodes on
-/// change, so an untouched phone sends nothing for minutes and the next frame's
-/// timestamp is minutes later; the cached keyframe a new viewer starts from can
-/// be older still. Honouring those puts a minutes-long jump in the stream's
-/// clock — measured at **120 s of PCR in a single step** for a viewer attaching
-/// after a two-minute idle — which is a far worse thing to hand a demuxer than
-/// a missing frame.
+/// How far the device's clock may jump between two frames and still be taken as
+/// elapsed presentation time. Beyond it, the gap is in *capture* — scrcpy sends
+/// nothing while a phone is untouched — and honouring it lurches the clock.
 const int kMaxBelievableStepUs = 1000000;
 
-/// What the clock advances by when the device's cannot be believed. One frame
-/// at 60 fps: enough to keep PTS and PCR moving, small enough that no player
-/// waits for it.
+/// What the clock advances by when the device's cannot be believed. One frame at
+/// 60 fps: enough to keep PTS and PCR moving, small enough that nobody waits.
 const int kNominalStepUs = 16000;
 
 /// CRC-32/MPEG-2: polynomial 0x04C11DB7, init 0xFFFFFFFF, MSB-first, no final
@@ -56,18 +45,9 @@ int mpegCrc32(List<int> data) {
   return crc & 0xFFFFFFFF;
 }
 
-/// Muxes H.264 access units into an MPEG-TS stream.
-///
-/// This exists because **libmpv's bundled FFmpeg has no raw-H.264 demuxer**: a
-/// bare Annex-B elementary stream cannot be opened at all (verified — it reports
-/// `Unknown lavf format h264`). MPEG-TS is a container it does demux, is the
-/// standard choice for low-latency streaming, and carries the per-frame PTS
-/// scrcpy gives us.
-///
-/// One muxer instance owns the continuity counters and the timestamp base for
-/// one output stream, so a new consumer must get a **new** muxer — replaying
-/// previously emitted packets to a second consumer duplicates continuity
-/// counters and the demuxer reports corrupt packets.
+/// Muxes H.264 access units into an MPEG-TS stream, because **libmpv's bundled
+/// FFmpeg has no raw-H.264 demuxer**. One muxer owns the continuity counters and
+/// the timestamp base for one output stream, so a new consumer needs a new one.
 class TsMuxer {
   TsMuxer({
     this.tablePeriodUs = kTablePeriodUs,
@@ -86,10 +66,8 @@ class TsMuxer {
   int _patContinuity = 0;
   int _pmtContinuity = 0;
 
-  /// PTS of the first frame muxed. Everything is emitted relative to it, so the
-  /// stream starts at zero and the 33-bit timestamp cannot wrap inside any
-  /// plausible session — scrcpy hands us the device's monotonic clock, which on
-  /// a device up for more than ~26 h would otherwise overflow mid-stream.
+  /// PTS of the first frame muxed; everything is emitted relative to it, so the
+  /// 33-bit timestamp cannot wrap on a device that has been up for ~26 h.
   int? _basePtsUs;
 
   /// The device timestamp of the previous frame, for measuring its step.
@@ -103,10 +81,8 @@ class TsMuxer {
   /// Stream time of the most recently muxed frame, relative to the first.
   int get streamTimeUs => _lastPtsUs;
 
-  /// PTS of the first frame muxed, or `null` before any frame.
-  ///
-  /// A caller measuring latency needs this: the player reports its position
-  /// relative to the start of the stream, and this is what that start was.
+  /// PTS of the first frame muxed, or `null` before any frame. A caller measuring
+  /// latency needs it: the player reports its position relative to this.
   int? get basePtsUs => _basePtsUs;
 
   /// PAT + PMT. Emit before any frame so the demuxer can identify the program.
@@ -187,20 +163,9 @@ class TsMuxer {
   /// [tablePeriodUs] so a consumer joining mid-stream can start quickly.
   Uint8List frame(Uint8List accessUnit, int ptsUs, {required bool keyframe}) {
     // The output has its own clock, advanced by each frame's *step* rather than
-    // rebased from the device's. Echoing the device clock is what made this
-    // muxer the reason the live view froze.
-    //
-    // The rule it replaced clamped a backwards step to the highest timestamp
-    // seen — which does not clamp one frame, it **latches**: every frame after
-    // it is stamped with that same value, so PTS and PCR stop advancing for the
-    // rest of the session while bytes keep flowing. Measured: four frames after
-    // a clock restart all carried PCR 2880. A stream whose time has stopped is
-    // exactly the frozen picture with a healthy socket the owner reported, and
-    // scrcpy had nothing to do with it.
-    //
-    // A step that is negative, zero or implausibly large is a discontinuity —
-    // a capture reset, an idle gap, a bad timestamp — and the honest thing to
-    // do with a discontinuity is to carry on, one nominal frame later.
+    // rebased from the device's. Clamping a backwards step to the highest
+    // timestamp seen does not clamp, it **latches**: PTS and PCR then stop
+    // advancing for the rest of the session while bytes keep flowing.
     final previous = _lastDevicePtsUs;
     _lastDevicePtsUs = ptsUs;
     if (previous == null) {
@@ -223,11 +188,9 @@ class TsMuxer {
 
     final pts90 = (ptsRelUs * 9) ~/ 100; // microseconds -> 90 kHz
 
-    // A **known** PES_packet_length is what makes this stream low latency.
-    // With the unbounded form (0) FFmpeg's MPEG-TS demuxer cannot tell a PES is
-    // finished until the *next* one starts, so every frame is held back by a
-    // whole inter-frame gap — 65 ms median and 267 ms at worst from this
-    // emulator. With the length set it emits the frame on its last byte.
+    // A **known** PES_packet_length is what makes this stream low latency: with
+    // the unbounded form FFmpeg's demuxer cannot tell a PES is finished until
+    // the next one starts, so every frame waits a whole inter-frame gap.
     final pesBodyLength = 3 + 5 + accessUnit.length;
     final declaredLength = pesBodyLength <= kMaxPesPacketLength
         ? pesBodyLength

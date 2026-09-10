@@ -1,15 +1,9 @@
 import 'device_input.dart';
 import 'ui_node.dart';
 
-/// Renders a [UiHierarchy] for an agent to read.
-///
-/// The point of this file is token cost. A raw `uiautomator dump` of an
-/// ordinary screen is ~23 000 characters of XML — several thousand tokens,
-/// nearly all of it repeated attribute names on layout containers that an agent
-/// can do nothing with. Pruning to nodes that carry text or accept input, and
-/// writing one line per node with the empty fields dropped, cuts that by well
-/// over an order of magnitude while keeping everything needed to choose and hit
-/// a target.
+/// Renders a [UiHierarchy] for an agent to read. The point is token cost: a raw
+/// dump of an ordinary screen is ~23 000 characters of XML, nearly all repeated
+/// attribute names on layout containers an agent can do nothing with.
 
 /// One line explaining the line format, emitted once per listing.
 const String uiListingLegend =
@@ -20,12 +14,9 @@ const String uiListingLegend =
 /// Longest text or content-description rendered before it is elided.
 const int _maxLabelLength = 80;
 
-/// One node as a single line.
-///
-/// Coordinates come first because they are what the caller acts on. When
-/// [screen] is given, a node whose centre falls outside it is flagged `o`:
-/// scrolled-away nodes stay in the dump with off-screen bounds, and tapping one
-/// would hit whatever is really at that point.
+/// One node as a single line. Coordinates come first because they are what the
+/// caller acts on; a node whose centre falls outside [screen] is flagged `o`,
+/// because tapping a scrolled-away node hits whatever is really there.
 String describeUiNode(UiNode node, {DeviceScreenSize? screen}) {
   final buffer = StringBuffer();
   final bounds = node.tapBounds;
@@ -72,8 +63,7 @@ String _flags(UiNode node, {DeviceScreenSize? screen}) {
 }
 
 /// Collapses a value onto one line and caps its length, so one node is always
-/// exactly one line. Real content-descriptions contain newlines — a Flutter
-/// clock widget reports four lines in one label.
+/// exactly one line: real content-descriptions contain newlines.
 String _escape(String value) {
   final flat = value
       .trim()
@@ -85,9 +75,7 @@ String _escape(String value) {
 }
 
 /// The pruned listing: one line per node that carries text or accepts input.
-///
-/// [limit] caps the output; the returned [truncated] count says how many were
-/// dropped so the caller can say so rather than silently lying.
+/// [limit] caps it, and [truncated] says how many were dropped.
 ({String listing, int shown, int truncated}) renderUiElements(
   List<UiNode> nodes, {
   DeviceScreenSize? screen,
@@ -105,11 +93,8 @@ String _escape(String value) {
   );
 }
 
-/// The full tree: every node, indented by depth.
-///
-/// Only worth asking for when the pruned listing missed something — a custom
-/// view with no text, no description and no flags is invisible to the pruner
-/// but visible here.
+/// The full tree: every node, indented by depth. Worth asking for only when the
+/// pruned listing missed something — a custom view with no text or flags.
 String renderUiTree(UiHierarchy hierarchy, {DeviceScreenSize? screen}) {
   final lines = <String>[];
   for (final root in hierarchy.roots) {
@@ -131,19 +116,10 @@ List<UiNode> interestingNodes(UiHierarchy hierarchy) => [
     if (node.isInteresting) node,
 ];
 
-/// A leaf big enough to be the screen that reports no text at all.
-///
-/// The accessibility tree describes *widgets*; a surface that is painted rather
-/// than composed of them — Flutter's `CustomPaint`, a canvas game, an embedded
-/// terminal — appears as one empty `View` and its content is simply absent.
-/// A dump that says "5 of 17 nodes" then reads like a successful dump rather
-/// than a blind spot, and the honest answer is to take a screenshot.
-///
-/// Returns the offending node so the caller can point at it, or null.
-///
-/// Leaf and textless are the load-bearing conditions; the size threshold only
-/// keeps ordinary empty spacers and dividers out. A false positive costs one
-/// advisory line, so it is deliberately generous.
+/// A leaf big enough to be the screen that reports no text at all: a painted
+/// surface appears as one empty `View` with its content simply absent, and a
+/// dump saying "5 of 17 nodes" then reads like a success rather than a blind
+/// spot. Returns the offending node so the caller can point at it, or null.
 UiNode? canvasLikeNode(UiHierarchy hierarchy, DeviceScreenSize? screen) {
   if (screen == null) return null;
   final area = screen.width * screen.height;

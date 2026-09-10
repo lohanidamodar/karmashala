@@ -5,14 +5,9 @@ import 'package:karmashala_devices/src/data/scrcpy_control.dart';
 import 'package:karmashala_devices/src/domain/device_keyboard.dart';
 import 'package:test/test.dart';
 
-/// The expected encoding, spelled out independently of the implementation.
-///
-/// Every offset below comes from disassembling the scrcpy-server jar this app
-/// deploys — `ControlMessageReader.parseInjectTouchEvent` reads, in order, an
-/// unsigned byte, a long, a `Position` (int, int, unsigned short, unsigned
-/// short), a short, an int and an int. A field in the wrong place does not
-/// fail loudly: the server reads a plausible-looking value from the wrong
-/// bytes and the touch lands somewhere else, or vanishes.
+/// The expected encoding, spelled out independently of the implementation, from
+/// disassembling the scrcpy-server jar this app deploys. A field in the wrong
+/// place does not fail loudly: the touch lands somewhere else, or vanishes.
 int _u8(Uint8List b, int i) => ByteData.sublistView(b).getUint8(i);
 int _u16(Uint8List b, int i) => ByteData.sublistView(b).getUint16(i);
 int _i32(Uint8List b, int i) => ByteData.sublistView(b).getInt32(i);
@@ -76,8 +71,7 @@ void main() {
 
     test('leaves the buttons clear so the event is a finger, not a mouse', () {
       // `Controller.injectTouch` picks SOURCE_MOUSE when any non-primary button
-      // is set, and a mouse source does not feed Android velocity tracker the
-      // way a touchscreen does — no fling.
+      // is set, and a mouse source produces no fling velocity.
       final bytes = event.encode();
       expect(_i32(bytes, 24), 0);
       expect(_i32(bytes, 28), 0);
@@ -146,14 +140,9 @@ void main() {
   });
 }
 
-/// The keyboard half of the same protocol, read out of the same jar.
-///
-/// `ControlMessageReader.parseInjectKeycode` reads an unsigned byte then three
-/// ints — action, keycode, repeat, metaState — and hands them to
-/// `Controller.injectKeycode`, which builds a real `KeyEvent`.
-/// `parseInjectText` reads a string: a **four**-byte big-endian length
-/// (`parseString` passes 4 to `parseBufferLength`) followed by that many UTF-8
-/// bytes, capped at `INJECT_TEXT_MAX_LENGTH = 300`.
+/// The keyboard half of the same protocol, read out of the same jar:
+/// `parseInjectKeycode` reads an unsigned byte then three ints, and
+/// `parseInjectText` a **four**-byte length capped at 300.
 void _keyboardWire() {
   group('INJECT_KEYCODE', () {
     const event = ScrcpyKeycodeEvent(
@@ -216,9 +205,8 @@ void _keyboardWire() {
     });
 
     test('text is split so no message exceeds the server cap', () {
-      // The server allocates the declared length and `readFully`s it; over
-      // INJECT_TEXT_MAX_LENGTH scrcpy 4.1 simply refuses the message, so a
-      // long paste has to arrive as several.
+      // The server allocates the declared length and `readFully`s it; over the
+      // cap scrcpy 4.1 refuses the message, so a long paste arrives as several.
       expect(kScrcpyInjectTextMaxBytes, 300);
       final chunks = splitForInjectText('a' * 701);
       expect(chunks.length, 3);
@@ -241,19 +229,15 @@ void _keyboardWire() {
 
   group('RESET_VIDEO', () {
     test('is type 17, read out of the jar this app deploys', () {
-      // Not from documentation, and not from the internet: the numbering has
-      // moved between scrcpy releases, and a wrong byte here is a *valid*
-      // message meaning something else. In `assets/scrcpy/scrcpy-server`'s
-      // `classes.dex`, `com.genymobile.scrcpy.control.ControlMessage` declares
-      // `TYPE_RESET_VIDEO` = 17.
+      // Not from documentation: the numbering has moved between scrcpy
+      // releases, and a wrong byte here is a *valid* message meaning something
+      // else.
       expect(ScrcpyControlType.resetVideo, 17);
     });
 
     test('is exactly one byte', () {
-      // `ControlMessageReader.read`'s packed-switch routes key 17 to
-      // `ControlMessage.createEmpty(type)` — the arm shared by every message
-      // with no payload. Anything sent after the type byte would be read as
-      // the next message's type and desynchronise the socket permanently.
+      // Key 17 routes to `createEmpty(type)`. Anything sent after the type byte
+      // would be read as the next message's type and desynchronise the socket.
       expect(encodeResetVideo(), [17]);
     });
   });

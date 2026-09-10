@@ -6,13 +6,9 @@ import '../domain/logcat_entry.dart';
 import 'adb_file_parsing.dart';
 import 'adb_service.dart';
 
-/// [DeviceDriver] over adb, for a phone or an emulator.
-///
-/// A thin composition rather than new behaviour: every verb here already
-/// existed on [AdbService], which the device pane also uses, so an agent and
-/// the person beside it drive one device through one service. What this adds is
-/// the honest capability report and the refusals — the things a caller with no
-/// eyes needs and a pane with a user in front of it does not.
+/// [DeviceDriver] over adb, for a phone or an emulator. A thin composition over
+/// the [AdbService] the pane also uses; what it adds is the honest capability
+/// report and the refusals a caller with no eyes needs.
 class AdbDeviceDriver implements DeviceDriver {
   AdbDeviceDriver({required this.adb, required this.target});
 
@@ -29,12 +25,8 @@ class AdbDeviceDriver implements DeviceDriver {
 
   String get _serial => target.id;
 
-  /// Everything except [DeviceCapability.powerOff] on a physical device.
-  ///
-  /// adb genuinely can do all of the rest against a handset as well as an
-  /// emulator — that is the whole reason `adb shell` exists — so the only line
-  /// this driver draws is the one it must: `emu kill` talks to an emulator's
-  /// console, and there is no console on somebody's phone.
+  /// Everything except [DeviceCapability.powerOff] on a physical device: `emu
+  /// kill` talks to an emulator's console, and a phone has no console.
   @override
   Set<DeviceCapability> get capabilities => {
     DeviceCapability.input,
@@ -73,7 +65,6 @@ class AdbDeviceDriver implements DeviceDriver {
     return DeviceScreenshot(
       bytes: bytes,
       size: size,
-      // The easy case, and the one that made the distinction easy to forget:
       // `screencap` captures the framebuffer and `input tap` takes framebuffer
       // coordinates, so a point measured off the image is directly tappable.
       imageSpace: CoordinateSpace.devicePixels,
@@ -127,11 +118,8 @@ class AdbDeviceDriver implements DeviceDriver {
     );
     return DeviceLogRead(
       lines: [for (final entry in entries) entry.toString()],
-      // Empty has two causes and they call for opposite next moves: launch the
-      // app, or lower the level. The device is asked which it is rather than
-      // guessed at — the guess was wrong on a live emulator, telling a caller
-      // an app with pid 4866 was not running when the truth was that it had
-      // logged nothing at `error`.
+      // Empty has two causes calling for opposite next moves — launch the app,
+      // or lower the level — so the device is asked which rather than guessed.
       note: entries.isEmpty && filter != null
           ? (await adb.pidsOf(_serial, filter)).isEmpty
                 ? 'No output — $filter is not running on $_serial.'
@@ -162,11 +150,8 @@ class AdbDeviceDriver implements DeviceDriver {
     await adb.installApk(_serial, path);
     return InstalledApp(
       path: path,
-      // Deliberately null, and the note says so. `adb install` prints nothing
-      // but `Success`, and reading the applicationId out of the APK would mean
-      // aapt2 — a build-tools binary this app does not locate and may not have.
-      // Guessing it from the file name would be wrong for every build that
-      // renames its output, which is most of them.
+      // Deliberately null, and the note says so: `adb install` prints only
+      // `Success`, and reading the applicationId out of the APK means aapt2.
       note:
           'adb does not report the applicationId an APK declares, so pass it to '
           'device_launch_app yourself — it is the applicationId in your '
@@ -188,8 +173,7 @@ class AdbDeviceDriver implements DeviceDriver {
     return LaunchedApp(
       appId: appId,
       // No pid: `am start` and `monkey` report an activity, not a process, and
-      // inventing one by grepping `ps` afterwards would race the app's own
-      // startup.
+      // grepping `ps` afterwards would race the app's own startup.
       note: relaunch
           ? 'relaunch is an iOS option and did nothing here — on Android, '
                 'device_terminate_app then device_launch_app is the cold start.'
@@ -201,32 +185,10 @@ class AdbDeviceDriver implements DeviceDriver {
   Future<void> terminateApp(String appId) =>
       adb.forceStopPackage(_serial, appId);
 
-  // ---------------------------------------------------------------------------
-  // Files
-  // ---------------------------------------------------------------------------
 
-  /// Three places, and the list is short on purpose.
-  ///
-  /// It would be easy to offer a dozen — Download, DCIM, Movies — but those are
-  /// *inside* `/sdcard` and a browser can walk to them in one click. What earns
-  /// a row here is a place you cannot reach from another one, or a place whose
-  /// rules differ:
-  ///
-  /// * **`/sdcard`** is where a person's own files are, and the only root that
-  ///   is both readable and writable on an ordinary device.
-  /// * **`/data/local/tmp`** is the shell user's own scratch space. It is the
-  ///   one writable spot outside shared storage on a device with scoped
-  ///   storage, which is why this app already stages screenshots and the scrcpy
-  ///   server there.
-  /// * **`/`** is offered read-only and honestly labelled. Most of it is
-  ///   readable — `/system`, `/proc`, `/vendor` — and a developer chasing a
-  ///   path from a stack trace needs it. `/data` underneath it is not, and says
-  ///   so when opened rather than appearing empty.
-  ///
-  /// An app's own directory is deliberately **not** a root: reaching it needs
-  /// `run-as <package>` against a debuggable build, and this driver does not do
-  /// that. Half-supporting it — offering the path and failing on most devices —
-  /// would be worse than the refusal, which at least names the missing piece.
+  /// Three places, and the list is short on purpose: a root earns a row only if
+  /// it cannot be reached from another one, or its rules differ. An app's own
+  /// directory is deliberately not one — it needs `run-as` on a debuggable build.
   @override
   Future<List<DeviceFileRoot>> fileRoots() async => const [
     DeviceFileRoot(
@@ -268,10 +230,8 @@ class AdbDeviceDriver implements DeviceDriver {
     required String devicePath,
     required String hostPath,
   }) async {
-    // Asked first so a directory is refused by name. `adb pull` of a directory
-    // *works* — it copies the tree — and this surface offers one file at a
-    // time, so silently pulling a hundred files because the user's click landed
-    // on a folder is not a favour.
+    // Asked first so a directory is refused by name: `adb pull` of a directory
+    // works, and this surface offers one file at a time.
     final entry = await adb.statPath(_serial, devicePath);
     if (entry == null) {
       throw DeviceRefusal('There is nothing at $devicePath on $_serial.');
@@ -299,10 +259,8 @@ class AdbDeviceDriver implements DeviceDriver {
     var destination = devicePath;
     String? note;
     if (existing != null && existing.isDirectory) {
-      // `adb push file dir` already does this, and doing it here as well is
-      // what lets the overwrite check below see the *real* destination. Without
-      // it, pushing into a folder that already holds a file of that name
-      // replaced it while reporting nothing.
+      // `adb push file dir` already does this, and doing it here too is what
+      // lets the overwrite check below see the *real* destination.
       destination = devicePathJoin(devicePath, _hostBasename(hostPath));
       note =
           '$devicePath is a directory, so it went in as '
@@ -359,10 +317,8 @@ class AdbDeviceDriver implements DeviceDriver {
         '${move ? 'moved' : 'copied'}.',
       );
     }
-    // A directory into its own subtree: the shell starts it and does not
-    // finish, leaving a half-copied tree behind an error nobody can read.
-    // Checked on the *string* deliberately — `ls` cannot answer "is this
-    // inside that", and a round trip per path segment would not either.
+    // A directory into its own subtree: the shell starts it and does not finish.
+    // Checked on the string — `ls` cannot answer "is this inside that".
     if (source.isDirectory &&
         destination.startsWith(_withTrailingSlash(from))) {
       throw DeviceRefusal(

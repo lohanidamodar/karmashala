@@ -66,9 +66,8 @@ void main() {
   });
 
   test('opens a fresh producer per viewer', () async {
-    // Per-viewer state is the whole reason this is a factory and not a stream:
-    // an MPEG-TS muxer's continuity counters and timestamp base belong to one
-    // output stream, and a second viewer replaying them would see duplicates.
+    // Per-viewer state is why this is a factory and not a stream: a muxer's
+    // continuity counters and timestamp base belong to one output stream.
     var opened = 0;
     final server = await LoopbackMediaServer.serve(
       openStream: () {
@@ -88,9 +87,8 @@ void main() {
 
   test('closing the server ends the viewer\'s producer', () async {
     // The server cannot notice a viewer that vanished — measured on macOS,
-    // writes to a destroyed peer keep reporting success and `response.done`
-    // never completes — so this is the seam that actually ends a stream, and
-    // it is the one the pane drives when it closes.
+    // writes to a destroyed peer keep reporting success — so this is the seam
+    // that actually ends a stream.
     var cancelled = false;
     final controller = StreamController<List<int>>(
       onCancel: () => cancelled = true,

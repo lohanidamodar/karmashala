@@ -2,11 +2,8 @@ import 'package:agent_cli/process.dart';
 import '../domain/android_device.dart';
 import '../domain/android_slimming.dart';
 
-/// Packages `pm list packages -d` reports as disabled.
-///
-/// The command prints one `package:<name>` per line and nothing else; a line
-/// that is not in that shape is ignored rather than guessed at, so an error
-/// message on stdout cannot be mistaken for a package name.
+/// Packages `pm list packages -d` reports as disabled. A line that is not
+/// `package:<name>` is ignored, so an error on stdout is not read as a package.
 Set<String> parseDisabledPackages(String stdout) {
   const prefix = 'package:';
   return {
@@ -18,12 +15,8 @@ Set<String> parseDisabledPackages(String stdout) {
   };
 }
 
-/// What one apply or restore run actually did.
-///
-/// Both halves matter to a caller: [applied] is what to tell the user changed,
-/// and [failed] is why the emulator is not quite in the state they asked for.
-/// Neither is an exception, because slimming must never be the reason a device
-/// fails to start.
+/// What one apply or restore run actually did. Neither half is an exception:
+/// slimming must never be the reason a device fails to start.
 class AndroidSlimmingReport {
   const AndroidSlimmingReport({
     this.applied = const [],
@@ -69,10 +62,8 @@ class AndroidSlimmingStatus {
   Set<String> get disabledManaged =>
       disabledPackages.intersection(allManagedPackages);
 
-  /// Disabled packages somebody else turned off — a hand-run `pm disable-user`,
-  /// a debloat script, a future version of this table. [AndroidSlimmingService
-  /// .restore] leaves these alone, and a UI should say so rather than claim the
-  /// device is back to stock.
+  /// Disabled packages somebody else turned off. [AndroidSlimmingService.restore]
+  /// leaves these alone, and a UI should say so rather than claim stock.
   Set<String> get disabledUnmanaged =>
       disabledPackages.difference(allManagedPackages);
 
@@ -89,13 +80,9 @@ class AndroidSlimmingStatus {
   /// Whether there is anything for [AndroidSlimmingService.restore] to do.
   bool get isSlimmed => disabledManaged.isNotEmpty || settingsSlimmed;
 
-  /// One line describing what is on the device, for the Restore row.
-  ///
-  /// Counts rather than names: seven package names is a paragraph nobody
-  /// reads, and the decision this informs — press Restore or not — only needs
-  /// to know whether anything is there. The unmanaged tail is said out loud
-  /// because Restore deliberately leaves it alone, and a user who disabled
-  /// something by hand would otherwise read "restored" as "back to stock".
+  /// One line describing what is on the device, for the Restore row. Counts
+  /// rather than names, and the unmanaged tail is said out loud because Restore
+  /// deliberately leaves it alone.
   String get summary {
     final left = disabledUnmanaged.isEmpty
         ? ''
@@ -119,22 +106,10 @@ class AndroidSlimmingStatus {
       'packages=${disabledManaged.length}+${disabledUnmanaged.length})';
 }
 
-/// Applies the two durable slimming layers to a **booted** emulator.
-///
-/// Layer 1 is not here: emulator flags are decided before there is a device to
-/// talk to, so they belong to `AdbService.bootAvd` and the argv comes from
-/// [launchArguments].
-///
-/// Nothing this class does throws. Every command is attempted, every failure is
-/// recorded in an [AndroidSlimmingReport] and the run carries on — one
-/// `settings put` that the device refused must not cost the other two, and none
-/// of them may cost the boot. That is the same rule the iOS side states in
-/// `ios_device_providers.dart`: slimming is an optimisation, and turning a
-/// saving into an outage is the one unacceptable outcome.
-///
-/// Every process goes through [runner] (architecture constraint 6), and the
-/// adb path comes from a discovered [AndroidSdk] rather than a literal, so a
-/// Windows SDK and a WSL SDK each drive their own adb server.
+/// Applies the two durable slimming layers to a **booted** emulator; layer 1 is
+/// emulator argv and belongs to `AdbService.bootAvd`. Nothing here throws —
+/// every failure is recorded and the run carries on, because turning a saving
+/// into an outage is the one unacceptable outcome.
 class AndroidSlimmingService {
   AndroidSlimmingService({
     required this.runner,
@@ -158,12 +133,9 @@ class AndroidSlimmingService {
     arguments: ['-s', serial, ...arguments],
   );
 
-  /// Applies layers 2 and 3 for [enabled] to [serial].
-  ///
-  /// Waits for `sys.boot_completed` first. `settings put` and `pm disable-user`
-  /// both need a running package manager, and a device answers adb well before
-  /// it has one — without the wait the first few commands land on a half-booted
-  /// system and fail in ways that look like our bug.
+  /// Applies layers 2 and 3 for [enabled] to [serial]. Waits for
+  /// `sys.boot_completed`: a device answers adb well before it has a package
+  /// manager, and the first commands would fail in ways that look like our bug.
   Future<AndroidSlimmingReport> apply(
     String serial, {
     Set<AndroidSlimmingCategory> enabled = const {},
@@ -204,17 +176,9 @@ class AndroidSlimmingService {
     return AndroidSlimmingReport(applied: applied, failed: failed);
   }
 
-  /// Puts **everything this build manages** back on [serial].
-  ///
-  /// Not a mirror of the current selection: a user who unticked a category and
-  /// then pressed Restore would otherwise be left with exactly the setting
-  /// nobody put back. Only packages the device actually reports as disabled are
-  /// touched, so restoring an emulator that was never slimmed costs one `pm
-  /// list` and changes nothing.
-  ///
-  /// Packages outside [allManagedPackages] are left disabled — see
-  /// [AndroidSlimmingStatus.disabledUnmanaged]. Re-enabling something this build
-  /// did not disable would be undoing a decision that was not ours.
+  /// Puts **everything this build manages** back on [serial] — not a mirror of
+  /// the current selection, which would strand the setting nobody put back.
+  /// Packages outside [allManagedPackages] are left disabled: not our decision.
   Future<AndroidSlimmingReport> restore(String serial) async {
     final applied = <String>[];
     final failed = <String, String>{};
@@ -274,11 +238,9 @@ class AndroidSlimmingService {
     );
   }
 
-  /// Runs one command, recording the outcome against [subject].
-  ///
-  /// An empty [arguments] means the allowlist in
-  /// [disableArgumentsFor]/[enableArgumentsFor] refused the subject. That is a
-  /// bug rather than a device problem, so it is recorded and not run.
+  /// Runs one command, recording the outcome against [subject]. Empty
+  /// [arguments] means the allowlist refused the subject — a bug, not a device
+  /// problem, so it is recorded and not run.
   Future<void> _attempt(
     String serial,
     List<String> arguments,

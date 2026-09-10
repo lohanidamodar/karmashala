@@ -3,18 +3,9 @@ import 'dart:collection';
 import 'logcat_entry.dart';
 
 /// A bounded tail of `logcat` lines: the newest [capacity], and a count of what
-/// was dropped to keep it that size.
-///
-/// Bounded by **lines**, not by time or by bytes, because that is the number a
-/// reader can act on: "1,000 kept, 12,431 dropped" says exactly what is missing
-/// from the top of the list. A device under load logs faster than anybody
-/// reads, so an unbounded buffer is not a longer history — it is the same
-/// history plus a leak.
-///
-/// [dropped] is counted, never estimated, and it is shown. A tail that silently
-/// discarded its oldest lines would look identical to one that had seen nothing
-/// before the first line on screen, which is the same confident false statement
-/// §19 deletes everywhere else.
+/// was dropped. Bounded by **lines** because that is the number a reader can act
+/// on, and [dropped] is counted and shown — a tail that silently discarded its
+/// oldest lines looks identical to one that had seen nothing.
 class LogcatTail {
   LogcatTail({this.capacity = 2000}) : assert(capacity > 0);
 
@@ -40,12 +31,8 @@ class LogcatTail {
     }
   }
 
-  /// The newest [limit] entries at [minLevel] or above, oldest first.
-  ///
-  /// The level is applied here rather than at adb, exactly as
-  /// `AdbService.readLogcat` applies it: `logcat` filters by tag and priority
-  /// together and a bare priority filter would need a `*:` spec, so the one
-  /// place either reader filters is this side.
+  /// The newest [limit] entries at [minLevel] or above, oldest first. The level
+  /// is applied here, not at adb: `logcat` filters by tag and priority together.
   List<LogcatEntry> tail({
     int limit = 400,
     LogLevel minLevel = LogLevel.verbose,
@@ -60,9 +47,8 @@ class LogcatTail {
     return List.unmodifiable(matching.sublist(matching.length - limit));
   }
 
-  /// Empties the tail **and** the dropped count: the user asked for a fresh
-  /// reading, so a count of what was lost before it would describe nothing on
-  /// screen.
+  /// Empties the tail **and** the dropped count: a count of what was lost before
+  /// a fresh reading would describe nothing on screen.
   void clear() {
     _entries.clear();
     _dropped = 0;

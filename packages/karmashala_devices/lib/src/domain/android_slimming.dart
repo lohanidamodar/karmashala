@@ -1,55 +1,7 @@
 /// Which Android emulator overhead this build is willing to switch off, and the
-/// pure logic that turns a choice of categories into emulator flags, `adb shell
-/// settings` writes and `pm disable-user` calls.
-///
-/// **Not a port of the iOS side.** There is no launchd on Android, so there is
-/// no single file to write; the saving comes from three unrelated mechanisms
-/// (see [AndroidSlimmingLayer]) with three different lifetimes. The iOS
-/// `disabled.plist` is read at boot and nothing else, so it is start-only and
-/// evaporates the moment this app stops writing it. Two of the three layers
-/// here are `adb` calls against a booted device, and they **persist on the AVD
-/// across reboots** — a user who switches slimming off keeps a device whose
-/// animations are still zeroed and whose Play services are still disabled until
-/// something puts them back. That is why every layer here has a restore path
-/// ([settingsRestoreArguments], [enableArgumentsFor]) and why the UI says which
-/// layer persists rather than implying the whole thing is per-run.
-///
-/// The polarity is inverted from iOS on purpose. iOS stores the categories to
-/// *spare*, so a category added in a later release is slimmed by default. Here
-/// the stored list is the categories to *apply*, so a category added later does
-/// nothing until somebody ticks it: on iOS the unreviewed direction costs a
-/// launchd service, here it would silently start disabling Play services on
-/// everybody's emulators after an app update.
-///
-/// **Measured** on this machine (Windows 11 host; AVD `sambandha_test`, API 34
-/// `google_apis` x86_64, 2 GB RAM, `hw.gpu.enabled=no`). One cold boot each —
-/// `-no-snapshot-load`, `-no-window`, `-no-boot-anim` — timed from launch to
-/// `sys.boot_completed`, then 45 s of settling before `dumpsys meminfo`:
-///
-/// | | stock | flags + animations | + all five package groups |
-/// |---|---|---|---|
-/// | boot | 26 s | 22 s | 21 s |
-/// | processes | 373 | 354 | 312 |
-/// | guest Used RAM | 1,462,865 K | 1,430,030 K | 1,125,061 K |
-///
-/// Read that honestly. **Layers 1 and 2 are not where the memory is**: 19
-/// processes and 2% of used RAM, one run, well inside the noise of a single
-/// boot. What they actually buy is a device that is nicer to drive — with the
-/// animation scales at zero a screen settles as soon as it changes, which is
-/// why the first `uiautomator dump` after a tap stops coming back "could not
-/// get idle state". Layer 3 is the whole memory saving — 61 fewer processes and
-/// 23% less used RAM — and it is also the layer that stops Firebase, Maps and
-/// Play billing working, which is why it is off by default and warned about by
-/// name.
-///
-/// Both durable layers were verified to survive a cold boot and then to be
-/// fully undone by the restore path (`settings delete` back to unset,
-/// `pm enable --user 0` back to enabled). The same run turned up the case the
-/// allowlist exists for: that emulator already had `com.android.nfc` disabled
-/// by something else, and restore correctly left it alone.
-///
-/// Everything in this file is pure. The service that runs the commands lives in
-/// `data/android_slimming_service.dart`.
+/// pure logic that turns a choice of categories into emulator flags, `settings`
+/// writes and `pm disable-user` calls. Two of the three layers **persist on the
+/// AVD across reboots**, which is why every layer has a restore path.
 library;
 
 /// The mechanism a category uses, and — the point of the type — how long its
@@ -102,18 +54,9 @@ enum AndroidSlimmingLayer {
   final String note;
 }
 
-/// How the emulator renders the guest's screen.
-///
-/// A deliberate user-facing choice rather than a guessed default. This pane
-/// streams the device, so the renderer is the difference between a live preview
-/// and a black rectangle, and the right answer depends on the host's GPU and
-/// its drivers. [auto] passes **no flag at all** — the emulator picks, and the
-/// AVD's own `hw.gpu.mode` still applies, which is the only option that cannot
-/// make an emulator that used to work stop working.
-///
-/// The modes are exactly the ones `emulator -help-gpu` lists on the installed
-/// binary (36.6.11.0); `lavapipe` and `swangle` are omitted because they are
-/// Vulkan/ANGLE variants of `swiftshader` with no reason to prefer them here.
+/// How the emulator renders the guest's screen. A user-facing choice, because
+/// the right answer depends on the host's GPU: [auto] passes **no flag at all**,
+/// the only option that cannot make a working emulator stop working.
 enum AndroidGpuMode {
   auto(id: 'auto', displayName: 'Automatic', flag: null,
       description: 'Let the emulator choose. The AVD\'s own setting applies.'),
@@ -157,17 +100,9 @@ enum AndroidGpuMode {
   }
 }
 
-/// A group of emulator overhead that is switched on and off together.
-///
-/// Grouping is what makes this safe to put in front of a person: "I still want
-/// Play services" is a decision somebody can make, and `com.google.android.gsf`
-/// is not.
-///
-/// The [id] is deliberately a field rather than [name]: it is what a saved
-/// preference stores, so renaming a constant must not silently change which
-/// categories are applied on everybody's machines.
+/// A group of emulator overhead switched on and off together. [id] is a field
+/// rather than [name]: it is what a saved preference stores.
 enum AndroidSlimmingCategory {
-  // ---- Layer 1: emulator flags. Cheap, per-start, nothing written. ---------
   /// Every flag below was confirmed against the installed binary with
   /// `emulator -help-<flag>` before it shipped.
   audio(
@@ -211,7 +146,7 @@ enum AndroidSlimmingCategory {
     },
   ),
 
-  // ---- Layer 2: device settings. Persists on the AVD. ---------------------
+  // Layer 2: device settings, which persist on the AVD.
   animations(
     id: 'animations',
     layer: AndroidSlimmingLayer.settings,
@@ -230,7 +165,7 @@ enum AndroidSlimmingCategory {
     },
   ),
 
-  // ---- Layer 3: packages. Persists, and this is where apps break. ---------
+  // Layer 3: packages. Persists, and this is where apps break.
   playServices(
     id: 'gms',
     layer: AndroidSlimmingLayer.packages,
@@ -343,10 +278,7 @@ enum AndroidSlimmingCategory {
   final List<String> packages;
 
   /// What visibly stops working, keyed by the flag, setting or package that
-  /// causes it.
-  ///
-  /// Only entries confirmed by hand are listed. An empty map means "nothing a
-  /// developer was likely to be using", not "verified harmless".
+  /// causes it. An empty map means "nothing likely", not "verified harmless".
   final Map<String, String> featureLoss;
 
   /// The category whose [id] is [id], or null.
@@ -363,14 +295,8 @@ enum AndroidSlimmingCategory {
   ];
 }
 
-/// The categories applied by default, as ids.
-///
-/// Everything in layers 1 and 2, nothing in layer 3. The split is not about
-/// size — layer 3 is where all the memory is — it is about what a user can
-/// diagnose. A flag that is not passed and an animation scale that is zero
-/// cannot make an app misbehave in a way that looks like a bug in the app;
-/// `com.google.android.gms` being disabled absolutely can, and it looks exactly
-/// like Firebase being broken.
+/// The categories applied by default, as ids: everything in layers 1 and 2. The
+/// split is about what a user can diagnose, not about size.
 const List<String> kDefaultAndroidSlimming = [
   'audio',
   'metrics',
@@ -393,39 +319,23 @@ final Set<String> _allManagedSettingsKeys = Set.unmodifiable({
     ...category.settingsKeys,
 });
 
-/// Every package this build will ever disable, in either direction.
-///
-/// **This set is the safety mechanism.** Slimming is an allowlist, never a
-/// denylist: nothing outside it is ever passed to `pm`, so a typo or a stale
-/// saved category id cannot reach a package the system cannot live without.
-///
-/// Absent from the table below, on purpose and asserted by a test: `android`,
-/// `com.android.systemui`, `com.android.settings`, `com.android.shell`, the
-/// `com.android.providers.*` content providers, the WebView providers
-/// (`com.google.android.webview`, `com.android.chrome`), the launcher
-/// (`com.google.android.apps.nexuslauncher`), the keyboard
-/// (`com.google.android.inputmethod.latin` — this pane types through it), the
-/// permission controller and package installer, TalkBack, and the Contacts and
-/// Dialer apps that own the system contact picker.
+/// Every package this build will ever disable, in either direction. **This set
+/// is the safety mechanism:** slimming is an allowlist, never a denylist, so a
+/// typo or a stale saved id cannot reach a package the system needs.
 Set<String> get allManagedPackages => _allManagedPackages;
 
 final Set<String> _allManagedPackages = Set.unmodifiable({
   for (final category in AndroidSlimmingCategory.values) ...category.packages,
 });
 
-/// The selected categories, from stored ids.
-///
-/// Ids that no longer name a category are dropped rather than erroring: a
-/// category removed in a later release must not make a saved preference
-/// unreadable.
+/// The selected categories, from stored ids. Unknown ids are dropped: a category
+/// removed in a later release must not make a saved preference unreadable.
 Set<AndroidSlimmingCategory> categoriesFromIds(Iterable<String> ids) => {
   for (final id in ids) ?AndroidSlimmingCategory.byId(id),
 };
 
-/// Extra `emulator` arguments for [enabled], plus the [gpu] mode.
-///
-/// Order is stable so a test can assert the whole argv, and categories are
-/// walked in declaration order rather than set order for the same reason.
+/// Extra `emulator` arguments for [enabled], plus the [gpu] mode. Order is
+/// stable so a test can assert the whole argv.
 List<String> launchArguments({
   Set<AndroidSlimmingCategory> enabled = const {},
   AndroidGpuMode gpu = AndroidGpuMode.auto,
@@ -438,9 +348,7 @@ List<String> launchArguments({
 ];
 
 /// `adb shell` argument lists that apply the layer-2 settings for [enabled].
-///
-/// One command per key rather than one chained shell line: `settings put` is
-/// cheap, and a single failure then costs one setting instead of all three.
+/// One command per key, so one failure costs one setting instead of three.
 List<List<String>> settingsArguments({
   Set<AndroidSlimmingCategory> enabled = const {},
 }) => [
@@ -452,16 +360,7 @@ List<List<String>> settingsArguments({
 ];
 
 /// `adb shell` argument lists that put **every** managed setting back.
-///
-/// `settings delete`, not `put 1.0`. Stock Android leaves these keys unset and
-/// the framework treats absent as 1.0, so deleting restores the state the
-/// device actually shipped with, where writing 1.0 would leave our fingerprint
-/// behind — the same reason the iOS side removes its plist keys rather than
-/// writing an explicit `false`.
-///
-/// Takes no selection: restore always covers everything this build manages, so
-/// a user who unticks a category and then restores is not left with the one
-/// setting nobody put back.
+/// `settings delete`, not `put 1.0`: absent is the state the device shipped in.
 List<List<String>> settingsRestoreArguments() => [
   for (final key in _orderedManagedSettingsKeys)
     ['shell', 'settings', 'delete', 'global', key],
@@ -481,15 +380,8 @@ Set<String> packagesFor({Set<AndroidSlimmingCategory> enabled = const {}}) => {
 };
 
 /// `adb shell` arguments that disable [package] for the primary user.
-///
-/// `disable-user`, not `disable`: `pm disable` needs a privileged caller and is
-/// refused for a system package from the adb shell, while `disable-user --user
-/// 0` is the reversible per-user form that actually works on a stock image.
-/// `--user 0` because an emulator has exactly one user and naming it keeps the
-/// command from depending on which user `pm` picks.
-///
-/// Returns empty for a package outside [allManagedPackages] — the allowlist,
-/// enforced at the point of use rather than trusted at the caller.
+/// `disable-user`, not `disable`, which the adb shell is not privileged for.
+/// Empty outside [allManagedPackages] — the allowlist, enforced at the use.
 List<String> disableArgumentsFor(String package) =>
     allManagedPackages.contains(package)
     ? ['shell', 'pm', 'disable-user', '--user', '0', package]
@@ -502,9 +394,8 @@ List<String> enableArgumentsFor(String package) =>
     ? ['shell', 'pm', 'enable', '--user', '0', package]
     : const [];
 
-/// The feature-loss notes that apply to a given choice, keyed by the flag,
-/// setting or package that causes each. Intended to be shown before the button
-/// is pressed.
+/// The feature-loss notes that apply to a given choice, keyed by cause.
+/// Meant to be shown before the button is pressed.
 Map<String, String> featureLossFor({
   Set<AndroidSlimmingCategory> enabled = const {},
 }) => {
@@ -512,12 +403,8 @@ Map<String, String> featureLossFor({
     if (enabled.contains(category)) ...category.featureLoss,
 };
 
-// ---------------------------------------------------------------------------
-// The package table. Every entry was confirmed present in `pm list packages` on
-// a stock API 34 `google_apis` x86_64 emulator image. A package that is not on
-// the image makes `pm disable-user` fail, which the service logs and swallows,
-// so a stale entry costs one failed command and nothing else.
-// ---------------------------------------------------------------------------
+// Every entry below was confirmed present in `pm list packages` on a stock API
+// 34 image; a stale one costs one failed command, which the service swallows.
 
 const List<String> _playServices = [
   'com.google.android.gms',
