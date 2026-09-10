@@ -1117,3 +1117,23 @@ refresh when the panel opens (§19's Tools precedent would allow it; the launch
 plus "Detect agents" covers the reported failure), no update check against a
 registry, no "a new version is available", and no setting for the bound — a
 cadence the user has to tune is one nobody tunes.
+
+## 21. Comments: a line or two, or none
+
+Measured 2026-09-10: comments were **25% of `lib/`** (45,648 lines) and 20% of
+`packages/`. Sections 2 and 4 already said "concise"; they were ignored, so
+here is the rule as something checkable.
+
+**A comment earns its place only by saying *why* a reader would otherwise get
+it wrong.** One line, two at most. A doc comment on a public API may name what
+it returns and one refusal it makes; that is all.
+
+**Delete on sight:** anything restating the code; a measurement narrative
+("measured on the owner's machine, 25 s, the dialog stayed at visible=0…"); the
+history of what the code used to be; "why that matters" essays; a paragraph
+justifying a decision. **Those belong in `docs/SETTLED.md`**, which is where a
+reader looks for a decision and where they will not scroll past it to reach the
+next function.
+
+**When trimming, a fact that is load-bearing and not already in `SETTLED.md`
+moves there in one sentence** rather than being deleted. Everything else goes.
