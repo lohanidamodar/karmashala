@@ -30,16 +30,8 @@ final environmentsControllerProvider =
       EnvironmentsController.new,
     );
 
-/// How one environment id should be shown to a person.
-///
-/// Everywhere that holds only an `environmentId` — an agent installation, a
-/// project row, a session — and wants to print it. The id is a stable database
-/// key and not a name: the local host's is the literal `windows` on every
-/// platform (see [localHostEnvironmentId]), so printing it raw is how the
-/// settings screen came to label a Mac's agents "windows".
-///
-/// Falls back to the id when the environment is unknown, which is at least a
-/// handle on the row rather than an empty line.
+/// How one environment id should be shown to a person. The id is a database
+/// key, not a name: the local host's is the literal `windows` on every platform.
 final environmentLabelForIdProvider = Provider.family<String, String>((
   ref,
   environmentId,
@@ -47,12 +39,8 @@ final environmentLabelForIdProvider = Provider.family<String, String>((
   for (final env in ref.watch(environmentsControllerProvider)) {
     if (env.id == environmentId) return environmentLabel(env) ?? environmentId;
   }
-  // The local host is the one id whose raw form is a *wrong* answer rather than
-  // an unhelpful one: [localHostEnvironmentId] is the literal `windows` on every
-  // platform, so a Mac whose environment list has not loaded yet labelled its
-  // agents "windows". It is also the id most likely to be asked about early,
-  // because every locally discovered agent installation points at it. The host
-  // can answer for itself without waiting for the list.
+  // The local host is the one id whose raw form is a *wrong* answer: a Mac
+  // whose environment list had not loaded labelled its agents "windows".
   if (environmentId == localHostEnvironmentId) return localHostEnvironmentName;
   return environmentId;
 });

@@ -10,19 +10,8 @@ import '../application/environment_health.dart';
 import '../application/system_health.dart';
 import '../application/system_health_service.dart';
 
-/// What the machine can actually do, measured — the panel behind "Check system
-/// health".
-///
-/// **Why this is one panel and not two.** The machine checks and the
-/// per-environment checks answer halves of the same question, and two screens
-/// that could disagree about one machine would be a worse outcome than one that
-/// is incomplete. The rows share a vocabulary ([HealthLevel]), share one
-/// timestamp, and are produced by one run.
-///
-/// **Why every row is drawn with its age.** Probing spawns processes, so the
-/// checks run when this opens and when the user asks — never on a timer. A
-/// reading that is not live must not look live; `AgentStatusReport.evidenceAt`
-/// exists for the same reason.
+/// What the machine can actually do, measured. One panel and not two, because
+/// two that could disagree is worse than one that is incomplete.
 class EnvironmentHealthDialog extends ConsumerStatefulWidget {
   const EnvironmentHealthDialog({super.key});
 

@@ -6,11 +6,7 @@ import '../data/execution_environment_dao.dart';
 import 'environment_providers.dart';
 
 /// Why the environment a checkout's commands would run in could not be named.
-///
-/// Each value is a different thing to tell the user, which is why they are not
-/// one "unknown": a missing row is a workspace that lost an environment, a
-/// nameless WSL row is a distribution that went away, and an SSH row with
-/// nothing to dial it is this app composed without a connection pool.
+/// Each value is a different thing to tell the user, which is why it is not one.
 enum EnvironmentRefusal {
   /// Nothing named a directory at all — no project, no repository row, no
   /// recorded working directory.
@@ -27,11 +23,7 @@ enum EnvironmentRefusal {
 }
 
 /// Where a command for one checkout runs — or the worded reason it cannot be
-/// said.
-///
-/// A refusal is a **value the caller shows**, not an exception that becomes
-/// "Unknown environment: …" in a log. Sites that already throw keep throwing,
-/// with [reason] as the message, so the two cannot drift.
+/// said. A refusal is a **value the caller shows**, not an exception.
 class EnvironmentResolution {
   const EnvironmentResolution.resolved(ExecutionEnvironment this.environment)
     : refusal = null,
@@ -65,17 +57,8 @@ class EnvironmentResolution {
       isResolved ? 'EnvironmentResolution($environment)' : 'refused: $reason';
 }
 
-/// The one answer to *"where does a command for this checkout run?"*.
-///
-/// Every launch path used to answer it alone — a `getById`, a null check and a
-/// sentence of its own — so the same failure read four different ways and a
-/// fifth path could invent a fifth. The runner half was already central
-/// ([CommandRunnerFactory.forEnvironment]); this is the half that decides which
-/// environment to hand it.
-///
-/// [runners] is asked whether a remote environment is reachable at all, so an
-/// SSH checkout in a container composed without a connection pool is refused
-/// here — with words — rather than throwing out of the factory later.
+/// The one answer to *"where does a command for this checkout run?"*. [runners]
+/// is asked whether a remote environment is reachable, so SSH is refused here.
 class ExecutionEnvironmentResolver {
   const ExecutionEnvironmentResolver({
     required this.environments,
@@ -89,12 +72,8 @@ class ExecutionEnvironmentResolver {
   EnvironmentResolution resolveFor(EnvironmentPath? path, {bool runnable = true}) =>
       resolve(path?.environmentId, runnable: runnable);
 
-  /// As [resolveFor], for a caller holding only an id.
-  ///
-  /// [runnable] asks the stronger question: not just *which* environment, but
-  /// whether this app can run a command there. Turn it off for callers that
-  /// need the environment's shape alone — a command line to copy, a path to
-  /// spell — where nothing is spawned and reachability is not the question.
+  /// As [resolveFor], for a caller holding only an id. [runnable] asks the
+  /// stronger question — turn it off where nothing is spawned.
   EnvironmentResolution resolve(String? environmentId, {bool runnable = true}) {
     if (environmentId == null || environmentId.isEmpty) {
       return const EnvironmentResolution.refused(
@@ -143,15 +122,7 @@ final environmentResolverProvider = Provider<ExecutionEnvironmentResolver>(
 );
 
 /// The `RunnerResolver` `agent_cli` asks for: an environment id in, the runner
-/// that reaches it out.
-///
-/// The package's adapters and its `CliStoreLocator` used to hold a
-/// `CommandRunnerFactory`, an `ExecutionEnvironmentDao` and this resolver
-/// between them — three ways of saying the same thing, each dragging a database
-/// in behind it (docs/PACKAGE_SPLIT.md §3). They now take one function, and
-/// this is where the app composes it: the same resolver every other launch path
-/// uses, so an environment that cannot be placed is refused in the same words,
-/// then the same factory.
+/// that reaches it out. One function instead of three ways of saying it.
 final runnerResolverProvider = Provider<RunnerResolver>((ref) {
   final resolver = ref.watch(environmentResolverProvider);
   final runners = ref.watch(commandRunnerFactoryProvider);

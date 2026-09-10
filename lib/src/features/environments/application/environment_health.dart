@@ -6,13 +6,8 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'environment_providers.dart';
 
-/// How bad a finding is, **ordered by severity** — `index` is the comparison,
-/// so anything added has to go in the right place.
-///
-/// [unknown] sits above [healthy] on purpose. A check that could not be run is
-/// not a passing check, and ranking the two together is how a panel ends up
-/// drawing green over an unmeasured machine; it sits below [warning] because
-/// not knowing is not yet evidence of a fault.
+/// How bad a finding is, **ordered by severity** — `index` is the comparison.
+/// [unknown] sits above [healthy]: a check that could not run is not a pass.
 enum HealthLevel { healthy, unknown, warning, failed }
 
 class EnvironmentHealth {
@@ -85,8 +80,6 @@ final environmentHealthServiceProvider = Provider<EnvironmentHealthService>(
   EnvironmentHealthService.new,
 );
 
-// There is no `environmentHealthProvider` any more. It ran these checks on its
-// own schedule for the health dialog, which meant the dialog and Settings could
-// hold two readings of one machine taken at two different times. Everything now
-// goes through `systemHealthProvider`, which runs this service once per check
-// and stamps the result with when it ran.
+// There is no `environmentHealthProvider` any more: it ran these checks on its
+// own schedule, so the dialog and Settings could hold two readings of one
+// machine. Everything goes through `systemHealthProvider`, stamped with a time.

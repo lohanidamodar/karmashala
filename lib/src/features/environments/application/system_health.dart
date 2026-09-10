@@ -2,20 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import 'environment_health.dart';
 
-/// One thing the app checked about the machine it is running on.
-///
-/// **A check reports what it observed, never what it assumes.** The panel this
-/// feeds used to say "Tools available — the MCP bridge is installed" because a
-/// file was on disk; on 2026-09-03 that sentence was on screen for over an hour
-/// while every Karmashala tool in an agent session was gone, because WSL's
-/// interop handler had disappeared and the file, though perfectly runnable,
-/// could not be spawned by the process that needed it. A confident false
-/// statement is worse than an admission of ignorance — the same rule
-/// `AgentStatusReport.evidence` and `DeviceCapability` are written to.
-///
-/// So [HealthLevel.unknown] is a first-class outcome here, not a failure to
-/// model one: "we could not tell" is drawn in [SemanticColors.neutral] and says
-/// what stopped it.
+/// One thing the app checked about the machine it runs on. **A check reports
+/// what it observed**, so [HealthLevel.unknown] is a first-class outcome.
 @immutable
 class SystemCheck {
   const SystemCheck({
@@ -77,22 +65,8 @@ class SystemCheck {
   );
 }
 
-/// The checks this app knows how to run, in the order they are shown.
-///
-/// **What is deliberately absent is as much a decision as what is here**, and
-/// the exclusions are recorded in `docs/` rather than left to be rediscovered:
-///
-/// * **A client's MCP connection.** Claude Code binds its servers when it
-///   starts and owns those processes. This app can spawn *its own* bridge and
-///   watch its own endpoint; it cannot see whether a CLI's server list is
-///   healthy, and a row claiming to would be the same lie in a new place.
-/// * **Network reachability.** Nothing here needs the internet, and a probe of
-///   somebody else's host reports their weather, not this machine's.
-/// * **Git and SSH per environment.** Already measured, per environment, by
-///   [EnvironmentHealthService]; a second row that could disagree with the
-///   first is exactly the failure this panel exists to avoid.
-/// * **CPU and memory.** No incident has turned on either, and a number with no
-///   threshold beside it is noise that trains the eye to skip the panel.
+/// The checks this app knows how to run, in the order they are shown. What is
+/// deliberately absent is recorded in docs/SETTLED.md, not rediscovered here.
 enum SystemCheckId {
   /// The stdio bridge an agent spawns, probed by handshake.
   mcpBridge,
@@ -111,11 +85,8 @@ enum SystemCheckId {
   diskSpace,
 }
 
-/// Everything the last check found, and when it found it.
-///
-/// The timestamp is part of the value rather than something the UI stamps on
-/// render, for the reason `AgentStatusReport.evidenceAt` exists: a reading
-/// drawn without its age looks live no matter how old it is.
+/// Everything the last check found, and when. The timestamp is part of the
+/// value: a reading drawn without its age looks live however old it is.
 @immutable
 class SystemHealthReport {
   const SystemHealthReport({
@@ -148,11 +119,8 @@ class SystemHealthReport {
 
   bool get hasRun => checkedAt != null;
 
-  /// The reading for one check, or `null` if it has never been made.
-  ///
-  /// Null is the honest answer for "we have not looked", and every surface that
-  /// reads a single row goes through here so that none of them can invent a
-  /// verdict out of an empty list.
+  /// The reading for one check, or `null` if it has never been made. Every
+  /// single-row surface goes through here, so none can invent a verdict.
   SystemCheck? checkFor(SystemCheckId id) {
     for (final check in checks) {
       if (check.id == id) return check;

@@ -7,11 +7,8 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart';
 import '../domain/checkpoint.dart';
 
-/// Data access for session checkpoints (schema v12).
-///
-/// The rows are an index over git objects, not a copy of them: nothing here can
-/// reconstruct a working tree on its own, and nothing here is authoritative
-/// about content. Git is (ADR 0004).
+/// Data access for session checkpoints. The rows are an index over git
+/// objects, not a copy: git is authoritative about content (ADR 0004).
 class CheckpointDao {
   CheckpointDao(this._db);
 
