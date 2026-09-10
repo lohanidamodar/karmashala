@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:karmashala/src/features/mcp/wsl_host_address.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_mcp/access.dart';
+import 'package:test/test.dart';
 
 /// Which address a WSL-hosted agent is told to dial.
 ///
