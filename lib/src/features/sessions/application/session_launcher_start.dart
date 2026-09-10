@@ -34,6 +34,10 @@ extension SessionStartVerbs on SessionLauncher {
       );
     }
 
+    // Before the kill, because ending is not undoable and a restart onto a
+    // CLI that has moved would take the agent down and put nothing back.
+    final startable = await usableInstallation(installation);
+
     // Only now, once nothing above can refuse: ending is not undoable. No live
     // pane is not an error — that session had already stopped.
     final paneId = livePaneFor(sessionId);
@@ -51,7 +55,7 @@ extension SessionStartVerbs on SessionLauncher {
     return launch(
       SessionLaunchRequest(
         repository: repository,
-        installation: installation,
+        installation: startable,
         title: session.title,
         purpose: SessionPurpose.existingSession,
         resumeExternalSessionId: externalId,
@@ -84,6 +88,12 @@ extension SessionStartVerbs on SessionLauncher {
     refuseIfForbidden(
       agentId: request.installation.agentId,
       externalSessionId: request.resumeExternalSessionId,
+    );
+
+    // Before every write below and before the only refusal that performs one:
+    // a stored path is state, and the boot sweep's reading ages out mid-session.
+    request = request.withInstallation(
+      await usableInstallation(request.installation),
     );
 
     // Every surface that continues a session comes through here, so none of

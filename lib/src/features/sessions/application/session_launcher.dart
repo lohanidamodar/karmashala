@@ -1,7 +1,9 @@
+import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/util/agent_cli_bridge.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -50,6 +52,7 @@ export 'session_launch_arguments.dart';
 // The launcher's body, one `part` per concern — start, resume_guards, policy,
 // surfaces, input — because privacy in Dart is per library.
 part 'session_launcher_start.dart';
+part 'session_launcher_executable.dart';
 part 'session_launcher_resume_guards.dart';
 part 'session_launcher_policy.dart';
 part 'session_launcher_surfaces.dart';
