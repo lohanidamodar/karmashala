@@ -28,7 +28,8 @@ abstract class HostBinarySource {
 class DirectoryHostBinaries implements HostBinarySource {
   DirectoryHostBinaries(this.directories);
 
-  /// Searched in order; the first match wins.
+  /// Searched in order; the first directory holding a match wins, and within it
+  /// the highest version does.
   final List<Directory> directories;
 
   /// Beside the running executable first, then the repository's build output,
@@ -50,18 +51,52 @@ class DirectoryHostBinaries implements HostBinarySource {
   Future<HostBinary?> binaryFor(HostPlatform platform) async {
     for (final directory in directories) {
       if (!directory.existsSync()) continue;
+      final candidates = <(String?, File)>[];
       for (final entity in directory.listSync().whereType<File>()) {
         final match = _name.firstMatch(entity.uri.pathSegments.last);
         if (match == null) continue;
         if ('${match.group(2)}-${match.group(3)}' != platform.targetKey) continue;
-        return HostBinary(
-          bytes: await entity.readAsBytes(),
-          version: match.group(1) ?? 'unversioned',
-          source: entity.path,
-        );
+        candidates.add((match.group(1), entity));
       }
+      if (candidates.isEmpty) continue;
+      // Every version ever installed accumulates here — the installer copies
+      // the Release directory wholesale and nothing prunes it — so the newest
+      // is what this build means, not whichever the filesystem listed first.
+      // On 2026-09-10 that took 1.20.0 while 1.20.1 lay beside it, and a stale
+      // pick reads as `protocolMismatch` after a protocol bump. The older files
+      // are left exactly where they are.
+      candidates.sort((a, b) => compareFilenameVersions(b.$1, a.$1));
+      final (version, file) = candidates.first;
+      return HostBinary(
+        bytes: await file.readAsBytes(),
+        version: version ?? 'unversioned',
+        source: file.path,
+        candidates: candidates.length,
+      );
     }
     return null;
+  }
+
+  /// Compares two filename versions segment by segment, as numbers.
+  ///
+  /// A string sort puts `1.9.0` above `1.20.1`, which is the whole bug. `null`
+  /// is a file the regex matched without a version and is lowest — it says
+  /// nothing about what it is, so it loses to anything that does. Segments that
+  /// are not plain integers (a `+build` tail) fall back to comparing the text,
+  /// which is a tie-break rather than an ordering claim.
+  static int compareFilenameVersions(String? a, String? b) {
+    if (a == null || b == null) return (a == null ? 0 : 1) - (b == null ? 0 : 1);
+    final left = a.split('.');
+    final right = b.split('.');
+    for (var i = 0; i < left.length || i < right.length; i++) {
+      final l = i < left.length ? left[i] : '0';
+      final r = i < right.length ? right[i] : '0';
+      final ln = int.tryParse(l);
+      final rn = int.tryParse(r);
+      final order = ln != null && rn != null ? ln.compareTo(rn) : l.compareTo(r);
+      if (order != 0) return order;
+    }
+    return 0;
   }
 
   @override

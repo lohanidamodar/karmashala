@@ -86,6 +86,10 @@ class HostDeployer {
             '${have.isEmpty ? '' : ' (it has ${have.join(', ')})'}.',
       );
     }
+    _logger.debug(
+      'host binary for ${platform.targetKey}: ${binary.source} (version ${binary.version}, '
+      '${binary.candidates == 1 ? 'the only candidate' : 'newest of ${binary.candidates} candidates'}).',
+    );
 
     // One reading, before any path is spelled. Everything below is built from
     // it, so nothing this deploy writes can depend on who expands what.
