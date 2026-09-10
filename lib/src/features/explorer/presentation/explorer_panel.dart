@@ -293,7 +293,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (chooseSubfolder) {
       final picked = await pickOneDirectory(
         what: 'a folder of ${project.name} to open',
-        initialDirectory: actions.windowsRootPath(project),
+        startNear: actions.windowsRootPath(project),
         confirmButtonText: 'Open in editor',
       );
       if (picked == null) return;

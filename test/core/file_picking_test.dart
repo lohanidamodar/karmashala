@@ -24,6 +24,7 @@ void main() {
     AppLogger.initialize(onRecord: Diagnostics.instance.handle);
     sink = LogFileSink(directory: dir);
     Diagnostics.instance.attachFile(sink);
+    forgetLastPickedDirectory();
   });
 
   tearDown(() async {
@@ -198,6 +199,316 @@ void main() {
       inner();
       outer();
       expect(told, [true, false]);
+    });
+  });
+
+  group('where a picker starts', () {
+    /// A disk with exactly these directories on it.
+    DirectoryProbe only(Set<String> live) => live.contains;
+
+    const env = {'USERPROFILE': r'C:\Users\someone', 'SystemDrive': 'C:'};
+
+    test("the caller's own folder wins when it is there", () {
+      expect(
+        pickerStartDirectory(
+          r'C:\src\karmashala',
+          probe: only({r'C:\src\karmashala', r'C:\Users\someone'}),
+          environment: env,
+        ),
+        r'C:\src\karmashala',
+      );
+    });
+
+    test('a file resolves to the folder holding it', () {
+      expect(
+        pickerStartDirectory(
+          r'C:\Tools\flutter\bin\flutter.bat',
+          probe: only({r'C:\Tools\flutter\bin', r'C:\Users\someone'}),
+          environment: env,
+        ),
+        r'C:\Tools\flutter\bin',
+      );
+    });
+
+    test('a trailing separator does not lose the folder', () {
+      expect(
+        pickerStartDirectory(
+          'C:\\src\\karmashala\\',
+          probe: only({r'C:\src\karmashala'}),
+          environment: env,
+        ),
+        r'C:\src\karmashala',
+      );
+    });
+
+    // The whole point: this is what the shell was restoring on its own, and
+    // drawing it costs 30 s because the dialog must enumerate Network first.
+    for (final refused in [
+      r'\\wsl.localhost\archlinux\home\dlohani\projects\appwrite-ai-workdir',
+      r'\\wsl$\archlinux\home\dlohani',
+      r'\\fileserver\share\builds',
+      '//fileserver/share/builds',
+    ]) {
+      test('refuses $refused even when it answers', () {
+        expect(
+          pickerStartDirectory(
+            refused,
+            // A probe that says yes to everything: refusal is by spelling,
+            // before anything stats it.
+            probe: (_) => true,
+            environment: env,
+          ),
+          r'C:\Users\someone',
+        );
+      });
+    }
+
+    test('a refused folder is not even stat-ed', () {
+      final asked = <String>[];
+      pickerStartDirectory(
+        r'\\wsl.localhost\archlinux\home\dlohani',
+        probe: (path) {
+          asked.add(path);
+          return true;
+        },
+        environment: env,
+      );
+      expect(
+        asked,
+        isNot(contains(anyOf(contains('wsl'), startsWith(r'\\')))),
+        reason: 'the stat is itself the thing that blocks',
+      );
+    });
+
+    test('a dead folder falls through to the profile', () {
+      expect(
+        pickerStartDirectory(
+          r'D:\gone',
+          probe: only({r'C:\Users\someone'}),
+          environment: env,
+        ),
+        r'C:\Users\someone',
+      );
+    });
+
+    test('a probe that throws is a refusal, not a crash', () {
+      expect(
+        pickerStartDirectory(
+          r'C:\junction',
+          probe: (path) {
+            if (path == r'C:\junction') throw const FileSystemException('448');
+            return path == r'C:\Users\someone';
+          },
+          environment: env,
+        ),
+        r'C:\Users\someone',
+      );
+    });
+
+    test('HOME answers when there is no USERPROFILE', () {
+      expect(
+        pickerStartDirectory(
+          null,
+          probe: only({'/home/someone'}),
+          environment: const {'HOME': '/home/someone'},
+        ),
+        '/home/someone',
+      );
+    });
+
+    test('with nothing live it still never answers null or a UNC', () {
+      final floor = pickerStartDirectory(
+        r'\\wsl.localhost\archlinux\home',
+        probe: (_) => false,
+        environment: env,
+      );
+      expect(floor, r'C:\');
+      expect(floor, isNot(startsWith(r'\\')));
+    });
+
+    test('a directory picker remembers where it landed', () async {
+      final home = Directory.systemTemp.createTempSync('karmashala-start');
+      addTearDown(() => home.deleteSync(recursive: true));
+
+      await pickOneDirectory(
+        what: 'a project folder',
+        show: ({String? confirmButtonText, String? initialDirectory}) async =>
+            home.path,
+      );
+      expect(lastPickedDirectory, home.path);
+
+      // The next picker has no idea of its own, and opens there rather than
+      // wherever the shell was last.
+      String? opened;
+      await pickOneDirectory(
+        what: 'somewhere else',
+        show: ({String? confirmButtonText, String? initialDirectory}) async {
+          opened = initialDirectory;
+          return null;
+        },
+      );
+      expect(opened, home.path);
+    });
+
+    test('a file picker remembers the folder, not the file', () async {
+      final home = Directory.systemTemp.createTempSync('karmashala-start');
+      final file = File('${home.path}${Platform.pathSeparator}chosen.exe')
+        ..writeAsStringSync('');
+      addTearDown(() => home.deleteSync(recursive: true));
+
+      await pickOneFile(
+        what: 'a terminal program',
+        show: ({
+          List<XTypeGroup> acceptedTypeGroups = const [],
+          String? confirmButtonText,
+          String? initialDirectory,
+        }) async => XFile(file.path),
+      );
+
+      expect(lastPickedDirectory, home.path);
+    });
+
+    test('the shell is always given a folder, and the log names it', () async {
+      String? opened;
+      await pickOneFile(
+        what: 'an agent executable',
+        startNear: r'\\wsl.localhost\archlinux\home\dlohani',
+        probe: only({r'C:\Users\someone'}),
+        environment: env,
+        show: ({
+          List<XTypeGroup> acceptedTypeGroups = const [],
+          String? confirmButtonText,
+          String? initialDirectory,
+        }) async {
+          opened = initialDirectory;
+          return null;
+        },
+      );
+      await Diagnostics.instance.flushFile();
+
+      expect(opened, r'C:\Users\someone');
+      // The log redacts the user's own name, so the line is asserted up to it.
+      expect(
+        logOnDisk(),
+        contains(
+          r'opening the file picker for an agent executable, '
+          r'starting at C:\Users\',
+        ),
+      );
+    });
+  });
+
+  group('no picker in lib may leave the folder to the shell', () {
+    /// `features/devices/**` was another agent's tree on 2026-09-10 and its
+    /// three calls still omit `startNear:`. Checked as a subset, so an entry
+    /// can simply be deleted once that lands.
+    const pending = {
+      'lib/src/features/devices/presentation/device_app_controls.dart',
+      'lib/src/features/devices/presentation/device_files_dialog.dart',
+    };
+
+    /// [source] with every comment and string literal blanked, so an
+    /// apostrophe in a comment cannot open a string that never closes and a
+    /// bracket in a message cannot unbalance the argument list.
+    String codeOnly(String source) {
+      final out = List<String>.filled(source.length, ' ');
+      var i = 0;
+      while (i < source.length) {
+        final c = source[i];
+        final next = i + 1 < source.length ? source[i + 1] : '';
+        if (c == '/' && next == '/') {
+          while (i < source.length && source[i] != '\n') {
+            i++;
+          }
+          continue;
+        }
+        if (c == '/' && next == '*') {
+          final end = source.indexOf('*/', i + 2);
+          i = end == -1 ? source.length : end + 2;
+          continue;
+        }
+        if (c == "'" || c == '"') {
+          final triple = source.startsWith(c * 3, i);
+          final close = triple ? c * 3 : c;
+          i += close.length;
+          while (i < source.length) {
+            if (!triple && source[i] == r'\') {
+              i += 2;
+              continue;
+            }
+            if (source.startsWith(close, i)) {
+              i += close.length;
+              break;
+            }
+            i++;
+          }
+          continue;
+        }
+        out[i] = c;
+        i++;
+      }
+      return out.join();
+    }
+
+    /// The argument list of every `name(` call in [code].
+    List<String> argumentsOf(String code, String name) {
+      final found = <String>[];
+      final needle = '$name(';
+      var at = code.indexOf(needle);
+      while (at != -1) {
+        var i = at + needle.length;
+        final start = i;
+        var depth = 1;
+        while (i < code.length && depth > 0) {
+          if (code[i] == '(') depth++;
+          if (code[i] == ')') depth--;
+          i++;
+        }
+        found.add(code.substring(start, i > start ? i - 1 : start));
+        at = code.indexOf(needle, i);
+      }
+      return found;
+    }
+
+    test('every call names where it starts', () {
+      final root = Directory('lib');
+      expect(root.existsSync(), isTrue, reason: 'run from the app root');
+
+      final silent = <String>[];
+      for (final file in root.listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.dart')) continue;
+        final where = file.path.replaceAll(r'\', '/');
+        if (where.endsWith('core/util/file_picking.dart')) continue;
+        final code = codeOnly(file.readAsStringSync());
+        for (final name in ['pickOneFile', 'pickOneDirectory']) {
+          for (final arguments in argumentsOf(code, name)) {
+            if (!arguments.contains('startNear:')) silent.add('$where — $name');
+          }
+        }
+      }
+
+      expect(
+        silent.where((s) => !pending.any(s.startsWith)),
+        isEmpty,
+        reason:
+            'a picker with no startNear lets the shell restore its own last '
+            'folder, which on the reporting machine cost 30 s',
+      );
+    });
+
+    test('the scanner finds a call it should and reads its arguments', () {
+      const sample = """
+        // pickOneFile( isn't a call, and platforms' apostrophe is not a string
+        final a = await pickOneFile(what: 'x (y)', startNear: dir(1));
+        final b = await pickOneDirectory(what: 'z');
+      """;
+      final code = codeOnly(sample);
+      expect(argumentsOf(code, 'pickOneFile'), hasLength(1));
+      expect(argumentsOf(code, 'pickOneFile').single, contains('startNear:'));
+      expect(
+        argumentsOf(code, 'pickOneDirectory').single,
+        isNot(contains('startNear:')),
+      );
     });
   });
 
