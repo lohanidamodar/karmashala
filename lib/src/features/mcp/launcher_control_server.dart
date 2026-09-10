@@ -52,22 +52,15 @@ import 'worktree_tools.dart';
 import 'wsl_host_address.dart';
 import '../../core/paths/app_support_directory.dart';
 
-/// The port the control server asks for before falling back to an ephemeral
-/// one. Fixed because the Hyper-V firewall rule that lets WSL reach this
-/// server can only name a port, never a program.
+/// The port asked for before falling back to an ephemeral one. Fixed because a
+/// Hyper-V firewall rule can name a port, never a program.
 const int preferredControlPort = 47821;
 
 /// How often to look again for the WSL switch while it is missing.
 const Duration wslRetryInterval = Duration(seconds: 30);
 
-/// A loopback HTTP server exposing karmashala's tools to the launcher agent's
-/// MCP bridge (`POST /rpc`) and to agents' installed hooks (`POST /agent-hook`).
-///
-/// The tokens are the whole boundary — any local process can dial loopback — so
-/// privileged `/rpc` moves to a unix socket in an owner-only directory and
-/// fails closed if any hardening step does not apply. The hook token is the
-/// separate low-privilege half and is public to anything running as this user.
-/// An agent inside WSL reaches neither door; see [_bindWslInterface].
+/// A loopback HTTP server serving the MCP bridge (`POST /rpc`) and agents' own
+/// hooks (`POST /agent-hook`). The tokens are the whole boundary.
 class LauncherControlServer implements SessionMcp {
   LauncherControlServer(
     this._container, {
@@ -156,9 +149,8 @@ class LauncherControlServer implements SessionMcp {
     logger: _logger,
   );
 
-  /// One agent per request, however many times the request arrives: a worktree
-  /// under `/mnt/c` outlives the 60s Claude Code waits, and its verbatim retry
-  /// of `open_new_session` started a second real agent. See [LaunchDedupe].
+  /// One agent per request, however often it arrives: a worktree under `/mnt/c`
+  /// outlives the 60s Claude Code waits, and its retry started a second agent.
   late final LaunchDedupe _launches = LaunchDedupe(
     clock: _container.read(clockProvider),
     onCollapsed: (tool) => _logger.warning(
@@ -180,10 +172,8 @@ class LauncherControlServer implements SessionMcp {
   /// it does not. Read by tests and by [mcpUrlFor]; nothing else needs it.
   InternetAddress? get wslHost => _wslHost;
 
-  /// The MCP endpoint URL that says the caller **is** [sessionId], for an agent
-  /// running in [environment] — null when no address this server listens on is
-  /// reachable from there (a WSL distro refuses loopback; SSH is another
-  /// machine, and the token in this URL opens the whole tool surface).
+  /// The MCP endpoint URL that says the caller **is** [sessionId] from
+  /// [environment], or null — a WSL distro refuses loopback, SSH gets nothing.
   String? mcpUrlFor(String sessionId, {required EnvironmentKind environment}) {
     final host = _mcpHostFor(environment);
     if (host == null) return null;
@@ -223,10 +213,8 @@ class LauncherControlServer implements SessionMcp {
     );
   }
 
-  /// The `mcpServers.karmashala` entry for an agent in [environment], or `null`
-  /// when there is nothing truthful to write. Only [EnvironmentKind.wsl]
-  /// differs: with no address of ours to dial it gets the stdio bridge, or the
-  /// switch URL when that executable is not beside the app.
+  /// The `mcpServers.karmashala` entry for an agent in [environment], or `null`.
+  /// Only [EnvironmentKind.wsl] differs: it is given the stdio bridge.
   Map<String, Object?>? _serverEntryFor(
     EnvironmentKind environment,
     String? url,
@@ -286,14 +274,8 @@ class LauncherControlServer implements SessionMcp {
     return p.join(dir.path, 'mcp_bridge.json');
   }
 
-  /// Binds the server and writes the handshake file.
-  ///
-  /// [useLocalSocket] is the owner-only `/rpc` transport (tests turn it off);
-  /// [hostCanHaveWsl] gates the second `/mcp` listener, because off Windows
-  /// there is no switch and the scan would repeat forever. Fails closed: if an
-  /// ACL or the socket bind does not apply, no privileged token is minted or
-  /// published and [controlServerStatusProvider] says why. `/agent-hook` stays
-  /// up regardless.
+  /// Binds the server and writes the handshake file. Fails closed: if an ACL or
+  /// the socket bind does not apply, no privileged token is minted or published.
   Future<void> start({
     String? bridgeFilePath,
     bool useLocalSocket = true,
@@ -437,9 +419,7 @@ class LauncherControlServer implements SessionMcp {
   }
 
   /// Also listens on the WSL switch's host address, so an agent inside a
-  /// distribution can dial `/mcp` at all; `/agent-hook` is answered there only
-  /// for hooks an earlier build pointed at it. Never fatal — a failure costs
-  /// WSL sessions their tools and nothing else.
+  /// distribution can dial `/mcp` at all. Never fatal.
   Future<void> _bindWslInterface(
     int port,
     Future<InternetAddress?> Function() lookup,
@@ -463,9 +443,8 @@ class LauncherControlServer implements SessionMcp {
       final server = await HttpServer.bind(host, port);
       _wslServer = server;
       _wslHost = host;
-      // [_hookEndpoint] is deliberately not republished. This listener
-      // completes the handshake and then resets every byte, so hooks in a
-      // distribution report by spool; this door still serves `/mcp`.
+      // [_hookEndpoint] is deliberately not republished: this listener completes
+      // the handshake and then resets every byte, so those hooks use the spool.
       server.listen(
         _handleWslInterface,
         onError: (Object e) => _logger.warning('$e'),
@@ -503,9 +482,8 @@ class LauncherControlServer implements SessionMcp {
     _wslRetry = null;
   }
 
-  /// Creates the owner-only directory per-session MCP configs go in, empty.
-  /// Gated on a credential existing: a config naming an endpoint that answers
-  /// `401` is a file with a secret in it and no use for it.
+  /// Creates the owner-only directory per-session MCP configs go in, empty, and
+  /// only where a credential exists — a config for a `401` is a leaked secret.
   Future<void> _prepareSessionConfigs(String dirPath) async {
     if (_mcpEndpoint?.token == null) return;
     _sessionConfigs = await SessionMcpConfigs.prepare(
@@ -573,9 +551,8 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
-  /// Creates the owner-only directory and binds the RPC socket inside it. The
-  /// directory is restricted first — a unix socket carries no permissions of
-  /// its own, so an ACL that did not apply is the whole boundary missing.
+  /// Creates the owner-only directory and binds the RPC socket inside it: a unix
+  /// socket carries no permissions, so the directory ACL is the whole boundary.
   Future<LocalRpcServer> _bindLocalSocket(String? overrideDirectory) async {
     final dirPath =
         overrideDirectory ??
@@ -594,11 +571,8 @@ class LauncherControlServer implements SessionMcp {
     return socket;
   }
 
-  /// Stops the server. **The two published files go first, and synchronously.**
-  /// `AppLifecycle._step` bounds the wait, not the work, and its 100 ms slice
-  /// can go entirely on `HttpServer.close(force: true)` — which used to leave a
-  /// stale handshake advertising a port nothing was listening on. It also stops
-  /// a [start] that has not finished yet; see [_stopped].
+  /// Stops the server, removing the published files **first and synchronously**:
+  /// the lifecycle bounds the wait, not the work, and its slice is 100 ms.
   Future<void> stop() async {
     // A `start()` suspended above reads this at its next checkpoint.
     _stopped = true;
@@ -631,9 +605,8 @@ class LauncherControlServer implements SessionMcp {
     _publishStatus(ControlServerStatus.notStarted);
   }
 
-  /// Creates the handshake file **empty**, ready to be restricted. A
-  /// pre-existing file is removed rather than overwritten, because a write
-  /// preserves the DACL a file already carries.
+  /// Creates the handshake file **empty**, ready to be restricted. A pre-existing
+  /// one is removed, not overwritten: a write preserves the DACL it carries.
   Future<File> _prepareBridgeFile(String? overridePath) async {
     final file = File(overridePath ?? await bridgeFilePath());
     _publishedBridgePath = file.path;
@@ -648,9 +621,8 @@ class LauncherControlServer implements SessionMcp {
     return file;
   }
 
-  /// Publishes the port, the pid and whichever credentials survived hardening.
-  /// `token` and `socketPath` appear only when a privileged transport is up;
-  /// the hook pair is always published, being the half that fails open.
+  /// Publishes the port, the pid and whichever credentials survived hardening:
+  /// `token` and `socketPath` only when a privileged transport is up.
   Future<void> _publishHandshake(File file, int port) async {
     await file.writeAsString(
       jsonEncode({
@@ -732,9 +704,8 @@ class LauncherControlServer implements SessionMcp {
       final args =
           (payload['arguments'] as Map?)?.cast<String, dynamic>() ??
           const <String, dynamic>{};
-      // Which of *our* sessions is calling. The bridge reads it from the
-      // environment Karmashala stamped on the process, not from the model —
-      // which is what makes the spawn-depth cap worth having.
+      // Which of *our* sessions is calling: read from the environment Karmashala
+      // stamped on the process, not from the model.
       final callerSessionId = payload['callerSessionId'] as String?;
       final result = await _dispatch(tool, args, callerSessionId);
       response.headers.contentType = ContentType.json;
@@ -747,9 +718,8 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
-  /// One `/rpc` call arriving over the owner-only socket. The directory ACL is
-  /// the boundary and the token is the second lock behind it, so a directory
-  /// whose permissions never applied is not instantly an open door.
+  /// One `/rpc` call over the owner-only socket. The directory ACL is the
+  /// boundary; the token is a second lock behind it.
   Future<String> _handleSocketRpc(String body) async {
     try {
       final payload = jsonDecode(body) as Map<String, dynamic>;
@@ -830,8 +800,7 @@ class LauncherControlServer implements SessionMcp {
       constantTimeEquals(actual, expected);
 
   /// One RPC, guarded against being made twice. Only the tools that *start*
-  /// something go through the ledger; collapsing a read would answer a genuine
-  /// second call with a stale result.
+  /// something go through the ledger; a read must not be collapsed.
   Future<Object?> _dispatch(
     String? tool,
     Map<String, dynamic> args, [
@@ -919,9 +888,8 @@ class LauncherControlServer implements SessionMcp {
         return SnippetControlTools(_container).call(name, args);
       case final String name when InstructionsTools.handles(name):
         return const InstructionsTools().call(name, args);
-      // Consent is resolved here rather than inside features/browser: which
-      // project a call is for is a question about sessions, and resolving it
-      // per dispatch means a grant taken back in Settings applies at once.
+      // Consent is resolved here, not in features/browser: which project a call
+      // is for is a sessions question, and nothing about it is cached.
       case final String name when BrowserTools.handles(name):
         return BrowserTools(
           _container.read(browserServiceProvider),
@@ -945,9 +913,8 @@ class LauncherControlServer implements SessionMcp {
       case final String name when VerificationTools.handles(name):
         await resolveVerificationRoot();
         final verification = _container.read(verificationServiceProvider);
-        // The run being closed, noted *before* the call because finishing it
-        // Noted *before* the call, because finishing clears the active run.
-        // This is the seam where verification writes to the decision record.
+        // Noted *before* the call, because finishing clears the active run: the
+        // seam where verification writes to the decision record.
         final finishing = name == 'verification_finish'
             ? verification.activeRun?.id
             : null;
@@ -1005,9 +972,8 @@ class _HardeningFailure implements Exception {
   String toString() => detail;
 }
 
-/// What to log when the fixed control port is taken and an ephemeral one is
-/// used instead. [hostIsWindows] because the reachability that is lost is WSL's,
-/// and a WSL environment cannot exist on a Mac.
+/// What to log when the fixed control port is taken. [hostIsWindows] because
+/// what is lost is WSL's reachability, which cannot exist on a Mac.
 String controlPortFallbackMessage(
   int port,
   Object error, {

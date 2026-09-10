@@ -6,13 +6,8 @@ import '../snippets/domain/command_snippet.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/domain/terminal_profile.dart';
 
-/// The commands the user keeps, as an agent can read and use them.
-/// `terminal_run` runs a command and waits; this is "here is the line, press
-/// Enter when you are ready", a different act with a different consent.
-///
-/// There is deliberately no `snippet_delete`: every other verb here reads or
-/// appends, and quietly removing commands somebody curated risks something no
-/// undo covers.
+/// The commands the user keeps: `terminal_run` runs one, this parks one at a
+/// prompt for the person to press Enter. There is deliberately no delete.
 class SnippetControlTools {
   SnippetControlTools(this._container);
 
@@ -48,10 +43,8 @@ class SnippetControlTools {
   TerminalSessionsState get _state =>
       _container.read(terminalSessionsControllerProvider);
 
-  /// Every snippet, and — when a pane is named or one is active — which of them
-  /// that pane would actually be offered. `fitsPane` is per row rather than the
-  /// list being filtered, because filtering silently would look like the snippet
-  /// was never saved.
+  /// Every snippet, and which of them a named pane would be offered. `fitsPane`
+  /// is per row: filtering silently would look like the snippet was never saved.
   Object? _list(String? paneId) {
     final snippets = _container.read(commandSnippetsProvider);
     final target = paneId == null || paneId.isEmpty
@@ -86,10 +79,8 @@ class SnippetControlTools {
     };
   }
 
-  /// Saves a snippet, keeping [command] as given apart from being flattened to
-  /// one line. [submit] defaults to false and has to be asked for explicitly,
-  /// as the dialog makes a person tick a box: a saved command that runs itself
-  /// is a decision about somebody else's machine.
+  /// Saves a snippet, keeping [command] as given but flattened to one line.
+  /// [submit] must be asked for: a command that runs itself is a decision.
   Object? _add({
     String? label,
     required String command,
@@ -127,13 +118,8 @@ class SnippetControlTools {
   bool _isKnownShell(String shell) =>
       TerminalShell.values.any((value) => value.name == shell);
 
-  /// Types a snippet into a pane, and — unless the snippet itself says
-  /// otherwise — stops there.
-  ///
-  /// The caller cannot override [CommandSnippet.submit]: that flag belongs to
-  /// whoever saved the snippet, and an argument for it would make every snippet
-  /// a potential `terminal_run` with none of that tool's waiting, reporting or
-  /// refusal to touch an agent pane.
+  /// Types a snippet into a pane and stops, unless the snippet itself submits.
+  /// A caller cannot override [CommandSnippet.submit]; it is the saver's flag.
   Object? _insert({String? id, String? paneId}) {
     if (id == null || id.isEmpty) {
       throw ArgumentError('id is required. snippets_list has the ids.');

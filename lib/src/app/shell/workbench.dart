@@ -62,11 +62,8 @@ part 'workbench_tab_entries.dart';
 /// painted on a given frame without going through whatever either one renders.
 const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 
-/// The primary content area: one tab strip across the top, the work underneath.
-///
-/// A selection shows the session's *terminal*, unconditionally — only the Chat
-/// half of [_ViewToggle] ever writes `terminalVisibleProvider` false, and a
-/// session with no pane of ours gets [_NoPaneForSession] rather than the chat.
+/// The primary content area: one tab strip, the work underneath. A selection
+/// shows the session's *terminal* unless the Chat half of [_ViewToggle] says not.
 class WorkbenchView extends ConsumerStatefulWidget {
   const WorkbenchView({super.key});
 
@@ -136,9 +133,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   void _openSession(String sessionId) =>
       _showSurfaceFor(sessionTerminalPane(ref, sessionId), sessionId);
 
-  /// Follows the selected session onto the pane it acquires, or loses. The
-  /// Explorer selects a row *before* it resumes it, so the pane arrives late and
-  /// has to be focused. Memoised on [_shownPane]; it never chooses a surface.
+  /// Follows the selected session onto the pane it acquires, or loses: the
+  /// Explorer selects a row *before* it resumes it, so the pane arrives late.
   void _followSessionPane() {
     final sessionId = ref.read(selectedSessionIdProvider);
     if (sessionId == null) return;
@@ -157,9 +153,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     }
   }
 
-  /// Lets go of the selected session once its pane has been taken away: ending
-  /// a session must not park the user on [_NoPaneForSession] while live tabs sit
-  /// behind it. Cleared rather than re-pointed — `null` is what [build] ignores.
+  /// Lets go of the selected session once its pane is gone: ending one must not
+  /// park the user on [_NoPaneForSession] while live tabs sit behind it.
   void _releaseEndedPane() {
     if (!ref.read(terminalVisibleProvider)) return;
     ref.read(selectedSessionIdProvider.notifier).select(null);
@@ -233,8 +228,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 }
 
 /// Reveals the pane [sessionId] is already running in; starts and stops nothing.
-/// [sessionId] names the change so it wakes only that row's watchers, not every
-/// per-session provider in the app.
+/// [sessionId] names the change, so only that row's watchers wake.
 void showTerminalFor(WidgetRef ref, String? paneId, String? sessionId) {
   if (paneId != null) {
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);

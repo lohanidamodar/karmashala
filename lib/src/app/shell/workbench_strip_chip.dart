@@ -1,10 +1,7 @@
 part of 'workbench.dart';
 
 /// One tab's chip, holding the strip's only watch on what happens *inside* a
-/// tab.
-///
-/// Each chip subscribes to its own panes through [terminalPaneLivenessProvider],
-/// so a process exiting redraws that tab and leaves the other ninety-nine alone.
+/// tab: [terminalPaneLivenessProvider] per chip, so one exit redraws one tab.
 class _TabChip extends ConsumerWidget {
   const _TabChip({
     required this.tab,
@@ -62,8 +59,7 @@ class _TabChip extends ConsumerWidget {
     return Draggable<TerminalDrag>(
       data: TabDrag(tab.id),
       // The pointer, not the grab point: a drop target reads `details.offset`,
-      // which is the feedback's corner — anchored to the child it was half a
-      // chip out, putting every drop in the leading half.
+      // the feedback's corner, which put every drop in the leading half.
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _TabDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
@@ -132,8 +128,7 @@ class _TabChip extends ConsumerWidget {
   }
 
   /// Runs [scope], asking first when it would take a running session with it: a
-  /// single close is a view action, but a bulk close that silently parks a dozen
-  /// live agents in the background list is the outcome nobody wants.
+  /// bulk close that silently parks a dozen live agents is nobody's intent.
   Future<void> _bulkClose(
     BuildContext context,
     WidgetRef ref,
@@ -181,8 +176,7 @@ class _TabChip extends ConsumerWidget {
   }
 
   /// The strongest liveness among this tab's panes, asked pane by pane: the
-  /// subscription set has to be the whole tab, or a pane this chip never asked
-  /// about could die unnoticed.
+  /// subscription has to be the whole tab, or a pane could die unnoticed.
   PaneLiveness _liveness(WidgetRef ref) {
     var strongest = PaneLiveness.exited;
     for (final paneId in tab.layout.panes) {
@@ -198,9 +192,7 @@ class _TabChip extends ConsumerWidget {
   }
 
   /// What the agent in this tab is doing, or null when it holds none. Pane by
-  /// pane for [_liveness]'s reason, folded by [mostUrgentAgentActivity];
-  /// [paneAgentActivityProvider] is narrowed twice, so a cycle that reconfirms
-  /// what a pane was already doing reaches no chip at all.
+  /// pane for [_liveness]'s reason; [paneAgentActivityProvider] is narrowed twice.
   AgentActivityStatus? _agentActivity(WidgetRef ref) => mostUrgentAgentActivity([
     for (final paneId in tab.layout.panes)
       ref.watch(paneAgentActivityProvider(paneId)),

@@ -6,12 +6,8 @@ import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../checkpoints/domain/checkpoint.dart';
 import 'package:karmashala_git/git.dart';
 
-/// The per-turn record of a session's working tree, as an agent can read and
-/// use it.
-///
-/// Like the session tools, these default to the caller's own session: the
-/// credential in the MCP URL says who is asking, so a checkpoint tool called
-/// with no `sessionId` is asking about the conversation it is running in.
+/// The per-turn record of a session's working tree. Like the session tools,
+/// these default to the caller's own session, named by its MCP credential.
 class CheckpointControlTools {
   CheckpointControlTools(this._container, {this.callerSessionId});
 

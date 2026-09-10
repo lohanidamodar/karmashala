@@ -7,14 +7,8 @@ import '../sessions/application/session_ui_providers.dart';
 import 'launcher_control_server.dart';
 import 'mcp_caller_registry.dart';
 
-/// Retires a session's MCP capability token once that session is over, so a
-/// config file left behind on disk stops being a way to speak for it.
-///
-/// **Which "ended" is the whole class.** A session whose *tab* was closed is
-/// still running — `SessionAdoptionService` clears the pane id and leaves the
-/// status alone — and taking that token would break an agent still holding the
-/// URL. What ends a session is a terminal status, the user archiving it, or its
-/// row going away: the three [sessionsRevisionProvider] bumps on.
+/// Retires a session's MCP token once that session is over. A closed *tab* is
+/// not over — taking that token would break an agent still holding the URL.
 class McpSessionTokenReaper {
   /// Positional, like [LauncherControlServer]'s own container: these two are
   /// what the reaper *is*, not options on it.
@@ -50,12 +44,7 @@ class McpSessionTokenReaper {
   }
 
   /// Forgets the token of every session that is over, and drops the devices it
-  /// was driving.
-  ///
-  /// The device claim is released here because this is already the one place
-  /// watching for a session to end, and the two answers must not differ: a
-  /// session that can no longer be spoken for cannot be the agent another agent
-  /// is told is holding a phone. Costs nothing until a token exists.
+  /// was driving: one place decides "ended", so the two answers cannot differ.
   void sweep() {
     final held = _callers.sessions;
     if (held.isEmpty) return;

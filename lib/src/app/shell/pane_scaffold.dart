@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
-/// The close button every [PaneHeader] in this subtree wears, after whatever
-/// actions the surface itself supplies.
-///
-/// Handed *down* so a surface that draws its own header still gets one, rather
-/// than the panel watching five features to add a button.
+/// The close button every [PaneHeader] in this subtree wears. Handed *down*, so
+/// a surface that draws its own header still gets one.
 class PaneCloseAction extends InheritedWidget {
   const PaneCloseAction({
     required this.tooltip,
@@ -29,12 +26,8 @@ class PaneCloseAction extends InheritedWidget {
       tooltip != oldWidget.tooltip || onClose != oldWidget.onClose;
 }
 
-/// The header a shell pane wears: a [Chrome.tabStrip] row on
-/// `surfaceContainerLow`, a leading glyph, the title in the chrome eyebrow, and
-/// whatever actions the surface owns — then the hairline under it.
-///
-/// A widget because six surfaces need this shape and three had drifted, and the
-/// hairline belongs to the header because it was the piece a site could forget.
+/// The header a shell pane wears — a [Chrome.tabStrip] row, a glyph, the title,
+/// the surface's own actions, and the hairline a site could otherwise forget.
 class PaneHeader extends StatelessWidget {
   const PaneHeader({
     required this.title,
@@ -44,9 +37,8 @@ class PaneHeader extends StatelessWidget {
     super.key,
   });
 
-  /// The surface's own glyph, drawn at [Chrome.iconSmall], or null for a pane
-  /// whose glyph would only repeat one already on screen — the Explorer's is
-  /// also its title-bar toggle's, 30px above it in the same column.
+  /// The surface's own glyph at [Chrome.iconSmall], or null where it would only
+  /// repeat one already on screen — the Explorer's is its title-bar toggle's.
   final IconData? icon;
 
   /// Written in any case; drawn uppercase, like every other chrome eyebrow.

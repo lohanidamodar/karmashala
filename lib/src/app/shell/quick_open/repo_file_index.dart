@@ -68,13 +68,8 @@ class RepoIndexStats {
   final Duration elapsed;
 }
 
-/// Walks a repository and keeps what it found current.
-/// Walks a repository and keeps what it found current.
-///
-/// Bounded on purpose — [maxFiles], [maxDirectories], [maxDepth] and
-/// [maxDuration], no symlinks, yielding on a time budget. A cached root is
-/// trusted for [refreshInterval] and marked stale by a [DirectoryChangeWatcher];
-/// staleness never walks by itself, the next [index] call does.
+/// Walks a repository and keeps what it found current, bounded by [maxFiles],
+/// [maxDepth] and [maxDuration]; a [DirectoryChangeWatcher] only marks it stale.
 class RepoFileIndex {
   RepoFileIndex({
     this.maxFiles = 6000,
@@ -113,9 +108,8 @@ class RepoFileIndex {
   final Map<String, Future<List<IndexedFile>>> _inFlight = {};
   final Map<String, int> _generation = {};
 
-  /// Roots touched while a walk was running, against that walk's generation:
-  /// a change noticed during walk *n* says nothing about walk *n+1*, which
-  /// started afterwards and has already read the changed tree.
+  /// Roots touched while a walk was running, against that walk's generation: a
+  /// change during walk *n* says nothing about walk *n+1*.
   final Map<String, int> _dirtyAt = {};
 
   /// Watched roots, least recently indexed first.
@@ -175,9 +169,8 @@ class RepoFileIndex {
     return index(root);
   }
 
-  /// Marks [root] stale without throwing away what is known about it — the call
-  /// a mutation path wants. [invalidate] is the blunter version, for a root
-  /// whose cached answer is wrong rather than merely old.
+  /// Marks [root] stale without throwing away what is known about it.
+  /// [invalidate] is the blunter version, for an answer wrong rather than old.
   void touch(String root) {
     if (_inFlight.containsKey(root)) _dirtyAt[root] = _generation[root]!;
     final entry = _entries[root];
@@ -344,9 +337,8 @@ class RepoFileIndex {
           ),
         );
       }
-      // Give the frame back on a time budget rather than a directory count: a
-      // fixed count pays for a hop after twenty-four instant directories and
-      // skips one after a single directory that took eighty milliseconds.
+      // A time budget, not a directory count: a count pays for a hop after
+      // twenty-four instant directories and skips one that took eighty ms.
       if (sinceYield.elapsedMilliseconds >= _yieldBudgetMs) {
         sinceYield.reset();
         await Future<void>.delayed(Duration.zero);
@@ -421,11 +413,8 @@ class _Indexed {
   bool stale = false;
 }
 
-/// One index for the app, so opening quick open twice does not walk twice.
-///
-/// The two revisions listened to build to a constant with no dependencies, so
-/// listening cannot drag a database into a test that only wanted an index.
-/// Everything they do not cover arrives through the watcher.
+/// One index for the app, so opening quick open twice does not walk twice. The
+/// revisions listened to build to a constant, so no test drags in a database.
 final repoFileIndexProvider = Provider<RepoFileIndex>((ref) {
   final index = RepoFileIndex();
   ref.onDispose(index.dispose);

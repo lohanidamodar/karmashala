@@ -5,12 +5,8 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'launcher_mcp.dart';
 
-/// What a probe of the stdio bridge found.
-///
-/// Four outcomes, because they need four different responses from the user. The
-/// panel that used to report this had two — the file is there, or it is not —
-/// which is why it spent an hour on 2026-09-03 saying *Tools available* while
-/// every agent session on the machine had lost every Karmashala tool.
+/// What a probe of the stdio bridge found. Four outcomes, because a panel with
+/// two once said *Tools available* for an hour while every session had none.
 enum McpBridgeVerdict {
   /// Spawned, and completed an MCP `initialize` handshake.
   answering,
@@ -52,14 +48,8 @@ class McpBridgeProbeResult {
   bool get ok => verdict == McpBridgeVerdict.answering;
 }
 
-/// Spawns `karmashala_mcp` and speaks one `initialize` handshake to it.
-///
-/// Not `existsSync`: the four things that must hold — the file is there, the OS
-/// will start it, it speaks MCP, and it does so promptly — are the four this
-/// separates. `initialize` and not `tools/list`, because whether the *app*
-/// answers is [ControlServerStatus]'s to report and it knows which step failed.
-/// This spawns the bridge the way *this host* would; a WSL session spawns it
-/// over interop, which the interop check speaks for.
+/// Spawns `karmashala_mcp` and speaks one `initialize` handshake to it — the
+/// bridge's own answer; whether the *app* replies is [ControlServerStatus]'s.
 class McpBridgeProbe {
   McpBridgeProbe({
     required this.runner,
@@ -73,17 +63,12 @@ class McpBridgeProbe {
 
   final File? Function() _locate;
 
-  /// How long the handshake is given.
-  ///
-  /// **Measured 2026-09-03 against the compiled bridge on the owner's Windows
-  /// machine: 121 ms median, 111-125 ms warm, 875 ms on the first spawn of a
-  /// freshly written executable.** Five seconds is forty times the worst warm
-  /// case, so a timeout here is a real fault rather than a slow disk.
+  /// How long the handshake is given. Measured 2026-09-03: 121 ms median and
+  /// 875 ms on a first cold spawn, so five seconds means a real fault.
   final Duration timeout;
 
-  /// The `initialize` request, as a client would send it. `2025-06-18` rather
-  /// than the newest revision: it is one of the versions `kMcpAdvertisedVersions`
-  /// recommends, so this probe exercises the path a real client takes.
+  /// The `initialize` request as a client would send it, at `2025-06-18` — one
+  /// of the versions `kMcpAdvertisedVersions` recommends, so this is a real path.
   static const String initializeRequest =
       '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
       '{"protocolVersion":"2025-06-18","capabilities":{},'
@@ -105,8 +90,7 @@ class McpBridgeProbe {
       handle = await runner.start(CommandRequest(executable: path));
     } on Object catch (error) {
       // Every start failure, not just [CommandException]: the interop failure
-      // this exists for arrives as a raw OS error on some hosts, and letting it
-      // through would crash the panel instead of reporting it.
+      // this exists for arrives as a raw OS error on some hosts.
       return McpBridgeProbeResult(
         verdict: McpBridgeVerdict.unspawnable,
         took: stopwatch.elapsed,

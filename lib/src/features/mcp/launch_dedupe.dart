@@ -2,18 +2,12 @@ import 'dart:convert';
 
 import 'package:karmashala_core/util.dart';
 
-/// How long a *settled* launch stays on the ledger.
-///
-/// It has to outlast the MCP client's own retry, and that timeout is not ours:
-/// Claude Code gave up on `open_new_session` after 60s and re-sent the identical
-/// call, which started a second agent. Two minutes clears one full retry cycle,
-/// and an attempt still running never expires whatever this says.
+/// How long a *settled* launch stays on the ledger — longer than the 60s an MCP
+/// client waits before re-sending. An attempt still running never expires.
 const Duration launchDedupeWindow = Duration(minutes: 2);
 
-/// Whether repeating [tool] would start something in the world: the calls a
-/// retry cannot be allowed to make twice. `open_sessions_in_tmux` belongs with
-/// the launches because `buildTmuxScript` *appends* — a repeat adds a second
-/// window per id. A preview starts nothing and is not one.
+/// Whether repeating [tool] would start something in the world.
+/// `open_sessions_in_tmux` counts: `buildTmuxScript` *appends* a second window.
 bool startsAnAgent(String tool, Map<String, dynamic> arguments) =>
     switch (tool) {
       'open_new_session' || 'open_sessions_in_tmux' => true,
@@ -21,10 +15,8 @@ bool startsAnAgent(String tool, Map<String, dynamic> arguments) =>
       _ => false,
     };
 
-/// A stable key for one launch request. Every argument counts rather than a
-/// chosen few: a client's retry repeats the call verbatim, so a tool that grows
-/// an argument later is covered without anyone remembering to come back here.
-/// Keys are sorted so the encoding does not depend on map order.
+/// A stable key for one launch request. Every argument counts, so a tool that
+/// grows one later is covered; keys are sorted, so map order cannot matter.
 String launchFingerprint(
   String tool,
   Map<String, dynamic> arguments,
@@ -59,14 +51,8 @@ class _Attempt {
   DateTime? settledAt;
 }
 
-/// Collapses a repeated launch request onto the one already made, keyed on the
-/// request itself because the client's retry carries nothing new.
-///
-/// The ledger records the **attempt**, not the outcome, and that ordering is the
-/// whole fix: the duplicate that started a second agent arrived 55s in, while
-/// the first launch was still creating its worktree. A duplicate gets the first
-/// attempt's own result; a **failed** attempt is forgotten at once, so one
-/// transient failure does not become two minutes of the same wrong answer.
+/// Collapses a repeated launch onto the one already made, keyed on the request.
+/// The ledger records the **attempt**, not the outcome; a failure is forgotten.
 class LaunchDedupe {
   LaunchDedupe({
     required this.clock,

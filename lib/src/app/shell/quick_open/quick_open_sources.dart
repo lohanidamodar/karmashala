@@ -93,8 +93,7 @@ const _recencySpread = 12.0;
 const _selectedRepoBoost = 10.0;
 
 /// Builds everything quick open can find. Every [QuickOpenItem.onSelect]
-/// delegates to the code that already owns that jump: a second way in, never a
-/// second implementation.
+/// delegates to the code that owns that jump: a second way in, not a second one.
 class QuickOpenSources {
   QuickOpenSources({
     required this.ref,
@@ -322,9 +321,8 @@ class QuickOpenSources {
     ];
   }
 
-  /// The keyboard's way to every layout verb the chrome can be dragged to do.
-  /// A *group* divides the workspace and holds tabs; a *region* divides one tab
-  /// and holds panes — the titles here use those two words and nothing else.
+  /// The keyboard's way to every layout verb the chrome can be dragged to do. A
+  /// *group* divides the workspace; a *region* divides one tab.
   List<QuickOpenItem> _splitCommands() {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final emptyGroup = sessions.emptyWorkspaceGroup();
@@ -516,9 +514,8 @@ class QuickOpenSources {
 
   // --- sessions ------------------------------------------------------------
 
-  /// Native and imported sessions across every project, most recently active
-  /// first. Only *free* whereabouts are shown: `sessionLastActiveProvider` is a
-  /// map lookup, where a transcript stat per session would be a disk sweep.
+  /// Native and imported sessions, most recently active first. Only *free*
+  /// whereabouts: a transcript stat per session would be a disk sweep.
   List<QuickOpenItem> _sessions() {
     final sessionDao = ref.read(sessionDaoProvider);
     final importedDao = ref.read(importedSessionDaoProvider);
@@ -659,9 +656,8 @@ class QuickOpenSources {
 
   // --- conversations ------------------------------------------------------
 
-  /// One row per conversation something was *said* in, from
-  /// `ConversationIndexDao.search` — hits collapsed per conversation, and never
-  /// filtered on the filesystem, so a row whose worktree is gone still opens.
+  /// One row per conversation something was *said* in, never filtered on the
+  /// filesystem, so a row whose worktree is gone still opens.
   List<QuickOpenItem> conversations(
     List<ConversationHit> hits,
     String query, {
@@ -716,9 +712,8 @@ class QuickOpenSources {
 
   // --- open terminal tabs --------------------------------------------------
 
-  /// Saved workbench shapes, under `~`. A preset is a *shape*, so the row says
-  /// how big it is; opening one may leave panes out when a profile has gone
-  /// from this machine, and the message says which.
+  /// Saved workbench shapes, under `~`. Opening one may leave panes out when a
+  /// profile has gone from this machine, and the message says which.
   List<QuickOpenItem> _presets() {
     final presets = ref.read(terminalPresetsProvider);
     final shell = ref.read(shellControllerProvider.notifier);
@@ -906,9 +901,8 @@ class QuickOpenSources {
 
   // --- command snippets ----------------------------------------------------
 
-  /// The saved commands that fit the terminal the user is in, plus the two ways
-  /// to manage the library. The pane is captured at build, not re-read at
-  /// select; filtering is by the pane's own shell, and untagged fits anywhere.
+  /// The saved commands that fit the terminal the user is in. The pane is
+  /// captured at build; filtering is by its shell, and untagged fits anywhere.
   List<QuickOpenItem> _snippets() {
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final state = ref.read(terminalSessionsControllerProvider);
@@ -1003,8 +997,7 @@ class QuickOpenSources {
   }
 
   /// The notifier is resolved before the `await`, and has to be: [dismiss] pops
-  /// the palette first, and Riverpod 3's `_assertNotDisposed` really throws on a
-  /// `ref.read` from an unmounted element — in release too, losing the snippet.
+  /// the palette, and Riverpod 3 throws on a `ref.read` from an unmounted element.
   Future<void> _newSnippet(SnippetTarget? target) async {
     final snippets = ref.read(commandSnippetsProvider.notifier);
     final draft = await SnippetEditorDialog.show(

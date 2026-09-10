@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Which transport privileged `/rpc` ended up on, if any. It opens sessions,
-/// launches terminals and drives attached devices, so it is only ever served
+/// Which transport privileged `/rpc` ended up on, if any: it is served only
 /// where the owner-only boundary around it could actually be established.
 enum PrivilegedRpcTransport {
   /// The control server has not been started (or has been stopped).
@@ -34,9 +33,7 @@ enum ControlServerFailureStage {
 }
 
 /// What the local control server managed to bring up, as a settings screen can
-/// show it. The fail-closed path is silent by construction: "my agent cannot see
-/// my sessions" with nothing on screen to explain it is a worse outcome than the
-/// failure itself.
+/// show it: the fail-closed path is otherwise silent by construction.
 @immutable
 class ControlServerStatus {
   const ControlServerStatus._({
@@ -71,9 +68,8 @@ class ControlServerStatus {
 
   final PrivilegedRpcTransport transport;
 
-  /// Whether agents' installed hooks can still report status. This survives every
-  /// hardening failure — that is the point of failing *closed* rather than not
-  /// starting at all.
+  /// Whether agents' installed hooks can still report status: this survives every
+  /// hardening failure, which is the point of failing *closed*.
   final bool hookEndpointAvailable;
 
   final ControlServerFailureStage? failureStage;

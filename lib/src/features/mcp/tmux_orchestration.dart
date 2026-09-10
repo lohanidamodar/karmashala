@@ -11,12 +11,8 @@ class TmuxWindow {
   final String command;
 }
 
-/// Builds a bash script that opens one tmux window per entry in [windows] in a
-/// tmux session named [sessionName], then attaches to it. Run as `bash <file>`
-/// so nothing has to survive shell-quoting through the terminal launcher.
-///
-/// **Non-destructive**: an existing session of that name is left running and the
-/// windows are appended with `-d`, so no attached client's focus moves.
+/// Builds a bash script opening one tmux window per entry in [windows], in a
+/// session named [sessionName]. **Non-destructive**: existing windows stay.
 String buildTmuxScript(String sessionName, List<TmuxWindow> windows) {
   if (windows.isEmpty) return '';
   final session = _qq(sessionName);

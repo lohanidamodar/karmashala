@@ -2,19 +2,8 @@ import 'dart:io';
 
 import 'package:karmashala_core/logging.dart';
 
-/// Restricts [file] so no other user on the machine can read it.
-///
-/// `mcp_bridge.json` holds two bearer tokens in cleartext and every local
-/// process can reach loopback, so this file's permissions are the boundary
-/// behind the boundary. On a stock Windows 11 profile the inherited DACL is
-/// already user-only — but *inherited* (`AreAccessRulesProtected: False`): a
-/// broader ACE on any ancestor propagates down, and `writeAsString` preserves
-/// whatever DACL a file already carries. So this grants an explicit ACE and
-/// **strips inheritance**, keeping SYSTEM and Administrators, since an admin can
-/// take ownership anyway and excluding them only breaks backup tooling.
-///
-/// Returns whether it was applied. A `false` is a refusal: the privileged token
-/// is never written, and the transport it authenticates comes down.
+/// Restricts [file] so no other user can read the two bearer tokens in it: an
+/// explicit ACE and **stripped inheritance**, and a `false` is a refusal.
 Future<bool> restrictHandshakeFileToCurrentUser(
   File file, {
   AppLogger? logger,
@@ -34,12 +23,8 @@ Future<bool> restrictHandshakeFileToCurrentUser(
   }
 }
 
-/// Restricts the directory [dir] so no other user on the machine can enter it —
-/// the boundary for the RPC **socket**, which carries none of its own, since
-/// anyone who can traverse to a unix socket can reach it. The Windows grant is
-/// `(OI)(CI)` so the socket node created inside is covered. Returns whether it
-/// was applied; a `false` means the boundary is absent, not weakened, so no
-/// socket is created at all.
+/// Restricts the directory [dir] — the whole boundary for the RPC socket, which
+/// carries none of its own. A `false` means no socket is created at all.
 Future<bool> restrictDirectoryToCurrentUser(
   Directory dir, {
   AppLogger? logger,
@@ -74,13 +59,11 @@ Future<bool> _restrictWindows(
   }
 
   // `(OI)(CI)` makes the ACE apply to what is created inside a directory; on a
-  // file the flags are meaningless, so they are only added where they mean
-  // something.
+  // file the flags are meaningless.
   final flags = inheritToChildren ? '(OI)(CI)(F)' : '(F)';
 
-  // Grant *first*, strip inheritance *second*. `/inheritance:r` deletes
-  // inherited ACEs outright rather than converting them to explicit ones, so
-  // stripping before granting would leave an entity its own owner cannot open.
+  // Grant *first*, strip inheritance *second*: `/inheritance:r` deletes
+  // inherited ACEs, so the other order leaves an entity its owner cannot open.
   final granted = await Process.run('icacls', [
     entity.path,
     '/grant:r',
@@ -107,9 +90,8 @@ Future<bool> _restrictWindows(
   return true;
 }
 
-/// `DOMAIN\user` for the current account, or just `user`, or `null` when the
-/// environment does not say. For a local account `USERDOMAIN` is the machine
-/// name, which is what `whoami` prints and what LSA resolves.
+/// `DOMAIN\user` for the current account, or just `user`, or `null`. For a local
+/// account `USERDOMAIN` is the machine name, which is what LSA resolves.
 String? _currentWindowsPrincipal() {
   final env = Platform.environment;
   final user = env['USERNAME'];
@@ -118,10 +100,8 @@ String? _currentWindowsPrincipal() {
   return (domain == null || domain.isEmpty) ? user : '$domain\\$user';
 }
 
-/// The two permission operations [restrictHandshakeFileToCurrentUser] and
-/// [restrictDirectoryToCurrentUser] provide, behind a seam. `icacls` and
-/// `chmod` cannot be made to fail on demand, and "what happens when hardening
-/// fails" is the entire security contract of the privileged RPC transport.
+/// The two permission operations behind a seam: `icacls` and `chmod` cannot be
+/// made to fail on demand, and the fail-closed path has to be testable.
 abstract class HandshakePermissions {
   const HandshakePermissions();
 

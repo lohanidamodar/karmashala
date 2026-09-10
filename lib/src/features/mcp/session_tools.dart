@@ -14,12 +14,8 @@ import 'package:agent_cli/stream.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/terminal_grid_text.dart';
 
-/// Operating a session that already exists: talk to it, read it, rename it,
-/// end it. The tools that *start* one live in `LauncherControlServer`.
-///
-/// Every one of them takes an optional `sessionId` and falls back to the caller
-/// the *transport* authenticated, never an argument, so "act on me" cannot be
-/// spelled as "act on someone else".
+/// Operating a session that already exists. Every tool takes an optional
+/// `sessionId` and falls back to the caller the *transport* authenticated.
 class SessionControlTools {
   SessionControlTools(this._container, {this.callerSessionId});
 
@@ -69,8 +65,7 @@ class SessionControlTools {
       };
 
   /// The session a call is aimed at. An explicit `sessionId` is a *target*, not
-  /// a credential: naming nothing means "me", and a caller with no identity of
-  /// its own has to say which session it means.
+  /// a credential: naming nothing means "me".
   String _target(Map<String, dynamic> args) {
     final named = args['sessionId'] as String?;
     if (named != null && named.trim().isNotEmpty) return named.trim();
@@ -91,18 +86,8 @@ class SessionControlTools {
     return session;
   }
 
-  /// Relays [text] into [sessionId]'s input, saying who it is from.
-  ///
-  /// The delivery is a keystroke, so an unattributed relay *is* the user's turn
-  /// inside the receiving CLI and stays one in that CLI's transcript. The prefix
-  /// names only a sender the transport established; a caller talking to itself,
-  /// or with no session of its own, is left bare.
-  ///
-  /// Refused while [AgentStatusReport.hasOpenPrompt] — measured against all three
-  /// installed CLIs, none delivered the text and two decided the pending request
-  /// — but an unknown state sends: the gate is positive evidence of a modal,
-  /// never the absence of it. `wait` checks the block **first**, so a target
-  /// already stopped for a person is refused with nothing sent.
+  /// Relays [text] into [sessionId]'s input under the sender's own name; the
+  /// delivery is a keystroke, so [AgentStatusReport.hasOpenPrompt] refuses it.
   Future<Object?> _send(
     String sessionId,
     String text, {
@@ -173,8 +158,7 @@ class SessionControlTools {
   }
 
   /// Blocks until [sessionId] settles, and says what it settled on. Calling it
-  /// twice is not merely safe but the intended answer to a timeout; two
-  /// different answers are a statement about the session, not about this tool.
+  /// twice is not merely safe but the intended answer to a timeout.
   Future<Object?> _wait(String sessionId, {num? timeoutSeconds}) async {
     final session = _session(sessionId);
     final outcome = await _container.read(sessionWaitProvider).wait(
@@ -188,9 +172,8 @@ class SessionControlTools {
     };
   }
 
-  /// One wait's answer, as the tool reports it. Every absence is spelled as an
-  /// absence: `exitCode` is null with `exitCodeKnown: false` rather than a zero,
-  /// the same rule `terminal_run` holds itself to.
+  /// One wait's answer. Every absence is spelled as an absence: `exitCode` is
+  /// null with `exitCodeKnown: false` rather than a zero.
   static Map<String, Object?> _renderWait(SessionWaitOutcome outcome) =>
       <String, Object?>{
         'state': outcome.state.name,
@@ -218,10 +201,8 @@ class SessionControlTools {
         'note': _noteFor(outcome),
       };
 
-  /// The sentence a model reads before it decides what to do next. Prose rather
-  /// than a flag because the costly states are misread on the word alone: `idle`
-  /// is equally the shape of a session that never started, and `timeout` is only
-  /// this call's bound.
+  /// The sentence a model reads before deciding what to do next: `idle` is also
+  /// the shape of a session that never started, `timeout` only this call's bound.
   static String _noteFor(SessionWaitOutcome outcome) =>
       switch (outcome.state) {
         SessionWaitState.idle =>
@@ -252,9 +233,8 @@ class SessionControlTools {
               'to go on waiting.',
       };
 
-  /// Answers an approval prompt by pressing the key the *agent* names for it.
-  /// Nothing here invents a binding: an agent that names no way to decline from
-  /// outside its terminal is reported as such rather than guessed at with Esc.
+  /// Answers an approval prompt with the key the *agent* names for it. Nothing
+  /// invents a binding; an agent that names none is reported as such.
   Future<Object?> _answer(String sessionId, String decision) async {
     if (decision != 'approve' && decision != 'deny') {
       throw ArgumentError("decision must be 'approve' or 'deny'.");
@@ -296,11 +276,8 @@ class SessionControlTools {
     };
   }
 
-  /// What this session has said, from whichever records exist — and which
-  /// source answered is part of the answer. A source with nothing in it reports
-  /// **"not recorded"**, never an empty list dressed as "it said nothing": a
-  /// model acting on the wrong one concludes the session is idle when it is
-  /// mid-turn.
+  /// What this session has said, and which source answered. A source with
+  /// nothing in it reports "not recorded", never an empty list.
   Object? _transcript(String sessionId, int limit) {
     final session = _session(sessionId);
     final capped = limit <= 0 ? 20 : (limit > 200 ? 200 : limit);
@@ -382,10 +359,8 @@ class SessionControlTools {
     return <String, Object?>{'sessionId': sessionId, 'title': trimmed};
   }
 
-  /// Ends the agent process behind a session; the row and its transcript
-  /// survive. A session with no live pane is reported as already stopped rather
-  /// than silently succeeding — only one of those means it stopped spending
-  /// tokens.
+  /// Ends the agent process behind a session; the row and its transcript survive.
+  /// No live pane is reported as already stopped, never as a silent success.
   Object? _end(String sessionId) {
     final session = _session(sessionId);
     final paneId = _container.read(sessionLauncherProvider).livePaneFor(

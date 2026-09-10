@@ -32,8 +32,7 @@ class _Ranked {
 }
 
 /// Every open tab, in one filterable list — the affordance that scales where a
-/// horizontal strip does not. Each row carries the tab's whereabouts as well as
-/// its title, and the filter matches those, so two `zsh` tabs are separable.
+/// horizontal strip does not. Rows carry whereabouts, so two `zsh` tabs differ.
 class TabPicker extends ConsumerStatefulWidget {
   const TabPicker({required this.entries, super.key});
 

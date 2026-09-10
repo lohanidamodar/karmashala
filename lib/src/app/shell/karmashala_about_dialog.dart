@@ -5,12 +5,8 @@ import 'package:karmashala_core/logging.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
-/// Which build this is, in the form a bug report needs.
-///
-/// It shows [buildIdentity], the same line every log starts with, so a pasted
-/// log and a pasted About box cannot disagree. The version can read `version
-/// not recorded`: it is a `--dart-define` the release recipe sets, and a
-/// constant kept in step by hand would drift silently instead.
+/// Which build this is, in the form a bug report needs: [buildIdentity], the
+/// same line every log starts with, so a pasted log cannot disagree with it.
 class KarmashalaAboutDialog extends StatelessWidget {
   const KarmashalaAboutDialog({super.key});
 

@@ -145,10 +145,8 @@ class MovePaneFocusIntent extends Intent {
   final PaneDirection direction;
 }
 
-/// One entry in the application's keyboard map.
-///
-/// [shellShortcutMap] and [appChordForTerminal] read this one list, so a chord
-/// cannot be bound in one and forgotten in the other.
+/// One entry in the application's keyboard map. [shellShortcutMap] and
+/// [appChordForTerminal] read this one list, so a chord cannot be half-bound.
 @immutable
 class ShellChord {
   const ShellChord({
@@ -618,8 +616,7 @@ Map<ShortcutActivator, Intent> terminalPaneShortcutsFor([
 }
 
 /// How the chord bound to [T] is written, so no widget spells a keystroke out
-/// for itself. Where an action has two chords the one that survives a focused
-/// pane wins; [where] narrows an intent type that carries a direction.
+/// for itself. Where there are two, the one that survives a focused pane wins.
 String? shellChordLabel<T extends Intent>({bool Function(T intent)? where}) {
   ShellChord? best;
   for (final chord in shellChords) {
@@ -632,8 +629,7 @@ String? shellChordLabel<T extends Intent>({bool Function(T intent)? where}) {
 }
 
 /// The app chord [event] is, when a focused terminal pane must not consume it.
-/// Matched on the key alone, kind ignored: the key-up and any repeat must be
-/// swallowed too, or xterm leaks a character for a chord already acted on.
+/// The key-up and repeats are swallowed too, or xterm leaks a character.
 Intent? appChordForTerminal(
   KeyEvent event, {
   Map<String, bool> overrides = const {},

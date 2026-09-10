@@ -40,12 +40,8 @@ class RevealOutcome {
   bool get ok => error == null;
 }
 
-/// Shows a path in the host's file manager.
-///
-/// The hard part is that every path here is an [EnvironmentPath] and the file
-/// manager only exists on the host, so the mapping belongs in [PathTranslator].
-/// A remote SSH path has no host spelling at all, and [canReveal] says so before
-/// a menu offers an entry that would always fail.
+/// Shows an [EnvironmentPath] in the host's file manager, through
+/// [PathTranslator]. A remote SSH path has none: [canReveal] says so first.
 class RevealInFileManager {
   const RevealInFileManager({
     required this.host,
@@ -78,9 +74,7 @@ class RevealInFileManager {
     if (owner.kind == EnvironmentKind.ssh) return null;
     if (owner.kind == EnvironmentKind.windowsNative) {
       // A POSIX-absolute path with a Windows environment id describes no real
-      // location — `git worktree list` reports one for a worktree created
-      // inside WSL — and guessing which machine it meant is the implicit
-      // conversion `PathTranslator` exists to forbid.
+      // location — `git worktree list` reports one for a worktree made in WSL.
       return _windowsPath.hasMatch(path.path) ? path.path : null;
     }
     try {

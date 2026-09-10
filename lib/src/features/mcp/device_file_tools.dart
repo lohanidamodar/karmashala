@@ -5,9 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
-/// Files on a device: which places it can reach, what is in one, and a copy in
-/// either direction. One listing tool rather than a roots tool and a directory
-/// tool, because the roots are not a directory — and no delete tool at all.
+/// Files on a device: the places it can reach, what is in one, and a copy in
+/// either direction. No delete tool at all.
 class DeviceFileTools extends DeviceToolFamily {
   DeviceFileTools(super.container, {super.callerSessionId});
 
@@ -39,10 +38,8 @@ class DeviceFileTools extends DeviceToolFamily {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// **Roots when no path is given, a listing when one is.** One tool rather
-  /// than two because the roots are not branches of one tree: an agent that had
-  /// to guess `/` first would be wrong on an iOS device, where the only
-  /// reachable places are the containers of development-signed apps.
+  /// **Roots when no path is given, a listing when one is**: the roots are not
+  /// branches of one tree, and on iOS `/` is not reachable at all.
   Future<Object?> _filesList(String? id, String? path) async {
     final driver = await driverThatCan(
       id,
@@ -84,9 +81,8 @@ class DeviceFileTools extends DeviceToolFamily {
             'link_target': ?entry.linkTarget,
           },
       ],
-      // Never dropped. `ls -l` differs by device and Android version, and
-      // omitting an unparsable line would tell the agent the directory is
-      // shorter than it is.
+      // Never dropped: `ls -l` differs by device, and omitting an unparsable
+      // line would tell the agent the directory is shorter than it is.
       if (listing.skipped.isNotEmpty)
         'unparsed': [
           for (final skipped in listing.skipped)
@@ -96,9 +92,8 @@ class DeviceFileTools extends DeviceToolFamily {
     };
   }
 
-  /// Copies a file off the device to somewhere this agent can then read —
-  /// by default the system temp directory under the device's own name, so the
-  /// reply's `host_path` can be handed straight to a file read.
+  /// Copies a file off the device into the system temp directory, so the reply's
+  /// `host_path` can be handed straight to a file read.
   Future<Object?> _filePull(
     String? id,
     String? devicePath,
@@ -134,8 +129,7 @@ class DeviceFileTools extends DeviceToolFamily {
   }
 
   /// Copies a file from this computer onto the device. [overwrite] is off unless
-  /// asked for and the driver refuses rather than replacing: there is no undo on
-  /// the far side, and a silent replacement would look like a plain success.
+  /// asked for: there is no undo on the far side.
   Future<Object?> _filePush(
     String? id,
     String? hostPath,
@@ -170,11 +164,8 @@ class DeviceFileTools extends DeviceToolFamily {
     };
   }
 
-  // **No delete tool, deliberately.** `deletePath` exists on the driver, and the
-  // pane offers it behind a confirmation — the only thing between a path typed
-  // one character wrong and an unrecoverable `rm -rf` on somebody's phone. A
-  // tool has no such affordance: the model would be both the one that typed the
-  // path and the one that confirmed it.
+  // **No delete tool, deliberately**: the pane's confirmation is the only thing
+  // between a mistyped path and an unrecoverable `rm -rf` on somebody's phone.
 }
 
 /// The schemas for [DeviceFileTools].

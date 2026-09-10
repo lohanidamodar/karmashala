@@ -2,10 +2,8 @@ import '../devices/application/device_fleet.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
-/// What exists, and whether it is running: the listing, and the two ends of a
-/// virtual device's life. `device_boot` and `device_stop_emulator` both take a
-/// name that survives a reboot, because a stopped emulator answers to no serial
-/// at all.
+/// What exists, and whether it is running. `device_boot` and
+/// `device_stop_emulator` take a name that survives a reboot; a serial does not.
 class DeviceInventoryTools extends DeviceToolFamily {
   DeviceInventoryTools(super.container, {super.callerSessionId});
 
@@ -27,20 +25,14 @@ class DeviceInventoryTools extends DeviceToolFamily {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// How many simulators to list before saying "there are more".
-  ///
-  /// A device set is not a device list: this developer's machine holds 170
-  /// simulators, 124 of them with no installed runtime, and printing them all
-  /// turns the one useful line — which is booted — into a haystack. Booted ones
-  /// are always listed; the bootable rest are truncated, newest runtime first.
+  /// How many simulators to list before saying "there are more". Booted ones are
+  /// always listed; a machine with 170 of them would bury the useful line.
   static const int _simulatorListLimit = 40;
 
   Future<Object?> _listDevices(int? limit) async {
     final fleet = await deviceFleet();
-    // Three probes of three different things, awaited together rather than one
-    // after another: they share no state, and serialising them only added the
-    // slower ones to the wait — measured on this Mac, `simctl list devices` is
-    // 214ms and `adb devices` 41ms.
+    // Three probes awaited together: they share no state, and serialising them
+    // only added the slower ones to the wait (simctl 214ms against adb's 41ms).
     final (android, simulators, avds) = await (
       fleet.androidTargets(),
       fleet.simulatorTargets(),
@@ -68,9 +60,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
     final cap = (limit ?? _simulatorListLimit).clamp(1, 1000);
     final shown = bootable.take((cap - booted.length).clamp(0, cap)).toList();
 
-    // The same batching as the Android sizes above, in the branch that did not
-    // get it: one `simctl io <udid> enumerate` per running simulator, all at
-    // once.
+    // The same batching as the Android sizes above: one `simctl io enumerate`
+    // per running simulator, all asked at once.
     final onScreen = [...booted, ...shown];
     final simulatorSizes = Map.fromIterables(
       [for (final target in onScreen) target.id],
@@ -126,9 +117,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
             'available': target.simulator.isAvailable,
             if (target.isReady) ...{
               'screenSizePixels': simulatorSizes[target.id]?.toString(),
-              // Named rather than measured: asking the backend for the point
-              // size means installing and launching a runner inside the
-              // simulator. device_ui_dump reports it, already in that space.
+              // Named rather than measured: asking the backend means launching
+              // a runner inside the simulator. device_ui_dump reports it.
               'coordinateSpace': CoordinateSpace.points.label,
             },
           },
@@ -138,9 +128,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
             '${bootable.length - shown.length} more simulators are installed '
             'and bootable but not listed. Raise limit, or name one directly: '
             'device_boot accepts a simulator name as well as a udid.',
-      // A missing SDK is a note beside an empty list rather than a throw: on a
-      // Mac with Xcode and no SDK, the one tool whose job is to say what exists
-      // refused to say anything.
+      // A missing SDK is a note beside an empty list, not a throw: on a Mac with
+      // Xcode alone, the tool whose job is to say what exists said nothing.
       if (fleet.adb == null)
         'androidNote':
             'No Android SDK was found, so no Android device or emulator could '
@@ -172,12 +161,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
     };
   }
 
-  /// Stops a running virtual device, on either platform.
-  ///
-  /// **Widened rather than given an iOS sibling**, and deliberately not renamed:
-  /// existing callers already call `device_stop_emulator`. The id is required
-  /// rather than inferred — silently defaulting a destructive action to "the
-  /// only ready device" is a different thing entirely.
+  /// Stops a running virtual device, on either platform. The id is required
+  /// rather than inferred: a destructive action must not default to a device.
   Future<Object?> _deviceStopEmulator(String? id) async {
     if (id == null || id.trim().isEmpty) {
       throw ArgumentError(
@@ -189,10 +174,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
     final wanted = id.trim();
     final fleet = await deviceFleet();
 
-    // An AVD name, before anything else. A *stopped* emulator answers to
-    // nothing at all — the serial is assigned at boot and vanishes with the
-    // process — so the AVD name is the only handle that survives, and it is the
-    // name device_boot takes too.
+    // An AVD name, before anything else: a *stopped* emulator answers to no
+    // serial at all, so the AVD name is the only handle that survives.
     if (await fleet.avdNamed(wanted) case final avd?) {
       if (!avd.isRunning) {
         return {
@@ -205,9 +188,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
       return _stopVirtualDevice(fleet, avd.runningSerial!, name: avd.name);
     }
 
-    // A serial that names nothing, shaped like an emulator's. The overwhelmingly
-    // likely reason is that it already stopped, and the caller has no way to
-    // know the serial was never going to work a second time.
+    // A serial that names nothing, shaped like an emulator's: it most likely
+    // stopped already, and the caller cannot know the serial was single-use.
     if (await fleet.find(wanted) == null &&
         RegExp(r'^emulator-\d+$').hasMatch(wanted)) {
       final stopped = [
@@ -223,9 +205,8 @@ class DeviceInventoryTools extends DeviceToolFamily {
       );
     }
 
-    // Not `driverFor`: a simulator that is already shut down is not "ready", and
-    // refusing to stop something already stopped would turn asking for a state
-    // into an error about being in it.
+    // Not `driverFor`: a simulator already shut down is not "ready", and
+    // refusing would turn asking for a state into an error about being in it.
     return _stopVirtualDevice(fleet, wanted);
   }
 

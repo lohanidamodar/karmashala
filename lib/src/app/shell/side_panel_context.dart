@@ -17,11 +17,8 @@ class _RescanChoice {
   const _RescanChoice();
 }
 
-/// Which checkout the panel is describing, and the picker that moves it.
-///
-/// The selection moves on its own — it follows the terminal tab — so the
-/// surfaces have to name it. The menu is offered even for a project with one
-/// checkout, because the thing you actually need is the **Rescan** under it.
+/// Which checkout the panel is describing, and the picker that moves it. The
+/// menu is offered even for a single checkout, for the **Rescan** under it.
 class SidePanelContextLine extends ConsumerStatefulWidget {
   const SidePanelContextLine({super.key});
 
@@ -218,11 +215,8 @@ class _CheckoutMenuRow extends ConsumerWidget {
   }
 }
 
-/// Level two of the picker: the worktrees of the checkout the panel is on.
-///
-/// A worktree the workspace has a row for is selectable; one it has never
-/// recorded is still *listed* but is not a destination, because there is
-/// nothing to point at. Rescan turns the second kind into the first.
+/// Level two of the picker: the worktrees of this checkout. One the workspace
+/// has never recorded is listed but is not a destination; Rescan changes that.
 class SidePanelWorktrees extends ConsumerWidget {
   const SidePanelWorktrees({super.key});
 

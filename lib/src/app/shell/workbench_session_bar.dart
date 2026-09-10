@@ -1,8 +1,7 @@
 part of 'workbench.dart';
 
-/// The chrome under the surface: what belongs to the session on screen, on a
-/// bar of its own. It speaks for the *focused pane's* session
-/// ([activePaneSessionIdProvider]), never the Explorer's selection.
+/// The chrome under the surface: what belongs to the session on screen. It
+/// speaks for the *focused pane's* session, never the Explorer's selection.
 class _SessionBar extends ConsumerWidget {
   const _SessionBar({
     required this.groupId,
@@ -89,9 +88,8 @@ class _SessionBar extends ConsumerWidget {
                           },
                         ),
                       ),
-                      // In the facts line and not the action row: a quota is
-                      // not a control and must not compete for those pixels.
-                      // Flexible because this row is as wide as a group.
+                      // In the facts line and not the action row: a quota is not
+                      // a control and must not compete for those pixels.
                       Flexible(child: UsageChip(sessionId: sessionId)),
                     ],
                   ),
@@ -106,8 +104,7 @@ class _SessionBar extends ConsumerWidget {
                     final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
                     final roomForModel = constraints.maxWidth > 820 * scale;
                     // A group is a fraction of the window — a two-way split
-                    // leaves 363px. Below this the row scrolls rather than
-                    // squeezing, but the toggle stays outside the scroll.
+                    // leaves 363px. Below this the row scrolls instead.
                     final narrow = constraints.maxWidth < 560 * scale;
                     final toggle = selected == null
                         ? null
@@ -199,9 +196,8 @@ class _SessionBar extends ConsumerWidget {
   }
 }
 
-/// A box that keeps the height it last laid out at, while [hold] is set — a
-/// render object because the frame that matters is the one the switch produces.
-/// The height belongs to the width it was measured at; a resize gets none.
+/// A box that keeps the height it last laid out at, while [hold] is set. The
+/// height belongs to the width it was measured at; a resize gets none.
 class _HeldHeight extends SingleChildRenderObjectWidget {
   const _HeldHeight({required this.hold, required super.child});
 

@@ -1,10 +1,5 @@
-/// The skills Karmashala installs into the agent CLIs on this machine — the
-/// same kind of thing `instructions(topic:)` says, through the door a CLI
-/// discovers without being asked for it.
-///
-/// **The rosters are generated, never typed**, from [kMcpGuides]. A skill naming
-/// a tool that no longer exists reads as a capability, so `agent_skills_test`
-/// holds every tool these bodies name against the served catalogue.
+/// The skills Karmashala installs into the agent CLIs: what `instructions()`
+/// says, through a door the CLI discovers. Rosters come from [kMcpGuides].
 library;
 
 import 'package:agent_cli/descriptors.dart';

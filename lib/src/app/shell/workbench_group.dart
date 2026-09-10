@@ -1,10 +1,7 @@
 part of 'workbench.dart';
 
-/// One **workspace group**: its own tab strip, its own surface, its own status
-/// bar — VS Code's editor group, holding the whole middle of the window.
-///
-/// Everything here reads its *own* group, never the focused one: with two
-/// groups a bar wired to "the window's session" describes somebody else's.
+/// One **workspace group**: its own tab strip, surface and status bar. Everything
+/// reads its *own* group; with two groups, "the window's" is somebody else's.
 class _WorkspaceGroup extends ConsumerStatefulWidget {
   const _WorkspaceGroup({
     required this.groupId,
@@ -22,12 +19,8 @@ class _WorkspaceGroup extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
-  /// The session whose **conversation** is mounted, or null when none is.
-  ///
-  /// Built only once it has been asked for: an [IndexedStack] builds every
-  /// child, so landing on a terminal also mounted its chat and paid a CLI store
-  /// scan plus a parse of that session's whole transcript. The poll behind it is
-  /// gated on which surface is in front (`chatTranscriptPollingProvider`).
+  /// The session whose **conversation** is mounted, or null when none is. Built
+  /// only once asked for: an [IndexedStack] mounts every child, transcript and all.
   String? _conversationFor;
   /// Wired to the labelled Chat half of the bar's toggle. No *ordinary* tap
   /// opens the conversation — every writer of `false` is a deliberate request.
@@ -63,9 +56,8 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
 
     final scheme = Theme.of(context).colorScheme;
     final session = empty ? null : _groupSession();
-    // With nothing to read the group is its terminal. Otherwise which of the
-    // two faces is up is a property of *this* group, so three agents side by
-    // side can show three transcripts at once.
+    // With nothing to read the group is its terminal. Which of the two faces is
+    // up is a property of *this* group, so three agents can show three at once.
     final onTerminal =
         groupId == null ||
         session == null ||
@@ -140,9 +132,8 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     );
   }
 
-  /// The session this group is about: a title, whether it has a pane of ours,
-  /// and whether it is one of ours at all. **This group's own active tab**, and
-  /// a *read* — writing the selection would fight the surface the user is on.
+  /// The session this group is about: **this group's own active tab**, and a
+  /// *read* — writing the selection would fight the surface the user is on.
   _WorkbenchSession? _groupSession() {
     // The strip draws the session's name and offers the toggle its pane
     // decides. Statuses and permission modes are drawn elsewhere.
@@ -151,9 +142,8 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
       SessionChangeKind.title,
       SessionChangeKind.placement,
     });
-    // A pane appearing or ending changes whether this session has a terminal,
-    // which is what decides the toggle. Only the tab list, because a *process*
-    // dying elsewhere cannot change which panes exist.
+    // A pane appearing or ending changes whether this session has a terminal.
+    // Only the tab list: a *process* dying cannot change which panes exist.
     ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs));
     final groupId = widget.groupId;
     final hosted = _hostedSelection(ref, groupId);
@@ -190,8 +180,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
 }
 
 /// The session group [groupId] was asked to show that has no tab to show it in.
-/// Null for every group but the Explorer selection's host, and null there too
-/// once that selection has a pane of ours — a session with a pane *is* a tab.
+/// Null once that selection has a pane of ours — a session with a pane *is* a tab.
 ({String id, bool native})? _hostedSelection(WidgetRef ref, String? groupId) {
   final host =
       ref.watch(selectionHostGroupProvider) ??

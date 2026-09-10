@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// A thin draggable divider that reports drag deltas, for the desktop panes.
-///
-/// [axis] is the direction the handle *moves* in: [Axis.horizontal] is a
-/// vertical bar dragged left/right; [Axis.vertical] is dragged up/down.
+/// A thin draggable divider that reports drag deltas. [axis] is the direction
+/// the handle *moves* in: [Axis.horizontal] is a vertical bar dragged sideways.
 class ResizeHandle extends StatelessWidget {
   const ResizeHandle({
     required this.onDelta,

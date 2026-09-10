@@ -1,14 +1,5 @@
-/// The Model Context Protocol, as this app speaks it: JSON-RPC 2.0 in, one
-/// JSON-RPC message out, with no connection state between calls.
-///
-/// It never mints an `Mcp-Session-Id`: agent processes here come and go
-/// constantly, and statelessness makes a reconnect a non-event. The app it
-/// drives is the state; what is absent is protocol state.
-///
-/// Dual-era, decided by the version a request declares: `2026-07-28` is modern
-/// (per-request `_meta` mirrored into headers, `server/discover`, `resultType`),
-/// the 2025 revisions are legacy (an `initialize` handshake and none of that),
-/// and a request declaring nothing is legacy at `2025-03-26`.
+/// The Model Context Protocol, as this app speaks it: JSON-RPC in, one message
+/// out, no session state. Dual-era, on the version a request declares.
 library;
 
 import 'dart:convert';
@@ -22,15 +13,8 @@ const List<String> kMcpSupportedVersions = <String>[
   '2025-03-26',
 ];
 
-/// Revisions `server/discover` **offers**, newest first, so a client picking the
-/// first it recognises picks one it will actually work on.
-///
-/// Deliberately narrower than [kMcpSupportedVersions], because of one client's
-/// bug: measured 2026-08-31, Claude Code 2.1.251 selects `2026-07-28`, receives
-/// all 62 tools and registers **none** of them — a connected server with an
-/// empty tool surface. **Delete this constant and point `_discoverResult` back
-/// at [kMcpSupportedVersions] once a released client registers tools over the
-/// modern path.**
+/// Revisions `server/discover` **offers**: narrower than [kMcpSupportedVersions]
+/// until a released client actually registers tools over the modern path.
 const List<String> kMcpAdvertisedVersions = <String>[
   '2025-11-25',
   '2025-06-18',
@@ -92,9 +76,8 @@ typedef McpToolInvoker =
 /// depend on app state never serves a stale list.
 typedef McpToolCatalogue = List<Map<String, dynamic>> Function();
 
-/// A transport-free MCP server. Everything that varies by HTTP — auth,
-/// `Origin`, method, path — belongs to the endpoint that wraps this, which is
-/// what makes the era rules testable without a socket.
+/// A transport-free MCP server: everything that varies by HTTP belongs to the
+/// endpoint wrapping this, which is what makes the era rules testable.
 class McpServer {
   McpServer({
     required this.name,
@@ -113,9 +96,8 @@ class McpServer {
   final McpToolCatalogue catalogue;
   final McpToolInvoker invoke;
 
-  /// Answers one JSON-RPC message. [headers] must already be lower-cased, as
-  /// every comparison below assumes; [callerSessionId] is the session the
-  /// transport authenticated, never anything the message said about itself.
+  /// Answers one JSON-RPC message. [headers] must already be lower-cased, and
+  /// [callerSessionId] is the session the transport authenticated.
   Future<McpReply> handle(
     Object? message, {
     Map<String, String> headers = const <String, String>{},
@@ -183,10 +165,8 @@ class McpServer {
     }
   }
 
-  /// Which revision this request is speaking, or the error that says why it
-  /// cannot be served. The body is the source of truth and the header mirrors
-  /// it, so a disagreement is rejected rather than resolved: a proxy routing on
-  /// the header and a server executing on the body must not diverge.
+  /// Which revision this request is speaking, or the error saying why not. The
+  /// body is the source of truth; a header that disagrees is rejected.
   _Resolved _resolveVersion(
     Map<String, Object?> params,
     Map<String, String> headers,
@@ -236,8 +216,7 @@ class McpServer {
   }
 
   /// The header/body agreement the modern revision requires. Missing counts as
-  /// mismatched: the spec lists a missing required header among the conditions
-  /// for `-32020`.
+  /// mismatched, per the spec's own conditions for `-32020`.
   McpReply? _validateModernHeaders(
     Object? id,
     String method,
@@ -358,9 +337,8 @@ class McpServer {
         modern: modern,
       );
     } on Object catch (error) {
-      // Tool failures come back as results, so the model reads them and can
-      // correct itself. An empty success would read as "done" for something
-      // that did not happen.
+      // Tool failures come back as results so the model can correct itself; an
+      // empty success would read as "done" for something that did not happen.
       return _result(
         id,
         <String, Object?>{
@@ -374,9 +352,8 @@ class McpServer {
     }
   }
 
-  /// Shapes one tool's return value as a `CallToolResult`. A tool that declared
-  /// an `outputSchema` **must** return structured results, so `structuredContent`
-  /// is emitted for exactly those, with the JSON in a text block beside it.
+  /// Shapes one tool's return value as a `CallToolResult`: a tool that declared
+  /// an `outputSchema` **must** return structured results, with text beside them.
   Map<String, Object?> _toolResult(String toolName, Object? result) {
     // A tool returning content blocks of its own — an image, say — hands them
     // back under `_mcpContent` to be passed through untouched.
@@ -430,9 +407,8 @@ class McpServer {
   });
 }
 
-/// Undoes the `=?base64?…?=` sentinel clients use for header values that cannot
-/// be written as plain ASCII. Returns [raw] unchanged when it is not encoded,
-/// and null when there was no header.
+/// Undoes the `=?base64?…?=` sentinel used for non-ASCII header values. Returns
+/// [raw] unchanged when it is not encoded, and null when there was no header.
 String? decodeMcpHeaderValue(String? raw) {
   if (raw == null) return null;
   const prefix = '=?base64?';

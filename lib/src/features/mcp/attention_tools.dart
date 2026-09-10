@@ -7,11 +7,8 @@ import '../notifications/domain/inbox_item.dart';
 import '../sessions/application/session_providers.dart';
 import 'todo_tools.dart';
 
-/// What is written down, and what is waiting.
-///
-/// Notes are the app's own scratchpad; the inbox is every session that needs
-/// somebody. Both were readable only by a person looking at the panel, which
-/// made "an agent finished and is waiting" a fact only a human could act on.
+/// What is written down, and what is waiting: notes are the app's own
+/// scratchpad, the inbox is every session that needs somebody.
 class AttentionControlTools {
   AttentionControlTools(this._container, {this.callerSessionId});
 
@@ -48,12 +45,8 @@ class AttentionControlTools {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// The notes, optionally narrowed to one session and one project.
-  ///
-  /// `projectId` follows the todo tools' convention: an id filters to that
-  /// project, the literal `'none'` filters to notes filed under no project, and
-  /// omitting it means all of them — a string argument cannot otherwise carry
-  /// the difference between "not given" and "explicitly nothing".
+  /// The notes, optionally narrowed to one session and one project, where
+  /// `projectId: 'none'` means the unfiled ones and omitting it means all.
   Object? _notesList(String? sessionId, {String? projectId}) {
     final notes = <Note>[
       for (final note in _container
@@ -85,9 +78,8 @@ class AttentionControlTools {
     };
   }
 
-  /// Writes a note, keeping [body] **exactly as given**: no trimming to a gist,
-  /// no summarising. A note is evidence, and a paraphrase's errors are invisible
-  /// to whoever reads it next.
+  /// Writes a note, keeping [body] **exactly as given**: a note is evidence, and
+  /// a paraphrase's errors are invisible to whoever reads it next.
   Object? _noteAdd({
     required String body,
     String? title,
@@ -98,8 +90,7 @@ class AttentionControlTools {
       throw ArgumentError('body is required and cannot be blank.');
     }
     // Which project it lands under: an explicit id wins, `'none'` files it
-    // nowhere, and an omitted argument lets `NotesController.capture` follow the
-    // session's own repository.
+    // nowhere, and omitting it follows the session's own repository.
     final repositoryId = sessionId == null
         ? null
         : _container.read(sessionDaoProvider).getById(sessionId)?.repositoryId;
@@ -135,8 +126,7 @@ class AttentionControlTools {
   }
 
   /// Everything waiting on somebody, newest first. `kind` is the fact that
-  /// matters: `needsApproval` and `failed` are sessions that have stopped and
-  /// will not restart themselves, and `finished` is work nobody has read.
+  /// matters: `needsApproval` and `failed` will not restart themselves.
   Object? _inboxList({required bool includeSeen}) {
     final inbox = _container.read(attentionInboxProvider);
     final items = includeSeen ? inbox.items : inbox.pending;
@@ -165,12 +155,8 @@ class AttentionControlTools {
     };
   }
 
-  /// Brings an item's session to the front, which also marks it seen.
-  ///
-  /// What "seen" does to the item depends on its kind: an **event** you have
-  /// looked at is done with and leaves, while a **condition** stays, because
-  /// looking at a question does not answer it. Both outcomes are read back from
-  /// the inbox afterwards rather than predicted.
+  /// Brings an item's session to the front, which also marks it seen: an event
+  /// then leaves the inbox and a condition stays. Both outcomes are read back.
   Object? _inboxOpen(String? id) {
     final item = _item(id);
     _container.read(attentionInboxProvider.notifier).open(item);
@@ -191,11 +177,8 @@ class AttentionControlTools {
     };
   }
 
-  /// Takes an item off the list without opening anything.
-  ///
-  /// For an *event* kind — a turn that ended, a build that went red — nothing
-  /// will put it back, because the thing it recorded has already happened. A
-  /// condition that is still true is re-filed by the next poll.
+  /// Takes an item off the list without opening anything. Nothing re-files an
+  /// event kind; a condition that still holds comes back on the next poll.
   Object? _inboxDismiss(String? id) {
     final item = _item(id);
     _container.read(attentionInboxProvider.notifier).dismiss(item.id);

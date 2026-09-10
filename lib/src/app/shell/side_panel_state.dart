@@ -89,10 +89,8 @@ enum SidePanelSurface {
   ];
 }
 
-/// Which side-panel surface is open, or `null` when the panel is collapsed.
-///
-/// The panel remembers the surface it was last showing. Collapsed means
-/// collapsed: the shell gives the body no width at all, only the rail stays.
+/// Which side-panel surface is open, or `null` when collapsed — and collapsed
+/// means collapsed: the body gets no width at all, only the rail stays.
 class SidePanelController extends Notifier<SidePanelSurface?> {
   /// What re-opening the panel should show. Never null, so the panel always has
   /// somewhere to go back to.

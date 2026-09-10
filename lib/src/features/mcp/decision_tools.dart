@@ -4,16 +4,8 @@ import '../sessions/application/decision_recorder.dart';
 import '../sessions/domain/decision_record.dart';
 import '../verification/domain/verification_run.dart';
 
-/// `decision_record`: an agent writing down a decision, deliberately.
-///
-/// The fourth of the four explicit acts that write to a session's decision
-/// record, and the one for a decision with no other act attached to it. It is
-/// called rather than inferred because a paraphrase is either right or wrong
-/// and the next agent cannot tell which.
-///
-/// An agent may write only two of the kinds: [DecisionKind.approvalGranted]
-/// would record permission the user never gave, and a verdict or a marked state
-/// would point at a run or a checkpoint that does not exist.
+/// `decision_record`: an agent writing down a decision, deliberately, because a
+/// paraphrase is not one. Only two [DecisionKind]s are writable, never approval.
 class DecisionControlTools {
   DecisionControlTools(this._container, {this.callerSessionId});
 
@@ -163,11 +155,8 @@ const List<Map<String, dynamic>> decisionControlToolSchemas =
       },
     ];
 
-/// Writes a finished run's verdict to the decision record of the session whose
-/// work it was about — the **subject**, not the verifier: whoever takes that
-/// work over is the one who would otherwise re-run a check that passed. Called
-/// from the control server's dispatch, so the verification feature need not know
-/// the record exists. An unfinished or unattached run writes nothing.
+/// Writes a finished run's verdict to the **subject** session's decision record,
+/// not the verifier's. An unfinished or unattached run writes nothing.
 void recordFinishedVerdict(ProviderContainer container, VerificationRun? run) {
   if (run == null) return;
   final subject = run.sessionId;

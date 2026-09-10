@@ -7,17 +7,13 @@ import '../../theme/design_tokens.dart';
 /// scrolled to a selection it has not laid out yet.
 const double quickOpenRowHeight = 42.0;
 
-/// [quickOpenRowHeight] at the reader's text size.
-///
-/// The constant is the height at 1.0; at Windows' "make text bigger" the two
-/// lines outgrew the fixed box and every visible row overflowed by 5px. What
-/// must stay constant is that every row is the *same* height.
+/// [quickOpenRowHeight] at the reader's text size. The constant is the height at
+/// 1.0; what must stay true is that every row is the *same* height.
 double quickOpenRowHeightOf(BuildContext context) =>
     MediaQuery.textScalerOf(context).scale(quickOpenRowHeight);
 
-/// The offset a scroll view must move to so the band starting at [leading] and
-/// [extent] long is inside the viewport, or `null` when it already is. Clamped
-/// to the real extents, which is what stops a reveal scrolling past the end.
+/// The offset a scroll view must move so the band at [leading] of [extent] is
+/// visible, or `null` when it already is. Clamped, so a reveal cannot overshoot.
 double? revealOffset({
   required ScrollPosition position,
   required double leading,
@@ -63,9 +59,8 @@ class QuickOpenSearchField extends StatelessWidget {
   );
 }
 
-/// One row of a filtered list: a glyph, a title with the matched characters
-/// picked out, where it lives, and a trailing note or control. Plain fields, so
-/// quick open's results and the tab picker's tabs share one row design.
+/// One row of a filtered list: a glyph, a title with the matches picked out,
+/// where it lives, and a trailing note. Plain fields, so two lists share it.
 class QuickOpenRow extends StatelessWidget {
   const QuickOpenRow({
     required this.icon,

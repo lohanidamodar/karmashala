@@ -17,12 +17,8 @@ class _WorkbenchSession {
   final bool native;
 }
 
-/// The terminal rendering of a session: the panes, and nothing over them.
-///
-/// No approval card: the agent draws its own prompt here and it is answered by
-/// typing into it. With a session selected that has **no pane of ours**,
-/// [_NoPaneForSession] takes the panes' place — the tab on screen would
-/// otherwise be some other session's.
+/// The terminal rendering of a session: the panes, and nothing over them. A
+/// session with **no pane of ours** gets [_NoPaneForSession] in their place.
 class _TerminalSurface extends StatelessWidget {
   const _TerminalSurface({
     this.session,
@@ -52,12 +48,8 @@ class _TerminalSurface extends StatelessWidget {
   }
 }
 
-/// What the terminal surface shows for a session nothing of ours is running.
-///
-/// Every sentence is read off `sessionTerminalPane` and the row itself, the
-/// same pair the conversation's empty hint reads, so the two surfaces cannot
-/// describe one session differently. It answers a session the user asked to
-/// see, never one just ended — that selection is released first.
+/// What the terminal surface shows for a session nothing of ours is running,
+/// read off the same pair the conversation's empty hint reads.
 class _NoPaneForSession extends ConsumerWidget {
   const _NoPaneForSession({required this.session, required this.groupId});
 

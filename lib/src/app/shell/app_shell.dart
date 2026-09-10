@@ -36,9 +36,8 @@ import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
-/// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6).
-/// Branching on width rather than platform is what keeps "responsive" a
-/// property of the shell instead of a per-widget afterthought.
+/// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6):
+/// branching on width, never platform, is what keeps "responsive" a property.
 enum ShellWidth {
   /// One pane at a time, chosen with a selector. The side panel's rail stays —
   /// it is 34px and it is the only way back to the tools.
@@ -232,9 +231,8 @@ class _ExplorerColumnState extends ConsumerState<_ExplorerColumn> {
   }
 }
 
-/// The window's one chrome row: the menus, the command field and the toggles
-/// for the two panes that can be hidden. Built as the tab strip's row — same
-/// height, same surface, same hairline — because it is chrome, not a heading.
+/// The window's one chrome row: the menus, the command field and the pane
+/// toggles. Built as the tab strip's row, because it is chrome, not a heading.
 class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
   const ShellTitleBar({this.height = Chrome.titleBar, super.key});
 
@@ -291,9 +289,8 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
                       ),
               ),
             ),
-            // The terminal's own verbs, acting on the pane the keyboard is in.
-            // Not per group: seven repeated in every strip made a split group
-            // narrower than its own status bar. Down to `+` at compact widths.
+            // The terminal's own verbs, on the pane the keyboard is in. Not per
+            // group: seven in every strip made a split narrower than its bar.
             TerminalToolbar(compact: width.isCompact),
             const _WindowSessionBadges(),
             _ChromeToggle(
@@ -325,8 +322,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
 }
 
 /// What is running that no group's strip can show: sessions a restart left
-/// dormant, and sessions kept alive with no tab. Both are facts about the
-/// **window**, which is why they are answered here once and not per group.
+/// dormant, and sessions kept alive with no tab. Both are about the **window**.
 class _WindowSessionBadges extends ConsumerWidget {
   const _WindowSessionBadges();
 
@@ -574,10 +570,8 @@ class _DesktopMenuBar extends ConsumerWidget {
             const Divider(height: 1),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.power),
-              // ⌘Q on macOS only, and written out rather than reached through
-              // `commandActivator`, because off a Mac this must not become
-              // Ctrl+Q, which is XON. `performKeyEquivalent` catches the real
-              // ⌘Q ahead of the Flutter view; this item is only its label.
+              // ⌘Q on macOS only, written out rather than reached through
+              // `commandActivator`: off a Mac that becomes Ctrl+Q, which is XON.
               shortcut: commandKeyIsMeta
                   ? const SingleActivator(LogicalKeyboardKey.keyQ, meta: true)
                   : null,
@@ -626,8 +620,7 @@ class _DesktopMenuBar extends ConsumerWidget {
               MenuItemButton(
                 leadingIcon: Icon(SidePanel.iconFor(surface)),
                 // The inbox already had this chord and the menu never said so.
-                // The others stay bare: a dozen more chords is a dozen more
-                // keys taken from every shell in the app.
+                // The others stay bare: more chords is more keys taken.
                 shortcut: surface == SidePanelSurface.inbox
                     ? commandActivator(LogicalKeyboardKey.keyA, shift: true)
                     : null,

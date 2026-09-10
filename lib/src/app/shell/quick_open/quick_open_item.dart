@@ -2,11 +2,8 @@ import 'package:flutter/widgets.dart';
 
 import 'fuzzy_match.dart';
 
-/// The kinds of thing quick open can find, in the order they are listed when
-/// nothing separates them.
-///
-/// A group is not a filter tab: results are ranked across all of them, and this
-/// order only breaks a tie between two groups whose best match scored the same.
+/// The kinds of thing quick open can find. Not a filter: results are ranked
+/// across all groups, and this order only breaks a tie between equal scores.
 enum QuickOpenGroup {
   attention('Needs you'),
   tabs('Open tabs'),
@@ -157,10 +154,8 @@ class QuickOpenSection {
   final List<QuickOpenResult> results;
 }
 
-/// Ranks [items] against [query] and buckets them into sections, ordered by
-/// their **best** result rather than a fixed hierarchy; the enum order only
-/// breaks ties. Each section is capped, so a hundred files cannot bury one
-/// matching session.
+/// Ranks [items] against [query] into sections ordered by their **best** result,
+/// each capped, so a hundred files cannot bury one matching session.
 List<QuickOpenSection> rankQuickOpen(
   QuickOpenQuery query,
   List<QuickOpenItem> items, {

@@ -1,7 +1,5 @@
-/// The verbs that open a workbench tab and bring one forward.
-///
-/// Their own file so a menu item, a chord or a quick-open row can reach them
-/// without importing `workbench.dart`, which imports those widgets back.
+/// The verbs that open a workbench tab and bring one forward. Their own file, so
+/// a menu item or a chord need not import `workbench.dart`, which imports back.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,12 +22,8 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
   releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
 }
 
-/// Opens Settings as a workbench tab, or brings the one already open forward,
-/// landing it on [section] when a caller names one.
-///
-/// The one way in. It used to be a route over the window, which covered the very
-/// panes half of these settings are about. Asking twice focuses the tab rather
-/// than opening a second one.
+/// Opens Settings as a workbench tab, or brings the open one forward, landing it
+/// on [section]. Asking twice focuses that tab rather than opening a second.
 void openSettingsTab(WidgetRef ref, {SettingsSectionId? section}) {
   if (section != null) {
     ref.read(settingsTabSectionProvider.notifier).select(section);
@@ -40,13 +34,8 @@ void openSettingsTab(WidgetRef ref, {SettingsSectionId? section}) {
   activateTerminalTab(ref, tabId);
 }
 
-/// Lets go of a selection that has no pane of ours, because the user has just
-/// asked to see one that has.
-///
-/// `_NoPaneForSession` replaces the *whole* pane stack, so a paneless selection
-/// held the middle of the window against every live tab in the strip. Cleared
-/// rather than out-voted: `null` is the one value `WorkbenchView`'s listeners
-/// ignore, and only the selection in the way of its own host group is dropped.
+/// Lets go of a selection that has no pane of ours: `_NoPaneForSession` replaces
+/// the *whole* pane stack, so it held the window against every live tab.
 void releaseHijackedSelection(WidgetRef ref, {String? inGroup}) {
   final host = ref.read(selectionHostGroupProvider);
   if (inGroup != null && host != null && host != inGroup) return;

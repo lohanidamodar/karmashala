@@ -30,17 +30,13 @@ import '../../features/todos/presentation/todos_view.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
 
-/// The right-hand side panel: a permanent icon rail plus a body that exists
-/// only while a surface is open.
-///
-/// A rail rather than a tab strip: these are tools applied to the work, not
-/// peers of it, and closing leaves [Chrome.rail] of chrome instead of a pane.
+/// The right-hand side panel: a permanent icon rail plus a body that exists only
+/// while a surface is open — tools applied to the work, not peers of it.
 class SidePanel extends ConsumerWidget {
   const SidePanel({super.key});
 
-  /// The glyph for each surface. **Every one must be legible as a different
-  /// thing at 16px** — the rail is unlabelled icons in a 34px column, so a
-  /// near-miss is a surface nobody can find; `side_panel_test.dart` pins it.
+  /// The glyph for each surface. **Every one must be legible at 16px** — the
+  /// rail is unlabelled icons, and `side_panel_test.dart` pins them.
   static IconData iconFor(SidePanelSurface surface) => switch (surface) {
     SidePanelSurface.inbox => AppIcons.tray,
     SidePanelSurface.changes => AppIcons.gitDiff,
@@ -113,8 +109,7 @@ class _SidePanelRail extends ConsumerWidget {
         border: Border(left: BorderSide(color: scheme.outlineVariant)),
       ),
       // The glyphs scroll rather than overflow: fourteen at 32px need ~450px,
-      // and the smallest window the app supports leaves the rail less than
-      // that. Nothing scrolls while they fit.
+      // more than the smallest supported window leaves the rail.
       child: SingleChildScrollView(
         primary: false,
         child: Column(
@@ -157,9 +152,8 @@ class _RailButton extends StatelessWidget {
   /// How many things are waiting behind this glyph; 0 draws nothing.
   final int badge;
 
-  /// The surface's name, then the keystroke that reaches it: an unlabelled glyph
-  /// is only findable if hovering teaches the chord. Read out of [shellChords],
-  /// so a rebinding cannot leave the tooltip advertising a dead key.
+  /// The surface's name, then the keystroke that reaches it, read out of
+  /// [shellChords] so a rebinding cannot leave a dead key advertised.
   String _tooltip() {
     final head = [
       surface.label,
@@ -274,9 +268,8 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
               width: width,
               child: Material(
                 color: scheme.surface,
-                // Every surface here can be closed from its header, whether the
-                // header is the panel's or the surface's own — handed down, so
-                // the panel need not watch five features to add one glyph.
+                // Every surface here closes from its header, the panel's or its
+                // own — handed down, so the panel watches nothing for a glyph.
                 child: PaneCloseAction(
                   tooltip:
                       'Close panel  ·  '

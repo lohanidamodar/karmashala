@@ -1,23 +1,11 @@
-/// What each tool does to the world, declared as MCP tool annotations.
-///
-/// One table rather than a field on each schema, because the question a reader
-/// arrives with — "which of these can I not undo" — is only answerable if the
-/// answers sit next to each other. Four axes are the spec's; `movesAttention` is
-/// ours: a window raised or created, the screen switched under the person, or
-/// the person asked to point at something. Driving a surface the caller was
-/// already pointed at does not count. These are hints, never enforcement.
-///
-/// **No automation tool is served here, ever**: arming one is a person deciding
-/// in the UI that something may start without them, and a tool that could arm
-/// one would take them out of that. `no_automation_tools_test.dart` fails if a
-/// served name begins with `automation`.
+/// What each tool does to the world: the spec's four axes plus `movesAttention`,
+/// ours. Hints, never enforcement — and no `automation_*` tool is ever served.
 library;
 
 /// The behaviour of one tool, as `tools/list` reports it.
 class McpToolAnnotations {
-  /// [movesAttention] is required and the other four are not: those are the
-  /// spec's, with its defaults, and this one has no answer until somebody has
-  /// read the implementation.
+  /// [movesAttention] is required and the other four are not: theirs are the
+  /// spec's defaults, and this one has no answer until somebody reads the code.
   const McpToolAnnotations({
     required this.movesAttention,
     this.readOnly = false,
@@ -63,8 +51,7 @@ class McpToolAnnotations {
 }
 
 /// Every tool this app serves, and what it does. A tool missing from here is a
-/// bug, not a default: `mcp_tool_catalogue_test` asserts this map and the
-/// served schemas name exactly the same set.
+/// bug: `mcp_tool_catalogue_test` asserts this map against the served schemas.
 const Map<String, McpToolAnnotations> kMcpToolAnnotations =
     <String, McpToolAnnotations>{
       'instructions': McpToolAnnotations.read,
@@ -107,15 +94,12 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'get_usage': McpToolAnnotations.read,
       // Lands in a pane, and `openAgentTab` makes that tab active and focused.
       'open_new_session': McpToolAnnotations(movesAttention: true),
-      // Reveals or resumes — and for an *imported* CLI session opens an
-      // external window, one per call: annotated idempotent, it once had a
-      // driver walking `list_sessions` open a window per row. That incident is
-      // why the fifth axis exists.
+      // Reveals or resumes; for an imported CLI session it opens an external
+      // window, one per call — a driver once opened one per `list_sessions` row.
       'open_session': McpToolAnnotations(movesAttention: true),
       'session_transcript': McpToolAnnotations.read,
-      // Idempotent in the sense this file means: the same call twice leaves
-      // the same state, and calling again after a timeout is the intended
-      // response to one.
+      // Idempotent in the sense this file means: calling again after a timeout
+      // is the intended response to one.
       'session_wait': McpToolAnnotations.read,
       // Text appears in the target's pane; no tab is switched, no pane focused.
       'session_send': McpToolAnnotations(movesAttention: false),
@@ -147,9 +131,8 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'terminal_output': McpToolAnnotations.read,
       // The new tab becomes active, its group activated, its pane focused.
       'terminal_open': McpToolAnnotations(movesAttention: true),
-      // Whether the command is destructive is its business, not this tool's,
-      // and a tool that cannot tell must not claim it is safe. It types into
-      // the pane the caller named, so it moves nothing itself.
+      // Whether the command is destructive is its business, not this tool's, and
+      // a tool that cannot tell must not claim it is safe.
       'terminal_run': McpToolAnnotations(
         destructive: true,
         movesAttention: false,
@@ -181,8 +164,7 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // Appends a row to the user's own library: twice is two snippets.
       'snippet_add': McpToolAnnotations(movesAttention: false),
       // A snippet the user saved with submit=true runs on insertion, and a
-      // client cannot see which one this is. It types where the caller
-      // pointed, so it puts words in front of them rather than moving them.
+      // client cannot see which one this is.
       'snippet_insert': McpToolAnnotations(
         destructive: true,
         movesAttention: false,
@@ -230,8 +212,7 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // Append-only: nothing already said can be edited or taken back.
       'review_thread_reply': McpToolAnnotations(movesAttention: false),
       // Not destructive: every comment and the anchor stay, and one more call
-      // puts the status back. `inbox_dismiss` differs because nothing re-files
-      // an event-derived item.
+      // puts the status back.
       'review_thread_status': McpToolAnnotations(
         idempotent: true,
         movesAttention: false,
@@ -287,9 +268,8 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
         openWorld: true,
         movesAttention: false,
       ),
-      // Booting a device that is already up leaves it up. It also selects the
-      // simulator in the device pane and, unless headless, runs
-      // `open -a Simulator`; the Android path never does either.
+      // Booting a device already up leaves it up; it also selects the simulator
+      // in the device pane and, unless headless, opens a window.
       'device_boot': McpToolAnnotations(
         idempotent: true,
         openWorld: true,
@@ -371,14 +351,12 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
         movesAttention: false,
       ),
 
-      // The Flutter app the developer is running. Open-world for the same
-      // reason the device tools are: the app is a process on a desktop, a phone
-      // or a simulator, not this machine's repositories.
+      // Open-world for the same reason the device tools are: the app is a
+      // process on a desktop, a phone or a simulator.
       'flutter_apps': McpToolAnnotations.read,
       'flutter_logs': McpToolAnnotations.readOutside,
-      // Puts the app into Flutter's own widget-select mode and takes it back
-      // out; the developer's taps stop doing what taps do for up to ten
-      // minutes.
+      // Puts the app into Flutter's widget-select mode and back; the developer's
+      // taps stop doing what taps do for up to ten minutes.
       'flutter_pick_widget': McpToolAnnotations(
         readOnly: true,
         idempotent: true,
@@ -399,17 +377,14 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
         movesAttention: false,
       ),
       // `stop` ends a running app and anything unsaved goes with it, and the
-      // annotation describes the worst action a caller can pass. Not
-      // idempotent: two `run`s are two launches. Every action but `status`
-      // runs in a terminal tab it opens and focuses.
+      // annotation describes the worst action a caller can pass.
       'flutter_run': McpToolAnnotations(
         destructive: true,
         openWorld: true,
         movesAttention: true,
       ),
       // A build overwrites the artifact with no undo and resolves dependencies
-      // from the network. Idempotent, unlike a launch: the same tree twice
-      // leaves the same artifact. Only "build" opens and focuses a tab.
+      // from the network; only "build" opens and focuses a tab.
       'project_build': McpToolAnnotations(
         destructive: true,
         idempotent: true,
@@ -428,11 +403,8 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'verification_finish': McpToolAnnotations(movesAttention: false),
     };
 
-/// The families the tools are shown in, in the order Settings draws them.
-///
-/// A fixed set rather than a name prefix: `list_devices` is a device tool and
-/// `get_usage` is a session one, and a prefix grouping puts both in a bucket of
-/// their own.
+/// The families the tools are shown in, in the order Settings draws them. A
+/// fixed set, not a name prefix: `list_devices` and `get_usage` defeat prefixes.
 enum McpToolCategory {
   sessions(
     'Sessions and agents',
@@ -500,11 +472,8 @@ enum McpToolCategory {
   final String blurb;
 }
 
-/// One tool as a person reads it: which family it is in, and what it does.
-///
-/// Separate from [McpToolAnnotations] because those are hints a *client* acts
-/// on and are shared by every tool that behaves alike, while a summary is prose
-/// for whoever opens Settings.
+/// One tool as a person reads it — prose for whoever opens Settings, where
+/// [McpToolAnnotations] is the hints a *client* acts on.
 class McpToolListing {
   const McpToolListing(this.category, this.summary);
 
@@ -519,11 +488,8 @@ class McpToolListing {
   static const int summaryLimit = 80;
 }
 
-/// Every served tool, in its family, in one line.
-///
-/// Grouped rather than kept in [kMcpToolAnnotations]'s order so a reader can
-/// see which family a new tool was filed under. `mcp_tool_catalogue_test` holds
-/// this against the served schemas in both directions.
+/// Every served tool, in its family, in one line. Grouped rather than kept in
+/// [kMcpToolAnnotations]'s order, so a mis-filed tool is visible at a glance.
 const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   // Sessions and agents.
   'list_sessions': McpToolListing(
@@ -821,9 +787,8 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.devices,
     'Tap what a query matches, not a coordinate. One session drives at a time.',
   ),
-  // The one device tool with a refusal of its own: it re-reads the screen
-  // before it acts, so a coordinate from a hierarchy that has since moved does
-  // not go out.
+  // The one device tool with a refusal of its own: it re-reads the screen first,
+  // so a coordinate from a hierarchy that has since moved does not go out.
   'device_tap': McpToolListing(
     McpToolCategory.devices,
     'Tap a coordinate; refused if the screen moved (verify: false) or in use.',
@@ -948,9 +913,8 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
 };
 
-/// [kMcpToolListings] grouped for display, in category order and then in
-/// declaration order. A lazy top-level `final`: nothing computes it until a
-/// page asks, and nothing computes it twice.
+/// [kMcpToolListings] grouped for display, in category order. A lazy top-level
+/// `final`: nothing computes it until a page asks, and nothing computes it twice.
 final Map<McpToolCategory, List<String>> kMcpToolsByCategory =
     <McpToolCategory, List<String>>{
       for (final category in McpToolCategory.values)
@@ -960,11 +924,8 @@ final Map<McpToolCategory, List<String>> kMcpToolsByCategory =
         ],
     };
 
-/// The served tool list: each schema with its annotations attached.
-///
-/// Merged here rather than written into the schemas because `/rpc` and the
-/// stdio bridge serve the same schemas and have no field to put them in — the
-/// bespoke envelope predates tool annotations existing.
+/// The served tool list: each schema with its annotations attached. Merged here
+/// because the bespoke `/rpc` envelope has no field to put them in.
 List<Map<String, dynamic>> annotatedToolSchemas(
   List<Map<String, dynamic>> schemas,
 ) => <Map<String, dynamic>>[

@@ -1,10 +1,7 @@
 part of 'workbench.dart';
 
-/// Whether group [groupId] is showing terminal **panes** right now.
-///
-/// Two other surfaces can be up — the conversation, and the empty state a
-/// session with no pane of ours gets — and while either is, no tab in that
-/// group may draw as the active one. A null [groupId] means the focused group.
+/// Whether group [groupId] is showing terminal **panes** right now — while the
+/// conversation or the empty state is up, no tab there may draw as active.
 bool _showingPanes(WidgetRef ref, {String? groupId}) {
   final group = groupId ?? ref.watch(focusedWorkspaceGroupProvider);
   // Before the window has a workspace there is nothing but the terminal.
@@ -13,10 +10,8 @@ bool _showingPanes(WidgetRef ref, {String? groupId}) {
   return _hostedSelection(ref, group) == null;
 }
 
-/// Every terminal tab, as [TabPicker] lists them.
-///
-/// Built only while the picker is up: telling two `zsh` tabs apart means
-/// knowing which session runs in which pane, which the strip never needs.
+/// Every terminal tab, as [TabPicker] lists them. Built only while the picker is
+/// up: telling two `zsh` tabs apart needs what the strip never asks for.
 List<TabEntry> terminalTabEntries(WidgetRef ref) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);

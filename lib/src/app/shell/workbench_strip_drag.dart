@@ -1,15 +1,11 @@
 part of 'workbench.dart';
 
 /// The insertion mark the strip draws while a tab is being dragged over it.
-///
-/// Exactly one is ever on screen, so a test can find *the* mark and read its
-/// rect to say which edge of which chip it is on.
+/// Exactly one is ever on screen, so a test can read *the* mark's rect.
 const kTabDropMarker = Key('tab-strip/drop-marker');
 
-/// The chip a pane will join, or a tab will divide the workspace beside.
-///
-/// A whole-chip mark rather than the edge caret [_markedForDrop] draws: neither
-/// drop lands the thing *between* two chips.
+/// The chip a pane will join, or a tab will divide the workspace beside — a
+/// whole-chip mark, because neither drop lands the thing *between* two chips.
 const kPaneJoinMarker = Key('tab-strip/pane-join-marker');
 const kTabSplitMarker = Key('tab-strip/split-marker');
 
@@ -123,9 +119,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
   bool _comesFromTheRight(TerminalDrag data) =>
       data is TabDrag && _indexInStrip(data.tabId) > widget.index;
 
-  /// The region of this tab a dropped **pane** joins. The chip is the only way
-  /// to address a *background* tab, so a drop on it means "into that tab" and
-  /// lands in the front region — the same place a new pane would.
+  /// The region of this tab a dropped **pane** joins: the chip is the only way
+  /// to address a *background* tab, so a drop on it lands in the front region.
   String get _paneAnchor =>
       widget.tab.layout.groupOf(widget.tab.focusedPaneId)?.activePaneId ??
       widget.tab.focusedPaneId;
@@ -177,8 +172,7 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
               HardwareKeyboard.instance.isMetaPressed ||
               _ctrlPressed;
           // Ctrl-drop divides the **workspace** and puts the tab in the new
-          // group: a tab carries a session and a status strip, and only a
-          // group can host that.
+          // group: a tab carries a session and a strip, which only a group hosts.
           if (ctrl && tabId != widget.tab.id && widget.groupId != null) {
             sessions.moveTabBesideGroup(
               tabId,

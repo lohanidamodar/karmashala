@@ -23,13 +23,8 @@ class LoadedRepoFacts {
       pullRequests.isEmpty && issues.isEmpty && branches.isEmpty;
 }
 
-/// Remembers the GitHub and branch data the app has already loaded, so quick
-/// open can search it without ever making a call of its own.
-///
-/// Quick open never fetches: `gh` is a subprocess, and the GitHub and worktree
-/// providers are `autoDispose`, so this cache is what keeps "the PRs I was just
-/// looking at" findable. A repository whose GitHub surface was never opened has
-/// no PRs to find, and the UI says so.
+/// Remembers the GitHub and branch data already loaded, so quick open can search
+/// it without a call of its own; a repository never opened has no PRs to find.
 class QuickOpenCache extends Notifier<Map<String, LoadedRepoFacts>> {
   @override
   Map<String, LoadedRepoFacts> build() => const {};
@@ -38,9 +33,8 @@ class QuickOpenCache extends Notifier<Map<String, LoadedRepoFacts>> {
       ? const LoadedRepoFacts()
       : (state[repositoryId] ?? const LoadedRepoFacts());
 
-  /// Copies whatever the live providers currently hold for [repositoryId].
-  /// `exists` is the whole point: reading a provider that is not alive would
-  /// *create* it, and creating these means running `gh`.
+  /// Copies whatever the live providers hold for [repositoryId]. `exists` is the
+  /// whole point: reading a provider that is not alive would *create* it.
   void harvest(ProviderContainer container, String? repositoryId) {
     if (repositoryId == null) return;
     final previous = factsFor(repositoryId);

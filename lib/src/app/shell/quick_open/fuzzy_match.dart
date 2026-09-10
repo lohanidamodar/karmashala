@@ -1,7 +1,5 @@
-/// Fuzzy matching and scoring for quick open.
-///
-/// Pure: no widgets, no providers, no clock. Anything that needs to know *what
-/// kind* of thing it is scoring belongs to the caller, as a per-item weight.
+/// Fuzzy matching and scoring for quick open. Pure: what *kind* of thing is
+/// being scored belongs to the caller, as a per-item weight.
 library;
 
 /// What a query matched in one piece of text.
@@ -53,12 +51,8 @@ const _innerGapPenalty = 2.2;
 /// Without a cap a deeply nested path could never outrank a short one.
 const _lengthPenaltyCap = 60.0;
 
-/// Scores [query] against [text], or returns null when [text] does not contain
-/// [query]'s characters in order.
-///
-/// Two passes: a substring hit always beats a scattered subsequence hit of the
-/// same query, and the subsequence pass is what makes an abbreviation work. An
-/// empty query matches everything with score 0.
+/// Scores [query] against [text], or null when [text] lacks [query]'s characters
+/// in order. A substring hit always beats a scattered subsequence hit.
 FuzzyMatch? fuzzyMatch(String query, String text) {
   if (query.isEmpty) return const FuzzyMatch(score: 0, positions: []);
   if (text.isEmpty) return null;

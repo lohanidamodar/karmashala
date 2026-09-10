@@ -6,9 +6,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
 
-/// Everything one launching session needs to reach the app's own MCP endpoint.
-/// Both fields are already in the **agent's** terms — an address that agent can
-/// dial, a path in its own namespace — and nothing downstream translates again.
+/// Everything one launching session needs to reach the app's own MCP endpoint,
+/// already in the **agent's** terms: nothing downstream translates again.
 class SessionMcpAccess {
   const SessionMcpAccess({this.url, this.configPath})
     : assert(
@@ -16,12 +15,8 @@ class SessionMcpAccess {
         'an access with neither an address nor a file says nothing',
       );
 
-  /// The endpoint URL, carrying this session's own credential in its last path
-  /// segment — or `null` when this environment has no HTTP address of ours it
-  /// can dial. Null is not "no tools": an agent inside WSL is pointed at the
-  /// stdio bridge through [configPath] instead. An agent whose convention is
-  /// *only* a URL does lose its tools there, and that is reported rather than
-  /// papered over.
+  /// The endpoint URL with this session's credential in its last path segment,
+  /// or `null` where no address of ours is dialable — WSL gets [configPath].
   final String? url;
 
   /// The config file describing the server, or null when the agent's convention
@@ -29,17 +24,11 @@ class SessionMcpAccess {
   final String? configPath;
 }
 
-/// What a launch asks about the MCP endpoint. Implemented by
-/// `LauncherControlServer`, which is the only thing that knows the port, the
-/// tokens and whether any of it survived hardening.
+/// What a launch asks about the MCP endpoint, implemented by
+/// `LauncherControlServer` — the only thing that knows what survived hardening.
 abstract class SessionMcp {
-  /// Where [sessionId] can reach the endpoint from [environment], writing it a
-  /// config file when [withConfigFile], or `null` when there is nothing
-  /// truthful to hand it.
-  ///
-  /// `null` is a normal answer, not a failure — an SSH session, a host with no
-  /// WSL switch, hardening that did not apply — and the session then launches
-  /// exactly as it did before any of this existed.
+  /// Where [sessionId] reaches the endpoint from [environment], or `null` when
+  /// there is nothing truthful to hand it — a normal answer, not a failure.
   SessionMcpAccess? accessFor({
     required String sessionId,
     required ExecutionEnvironment environment,
@@ -48,9 +37,7 @@ abstract class SessionMcp {
 }
 
 /// [windowsPath] as the agent running in [kind] would name it, or `null` when
-/// that agent has no name for it. The two nulls are different facts: an SSH
-/// agent is on another machine, and a UNC application-support directory has no
-/// `/mnt/` form — and a path an agent cannot open is worse than no path.
+/// it has no name for it: a path an agent cannot open is worse than no path.
 String? agentConfigPathFor(String windowsPath, EnvironmentKind kind) {
   switch (kind) {
     case EnvironmentKind.windowsNative:
@@ -69,22 +56,15 @@ String? agentConfigPathFor(String windowsPath, EnvironmentKind kind) {
   }
 }
 
-/// The per-session MCP config files, and the owner-only directory they live in.
-///
-/// **One file per session**, because the URL inside it is what tells the server
-/// which session is calling. The directory is emptied when it is prepared rather
-/// than when the app quits: a crash is exactly the case where the tidy-up on the
-/// way out did not happen.
+/// The per-session MCP config files, in an owner-only directory emptied as it is
+/// prepared: one file per session, because its URL is what names the caller.
 class SessionMcpConfigs {
   const SessionMcpConfigs(this.directory);
 
   final Directory directory;
 
-  /// Creates [directory] empty and locks it to this user, or returns `null`
-  /// when it could not be locked — the file holds a credential for the app's
-  /// whole tool surface, so an ACL that did not apply is the boundary missing
-  /// rather than weakened. The grant is inheritable, so each config written
-  /// later is born behind it instead of racing an `icacls` of its own.
+  /// Creates [directory] empty and locked to this user, or `null` when the ACL
+  /// did not apply — with a credential inside, that is the boundary missing.
   static Future<SessionMcpConfigs?> prepare(
     Directory directory,
     Future<bool> Function(Directory) restrict,
@@ -100,12 +80,7 @@ class SessionMcpConfigs {
   }
 
   /// Writes [sessionId]'s config around [entry] and returns its **Windows**
-  /// path, or `null` if it could not be written.
-  ///
-  /// [entry] is the `mcpServers.karmashala` value, and the caller picks it:
-  /// which transport an environment gets is a property of the environment, not
-  /// of the file format. Synchronous because the pane launch is —
-  /// `SessionLauncher._startInPane` returns a result rather than a future.
+  /// path, or `null`. Synchronous because the pane launch is.
   String? write({
     required String sessionId,
     required Map<String, Object?> entry,
@@ -139,11 +114,8 @@ class SessionMcpConfigs {
       'session-${sessionId.replaceAll(RegExp('[^A-Za-z0-9-]'), '_')}.json';
 }
 
-/// The live MCP wiring, or `null` when nothing is served.
-///
-/// `LauncherControlServer` is built by the lifecycle owner rather than by a
-/// provider, so this is how a launch — which has only a `Ref` — finds it. Set on
-/// start and cleared on stop, so "the server is not up" answers itself.
+/// The live MCP wiring, or `null` when nothing is served: how a launch holding
+/// only a `Ref` finds a server the lifecycle owner built.
 class SessionMcpController extends Notifier<SessionMcp?> {
   @override
   SessionMcp? build() => null;

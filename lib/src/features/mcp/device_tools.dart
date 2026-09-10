@@ -10,19 +10,8 @@ import 'device_observe_tools.dart';
 // this file is the door they come to. Nothing else here is re-exported.
 export 'device_drive_tools.dart' show kDeviceLocatingPolicy;
 
-/// An attached Android device, an Android emulator, or an iOS Simulator, as an
-/// agent can drive it end to end — through the same services the device pane
-/// uses, so the agent and the person beside it touch one device.
-///
-/// **One family, and the id is the discriminator**: a `simulator_*` family
-/// would make "which do I call" a question an agent has to answer before it
-/// knows what it is holding. Nothing below knows what kind of device it holds
-/// except `list_devices`, whose whole job is to say which is which.
-///
-/// A tool never pretends: `DeviceCapability` and `DeviceRefusal` are checked
-/// before anything is attempted, because an agent has no eyes and a verb that
-/// quietly does nothing reads as one that worked. Anything that changes a device
-/// takes a `DeviceClaims` claim first; a read never does.
+/// An Android device, an emulator or an iOS Simulator, driven end to end
+/// through the device pane's own services. One family; the id says which.
 class DeviceControlTools {
   DeviceControlTools(this._container, {this.callerSessionId});
 
@@ -67,10 +56,8 @@ class DeviceControlTools {
   }
 }
 
-/// The schemas for [DeviceControlTools], in the order they are served. One
-/// entry per tool rather than five family lists, because the served order
-/// interleaves the families and is pinned byte for byte by
-/// `tool_schemas_golden_test.dart`.
+/// The schemas for [DeviceControlTools], in the order they are served — pinned
+/// byte for byte by `tool_schemas_golden_test.dart`.
 const List<Map<String, dynamic>> deviceControlToolSchemas = [
   listDevicesSchema,
   deviceScreenshotSchema,

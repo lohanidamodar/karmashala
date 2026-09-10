@@ -1,15 +1,5 @@
-/// `instructions(<topic>)` — the policy an agent needs and a tool description
-/// has nowhere to put.
-///
-/// A `description` is read while *choosing* a tool and has no room for the
-/// sentence that matters, which is almost always "what a success here does
-/// **not** mean": `session_send`'s `delivered: true` says only that the text
-/// reached a PTY.
-///
-/// The guides' tool lists are generated from [kMcpToolAnnotations], because a
-/// guide that hand-lists them goes stale in the direction of claiming a family
-/// is smaller and safer than it is. `mcp_tool_catalogue_test` holds the other
-/// half: every `destructiveHint` tool must be claimed by some guide.
+/// `instructions(<topic>)` — the policy a tool `description` has nowhere to put,
+/// with each guide's tool list generated from [kMcpToolAnnotations].
 library;
 
 import 'mcp_tool_catalogue.dart';
@@ -41,9 +31,8 @@ class McpGuide {
   /// belongs with the workspace, `get_usage` with sessions.
   final List<String> extraTools;
 
-  /// Every catalogued tool this guide is responsible for, in catalogue order.
-  /// Read from [kMcpToolAnnotations] rather than stored, so the list cannot
-  /// disagree with what the server actually serves.
+  /// Every catalogued tool this guide is responsible for, read from
+  /// [kMcpToolAnnotations] so the list cannot disagree with what is served.
   List<String> get tools => <String>[
     for (final name in kMcpToolAnnotations.keys)
       if (claims(name)) name,
@@ -53,9 +42,8 @@ class McpGuide {
       extraTools.contains(name) ||
       prefixes.any((prefix) => name.startsWith(prefix));
 
-  /// The guide as the tool returns it: the prose, then the generated roster.
-  /// The roster carries each tool's annotations because "which of these can I
-  /// not undo" is the question the prose above it is answering.
+  /// The guide as the tool returns it: the prose, then the generated roster with
+  /// each tool's annotations beside it.
   String render() {
     final roster = <String>[
       for (final name in tools)
@@ -92,9 +80,8 @@ class McpGuide {
   }
 }
 
-/// The guides, in the order the topic listing shows them: by how early an agent
-/// needs them, so one that reads only the first two has read the two facts that
-/// cause the most wasted work in this app.
+/// The guides, ordered by how early an agent needs them: reading only the first
+/// two gets the two facts that cause the most wasted work in this app.
 const List<McpGuide> kMcpGuides = <McpGuide>[
   McpGuide(
     topic: 'sessions',

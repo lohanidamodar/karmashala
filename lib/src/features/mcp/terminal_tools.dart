@@ -7,12 +7,8 @@ import '../terminal/data/terminal_instance.dart';
 import '../terminal/domain/terminal_profile.dart';
 import '../terminal/application/terminal_profiles.dart';
 
-/// The terminal layout, as an agent can drive it.
-///
-/// These go through `TerminalSessionsController` — the same object the tab bar
-/// calls — rather than spawning anything of their own, so a pane an agent opened
-/// is a pane the user can see, that persists across a restart and closes under
-/// the same rules.
+/// The terminal layout, as an agent can drive it — through the same
+/// `TerminalSessionsController` the tab bar calls, so its panes are the user's.
 class TerminalControlTools {
   TerminalControlTools(this._container);
 
@@ -115,10 +111,8 @@ class TerminalControlTools {
     if (profileId != null && profileId.isNotEmpty) {
       final known = profiles.any((profile) => profile.id == profileId);
       if (!known) {
-        // `resolveTerminalProfile` falls back to the first profile, which is
-        // right when restoring a layout and wrong here: an agent that asked for
-        // a WSL shell and silently got PowerShell runs against the wrong
-        // filesystem.
+        // `resolveTerminalProfile` falls back to the first profile: an agent
+        // that asked for WSL and got PowerShell runs on the wrong filesystem.
         throw ArgumentError(
           'No terminal profile "$profileId". Available: '
           '${profiles.map((p) => p.id).join(', ')}.',
@@ -144,14 +138,8 @@ class TerminalControlTools {
   static const Duration _defaultRunTimeout = Duration(seconds: 60);
   static const Duration _maxRunTimeout = Duration(minutes: 10);
 
-  /// Runs [command] in a pane and waits for **that** command to finish.
-  ///
-  /// A PTY has no notion of a command ending, so an agent had to type, poll and
-  /// guess — and guessing is worse than spawning its own console, which is what
-  /// agents did instead. OSC 133 is the missing notion, waited on in
-  /// [CommandRunWatch]. Three things it must never do: satisfy a call with an
-  /// earlier command's end marker, hand back the whole screen as this command's
-  /// output, or report an exit code it did not receive.
+  /// Runs [command] in a pane and waits for **that** command to finish, on the
+  /// OSC 133 markers [CommandRunWatch] watches. It never invents an exit code.
   Future<Object?> _run(
     String? paneId,
     String command, {
@@ -167,9 +155,8 @@ class TerminalControlTools {
     if (instance == null) {
       throw StateError('No terminal pane with id $paneId.');
     }
-    // An agent pane is not a shell: it is somebody's live agent session, and
-    // text typed into it is a *turn*, indistinguishable from one the user took.
-    // There is no shell to run a command in and no exit code to report.
+    // An agent pane is not a shell: text typed into it is a *turn*. There is no
+    // shell to run a command in and no exit code to report.
     final agent = instance.agentLaunch;
     if (agent != null) {
       throw StateError(
@@ -202,9 +189,8 @@ class TerminalControlTools {
       'finished': outcome.finished,
       // Never invented. `null` is "we were not told", which is not zero.
       'exitCode': outcome.exitCode,
-      // The code, not the shape of the ending: a pane whose process died carries
-      // the host's own code. The `paneExited` note below is the other half of
-      // this line — change them together or not at all.
+      // The code, not the shape of the ending. The `paneExited` note below is
+      // the other half of this line — change them together or not at all.
       'exitCodeKnown': outcome.exitCode != null,
       'durationMs': outcome.duration?.inMilliseconds,
       'output': outcome.output.lines,
@@ -225,9 +211,7 @@ class TerminalControlTools {
   }
 
   /// The answer for a pane whose shell cannot say when a command ended: it types
-  /// and returns, as the tool always did, but says so. A caller that cannot tell
-  /// "finished, exit 0" from "we cannot tell" makes wrong decisions, so the one
-  /// thing not on offer is a fabricated zero.
+  /// and returns, and says so. The one thing not on offer is a fabricated zero.
   Map<String, Object?> _unwatched(TerminalInstance instance, String command) {
     final shell = _profiles()
         .where((profile) => profile.id == instance.profileId)
@@ -339,13 +323,8 @@ class TerminalControlTools {
     };
   }
 
-  /// Closes a tab. Whether its panes survive is `shouldDetachOnClose`'s decision
-  /// — an agent session or a running command is kept, an idle shell released —
-  /// so what comes back is which actually happened to each pane, read back
-  /// afterwards rather than claimed.
-  ///
-  /// `kill` skips the policy and ends every pane, which is why it is a separate
-  /// argument and not the meaning of close.
+  /// Closes a tab and reports what actually happened to each pane, read back
+  /// rather than claimed; `kill` skips the detach policy and ends every one.
   Object? _close(String? tabId, {required bool kill}) {
     if (tabId == null || tabId.isEmpty) {
       throw ArgumentError('tabId is required. terminal_list has the ids.');
@@ -388,9 +367,8 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
         '(detached). Also lists the shell profiles this machine offers, which '
         'is where terminal_open gets its profileId. Start here — every other '
         'terminal tool takes an id from this one.',
-    // An empty `properties` as well as `additionalProperties: false`. The spec
-    // accepts either spelling for a tool with no arguments; this repo asserts
-    // that every served schema carries a properties map, so it gets both.
+    // An empty `properties` as well as `additionalProperties: false`: the spec
+    // accepts either, and this repo asserts every schema carries a properties map.
     'inputSchema': {
       'type': 'object',
       'properties': <String, dynamic>{},

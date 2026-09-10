@@ -32,12 +32,8 @@ final quickOpenRequestProvider = NotifierProvider<QuickOpenRequest, int>(
 /// shared with every other filtered list in the shell.
 const _headerHeight = 24.0;
 
-/// One search box over the whole workspace: projects, repositories, sessions,
-/// **what was said inside them**, files, branches, GitHub work and commands.
-///
-/// *Nothing here fetches.* Opening it starts no `gh` call, no `git status` and
-/// no PTY; the file index is a bounded local walk that begins only once the
-/// user types, and the conversation search reads an index already built.
+/// One search box over the whole workspace. *Nothing here fetches*: the file
+/// index is a bounded local walk that begins only once the user types.
 class QuickOpen extends ConsumerStatefulWidget {
   const QuickOpen({super.key, this.initialQuery = ''});
 
@@ -145,8 +141,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 
   /// Runs the conversation search for the query as typed: one indexed FTS5
-  /// statement, skipped for a query already run. No debounce — a search lagging
-  /// the list it shares a window with would read as a bug.
+  /// statement, and no debounce — lagging the list would read as a bug.
   void _searchConversations() {
     final query = _query;
     final only = query.only;
@@ -311,9 +306,8 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // 72 is a desktop-sized gap, but this palette opens in a window that can be
-    // 560 tall. At 720x560 with text at 1.3x the fixed rows no longer fit and
-    // the column overflowed by 5px, so the inset is scaled to the window.
+    // Scaled to the window, not fixed: at 720x560 with text at 1.3x, a 72px
+    // desktop inset overflowed the column.
     final height = MediaQuery.sizeOf(context).height;
     final topInset = (height * 0.09).clamp(16.0, 72.0);
     return Dialog(

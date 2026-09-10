@@ -9,11 +9,8 @@ import '../../features/git/application/changes_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 
-/// The window's bottom rule: where you are, and what is still running.
-///
-/// Every item is a button — a status bar that reports a fact you then have to go
-/// and find is half a control. Everything on it is about the **window**; the two
-/// per-session chips it used to carry are on the session's own bar now.
+/// The window's bottom rule: where you are, and what is still running. Every
+/// item is a button, and everything on it is about the **window**.
 class ShellStatusBar extends ConsumerWidget {
   const ShellStatusBar({super.key});
 
@@ -57,13 +54,8 @@ class ShellStatusBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       child: DefaultTextStyle.merge(
         style: style,
-        // Two groups with the slack between them, not one row with a `Spacer`:
-        // a `Flexible`'s unused share is not handed back, and three loose ones
-        // left some 500 blank pixels at the end of a 1600px row. Each group is
-        // `Flexible` because a non-flex child of a `Row` is laid out unbounded,
-        // where a `Flexible` is silently inert — which is how the model chip
-        // overflowed the minimum window by 8.2px. The weights are the order in
-        // which they yield.
+        // Two `Flexible` groups rather than a `Spacer`: unused share is not
+        // handed back, and a non-flex child of a `Row` is laid out unbounded.
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -99,8 +91,7 @@ class ShellStatusBar extends ConsumerWidget {
               ),
             ),
             // 1 : 5, from the measured 1 : 4 : 5 with the quota's middle group
-            // taken out: this group needs 362px at 720x560 on the 1.3x text
-            // step, and the ratio is what reserves it.
+            // out: this group needs 362px at 720x560 on the 1.3x text step.
             Flexible(
               flex: 5,
               child: Row(

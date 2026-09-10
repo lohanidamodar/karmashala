@@ -36,9 +36,8 @@ AgentInstallation? installFor(
   return null;
 }
 
-/// Both callers are resuming a conversation the agent already has, so both
-/// ask for the existing-session mode — through the launcher, which is the one
-/// place that turns a purpose into a selection.
+/// Both callers are resuming a conversation the agent already has, so both ask
+/// for the existing-session mode, through the launcher.
 PermissionSelection resumePermissionFor(
   ProviderContainer container,
   String agentId,

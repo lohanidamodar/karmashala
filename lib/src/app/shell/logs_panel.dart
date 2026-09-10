@@ -10,12 +10,8 @@ import 'package:karmashala_core/logging.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
-/// The live log tail: what the app is actually saying, inside the app.
-///
-/// It reads a counter rather than listening: a busy channel emits far faster
-/// than the frame budget, so the ring buffer bumps an integer and this panel
-/// compares it on a [LogsPanel.refreshInterval] timer. Pausing freezes the
-/// snapshot; scrolling away from the newest end pauses on its own.
+/// The live log tail, inside the app: a counter polled on a timer rather than a
+/// listener, because a busy channel emits faster than the frame budget.
 class LogsPanel extends ConsumerStatefulWidget {
   const LogsPanel({super.key});
 

@@ -16,13 +16,8 @@ import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
 import '../sessions/domain/session.dart';
 
-/// Making a git worktree and taking one away.
-///
-/// **The two halves are not symmetrical, on purpose.** Creating one is
-/// recoverable; removing one is not, because a worktree directory is the only
-/// place some work exists until it is committed, merged and pushed. So [_remove]
-/// refuses in words for every reading it does not like **and** every one it
-/// could not take: a worktree goes once its branch is merged **and** pushed.
+/// Making a git worktree and taking one away. Removing is not the mirror of
+/// creating: [_remove] refuses unless the branch is merged **and** pushed.
 class WorktreeControlTools {
   WorktreeControlTools(this._container);
 
@@ -60,12 +55,8 @@ class WorktreeControlTools {
     return repository;
   }
 
-  /// Adds a worktree of [repositoryId] on a new [branch].
-  ///
-  /// Every collision is checked *before* git runs, so a refusal names the thing
-  /// in the way rather than relaying a `fatal:` about a path the caller never
-  /// chose. A plain directory sitting at the computed path is git's own refusal,
-  /// passed straight through.
+  /// Adds a worktree of [repositoryId] on a new [branch]. Collisions are checked
+  /// before git runs, so a refusal names the thing in the way.
   Future<Object?> _create({
     required String? repositoryId,
     required String? name,
@@ -151,13 +142,8 @@ class WorktreeControlTools {
     };
   }
 
-  /// The `repositories` row for the worktree just created, or why there is
-  /// none.
-  ///
-  /// The worktree exists either way. This second, separable step can fail on
-  /// its own — discovery runs on the Windows host, so a project root on a
-  /// stopped distribution cannot be scanned — and "not recorded" is what tells
-  /// a caller to retry the rescan rather than believe nothing was made.
+  /// The `repositories` row for the new worktree, or why there is none: the
+  /// worktree exists either way, and "not recorded" means retry the rescan.
   Future<String> _recordCheckout(String projectId, EnvironmentPath path) async {
     try {
       final added = await _container
@@ -186,10 +172,7 @@ class WorktreeControlTools {
   }
 
   /// Removes the worktree recorded as [repositoryId], or says why it will not.
-  ///
-  /// Nine questions, and a "no" or a "could not tell" to any of them stops it.
-  /// The branch is left alone in every case: a branch is cheap and recoverable,
-  /// a directory is what accumulates.
+  /// The branch is left alone in every case; a directory is what accumulates.
   Future<Object?> _remove(String? repositoryId) async {
     final worktree = _checkout(repositoryId, 'repositoryId');
 
@@ -295,9 +278,8 @@ class WorktreeControlTools {
     }
 
     try {
-      // No `force`, ever. Every condition it would override is one this method
-      // has already refused, so passing it could only override one we failed to
-      // check.
+      // No `force`, ever: every condition it would override is one this method
+      // has already refused, so it could only override an unchecked one.
       await _container
           .read(worktreeServiceProvider)
           .remove(owner.path, worktree.path);
@@ -324,11 +306,8 @@ class WorktreeControlTools {
     };
   }
 
-  /// A session running in [worktree] right now, or `null`.
-  ///
-  /// Two ways a session lands in one — launched with `useWorktree`, which
-  /// records the path on the row, or adopted into a checkout that happens to be
-  /// a worktree, which records only the repository id — and both are asked.
+  /// A session running in [worktree] right now, or `null`. Both ways one lands
+  /// there are asked: the path on the row, and the repository id.
   Session? _liveSessionIn(Repository worktree) {
     final launcher = _container.read(sessionLauncherProvider);
     for (final session in _container.read(sessionDaoProvider).getAll()) {

@@ -5,12 +5,8 @@ import '../sessions/application/session_providers.dart';
 import '../todos/application/todos_providers.dart';
 import '../todos/domain/todo.dart';
 
-/// The list a person and an agent both write to.
-///
-/// **`'none'` is a real value here.** `projectId` is a string and cannot carry
-/// the difference between "not given" and "explicitly nothing", so every tool in
-/// this file reads `'none'` as *filed under no project*. Omitting it means
-/// everything, or the calling session's own project.
+/// The list a person and an agent both write to, where `projectId: 'none'` is a
+/// real value — a string cannot carry "not given" against "explicitly nothing".
 class TodoControlTools {
   TodoControlTools(this._container, {this.callerSessionId});
 
@@ -79,9 +75,7 @@ class TodoControlTools {
   }
 
   /// Which project a new todo lands in: an explicit id wins, `'none'` files it
-  /// nowhere, and an omitted argument follows the **calling session's** project,
-  /// the same rule `note_add` uses. An agent working in a checkout is working in
-  /// exactly one project, and making it say so would mostly file todos nowhere.
+  /// nowhere, and omitting it follows the **calling session's** project.
   String? _fileUnder(String? projectId) {
     if (projectId == unfiled) return null;
     if (projectId != null && projectId.isNotEmpty) return projectId;
@@ -95,9 +89,8 @@ class TodoControlTools {
         ?.projectId;
   }
 
-  /// Ticks a todo off, or reopens it with `done: false`. Not destructive and
-  /// idempotent: the row is still there afterwards, and one more call puts it
-  /// back — precisely the undo a destructive annotation says does not exist.
+  /// Ticks a todo off, or reopens it with `done: false`. Not destructive: the
+  /// row is still there, and one more call puts it back.
   Object? _done(String? id, {required bool done}) {
     final todo = _todo(id);
     _container.read(todosProvider.notifier).setDone(todo.id, done);

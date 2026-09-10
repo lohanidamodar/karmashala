@@ -5,14 +5,8 @@ import 'package:karmashala_core/logging.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_protocol.dart';
 
-/// The Streamable HTTP binding: one path, POST only, no session.
-///
-/// On loopback despite the threat model next door, because **an MCP client dials
-/// an `http://` URL** and cannot dial a socket path. What is left is deliberate:
-/// a token minted under exactly the `/rpc` prerequisites, so failed hardening
-/// leaves this answering `401`; `Origin` validation, because the realistic
-/// attack is DNS rebinding from a page in the user's own browser; and
-/// `127.0.0.1` only.
+/// The Streamable HTTP binding: one path, POST only, no session. On loopback
+/// because an MCP client dials a URL; `Origin` is checked, `127.0.0.1` only.
 class McpHttpEndpoint {
   McpHttpEndpoint({
     required this.server,
@@ -122,10 +116,8 @@ class McpHttpEndpoint {
     }
   }
 
-  /// Who is calling, from the credential they presented. The path segment is
-  /// the primary carrier and `Authorization: Bearer` the fallback, because
-  /// clients differ — but they are the *same* credential space, so there is one
-  /// rule about what a token means and not two.
+  /// Who is calling, from the credential presented. The path segment carries it
+  /// and `Authorization: Bearer` is the fallback — one credential space, not two.
   _Caller _authenticate(HttpRequest request) {
     final live = token;
     // No credential exists, so no caller can present one. Without this an
@@ -153,10 +145,8 @@ class McpHttpEndpoint {
     return const _Caller.rejected();
   }
 
-  /// Whether a browser-set `Origin` may drive this server. Absent is fine — an
-  /// agent CLI is not a browser and sends none. Present and loopback is fine.
-  /// Anything else, `null` included, is a page: `null` is the opaque origin a
-  /// sandboxed frame or a `file://` document sends.
+  /// Whether a browser-set `Origin` may drive this server. Absent is fine; any
+  /// origin but loopback — `null` included — is a page, and is refused.
   static bool _originAllowed(String? origin) {
     if (origin == null) return true;
     final uri = Uri.tryParse(origin);
@@ -167,9 +157,8 @@ class McpHttpEndpoint {
         uri.host == '[::1]';
   }
 
-  /// Request headers, lower-cased, one value each. The protocol layer relies on
-  /// `HttpHeaders` already lower-casing field names, and this is where that is
-  /// made true rather than assumed.
+  /// Request headers, lower-cased, one value each: the protocol layer assumes
+  /// that, and this is where it is made true rather than assumed.
   static Map<String, String> _headersOf(HttpRequest request) {
     final headers = <String, String>{};
     request.headers.forEach((name, values) {

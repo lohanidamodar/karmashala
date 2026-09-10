@@ -22,14 +22,11 @@ class WorkbenchTabChip extends StatelessWidget {
   final bool selected;
 
   /// Whether this chip carries the accent rule, when that is a different
-  /// question from being selected: once the window holds several strips, "the
-  /// tab this strip is showing" and "the tab your keystrokes reach" stop being
-  /// one question. Null means they are, and selection carries the accent.
+  /// question from being selected. Null means it is not, and selection carries it.
   final bool? accented;
 
   /// Whether this chip belongs to a **pane** header rather than the window's tab
-  /// strip: shorter, a step down in label, and selection on its *bottom* edge,
-  /// so a stacked region header does not read as a second, inert tab.
+  /// strip: shorter, and selected on its *bottom* edge, so it reads as a header.
   final bool dense;
 
   final VoidCallback onTap;
@@ -39,19 +36,15 @@ class WorkbenchTabChip extends StatelessWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
 
   /// What a **middle click** does — the reversible close, never ending the
-  /// session, because a wheel press is easy to fire while scrolling. Here rather
-  /// than at the call sites so both strips have it; `InkWell` has no tertiary
-  /// callback, hence the wrapper, and it fires on *up*.
+  /// session. `InkWell` has no tertiary callback, hence the wrapper; it fires up.
   final VoidCallback? onClose;
   final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // The active chip takes the colour of the ground it sits over; selection is
-    // then carried by a rule on the edge the chip belongs to. The middle state
-    // is a neutral rule, or an unfocused group's chosen tab would look like any
-    // other tab in its strip.
+    // The active chip takes the colour of the ground it sits over, and selection
+    // is then a rule on its edge; the middle state is neutral, not unselected.
     final rule = BorderSide(
       width: 2,
       color: switch ((selected, accented)) {
@@ -82,8 +75,7 @@ class WorkbenchTabChip extends StatelessWidget {
               ),
             ),
             // Fills the slot the strip gave it rather than hugging its title:
-            // tabs are laid out at a uniform extent, so a short name left the X
-            // floating in the middle of the tab.
+            // at a uniform extent, a short name left the X floating mid-tab.
             child: Row(
               children: [
                 ?leading,

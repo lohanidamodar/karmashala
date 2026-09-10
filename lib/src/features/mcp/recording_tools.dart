@@ -9,9 +9,8 @@ import 'package:karmashala_devices/devices.dart';
 import '../terminal/application/terminal_recording_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 
-/// Recording a pane or a device, as an agent can drive it. The same controllers
-/// the menus call, so an agent's recording shows the same banner, is stoppable
-/// by the person beside it, and lands in the same folder.
+/// Recording a pane or a device, through the controllers the menus call — same
+/// banner, same folder, and stoppable by the person beside it.
 class RecordingControlTools {
   RecordingControlTools(this._container);
 
@@ -41,9 +40,8 @@ class RecordingControlTools {
   TerminalRecordingController get _terminal =>
       _container.read(terminalRecordingProvider.notifier);
 
-  /// What can be produced here, and why not, when it cannot. Returned by both
-  /// start tools, so the choice is known before the recording runs rather than
-  /// when the export has to refuse.
+  /// What can be produced here, and why not, when it cannot: returned by both
+  /// start tools, so the choice is known before the recording runs.
   Map<String, Object?> _formats(List<String> offered) {
     final support = _container.read(videoSupportProvider);
     return <String, Object?>{

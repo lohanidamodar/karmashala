@@ -4,15 +4,8 @@ import '../git/application/review_threads.dart';
 import 'package:karmashala_git/git.dart';
 import '../sessions/application/session_providers.dart';
 
-/// Review comments as an agent can read, raise, answer and be answered in: a row
-/// with an anchor a human can click, where prose in a transcript is the failure
-/// `ReviewBrief` names — what nobody can find later did not happen.
-///
-/// An agent's thread always opens as [ReviewThreadStatus.open] and cannot be
-/// filed straight into `should-fix`, the pending set handed back to agents,
-/// because that would be an agent writing its own instructions. There is no
-/// `review_thread_delete` either: dismissing keeps the record that somebody
-/// looked.
+/// Review comments an agent can raise and answer: a row with an anchor a human
+/// can click. An agent's thread opens as [ReviewThreadStatus.open] and no more.
 class ReviewThreadTools {
   ReviewThreadTools(this._container, {this.callerSessionId});
 
@@ -110,9 +103,8 @@ class ReviewThreadTools {
       excerpt: (args['excerpt'] as String?)?.trim(),
       sessionId: callerSessionId,
     );
-    // Freshly anchored against the bytes just hashed, so this is `attached` by
-    // construction — reported anyway, because a client that has to remember
-    // which calls carry the field will forget on the one that matters.
+    // `attached` by construction here, and reported anyway: a client that has to
+    // remember which calls carry the field forgets on the one that matters.
     return _threadJson(
       AnchoredReviewThread(thread, ReviewThreadAttachment.attached),
     );
@@ -170,10 +162,8 @@ class ReviewThreadTools {
     return session.repositoryId;
   }
 
-  /// Who a comment written through these tools is attributed to. Words, not an
-  /// id, for the reason `DecisionRecord.decidedBy` gives: the person reading the
-  /// thread in the Changes panel has no way to resolve a key. The session id is
-  /// inside the phrase for the reader who does.
+  /// Who a comment is attributed to. Words, not an id: the person reading the
+  /// thread in the Changes panel has no way to resolve a key.
   String get _author => callerSessionId == null
       ? 'an agent'
       : 'an agent in session $callerSessionId';
@@ -195,16 +185,14 @@ class ReviewThreadTools {
       'id': thread.id,
       'repositoryId': thread.repositoryId,
       'path': anchor.path,
-      // Emitted even when null: an omitted key reads as a gap in the tool
-      // rather than as a comment about the whole file, which is a different
-      // and real thing.
+      // Emitted even when null: an omitted key would read as a gap in the tool
+      // rather than as a comment about the whole file.
       'startLine': anchor.startLine,
       'endLine': anchor.endLine,
       'excerpt': anchor.excerpt,
       'status': thread.status.name,
-      // The whole reason this feature exists. `detached` means the file has
-      // changed since the comment was written, so the line numbers above locate
-      // nothing, and nothing here has guessed at where they moved to.
+      // The whole reason this feature exists: `detached` means the file changed,
+      // so the line numbers above locate nothing, and nothing has guessed.
       'attachment': entry.attachment.name,
       'blobSha': anchor.blobSha,
       'sessionId': thread.sessionId,

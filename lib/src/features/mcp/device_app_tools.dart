@@ -1,8 +1,7 @@
 import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
-/// An app on a device: put it there, start it, stop it. The three verbs an
-/// agent needs between building something and looking at it, and each one
+/// An app on a device: put it there, start it, stop it. Each of the three
 /// changes the device, so each takes the claim.
 class DeviceAppTools extends DeviceToolFamily {
   DeviceAppTools(super.container, {super.callerSessionId});
@@ -104,8 +103,7 @@ class DeviceAppTools extends DeviceToolFamily {
       'platform': driver.target.platform.name,
       'terminated': appId.trim(),
       // Both platforms treat "it was not running" as success, and saying so is
-      // the difference between a caller trusting this reply and a caller
-      // re-checking with a UI dump.
+      // what stops a caller re-checking with a UI dump.
       'note':
           'An app that was not running is not an error — this asks for a '
           'state, and reports the state it left behind.',
