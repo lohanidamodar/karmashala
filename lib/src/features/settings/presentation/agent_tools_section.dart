@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
-import '../../mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 import 'settings_section.dart';
 
 /// Every tool the MCP bridge serves, grouped and described from

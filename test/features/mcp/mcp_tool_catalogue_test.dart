@@ -1,6 +1,6 @@
-import 'package:karmashala/src/features/mcp/instructions_tools.dart';
+import 'package:karmashala_mcp/instructions.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The annotation table, held against the tools it describes.

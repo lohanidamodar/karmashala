@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_app_pro
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_tools.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 
 import '../../support/fakes.dart';
 import 'fake_vm_service.dart';

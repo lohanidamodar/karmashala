@@ -6,7 +6,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/session_mcp.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The served tool list, frozen byte for byte.

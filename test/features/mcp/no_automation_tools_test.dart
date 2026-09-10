@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
-import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 
 /// Arming an automation is a human action in the UI and nowhere else.
 ///

@@ -6,7 +6,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/features/env_secrets/data/env_value_cipher.dart';
 import 'package:karmashala/src/features/env_secrets/data/env_vault.dart';
 import 'package:karmashala/src/features/env_secrets/domain/env_variable.dart';
-import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'package:path/path.dart' as p;
 
 /// Permissions that answer whatever the test needs, without spawning `icacls`.

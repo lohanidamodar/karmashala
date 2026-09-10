@@ -9,7 +9,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_devices/devices.dart';
 import '../../mcp/control_server_status.dart';
-import '../../mcp/mcp_bridge_probe.dart';
+import 'package:karmashala_mcp/access.dart';
 import 'environment_health.dart';
 import 'environment_providers.dart';
 import 'system_health.dart';

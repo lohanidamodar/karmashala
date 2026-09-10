@@ -11,7 +11,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/logging.dart';
-import '../../mcp/handshake_file_permissions.dart';
+import 'package:karmashala_mcp/access.dart';
 import '../domain/env_variable.dart';
 import 'env_value_cipher.dart';
 import 'local_key_cipher.dart';

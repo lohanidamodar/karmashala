@@ -21,6 +21,7 @@ workspace:
   - packages/karmashala_devices
   - packages/karmashala_flutter_apps
   - packages/karmashala_git
+  - packages/karmashala_mcp
   - packages/karmashala_media
   - packages/karmashala_remote
   - packages/karmashala_session
@@ -66,6 +67,12 @@ dependencies:
   # for, the resume rules, lineage and handoff, the event and decision
   # vocabulary, the transcript readings and the delivery ladder. Pure Dart
   # (docs/PACKAGE_SPLIT_2.md, Revision 2).
+  # The tool surface served to agents: the MCP wire format and its Streamable
+  # HTTP binding, the catalogue, the instruction texts and skills, and how an
+  # agent reaches the tools. Not the handlers — those serve the app's own types
+  # (docs/PACKAGE_SPLIT_2.md, the mcp/ssh correction). Pure Dart.
+  karmashala_mcp:
+    path: packages/karmashala_mcp
   karmashala_session:
     path: packages/karmashala_session
   # What a terminal is, as values: profiles and launch contexts, the pane and

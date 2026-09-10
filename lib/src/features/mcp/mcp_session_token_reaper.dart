@@ -5,7 +5,7 @@ import '../devices/application/device_claims.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
 import 'launcher_control_server.dart';
-import 'mcp_caller_registry.dart';
+import 'package:karmashala_mcp/protocol.dart';
 
 /// Retires a session's MCP token once that session is over. A closed *tab* is
 /// not over — taking that token would break an agent still holding the URL.
