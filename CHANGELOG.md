@@ -1,6 +1,6 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.20.2 (2026-09-10)**, and what
+This file records **1.1.0 (2026-08-31) through 1.21.0 (2026-09-10)**, and what
 is on `main` past it. Anything before 1.1.0 is not recorded — no release notes
 were written for those versions and this file does not invent them.
 
@@ -13,6 +13,36 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.21.0 — 2026-09-10 (build 39)
+
+**Fifteen packages, a third of the app's source out of `lib/`, and two freezes
+whose real causes were nothing like the first diagnosis.** Schema head is still
+**v48**.
+
+- **The file picker no longer freezes the window.** One picker had started at a
+  `\\wsl.localhost` folder, and Windows keeps that memory per executable, so
+  every later dialog had to enumerate the Network root to draw it — measured at
+  **30.7 seconds** cold, against 72 ms to reach the WSL folder itself. Pickers
+  now start at a local folder and refuse a network path outright, and the
+  poisoned entry heals on first use.
+- **Closing a terminal pane no longer hangs the app**: releasing the pane's
+  console waited on a child that had not died. Measured 5,005 ms before, 1.4 ms
+  after.
+- **A session checks its agent's executable before it starts or resumes**, and
+  says which agent, which path and where to fix it, instead of failing inside
+  the pane after the session row was written.
+- **The Antigravity CLI's own stream-json protocol** is parsed, its `.pb`
+  conversation files are read, and the signed-in email comes from the token
+  rather than a network round trip.
+- **The phone can search** projects and sessions, pins running sessions above
+  the list, and every session says when it was last active — as does the
+  desktop's sidebar and Quick Open, now ordered by it.
+- **Sixteen packages under `packages/`**, `lib/` down from 754 files and
+  181,959 lines to 579 and 119,813, and a change inside a package is proved in
+  30–63 seconds instead of a seven-minute gate.
 
 ---
 
