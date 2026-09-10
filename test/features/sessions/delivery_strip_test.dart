@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';

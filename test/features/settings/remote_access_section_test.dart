@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
-import 'package:karmashala/src/core/widgets/qr_painter.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala/src/features/remote/presentation/remote_access_section.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';

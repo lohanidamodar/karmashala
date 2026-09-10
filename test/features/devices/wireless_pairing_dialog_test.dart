@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/core/widgets/qr_painter.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/devices/application/wireless_pairing_controller.dart';
 import 'package:karmashala_devices/devices.dart';

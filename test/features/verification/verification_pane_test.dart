@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';

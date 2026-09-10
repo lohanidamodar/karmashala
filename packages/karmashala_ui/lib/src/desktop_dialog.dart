@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'app_icons.dart';
+import 'design_tokens.dart';
 
 /// Consistent title row for desktop dialogs, including a visible close affordance.
 class DesktopDialogTitle extends StatelessWidget {

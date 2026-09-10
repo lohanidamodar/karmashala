@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import '../companion_chrome.dart';
 import '../companion_states.dart';
 import 'scan_qr_screen.dart';

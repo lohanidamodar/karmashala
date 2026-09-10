@@ -6,7 +6,7 @@
 /// state the screen can be in.
 library;
 
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
 import 'package:karmashala_remote/remote.dart';

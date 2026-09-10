@@ -9,8 +9,8 @@
 /// must say something a user can act on.
 library;
 
-import 'package:karmashala/src/app/theme/app_icons.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';

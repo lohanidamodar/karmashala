@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/shell/pane_scaffold.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_menu.dart';
-import '../../../app/widgets/row_menu.dart';
+import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import '../../explorer/application/session_context.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -15,7 +14,7 @@ import '../application/todos_providers.dart';
 import '../domain/project_scope.dart';
 import '../domain/todo.dart';
 import 'project_menu.dart';
-import '../../../core/widgets/linkable_text.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// The resting height of either text field, in lines. Both start at one, which
 /// is how the panel has always looked when there is nothing in it.

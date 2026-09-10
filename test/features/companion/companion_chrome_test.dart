@@ -11,7 +11,7 @@
 /// * the Projects tab left 24px under its last row for a 56px floating button.
 library;
 
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_chrome.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_log_screen.dart';

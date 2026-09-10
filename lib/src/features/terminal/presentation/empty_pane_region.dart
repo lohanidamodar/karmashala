@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/quick_open/quick_open_item.dart';
 import '../../../app/shell/tab_picker.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 

@@ -1,0 +1,32 @@
+name: karmashala_ui
+description: >-
+  The design system, as widgets: the colour ramp, spacing, radii, density and
+  chrome metrics; the Phosphor glyph table; the assembled `ThemeData` and the
+  UI text scale over it; and the desktop chrome every surface wears — pane
+  frames, popup menus, dialog headers and a handful of primitives. A Flutter
+  package, so its suites run under `flutter test`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # `linksInText`, behind LinkableText's span builder.
+  karmashala_core:
+    path: ../karmashala_core
+  # The QR matrix QrPainter paints.
+  qr: ^4.0.0
+  # Opening a link LinkableText found.
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^6.1.0

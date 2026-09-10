@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import '../application/remote_links.dart';
 
 /// A piece of text that opens a page on the forge — a commit sha, a pull

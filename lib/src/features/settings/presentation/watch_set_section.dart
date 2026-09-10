@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
 import 'settings_row.dart';

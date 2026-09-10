@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/explorer_actions.dart';

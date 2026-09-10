@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/file_picking.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';

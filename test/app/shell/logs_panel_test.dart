@@ -1,6 +1,6 @@
 import 'package:karmashala/src/app/shell/logs_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
 import 'package:flutter/material.dart';

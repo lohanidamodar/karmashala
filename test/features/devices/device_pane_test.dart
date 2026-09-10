@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';

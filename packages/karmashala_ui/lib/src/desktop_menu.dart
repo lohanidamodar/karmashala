@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'app_icons.dart';
+import 'design_tokens.dart';
 
 /// The gutter every menu row shares, so a one-line row and a two-line row line
 /// their labels up in the same menu.

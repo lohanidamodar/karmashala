@@ -7,7 +7,7 @@ import 'package:xterm2/xterm.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../media/application/session_media_providers.dart';
 import '../../media/domain/session_image_reference.dart';
 import '../../media/presentation/session_image_dialog.dart';

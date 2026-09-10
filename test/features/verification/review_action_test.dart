@@ -1,5 +1,5 @@
-import 'package:karmashala/src/app/theme/design_tokens.dart';
-import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/lineage.dart';

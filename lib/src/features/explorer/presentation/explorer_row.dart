@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/row_menu.dart';
-import '../../../core/widgets/reveal_on_focus.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// What a row stands for, and therefore how strongly it is drawn — one kind
 /// per level of the tree: project, checkout, session.

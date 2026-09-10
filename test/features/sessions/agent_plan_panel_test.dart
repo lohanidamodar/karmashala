@@ -1,4 +1,4 @@
-import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';

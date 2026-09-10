@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/design_tokens.dart';
+import 'design_tokens.dart';
 
 /// A [Chrome.dot]-wide coloured dot that **cannot be unlabelled**: [label] is
 /// required by construction, and says what the colour means, not how it looks.

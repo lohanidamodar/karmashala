@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// One labelled block on the settings page. Extracted so sections that live in
 /// their own feature sit on the page looking like the ones that do not.

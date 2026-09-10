@@ -1,4 +1,4 @@
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';

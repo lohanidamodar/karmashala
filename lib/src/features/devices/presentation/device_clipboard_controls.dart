@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import '../application/device_clipboard_bridge.dart';
 import 'device_controls.dart';
 

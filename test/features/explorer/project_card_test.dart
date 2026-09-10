@@ -1,4 +1,4 @@
-import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
 import 'package:flutter/gestures.dart';

@@ -1,5 +1,5 @@
 import 'package:karmashala/src/app/shell/side_panel_context.dart';
-import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';

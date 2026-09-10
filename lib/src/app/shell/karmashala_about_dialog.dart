@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// Which build this is, in the form a bug report needs: [buildIdentity], the
 /// same line every log starts with, so a pasted log cannot disagree with it.

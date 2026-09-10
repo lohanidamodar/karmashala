@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/shell/pane_scaffold.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_menu.dart';
-import '../../../app/widgets/row_menu.dart';
+import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/menus.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -14,7 +13,7 @@ import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
 import 'note_edit_dialog.dart';
-import '../../../core/widgets/linkable_text.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// The Notes surface. A note is a **deferred instruction**, so the list is
 /// arranged around sending one back to an agent's composer.

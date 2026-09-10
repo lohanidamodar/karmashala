@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
-import '../widgets/status_dot.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'logs_panel.dart';
-import 'pane_scaffold.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_context.dart';

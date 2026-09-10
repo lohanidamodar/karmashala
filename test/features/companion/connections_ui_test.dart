@@ -6,7 +6,7 @@ library;
 import 'dart:async';
 
 import 'package:karmashala/src/app/companion/companion_shell.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/features/companion/application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/presentation/connections_section.dart';

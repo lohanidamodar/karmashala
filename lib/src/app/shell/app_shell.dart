@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
-import '../widgets/desktop_dialog.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'karmashala_about_dialog.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';

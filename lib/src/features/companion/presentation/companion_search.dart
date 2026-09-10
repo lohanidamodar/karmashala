@@ -4,8 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'project_group.dart';

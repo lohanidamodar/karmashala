@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'app_icons.dart';
+import 'design_tokens.dart';
 import 'desktop_menu.dart';
 
 /// A row's menu, built when it opens and not before: as a `List` a hundred-row

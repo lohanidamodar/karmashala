@@ -1,5 +1,5 @@
-import 'package:karmashala/src/app/theme/app_theme.dart';
-import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/features/companion/application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_remote/remote.dart';

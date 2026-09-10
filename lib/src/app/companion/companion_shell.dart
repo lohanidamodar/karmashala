@@ -8,8 +8,8 @@ import '../../features/companion/presentation/inbox_screen.dart';
 import '../../features/companion/presentation/link_banner.dart';
 import '../../features/companion/presentation/pairing/pairing_screen.dart';
 import '../../features/companion/presentation/session_list_screen.dart';
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// The phone shell: pairing until a host exists, then Projects, Inbox and
 /// Settings under a connection banner. Bottom navigation, no rail, no panes.

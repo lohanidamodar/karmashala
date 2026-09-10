@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// The room a scrolling list leaves under its last row when a floating action
 /// button hovers over it: a [Touch.target]-tall button plus a gutter each side.

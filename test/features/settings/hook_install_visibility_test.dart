@@ -3,7 +3,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/tools_page.dart';
-import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart'
     show healthIcon;

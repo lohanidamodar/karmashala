@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/shell/pane_scaffold.dart';
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
-import '../../../app/widgets/desktop_dialog.dart';
+import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import '../../git/presentation/remote_link.dart';
 import '../application/github_providers.dart';
 import 'package:karmashala_git/github.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../domain/verdict_attribution.dart';
 
 /// The one way this app says who graded something. Three surfaces show a

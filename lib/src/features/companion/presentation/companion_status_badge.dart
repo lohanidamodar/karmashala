@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala_remote/companion.dart';

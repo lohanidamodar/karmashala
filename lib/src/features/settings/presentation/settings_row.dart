@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// One setting in the page's shared shape: label (and small help text) left,
 /// control right — dropping under the label when the row is too narrow.

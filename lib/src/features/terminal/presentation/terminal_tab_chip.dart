@@ -5,12 +5,12 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
-import '../../../app/widgets/desktop_menu.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'session_status.dart';
 
 /// A bulk close, named the way VS Code names it. Declared in the order the menu

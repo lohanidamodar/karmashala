@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_icons.dart';
-import '../theme/design_tokens.dart';
+import 'app_icons.dart';
+import 'design_tokens.dart';
 
 /// The close button every [PaneHeader] in this subtree wears. Handed *down*, so
 /// a surface that draws its own header still gets one.

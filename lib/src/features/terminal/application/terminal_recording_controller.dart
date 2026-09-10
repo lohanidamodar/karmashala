@@ -5,7 +5,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 
-import '../../../app/theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_media/media.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../../../core/paths/app_support_directory.dart';

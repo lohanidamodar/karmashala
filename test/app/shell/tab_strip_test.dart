@@ -1,7 +1,7 @@
 import 'package:karmashala/src/app/shell/app_shell.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';

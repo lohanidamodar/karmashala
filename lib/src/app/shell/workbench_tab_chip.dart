@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/design_tokens.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// The shared chip shape for everything in the workbench tab strip, so a
 /// session tab and a terminal tab are visibly the same kind of thing.
