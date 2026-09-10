@@ -20,6 +20,13 @@ class PaneAccess implements HostSessionAccess {
   /// The machine's sessions, surviving a link the way real ones do.
   final liveSessions = <String>{};
 
+  /// What tmux on that machine is holding, and whether it will say. Unknown is
+  /// a third answer, not a silent "no" — a pane treats it as a session it must
+  /// not walk away from.
+  final tmuxSessions = <String>{};
+  var tmuxUnknown = false;
+  var tmuxAsks = 0;
+
   /// What a *reattach* says the session has produced so far. Zero unless a test
   /// is about what a pane does with a session that already has history.
   int resumedTotalBytes = 0;
@@ -38,6 +45,12 @@ class PaneAccess implements HostSessionAccess {
     final failure = deploymentError;
     if (failure != null) throw failure;
     return _deployment;
+  }
+
+  @override
+  Future<bool?> hasTmuxSession(String name) async {
+    tmuxAsks++;
+    return tmuxUnknown ? null : tmuxSessions.contains(name);
   }
 
   @override
@@ -170,7 +183,8 @@ HostDeployment readyDeployment({bool restarted = false}) => HostDeployment(
   status: HostDeploymentStatus.ready,
   observedAt: DateTime.utc(2026, 9, 8, 14, 0),
   reason: 'answering',
-  remotePath: r'$HOME/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+  // Absolute, the way a deploy that resolved the remote home reports it.
+  remotePath: '/home/me/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
   hostVersion: '0.1.0',
   protocolVersion: kProtocolVersion,
   restartedByUs: restarted,
