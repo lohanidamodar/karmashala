@@ -26,9 +26,10 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the eight — `core`, `media`,
-  `agent_cli`, `browser`, `devices`, `remote`, `git` and `flutter_apps` — is
-  extracted and cut over: the app holds no copy of any of them.
+  A key of the map below. Every one of the nine — `core`, `media`,
+  `agent_cli`, `browser`, `devices`, `remote`, `git`, `flutter_apps` and
+  `terminal_core` — is extracted and cut over: the app holds no copy of any of
+  them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -69,8 +70,9 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# All eight are extracted and cut over, so every mapping here is a real seam:
-# no key names a folder the app still keeps a second copy of.
+# All nine are extracted and cut over, so every mapping here is a real seam:
+# no key names a folder the app still keeps a second copy of. `flutter = $true`
+# marks a member whose own half needs `flutter test` rather than `dart test`.
 $map = [ordered]@{
   core = @{
     pkg  = 'packages/karmashala_core'
@@ -156,6 +158,23 @@ $map = [ordered]@{
              'test/features/mcp/tool_schemas_golden_test.dart')
     owns = @('lib/src/features/devices', 'test/features/devices')
   }
+  terminal_core = @{
+    pkg  = 'packages/karmashala_terminal_core'
+    # A Flutter package: `xterm2`'s buffer types and `Color` are the
+    # vocabulary, so its own half runs under `flutter test`.
+    flutter = $true
+    # `test/features/terminal` whole: what is left in it is the app's half —
+    # the instance, the recorders, the controllers and the panel — plus the
+    # three goldens outside it whose import closure reaches the package: the
+    # workbench tree (the shell lays out `PaneLayout`), the tool schemas (the
+    # terminal and snippet tools are served over `TerminalProfile`) and the
+    # session launches (the launcher builds its argv from a launch context).
+    app  = @('test/features/terminal',
+             'test/app/shell/workbench_tree_golden_test.dart',
+             'test/features/mcp/tool_schemas_golden_test.dart',
+             'test/features/sessions/session_launch_golden_test.dart')
+    owns = @('lib/src/features/terminal', 'test/features/terminal')
+  }
   remote = @{
     pkg  = 'packages/karmashala_remote'
     # Both folders whole: what is left in them is the app's half of the link —
@@ -219,7 +238,8 @@ function Invoke-PackageGate {
   if (Test-Path $pkgDir) {
     Push-Location $pkgDir
     try {
-      Invoke-Gate -Label "$Key-pkg" -Exe $dart -GateArgs @('test', '--reporter', 'expanded') | Out-Null
+      $pkgExe = if ($entry['flutter']) { $flutter } else { $dart }
+      Invoke-Gate -Label "$Key-pkg" -Exe $pkgExe -GateArgs @('test', '--reporter', 'expanded') | Out-Null
     } finally {
       Pop-Location
     }
