@@ -16,6 +16,16 @@ installs claim the same version name.
 
 ---
 
+## Unreleased
+
+- **SSH panes reach the session host.** The deploy wrote to a literal `$HOME`
+  over SFTP and every pane fell back to tmux; the home is resolved once now.
+  A session that already lives in tmux keeps attaching there; new sessions
+  take the host, which carries command blocks, links, exit codes, selection
+  and the context menu intact.
+
+---
+
 ## 1.20.1 — 2026-09-10 (build 37)
 
 **The package split, end to end, and nothing else the user sees.** The build
