@@ -1,6 +1,6 @@
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
+import 'package:test/test.dart';
 
 /// The strings this app wrote into *other programs'* config files under names
 /// it no longer uses.

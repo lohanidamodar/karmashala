@@ -16,6 +16,7 @@ environment:
 # in it, which a member cannot do — "found no workspace root including it".
 workspace:
   - packages/agent_cli
+  - packages/karmashala_agent_reporting
   - packages/karmashala_browser
   - packages/karmashala_core
   - packages/karmashala_devices
@@ -99,6 +100,12 @@ dependencies:
   # nothing under `lib/` imports it yet (docs/PACKAGE_SPLIT.md §3).
   agent_cli:
     path: packages/agent_cli
+  # How an agent reports back: the hook callbacks written into its own config,
+  # the WSL spool, the receiver that classifies one, the skill installer and
+  # the status sources. Not the application services or the DAOs
+  # (docs/PACKAGE_SPLIT_2.md, the agents correction). Pure Dart.
+  karmashala_agent_reporting:
+    path: packages/karmashala_agent_reporting
   karmashala_local_ipc:
     path: packages/local_ipc
   # The relay server itself, embedded in the desktop app so "This computer

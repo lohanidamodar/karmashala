@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
-import 'package:karmashala/src/features/agents/data/agent_hook_spool.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

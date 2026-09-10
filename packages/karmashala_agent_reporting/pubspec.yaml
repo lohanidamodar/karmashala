@@ -1,0 +1,33 @@
+name: karmashala_agent_reporting
+description: >-
+  How an agent reports back to us — the counterpart to `agent_cli`'s "how we
+  drive one". The hook callbacks installed into an agent's own config, the
+  spool a WSL agent writes them to, the receiver that classifies one, the skill
+  installer, and the status sources the service reads in precedence. Not the
+  application services, the DAOs or any provider. Pure Dart, so it runs under
+  `dart test` without a `flutter_tester` or a `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `AgentDescriptor` and its hook, skill, grid and state-file specs, the
+  # registry, `AgentStatusReport`, `AgentHookEndpoint` and `EnvironmentKind` —
+  # the vocabulary an agent is described in, which this package reads back.
+  agent_cli:
+    path: ../agent_cli
+  # `Clock`, so an observation's time is injectable.
+  karmashala_core:
+    path: ../karmashala_core
+  meta: ^1.16.0
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

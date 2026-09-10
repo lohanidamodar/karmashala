@@ -1,9 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../data/agent_hook_installer.dart';
-import '../data/agent_hook_receiver.dart';
-import '../data/agent_status_service.dart';
+import 'package:karmashala_agent_reporting/hooks.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'agent_providers.dart';
 
 /// The live hook-reported statuses. One store for the whole app: the receiver

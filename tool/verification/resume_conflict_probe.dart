@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala/src/features/agents/data/terminal_grid_status_source.dart';
+import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';

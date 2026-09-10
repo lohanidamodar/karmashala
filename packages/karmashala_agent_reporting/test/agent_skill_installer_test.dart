@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/agents/data/agent_skill_installer.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_agent_reporting/skills.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/temp_directory.dart';
+import 'support/temp_directory.dart';
 
 /// What the installer writes into somebody's home, held to the four claims
 /// that make writing there defensible at all: exactly these files, a

@@ -26,10 +26,10 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the twelve — `core`, `media`,
-  `agent_cli`, `browser`, `devices`, `mcp`, `remote`, `session`, `ssh`, `git`,
-  `flutter_apps` and `terminal_core` — is extracted and cut over: the app
-  holds no copy of any of them.
+  A key of the map below. Every one of the thirteen — `core`, `media`,
+  `agent_cli`, `agent_reporting`, `browser`, `devices`, `mcp`, `remote`,
+  `session`, `ssh`, `git`, `flutter_apps` and `terminal_core` — is extracted
+  and cut over: the app holds no copy of any of them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -70,7 +70,7 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# All ten are extracted and cut over, so every mapping here is a real seam:
+# All thirteen are extracted and cut over, so every mapping here is a real seam:
 # no key names a folder the app still keeps a second copy of. `flutter = $true`
 # marks a member whose own half needs `flutter test` rather than `dart test`.
 $map = [ordered]@{
@@ -106,6 +106,32 @@ $map = [ordered]@{
              'lib/src/features/cli_detection', 'lib/src/features/environments',
              'test/features/agents', 'test/features/cli_detection',
              'test/features/environments')
+  }
+  agent_reporting = @{
+    pkg  = 'packages/karmashala_agent_reporting'
+    # `test/features/agents` whole: what is left in it is the app's half — the
+    # four application services over the cli_detection, environment and
+    # notification providers, the status providers, the DAOs and controllers,
+    # the pickers and the usage chip — plus the grid-source suite, which
+    # renders its rows through the app's `terminal_grid_text` and `xterm2`.
+    # Eight suites outside the folder read a status this package produced: the
+    # workbench, the four notification ones, the two session ones and the MCP
+    # hook route. No golden is mapped: the hook scripts, the endpoint file and
+    # the skill bytes are pinned by the package's own suites, and every agent
+    # string in the six goldens is `agent_cli`'s descriptor table.
+    app  = @('test/features/agents',
+             'test/app/shell/workbench_test.dart',
+             'test/features/cli_detection/codex_session_identity_test.dart',
+             'test/features/mcp/agent_hook_route_test.dart',
+             'test/features/notifications/agent_hook_route_status_test.dart',
+             'test/features/notifications/agent_status_watcher_test.dart',
+             'test/features/notifications/session_status_registry_test.dart',
+             'test/features/notifications/watched_session_loader_test.dart',
+             'test/features/sessions/agent_status_badge_cost_test.dart',
+             'test/features/sessions/session_outcome_test.dart')
+    # Nothing under `lib/` or `test/` is this package's alone: what remains of
+    # `features/agents` is `agent_cli`'s app half, which already owns it.
+    owns = @()
   }
   git = @{
     pkg  = 'packages/karmashala_git'
