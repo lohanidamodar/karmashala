@@ -1,10 +1,9 @@
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
-import '../../support/fakes.dart';
-import '../../support/fixtures.dart';
+import 'support/fakes.dart';
 
 /// What the app is allowed to say about a pending approval, and how it may be
 /// answered.

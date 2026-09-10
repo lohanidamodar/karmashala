@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:path/path.dart' as p;
 
-import '../../support/temp_directory.dart';
+import 'support/temp_directory.dart';
 
 void main() {
   const installer = AgentHookInstaller();
