@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/util/clock_provider.dart';
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
 import '../../../features/cli_detection/application/cli_detection_providers.dart';
@@ -19,8 +20,10 @@ import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/repositories/application/repository_providers.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
+import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/domain/session.dart';
+import '../../../features/sessions/domain/session_last_active.dart';
 import '../../../features/sessions/domain/session_launch.dart';
 import '../../../features/sessions/domain/session_resume.dart' show describeAge;
 import '../../../features/sessions/presentation/new_session_dialog.dart';
@@ -572,13 +575,17 @@ class QuickOpenSources {
 
   // --- sessions ------------------------------------------------------------
 
-  /// Native and imported sessions across every project, newest first.
+  /// Native and imported sessions across every project, **most recently
+  /// active first** — the same order and the same reading the Explorer's
+  /// sidebar and the phone's list use.
   ///
   /// The whereabouts shown here are the **free** ones — where the session was
-  /// started, and whether a pane of ours is running it right now. The Explorer's
-  /// row also shows a "last seen" age, which costs a transcript stat per
-  /// session; paying that for every session in the workspace to fill a search
-  /// list would be a filesystem sweep on every keystroke.
+  /// started, and whether a pane of ours is running it right now. So is the
+  /// age: `sessionLastActiveProvider` reads the status registry's own cached
+  /// report, which costs a map lookup. It used to cost a transcript stat per
+  /// session, which is why this list drew no time at all — paying that for
+  /// every session in the workspace on every keystroke would have been a
+  /// filesystem sweep.
   List<QuickOpenItem> _sessions() {
     final sessionDao = ref.read(sessionDaoProvider);
     final importedDao = ref.read(importedSessionDaoProvider);
@@ -587,8 +594,11 @@ class QuickOpenSources {
     final registry = ref.read(agentRegistryProvider);
     final terminals = ref.read(terminalSessionsControllerProvider.notifier);
     final selectedRepository = ref.read(selectedRepositoryIdProvider);
+    final lastActiveOf = ref.read(sessionLastActiveProvider);
+    final now = ref.read(clockProvider).nowUtc();
 
-    final entries = <({DateTime at, QuickOpenItem Function(double) make})>[];
+    final entries =
+        <({SessionActivityOrder order, QuickOpenItem Function(double) make})>[];
 
     for (final project in ref.read(sortedProjectsProvider)) {
       for (final repository in repositoryDao.getByProject(project.id)) {
@@ -602,13 +612,17 @@ class QuickOpenSources {
             installations.getById(session.agentInstallationId)?.agentId ?? '',
           );
           final note = _cheapWhereabouts(session, terminals);
+          final lastActive = lastActiveOf(session.id);
           entries.add((
-            at: session.createdAt,
+            order: (lastActive: lastActive, createdAt: session.createdAt),
             make: (recency) => QuickOpenItem(
               id: 'session/${session.id}',
               group: QuickOpenGroup.sessions,
               title: session.title,
-              subtitle: [where, agent, ?note].join(' · '),
+              // The age of the newest reading, in the app's own words, or
+              // nothing at all when we hold none — never "just now" for a
+              // session we cannot speak for (§19).
+              subtitle: [where, agent, ?note, ?lastActive.label(now)].join(' · '),
               detail: session.status.name,
               icon: AppIcons.chatCircle,
               keywords: [
@@ -626,13 +640,22 @@ class QuickOpenSources {
 
         for (final session in importedDao.getByRepository(repository.id)) {
           final agent = registry.displayNameFor(session.cli);
+          final lastActive = lastActiveOf(
+            session.id,
+            storeModifiedAt: session.updatedAt,
+          );
           entries.add((
-            at: session.updatedAt ?? session.createdAt,
+            order: (lastActive: lastActive, createdAt: session.createdAt),
             make: (recency) => QuickOpenItem(
               id: 'imported/${session.id}',
               group: QuickOpenGroup.sessions,
               title: session.displayTitle,
-              subtitle: '$where · $agent · imported',
+              subtitle: [
+                where,
+                agent,
+                'imported',
+                ?lastActive.label(now),
+              ].join(' · '),
               detail: session.isSubagent ? 'subagent' : null,
               icon: AppIcons.clockCounterClockwise,
               keywords: [agent, 'imported', session.preview],
@@ -645,9 +668,10 @@ class QuickOpenSources {
       }
     }
 
-    // Recency is a rank, not a duration: the newest session is worth
-    // [_recencySpread] over the oldest whether that gap is an hour or a year.
-    entries.sort((a, b) => b.at.compareTo(a.at));
+    // Recency is a rank, not a duration: the most recently active session is
+    // worth [_recencySpread] over the stalest whether that gap is an hour or a
+    // year. A session we hold no reading for ranks below every one we do.
+    entries.sort((a, b) => compareByLastActive(a.order, b.order));
     final last = entries.length - 1;
     return [
       for (var i = 0; i < entries.length; i++)

@@ -14,6 +14,7 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
+import '../../sessions/domain/session_last_active.dart';
 import '../../sessions/domain/session_lineage.dart';
 import '../../sessions/domain/session_resume.dart';
 import '../../sessions/domain/session_status.dart';
@@ -125,11 +126,14 @@ class NativeSessionRow extends ConsumerWidget {
     // the user clicks anything. Three separately-weighted facts, none of which
     // is allowed to become a confident "active": see [SessionWhereabouts].
     final whereabouts = ref.watch(sessionWhereaboutsProvider(session.id));
-    // The newest evidence the agent itself produced, or failing that when the
-    // session was created. Never the time of our last poll: ageing a poll would
-    // make a week-old transcript look live.
+    // **When this session was last active**, through the one definition every
+    // session list orders by. Never the time of our last poll: ageing a poll
+    // would make a week-old transcript look live.
     final now = ref.read(clockProvider).nowUtc();
-    final since = whereabouts.lastSeen ?? session.createdAt;
+    final lastActive = newestLastActive(agentEvidenceAt: whereabouts.lastSeen);
+    // The corner still dates a session we hold no reading for, from the one
+    // fact we own — and the tooltip says which of the two it is looking at.
+    final since = lastActive.at ?? session.createdAt;
     final agentId = ref
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId)
@@ -171,12 +175,15 @@ class NativeSessionRow extends ConsumerWidget {
       // be `running` and its agent idle, waiting for you to type.
       badge: AgentStatusBadge(sessionId: session.id),
       age: compactAge(now.difference(since)),
-      // The corner has room for a number, not for how much to trust it. Loop
-      // 46's exact wording survives on hover, including the distinction
+      // The corner has room for a number, not for how much to trust it — see
+      // [compactAge]. The words survive on hover, in `describeAge`'s wording so
+      // they match Quick Open and the phone, and they keep the distinction
       // between evidence the agent produced and the row's own birthday.
-      ageTooltip:
-          whereabouts.lastSeenLabel(now) ??
-          'Created ${describeAge(now.difference(session.createdAt))}',
+      ageTooltip: switch (lastActive.label(now)) {
+        final label? => _capitalised(label),
+        _ => 'Created ${describeAge(now.difference(session.createdAt))} — '
+            'nothing this session did has been observed.',
+      },
       title: session.title,
       branch: stat?.branch,
       subPath: subPath,
@@ -363,10 +370,11 @@ class ImportedSessionRow extends ConsumerWidget {
     // The CLI store file's own mtime — the strongest "last seen" anywhere in the
     // app, because it is the agent's own writing rather than anything we
     // inferred. Aged rather than stated, so a row can never claim to be live.
-    final updatedAt = session.updatedAt;
-    final lastSeen = updatedAt == null
+    final now = ref.read(clockProvider).nowUtc();
+    final lastActive = newestLastActive(storeModifiedAt: session.updatedAt);
+    final lastSeen = lastActive.at == null
         ? null
-        : compactAge(ref.read(clockProvider).nowUtc().difference(updatedAt));
+        : compactAge(now.difference(lastActive.at!));
 
     Future<void> onMenu(String action) async {
       switch (action) {
@@ -419,10 +427,12 @@ class ImportedSessionRow extends ConsumerWidget {
           : AppIcons.clockCounterClockwise,
       agentLabel: [cliLabel, 'imported'].join('  ·  '),
       age: lastSeen,
-      ageTooltip: lastSeen == null
-          ? null
-          : 'The agent last wrote to this conversation then. We cannot see '
-                'whether a process still has it open.',
+      ageTooltip: switch (lastActive.label(now)) {
+        final label? =>
+          '${_capitalised(label)} — the agent last wrote to this conversation '
+              'then. We cannot see whether a process still has it open.',
+        _ => null,
+      },
       title: session.displayTitle,
       branch: stat?.branch,
       subPath: subPath,
@@ -631,3 +641,9 @@ Future<bool?> _confirmDelete(BuildContext context, String title) {
     ),
   );
 }
+
+/// The shared age clause as a tooltip opens: "active 3m ago" -> "Active 3m
+/// ago". The words are [SessionLastActive.label]'s so every surface says the
+/// same thing; only the sentence case is this one's.
+String _capitalised(String text) =>
+    text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);

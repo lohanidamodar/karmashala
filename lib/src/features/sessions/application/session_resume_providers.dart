@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/domain/pane_liveness.dart';
 import '../../terminal/data/terminal_grid_text.dart';
+import '../domain/session_last_active.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_resume.dart';
 import 'session_providers.dart';
@@ -45,16 +46,11 @@ final sessionWhereaboutsProvider = Provider.autoDispose
       // When the newest real evidence about this conversation was *written*.
       // Deliberately not "when we last polled": the poll is always fresh, and
       // showing its age beside a status would make a week-old transcript look
-      // live. A source that could tell us nothing (`AgentStatusSource.none`)
-      // contributes no timestamp at all, which renders as no age rather than as
-      // a zero.
-      final report = ref
-          .watch(agentSessionStatusProvider(sessionId))
-          .asData
-          ?.value;
-      final lastSeen = report == null || report.source == AgentStatusSource.none
-          ? null
-          : report.evidenceAt;
+      // live. `agentEvidenceAt` is the one place that rule lives, so a source
+      // that could tell us nothing contributes no timestamp anywhere.
+      final lastSeen = agentEvidenceAt(
+        ref.watch(agentSessionStatusProvider(sessionId)).asData?.value,
+      );
 
       if (paneId == null) {
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
@@ -74,7 +70,11 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
       if (liveness.isLive) {
-        return const SessionWhereabouts(hostedLive: true);
+        // The reading is kept, not dropped. "Running here" is the stronger
+        // *claim*, and it still wins the subtitle — but a live session is the
+        // one thing every list orders by, and it must not fall back to its own
+        // birthday for want of a timestamp we already have.
+        return SessionWhereabouts(hostedLive: true, lastSeen: lastSeen);
       }
 
       // A pane restored from disk has run nothing this launch, so its buffer

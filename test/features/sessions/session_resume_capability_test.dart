@@ -1,4 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala/src/features/sessions/domain/session_last_active.dart';
 import 'package:karmashala/src/features/sessions/domain/session_resume.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -177,37 +178,42 @@ void main() {
       expect(both.explanation, contains('another process'));
     });
 
-    test('a live session is never given an age', () {
-      final now = DateTime.utc(2026, 8, 30, 12);
+    test('a live session keeps its reading behind the stronger claim', () {
       final whereabouts = SessionWhereabouts(
         hostedLive: true,
-        lastSeen: now.subtract(const Duration(hours: 3)),
+        lastSeen: DateTime.utc(2026, 8, 30, 9),
       );
-      // We can see the process. "running here" is stronger than any timestamp,
-      // and showing both would invite the reader to distrust the stronger one.
-      expect(whereabouts.lastSeenLabel(now), isNull);
+      // "running here" is stronger than any timestamp and still wins the
+      // subtitle — but the reading is kept, because it is what every session
+      // list orders by and a live session must not fall back to its birthday.
+      expect(whereabouts.note, 'running here');
+      expect(whereabouts.lastSeen, DateTime.utc(2026, 8, 30, 9));
     });
 
     test('an absent last-seen renders as nothing, never as zero', () {
       final now = DateTime.utc(2026, 8, 30, 12);
-      expect(const SessionWhereabouts().lastSeenLabel(now), isNull);
+      expect(const SessionWhereabouts().lastSeen, isNull);
       expect(
-        const SessionWhereabouts(external: true).lastSeenLabel(now),
+        newestLastActive(
+          agentEvidenceAt: const SessionWhereabouts(external: true).lastSeen,
+        ).label(now),
         isNull,
       );
     });
 
     test('ages the evidence, not the poll', () {
       final now = DateTime.utc(2026, 8, 30, 12);
-      String? at(Duration ago) => SessionWhereabouts(
-        external: true,
-        lastSeen: now.subtract(ago),
-      ).lastSeenLabel(now);
+      String? at(Duration ago) => newestLastActive(
+        agentEvidenceAt: SessionWhereabouts(
+          external: true,
+          lastSeen: now.subtract(ago),
+        ).lastSeen,
+      ).label(now);
 
-      expect(at(const Duration(seconds: 5)), 'last seen just now');
-      expect(at(const Duration(minutes: 2)), 'last seen 2m ago');
-      expect(at(const Duration(hours: 5)), 'last seen 5h ago');
-      expect(at(const Duration(days: 3)), 'last seen 3d ago');
+      expect(at(const Duration(seconds: 5)), 'active just now');
+      expect(at(const Duration(minutes: 2)), 'active 2m ago');
+      expect(at(const Duration(hours: 5)), 'active 5h ago');
+      expect(at(const Duration(days: 3)), 'active 3d ago');
     });
   });
 
