@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../domain/pane_layout.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 
 /// Width of the draggable divider between two panes.
 const double kPaneDividerThickness = 8;

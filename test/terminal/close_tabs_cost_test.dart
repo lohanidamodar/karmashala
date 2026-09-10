@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import '../features/terminal/fake_instance.dart';

@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/command_block_recorder.dart';
-import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:karmashala/src/features/terminal/data/command_run_watch.dart';
-import 'package:karmashala/src/features/terminal/domain/command_blocks.dart';
 import 'package:xterm2/xterm.dart';
 
 /// The byte stream a *real* PowerShell 5.1 produced under

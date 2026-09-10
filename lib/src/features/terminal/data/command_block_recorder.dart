@@ -1,7 +1,6 @@
 import 'package:xterm2/xterm.dart';
 
-import '../domain/command_blocks.dart';
-import '../domain/osc_router.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 
 /// The most lines of typed input read back as one command: a pasted script can
 /// put hundreds between `B` and `C`, and the label needs the first one or two.

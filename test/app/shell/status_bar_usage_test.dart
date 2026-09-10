@@ -2,7 +2,7 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';

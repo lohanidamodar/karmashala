@@ -22,8 +22,8 @@ import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';

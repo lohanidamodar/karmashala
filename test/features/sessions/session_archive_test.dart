@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';

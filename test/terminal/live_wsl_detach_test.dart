@@ -11,8 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:karmashala/src/features/terminal/domain/detach_policy.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:xterm2/xterm.dart';
 
 /// Whether closing an **empty** WSL shell ends it, against a real prompt.

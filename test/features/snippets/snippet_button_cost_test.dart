@@ -6,7 +6,7 @@ import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import '../../support/window_matrix.dart';

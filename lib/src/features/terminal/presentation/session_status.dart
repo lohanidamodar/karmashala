@@ -5,7 +5,7 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import '../application/terminal_sessions_controller.dart';
-import '../domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
 /// A bar drawn above a pane whose buffer has no process behind it: a prompt is
 /// a prompt whether it is a week old or waiting for input, so this says which.

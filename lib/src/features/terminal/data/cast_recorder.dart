@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../domain/terminal_cast.dart';
+import 'package:karmashala_terminal_core/cast.dart';
 
 /// Most a single recording may hold in memory. Past it the recorder stops
 /// adding events and says so, which makes the recording short, not wrong.

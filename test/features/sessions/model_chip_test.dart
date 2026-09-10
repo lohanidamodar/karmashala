@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';

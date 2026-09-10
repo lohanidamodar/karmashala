@@ -6,8 +6,7 @@ import '../../../app/shell/tab_picker.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_sessions_controller.dart';
-import '../domain/terminal_drag.dart';
-import '../domain/workspace_layout.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 
 /// A region of a split with nothing in it yet: what it is, the two ways to fill
 /// it, and the way to close it again. **Not a blank rectangle** — that would

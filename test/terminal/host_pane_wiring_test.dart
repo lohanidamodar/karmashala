@@ -7,7 +7,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/host_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/local_host_access.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 /// Which pane the *real* factory builds, so "the setting decides" is asserted
 /// rather than assumed.

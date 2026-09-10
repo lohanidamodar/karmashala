@@ -2,9 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/shell_integration.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:karmashala/src/features/terminal/domain/wsl_shell_integration.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 const _wsl = TerminalProfile(
   id: 'wsl:Ubuntu',

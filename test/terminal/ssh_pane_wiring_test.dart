@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/ssh_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:xterm2/xterm.dart';
 

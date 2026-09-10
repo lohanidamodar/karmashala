@@ -1,4 +1,4 @@
-import '../domain/ingest_tier.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
 /// Bytes the **active** pane may decode per refill, all to itself. Deliberately
 /// the old per-pane cap, so a single visible pane behaves exactly as it did

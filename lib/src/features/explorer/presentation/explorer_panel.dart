@@ -29,7 +29,7 @@ import '../../sessions/application/session_last_active_providers.dart';
 import '../../sessions/domain/session_last_active.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../application/checkout.dart';
 import '../application/explorer_actions.dart';

@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_search_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import '../../features/terminal/fake_instance.dart';

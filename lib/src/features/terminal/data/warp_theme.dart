@@ -4,7 +4,7 @@ library;
 
 import 'package:yaml/yaml.dart';
 
-import '../domain/terminal_palette.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 
 /// The eight colour names Warp uses under both `normal` and `bright`.
 const _warpColorNames = [

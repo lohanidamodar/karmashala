@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

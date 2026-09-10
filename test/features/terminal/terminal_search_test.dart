@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/domain/terminal_search.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 

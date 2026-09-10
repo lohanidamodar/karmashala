@@ -6,7 +6,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../domain/terminal_palette.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 import 'ghostty_theme.dart';
 import 'warp_theme.dart';
 

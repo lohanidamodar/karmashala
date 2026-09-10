@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';

@@ -6,7 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:xterm2/xterm.dart';
 
-import '../domain/terminal_palette.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 
 /// The terminal's colours: xterm's own 16-colour palette, with the background,
 /// foreground and cursor aligned to the app surface so the panel reads as one

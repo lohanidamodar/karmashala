@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
 import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
 import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/data/ssh_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:xterm2/xterm.dart';

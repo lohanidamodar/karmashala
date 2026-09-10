@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_notice_line.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Area shared by two rectangles; 0 when they only touch.

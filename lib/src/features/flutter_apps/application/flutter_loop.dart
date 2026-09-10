@@ -14,7 +14,7 @@ import 'package:agent_cli/process.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
 import '../../terminal/data/terminal_grid_text.dart';
-import '../../terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';
 import 'flutter_app_providers.dart';

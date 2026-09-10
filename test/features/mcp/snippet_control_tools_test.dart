@@ -11,8 +11,7 @@ import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';

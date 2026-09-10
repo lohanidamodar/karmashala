@@ -1,7 +1,6 @@
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import '../domain/command_snippet.dart';
-import '../../terminal/domain/agent_pane_launch.dart';
 
 /// The pane a snippet would go into, and everything that decides what happens
 /// when it gets there.

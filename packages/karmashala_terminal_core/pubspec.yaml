@@ -1,0 +1,39 @@
+name: karmashala_terminal_core
+description: >-
+  What a terminal is, as values: launch profiles and their shell contexts, the
+  pane and workspace geometry, the grid vocabulary (search, links, keys,
+  colours), OSC shell integration and the asciinema cast format. A Flutter
+  package — `xterm2`'s buffer types and `Color` are part of the vocabulary — so
+  its suites run under `flutter test`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The terminal's own buffer, key and theme types: `BufferLine` is what a
+  # search scans and `TerminalTheme` is what a palette overrides.
+  xterm2:
+    git:
+      url: https://github.com/lohanidamodar/xterm2.git
+      ref: febca4d0830fdcca22fd67e0fba4fbfb5aa23692
+  # `Color`, for the palette's hex-to-theme conversion.
+  flutter:
+    sdk: flutter
+  # A profile names a command and an agent: the process and agent descriptors.
+  agent_cli:
+    path: ../agent_cli
+  # Small shared helpers behind the link scanner.
+  karmashala_core:
+    path: ../karmashala_core
+  path: ^1.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^6.1.0

@@ -15,8 +15,7 @@ import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../data/terminal_instance.dart';
-import '../domain/terminal_link_resolution.dart';
-import '../domain/terminal_links.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 
 /// One pane's terminal grid, plus the Ctrl+click (Cmd on macOS) affordance over
 /// URLs, paths, `path:12:7` and `[Image #6]`. Nothing is detected until the

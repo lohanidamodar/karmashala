@@ -1,9 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/env_secrets/domain/env_variable.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 const _overlay = {'TOKEN': 'super-secret-value', 'EDITOR': 'nvim'};
 

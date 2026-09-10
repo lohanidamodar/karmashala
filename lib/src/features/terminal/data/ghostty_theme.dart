@@ -3,7 +3,7 @@
 /// keys, so a broken theme can never reach the terminal as a crash.
 library;
 
-import '../domain/terminal_palette.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 
 /// Parses a Ghostty config or theme file. Every key maps to a *list*, because
 /// `palette` is spelled as a repeated key; scalars take the last entry.

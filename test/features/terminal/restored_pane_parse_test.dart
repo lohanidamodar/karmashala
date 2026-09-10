@@ -7,8 +7,8 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
-import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';

@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_checkouts.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fixtures.dart';
 import '../fanout/fanout_harness.dart' as fanout;

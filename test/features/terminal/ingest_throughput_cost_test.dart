@@ -6,8 +6,7 @@ import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart'
 import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
 import 'package:karmashala/src/features/terminal/data/scrollback_spool.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
-import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
-import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 

@@ -5,10 +5,9 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/command_block_recorder.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

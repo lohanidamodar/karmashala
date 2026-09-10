@@ -5,9 +5,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/agent_pane_launch.dart';
-import '../domain/pane_layout.dart';
-import '../domain/workspace_layout.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 
 /// One persisted terminal pane: how to relaunch it, and what was on its screen.
 class StoredTerminalPane {

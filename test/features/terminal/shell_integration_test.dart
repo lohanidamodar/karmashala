@@ -2,9 +2,8 @@ import 'dart:convert';
 
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/shell_integration.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Decodes what `powershell.exe -EncodedCommand` expects: base64 of UTF-16LE.

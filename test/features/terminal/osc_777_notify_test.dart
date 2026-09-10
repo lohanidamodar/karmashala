@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 

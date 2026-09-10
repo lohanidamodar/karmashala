@@ -4,7 +4,7 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../data/terminal_preset_dao.dart';
-import '../domain/terminal_preset.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'terminal_sessions_controller.dart';
 
 final terminalPresetDaoProvider = Provider<TerminalPresetDao>(

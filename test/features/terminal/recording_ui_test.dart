@@ -10,7 +10,7 @@ import 'package:karmashala/src/core/media/video_support_provider.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/recording_saved_dialog.dart';
 import 'package:karmashala/src/features/terminal/presentation/session_status.dart';
 

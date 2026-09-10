@@ -1,6 +1,6 @@
 import 'package:xterm2/xterm.dart';
 
-import '../domain/scrollback_limits.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'scrollback_codec.dart';
 
 /// A pane's parsed scrollback, handed back while nobody can see it — the

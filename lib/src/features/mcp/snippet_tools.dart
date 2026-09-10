@@ -4,7 +4,7 @@ import '../snippets/application/snippet_insertion.dart';
 import '../snippets/application/snippet_providers.dart';
 import '../snippets/domain/command_snippet.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
-import '../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 /// The commands the user keeps: `terminal_run` runs one, this parks one at a
 /// prompt for the person to press Enter. There is deliberately no delete.

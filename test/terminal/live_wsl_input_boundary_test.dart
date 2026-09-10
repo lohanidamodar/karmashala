@@ -10,8 +10,8 @@ import 'package:flutter_pty/flutter_pty.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
-import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
-import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
+import 'package:karmashala_terminal_core/grid.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:xterm2/xterm.dart';
 
 /// **Does an escape sequence this app writes reach the process in a WSL pane in

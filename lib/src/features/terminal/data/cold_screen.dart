@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:xterm2/xterm.dart';
 
-import '../domain/ingest_tier.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'scrollback_park.dart';
 import 'scrollback_spool.dart';
 import 'terminal_ingest_budget.dart';

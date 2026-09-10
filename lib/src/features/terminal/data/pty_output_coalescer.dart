@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../domain/ingest_tier.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'terminal_ingest_budget.dart';
 
 /// Most bytes decoded and handed to the terminal in a single flush. Anything
