@@ -6,6 +6,25 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
+import '../../../core/util/clock_provider.dart';
+
+/// A list of sessions as the phone received it, with the instant it arrived.
+///
+/// The pair travels together because they are one fact: rows with no reading
+/// time cannot be shown honestly, and a reading time with no rows describes
+/// nothing.
+class CompanionSessionsSnapshot {
+  const CompanionSessionsSnapshot({
+    required this.sessions,
+    required this.receivedAt,
+  });
+
+  final List<CompanionSessionSummary> sessions;
+
+  /// When this phone received [sessions] — never when the host observed them.
+  final DateTime receivedAt;
+}
+
 /// The gateway the companion UI reads.
 ///
 /// The package owns the interface and both implementations; the provider over
@@ -98,10 +117,60 @@ final companionLinkSinceProvider = StreamProvider<DateTime?>(
   (ref) => ref.watch(companionGatewayProvider).linkSinceStates,
 );
 
+/// The host's session rows **and when this phone received them**.
+///
+/// §19: what the phone holds is a reading, and a reading carries its age. The
+/// stamp is written where the rows arrive — in the stream, not on the first
+/// read — so a screen that opens an hour later shows the snapshot's real age
+/// rather than the age of its own first frame.
+///
+/// **One subscription, deliberately.** [CompanionGateway.watchSessions] is a
+/// `Stream.multi`: every listener gets its own subscription and its own
+/// `sessions.list` refresh at the host. A second provider over the same call
+/// would therefore be a frame on the wire, which is exactly what the phone's
+/// search must never cost — so the rows and the stamp are read off this one
+/// stream and everything else derives from it.
+final companionSessionsSnapshotProvider =
+    StreamProvider<CompanionSessionsSnapshot>((ref) {
+      final clock = ref.watch(clockProvider);
+      return ref
+          .watch(companionGatewayProvider)
+          .watchSessions()
+          .map(
+            (rows) => CompanionSessionsSnapshot(
+              sessions: rows,
+              receivedAt: clock.nowUtc(),
+            ),
+          );
+    });
+
 /// Every session the host holds, live.
-final companionSessionsProvider = StreamProvider<List<CompanionSessionSummary>>(
-  (ref) => ref.watch(companionGatewayProvider).watchSessions(),
-);
+///
+/// **Not `whenData`**, for the reason `companionAsync` is not `AsyncValue.when`:
+/// Riverpod 3 reports a provider that failed and is being retried as
+/// `AsyncLoading` *carrying* its error, and `whenData` takes its loading branch
+/// and drops the error — which turned "your desktop refused to list its
+/// sessions" into a skeleton that never resolved.
+final companionSessionsProvider =
+    Provider<AsyncValue<List<CompanionSessionSummary>>>((ref) {
+      final snapshot = ref.watch(companionSessionsSnapshotProvider);
+      // The same precedence `companionAsync` applies, applied once here: rows
+      // if there are rows, then the reason there are none, then "not yet".
+      if (snapshot.hasValue) return AsyncData(snapshot.requireValue.sessions);
+      final failure = snapshot.error;
+      if (failure != null) {
+        return AsyncError(failure, snapshot.stackTrace ?? StackTrace.empty);
+      }
+      return const AsyncLoading();
+    });
+
+/// When this phone received the rows it is showing, or null while it has
+/// received none. An unknown reading time is not a reading time (§19), so this
+/// is null rather than "now" before the first snapshot lands.
+final companionSessionsReceivedAtProvider = Provider<DateTime?>((ref) {
+  final snapshot = ref.watch(companionSessionsSnapshotProvider);
+  return snapshot.hasValue ? snapshot.requireValue.receivedAt : null;
+});
 
 /// One session's transcript, live.
 final companionTranscriptProvider = StreamProvider.autoDispose

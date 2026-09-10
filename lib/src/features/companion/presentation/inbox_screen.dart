@@ -34,7 +34,7 @@ class InboxScreen extends ConsumerWidget {
         error: error,
         onRetry: () {
           ref.read(companionGatewayProvider).reconnect();
-          ref.invalidate(companionSessionsProvider);
+          ref.invalidate(companionSessionsSnapshotProvider);
         },
       ),
       data: (_) => waiting.isEmpty
