@@ -9,26 +9,17 @@ import 'host_paths.dart';
 import 'host_server.dart';
 import 'session_store.dart';
 
-/// The daemon.
-///
-/// Started by the deployer as `setsid nohup … &` through an SSH exec channel,
-/// so it is already out of that channel's process group by the time it runs.
-/// What it has to do for itself is ignore SIGHUP: the channel closing must not
-/// be the end of every session on the machine, which is the failure the whole
-/// host exists to remove.
-///
-/// On Windows it is started by the app instead, detached, and hosts ConPTY
-/// rather than POSIX ptys — the same server, the same socket, the same
-/// protocol. Which pty layer it is running is a reading it reports in `hello`.
+/// The daemon. Started detached — `setsid nohup … &` over SSH, or by the app on
+/// Windows — and ignores SIGHUP, so an SSH channel closing is not the end of
+/// every session on the machine.
 Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
   final paths = HostPaths.resolve();
   paths.ensureDirectory();
 
-  // The boundary before the lock: a socket in a directory anybody can traverse
-  // is a socket anybody can drive, and there is nothing to authenticate with
-  // afterwards. Fail closed, the way the app's privileged RPC does.
+  // Before the lock: a socket anybody can traverse to is a socket anybody can
+  // drive, and there is nothing to authenticate with afterwards.
   final unrestricted = await paths.restrictToCurrentUser();
   if (unrestricted != null) {
     errSink.writeln(
@@ -47,8 +38,8 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     return 3;
   }
 
-  // A socket file left by a host that was killed would refuse the bind. We
-  // only reach here holding the lock, so nothing is listening on it.
+  // A socket left by a killed host refuses the bind; we hold the lock, so
+  // nothing is listening on it.
   final stale = File(paths.socketPath);
   if (stale.existsSync()) stale.deleteSync();
 
@@ -61,9 +52,8 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     return 4;
   }
 
-  // Read before anything binds, so the first client to connect already sees
-  // what the last host left — including the sessions that were running when it
-  // stopped, which come back ended with no exit code and a reason saying so.
+  // Read before anything binds, so the first client already sees what the last
+  // host left.
   final store = SessionStore(Directory(paths.sessionsDirectory))..ensureDirectory();
   final registry = SessionRegistry(launcher: pty.launcher, store: store);
   final server = HostServer(registry: registry, ptyLibrary: pty.library);
@@ -75,22 +65,15 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     if (!stopping.isCompleted) stopping.complete(code);
   }
 
-  // Nothing here is a timer. Each of these is an event the OS delivers.
-  //
-  // SIGINT is the only one Windows has. `watch()` there answers "Failed to
-  // listen for SIGTERM … The request is not supported (errno 50)" — measured
-  // 2026-09-09, and it arrives from `onListen`'s own microtask, so it is an
-  // *unhandled* exception a try/catch around `listen` never sees: the daemon
-  // printed its banner and died a moment later, leaving a lock file, no socket
-  // and a client that could only report "connection refused". Asked by platform
-  // for that reason.
+  // Asked by platform: SIGINT is the only signal Windows has, and watching
+  // SIGTERM there throws errno 50 from `onListen`'s own microtask, where no
+  // try/catch around `listen` can see it.
   final subscriptions = <StreamSubscription<void>>[
     server.listen(listener),
     ProcessSignal.sigint.watch().listen((_) => stop(0)),
     if (!Platform.isWindows) ...[
       ProcessSignal.sigterm.watch().listen((_) => stop(0)),
-      // Ignored on purpose: an SSH channel closing sends this, and sessions
-      // surviving that is the entire feature.
+      // Ignored on purpose: an SSH channel closing sends this.
       ProcessSignal.sighup.watch().listen((_) {}),
     ],
   ];
@@ -98,9 +81,8 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
   sink
     ..writeln('karmashala_host serving on ${listener.address}')
     ..writeln('pty library ${pty.library}')
-    // Counted, and said out loud: a host that came back holding nothing and one
-    // that came back holding four dead sessions are different situations, and
-    // the difference is what the log is for.
+    // Said out loud: coming back with nothing and coming back with four dead
+    // sessions are different situations.
     ..writeln('restored $remembered session(s) from ${paths.sessionsDirectory}');
   await sink.flush();
 

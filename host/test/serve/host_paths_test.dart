@@ -9,9 +9,8 @@ void main() {
       final paths = HostPaths.resolve(
         environment: {
           'USERPROFILE': r'C:\Users\dlohani',
-          // A WSL shell, a git hook or an MSYS tool can leave this behind, and
-          // the host's directory must not follow it onto a path Windows does
-          // not share with the app.
+          // A WSL shell or an MSYS tool leaves this behind, and the host's
+          // directory must not follow it somewhere the app cannot reach.
           'HOME': '/home/dlohani',
           'XDG_RUNTIME_DIR': '/run/user/1000',
         },
@@ -25,8 +24,7 @@ void main() {
     });
 
     test('a POSIX host prefers the runtime dir, and only when it exists', () {
-      // Skipped rather than faked on Windows: the branch reads the filesystem,
-      // and a directory that is not there is the whole condition.
+      // Skipped rather than faked: the branch reads the real filesystem.
       final missing = HostPaths.resolve(
         environment: {'XDG_RUNTIME_DIR': '/nonexistent-runtime-dir', 'HOME': '/home/x'},
       );
@@ -59,8 +57,7 @@ void main() {
       final refusal = await HostPaths(
         Directory('${Directory.systemTemp.path}/karmashala-host-absent-${DateTime.now().microsecondsSinceEpoch}'),
       ).restrictToCurrentUser();
-      // A refusal, not a silent success: `serve` will not bind on this, and the
-      // sentence has to name what a person would have to look at.
+      // A refusal, not a silent success, naming what a person must look at.
       expect(refusal, isNotNull);
       expect(refusal, contains('karmashala-host-absent'));
     });

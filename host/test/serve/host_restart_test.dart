@@ -5,11 +5,8 @@ import 'dart:typed_data';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
-/// What a restarted host can answer for, and what it must admit it cannot.
-///
-/// The registry is built twice over one store — which is what a restart is —
-/// and the second one is asked the questions a reconnecting pane asks. Nothing
-/// here waits on a clock; a session ends because a test ended it.
+/// What a restarted host can answer for, and what it must admit it cannot: the
+/// registry is built twice over one store, which is what a restart is.
 void main() {
   late Directory root;
   late FakePtyLauncher launcher;
@@ -67,8 +64,7 @@ void main() {
     final second = SessionRegistry(launcher: launcher, store: store());
     final restored = second.require('pane-b');
     expect(restored.lifecycle.hasEnded, isTrue);
-    // Never a zero: the process did not exit, it died with the host that held
-    // it, and that is what `ExitedMessage`'s null code is for.
+    // Never a zero: it died with the host, which is what a null code is for.
     expect(restored.lifecycle.exitCode, isNull);
     expect(restored.lifecycle.describe(), contains('did not survive'));
 
@@ -90,8 +86,7 @@ void main() {
     final reopened = second.open('pane-c', request);
     expect(reopened.lifecycle.hasEnded, isFalse);
     expect(reopened.backlog.totalBytes, 0, reason: 'a new session starts from nothing');
-    // And the old record went with it, rather than being replayed into the new
-    // session's numbering on the next restart.
+    // And the old record went with it, not into the new session's numbering.
     final third = SessionRegistry(launcher: launcher, store: store());
     expect(third.require('pane-c').backlog.totalBytes, 0);
   });

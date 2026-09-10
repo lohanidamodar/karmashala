@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'dart:math';
 
-/// Shared plumbing for the `live-wsl` tests: they cross-compile the host and
-/// drive the real binary inside a real distribution, because the pty layer is
-/// FFI to a libc that does not exist on the machine running the gate.
+/// Shared plumbing for the `live-wsl` tests: the pty layer is FFI to a libc that
+/// does not exist on the machine running the gate, so nothing can stand in.
 class WslHarness {
   WslHarness._(this.distribution, this.binary);
 
@@ -12,8 +11,7 @@ class WslHarness {
 
   static const _distribution = 'archlinux';
 
-  /// Null when this machine cannot answer — no WSL, or no distribution — so a
-  /// test skips with a reason instead of failing for the machine's shape.
+  /// Null when this machine has no WSL, so a test skips with a reason.
   static String? unavailableReason() {
     if (!Platform.isWindows) return 'live-wsl needs Windows with WSL';
     final probe = Process.runSync('wsl.exe', ['-d', _distribution, '--', 'true']);
@@ -23,8 +21,8 @@ class WslHarness {
     return null;
   }
 
-  /// Compiles once per run and reuses the artefact; `dart compile exe` is the
-  /// only route because the Flutter cache carries no Linux `dartaotruntime`.
+  /// `dart compile exe` is the only route: the Flutter cache carries no Linux
+  /// `dartaotruntime`.
   static WslHarness prepare() {
     final out = File('build/karmashala_host-linux-x64');
     if (!out.existsSync()) {
@@ -54,24 +52,17 @@ class WslHarness {
     return '/mnt/${drive.group(1)!.toLowerCase()}/${normalised.substring(3)}';
   }
 
-  /// Copies the binary into the distribution's own filesystem before running
-  /// it: DrvFs cannot carry the execute bit, and a host deployed for real
-  /// lives under `~/.karmashala/bin` anyway.
+  /// Copied into the distribution's own filesystem first: DrvFs cannot carry
+  /// the execute bit.
   String installScript(String target) => '''
 mkdir -p "\$(dirname $target)"
 cp ${toWslPath(binary.path)} $target
 chmod +x $target
 ''';
 
-  /// Scripts travel as a file, never as a `sh -c` argument: Windows rebuilds a
-  /// command line out of Dart's argument list, and a multi-line script with
-  /// quotes in it does not survive that round trip.
-  ///
-  /// The name has to be unique across isolates, not just within one. Test files
-  /// run concurrently in isolates of the *same* process, so a name built from
-  /// the pid and a static counter collides — and the collision is silent: one
-  /// file's setup runs the other file's script and the failure surfaces much
-  /// later as something that makes no sense.
+  /// Scripts travel as a file, never as `sh -c`: a multi-line script with quotes
+  /// does not survive Windows rebuilding the command line. The name must be
+  /// unique across isolates — pid plus a static counter collides, silently.
   ProcessResult runSync(String script) {
     final tag = '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
     final file = File('${binary.parent.path}/wsl-script-$tag.sh')
@@ -81,8 +72,7 @@ chmod +x $target
     return result;
   }
 
-  /// Same, but a non-zero exit is a failed set-up rather than something to
-  /// discover three assertions later.
+  /// Same, but a non-zero exit fails the set-up rather than an assertion later.
   void runOrThrow(String script) {
     final result = runSync(script);
     if (result.exitCode != 0) {

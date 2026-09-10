@@ -1,11 +1,9 @@
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
-/// The half of the Windows pty layer that has no operating system behind it.
-///
-/// `CreateProcessW` takes one string and every C runtime unpicks it again, so
-/// getting these rules wrong turns an argument containing a space into two, and
-/// one containing a quote into a syntax error inside somebody else's program.
+/// The half of the Windows pty layer with no operating system behind it.
+/// `CreateProcessW` takes one string that every C runtime unpicks again, so a
+/// wrong rule splits an argument or breaks somebody else's parser.
 void main() {
   group('windows argument quoting', () {
     test('always quotes, so a space is never a second argument', () {
@@ -37,9 +35,8 @@ void main() {
   });
 
   test('the pseudoconsole attribute is the number the SDK macro builds', () {
-    // ProcThreadAttributeValue(22, FALSE, TRUE, FALSE): number 22 with
-    // PROC_THREAD_ATTRIBUTE_INPUT. Pinned because a wrong value is accepted by
-    // UpdateProcThreadAttribute and only shows up as a pane that never paints.
+    // Pinned because UpdateProcThreadAttribute accepts a wrong value and it
+    // only shows up as a pane that never paints.
     expect(kProcThreadAttributePseudoConsole, 0x00020016);
   });
 }

@@ -31,8 +31,7 @@ class SocketHostConnection implements HostConnection {
       // The peer hung up first; there is nothing left to close politely.
     }
     // close() only half-closes, and a client waiting for end-of-file on a
-    // refusal would sit there until something else timed it out. When the host
-    // is done with a connection it is done in both directions.
+    // refusal would sit there until something else timed it out.
     _socket.destroy();
   }
 

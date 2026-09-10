@@ -1,16 +1,8 @@
 import 'dart:io';
 
-/// Where the socket and the lock live, and why.
-///
-/// `$XDG_RUNTIME_DIR` first because it is per-user, mode 0700, on tmpfs, and
-/// cleaned when the user's last session ends — exactly the lifetime a socket
-/// wants. `~/.karmashala` second because plenty of SSH hosts have no runtime
-/// dir for a non-login session, and a host that refuses to start there would
-/// be a host that does not start at all.
-///
-/// On Windows the same second spelling is used, rooted at `%USERPROFILE%`
-/// rather than `$HOME`: a Windows process can inherit a `HOME` from whatever
-/// launched it, and the host's directory must not move because a tool set one.
+/// `$XDG_RUNTIME_DIR` first — per-user, 0700, tmpfs — then `~/.karmashala`,
+/// because plenty of SSH hosts have no runtime dir for a non-login session.
+/// Windows roots at `%USERPROFILE%`: a stray inherited `HOME` must not move it.
 class HostPaths {
   HostPaths(this.directory);
 
@@ -30,48 +22,24 @@ class HostPaths {
     return HostPaths(Directory('$home/.karmashala'));
   }
 
-  /// A unix domain socket, on Windows as well as POSIX.
-  ///
-  /// Windows has had `AF_UNIX` since 10 1803 and Dart's `ServerSocket` binds it
-  /// there — measured on 2026-09-09, Windows 11 build 26200: bind, round trip
-  /// and unlink on close all behave as they do on Linux. That is why the local
-  /// stage adds no listener at all. The two alternatives were both refused with
-  /// their reasons recorded:
-  ///
-  ///  * **A named pipe.** `packages/local_ipc/` *was* one and was deleted for a
-  ///    measured defect this host would have inherited: the serving isolate
-  ///    parks inside a blocking `ConnectNamedPipe`, a blocking FFI call cannot
-  ///    be interrupted by `Isolate.kill` or by VM shutdown, and Loop 48 measured
-  ///    the app failing to quit at all (>120 s) against 322 ms without it.
-  ///  * **Loopback TCP with a per-launch secret.** `LauncherControlServer`'s own
-  ///    threat model says why not: loopback carries no peer credentials, so any
-  ///    local process of any user may connect and attempt auth, and the token
-  ///    becomes the entire boundary. A socket inside a directory only this user
-  ///    can traverse refuses that process before it can present anything.
+  /// A unix domain socket on Windows as well as POSIX: `AF_UNIX` has worked
+  /// since 10 1803, so the local stage needs no second listener.
   String get socketPath => '${directory.path}/host.sock';
   String get lockPath => '${directory.path}/host.lock';
   String get logPath => '${directory.path}/host.log';
   String get binDirectory => '${directory.path}/bin';
 
-  /// Where each session's output and metadata are kept so a restart can answer
-  /// for them. Inside the same owner-only directory as the socket, because the
-  /// scrollback of an agent session is at least as sensitive as the channel
-  /// that carries it.
+  /// Each session's output and metadata, inside the same owner-only directory
+  /// as the socket — scrollback is as sensitive as the channel carrying it.
   String get sessionsDirectory => '${directory.path}/sessions';
 
   void ensureDirectory() {
     if (!directory.existsSync()) directory.createSync(recursive: true);
   }
 
-  /// Makes [directory] unreachable by any other account on the machine.
-  ///
-  /// This is the whole access control on the socket, which carries none of its
-  /// own: anybody who can traverse to the node can connect to it. Applied
-  /// rather than inherited, for the reason the app's `restrictDirectoryToCurrentUser`
-  /// documents — and asked for as a prerequisite, so a `serve` that could not
-  /// establish the boundary does not bind at all.
-  ///
-  /// Returns null on success, or the sentence to refuse with.
+  /// Makes [directory] unreachable by any other account: the whole access
+  /// control on a socket that carries none of its own, so `serve` refuses to
+  /// bind without it. Returns null on success, or the sentence to refuse with.
   Future<String?> restrictToCurrentUser() async {
     try {
       if (Platform.isWindows) return await _restrictWindows();
@@ -93,11 +61,9 @@ class HostPaths {
     }
     final domain = env['USERDOMAIN'];
     final principal = (domain == null || domain.isEmpty) ? user : '$domain\\$user';
-    // `(OI)(CI)` so the socket node created inside is covered too, and the
-    // well-known SIDs rather than names, which are localised. Grant first and
-    // strip inheritance second: `/inheritance:r` deletes inherited ACEs outright
-    // rather than converting them, so the other order leaves a directory its own
-    // owner cannot open.
+    // Well-known SIDs, not localised names. Grant first and strip inheritance
+    // second: `/inheritance:r` deletes inherited ACEs rather than converting
+    // them, so the other order locks the owner out of their own directory.
     final granted = await Process.run('icacls', [
       directory.path,
       '/grant:r',
@@ -116,20 +82,16 @@ class HostPaths {
   }
 }
 
-/// One instance per user, enforced by an exclusive lock on a file rather than
-/// by a pid written into one.
-///
-/// A pid file lies after a reboot or a pid wrap; an OS lock is released when
-/// the holding process dies however it dies, which is the only property that
-/// matters for a daemon nobody supervises.
+/// One instance per user, held by an OS file lock rather than a pid file: a pid
+/// lies after a reboot or a wrap, and a lock is released however the holder dies.
 class HostLock {
   HostLock._(this._file, this.path);
 
   final RandomAccessFile _file;
   final String path;
 
-  /// Null when another instance holds it. The caller reports that rather than
-  /// starting a second host that would bind over the first one's socket.
+  /// Null when another instance holds it, so no second host binds over its
+  /// socket.
   static HostLock? tryAcquire(String path) {
     final file = File(path).openSync(mode: FileMode.write);
     try {
@@ -144,8 +106,7 @@ class HostLock {
     return HostLock._(file, path);
   }
 
-  /// Best effort: what the lock holder said its pid was, for a refusal message
-  /// that names something. Never trusted for anything but words.
+  /// Best effort, for a refusal message that names something. Never trusted.
   static String describeHolder(String path) {
     try {
       final text = File(path).readAsStringSync().trim();

@@ -4,21 +4,16 @@ import 'conpty.dart';
 import 'posix_pty.dart';
 import 'pty.dart';
 
-/// A launcher for this machine, and the library it was found in.
-///
-/// Two implementations of one interface, chosen by the operating system and
-/// nothing else — no setting, no environment variable. [library] is what the
-/// host reports in `hello`: a reading taken here, never a guess made by the
-/// client reading it.
+/// A launcher for this machine, chosen by the operating system and nothing else.
+/// [library] is what `hello` reports — measured here, never guessed by a client.
 class PtyPlatform {
   const PtyPlatform(this.launcher, this.library);
   final PtyLauncher launcher;
   final String library;
 }
 
-/// Throws [PtyException] naming what this machine could not provide. The caller
-/// prints that sentence and refuses to serve, rather than starting a host whose
-/// every `open` will fail one at a time.
+/// Throws [PtyException] naming what this machine could not provide, so the
+/// caller refuses to serve rather than failing one `open` at a time.
 PtyPlatform resolvePtyPlatform() {
   if (Platform.isWindows) {
     final ConPtyLauncher launcher;

@@ -1,9 +1,6 @@
-/// The host's protocol and domain, with no `dart:ffi` anywhere in it.
-///
-/// The app imports *this*, never `karmashala_host.dart`: the pty layer binds
-/// libc and a Flutter web build would refuse the whole package for it. Keeping
-/// the split here rather than reimplementing the codec app-side is what stops
-/// the two ends of the wire drifting apart.
+/// The host's protocol and domain, with no `dart:ffi` in it. The app imports
+/// this, never `karmashala_host.dart`, which binds libc and would fail a web
+/// build.
 library;
 
 export 'src/domain/age.dart';
