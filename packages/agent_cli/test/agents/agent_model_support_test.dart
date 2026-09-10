@@ -47,6 +47,19 @@ void main() {
     expect(supportOf(AgentIds.codex).slashCommand, isEmpty);
   });
 
+  test('Antigravity offers Gemini 3.8 Flash models', () {
+    final support = supportOf(AgentIds.antigravity);
+    final modelIds = support.models.map((m) => m.id).toList();
+    expect(
+      modelIds,
+      containsAllInOrder([
+        'gemini-3.8-flash-high',
+        'gemini-3.8-flash-medium',
+        'gemini-3.8-flash-low',
+      ]),
+    );
+  });
+
   test('the in-session command is the command plus the id, and nothing else', () {
     expect(supportOf(AgentIds.claudeCode).commandFor('opus'), '/model opus');
     // Codex has no such command, so there is nothing to send — which is what

@@ -103,18 +103,20 @@ class ConversationStoreIndex {
     return ConversationPresence.absent;
   }
 
-  /// `<home>/conversations/<id>.db`.
+  /// `<home>/conversations/<id>.db` or `<home>/conversations/<id>.pb`.
   ///
   /// The cheapest of the three: Antigravity's conversation id **is** the file
-  /// name, so this is one `stat` and no listing at all. Nothing is opened —
-  /// presence is a question about a name, and the file's contents are protobuf
-  /// anyway.
+  /// name, so this is one or two `stat`s and no listing at all. Nothing is
+  /// opened — presence is a question about a name, and the file's contents are
+  /// protobuf anyway.
   Future<ConversationPresence> _antigravity(String home, String id) async {
     final conversations = Directory(p.join(home, 'conversations'));
     if (!await conversations.exists()) return ConversationPresence.unknown;
-    return await File(p.join(conversations.path, '$id.db')).exists()
-        ? ConversationPresence.present
-        : ConversationPresence.absent;
+    if (await File(p.join(conversations.path, '$id.db')).exists() ||
+        await File(p.join(conversations.path, '$id.pb')).exists()) {
+      return ConversationPresence.present;
+    }
+    return ConversationPresence.absent;
   }
 
   /// `<home>/sessions/[YYYY/MM/DD/]rollout-<timestamp>-<id>.jsonl`.
@@ -161,6 +163,8 @@ class ConversationStoreIndex {
       final name = p.basename(file.path);
       if (name.endsWith('.db')) {
         ids.add(name.substring(0, name.length - '.db'.length));
+      } else if (name.endsWith('.pb')) {
+        ids.add(name.substring(0, name.length - '.pb'.length));
       }
     }
     return ids;

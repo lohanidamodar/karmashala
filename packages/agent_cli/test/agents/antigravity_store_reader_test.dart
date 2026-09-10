@@ -64,8 +64,8 @@ void main() {
     );
   }
 
-  AntigravityStoreReader reader() =>
-      AntigravityStoreReader(readRows: sqlite.read);
+  AntigravityStoreReader reader({bool countSteps = true}) =>
+      AntigravityStoreReader(readRows: sqlite.read, countSteps: countSteps);
 
   group('the conversation id', () {
     test('is the conversation file name', () async {
@@ -76,6 +76,26 @@ void main() {
       expect(conversations.single.id, 'df3c0708-a27f-4799-b761-57a657a84274');
     });
 
+    test('reads .pb files as conversations on Windows', () async {
+      writeFile('conversations/win-pb.pb', '');
+
+      final conversations = await reader().read(storeHome);
+
+      expect(conversations.single.id, 'win-pb');
+    });
+
+    test('deduplicates when both .db and .pb exist, preferring .db', () async {
+      writeConversation('shared-id', steps: 5);
+      writeFile('conversations/shared-id.pb', '');
+
+      final conversations = await reader(countSteps: true).read(storeHome);
+
+      expect(conversations, hasLength(1));
+      expect(conversations.single.id, 'shared-id');
+      expect(conversations.single.filePath.endsWith('.db'), isTrue);
+      expect(conversations.single.stepCount, 5);
+    });
+
     test('a store with no conversations directory reads as empty', () async {
       expect(await reader().read(storeHome), isEmpty);
     });
@@ -84,6 +104,7 @@ void main() {
       writeConversation('real-one');
       writeFile('conversations/notes.txt', 'not a conversation');
       writeFile('conversations/.db', 'no id at all');
+      writeFile('conversations/.pb', 'no id at all');
 
       final conversations = await reader().read(storeHome);
 

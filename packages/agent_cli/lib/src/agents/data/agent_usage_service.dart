@@ -409,14 +409,21 @@ class AgentUsageService {
       }
     }
 
-    String? email;
-    try {
-      final tokenInfo = await _getJson(_googleTokenInfoUrl, {
-        'Authorization': 'Bearer $token',
-      });
-      email = tokenInfo['email'] as String?;
-    } catch (_) {
-      // Non-fatal if tokeninfo cannot be retrieved
+    String? email = _emailFromJwt(auth?['id_token'] as String?) ??
+        _emailFromJwt(
+          tokenObj is Map<String, dynamic>
+              ? tokenObj['id_token'] as String?
+              : null,
+        );
+    if (email == null) {
+      try {
+        final tokenInfo = await _getJson(_googleTokenInfoUrl, {
+          'Authorization': 'Bearer $token',
+        });
+        email = tokenInfo['email'] as String?;
+      } catch (_) {
+        // Non-fatal if tokeninfo cannot be retrieved
+      }
     }
 
     final json = await _postJson(

@@ -273,4 +273,46 @@ void main() {
     );
     expect(messages, isEmpty);
   });
+
+  group('Antigravity transcript parsing', () {
+    test('unwraps <USER_REQUEST> tags from USER_INPUT', () async {
+      final file = write('agy.jsonl', [
+        '{"type":"USER_INPUT","content":"<CONTEXT_SUMMARY>old context</CONTEXT_SUMMARY>\\n<USER_REQUEST>\\nPlease fix the build\\n</USER_REQUEST>"}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.antigravity);
+
+      expect(messages.single.role, 'user');
+      expect(messages.single.text, 'Please fix the build');
+    });
+
+    test('preserves plain USER_INPUT without <USER_REQUEST> tags', () async {
+      final file = write('agy.jsonl', [
+        '{"type":"USER_INPUT","content":"Hello Antigravity"}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.antigravity);
+
+      expect(messages.single.role, 'user');
+      expect(messages.single.text, 'Hello Antigravity');
+    });
+
+    test('parses PLANNER_RESPONSE with tool calls and thinking', () async {
+      final file = write('agy.jsonl', [
+        '{"type":"PLANNER_RESPONSE","content":"I will run the command",'
+            '"thinking":"Need to check directory contents",'
+            '"tool_calls":[{"name":"run_command","args":{"toolSummary":"\\"List files\\""}}]}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.antigravity);
+
+      expect(messages, hasLength(2));
+      expect(messages[0].role, 'agent');
+      expect(messages[0].text, 'I will run the command');
+      expect(messages[0].thinking, 'Need to check directory contents');
+      expect(messages[1].role, 'tool');
+      expect(messages[1].tool?.name, 'run_command');
+      expect(messages[1].tool?.subject, 'List files');
+    });
+  });
 }

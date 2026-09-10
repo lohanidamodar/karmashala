@@ -35,11 +35,9 @@ List<String> antigravityLaunchArgs(AgentLaunch launch) => [
 
 /// Translates one line of Antigravity CLI output into normalized events.
 ///
-/// This is a **compatibility** adapter: it accepts either structured JSON lines
-/// (`{"type": ...}`) or, when a line is not JSON, treats the raw line as agent
-/// text. That tolerance is the point — it adapts a looser CLI to the same
-/// normalized event model. Raw protocol handling stays here (architecture rule);
-/// the mapping is provisional and refinable on live integration.
+/// Supports the native `stream-json` wire protocol emitted by `agy` in print /
+/// streaming mode (`{"event": "init" | "step_update" | "result"}`), as well as
+/// compatibility JSON objects (`{"type": ...}`) and plain-text fallback lines.
 List<AgentEvent> parseAntigravityMessage(String line) {
   final trimmed = line.trim();
   if (trimmed.isEmpty) return const [];
@@ -48,6 +46,75 @@ List<AgentEvent> parseAntigravityMessage(String line) {
     try {
       final decoded = jsonDecode(trimmed);
       if (decoded is Map<String, dynamic>) {
+        final event = decoded['event'];
+        if (event is String) {
+          switch (event) {
+            case 'init':
+              final cid = decoded['conversation_id'];
+              return [
+                AgentEvent(SessionEventTypes.agentStatus, {
+                  'state': 'started',
+                  if (cid is String && cid.isNotEmpty) 'sessionId': cid,
+                }),
+              ];
+            case 'step_update':
+              final step = decoded['step_update'];
+              if (step is Map<String, dynamic>) {
+                final stepType = step['step_type'];
+                if (stepType == 'agent_response') {
+                  final delta = step['text_delta'];
+                  if (delta != null && delta.toString().isNotEmpty) {
+                    return [
+                      AgentEvent(SessionEventTypes.agentMessage, {
+                        'role': 'assistant',
+                        'text': delta.toString(),
+                      }),
+                    ];
+                  }
+                } else if (stepType == 'tool') {
+                  if (step['state'] == 'ACTIVE') {
+                    final toolInfo = step['tool_info'];
+                    final params = toolInfo is Map<String, dynamic>
+                        ? toolInfo['parameters']
+                        : null;
+                    return [
+                      AgentEvent(SessionEventTypes.toolCall, {
+                        'name': step['tool_name'] ?? 'unknown_tool',
+                        'input': ?params,
+                        if (step['step_index'] != null)
+                          'id': step['step_index'].toString(),
+                      }),
+                    ];
+                  }
+                }
+              }
+              return const [];
+            case 'result':
+              final result = decoded['result'];
+              if (result is Map<String, dynamic>) {
+                if (result['status'] == 'ERROR') {
+                  return [
+                    AgentEvent(SessionEventTypes.error, {
+                      'message':
+                          (result['error'] ?? 'unknown error').toString(),
+                    }),
+                  ];
+                }
+                final cid = result['conversation_id'];
+                return [
+                  AgentEvent(SessionEventTypes.agentStatus, {
+                    'state': 'complete',
+                    if (cid is String && cid.isNotEmpty) 'sessionId': cid,
+                  }),
+                ];
+              }
+              return const [];
+            default:
+              return const [];
+          }
+        }
+
+        // Legacy compatibility object format:
         switch (decoded['type']) {
           case 'message':
           case 'assistant':
@@ -89,6 +156,13 @@ List<AgentEvent> parseAntigravityMessage(String line) {
 }
 
 /// Encodes a user message for the Antigravity CLI as a plain text line.
+///
+/// **Not** the `{"event":"user"}` stream-json envelope, even though the parser
+/// reads that protocol: this descriptor's `baseArguments` are empty, so a pane
+/// runs `agy` in its own TUI mode with no `--input-format stream-json`. Wrap
+/// the message and the agent receives literal JSON as what the user typed.
+/// Claude Code encodes JSON because it asks for that input format; when this
+/// descriptor does the same, this may follow.
 String encodeAntigravityUserMessage(String message) => message;
 
 /// Compatibility `AgentAdapter` for the Antigravity CLI.

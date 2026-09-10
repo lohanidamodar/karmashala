@@ -378,7 +378,7 @@ void _parseAntigravityLine(
   final content = json['content'];
   switch (json['type']) {
     case 'USER_INPUT':
-      _add(out, 'user', content, at);
+      _add(out, 'user', _cleanAntigravityUserInput(content), at);
     case 'PLANNER_RESPONSE':
       // Held across the rows this record makes and spent on the first of them.
       var thinking = _antigravityThinking(json['thinking']);
@@ -430,6 +430,23 @@ void _parseAntigravityLine(
       }
       _add(out, 'tool', content, at);
   }
+}
+
+/// Extracts the user's prompt from `<USER_REQUEST>...</USER_REQUEST>` if present.
+///
+/// Headless and interactive prompts in Antigravity transcripts are often wrapped
+/// in `<USER_REQUEST>` delimiters when additional metadata or context summaries
+/// are prepended to the prompt.
+Object? _cleanAntigravityUserInput(Object? content) {
+  if (content is! String) return content;
+  final match = RegExp(r'<USER_REQUEST>([\s\S]*?)</USER_REQUEST>').firstMatch(content);
+  if (match != null) {
+    final extracted = match.group(1)?.trim();
+    if (extracted != null && extracted.isNotEmpty) {
+      return extracted;
+    }
+  }
+  return content;
 }
 
 /// The reasoning a record carried, or null when it carried none.

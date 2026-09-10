@@ -193,13 +193,22 @@ class AntigravityStoreReader {
     final titles = await readTitles(storeHome);
     final presenceIds = await readPresenceIds(storeHome);
 
-    final conversations = <AntigravityConversation>[];
+    final conversationsById = <String, AntigravityConversation>{};
     await for (final entity in dir.list()) {
       if (entity is! File) continue;
       final name = p.basename(entity.path);
-      if (!name.endsWith('.db')) continue;
-      final id = name.substring(0, name.length - '.db'.length);
+      final isDb = name.endsWith('.db');
+      final isPb = name.endsWith('.pb');
+      if (!isDb && !isPb) continue;
+      final id = isDb
+          ? name.substring(0, name.length - '.db'.length)
+          : name.substring(0, name.length - '.pb'.length);
       if (id.isEmpty) continue;
+
+      final existing = conversationsById[id];
+      if (existing != null && existing.filePath.endsWith('.db') && !isDb) {
+        continue;
+      }
 
       DateTime? modified;
       try {
@@ -209,23 +218,22 @@ class AntigravityStoreReader {
       }
 
       final summary = summaries[id];
-      conversations.add(
-        AntigravityConversation(
-          id: id,
-          filePath: entity.path,
-          storeHome: storeHome,
-          workspace: workspaces[id],
-          title: titles[id],
-          preview: summary?.preview ?? '',
-          stepCount: countSteps
-              ? await readStepCount(entity.path) ?? summary?.stepCount
-              : summary?.stepCount,
-          modifiedAt: modified,
-          hasPresenceFile: presenceIds.contains(id),
-        ),
+      conversationsById[id] = AntigravityConversation(
+        id: id,
+        filePath: entity.path,
+        storeHome: storeHome,
+        workspace: workspaces[id],
+        title: titles[id],
+        preview: summary?.preview ?? '',
+        stepCount: countSteps && isDb
+            ? await readStepCount(entity.path) ?? summary?.stepCount
+            : summary?.stepCount,
+        modifiedAt: modified ?? existing?.modifiedAt,
+        hasPresenceFile: presenceIds.contains(id),
       );
     }
 
+    final conversations = conversationsById.values.toList();
     conversations.sort((a, b) {
       final at = a.modifiedAt, bt = b.modifiedAt;
       if (at == null && bt == null) return a.id.compareTo(b.id);
@@ -444,6 +452,7 @@ class AntigravityStoreReader {
   /// Opened read-only, and `null` on any failure — the CLI may hold the file,
   /// and a busy database is "not recorded", not an error to propagate.
   Future<int?> readStepCount(String conversationFile) async {
+    if (!conversationFile.endsWith('.db')) return null;
     final rows = await readRows(
       conversationFile,
       'select count(*) as n from steps',

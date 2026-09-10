@@ -74,8 +74,11 @@ CliInvocation oneShotInvocation(
   ),
   AgentIds.antigravity => CliInvocation(
     arguments: [
-      if (model != null) ...['--model', model],
+      '--print',
       if (systemPrompt != null) '$systemPrompt\n\n$prompt' else prompt,
+      '--output-format',
+      'stream-json',
+      if (model != null) ...['--model', model],
     ],
     parse: (line) => _text(parseAntigravityMessage(line)),
   ),

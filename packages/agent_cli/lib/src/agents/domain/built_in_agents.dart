@@ -1363,10 +1363,21 @@ const _antigravity = AgentDescriptor(
   // distributed self-updating Go binary that puts itself on PATH with
   // `agy install` — the Antigravity IDE does not ship or launch it.
   //
-  // No `windowsInstallPaths`: `agy install` is what puts the binary somewhere,
-  // and nobody here has watched it do that on Windows. A guessed path would be
-  // a probe that can only ever fail, so the honest entry is an empty one.
-  binaries: AgentBinaries(windows: ['agy'], posix: ['agy']),
+  // `windows: ['agy']`, not `['agy.exe', 'agy']`: Windows resolves the bare
+  // name through PATHEXT, so the second spelling is one more failed spawn per
+  // discovery, and Claude and Codex both declare the bare name.
+  //
+  // One declared path, not three. `windowsInstallPaths` is probed by *running*
+  // the candidate, so every path that is not there costs a failed spawn per
+  // discovery. This one mirrors where `agy install` puts the binary on POSIX
+  // (`~/.local/bin`) and matches Claude Code's entry; it is inferred, not
+  // watched — nothing here has seen `agy install` run on Windows, and it was
+  // absent from all three candidate paths on 2026-09-10.
+  binaries: AgentBinaries(
+    windows: ['agy'],
+    posix: ['agy'],
+    windowsInstallPaths: [r'%USERPROFILE%\.local\bin\agy.exe'],
+  ),
   launch: AgentLaunchSpec(
     // Deliberately empty. The previous `--stdio` does not exist in this CLI at
     // all, and while `agy --print --input-format stream-json --output-format
@@ -1554,14 +1565,15 @@ const _antigravity = AgentDescriptor(
     // the `=` form the CLI itself prints: this app passes `--conversation` and
     // the id as two arguments, so our own echoed command line cannot be
     // mistaken for the agent's statement about itself.
+    // Both the TUI resume hint and stream-json init event announce the id.
     sessionIdAnnouncement: AgentSessionIdAnnouncement.pattern(
       pattern:
-          r'agy\s+--conversation=([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-'
+          r'(?:agy\s+--conversation=|"conversation_id"\s*:\s*")([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-'
           r'[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
       evidence:
-          'agy 1.1.22 binary: "\\nResume with -c (or command below):\\n'
-          'agy --conversation=%s\\n", emitted by '
-          'entrypoints.printResumeHint',
+          'agy 1.1.28: resume hint from entrypoints.printResumeHint '
+          '("\\nResume with -c (or command below):\\nagy --conversation=%s\\n") '
+          'and stream-json "init" event ("\\"conversation_id\\":\\"%s\\"")',
     ),
     // `-c  Short alias for --continue` / `--continue  Continue the most recent
     // conversation`. "Most recent" is scoped to the **working directory**, and
@@ -1721,9 +1733,24 @@ const _antigravity = AgentDescriptor(
           summary: 'The same model with reasoning turned down.',
         ),
         AgentModel(
+          id: 'gemini-3.8-flash-high',
+          label: 'Gemini 3.8 Flash (High)',
+          summary: 'Latest Flash, at the most reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-3.8-flash-medium',
+          label: 'Gemini 3.8 Flash (Medium)',
+          summary: 'Latest Flash, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-3.8-flash-low',
+          label: 'Gemini 3.8 Flash (Low)',
+          summary: 'Latest Flash, fastest.',
+        ),
+        AgentModel(
           id: 'gemini-3.7-flash-high',
           label: 'Gemini 3.7 Flash (High)',
-          summary: 'Newest Flash, at the most reasoning.',
+          summary: 'Previous Flash, at the most reasoning.',
         ),
         AgentModel(
           id: 'gemini-3.7-flash-medium',
