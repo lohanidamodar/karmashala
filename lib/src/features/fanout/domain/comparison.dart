@@ -104,10 +104,8 @@ class CandidateEvidence {
   /// Copied with the verdict: one that outlives its attribution is the failure.
   final String? producerSessionId;
 
-  /// Whether the candidate's own session produced this verdict.
-  ///
-  /// Takes the subject rather than storing it, because the candidate already
-  /// holds it — see [ComparisonCandidate.evidenceAttribution].
+  /// Whether the candidate's own session produced this verdict. Takes the
+  /// subject rather than storing it — the candidate already holds it.
   VerdictAttribution attributionFor(String? subjectSessionId) =>
       VerdictAttribution.of(
         producerSessionId: producerSessionId,

@@ -96,10 +96,8 @@ class _AccountUsage extends ConsumerWidget {
     final usage = ref.watch(agentUsageProvider(installation));
     final error = usage.error;
 
-    // **The value first, and never `when`.** A failed lookup carries the value
-    // it had — and, across the `autoDispose` that closing this dialog causes,
-    // the service's remembered reading does. Reading the error first threw both
-    // away and printed "not recorded" over a number the app was holding.
+    // **The value first, and never `when`.** A failed lookup carries the value it
+    // had; reading the error first printed "not recorded" over a held number.
     final value =
         usage.value ??
         ref.watch(agentUsageServiceProvider).remembered(installation);

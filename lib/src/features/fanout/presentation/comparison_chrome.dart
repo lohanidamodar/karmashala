@@ -23,10 +23,8 @@ class CandidateStateMark extends StatelessWidget {
   final ComparisonCandidate candidate;
   final bool isWinner;
 
-  /// Decided in this order, and the order is the point: a candidate that never
-  /// ran has nothing else worth saying about it, and a winner's worktree is
-  /// usually gone by the time it is one — "winner" is the more useful of those
-  /// two facts.
+  /// Decided in this order, and the order is the point: a winner's worktree is
+  /// usually gone by the time it is one, and "winner" is the more useful fact.
   CandidateState get state {
     if (!candidate.started) return CandidateState.didNotStart;
     if (isWinner) return CandidateState.winner;

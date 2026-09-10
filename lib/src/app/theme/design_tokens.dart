@@ -193,11 +193,8 @@ enum UiDensity {
   /// A thumb does not: 48dp targets, roomier padding, one step up the ramp.
   touch;
 
-  /// The Material compact breakpoint (CLAUDE.md §6).
-  ///
-  /// A **width** class, and since density stopped keying on width, only that:
-  /// it is what `companionReadableWidth` caps a column of prose at. Measure is
-  /// a width question; modality is not.
+  /// The Material compact breakpoint (CLAUDE.md §6). A **width** class and only
+  /// that: measure is a width question, modality is not.
   static const compactWidth = 600.0;
 
   /// The density [platform] calls for: what its owner holds it with, because
@@ -414,18 +411,12 @@ class Chrome {
   /// `860` in three places, and three copies of a measure drift apart.
   static const readableWidth = 860.0;
 
-  /// One level of a file tree's indentation.
-  ///
-  /// Narrower than [Insets.lg] on purpose: a repository nests deeply and a
-  /// 16px step runs a `lib/src/features/…/presentation` path off the side of
-  /// a side panel long before the name it is indenting becomes readable.
+  /// One level of a file tree's indentation, narrower than [Insets.lg]: a 16px
+  /// step runs a deep path off the side of a side panel.
   static const treeIndent = 14.0;
 
-  /// How far a tree line with no row of its own — "Empty", "Loading…" — clears
-  /// the disclosure column, on top of its [treeIndent].
-  ///
-  /// It sits under its level's names rather than under their carets, so it
-  /// reads as that folder's content and not as a sibling of it.
+  /// How far a tree line with no row of its own clears the disclosure column, on
+  /// top of its [treeIndent] — under its level's names, not under their carets.
   static const treeGutter = 22.0;
 
   /// The height of a control that has to sit inside a [titleBar] row — a menu
