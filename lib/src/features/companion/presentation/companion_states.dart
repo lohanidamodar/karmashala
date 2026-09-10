@@ -10,11 +10,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../../sessions/domain/session_resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
 
-/// Draws [value] through its four states.
-///
-/// Not `AsyncValue.when`: a provider Riverpod is retrying is `AsyncLoading`
-/// *carrying* its error, so `when` takes the loading branch and the screen sits
-/// on a skeleton for ever. Asked here in the order a user cares about.
+/// Draws [value] through its four states. Not `when`: a provider being retried
+/// is `AsyncLoading` *carrying* its error, so `when` skeletons for ever.
 Widget companionAsync<T>(
   AsyncValue<T> value, {
   required Widget Function(T data) data,

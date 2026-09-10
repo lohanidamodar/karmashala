@@ -1,9 +1,5 @@
-/// The companion's shared chrome: one app bar, one bottom sheet, one section
-/// header, one readable width.
-///
-/// Heights come from [Touch] and [UiDensity], never from [Chrome], because a
-/// pointer's 30px row is not a target; where a companion widget can also be
-/// hosted at pointer density the density is asked rather than assumed.
+/// The companion's shared chrome: app bar, bottom sheet, section header,
+/// readable width. Heights from [Touch]/[UiDensity], never [Chrome]'s 30px row.
 library;
 
 import 'package:flutter/material.dart';

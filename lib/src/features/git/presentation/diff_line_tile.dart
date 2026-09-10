@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:karmashala_git/git.dart';
 
-/// One row of a unified diff — the only place a diff line is drawn, so the
-/// Changes panel and an agent's file edit cannot look different.
-///
-/// Colour is never the only signal (CLAUDE.md §5): the verbatim `+`/`-`/` `,
-/// a semantics label, and the tint all carry the same fact.
+/// One row of a unified diff — the only place one is drawn. Colour is never the
+/// only signal: the verbatim `+`/`-`, a semantics label, and the tint (§5).
 class DiffLineTile extends StatelessWidget {
   const DiffLineTile({
     required this.line,

@@ -2,15 +2,8 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import 'package:karmashala_git/git.dart';
 
-/// Data access for review threads and their comments (schema v30).
-///
-/// The anchor is immutable and comments are append-only: there is no method to
-/// change either, because a rewritten anchor is fuzzy re-anchoring wearing a
-/// DAO's name. Only [setStatus] mutates — triage is a judgement, not a record.
-///
-/// [forRepository] is two statements whatever the thread count; the obvious
-/// shape is a query per comment on every frame of a panel that redraws on a git
-/// poll. See `review_thread_cost_test`.
+/// Data access for review threads and their comments (schema v30). Anchors are
+/// immutable and comments append-only — only [setStatus] mutates.
 class ReviewThreadDao {
   ReviewThreadDao(this._db);
 

@@ -106,13 +106,8 @@ final companionLinkSinceProvider = StreamProvider<DateTime?>(
   (ref) => ref.watch(companionGatewayProvider).linkSinceStates,
 );
 
-/// The host's session rows and when this phone received them. The stamp is
-/// written where the rows arrive, so a screen opened an hour later shows the
-/// snapshot's real age (§19).
-///
-/// One subscription, deliberately: [CompanionGateway.watchSessions] is a
-/// `Stream.multi`, so a second provider over it would be another frame on the
-/// wire. Everything else derives from this one.
+/// The host's rows, stamped on arrival so their real age shows (§19). One
+/// subscription: `watchSessions` is a `Stream.multi`, so a second is a frame.
 final companionSessionsSnapshotProvider =
     StreamProvider<CompanionSessionsSnapshot>((ref) {
       final clock = ref.watch(clockProvider);
@@ -127,11 +122,8 @@ final companionSessionsSnapshotProvider =
           );
     });
 
-/// Every session the host holds, live.
-///
-/// Not `whenData`: Riverpod reports a provider that failed and is being retried
-/// as `AsyncLoading` *carrying* its error, so `whenData` drops it and the
-/// refusal becomes a skeleton that never resolves.
+/// Every session the host holds, live. Not `whenData`: a provider being retried
+/// is `AsyncLoading` *carrying* its error, which `whenData` silently drops.
 final companionSessionsProvider =
     Provider<AsyncValue<List<CompanionSessionSummary>>>((ref) {
       final snapshot = ref.watch(companionSessionsSnapshotProvider);

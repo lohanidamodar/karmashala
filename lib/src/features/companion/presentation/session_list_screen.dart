@@ -18,13 +18,8 @@ import 'project_sessions_screen.dart';
 import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
-/// The phone's first tab: the host's projects, one per row, each opening its
-/// own sessions on a screen of its own — two levels of a hierarchy on one
-/// screen is what made the distinction unreadable.
-///
-/// One project is not a hierarchy, so a desktop holding one skips the index.
-/// The host's order is the order: [groupByProject] partitions, never sorts.
-/// Search filters the snapshot in hand and sends no frame.
+/// The phone's first tab: the host's projects, each opening its own sessions on
+/// a screen of its own. [groupByProject] partitions, never sorts.
 class SessionListScreen extends ConsumerStatefulWidget {
   const SessionListScreen({super.key});
 

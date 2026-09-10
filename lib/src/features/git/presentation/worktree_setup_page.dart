@@ -15,12 +15,8 @@ import '../application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'worktree_setup_dialog.dart';
 
-/// Settings → Worktrees: what each checkout wants done to a worktree the moment
-/// git makes one, and what happened the last time it was done.
-///
-/// The setting and its verdict share a card, because a setup runs unattended in
-/// a pane nobody watches. Nothing polls: every write bumps
-/// `worktreeSetupRevisionProvider` and this rebuilds.
+/// Settings → Worktrees: what each checkout wants done to a new worktree, and
+/// what happened last time. Nothing polls; every write bumps the revision.
 class WorktreeSetupPage extends ConsumerWidget {
   const WorktreeSetupPage({super.key});
 

@@ -14,11 +14,8 @@ import 'link_banner.dart';
 import 'add_project_screen.dart';
 import 'session_view_screen.dart';
 
-/// Starting a session on the desktop, from the phone.
-///
-/// Every choice and every label comes from what the desktop reports; nothing is
-/// inferred here. A permission mode the agent cannot be put into is shown,
-/// disabled and explained rather than quietly missing.
+/// Starting a session on the desktop, from the phone. Every label is what the
+/// desktop reported; a mode its agent refuses is shown disabled, not hidden.
 class StartSessionScreen extends ConsumerStatefulWidget {
   const StartSessionScreen({this.projectId, super.key});
 

@@ -6,10 +6,8 @@ import '../../../core/util/file_picking.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The phone's message box: a prompt, and at most one file to go with it.
-///
-/// The picker is offered only when the host has said what it would take, so
-/// nobody picks a 4 MB photo and learns after it has crossed.
+/// The phone's message box: a prompt, and at most one file. The picker appears
+/// only when the host has said what it would take.
 class CompanionComposer extends StatefulWidget {
   const CompanionComposer({
     required this.onSend,
@@ -268,10 +266,8 @@ class _CompanionComposerState extends State<CompanionComposer> {
                     enabled: canType,
                     minLines: 1,
                     maxLines: 5,
-                    // Named, not inherited: `TextField` picks a multiline input
-                    // type for any `maxLines != 1`, and an Android IME then
-                    // draws Return instead of Send, so `onSubmitted` never
-                    // fires. The box still grows to [maxLines].
+                    // Named, not inherited: `maxLines != 1` picks a multiline
+                    // type, whose Android IME draws Return, not Send.
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.send,
                     focusNode: _focus,

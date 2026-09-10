@@ -1,7 +1,5 @@
-/// The pure mapping from an attention event to the local notification shown
-/// for it. Kept plugin-free so it is unit-testable; the plugin wrapper in
-/// `companion_notifier.dart` is the only file that touches
-/// `flutter_local_notifications`.
+/// The pure mapping from an attention event to the notification shown for it —
+/// plugin-free, so `companion_notifier.dart` alone touches the plugin.
 library;
 
 import 'package:karmashala_remote/companion.dart';

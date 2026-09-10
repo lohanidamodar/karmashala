@@ -26,10 +26,7 @@ class WorktreeRequest {
 }
 
 /// A worktree on its own, not only as a side effect of starting a session.
-///
-/// Through [WorktreeService.createForSession] and not around it, so this is the
-/// same worktree the MCP tool makes — including the post-create setup a
-/// hand-rolled `git worktree add` would silently skip.
+/// Through [WorktreeService.createForSession], so it gets the setup too.
 Future<void> showWorktreeCreateDialog(
   BuildContext context,
   WidgetRef ref,

@@ -17,11 +17,8 @@ import 'project_group.dart';
 import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
-/// One project's sessions, under that project's own name: on this screen there
-/// are only sessions, and what they belong to is the app bar title.
-///
-/// The title is also the way sideways — with more than one project it opens a
-/// sheet, and choosing one swaps this screen in place.
+/// One project's sessions, under that project's own name; the app bar title is
+/// also the way sideways, opening a sheet that swaps this screen in place.
 class ProjectSessionsScreen extends ConsumerStatefulWidget {
   const ProjectSessionsScreen({required this.projectKey, super.key});
 

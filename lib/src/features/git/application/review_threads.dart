@@ -8,12 +8,8 @@ import '../data/review_thread_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'changes_providers.dart';
 
-/// Opening, answering and triaging review threads, and holding every anchor
-/// against the file it points at.
-///
-/// No argument accepts a blob sha: every write computes it from the file on
-/// disk, because a caller-supplied sha is a claim about content that caller may
-/// not have been looking at. A file git will not hash gets no thread at all.
+/// Opening, answering and triaging review threads. No argument takes a blob
+/// sha: every write computes it from disk, and an unhashable file gets none.
 class ReviewThreadService {
   ReviewThreadService(this._ref);
 
@@ -21,13 +17,8 @@ class ReviewThreadService {
 
   ReviewThreadDao get _dao => _ref.read(reviewThreadDaoProvider);
 
-  /// Opens a thread against [path] in [repositoryId]. [startLine]/[endLine] are
-  /// line numbers in the file as it is right now; omit them for a file-level
-  /// thread.
-  ///
-  /// [status] defaults by author: a person gets [ReviewThreadStatus.shouldFix],
-  /// an agent [ReviewThreadStatus.open] — an agent asserting "should be fixed"
-  /// would file its own findings into the queue that is sent back to an agent.
+  /// Opens a thread against [path], anchored to the file as it is now; [status]
+  /// defaults by author, since an agent must not triage its own findings.
   Future<ReviewThread> open({
     required String repositoryId,
     required String path,

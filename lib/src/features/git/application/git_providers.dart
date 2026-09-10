@@ -12,13 +12,8 @@ import 'worktree_service.dart';
 import 'worktree_setup_providers.dart';
 import 'worktree_setup_service.dart';
 
-/// The `agentId` a worktree setup pane is opened under. A setup command is not
-/// an agent, but `openAgentTab` is the only route that starts a pane on a
-/// chosen command with the WSL/SSH/Windows wrapping §17 forbids re-deriving.
-///
-/// The pane is therefore stored as `agent:`, which is the safe direction:
-/// `shouldRestartOnActivate` excludes agent panes, so a restored setup pane
-/// re-runs nothing.
+/// The `agentId` a setup pane is opened under: `openAgentTab` is the only route
+/// with the §17 wrapping, and an `agent:` pane is one a restore never re-runs.
 const String kWorktreeSetupAgentId = 'karmashala:worktree-setup';
 
 final worktreeServiceProvider = Provider<WorktreeService>(

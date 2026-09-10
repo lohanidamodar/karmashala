@@ -1,7 +1,5 @@
-/// The phone's view of "which project is this session in".
-///
-/// The desktop already sends its rows in display order, so grouping here is a
-/// partition and never a sort: this file walks the host's list once and appends.
+/// The phone's view of "which project is this session in" — a partition and
+/// never a sort: the desktop already sent its rows in display order.
 library;
 
 import '../../explorer/application/session_diff_stat.dart';

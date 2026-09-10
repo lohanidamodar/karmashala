@@ -9,12 +9,8 @@ import 'package:karmashala_remote/remote.dart';
 import '../../sessions/presentation/activity_strip.dart';
 import '../application/companion_providers.dart';
 
-/// What this session is doing right now, on the phone, above the composer —
-/// from the desktop's own `sessionActivityFrom`, so the two screens cannot word
-/// one session two ways.
-///
-/// It draws nothing before the host has answered, and turns neither a refusal
-/// nor "we cannot see" into silence.
+/// What this session is doing right now, above the composer, from the desktop's
+/// own `sessionActivityFrom`; draws nothing before the host has answered.
 class CompanionActivityStrip extends ConsumerStatefulWidget {
   const CompanionActivityStrip({required this.sessionId, super.key});
 

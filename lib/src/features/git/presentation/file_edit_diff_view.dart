@@ -1,9 +1,5 @@
-/// Showing what an agent changed in a file, as a diff, wherever a file write is
-/// rendered.
-///
-/// Feed it through [FileEditCollector] rather than the per-line readers: Claude
-/// records one write twice, as the call and as the result, and only the
-/// collector folds the pair into a single row.
+/// Showing what an agent changed in a file, as a diff. Feed it through
+/// [FileEditCollector]: Claude records one write twice, as call and as result.
 library;
 
 import 'dart:math' as math;

@@ -21,23 +21,15 @@ typedef SecureWrite = Future<void> Function(String key, String value);
 
 typedef SecureDelete = Future<void> Function(String key);
 
-/// How long one keystore call may take before it counts as failed.
-///
-/// `CompanionConnections.mutate` serialises every read-modify-write on one
-/// static chain, so a single hung call stops every later one for the life of
-/// the process — a phone stuck on "Connecting…" with a live desktop.
+/// How long one keystore call may take. `CompanionConnections.mutate` chains
+/// every write, so one hung call stops every later one for the process's life.
 const Duration kSecureStoreTimeout = Duration(seconds: 5);
 
-/// A [CompanionStore] over the platform's secure storage.
-///
-/// A read that fails answers null, which the gateway reads as "unpaired"; a
-/// launch must never crash on bad storage. Writes and deletes propagate their
-/// failures, and every call is bounded by [timeout].
+/// A [CompanionStore] over the platform's secure storage: a failed read answers
+/// null ("unpaired"), writes propagate, and every call is bounded by [timeout].
 class SecureCompanionStore implements CompanionStore {
-  /// The real plugin-backed store the companion bootstrap uses. [onLog]
-  /// defaults to [debugPrint] because a keystore that has stopped decrypting
-  /// what it holds is otherwise indistinguishable from a phone that never
-  /// paired.
+  /// The real plugin-backed store. [onLog] defaults to [debugPrint]: a keystore
+  /// that stopped decrypting looks exactly like a phone that never paired.
   factory SecureCompanionStore({
     void Function(String message)? onLog,
     Duration timeout = kSecureStoreTimeout,

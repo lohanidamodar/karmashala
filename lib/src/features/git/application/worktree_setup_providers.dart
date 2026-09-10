@@ -23,12 +23,8 @@ class WorktreeSetupRevision extends Notifier<int> {
 final worktreeSetupRevisionProvider =
     NotifierProvider<WorktreeSetupRevision, int>(WorktreeSetupRevision.new);
 
-/// Turns "running in a pane" into a verdict, when the pane's process stops.
-///
-/// Must be *watched*: Riverpod pauses a provider's own subscriptions while
-/// nothing listens, so an observer nobody watches hears no pane stop at all.
-/// A pane the user closed by hand keeps its `running` verdict — nobody
-/// observed how it ended.
+/// Turns "running in a pane" into a verdict. Must be *watched*: Riverpod pauses
+/// a provider's subscriptions while nothing listens, and this then hears none.
 class WorktreeSetupExitObserver extends Notifier<void> {
   @override
   void build() {

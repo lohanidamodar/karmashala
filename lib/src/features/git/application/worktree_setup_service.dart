@@ -40,12 +40,8 @@ typedef WorktreeSetupPaneOpener =
 /// Files a finished report. See `WorktreeSetupDao.record`.
 typedef WorktreeSetupRecorder = void Function(WorktreeSetupReport report);
 
-/// Does to a new worktree what its repository asked for: copies the gitignored
-/// paths git will not put there, then opens a pane on the setup command, both
-/// in the repository's own environment.
-///
-/// The worktree is created whether or not any of this works. Nothing here
-/// throws: every failure becomes a sentence on a recorded report.
+/// Does to a new worktree what its repository asked: the gitignored copies,
+/// then a pane on the setup command. Nothing throws; failures are recorded.
 class WorktreeSetupService {
   WorktreeSetupService({
     required this.runnerFactory,
@@ -65,11 +61,8 @@ class WorktreeSetupService {
 
   final Clock clock;
 
-  /// The reports whose command is still expected to be running, by pane id.
-  ///
-  /// In memory and not a column: the only exits [noteExit] can be handed are of
-  /// panes this process opened, since closing the app kills every pane and a
-  /// restored setup pane never re-runs its command.
+  /// The reports whose command is still expected to be running, by pane id. In
+  /// memory, because [noteExit] only ever sees panes this process opened.
   final Map<String, WorktreeSetupReport> _pending = {};
 
   /// Sets [worktree] up for [repo]. Returns the report, or null when there was
@@ -196,11 +189,8 @@ class WorktreeSetupService {
     return verdicts;
   }
 
-  /// The command half: a pane, or a refusal saying why there is not one.
-  ///
-  /// Started and not awaited. A setup script has no bound and the caller is
-  /// inside `createForSession`, which a session launch waits on, so a hung
-  /// `pub get` would hang the window; the exit code arrives via `PaneExitSignal`.
+  /// The command half: a pane, or a refusal saying why there is none. Started
+  /// and not awaited, because a session launch is waiting on the caller.
   WorktreeCommandVerdict _startCommand({
     required WorktreeSetup setup,
     required ExecutionEnvironment environment,

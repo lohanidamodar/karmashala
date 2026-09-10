@@ -1,10 +1,5 @@
-/// Finding a project or a session in what the phone already holds.
-///
-/// Nothing here asks the desktop anything — no query frame, no poll — so a
-/// result is only as good as the snapshot behind it, and every screen that
-/// filters says how old that snapshot is (CLAUDE.md §19). The rule is the
-/// Explorer's: one case-folded substring over a project's name and path and a
-/// session's title and agent.
+/// Finding a project or a session in what the phone already holds: a filter
+/// over the snapshot, never a query frame, so a screen names its age (§19).
 library;
 
 import 'package:flutter/material.dart';
@@ -46,12 +41,8 @@ List<CompanionSessionSummary> companionMatchingSessions(
   ];
 }
 
-/// The groups of [groups] that match, in the host's order, each carrying only
-/// the sessions that match.
-///
-/// Naming a project brings all of its sessions: someone who typed a project's
-/// name asked for that project. [keepKey] keeps the project a screen is open on
-/// even when it does not match, so nothing says "this project is gone".
+/// The groups that match, in the host's order. Naming a project brings all its
+/// sessions; [keepKey] keeps the one a screen is open on even if it misses.
 List<CompanionProjectGroup> companionMatchingGroups(
   List<CompanionProjectGroup> groups,
   String query, {

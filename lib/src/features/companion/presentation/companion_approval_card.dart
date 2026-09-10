@@ -5,11 +5,8 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The pending approval for one session, on the phone, drawn to the desktop
-/// card's rules: evidence verbatim or absent, buttons only for answers the
-/// agent named, and none at all for [RemoteWaitKind.input] — `needs_approval`
-/// also fires when Claude Code has merely finished its turn, where approve
-/// would type Enter and send whatever is in the composer.
+/// The pending approval for one session, evidence verbatim. Nothing to press
+/// for [RemoteWaitKind.input] — there approve would type Enter into a composer.
 class CompanionApprovalCard extends StatefulWidget {
   const CompanionApprovalCard({
     required this.approval,

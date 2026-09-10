@@ -11,13 +11,8 @@ import 'companion_chrome.dart';
 import 'companion_states.dart';
 import 'pairing/pairing_screen.dart';
 
-/// The saved desktops, on the settings screen: which one this phone is talking
-/// to, when it last reached each, and the two verbs — switch, forget.
-///
-/// The section's frame is drawn in every state and only the list slot answers,
-/// so a read that never returns still leaves a way to pair. No skeleton: the
-/// gateway seeds `connectionsStates` on listen, so the unknown window is one
-/// microtask.
+/// The saved desktops on the settings screen. The frame draws in every state
+/// and only the list slot answers, so a read that never returns still pairs.
 class ConnectionsSection extends ConsumerWidget {
   const ConnectionsSection({super.key});
 

@@ -6,12 +6,8 @@ import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/markdown_message.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The phone's transcript: a conversation drawn from its newest message
-/// upwards.
-///
-/// Reversed, so offset zero *is* the newest message. A forward list jumping to
-/// `maxScrollExtent` lands short, because on a lazy list that extent is an
-/// estimate from the children laid out so far.
+/// The phone's transcript, drawn newest-first: reversed, so offset zero *is*
+/// the newest message rather than a lazy list's estimated `maxScrollExtent`.
 class CompanionTranscriptView extends StatefulWidget {
   const CompanionTranscriptView({
     required this.messages,
@@ -210,11 +206,8 @@ class _WindowTopNotice extends StatelessWidget {
   }
 }
 
-/// One turn, in the desktop chat's shapes at a thumb's sizes.
-///
-/// Copying is a long press: a copy `IconButton` at the touch floor made every
-/// gutter 48px tall for an 11px label, and a long press cannot compete with
-/// the tap that opens a link inside the text.
+/// One turn, at a thumb's sizes. Copying is a long press: a copy button at the
+/// touch floor made every gutter 48px tall for an 11px label.
 class _MessageTile extends StatelessWidget {
   const _MessageTile({required this.message, super.key});
 

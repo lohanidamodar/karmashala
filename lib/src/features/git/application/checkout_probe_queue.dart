@@ -4,23 +4,14 @@ import 'dart:collection';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Where a row's git probe waits before it is allowed to spawn anything: a
-/// frame, because a probe reached from the build phase charges the synchronous
-/// half of its ask to that frame, and a pane's worth of them to one build.
-///
-/// A frame and not a delay: there is nothing to wait *for*, and a pending timer
-/// is what a widget test complains about. A provider so a headless test can
-/// neutralise it — no widget tree pumps no frames, and an un-pumped
-/// `endOfFrame` never completes.
+/// Where a row's git probe waits before it may spawn: a frame, because a probe
+/// reached from the build phase charges the synchronous half of its ask to it.
 final probeGateProvider = Provider<Future<void> Function()>(
   (ref) => () => SchedulerBinding.instance.endOfFrame,
 );
 
-/// How many git probes may be running at once, across every visible row.
-///
-/// Four: one checkout's five probes are at most two wide, so this is two rows
-/// at their natural width — against the twenty-eight overlapping `git`
-/// processes an unbounded full pane reached.
+/// How many git probes may run at once across every visible row. Four: two rows
+/// at their natural width, against the twenty-eight an unbounded pane reached.
 const int kCheckoutProbeConcurrency = 4;
 
 /// Gates a checkout's git probes so a row's facts arrive after the frame that
@@ -45,12 +36,8 @@ class CheckoutProbeQueue {
   /// pane fills from the top rather than from the last row to ask.
   final Queue<Completer<void>> _waiting = Queue<Completer<void>>();
 
-  /// Runs [probe] once the gate has opened and a slot is free — the gate first,
-  /// because a probe holding a slot while it waits for a frame is a slot no
-  /// other row can use.
-  ///
-  /// Nothing awaited inside [probe] may itself pass through this queue:
-  /// [concurrency] nested probes would hold every slot waiting for one more.
+  /// Runs [probe] once the gate has opened and a slot is free — gate first, and
+  /// nothing inside [probe] may re-enter this queue or the slots deadlock.
   Future<T> run<T>(Future<T> Function() probe) async {
     await gate();
     await _acquire();

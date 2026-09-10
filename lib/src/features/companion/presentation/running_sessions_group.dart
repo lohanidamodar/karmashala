@@ -1,8 +1,5 @@
-/// What is running, on top, in every list the phone draws.
-///
-/// The snapshot decides membership — no local timer, no optimistic guess — the
-/// running rows are *lifted* rather than copied so a session appears once, and
-/// nothing running means no group at all.
+/// What is running, on top, in every list the phone draws. The snapshot decides
+/// membership, rows are lifted and not copied, and none means no group at all.
 library;
 
 import 'package:flutter/material.dart';

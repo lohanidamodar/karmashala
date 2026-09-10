@@ -49,11 +49,8 @@ class WorktreeService {
   Future<List<GitWorktree>> list(EnvironmentPath repo) =>
       _gitFor(repo).listWorktrees(repo);
 
-  /// Creates a worktree named [worktreeName] for [repo] on a new [branch], as a
-  /// sibling `.karmashala-worktrees/…` folder in the repository's environment.
-  ///
-  /// The setup hook is here and nowhere else: all three callers reach this
-  /// method, and the environment the setup must run in is already resolved.
+  /// Creates a worktree for [repo] on a new [branch] in the repository's own
+  /// environment; the setup hook is here, so all three callers reach it.
   Future<GitWorktree> createForSession({
     required EnvironmentPath repo,
     required String worktreeName,

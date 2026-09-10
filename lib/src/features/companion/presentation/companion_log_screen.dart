@@ -9,11 +9,8 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import 'companion_chrome.dart';
 
-/// The companion's own log, on the phone that produced it. The log file lives
-/// in app-support, which on Android nobody can reach, so Copy is the real
-/// feature: a bug report needs the text in a message.
-///
-/// Not a live tail — this snapshots on open and on pull-to-refresh.
+/// The companion's own log, on the phone that produced it — Copy is the real
+/// feature, since app-support is unreachable on Android. Not a live tail.
 class CompanionLogScreen extends ConsumerStatefulWidget {
   const CompanionLogScreen({super.key});
 

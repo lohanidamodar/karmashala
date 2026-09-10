@@ -7,14 +7,8 @@ import 'package:karmashala_git/git.dart';
 /// rewritten, so Quick Open's index can mark that root stale.
 typedef WorkingTreeChanged = void Function(EnvironmentPath repo);
 
-/// High-level access to a repository's working-tree changes and diffs,
-/// resolving the runner each call needs: a read by where the checkout's files
-/// live, a write by the row it is filed under — see [_ask]. Git is the source
-/// of truth and there is no editor (ADR 0004).
-///
-/// Almost read-only, as a rule: committing and pushing are things the *agent*
-/// does. The four writes below are each one user press with one meaning, not a
-/// general licence for the app to write to git.
+/// A repository's changes and diffs; reads run where the files live, writes on
+/// the row's runner. Almost read-only: committing and pushing are the agent's.
 class ChangesService {
   ChangesService({
     required this.runnerFactory,
@@ -43,12 +37,8 @@ class ChangesService {
     return env;
   }
 
-  /// Runs a **read-only** question against the runner that owns [repo]'s files
-  /// rather than the row it is filed under; see [gitProbeTargetFor].
-  ///
-  /// The writes keep [_gitFor] — a merge runs the checkout's own git, with that
-  /// side's config and filters. Nothing here returns an [EnvironmentPath], so a
-  /// moved read cannot hand a Windows-spelled path to a session that chose WSL.
+  /// Runs a read-only question on the runner that owns [repo]'s files, not the
+  /// row's; returns no [EnvironmentPath], so a moved read cannot mis-spell one.
   Future<T> _ask<T>(
     EnvironmentPath repo,
     Future<T> Function(GitService git, EnvironmentPath at) question,
@@ -204,12 +194,8 @@ class ChangesService {
     return restored;
   }
 
-  /// Moves [branch] back to [sha] for "also drop the commits this run made",
-  /// which `undo_run.dart` refuses once any of them is on a remote.
-  ///
-  /// `update-ref` and not `git reset`: the files are already back from the run's
-  /// base checkpoint, so `--hard` would discard what the user did since and
-  /// `--mixed` would silently unstage their index.
+  /// Moves [branch] back to [sha]; `undo_run.dart` refuses once any of those
+  /// commits is on a remote. `update-ref`, so no file or index entry moves.
   Future<void> moveBranchTo(
     EnvironmentPath repo, {
     required String branch,

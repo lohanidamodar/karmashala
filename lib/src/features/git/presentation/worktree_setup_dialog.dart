@@ -4,13 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:karmashala_git/git.dart';
 
-/// Writes one checkout's worktree setup: the command, and the gitignored paths
-/// to copy in.
-///
-/// The split argv is drawn under the field, because argv is what is stored and
-/// a user who cannot see the split cannot tell that `--message=two words`
-/// became two arguments. Paths are validated by the same
-/// [worktreeCopyPathRefusal] the setup runs.
+/// Writes one checkout's worktree setup. The split argv is drawn under the
+/// field, because argv is what is stored and the split is otherwise invisible.
 class WorktreeSetupDialog extends ConsumerStatefulWidget {
   const WorktreeSetupDialog({
     required this.checkoutName,
