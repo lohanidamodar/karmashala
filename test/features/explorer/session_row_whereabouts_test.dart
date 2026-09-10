@@ -126,10 +126,10 @@ void main() {
       findsOneWidget,
     );
     // …and it is dated, not asserted. The card's corner carries the age as a
-    // number and the tooltip carries what the number means, which is where
-    // Loop 46's exact wording lives now that the row is three lines.
+    // number and the tooltip carries what the number means, in `describeAge`'s
+    // wording so it reads the same here, in Quick Open and on the phone.
     expect(find.text('2h'), findsOneWidget);
-    expect(tooltipSaying('last seen 2h ago'), findsOneWidget);
+    expect(tooltipSaying('Active 2h ago'), findsOneWidget);
   });
 
   testWidgets('a session with no evidence never claims to have been seen', (

@@ -36,8 +36,13 @@ void main() {
   /// Directories reported as gone, so nothing here touches a filesystem.
   final missing = <String>{};
 
+  /// The newest evidence the app holds per session, as the presence seam
+  /// reports it — the one reading the walk both orders by and sends.
+  final activeAt = <String, DateTime>{};
+
   setUp(() {
     missing.clear();
+    activeAt.clear();
     db = AppDatabase.memory();
     container = ProviderContainer(
       overrides: [
@@ -45,7 +50,7 @@ void main() {
         remoteDeliveryStageProvider.overrideWithValue((id) async => null),
         remoteApprovalEvidenceProvider.overrideWithValue((id) async => null),
         remoteSessionPresenceProvider.overrideWithValue(
-          (id) => (note: null, lastSeen: null),
+          (id) => (note: null, lastSeen: activeAt[id]),
         ),
         // The two filesystem/git-shaped lookups, stubbed: a list must never
         // stat a disk or start git in a test.
@@ -290,5 +295,85 @@ void main() {
     final ids = listedIds();
     expect(ids, hasLength(5));
     expect(ids.toSet(), hasLength(5));
+  });
+
+  test('within a row: most recently active first, not most recently '
+      'created', () {
+    seedEnvironment();
+    seedProject('p', r'C:\work\p');
+    seedRepository('r', 'p', r'C:\work\p\repo');
+    seedSession('fresh-row', repositoryId: 'r', createdAt: DateTime.utc(2026, 6));
+    seedSession('old-row', repositoryId: 'r', createdAt: DateTime.utc(2026, 1));
+    activeAt['old-row'] = DateTime.utc(2026, 8, 31, 9);
+
+    // The phone shows "exactly as the host ordered them", so this walk is the
+    // phone's order: a week-old session that answered this morning belongs
+    // above one started in June that has done nothing.
+    expect(listedIds(), ['old-row', 'fresh-row']);
+  });
+
+  test('a session we hold no reading for lists below every one we do', () {
+    seedEnvironment();
+    seedProject('p', r'C:\work\p');
+    seedRepository('r', 'p', r'C:\work\p\repo');
+    seedSession('silent', repositoryId: 'r', createdAt: DateTime.utc(2026, 8));
+    seedSession('ancient', repositoryId: 'r', createdAt: DateTime.utc(2026, 1));
+    activeAt['ancient'] = DateTime.utc(2020);
+
+    expect(listedIds(), ['ancient', 'silent']);
+  });
+
+  test('the row carries the reading it was ordered by', () {
+    seedEnvironment();
+    seedProject('p', r'C:\work\p');
+    seedRepository('r', 'p', r'C:\work\p\repo');
+    seedSession('s1', repositoryId: 'r', createdAt: DateTime.utc(2026, 1));
+    activeAt['s1'] = DateTime.utc(2026, 8, 31, 9);
+
+    final row = container.read(remoteHostBindingsProvider).listSessions().single;
+
+    // `lastActivityAt` is what the phone draws its age from, and it is the same
+    // value the walk sorted by — a phone can never be handed a list ordered by
+    // something it cannot see.
+    expect(row.lastActivityAt, '2026-08-31T09:00:00.000Z');
+  });
+
+  test('a session with no reading falls back to its own birthday, never to '
+      'now', () {
+    seedEnvironment();
+    seedProject('p', r'C:\work\p');
+    seedRepository('r', 'p', r'C:\work\p\repo');
+    seedSession('s1', repositoryId: 'r', createdAt: DateTime.utc(2026, 1, 2));
+
+    final row = container.read(remoteHostBindingsProvider).listSessions().single;
+
+    expect(row.lastActivityAt, '2026-01-02T00:00:00.000Z');
+    expect(row.createdAt, '2026-01-02T00:00:00.000Z');
+  });
+
+  test('imported history is dated by its own file, or not at all', () {
+    seedEnvironment();
+    seedProject('p', r'C:\work\p');
+    seedRepository('r', 'p', r'C:\work\p\repo');
+    ImportedSessionDao(db).insertIfAbsent(
+      ImportedSession(
+        id: 'undated',
+        repositoryId: 'r',
+        cli: 'mystery',
+        externalId: 'x2',
+        environmentId: 'windows',
+        filePath: r'C:\nowhere\x2.jsonl',
+        storeHome: r'C:\nowhere',
+        isSubagent: false,
+        preview: 'no mtime',
+        createdAt: now,
+      ),
+    );
+
+    final row = container.read(remoteHostBindingsProvider).listSessions().single;
+
+    // §19: a file we could not date is sent as nothing, never as its import
+    // time dressed up as activity.
+    expect(row.lastActivityAt, isNull);
   });
 }

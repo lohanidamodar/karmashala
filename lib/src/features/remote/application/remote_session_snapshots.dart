@@ -25,6 +25,7 @@ import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/domain/session.dart';
+import '../../sessions/domain/session_last_active.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'remote_attachment_bindings.dart';
@@ -123,9 +124,10 @@ RemoteSessionSnapshot remoteSessionSnapshot(
       session.status.name,
     ].join('  ·  '),
     whereabouts: presence.note,
-    // The desktop's `since`: the agent's own newest evidence, or failing
-    // that when the row was created — never the time of our last poll.
-    lastActivityAt: (presence.lastSeen ?? session.createdAt)
+    // The desktop's `since`, through the one definition every list orders by:
+    // the agent's own newest evidence, or failing that when the row was
+    // created — never the time of our last poll.
+    lastActivityAt: (_lastActiveOfSession(ref, session).at ?? session.createdAt)
         .toUtc()
         .toIso8601String(),
     projectId: owner?.id,
@@ -179,7 +181,8 @@ RemoteSessionSnapshot remoteImportedSnapshot(
       'imported',
     ].join('  ·  '),
     // The store file's own mtime — the agent's writing, nothing inferred.
-    lastActivityAt: session.updatedAt?.toUtc().toIso8601String(),
+    // Absent rather than invented when the file could not be dated (§19).
+    lastActivityAt: _lastActiveOfImported(session).at?.toUtc().toIso8601String(),
     imported: true,
     projectId: owner?.id,
     projectName: owner?.name,
@@ -207,6 +210,22 @@ RemoteSessionSnapshot remoteImportedSnapshot(
   );
 }
 
+/// When a session was last active, as the walk reads it.
+///
+/// Through [remoteSessionPresenceProvider] rather than the status registry
+/// directly, because that is the seam the snapshot's own `lastActivityAt` is
+/// built from: the field the phone draws and the order it draws it in come from
+/// one reading, so a phone can never be handed a list ordered by something it
+/// cannot see.
+SessionLastActive _lastActiveOfSession(Ref ref, Session session) =>
+    newestLastActive(
+      agentEvidenceAt: ref.read(remoteSessionPresenceProvider)(session.id)
+          .lastSeen,
+    );
+
+SessionLastActive _lastActiveOfImported(ImportedSession session) =>
+    newestLastActive(storeModifiedAt: session.updatedAt);
+
 /// The sessions of one Explorer row, in the order the Explorer draws them:
 /// pinned first, then most recently active, with a lineage's children
 /// following the session they came from.
@@ -219,28 +238,40 @@ List<RemoteSessionSnapshot> _rowSnapshots(
   final forest = buildSessionForest(
     sessions.native,
     isPinned: (id) => _isPinned(ref, id),
+    lastActive: (id) {
+      final session = ref.read(sessionDaoProvider).getById(id);
+      return session == null
+          ? SessionLastActive.unknown
+          : _lastActiveOfSession(ref, session);
+    },
   );
   List<RemoteSessionSnapshot> lineage(SessionNode node) => [
     remoteSessionSnapshot(ref, node.session, project: project),
     for (final child in node.children) ...lineage(child),
   ];
   final entries =
-      <({DateTime ts, bool pinned, List<RemoteSessionSnapshot> rows})>[
+      <({SessionActivityOrder order, bool pinned, List<RemoteSessionSnapshot> rows})>[
         for (final node in forest)
           (
-            ts: node.session.createdAt,
+            order: (
+              lastActive: _lastActiveOfSession(ref, node.session),
+              createdAt: node.session.createdAt,
+            ),
             pinned: _isPinned(ref, node.session.id),
             rows: lineage(node),
           ),
         for (final imported in sessions.imported)
           (
-            ts: imported.updatedAt ?? imported.createdAt,
+            order: (
+              lastActive: _lastActiveOfImported(imported),
+              createdAt: imported.createdAt,
+            ),
             pinned: _isPinned(ref, imported.id),
             rows: [remoteImportedSnapshot(ref, imported, project: project)],
           ),
       ]..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-        return b.ts.compareTo(a.ts);
+        return compareByLastActive(a.order, b.order);
       });
   return [for (final entry in entries) ...entry.rows];
 }

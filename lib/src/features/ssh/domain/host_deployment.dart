@@ -114,7 +114,12 @@ class HostDeployment {
 /// A compiled host binary and the version it reports.
 @immutable
 class HostBinary {
-  const HostBinary({required this.bytes, required this.version, required this.source});
+  const HostBinary({
+    required this.bytes,
+    required this.version,
+    required this.source,
+    this.candidates = 1,
+  });
 
   final Uint8List bytes;
 
@@ -124,4 +129,9 @@ class HostBinary {
 
   /// Where it came from, so a failure names a path a person can look at.
   final String source;
+
+  /// How many files matched this target where [source] was found. More than one
+  /// means older builds are sitting beside it, so a notice can say which of
+  /// them was taken rather than leaving the choice invisible.
+  final int candidates;
 }

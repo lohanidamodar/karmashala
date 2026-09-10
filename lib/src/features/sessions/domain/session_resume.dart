@@ -177,16 +177,6 @@ class SessionWhereabouts {
     return null;
   }
 
-  /// The "last seen" clause, aged against [now], or null when we have no
-  /// evidence to age.
-  ///
-  /// Never rendered for [hostedLive]: we can see that process, so "running
-  /// here" is a stronger and more honest thing to say than a timestamp.
-  String? lastSeenLabel(DateTime now) {
-    if (hostedLive) return null;
-    final at = lastSeen;
-    return at == null ? null : 'last seen ${describeAge(now.difference(at))}';
-  }
 }
 
 /// A coarse, deliberately unexciting rendering of an age.
