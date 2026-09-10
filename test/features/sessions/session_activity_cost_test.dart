@@ -30,6 +30,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala_ui/rows.dart';
 
 /// **What the live-activity strip costs.** Counted, never timed.
 ///

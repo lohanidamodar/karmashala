@@ -27,8 +27,7 @@ import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_selection.dart';
 import 'section_membership_dialog.dart';
-import 'session_card.dart';
-
+import 'package:karmashala_ui/rows.dart';
 /// The two rows that stand for a session, wherever the app draws one: the tree
 /// and the sections must be the same object. Both watch inside their own
 /// `build`, so a list of five hundred that shows thirty pays for thirty.

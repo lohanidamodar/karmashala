@@ -15,7 +15,6 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
-import 'package:karmashala/src/features/sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -33,6 +32,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import 'fake_instance.dart';
+import 'package:karmashala_ui/rows.dart';
 
 /// The owner: *"in the terminals with an active session, can we add an icon or
 /// something like cmux does that shows whether the session is actually running,

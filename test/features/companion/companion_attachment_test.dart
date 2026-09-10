@@ -12,8 +12,8 @@ import 'dart:typed_data';
 
 import 'package:karmashala/src/core/util/file_picking.dart';
 import 'package:karmashala_remote/companion.dart';
-import 'package:karmashala/src/features/companion/presentation/companion_composer.dart';
-import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
+import 'package:karmashala_companion/widgets.dart';
+import 'package:karmashala_companion/screens.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

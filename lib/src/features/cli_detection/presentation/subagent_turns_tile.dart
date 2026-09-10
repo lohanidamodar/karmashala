@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../sessions/presentation/markdown_message.dart';
+import 'package:karmashala_ui/transcript.dart';
 import '../../sessions/presentation/tool_activity_row.dart';
 import '../application/subagent_providers.dart';
 import 'package:agent_cli/read.dart';

@@ -1,6 +1,6 @@
 import 'package:karmashala/src/app/companion/companion_shell.dart';
 import 'package:karmashala_remote/companion.dart';
-import 'package:karmashala/src/features/companion/presentation/pairing/pairing_screen.dart';
+import 'package:karmashala_companion/pairing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -10,7 +10,7 @@ import '../../projects/domain/project.dart';
 import '../application/checkout.dart';
 import '../application/explorer_sections.dart';
 import '../domain/explorer_section.dart';
-import 'explorer_row.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'session_rows.dart';
 
 /// The saved sections, drawn above the project tree. Returns a list, never a

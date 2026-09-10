@@ -1,7 +1,6 @@
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
-import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
-import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

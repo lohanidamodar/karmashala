@@ -5,7 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/transcript.dart';
-import 'markdown_message.dart';
+import 'package:karmashala_ui/transcript.dart';
 import 'transcript_image_preview.dart';
 
 /// The body of a transcript row that is a tool call: the command, the file, the

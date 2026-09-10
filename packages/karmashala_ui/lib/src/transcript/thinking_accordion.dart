@@ -1,0 +1,89 @@
+import 'package:flutter/material.dart';
+
+import '../app_icons.dart';
+import '../design_tokens.dart';
+
+/// An interactive accordion for agent reasoning / chain-of-thought.
+class ThinkingAccordion extends StatefulWidget {
+  const ThinkingAccordion({required this.thinking, super.key});
+  final String thinking;
+
+  @override
+  State<ThinkingAccordion> createState() => _ThinkingAccordionState();
+}
+
+class _ThinkingAccordionState extends State<ThinkingAccordion> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final lines = widget.thinking.split('\n').length;
+    final summary = lines <= 1 ? 'Thought' : 'Thought for $lines lines';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: Insets.xs),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(Radii.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.sm,
+                vertical: Insets.xs,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    AppIcons.chatCircleDots,
+                    size: Chrome.iconAction,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    summary,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _expanded ? AppIcons.caretDown : AppIcons.caretRight,
+                    size: Chrome.iconAction,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            Divider(
+              height: 1,
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(Insets.sm),
+              child: SelectableText(
+                widget.thinking,
+                style: MonoStyles.small.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

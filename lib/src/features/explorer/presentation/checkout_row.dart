@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
-import '../application/session_diff_stat.dart';
-import 'explorer_row.dart';
-import 'session_card.dart';
-
+import 'package:karmashala_ui/rows.dart';
 /// One place a session can live: a repository, one of its worktrees, or a
 /// folder the scanner has not been to yet. A single dense line, because the
 /// pane's vertical space belongs to the cards.

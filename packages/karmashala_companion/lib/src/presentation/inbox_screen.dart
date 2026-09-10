@@ -1,0 +1,150 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
+import '../application/companion_runtime.dart';
+import 'package:karmashala_session/resume.dart';
+import '../application/companion_providers.dart';
+import 'package:karmashala_remote/companion.dart';
+import 'companion_chrome.dart';
+import 'companion_route.dart';
+import 'companion_states.dart';
+import 'session_view_screen.dart';
+
+/// The attention inbox on the phone: sessions the host says are waiting,
+/// newest first. The tab that answers "what needs me" across projects, which
+/// is why the Projects tab does not have to.
+class InboxScreen extends ConsumerWidget {
+  const InboxScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessions = ref.watch(companionSessionsProvider);
+    final waiting = ref.watch(companionInboxProvider);
+    final now = ref.read(companionClockProvider).nowUtc();
+    final scheme = Theme.of(context).colorScheme;
+
+    return companionAsync(
+      sessions,
+      loading: () => const CompanionSkeletonList(lines: 2),
+      error: (error) => CompanionNotice.failure(
+        error: error,
+        onRetry: () {
+          ref.read(companionGatewayProvider).reconnect();
+          ref.invalidate(companionSessionsSnapshotProvider);
+        },
+      ),
+      data: (_) => waiting.isEmpty
+          ? const CompanionNotice(
+              icon: AppIcons.checkCircle,
+              tone: NoticeTone.idle,
+              title: 'Nothing needs you.',
+              body:
+                  'Sessions that finish, fail, or stop to ask you something '
+                  'collect here.',
+            )
+          : ListView.separated(
+              padding: companionListInsets(
+                context,
+                const EdgeInsets.only(bottom: Insets.xl),
+              ),
+              itemCount: waiting.length,
+              separatorBuilder: (context, index) => Divider(
+                height: 1,
+                thickness: 1,
+                indent: Insets.lg,
+                color: scheme.outlineVariant,
+              ),
+              itemBuilder: (context, index) =>
+                  _InboxRow(session: waiting[index], now: now),
+            ),
+    );
+  }
+}
+
+class _InboxRow extends StatelessWidget {
+  const _InboxRow({required this.session, required this.now});
+
+  final CompanionSessionSummary session;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final semantic = SemanticColors.of(context);
+    final density = UiDensity.of(context);
+    final attention = session.attention!;
+    // The same glyph-and-colour pairs as the desktop inbox rows.
+    final (icon, colour) = switch (attention.kind) {
+      CompanionAttentionKind.needsYou => (
+        AppIcons.question,
+        semantic.attention,
+      ),
+      CompanionAttentionKind.failed => (
+        AppIcons.warningCircle,
+        semantic.failure,
+      ),
+      CompanionAttentionKind.finished => (AppIcons.checkCircle, semantic.idle),
+    };
+
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        companionRoute<void>(
+          context,
+          (_) => SessionViewScreen(sessionId: session.id),
+        ),
+      ),
+      child: Container(
+        constraints: density.isTouch
+            ? const BoxConstraints(minHeight: Touch.target)
+            : null,
+        padding: EdgeInsets.symmetric(
+          horizontal: density.padX,
+          vertical: density.padY,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              // An optical nudge, so the glyph sits on the title's first line
+              // rather than on the top of its box.
+              padding: EdgeInsets.only(top: density.lineGap / 2),
+              child: Icon(icon, size: density.icon, color: colour),
+            ),
+            SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    session.title,
+                    maxLines: density.isTouch ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: density.title(theme),
+                  ),
+                  SizedBox(height: density.lineGap),
+                  Text(
+                    '${attention.kind.label}  ·  '
+                    '${session.projectName}  ·  '
+                    '${describeAge(now.difference(attention.at))}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: density.muted(theme),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: density.glyphGap),
+            Icon(
+              AppIcons.caretRight,
+              size: density.icon,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

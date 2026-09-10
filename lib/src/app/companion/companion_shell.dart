@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/companion/application/companion_providers.dart';
-import '../../features/companion/presentation/companion_settings_screen.dart';
-import '../../features/companion/presentation/host_switcher_bar.dart';
-import '../../features/companion/presentation/inbox_screen.dart';
-import '../../features/companion/presentation/link_banner.dart';
-import '../../features/companion/presentation/pairing/pairing_screen.dart';
-import '../../features/companion/presentation/session_list_screen.dart';
+import 'package:karmashala_companion/providers.dart';
+import 'package:karmashala_companion/screens.dart';
+import 'package:karmashala_companion/widgets.dart';
+import 'package:karmashala_companion/pairing.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 

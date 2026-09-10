@@ -3,8 +3,10 @@ description: >-
   The design system, as widgets: the colour ramp, spacing, radii, density and
   chrome metrics; the Phosphor glyph table; the assembled `ThemeData` and the
   UI text scale over it; and the desktop chrome every surface wears — pane
-  frames, popup menus, dialog headers and a handful of primitives. A Flutter
-  package, so its suites run under `flutter test`.
+  frames, popup menus, dialog headers and a handful of primitives — plus the
+  rows a workspace is listed as and the way one transcript message is drawn,
+  both shared by the desktop and the phone. A Flutter package, so its suites
+  run under `flutter test`.
 version: 0.1.0
 publish_to: none
 
@@ -18,9 +20,22 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # `AgentActivityStatus`, the five states a status glyph is drawn for.
+  agent_cli:
+    path: ../agent_cli
   # `linksInText`, behind LinkableText's span builder.
   karmashala_core:
     path: ../karmashala_core
+  # The values the rows draw: `SessionLink` for lineage, `SessionDelivery`
+  # behind `SessionDiffStat.from`, and the path pattern a message links on.
+  karmashala_session:
+    path: ../karmashala_session
+  # A transcript message: markdown, its highlighted code, and the inline
+  # syntax the path links are found by.
+  flutter_highlight: ^0.7.0
+  flutter_markdown_plus: ^1.0.7
+  highlight: ^0.7.0
+  markdown: ^7.3.1
   # The QR matrix QrPainter paints.
   qr: ^4.0.0
   # Opening a link LinkableText found.

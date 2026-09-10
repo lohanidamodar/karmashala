@@ -11,10 +11,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// debt is *textual*, and a widget test would have to render every screen to
 /// find one badge.
 void main() {
-  // The app and the design system it is drawn with: the tokens and the chrome
-  // left for `karmashala_ui`, and a sweep that stopped at `lib/` would stop
-  // guarding exactly the files that define the ramp.
-  final roots = [Directory('lib'), Directory('packages/karmashala_ui/lib')];
+  // The app, the design system it is drawn with and the phone: the tokens and
+  // the chrome left for `karmashala_ui`, the companion left for its own
+  // package, and a sweep that stopped at `lib/` would stop guarding exactly
+  // the files that define the ramp and the touch surface that borrows it.
+  final roots = [
+    Directory('lib'),
+    Directory('packages/karmashala_ui/lib'),
+    Directory('packages/karmashala_companion/lib'),
+  ];
 
   /// Where a size may be named. Everywhere else borrows a style.
   const themeLayer = {
@@ -170,7 +175,7 @@ void main() {
     expect(
       hits(
         pattern,
-        skip: (path) => path.startsWith('lib/src/features/companion/'),
+        skip: (path) => path.startsWith('packages/karmashala_companion/'),
       ),
       isEmpty,
       reason: 'the theme already draws this glyph at Chrome.icon — drop the '

@@ -21,7 +21,7 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
-import 'package:karmashala/src/features/sessions/presentation/markdown_message.dart';
+import 'package:karmashala_ui/transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
