@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_changed_alert.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_key_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_secret_dialog.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/presentation/session_status.dart';
 import 'package:flutter/material.dart';

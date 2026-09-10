@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
-import '../domain/pane_search.dart';
-import '../domain/terminal_search.dart';
-import '../domain/terminal_search_query.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 import 'scrollback_autosave.dart';
 import 'terminal_scroll.dart';
 import 'terminal_sessions_controller.dart';

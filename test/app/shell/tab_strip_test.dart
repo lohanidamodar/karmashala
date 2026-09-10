@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -22,7 +22,7 @@ import 'package:karmashala/src/features/terminal/data/system_terminal_service.da
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

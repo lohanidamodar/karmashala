@@ -9,7 +9,7 @@ import '../../flutter_apps/application/flutter_sdk_readings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
 import '../../terminal/data/terminal_grid_text.dart';
-import '../../terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/project_scanner.dart';
 import '../domain/apk_output_metadata.dart';
 import '../domain/project_build.dart';

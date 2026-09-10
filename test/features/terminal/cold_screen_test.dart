@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/terminal/data/cold_screen.dart';
 import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
-import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 

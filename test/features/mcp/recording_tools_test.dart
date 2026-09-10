@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:karmashala/src/features/mcp/recording_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_recording_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../terminal/fake_instance.dart';
 

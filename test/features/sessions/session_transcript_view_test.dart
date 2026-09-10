@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_event.dart';
 import 'package:agent_cli/stream.dart';

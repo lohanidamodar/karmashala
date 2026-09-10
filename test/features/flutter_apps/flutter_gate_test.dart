@@ -10,7 +10,7 @@ import 'package:karmashala/src/features/flutter_apps/application/flutter_gate_ob
 import 'package:karmashala/src/features/flutter_apps/application/flutter_loop.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
 

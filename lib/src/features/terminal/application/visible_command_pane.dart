@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:agent_cli/process.dart';
-import '../domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'terminal_sessions_controller.dart';
 
 /// A command the app wants to run **where the user can see it**, plus the three

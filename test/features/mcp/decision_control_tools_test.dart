@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/decision_record.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
 import 'package:karmashala/src/features/verification/domain/verification_target.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

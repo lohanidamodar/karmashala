@@ -20,7 +20,7 @@ import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

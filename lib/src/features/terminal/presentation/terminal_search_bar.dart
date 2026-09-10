@@ -5,8 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_search_controller.dart';
-import '../domain/pane_search.dart';
-import '../domain/terminal_search.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 
 /// Find bar. Enter, Shift+Enter and Escape are bound here rather than in the
 /// terminal's key handling, because this field has the focus while it is open.

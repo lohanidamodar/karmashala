@@ -4,7 +4,7 @@ import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/command_run_watch.dart';
 import '../terminal/data/terminal_grid_text.dart';
 import '../terminal/data/terminal_instance.dart';
-import '../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import '../terminal/application/terminal_profiles.dart';
 
 /// The terminal layout, as an agent can drive it — through the same

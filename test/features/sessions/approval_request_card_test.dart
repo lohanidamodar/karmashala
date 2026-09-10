@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

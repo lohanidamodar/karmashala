@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/domain/command_blocks.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A stand-in for a buffer line whose index can move, or vanish when the line

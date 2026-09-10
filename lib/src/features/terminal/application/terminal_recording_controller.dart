@@ -12,7 +12,7 @@ import '../../../core/paths/app_support_directory.dart';
 import '../data/cast_frame_renderer.dart';
 import '../data/cast_recorder.dart';
 import '../data/terminal_instance.dart';
-import '../domain/terminal_cast.dart';
+import 'package:karmashala_terminal_core/cast.dart';
 import 'terminal_sessions_controller.dart';
 
 /// Where recordings are written: under the application support directory, not

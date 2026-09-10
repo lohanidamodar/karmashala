@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:xterm2/xterm.dart';
 
-import '../domain/scrollback_limits.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
 /// Re-emits [terminal]'s main-buffer scrollback as text plus SGR sequences,
 /// each line self-contained and newest first, so [maxBytes] can stop the walk.

@@ -19,7 +19,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

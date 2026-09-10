@@ -13,8 +13,7 @@ import 'package:karmashala/src/features/media/presentation/session_image_dialog.
 import 'package:karmashala/src/features/terminal/application/terminal_link_actions.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:xterm2/xterm.dart';
 
 import '../media/session_media_fixture.dart';

@@ -1,5 +1,5 @@
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

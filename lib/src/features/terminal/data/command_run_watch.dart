@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:xterm2/xterm.dart';
 
-import '../domain/command_blocks.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'command_block_recorder.dart';
 import 'terminal_instance.dart';
 

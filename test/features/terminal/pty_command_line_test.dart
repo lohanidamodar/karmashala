@@ -2,8 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 /// The command line `flutter_pty` 0.4.2 really hands to `CreateProcessW`.
 ///

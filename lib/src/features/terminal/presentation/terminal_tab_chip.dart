@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import 'session_status.dart';

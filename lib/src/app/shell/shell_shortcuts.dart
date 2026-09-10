@@ -9,7 +9,7 @@ import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
-import '../../features/terminal/domain/pane_layout.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
 import 'workbench_tabs.dart';

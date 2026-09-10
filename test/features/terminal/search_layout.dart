@@ -2,9 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_search_controller.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_search.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_core/grid.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';

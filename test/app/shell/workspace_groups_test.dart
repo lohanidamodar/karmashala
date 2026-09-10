@@ -19,8 +19,8 @@ import 'package:karmashala/src/features/sessions/presentation/session_transcript
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 

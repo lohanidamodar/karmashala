@@ -5,8 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 

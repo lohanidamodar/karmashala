@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/settings/presentation/settings_nav.dart'
 import 'package:karmashala/src/features/settings/presentation/settings_tab_view.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/document_pane.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

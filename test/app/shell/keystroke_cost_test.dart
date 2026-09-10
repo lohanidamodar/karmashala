@@ -37,7 +37,7 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 

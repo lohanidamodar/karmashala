@@ -14,7 +14,7 @@ import 'package:karmashala/src/features/snippets/application/snippet_providers.d
 import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

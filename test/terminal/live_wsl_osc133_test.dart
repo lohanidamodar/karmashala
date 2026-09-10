@@ -16,10 +16,8 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/domain/command_blocks.dart';
-import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
-import 'package:karmashala/src/features/terminal/domain/wsl_shell_integration.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 import '../features/terminal/fake_instance.dart';
 

@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala/src/features/terminal/presentation/pane_layout_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';

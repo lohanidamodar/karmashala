@@ -23,6 +23,7 @@ workspace:
   - packages/karmashala_git
   - packages/karmashala_media
   - packages/karmashala_remote
+  - packages/karmashala_terminal_core
   - packages/local_ipc
 
 dependencies:
@@ -60,6 +61,12 @@ dependencies:
     path: packages/karmashala_flutter_apps
   karmashala_remote:
     path: packages/karmashala_remote
+  # What a terminal is, as values: profiles and launch contexts, the pane and
+  # workspace geometry, the grid vocabulary, OSC shell integration and the cast
+  # format. A Flutter package — `xterm2`'s buffer types are its vocabulary
+  # (docs/PACKAGE_SPLIT_2.md, Revision 2).
+  karmashala_terminal_core:
+    path: packages/karmashala_terminal_core
   # Git and GitHub as values plus the readers and parsers that produce them.
   # Built beside the app in phase A — nothing under `lib/` imports it yet
   # (docs/PACKAGE_SPLIT.md §2).

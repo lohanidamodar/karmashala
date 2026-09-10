@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../environments/application/environments_controller.dart';
-import '../domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 /// The shells this machine can open a terminal in. Host-aware, which it was
 /// not: a Mac's settings page listed PowerShell and Command Prompt, and picking

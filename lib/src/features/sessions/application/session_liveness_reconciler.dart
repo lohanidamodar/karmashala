@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/session_dao.dart';
 import '../domain/session_status.dart';
 import 'session_launch_refusal.dart';

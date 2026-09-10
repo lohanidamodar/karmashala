@@ -5,8 +5,7 @@ import 'package:flutter/painting.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_media/media.dart';
-import '../domain/cast_playback.dart';
-import '../domain/terminal_cast.dart';
+import 'package:karmashala_terminal_core/cast.dart';
 
 /// How a recording is framed: the canvas, and the window drawn on it. The
 /// chrome is *fixed* — nobody would ever change a corner radius in settings.

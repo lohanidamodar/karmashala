@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
 import 'package:karmashala/src/features/terminal/data/host_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_host/protocol.dart';
 
 import 'fake_host_access.dart';

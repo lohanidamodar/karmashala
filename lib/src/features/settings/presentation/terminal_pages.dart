@@ -6,7 +6,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../terminal/application/terminal_theme_controller.dart';
 import '../../terminal/data/theme_discovery.dart';
-import '../../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'session_host_status_line.dart';

@@ -1,10 +1,7 @@
 import 'dart:convert';
 
-import '../domain/agent_pane_launch.dart';
-import '../domain/launch_context.dart';
-import '../domain/shell_integration.dart';
-import '../domain/wsl_shell_integration.dart';
-import '../domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_core/shell_integration.dart';
 
 /// A concrete process launch for a host ConPTY. Deliberately not a
 /// [ShellCommand] and with no route back, so double-wrapping cannot compile.

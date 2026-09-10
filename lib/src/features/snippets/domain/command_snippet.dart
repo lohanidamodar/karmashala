@@ -1,4 +1,4 @@
-import '../../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 
 /// A command the user keeps. Delivered as **text at the prompt**; [submit] is
 /// what makes it press Enter. [shellId] is the raw name, so a tag this build

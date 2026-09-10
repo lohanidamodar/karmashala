@@ -10,8 +10,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/terminal_sessions_controller.dart';
-import '../domain/pane_layout.dart';
-import '../domain/terminal_drag.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'session_status.dart';
 
 /// The header one region of a split draws for the panes stacked in it.

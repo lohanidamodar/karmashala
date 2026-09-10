@@ -4,7 +4,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/domain/pane_liveness.dart';
+import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../domain/session_last_active.dart';
 import '../domain/session_launch.dart';

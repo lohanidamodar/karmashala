@@ -5,7 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../mcp/session_mcp.dart';
-import '../../terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import 'session_working_directory.dart';
 
 /// The flags that point one agent at this app's MCP endpoint — the only

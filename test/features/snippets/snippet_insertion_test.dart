@@ -3,9 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_insertion.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';

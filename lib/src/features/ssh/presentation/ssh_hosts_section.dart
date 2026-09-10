@@ -9,7 +9,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/domain/terminal_profile.dart';
+import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/ssh_hosts_controller.dart';
 import '../domain/ssh_host.dart';
 import 'ssh_connection_status_chip.dart';
