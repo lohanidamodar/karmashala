@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 import 'device_touch_surface.dart';
 
 /// Covers a frozen live view, says what happened, and offers the way out.

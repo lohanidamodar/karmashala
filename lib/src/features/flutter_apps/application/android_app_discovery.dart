@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
-import '../../devices/application/device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'attached_apps.dart';

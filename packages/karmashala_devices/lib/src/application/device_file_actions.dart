@@ -4,8 +4,7 @@ library;
 
 import 'dart:io';
 
-import '../../../core/clipboard/host_clipboard.dart';
-import 'package:karmashala_devices/karmashala_devices.dart';
+import '../../karmashala_devices.dart';
 
 /// Creates a host directory. Injected so a test never writes to a real disk.
 typedef HostDirectoryMaker = Future<void> Function(String path);

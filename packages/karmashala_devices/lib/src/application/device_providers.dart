@@ -2,10 +2,9 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/command_runner_providers.dart';
+import 'device_ports.dart';
 import 'package:agent_cli/process.dart';
-import '../../settings/application/settings_controller.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// The environment whose Android SDK the pane uses. A provider, not a
 /// constant: a WSL SDK is a different adb server with a different list.
@@ -17,7 +16,7 @@ final deviceEnvironmentProvider = Provider<ExecutionEnvironment>(
 final androidSdkProvider = FutureProvider<AndroidSdk?>((ref) async {
   final environment = ref.watch(deviceEnvironmentProvider);
   final runner = ref
-      .watch(commandRunnerFactoryProvider)
+      .watch(deviceCommandRunnerFactoryProvider)
       .forEnvironment(environment);
   return AndroidSdkDiscoveryService(
     runner: runner,
@@ -31,7 +30,7 @@ final adbServiceProvider = Provider<AdbService?>((ref) {
   if (sdk == null) return null;
   final environment = ref.watch(deviceEnvironmentProvider);
   final runner = ref
-      .watch(commandRunnerFactoryProvider)
+      .watch(deviceCommandRunnerFactoryProvider)
       .forEnvironment(environment);
   return AdbService(runner: runner, sdk: sdk);
 });
@@ -117,7 +116,7 @@ final androidSlimmingServiceProvider = Provider<AndroidSlimmingService?>((ref) {
   if (sdk == null) return null;
   final environment = ref.watch(deviceEnvironmentProvider);
   return AndroidSlimmingService(
-    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
     sdk: sdk,
   );
 });
@@ -133,7 +132,7 @@ final androidSlimmingStatusProvider = FutureProvider.autoDispose
 
 /// Whether starting an emulator slims it at all — the master switch.
 final androidSlimmingOnStartProvider = Provider<bool>(
-  (ref) => ref.watch(settingsControllerProvider.select((s) => s.androidSlimming)),
+  (ref) => ref.watch(deviceSlimmingPreferencesProvider.select((s) => s.androidSlimming)),
 );
 
 /// The categories to apply, or empty when slimming is off. Ids that no longer
@@ -143,7 +142,7 @@ final androidSlimmingCategoriesProvider =
       if (!ref.watch(androidSlimmingOnStartProvider)) return const {};
       return categoriesFromIds(
         ref.watch(
-          settingsControllerProvider.select((s) => s.androidSlimmingEnabled),
+          deviceSlimmingPreferencesProvider.select((s) => s.androidSlimmingEnabled),
         ),
       );
     });
@@ -151,7 +150,7 @@ final androidSlimmingCategoriesProvider =
 /// The renderer the emulator is started with.
 final androidEmulatorGpuProvider = Provider<AndroidGpuMode>(
   (ref) => AndroidGpuMode.byId(
-    ref.watch(settingsControllerProvider.select((s) => s.androidEmulatorGpu)),
+    ref.watch(deviceSlimmingPreferencesProvider.select((s) => s.androidEmulatorGpu)),
   ),
 );
 
@@ -224,7 +223,7 @@ final deviceStreamServiceProvider = Provider<DeviceStreamService?>((ref) {
   final environment = ref.watch(deviceEnvironmentProvider);
   return DeviceStreamService(
     adb: adb,
-    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
     serverBytes: () async {
       final data = await rootBundle.load(kScrcpyServerAsset);
       return data.buffer.asUint8List();

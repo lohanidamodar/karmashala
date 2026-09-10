@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/device_ports.dart';
 import '../application/device_logcat_session.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// Whether the logcat view under the picture is open. Outside the widget, so
 /// closing it disposes the session and a surface switch finds it as left.
@@ -133,7 +133,7 @@ class _LogcatState extends ConsumerState<_Logcat> {
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(deviceLogcatSessionProvider(widget.serial));
-    final now = ref.watch(clockProvider).nowUtc();
+    final now = ref.watch(deviceClockProvider).nowUtc();
     return ListenableBuilder(
       listenable: session,
       builder: (context, _) => Column(

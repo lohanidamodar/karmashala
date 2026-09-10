@@ -7,11 +7,10 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/clipboard/host_clipboard.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../application/device_file_actions.dart';
 import '../application/device_fleet.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// Browsing a device's storage, and moving files across: the roots the driver
 /// says it can reach, never a filesystem, and a refusal is never "empty".

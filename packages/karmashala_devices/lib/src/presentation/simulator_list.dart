@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../settings/application/settings_controller.dart';
+import '../application/device_ports.dart';
 import '../application/ios_device_providers.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 import 'device_section_header.dart';
 import 'simulator_slimming_dialog.dart';
 
@@ -153,7 +153,7 @@ class _SlimOnStart extends ConsumerWidget {
             style: theme.textTheme.bodySmall,
           ),
           onChanged: (value) => ref
-              .read(settingsControllerProvider.notifier)
+              .read(deviceSlimmingPreferencesProvider.notifier)
               .setSimulatorSlimming(value ?? false),
         ),
         if (enabled && booted)

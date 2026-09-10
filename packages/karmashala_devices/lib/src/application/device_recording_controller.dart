@@ -5,10 +5,9 @@ import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/paths/app_support_directory.dart';
 import 'package:agent_cli/process.dart';
-import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'device_ports.dart';
+import '../../devices.dart';
 import 'ios_device_providers.dart';
 
 /// The folder recordings are written to, under the app's support directory.
@@ -38,7 +37,10 @@ typedef RecordingSinkOpener = Future<RecordingSink> Function(String path);
 final deviceRecordingDirectoryProvider = Provider<Future<String> Function()>(
   (ref) => () async {
     final directory = Directory(
-      p.join((await appSupportDirectory()).path, kDeviceRecordingsFolder),
+      p.join(
+        (await ref.read(deviceDataDirectoryProvider)()).path,
+        kDeviceRecordingsFolder,
+      ),
     );
     await directory.create(recursive: true);
     return directory.path;
@@ -142,7 +144,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     final source = _source;
     if (source == null) return;
 
-    final startedAt = ref.read(clockProvider).nowUtc();
+    final startedAt = ref.read(deviceClockProvider).nowUtc();
     final String path;
     RecordingSink? sink;
     Mp4RecordingWriter? mp4;
@@ -199,7 +201,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
 
-    final startedAt = ref.read(clockProvider).nowUtc();
+    final startedAt = ref.read(deviceClockProvider).nowUtc();
     final String path;
     final ProcessHandle process;
     try {
@@ -355,7 +357,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     }
     if (bytes == 0) bytes = await _sizeOf(active.path);
 
-    final length = ref.read(clockProvider).nowUtc().difference(active.startedAt);
+    final length = ref.read(deviceClockProvider).nowUtc().difference(active.startedAt);
     // A transport stream whose only event was the container tables holds no
     // picture, however many bytes. An MP4 counts access units, so one is real.
     final noPicture =

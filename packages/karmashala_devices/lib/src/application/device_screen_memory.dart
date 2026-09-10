@@ -1,8 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/util.dart';
-import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'device_ports.dart';
+import '../../devices.dart';
 
 /// The last screen this app read on each device, in memory only and keyed per
 /// device, not per caller: a moved screen is stale for whoever holds it.
@@ -58,5 +58,5 @@ class DeviceScreenMemory {
 }
 
 final deviceScreenMemoryProvider = Provider<DeviceScreenMemory>(
-  (ref) => DeviceScreenMemory(clock: ref.watch(clockProvider)),
+  (ref) => DeviceScreenMemory(clock: ref.watch(deviceClockProvider)),
 );

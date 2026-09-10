@@ -19,6 +19,7 @@ import 'src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
+import 'src/features/devices/application/device_bindings.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'src/features/env_secrets/application/env_secrets_controller.dart';
@@ -102,6 +103,9 @@ Future<void> main() async {
     overrides: [
       databaseProvider.overrideWithValue(database),
       envVaultProvider.overrideWithValue(envVault),
+      // What `karmashala_devices` cannot know: this app's clock, its SSH-aware
+      // runner factory, where it keeps data, its settings and its shell.
+      ...deviceBindings,
     ],
   );
 

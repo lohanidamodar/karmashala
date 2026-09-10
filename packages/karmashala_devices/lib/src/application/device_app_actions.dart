@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'device_ports.dart';
+import '../../devices.dart';
 import 'device_claims.dart';
 import 'device_fleet.dart';
 
@@ -70,7 +70,7 @@ class DeviceAppActions {
       return DeviceActionOutcome<T>(
         verb: verb,
         value: value,
-        at: _ref.read(clockProvider).nowUtc(),
+        at: _ref.read(deviceClockProvider).nowUtc(),
       );
     } on Object catch (error) {
       // `DeviceBusy` and `DeviceRefusal` both `toString()` to the sentence
@@ -78,7 +78,7 @@ class DeviceAppActions {
       return DeviceActionOutcome<T>(
         verb: verb,
         problem: '$error',
-        at: _ref.read(clockProvider).nowUtc(),
+        at: _ref.read(deviceClockProvider).nowUtc(),
       );
     }
   }

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/tokens.dart';
-import '../../settings/application/settings_controller.dart';
+import '../application/device_ports.dart';
 import '../application/device_providers.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// What an Android emulator starts with, and what is switched off inside it.
 /// A tick *applies* a category here; on the iOS page a tick *spares* one.
@@ -22,10 +22,10 @@ class AndroidSlimmingDialog extends ConsumerWidget {
     final enabled = ref.watch(androidSlimmingOnStartProvider);
     final selected = categoriesFromIds(
       ref.watch(
-        settingsControllerProvider.select((s) => s.androidSlimmingEnabled),
+        deviceSlimmingPreferencesProvider.select((s) => s.androidSlimmingEnabled),
       ),
     );
-    final controller = ref.read(settingsControllerProvider.notifier);
+    final controller = ref.read(deviceSlimmingPreferencesProvider.notifier);
 
     void setSelected(AndroidSlimmingCategory category, {required bool apply}) {
       final next = {...selected};
@@ -129,7 +129,7 @@ class _GpuPicker extends ConsumerWidget {
           ],
           onChanged: enabled
               ? (value) => ref
-                    .read(settingsControllerProvider.notifier)
+                    .read(deviceSlimmingPreferencesProvider.notifier)
                     .setAndroidEmulatorGpu((value ?? AndroidGpuMode.auto).id)
               : null,
         ),

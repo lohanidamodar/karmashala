@@ -1,9 +1,8 @@
+import 'package:karmashala_core/util.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_core/util.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../sessions/application/session_providers.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
+import 'device_ports.dart';
 
 /// What to call the session [sessionId], or **null when it is over**. One
 /// lookup for two questions: a holder we can name is one that still exists.
@@ -115,15 +114,12 @@ class DeviceClaims {
       'device_logcat all work while somebody else is driving.';
 }
 
-/// The app's one claim registry. Its holder lookup is `Session.isOver`, the
-/// same predicate that retires a session's MCP token — one rule, one place.
+/// The one claim registry. Its default names no holder, so nothing is ever
+/// busy; the app overrides it with a lookup through its session store, which
+/// reads a DAO and is why that half cannot live here.
 final deviceClaimsProvider = Provider<DeviceClaims>(
   (ref) => DeviceClaims(
-    clock: ref.watch(clockProvider),
-    holder: (sessionId) {
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
-      if (session == null || session.isOver) return null;
-      return session.title;
-    },
+    clock: ref.watch(deviceClockProvider),
+    holder: (_) => null,
   ),
 );

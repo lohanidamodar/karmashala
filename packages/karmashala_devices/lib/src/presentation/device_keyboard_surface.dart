@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 import 'desktop_key_bridge.dart';
 

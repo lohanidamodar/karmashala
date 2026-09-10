@@ -3,11 +3,10 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/command_runner_providers.dart';
+import 'device_ports.dart';
 import 'package:agent_cli/process.dart';
-import '../../settings/application/settings_controller.dart';
 import 'device_providers.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// Whether this machine can have iOS Simulators at all — a fact about the OS,
 /// not a probe: `simctl` ships with Xcode, so spawning `xcrun` proves nothing.
@@ -18,7 +17,7 @@ final simctlServiceProvider = Provider<SimctlService?>((ref) {
   if (!ref.watch(hostCanRunSimulatorsProvider)) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
   return SimctlService(
-    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
   );
 });
 
@@ -68,7 +67,7 @@ final simulatorBackendProvider = Provider<WdaBackend?>((ref) {
   if (locator.locate() == null) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
   final backend = WdaBackend(
-    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
     simctl: simctl,
     locator: locator,
   );
@@ -130,7 +129,7 @@ final simulatorSlimmingServiceProvider = Provider<SimulatorSlimmingService?>((
   if (!ref.watch(hostCanRunSimulatorsProvider)) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
   return SimulatorSlimmingService(
-    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
   );
 });
 
@@ -138,7 +137,7 @@ final simulatorSlimmingServiceProvider = Provider<SimulatorSlimmingService?>((
 /// name a category are dropped: a removal must not break a saved preference.
 final slimmingKeptCategoriesProvider = Provider<Set<SlimmingCategory>>((ref) {
   final ids = ref.watch(
-    settingsControllerProvider.select((s) => s.simulatorSlimmingKept),
+    deviceSlimmingPreferencesProvider.select((s) => s.simulatorSlimmingKept),
   );
   return {for (final id in ids) ?SlimmingCategory.byId(id)};
 });
@@ -148,7 +147,7 @@ final slimmingKeptCategoriesProvider = Provider<Set<SlimmingCategory>>((ref) {
 final slimmingOnStartProvider = Provider<bool>((ref) {
   if (!ref.watch(hostCanRunSimulatorsProvider)) return false;
   return ref.watch(
-    settingsControllerProvider.select((s) => s.simulatorSlimming),
+    deviceSlimmingPreferencesProvider.select((s) => s.simulatorSlimming),
   );
 });
 

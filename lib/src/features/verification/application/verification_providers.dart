@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_providers.dart';
 import '../../browser/application/browser_providers.dart';
-import '../../devices/application/device_providers.dart';
+import 'package:karmashala_devices/providers.dart';
 import '../../follow_ups/domain/session_ending.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';

@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// The touch target laid over the live view. A raw [Listener], never a
 /// `GestureDetector`: a recogniser withholds events until ~18 px of slop.

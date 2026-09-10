@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/tokens.dart';
-import '../../settings/application/settings_controller.dart';
+import '../application/device_ports.dart';
 import '../application/ios_device_providers.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// What an iOS simulator starts with, and what is switched off inside it.
 /// A tick *spares* a category here; on the Android dialog a tick applies one.
@@ -21,7 +21,7 @@ class SimulatorSlimmingDialog extends ConsumerWidget {
     final theme = Theme.of(context);
     final enabled = ref.watch(slimmingOnStartProvider);
     final kept = ref.watch(slimmingKeptCategoriesProvider);
-    final controller = ref.read(settingsControllerProvider.notifier);
+    final controller = ref.read(deviceSlimmingPreferencesProvider.notifier);
 
     void setKept(SlimmingCategory category, {required bool keep}) {
       final next = {...kept};

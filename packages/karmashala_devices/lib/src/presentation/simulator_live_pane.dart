@@ -8,7 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/device_recording_controller.dart';
 import '../application/ios_device_providers.dart';
 import '../application/simulator_live_view.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_touch_surface.dart';

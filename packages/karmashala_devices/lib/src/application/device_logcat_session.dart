@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_devices/devices.dart';
+import 'device_ports.dart';
+import '../../devices.dart';
 import 'device_providers.dart';
 
 /// A live `logcat` for one device, over the same `AdbService` the
@@ -217,7 +217,7 @@ final deviceLogcatSessionProvider = Provider.autoDispose
       final session = DeviceLogcatSession(
         serial: serial,
         adb: ref.watch(adbServiceProvider),
-        clock: ref.watch(clockProvider),
+        clock: ref.watch(deviceClockProvider),
       );
       ref.onDispose(session.dispose);
       return session;

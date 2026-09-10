@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/shell/reveal_in_file_manager.dart';
+import '../application/device_ports.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
 import '../application/device_providers.dart';
 import '../application/device_recording_controller.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// The one thing on screen that says a recording is running: it reads
 /// [deviceRecordingProvider], which outlives the pane a switch unmounts.
@@ -92,8 +92,8 @@ class _Finished extends ConsumerWidget {
   Future<void> _reveal(BuildContext context, WidgetRef ref) async {
     final path = outcome.path;
     if (path == null) return;
-    final outcomeOfReveal = await ref
-        .read(revealInFileManagerProvider)
+    final failure = await ref
+        .read(devicePathRevealerProvider)
         .reveal(
           EnvironmentPath(
             environmentId: localHostEnvironmentId,
@@ -101,10 +101,10 @@ class _Finished extends ConsumerWidget {
           ),
           select: true,
         );
-    if (!context.mounted || outcomeOfReveal.ok) return;
+    if (!context.mounted || failure == null) return;
     ScaffoldMessenger.maybeOf(
       context,
-    )?.showSnackBar(SnackBar(content: Text(outcomeOfReveal.error!)));
+    )?.showSnackBar(SnackBar(content: Text(failure)));
   }
 
   @override
@@ -115,7 +115,7 @@ class _Finished extends ConsumerWidget {
     final canReveal =
         path != null &&
         ref
-            .watch(revealInFileManagerProvider)
+            .watch(devicePathRevealerProvider)
             .canReveal(
               EnvironmentPath(
                 environmentId: localHostEnvironmentId,

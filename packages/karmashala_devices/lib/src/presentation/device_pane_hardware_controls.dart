@@ -82,7 +82,7 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     final canReach = target != null && ref.watch(adbServiceProvider) != null;
     final recording = ref.watch(deviceRecordingProvider);
     // What container the recording can be, said on the button before it starts.
-    final mp4Support = ref.watch(videoSupportProvider);
+    final mp4Support = ref.watch(deviceVideoSupportProvider);
     const idle = 'Start the live view to use the device controls';
     String tooltip(String label) =>
         target == null ? idle : '$label — ${target.displayName}';

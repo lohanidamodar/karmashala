@@ -15,7 +15,7 @@ import '../../features/checkpoints/presentation/checkpoints_view.dart';
 import '../../features/flutter_apps/presentation/flutter_app_pane.dart';
 import '../../features/detail/presentation/repository_info_view.dart';
 import '../../features/detail/presentation/verification_view.dart';
-import '../../features/devices/presentation/device_pane.dart';
+import 'package:karmashala_devices/pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
 import '../../features/github/presentation/github_view.dart';

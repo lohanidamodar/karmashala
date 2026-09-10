@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/device_ports.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../application/device_app_actions.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// **Put a build on the device, start it, stop it** — beside the live view,
 /// through [DeviceAppActions]: the same claim the tools take, naming holders.
@@ -207,7 +207,7 @@ class _Answer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
-    final now = ref.watch(clockProvider).nowUtc();
+    final now = ref.watch(deviceClockProvider).nowUtc();
     final said = outcome.ok
         ? switch (outcome.value) {
             final InstalledApp app => app.note ?? 'Installed ${app.path}',

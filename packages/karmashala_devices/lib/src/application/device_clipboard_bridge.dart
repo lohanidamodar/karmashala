@@ -5,8 +5,7 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
-import '../../../core/clipboard/host_clipboard.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// How long the device gets to answer before we say it did not. Generous: the
 /// round trip is sub-millisecond, so anything near this bound means wedged.

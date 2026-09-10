@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart';
-import 'package:karmashala_devices/devices.dart';
+import '../../devices.dart';
 
 /// Flutter's keyboard, said in the words `karmashala_devices` understands.
 /// Flutter's types stop here, so the translation runs under plain `dart test`.

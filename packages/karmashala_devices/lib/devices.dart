@@ -1,7 +1,8 @@
 /// Everything this package knows about a device: the vocabulary (`src/domain`)
 /// and the drivers that speak it (`src/data`). Nothing in `domain` starts a
-/// process; a DAO, a provider and a widget are all the app's, so this package
-/// takes values in and hands values back.
+/// process, and nothing here reads a provider — the graph is `providers.dart`
+/// and the surfaces are `pane.dart` and `widgets.dart`. A DAO is still the
+/// app's; this layer takes values in and hands values back.
 library;
 
 export 'src/data/adb_device_driver.dart';
@@ -15,6 +16,7 @@ export 'src/data/avd_system_images.dart';
 export 'src/data/device_gesture_sink.dart';
 export 'src/data/device_keyboard_sink.dart';
 export 'src/data/device_stream.dart';
+export 'src/data/host_clipboard.dart';
 export 'src/data/loopback_media_server.dart';
 export 'src/data/mjpeg_stream.dart';
 export 'src/data/recording_sink.dart';
