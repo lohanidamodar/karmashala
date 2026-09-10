@@ -1,12 +1,5 @@
-/// What the find bar is looking for: literal text or a regular expression,
-/// folded or not.
-///
-/// Compiled **once** per query rather than per line — a `RegExp` built inside
-/// the scan loop would recompile the pattern for every line of a 10 000-line
-/// scrollback, which is the whole cost of the search. The two toggles
-/// **compose**: `caseSensitive` becomes `RegExp`'s own, and since Dart has no
-/// inline `(?i)` flag the toggle is the only way to fold a pattern's case,
-/// which is why it stays enabled while regex is on.
+/// What the find bar is looking for. Compiled **once** per query: a `RegExp`
+/// built in the scan loop would recompile for every line of the scrollback.
 class TerminalSearchQuery {
   TerminalSearchQuery._({
     required this.text,
@@ -68,10 +61,9 @@ class TerminalSearchQuery {
   /// pattern are both "no", for the same reason: there is nothing to look for.
   bool get isUsable => text.isNotEmpty && error == null;
 
-  /// Reports every hit in [haystack] as a half-open `[start, end)` range of
-  /// **character** indices, in reading order. Callers map those to cell columns
-  /// (see [TerminalLineText]); a hit never spans a line break, so `^` and `$`
-  /// anchor to one buffer line.
+  /// Every hit in [haystack] as a half-open `[start, end)` range of
+  /// **character** indices. A hit never spans a line break, so `^` anchors to
+  /// one line.
   void forEachMatch(String haystack, void Function(int start, int end) onHit) {
     if (!isUsable || haystack.isEmpty) return;
 

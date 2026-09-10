@@ -3,14 +3,8 @@ import 'package:xterm2/xterm.dart';
 
 import '../domain/scrollback_limits.dart';
 
-/// Re-emits [terminal]'s scrollback as text plus SGR escape sequences, ready to
-/// be written back into a fresh `Terminal`. Only the **main** buffer.
-///
-/// Every line is **self-contained**, so [maxBytes] can drop leading lines
-/// without a later one losing an earlier one's colour, and lines are encoded
-/// **newest first** so a save costs what it *stores*: encoding everything and
-/// re-joining until it fits is quadratic in the overshoot, which measured
-/// 121-2 588 ms on top of a 3-197 ms encode at a full 10 000-line buffer.
+/// Re-emits [terminal]'s main-buffer scrollback as text plus SGR sequences,
+/// each line self-contained and newest first, so [maxBytes] can stop the walk.
 String encodeScrollback(
   Terminal terminal, {
   int maxLines = kDurableScrollbackMaxLines,
@@ -21,10 +15,8 @@ String encodeScrollback(
   maxBytes: maxBytes,
 ).encoded;
 
-/// [encodeScrollback], plus how many buffer lines it had to encode to get
-/// there. The line count is the whole performance contract — a save must cost
-/// what it stores, not what it considered — so it is exposed rather than left
-/// to a wall clock, which cannot be asserted on honestly.
+/// [encodeScrollback], plus the buffer lines it had to encode. The count is the
+/// performance contract — a save must cost what it stores — so it is exposed.
 @visibleForTesting
 ({String encoded, int linesEncoded}) encodeScrollbackWithStats(
   Terminal terminal, {

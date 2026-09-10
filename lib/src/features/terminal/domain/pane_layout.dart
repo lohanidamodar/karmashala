@@ -18,15 +18,8 @@ sealed class PaneNode {
   final String id;
 }
 
-/// One **region**: the panes stacked in one part of a tab, and which of them is
-/// on top. VS Code's editor group — it holds one or more panes, shows a tab for
-/// each, and only [activePaneId] is on screen.
-///
-/// [panes] is never empty; a region that loses its last pane is removed by
-/// [PaneLayout.close] and the split it was in collapses. An **empty region** —
-/// the room a split clears before anything is put in it — still holds exactly
-/// one pane id with no terminal behind it, which is the invariant
-/// `TerminalSessionsController.isEmptySlot` states.
+/// One **region**: the panes stacked in one part of a tab, and which is on top.
+/// Never empty — an *empty region* holds one pane id with nothing behind it.
 class PaneGroup extends PaneNode {
   PaneGroup(super.id, {required this.panes, String? activePaneId})
     : assert(panes.isNotEmpty, 'a region with no panes is not a region'),
@@ -92,13 +85,8 @@ class PaneRect {
   String toString() => 'PaneRect($left, $top, $right, $bottom)';
 }
 
-/// The immutable tree of regions inside one terminal tab, plus the operations
-/// the UI drives it with. Free of Flutter, Riverpod and the terminal itself, so
-/// splitting, closing, stacking and focus traversal are unit-testable; every
-/// operation returns a new layout and nothing here mutates.
-///
-/// **Everything is addressed by pane id.** A region has an id of its own, but
-/// it is only an identity for the widget that draws it.
+/// The immutable tree of regions inside one terminal tab. Free of Flutter and
+/// of the terminal itself, and everything is addressed by pane id.
 class PaneLayout {
   PaneLayout(this.root);
 
@@ -111,11 +99,8 @@ class PaneLayout {
   /// Every region, depth-first, left to right.
   late final List<PaneGroup> groups = _collectGroups(root, <PaneGroup>[]);
 
-  /// Pane ids in depth-first, left-to-right order — every pane, including the
-  /// ones stacked behind another in their region.
-  ///
-  /// Walked once and kept: a layout is immutable, and this is asked for once per
-  /// tab on every publish and again inside every [contains]. Read-only.
+  /// Pane ids depth-first, including the ones stacked behind another. Walked
+  /// once and kept, because a layout is immutable and this is asked for often.
   late final List<String> panes = [
     for (final group in groups) ...group.panes,
   ];
@@ -136,12 +121,8 @@ class PaneLayout {
   /// The region [paneId] is in, or `null` when this layout does not hold it.
   PaneGroup? groupOf(String paneId) => _groupByPane[paneId];
 
-  /// Divides the region holding [paneId] along [axis], putting a new region
-  /// holding [newPaneId] after (or before, if [insertBefore]) it.
-  ///
-  /// Always created nested; normalization then flattens it into the parent when
-  /// the axes match, which is what turns a second "split right" into a third
-  /// equal column rather than a right-leaning spine.
+  /// Divides the region holding [paneId] along [axis]. Always created nested;
+  /// normalization flattens same-axis splits into one row of equal columns.
   PaneLayout split(
     String paneId,
     SplitAxis axis,
@@ -250,14 +231,8 @@ class PaneLayout {
     );
   }
 
-  /// Puts [node] where the region holding [paneId] is, keeping its position and
-  /// its share of the split — what filling an *empty region* of a split is made
-  /// of.
-  ///
-  /// Normalization then flattens a same-axis sub-tree into the parent, so moving
-  /// a side-by-side tab into a column gives three rows rather than a row nested
-  /// inside a column. The caller owns uniqueness: [node] must not contain a pane
-  /// this layout already holds outside the region being replaced.
+  /// Puts [node] where the region holding [paneId] is — what fills an *empty
+  /// region*. The caller owns uniqueness: [node] may hold no pane already here.
   PaneLayout replaceRegion(String paneId, PaneNode node) {
     final group = groupOf(paneId);
     if (group == null) return this;
@@ -265,10 +240,8 @@ class PaneLayout {
     return normalized == null ? this : PaneLayout(normalized);
   }
 
-  /// Removes [paneId], collapsing its region when it was the last pane in it
-  /// and every split that region leaves pointless.
-  ///
-  /// Returns `null` when it was the last pane in the tab.
+  /// Removes [paneId], collapsing its region and every split that leaves
+  /// pointless. `null` when it was the last pane in the tab.
   PaneLayout? close(String paneId) {
     if (!contains(paneId)) return this;
     final removed = _prune(root, (id) => id != paneId);
@@ -305,12 +278,8 @@ class PaneLayout {
     return all[(index + by + all.length) % all.length];
   }
 
-  /// The pane on screen next to [from] in [direction], or `null` at the
-  /// layout's edge.
-  ///
-  /// Answered from geometry rather than tree structure: past two levels of
-  /// nesting the tree sibling is frequently not the region the user sees next to
-  /// this one. Always a region's **front** pane.
+  /// The pane on screen next to [from] in [direction], or `null` at the edge.
+  /// From geometry, not tree structure — past two levels they disagree.
   String? paneInDirection(String from, PaneDirection direction) {
     final all = rects();
     final source = all[from];

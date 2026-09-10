@@ -31,12 +31,8 @@ class HostAttachment {
   final DateTime observedAt;
 }
 
-/// The app's end of the host protocol, over one channel.
-///
-/// Deliberately a [RemoteChannel] and not an SSHSession: the local stage runs
-/// the same conversation over a socket, and nothing in this class would change.
-/// It relays bytes — it does not render, re-emit or normalise anything the
-/// child wrote, which is the entire reason the host exists rather than tmux.
+/// The app's end of the host protocol, over one channel. It relays bytes and
+/// normalises nothing — the entire reason the host exists rather than tmux.
 class HostPaneLink {
   HostPaneLink._(this._channel, this.clientId);
 
@@ -156,12 +152,8 @@ class HostPaneLink {
     );
   }
 
-  /// Ends a session on the host for good, and forgets its record.
-  ///
-  /// Never called by a pane closing — that is a *disconnect*, and keeping the
-  /// session running through one is the whole point. It is for a session known
-  /// to be over whose record is in the way, once its scrollback has been
-  /// shown.
+  /// Ends a session on the host for good. Never called by a pane closing —
+  /// that is a *disconnect*, and surviving one is the whole point.
   Future<void> closeSession(String sessionId) async {
     if (_closed) return;
     try {

@@ -8,13 +8,8 @@ import 'package:karmashala_media/media.dart';
 import '../domain/cast_playback.dart';
 import '../domain/terminal_cast.dart';
 
-/// How a recording is framed: the canvas it is drawn on, and the window drawn
-/// on that.
-///
-/// The chrome is what makes a recording presentable rather than a screenshot of
-/// a rectangle, and it is *fixed*: padding, corner radius and title-bar height
-/// are the three numbers a settings screen would offer and nobody would ever
-/// change. The theme and font are the app's own.
+/// How a recording is framed: the canvas, and the window drawn on it. The
+/// chrome is *fixed* — nobody would ever change a corner radius in settings.
 class CastFrameStyle {
   const CastFrameStyle({
     required this.width,
@@ -68,20 +63,12 @@ class CastFrameStyle {
   final double titleBarHeight;
 }
 
-/// The font size the grid is laid out at before it is scaled to fit. Only the
-/// ratio matters: Skia rasterises the glyphs at the transformed size, so text
-/// stays crisp at any resolution, and a middling size keeps that scale factor
-/// near one for an ordinary 80x24.
+/// The font size the grid is laid out at before scaling. Only the ratio
+/// matters: Skia rasterises at the transformed size, so text stays crisp.
 const double _kLayoutFontSize = 14;
 
-/// Replays a cast into an offscreen terminal and paints each frame.
-///
-/// **Runs on the isolate that owns the Flutter engine, and has to**:
-/// `Picture.toImage` rasterises on the engine's raster thread and there is no
-/// second engine to hand this to. The cost is bounded three ways — the painter
-/// and its caches are built once and reused, each frame awaits `toImage` and so
-/// yields the event loop back to the app, and everything after the pixels exist
-/// happens behind [FrameSink] on a worker isolate.
+/// Replays a cast into an offscreen terminal and paints each frame. **Runs on
+/// the engine's isolate and has to**: `Picture.toImage` rasterises there.
 class CastFrameRenderer {
   CastFrameRenderer({
     required this.cast,
@@ -95,10 +82,8 @@ class CastFrameRenderer {
   final int frameRate;
   final Duration idleCap;
 
-  /// Renders every frame into [sink] and closes it. [onProgress] is called with
-  /// `(rendered, total)` after each frame — the only honest progress there is,
-  /// because the number of frames is known before the first one is drawn and
-  /// how long each takes is not.
+  /// Renders every frame into [sink] and closes it. [onProgress] reports
+  /// `(rendered, total)` — the frame count is known, the per-frame cost is not.
   Future<FrameSinkResult> renderTo(
     FrameSink sink, {
     void Function(int rendered, int total)? onProgress,

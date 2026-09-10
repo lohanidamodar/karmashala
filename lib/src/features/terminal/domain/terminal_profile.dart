@@ -15,11 +15,8 @@ enum TerminalShell {
   ssh,
 }
 
-/// A launchable terminal shell: a PowerShell or Command Prompt on the Windows
-/// host, a shell in a specific WSL distribution, a shell on macOS or Linux, or
-/// an interactive session on an SSH host. Identified by a stable [id]
-/// (`powershell`, `wsl:<distro>`, `posix:/bin/zsh`, `ssh:<hostId>`) so it can
-/// be stored as the user's default-terminal preference.
+/// A launchable terminal shell, identified by a stable [id] (`powershell`,
+/// `wsl:<distro>`, `posix:/bin/zsh`, `ssh:<hostId>`) so it can be stored.
 class TerminalProfile {
   const TerminalProfile({
     required this.id,
@@ -102,13 +99,8 @@ class TerminalProfile {
   );
 }
 
-/// The terminal profiles available on this machine: on Windows the two host
-/// shells plus one per discovered WSL distribution; on macOS and Linux the
-/// shells in [shells] with the login shell first — offering PowerShell anyway
-/// gave a Mac a settings page listing two shells it could not launch.
-///
-/// [hostIsWindows] is passed rather than read, so this stays pure and the tests
-/// can ask for either host.
+/// The terminal profiles available on this machine. [hostIsWindows] is passed
+/// rather than read — offering PowerShell on a Mac listed unlaunchable shells.
 List<TerminalProfile> terminalProfilesFor(
   List<ExecutionEnvironment> environments, {
   bool hostIsWindows = true,
@@ -159,10 +151,8 @@ List<TerminalProfile> terminalProfilesFor(
   return profiles;
 }
 
-/// Rebuilds a profile from a stored [id] alone, or `null` when the id is not one
-/// this app writes. Deliberately does *not* consult the discovered
-/// environments: a WSL distro that has since been removed should come back as a
-/// pane that fails to launch and says so, not silently as PowerShell.
+/// Rebuilds a profile from a stored [id] alone, or `null`. It does not consult
+/// discovered environments: a removed distro must fail, not become PowerShell.
 TerminalProfile? terminalProfileFromId(String id) {
   if (id == TerminalProfile.powerShellId) return TerminalProfile.powerShell;
   if (id == TerminalProfile.commandPromptId) {

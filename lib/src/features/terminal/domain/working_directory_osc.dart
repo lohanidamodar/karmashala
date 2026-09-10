@@ -1,27 +1,17 @@
-/// OSC 7 — the shell reporting the directory it is in *now*.
-///
-/// Pure Dart on purpose — no Flutter, no xterm, no `Platform` — so the protocol
-/// is testable without a terminal, a process or a widget tree. The caller
-/// supplies this machine's name; nothing here goes looking for it.
+/// OSC 7 — the shell reporting the directory it is in *now*. Pure: the caller
+/// supplies this machine's name, and nothing here goes looking for it.
 library;
 
 /// A drive-letter path as it arrives inside a file URI: `/C:/src/app`. The
 /// leading slash is URI syntax, not part of the path.
 final RegExp _driveLetter = RegExp(r'^/[A-Za-z]:');
 
-/// A `%` that is not the start of a valid escape. `Uri.parse` quietly rewrites
-/// `%zz` to `%25zz` — repairing the input rather than rejecting it, which would
-/// turn a garbled sequence into a plausible directory — so this is checked
-/// against the raw payload.
+/// A `%` that is not the start of a valid escape. `Uri.parse` rewrites `%zz` to
+/// `%25zz`, turning a garbled sequence into a plausible directory.
 final RegExp _malformedEscape = RegExp('%(?![0-9A-Fa-f]{2})');
 
-/// The directory carried by an `OSC 7 ; file://<host>/<path>`, or `null` when
-/// the sequence is not one we can read — `null` always means *no answer*, never
-/// *the pane has no directory*, so the caller keeps what it had.
-///
-/// Refused: a scheme other than `file:`, a malformed URI or percent escape, and
-/// a host that is not this machine — an ssh session inside the pane reports its
-/// own host, and that path does not exist here.
+/// The directory an `OSC 7 ; file://<host>/<path>` carries, or `null` — which
+/// means *no answer*, never *no directory*. A foreign host is refused.
 String? workingDirectoryFromOsc(
   String code,
   List<String> args, {

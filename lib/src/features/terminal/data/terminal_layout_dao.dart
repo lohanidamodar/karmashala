@@ -33,18 +33,13 @@ class StoredTerminalPane {
   final AgentPaneLaunch? agentLaunch;
 
   /// Whether a process was running behind this pane when the row was written —
-  /// a record of the pane's shape cannot tell a live shell from a buffer full
-  /// of last week. Refreshed by every structural save and by the save on quit,
-  /// and false by default, so a row written before the column reads as "not
-  /// recorded".
+  /// a record of its shape cannot tell a live shell from last week's buffer.
   final bool wasLive;
 }
 
-/// One persisted tab: its pane tree plus the panes the tree references.
-///
-/// A **detached** session — one whose tab the user closed while it kept
-/// running — is stored the same way, as a single-pane row with [detached] set;
-/// sharing the table is what preserves its scrollback by the same code path.
+/// One persisted tab: its pane tree plus the panes it references. A
+/// **detached** session is stored the same way, so one code path keeps its
+/// scrollback.
 class StoredTerminalTab {
   const StoredTerminalTab({
     required this.id,
@@ -80,18 +75,12 @@ class StoredTerminalLayout {
   final String? activeTabId;
 }
 
-/// The `app_metadata` key stamped when a save emptied a non-empty layout: when
-/// the copy was taken, which the backup rows' own `updated_at` does not say.
-/// The key still says "workspace" because renaming it would orphan the
-/// timestamp already on disk.
+/// The `app_metadata` key stamped when a save emptied a non-empty layout. It
+/// still says "workspace": renaming would orphan the timestamp on disk.
 const kTerminalLayoutBackupAtKey = 'terminal.workspace_backup_at';
 
-/// The `app_metadata` key holding the grid the app last drew a terminal pane
-/// at.
-///
-/// Carried over from the last run because a restored layout's panes parse their
-/// stored scrollback during `build`, before any layout pass could tell them how
-/// wide a pane is. See `TerminalGridHint`.
+/// The `app_metadata` key holding the grid the app last drew a terminal pane at
+/// — restored panes parse during `build`, before any layout pass could say.
 const kTerminalPaneGridKey = 'terminal.pane_grid';
 
 /// The `app_metadata` key holding the workspace split tree — see
@@ -107,11 +96,8 @@ class TerminalLayoutDao {
 
   final AppDatabase _db;
 
-  /// The scrollback text this dao last saw in the store, by pane id.
-  ///
-  /// Everything else a save compares it reads back from the store; scrollback
-  /// is the one column too expensive to re-read, so the dao keeps its own
-  /// record and writes whenever it has none.
+  /// The scrollback text this dao last saw in the store, by pane id: the one
+  /// column too expensive to read back, so a save compares against this.
   final Map<String, String> _writtenScrollback = {};
 
   /// How many tabs (including detached rows) the store holds — the cheapest
@@ -122,14 +108,9 @@ class TerminalLayoutDao {
     return (rows.first['n'] as int?) ?? 0;
   }
 
-  /// Makes the stored layout be [tabs], by writing **only the rows that differ
-  /// from what is stored**: a full `DELETE` plus an INSERT per row rewrote every
-  /// pane's scrollback on every structural change, measured at 645 ms of
-  /// synchronous work on the frame that resumes a hundred-pane session.
-  ///
-  /// A copy of the outgoing layout is taken first, inside the same transaction,
-  /// when this save loses something — it empties a store that was not empty, or
-  /// stores fewer tabs while [userClosed] is false.
+  /// Makes the stored layout be [tabs] by writing **only the rows that
+  /// differ**: a full rewrite cost 645 ms on the frame resuming a hundred
+  /// panes.
   void saveLayout(
     List<StoredTerminalTab> tabs, {
     String? activeTabId,
@@ -150,14 +131,8 @@ class TerminalLayoutDao {
       ..addAll(written);
   }
 
-  /// The body of [saveLayout]: upsert what moved, delete what vanished, and
-  /// return what [_writtenScrollback] should become once the transaction has
-  /// committed.
-  ///
-  /// Upserts first, deletes after — a pane that moved out of a tab that is
-  /// itself going has to be re-parented before the foreign key cascade takes it.
-  /// `ON CONFLICT DO UPDATE` rather than `INSERT OR REPLACE`, because REPLACE
-  /// deletes the conflicting row first and would cascade a tab's panes away.
+  /// The body of [saveLayout]. Upserts before deletes, so a re-parented pane
+  /// outruns the cascade; `ON CONFLICT DO UPDATE`, because REPLACE cascades.
   Map<String, String> _writeChangedRows(
     List<StoredTerminalTab> tabs,
     String? activeTabId,
@@ -215,11 +190,9 @@ class TerminalLayoutDao {
             : jsonEncode(pane.agentLaunch!.toJson());
         final wasLive = intFromBool(pane.wasLive);
         final storedPane = storedPanes[pane.id];
-        // The scrollback column is asked about **separately** from the other
-        // eight because it is the only expensive one. Written together, any
-        // column moving rewrote the text — and the first structural save of
-        // every run flips `was_live` 1 -> 0 for every restored pane at once,
-        // measured as 1 MB rewritten to record four booleans.
+        // Scrollback is asked about separately because it is the only
+        // expensive column: the first save of a run flips `was_live` on every
+        // restored pane at once.
         final scrollbackChanged =
             storedPane == null || _scrollbackChanged(pane);
         final metadataChanged =
@@ -332,17 +305,8 @@ class TerminalLayoutDao {
     }
   }
 
-  /// Copies the stored layout into the backup tables, replacing whatever was
-  /// there. Does nothing when there is nothing to lose.
-  ///
-  /// Called from inside [saveLayout]'s transaction, so a failure anywhere in
-  /// the save rolls the copy back with it. [stored] is the tab count
-  /// [saveLayout] has already taken.
-  ///
-  /// **The largest single synchronous unit of database work in the app, and it
-  /// is left as it is**: the `INSERT ... SELECT` copies every stored pane's
-  /// scrollback on the UI isolate — 7.8 MB over 100 panes holding 64 KiB each —
-  /// and fires only when a save would otherwise lose something.
+  /// Copies the stored layout into the backup tables inside [saveLayout]'s
+  /// transaction — 7.8 MB over 100 panes, so only when a save would lose data.
   void _backupLayout(String now, int stored) {
     if (stored == 0) return;
     _db.execute('DELETE FROM terminal_panes_backup;');

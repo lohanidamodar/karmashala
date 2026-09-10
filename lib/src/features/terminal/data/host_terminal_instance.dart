@@ -27,15 +27,8 @@ import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
 
-/// A pane whose process belongs to the **session host** rather than to this
-/// app, on this machine.
-///
-/// A separate class rather than a flag on [PtyTerminalInstance] because a
-/// `flutter_pty` child is this process's child, so an app crash takes every
-/// agent with it, while a session the host owns outlives the app and resumes
-/// from the exact byte it last rendered. **No fallback here on purpose**:
-/// choosing between the two is the setting's job, so a pane that cannot reach
-/// the host says so and stays dead.
+/// A pane whose process belongs to the **session host**, so it outlives the app
+/// a `flutter_pty` child would die with. No fallback: it says so and stays dead.
 class HostTerminalInstance
     implements
         TerminalInstance,
@@ -280,10 +273,8 @@ class HostTerminalInstance
 
       final attachment = await _attachOrOpen(link, width, height, resumeFrom);
       if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
-        // The replay about to arrive is the more accurate of the two records —
-        // the session's own bytes rather than a re-encoding of a buffer — so
-        // the stored copy goes. Erase display *and* scrollback: a plain clear
-        // leaves the history one scroll away.
+        // The replay is the more accurate record, so the stored copy goes.
+        // Erase scrollback as well: a plain clear leaves it one scroll away.
         terminal.write('\x1b[H\x1b[2J\x1b[3J');
         _hasStoredHistory = false;
       }
@@ -303,13 +294,8 @@ class HostTerminalInstance
     }
   }
 
-  /// Reattaches from the last offset this pane rendered; opens only when there
-  /// is no such session yet.
-  ///
-  /// After a host restart `attach` finds the *record* of a session whose
-  /// process died with the host — the right thing to show — and
-  /// [_onSessionEnded] closes it once it has been shown, so the next start of
-  /// this pane opens a live one rather than replaying a dead one for ever.
+  /// Reattaches from the last offset this pane rendered, opening only when
+  /// there is no session. A dead record is shown once, then closed.
   Future<HostAttachment> _attachOrOpen(
     HostPaneLink link,
     int width,
@@ -424,16 +410,8 @@ class HostTerminalInstance
   }
 }
 
-/// Builds the launch for [profile] and hands it to the session host.
-///
-/// The launch is built by exactly the same functions `createPtyTerminalInstance`
-/// uses, so a host-backed pane starts the same command line a `flutter_pty`
-/// pane would have — the difference is only whose child it is.
-///
-/// **Shell integration is never asked for here**: the marker stream would
-/// probably arrive through the host unchanged, but nothing above this has been
-/// measured against it, so a host-backed pane reports no command blocks and
-/// `terminal_run` refuses to name an exit code for a command typed into one.
+/// Builds the launch for [profile] and hands it to the session host: the same
+/// command line, minus shell integration, which nothing here has measured.
 TerminalInstance createHostTerminalInstance({
   required String id,
   required TerminalProfile profile,

@@ -1,22 +1,13 @@
-/// Shell-side OSC 133 injection.
-///
-/// Everything here is pure: it produces the text of a script and the encoding
-/// of it, and never touches the filesystem or the user's configuration.
-/// Injection happens **only at launch**, so nothing is left behind.
+/// Shell-side OSC 133 injection: script text only. Injection happens **only at
+/// launch**, so nothing is left on the user's machine.
 library;
 
 import 'dart:convert';
 
 import 'terminal_profile.dart';
 
-/// Whether this app can emit OSC 133 markers from [shell] safely: PowerShell
-/// and WSL only.
-///
-/// **`cmd.exe` is refused permanently, and it is a measurement.** `C` has no
-/// hook to come from — `cmd` has nothing between reading a command and running
-/// it — and `PROMPT` freezes `%ERRORLEVEL%` when it is set, so `D;<code>` is
-/// unreachable too. A `cmd.exe` pane's exit code is genuinely unknown, and
-/// `terminal_run` says so rather than reporting a zero.
+/// Whether this app can emit OSC 133 markers from [shell]: PowerShell and WSL.
+/// **`cmd.exe` is refused permanently** — it has no hook to emit `C` from.
 bool shellSupportsIntegration(TerminalShell shell) =>
     shell == TerminalShell.powerShell || shell == TerminalShell.wsl;
 
@@ -33,17 +24,8 @@ String encodePowerShellCommand(String script) {
   return base64Encode(bytes);
 }
 
-/// The PowerShell OSC 133 (and OSC 7) bootstrap.
-///
-/// It rests on `-EncodedCommand` running **after** the user's profiles, so
-/// `$function:prompt` is already their final prompt: we wrap it, and never
-/// touch `$PROFILE`. The guards, each tested against a real PowerShell 5.1:
-/// `$?` is captured as the literal first statement, `$LASTEXITCODE` and `$?`
-/// are put back before the user's prompt runs, `Set-StrictMode -Off` in case a
-/// profile set `-Version Latest` globally, and `C` wraps
-/// `PSConsoleHostReadLine` rather than binding Enter. Exit codes are best
-/// effort — `$LASTEXITCODE` is real only for native executables — but the
-/// failed/succeeded flag always is.
+/// The PowerShell OSC 133 (and OSC 7) bootstrap. It rests on `-EncodedCommand`
+/// running **after** the user's profiles, so it wraps their final prompt.
 String powerShellIntegrationScript() => r'''
 # Karmashala OSC 133 shell integration.
 # Injected at launch with -EncodedCommand, which PowerShell runs after profiles

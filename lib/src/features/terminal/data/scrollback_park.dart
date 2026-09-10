@@ -3,12 +3,8 @@ import 'package:xterm2/xterm.dart';
 import '../domain/scrollback_limits.dart';
 import 'scrollback_codec.dart';
 
-/// A pane's parsed scrollback, handed back while nobody can see it.
-///
-/// The storage half of the ingest tiers — see [kColdScrollbackMaxLines] for
-/// what a detached pane's full buffer was costing. Split out of the pane so the
-/// mechanism can be tested without a PTY, and so there is one implementation of
-/// it rather than one per kind of instance.
+/// A pane's parsed scrollback, handed back while nobody can see it — the
+/// storage half of the ingest tiers, split out so it is testable without a PTY.
 class ScrollbackPark {
   ScrollbackPark(this.terminal);
 
@@ -22,15 +18,8 @@ class ScrollbackPark {
 
   bool get isParked => _parked != null;
 
-  /// Encodes the scrollback and releases the lines above the screen. Returns
-  /// whether anything was released, which decides whether the command blocks
-  /// anchored to those lines are dropped.
-  ///
-  /// The lines are **removed** rather than trimmed: `trimStart` only moves the
-  /// circular buffer's start index, so every `BufferLine` stays reachable from
-  /// the backing array. Does nothing while a full-screen program owns the
-  /// display — a snapshot cannot be written back underneath one — which is also
-  /// how `ColdScreen` knows to leave a TUI alone.
+  /// Encodes the scrollback and **removes** the lines above the screen, since
+  /// `trimStart` only moves an index. Does nothing while a TUI owns the screen.
   bool park() {
     if (_parked != null || terminal.isUsingAltBuffer) return false;
     _parked = encodeScrollback(
@@ -45,10 +34,8 @@ class ScrollbackPark {
     return true;
   }
 
-  /// Rebuilds a bounded recent window from the parked snapshot. The kept screen
-  /// is also the tail of that snapshot, so the buffer is cleared before the
-  /// replay: the window is written once, in order, rather than appended below a
-  /// copy of its own last page.
+  /// Rebuilds a bounded recent window from the parked snapshot. The buffer is
+  /// cleared first: the kept screen is also the tail of that snapshot.
   void unpark() {
     final parked = _parked;
     _parked = null;

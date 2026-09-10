@@ -5,15 +5,8 @@ library;
 
 import '../domain/terminal_palette.dart';
 
-/// Parses a Ghostty config or theme file. Every key maps to the list of values
-/// it was given, because `palette` is spelled as a repeated key; for scalar
-/// keys the caller takes the last entry.
-///
-/// The grammar follows real files rather than an idealised one: lines are
-/// trimmed first (so CRLF works), a trimmed line starting with `#` is a
-/// comment, the *first* `=` splits key from value, a `#` preceded by whitespace
-/// and outside quotes starts an inline comment, and matching wrapping quotes
-/// are stripped.
+/// Parses a Ghostty config or theme file. Every key maps to a *list*, because
+/// `palette` is spelled as a repeated key; scalars take the last entry.
 Map<String, List<String>> parseGhosttyConfig(String content) {
   final result = <String, List<String>>{};
   for (final rawLine in content.split('\n')) {

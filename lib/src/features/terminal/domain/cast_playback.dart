@@ -1,9 +1,7 @@
 import 'terminal_cast.dart';
 
-/// Longest gap between two events that is played at its real length. A
-/// recording of real work is mostly waiting, and played back untouched a
-/// two-minute cast is a hundred seconds of a still frame. asciinema calls this
-/// `--idle-time-limit` and defaults it off; a cast meant to be watched cannot.
+/// Longest gap between two events played at its real length: a two-minute cast
+/// is otherwise a hundred seconds of a still frame.
 const Duration kCastIdleCap = Duration(seconds: 2);
 
 /// How long the last frame is held, so the final output can be read rather than
@@ -45,10 +43,8 @@ class CastPlayback {
   int get frameCount => steps.length;
 }
 
-/// Cuts [cast] into [frameRate] frames a second, collapsing any gap longer than
-/// [idleCap] down to it. Every event lands in exactly one frame and none is
-/// dropped: a frame's slice is `(previous frame, this frame]` in output time,
-/// so a burst arriving between two frames is written before the next paint.
+/// Cuts [cast] into [frameRate] frames a second, collapsing gaps over
+/// [idleCap]. Every event lands in exactly one frame, so no burst is lost.
 CastPlayback planCastPlayback(
   TerminalCast cast, {
   int frameRate = 12,

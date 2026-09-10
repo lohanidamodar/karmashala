@@ -3,16 +3,12 @@ import 'package:xterm2/xterm.dart';
 import '../domain/command_blocks.dart';
 import '../domain/osc_router.dart';
 
-/// The most lines of typed input we will read back as one command. A pasted
-/// script can put hundreds of lines between `B` and `C`; the label only needs
-/// the first line or two, and reading the whole paste on every command would
-/// cost whatever the user pasted.
+/// The most lines of typed input read back as one command: a pasted script can
+/// put hundreds between `B` and `C`, and the label needs the first one or two.
 const kMaxCommandTextLines = 4;
 
-/// A [TerminalLineRef] backed by one of xterm's own [CellAnchor]s, which rides
-/// along with buffer mutations and detaches itself when its line is evicted —
-/// exactly the contract [TerminalLineRef] describes, and existing public API,
-/// so tracking command positions costs no divergence.
+/// A [TerminalLineRef] backed by xterm's own [CellAnchor], which detaches when
+/// its line is evicted — public API, so tracking costs no divergence.
 class CellAnchorLineRef implements TerminalLineRef {
   CellAnchorLineRef(this.anchor);
 
@@ -45,10 +41,8 @@ class CommandBlockRecorder {
   /// when the shell says the command is running.
   CellAnchorLineRef? _inputRef;
 
-  /// Starts listening. Call before the process starts, so no marker is missed.
-  /// Through the pane's [OscRouter] rather than by taking
-  /// `terminal.onPrivateOSC`: that slot is single-occupancy, and the OSC 7
-  /// working directory needs the same stream whether a recorder exists or not.
+  /// Starts listening. Call before the process starts, so no marker is missed;
+  /// through the pane's [OscRouter], since that slot is single-occupancy.
   void attach(OscRouter router) => router.add(handleOsc);
 
   /// Handles one OSC dispatched by xterm. Anything that is not an OSC 133

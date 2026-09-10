@@ -2,11 +2,8 @@
 /// unit-testable and the caller supplies the observations.
 library;
 
-/// A working directory, shortened for a tab chip: `~` for the home directory
-/// itself, `~/x` for one level below it, the last two segments otherwise — a
-/// tab is 220 pixels wide, so a full path is ellipsised into uselessness and
-/// the end of it is the part that identifies the shell. Both separators are
-/// accepted, because a Windows-first app runs WSL panes.
+/// A working directory shortened for a tab chip: `~`, `~/x`, or the last two
+/// segments — a 220-pixel tab ellipsises a full path into uselessness.
 String directoryLabel(String path, {String? home}) {
   var normalized = _trimSlashes(path.replaceAll(r'\', '/'));
   if (normalized.isEmpty) return '/';
@@ -45,27 +42,16 @@ bool _isBelow(String path, String parent) =>
     _sameDirectory(path.substring(0, parent.length), parent) &&
     path[parent.length] == '/';
 
-/// Whether [title] is a pane reciting the program we launched rather than
-/// saying anything about the work going on in it.
-///
-/// ConPTY hands the child's image path through as a pane's window title, so a
-/// WSL pane opens announcing itself as the `wsl.exe` this app put in front of
-/// the shell. Two conditions keep it narrow: the title has to be an absolute
-/// path *and nothing else*, which leaves `user@host: /home/me/src` alone, and
-/// the file it names has to be one of [launchers]. Compared
-/// case-insensitively, because the casing comes from Windows.
+/// Whether [title] is a pane reciting the program we launched: ConPTY passes
+/// the child's image path through, so a WSL pane announces itself as `wsl.exe`.
 bool namesLauncher(String title, Set<String> launchers) {
   if (launchers.isEmpty || !_isAbsolutePath(title)) return false;
   return launchers.contains(_basename(title).toLowerCase());
 }
 
-/// Every image name a launch line names — [executable] itself and every `.exe`
-/// token inside [arguments] — lowercased and without its directory.
-///
-/// **Every name, not just the first.** A WSL pane is spawned through
-/// `cmd.exe`, so the image that announces itself is no longer the executable;
-/// and the arguments are *searched* rather than compared, because
-/// `throughCommandPrompt` joins the whole line into one `/c` argument.
+/// Every image name a launch line names, lowercased and without its directory.
+/// **Every name, not just the first** — a WSL pane is spawned through
+/// `cmd.exe`.
 Set<String> launcherNames(String executable, List<String> arguments) => {
   _basename(executable).toLowerCase(),
   for (final argument in arguments)

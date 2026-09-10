@@ -1,9 +1,7 @@
 import 'dart:convert';
 
-/// What one recorded event is: output, the bytes the process wrote, or resize,
-/// the grid changing underneath it — which a replay has to reproduce or every
-/// later line wraps in the wrong place. asciinema's `i` and `m` are not
-/// recorded; see [TerminalCast] on why input is deliberately not captured.
+/// What one recorded event is: output, or a resize a replay has to reproduce or
+/// every later line wraps wrong. asciinema's `i` and `m` are not recorded.
 enum CastEventKind {
   output('o'),
   resize('r');
@@ -59,15 +57,9 @@ class CastEvent {
   return (columns: columns, rows: rows);
 }
 
-/// A recording of a terminal pane: the grid it started on, and the bytes that
-/// arrived, each stamped with when.
-///
-/// **Data, not pixels** — a minute of a busy shell is tens of kilobytes, and it
-/// can never contain a notification or another window, because none of that was
-/// ever in the pipe. **Output only**: what a shell deliberately does not echo
-/// (a `read -s` password, a `sudo` prompt) never enters the recording, though
-/// what *was* on screen is in it and is not redactable. The wire format is
-/// [asciinema v2](https://docs.asciinema.org/manual/asciicast/v2/).
+/// A recording of a terminal pane: the bytes that arrived, each stamped with
+/// when. **Output only** — a `read -s` password never echoes, so it is never in
+/// it.
 class TerminalCast {
   const TerminalCast({
     required this.columns,

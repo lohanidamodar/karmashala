@@ -1,7 +1,5 @@
-/// What a drag in the terminal is carrying: a whole tab out of the strip along
-/// the top, or one pane out of a region's own header. `Draggable<String>` could
-/// not tell a tab id from a pane id, and the ids are opaque, so a drop target
-/// that guessed would one day guess wrong, silently.
+/// What a drag in the terminal is carrying: a whole tab, or one pane.
+/// `Draggable<String>` could not tell their opaque ids apart.
 sealed class TerminalDrag {
   const TerminalDrag();
 }

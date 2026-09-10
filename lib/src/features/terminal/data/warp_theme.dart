@@ -1,7 +1,5 @@
-/// Warp theme files: YAML.
-///
-/// Pure: a string in, a result out. Failure is a value, never an exception, so
-/// a corrupt file in a scanned directory can only ever be skipped.
+/// Warp theme files: YAML. Pure, and failure is a value — a corrupt file in a
+/// scanned directory can only ever be skipped.
 library;
 
 import 'package:yaml/yaml.dart';
@@ -48,10 +46,8 @@ class WarpThemeError extends WarpThemeResult {
   final String reason;
 }
 
-/// Parses one Warp theme.
-///
-/// [fallbackName] is used when the file carries no `name`; callers pass the file
-/// name without its extension.
+/// Parses one Warp theme. [fallbackName] is used when the file carries no
+/// `name`; callers pass the file name without its extension.
 WarpThemeResult parseWarpTheme(String yamlText, {String? fallbackName}) {
   final Object? document;
   try {

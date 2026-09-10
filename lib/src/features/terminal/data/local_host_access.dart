@@ -12,13 +12,8 @@ import '../../ssh/data/host_session_access.dart';
 import '../../ssh/domain/host_deployment.dart';
 import 'host_pane_link.dart';
 
-/// The session host on *this* machine, reached over its own socket.
-///
-/// The counterpart of `SshHostSessionAccess` and deliberately the same
-/// interface: the pane above it never learns which one it got. Two differences,
-/// both because there is no network — there is nothing to deploy (the binary
-/// either ships beside this app or it does not, measured per launch, §20), and
-/// nothing to reconnect, so [reconnected] never fires.
+/// The session host on *this* machine, over its own socket — the same interface
+/// an SSH pane gets. Nothing to deploy and nothing to reconnect.
 class LocalHostSessionAccess implements HostSessionAccess {
   LocalHostSessionAccess({
     HostPaths? paths,
@@ -79,11 +74,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
   /// nothing is listening on.
   void forget() => _reading = null;
 
-  /// Looks, and starts nothing.
-  ///
-  /// [deployment] may start a host because a pane is about to need one; a
-  /// status row may not — reading Settings with the setting off must not launch
-  /// a daemon. Same question, same handshake, `unknown` when nothing answers.
+  /// Looks, and starts nothing: reading Settings with the setting off must not
+  /// launch a daemon. `unknown` when nothing answers.
   Future<HostDeployment> observe() async {
     final binary = executable.locate();
     final answered = await _sayHello();
@@ -173,10 +165,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
     }
 
     if (answered is _NoAnswer) {
-      // The one thing this must not do. A refused connection is an EVENT —
-      // nobody is there, so start one — but a handshake that ran out of bound
-      // is a reading of a loaded machine, and acting on it starts a second
-      // daemon over a live one.
+      // A refused connection means nobody is there; a handshake that ran out of
+      // bound means a busy machine, and must not start a second daemon.
       return HostDeployment(
         status: HostDeploymentStatus.unknown,
         observedAt: DateTime.now(),
@@ -329,11 +319,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
   }
 }
 
-/// Where `karmashala_host` is on this machine, asked every time.
-///
-/// A stored path is state and whether it resolves is a measurement (§20), so
-/// the executable is found relative to `Platform.resolvedExecutable` per call —
-/// an app that moved or was reinstalled needs nothing repaired.
+/// Where `karmashala_host` is on this machine, asked every time: a stored path
+/// is state and whether it resolves is a measurement (§20).
 class LocalHostExecutable {
   const LocalHostExecutable({this.executableDirectory, this.repositoryRoot});
 
@@ -367,11 +354,8 @@ class LocalHostExecutable {
   String describeSearch() => _candidates().join(', ');
 }
 
-/// A [RemoteChannel] over a plain socket.
-///
-/// The local half of the transport seam: the frames are identical to the ones
-/// an SSH exec channel carries, which is what made `attach` a byte proxy rather
-/// than a protocol participant.
+/// A [RemoteChannel] over a plain socket — the frames are identical to the ones
+/// an SSH exec channel carries, which is what makes `attach` a byte proxy.
 class SocketRemoteChannel implements RemoteChannel {
   SocketRemoteChannel(this._socket);
 
@@ -418,10 +402,8 @@ class _Silent extends _HelloOutcome {
   const _Silent();
 }
 
-/// Something took the connection and did not finish the handshake in time.
-///
-/// A *reading*, not an event, which is the whole distinction: it says how busy
-/// the machine was and nothing whatever about whether a host is running.
+/// Something took the connection and did not finish the handshake in time — a
+/// *reading* of how busy the machine was, never an event about a host.
 class _NoAnswer extends _HelloOutcome {
   const _NoAnswer(this.reason);
   final String reason;

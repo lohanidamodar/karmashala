@@ -1,13 +1,7 @@
 import 'terminal_search.dart';
 
-/// How far back a pane **other than the one being searched** is scanned.
-///
-/// The app's scale target is 100 live terminals of up to
-/// `kDurableScrollbackMaxLines` each, so an unbounded cross-pane search is a
-/// million lines of work; the bar says how many panes it got through, so the
-/// bound is visible rather than a silent truncation. Paired with
-/// [kCrossPaneMatchBudget] and one pane per slice, **no single turn of the
-/// event loop scans more than this many lines.**
+/// How far back a pane **other than the one being searched** is scanned: at the
+/// 100-pane target an unbounded sweep is a million lines of work.
 const int kCrossPaneScanLines = 2000;
 
 /// Most matches a cross-pane search collects before it stops sweeping — what

@@ -1,10 +1,5 @@
-/// Turning a path printed in a pane into a path on this machine.
-///
-/// Kept apart from `terminal_links.dart` because detection only has the line
-/// and resolution needs the *pane*: `/home/me/src` is one place inside a WSL
-/// pane and nowhere at all inside a PowerShell one, the same rule
-/// `EnvironmentPath` enforces elsewhere. Pure — what is actually *at* the
-/// resolved path is asked once per candidate by the pane.
+/// Turning a path printed in a pane into a path on this machine — resolution
+/// needs the *pane*, because `/home/me/src` means nothing in a PowerShell one.
 library;
 
 import 'package:path/path.dart' as p;
@@ -19,16 +14,8 @@ final RegExp _windowsAbsolute = RegExp(r'^[A-Za-z]:[\\/]');
 /// timestamp on the two it is handed is never looked at.
 final DateTime _unused = DateTime.utc(1970);
 
-/// [target] spelled as a path on the host, or null when there is none.
-///
-/// A drive or UNC path is already the host's spelling and only has its
-/// separators normalised. A POSIX-absolute path is on this machine only if the
-/// pane can say where — a WSL pane maps it through [PathTranslator], and a pane
-/// whose own working directory is POSIX is on a POSIX host — so a POSIX path
-/// printed in a PowerShell pane resolves to nothing. `~` resolves to nothing
-/// too: the home it means belongs to whichever user the program ran as.
-/// Anything else is relative, joined onto [workingDirectory] in that
-/// directory's own flavour and then translated by the same rule.
+/// [target] spelled as a path on the host, or null. A POSIX path resolves only
+/// if the pane says where it is; `~` never does, the home being the program's.
 String? hostPathForTerminalTarget(
   PathTarget target, {
   required String? workingDirectory,
@@ -53,15 +40,8 @@ String? hostPathForTerminalTarget(
   if (_isWindowsPath(base)) {
     return p.windows.normalize(p.windows.join(base, raw.replaceAll('/', r'\')));
   }
-  // A POSIX working directory is the pane's own spelling, not the host's, so a
-  // join onto it needs exactly the translation an absolute POSIX path already
-  // gets: without it the join went to a Windows `stat`, which found nothing, so
-  // absolute paths were clickable and relative ones silently were not.
-  //
-  // A Windows-shaped relative path needs nothing special here, though it looks
-  // as though it should: the translation rewrites forward slashes and leaves
-  // backslashes alone, so both readings arrive at the same host path. Measured
-  // — this was filed as a bug and the probe showed them resolving identically.
+  // A POSIX working directory is the pane's spelling, so a join onto it needs
+  // the same translation: without it, relative paths silently did not resolve.
   return _hostPathForPosix(
     p.posix.join(base, raw),
     profileId: profileId,

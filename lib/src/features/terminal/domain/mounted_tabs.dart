@@ -1,14 +1,5 @@
-/// Which terminal tabs keep a mounted widget subtree.
-///
-/// `IndexedStack` is preservation, not virtualization: hidden children stop
-/// *painting* but stay mounted with their render objects, terminal controller,
-/// focus node and layout. Measured at 5 291 render objects and a 65 ms tab
-/// switch across 100 tabs, against 242 and 0.06 ms at one — linear in the
-/// number of tabs, for panes nobody can see.
-///
-/// A pane's *process and buffer* live in `TerminalSessionsController` and are
-/// untouched by this, so an unmounted tab keeps running, keeps its scrollback
-/// and comes back with the same buffer; only its widgets are rebuilt.
+/// Which terminal tabs keep a mounted widget subtree. `IndexedStack` is
+/// preservation, not virtualization: 100 tabs cost 5 291 render objects.
 library;
 
 /// How many tabs keep a mounted view. Eight rather than four: a mounted tab is
@@ -31,10 +22,8 @@ class MountedTabs {
 
   bool contains(String tabId) => _mru.contains(tabId);
 
-  /// Re-derives the set from the layout. Called on every build rather than on
-  /// every activation, so there is one path and no way for the set to drift
-  /// from the tabs that exist: closed tabs drop out, the active tab is always
-  /// held, and tabs never visited fill whatever room is left.
+  /// Re-derives the set from the layout on every build, so it cannot drift from
+  /// the tabs that exist: closed tabs drop out and the active tab is held.
   void sync({required Iterable<String> openTabIds, String? activeTabId}) {
     final open = openTabIds.toSet();
     _mru.removeWhere((id) => !open.contains(id));

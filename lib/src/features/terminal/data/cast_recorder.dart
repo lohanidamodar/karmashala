@@ -3,18 +3,12 @@ import 'dart:typed_data';
 
 import '../domain/terminal_cast.dart';
 
-/// Most a single recording may hold in memory. A pane left recording through a
-/// `yes` or a verbose build is otherwise unbounded, and this feature's premise
-/// is that a recording is kilobytes: past 8 MB the recorder stops adding events
-/// and says so, which makes the recording short rather than wrong.
+/// Most a single recording may hold in memory. Past it the recorder stops
+/// adding events and says so, which makes the recording short, not wrong.
 const int kCastMaxBytes = 8 * 1024 * 1024;
 
-/// Turns a pane's output into a [TerminalCast] while it happens.
-///
-/// Deliberately not a widget, not a provider and not attached to a screen: this
-/// holds the recording, so it survives the pane being switched away from or
-/// dropped to the cold ingest tier. The tap is on the bytes arriving from the
-/// process, the one place upstream of all of that.
+/// Turns a pane's output into a [TerminalCast] while it happens. Not a widget:
+/// the recording survives the pane going cold or being switched away from.
 class CastRecorder {
   CastRecorder({
     required this.columns,

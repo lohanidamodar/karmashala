@@ -1,14 +1,5 @@
-/// Finding the links in terminal output: URLs, and the file paths an agent's
-/// output is mostly made of.
-///
-/// **Only http and https, for URLs.** Terminal output is untrusted, so a click
-/// must never reach a scheme handler; not detecting one means the affordance
-/// never appears for a link that could not be opened anyway.
-///
-/// Nothing here runs on the output path or on a frame — detection is per line,
-/// for the one line under the pointer while Ctrl is held — and nothing here
-/// touches the filesystem: a [PathTarget] is text shaped like a path, and the
-/// pane stats it after this returns.
+/// Finding links in terminal output. **http and https only**: terminal output
+/// is untrusted, so a click must never reach a scheme handler.
 library;
 
 import 'package:xterm2/xterm.dart';
@@ -45,13 +36,8 @@ class UrlTarget extends TerminalTarget {
   int get hashCode => url.hashCode;
 }
 
-/// A path, exactly as it was printed — absolute or relative, in whichever
-/// environment's spelling the program that printed it uses; resolving that to
-/// somewhere on this machine is `hostPathForTerminalTarget`'s job.
-///
-/// [line] and [column] are the `path:12:7` suffix compilers and agents emit.
-/// Carried though nothing honours them yet: dropping them here would mean
-/// re-parsing the text to get them back.
+/// A path exactly as it was printed, in the spelling of whichever environment
+/// printed it; `hostPathForTerminalTarget` resolves it to this machine.
 class PathTarget extends TerminalTarget {
   const PathTarget(this.path, {this.line, this.column});
 
@@ -80,12 +66,8 @@ class PathTarget extends TerminalTarget {
   int get hashCode => Object.hash(path, line, column);
 }
 
-/// One link found in terminal output, in **buffer rows and cell columns**.
-///
-/// Columns, not character indices: `BufferLine.getText()` skips empty cells and
-/// the trailing half of a double-width glyph. Rows, plural, because a link too
-/// long for the row it started on continues on the next — as a long
-/// `wsl.localhost` UNC path routinely is.
+/// One link, in **buffer rows and cell columns**: `BufferLine.getText()` skips
+/// cells, so its indices are not columns, and a long link wraps onto two rows.
 class TerminalLink {
   const TerminalLink({
     required this.target,
@@ -130,10 +112,8 @@ class TerminalLink {
       Object.hash(target, startRow, startColumn, endRow, endColumn);
 }
 
-/// A wrapped run of buffer rows, flattened into one string to scan.
-/// [rowOfChar] is what makes a link that crosses a row boundary one link: every
-/// character remembers its row, so a match's two ends can be put back on the
-/// buffer as anchors.
+/// A wrapped run of buffer rows, flattened to scan. [rowOfChar] is what makes a
+/// link crossing a row boundary one link: each character remembers its row.
 class TerminalLinkLine {
   const TerminalLinkLine({
     required this.text,
@@ -224,17 +204,8 @@ TerminalLinkLine linkLineAt(
   );
 }
 
-/// The `OSC 8` hyperlink covering ([row], [column]) of [terminal]'s active
-/// buffer, as **the same [TerminalLink] the text scan produces**, or null when
-/// there is none there.
-///
-/// The two ways of finding a link meet here so that nothing downstream has to
-/// care which of them found it. **Only http and https**, exactly as the text
-/// scan is and for the same reason: an `OSC 8` URI is as untrusted as the
-/// stdout it rode in on. **No underline of its own** — the cell carries the id,
-/// so xterm2's painter already draws the active hyperlink. The span is walked
-/// in cells, following a wrapped run as [linkLineAt] does and bounded the same
-/// way.
+/// The `OSC 8` hyperlink at ([row], [column]) as the same [TerminalLink] the
+/// text scan makes, http/https only: the URI is as untrusted as the stdout.
 TerminalLink? osc8LinkAt(
   Terminal terminal,
   int row,
@@ -290,13 +261,9 @@ TerminalLink? osc8LinkAt(
   );
 }
 
-/// What a path candidate is allowed to be made of: everything up to whitespace
-/// or a character that ends a path in practice.
-///
-/// Brackets and quotes are breaks rather than something to trim afterwards, so
-/// `(lib/main.dart:42)` comes out as the path itself; `=` is a break so
-/// `--out=build/app` offers one; `,`, `;`, `|`, `*` and `?` separate lists,
-/// shell pipelines and globs, none of which is one path.
+/// What a path candidate may be made of: everything up to whitespace or a
+/// character that ends a path — brackets, quotes, `=`, list and glob
+/// separators.
 final RegExp _tokenPattern = RegExp('[^\\s\'"`<>|*?,;=(){}\\[\\]]+');
 
 /// A drive-letter path: `C:\src`, `c:/src`.
@@ -384,12 +351,8 @@ TerminalLink _linkOf(
   );
 }
 
-/// The path [text] is a candidate for, or null when it is not one.
-///
-/// Deliberately **not** matched, because the cost of a wrong guess is a link
-/// under a word that is not one: a bare filename with no separator (`Node.js`
-/// is the same shape as `pubspec.yaml`), a path containing a space, and
-/// anything with a scheme in it.
+/// The path [text] is a candidate for, or null. A bare filename, a path with a
+/// space and anything with a scheme are refused — a wrong guess links a word.
 PathTarget? _pathTargetOf(String text) {
   if (text.contains('://')) return null;
   final match = _locationSuffix.firstMatch(text);
@@ -415,23 +378,14 @@ bool _looksLikePath(String text) {
   return _startsPath.hasMatch(text);
 }
 
-/// The absolute http(s) URL scanned [text] means, or null when it is not one.
-/// A bare `www.…` is what the scan may hand over, and it means https. An
-/// `OSC 8` URI is not run through this: a program writing the sequence wrote a
-/// scheme or wrote nothing usable.
+/// The absolute http(s) URL [text] means, or null. A bare `www.…` means https;
+/// an `OSC 8` URI is not run through this, having written its own scheme.
 String? _resolveUrl(String text) => httpUrlOf(
   text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
 );
 
-/// The path a `file://` URL names, or null when [text] is not one this may
-/// follow.
-///
-/// **A file URL is a path, never a [UrlTarget]**, so it goes through
-/// `hostPathForTerminalTarget` and reveal rather than reaching a scheme
-/// handler. **A host is refused**: `file://server/share/x` is a UNC path, and
-/// revealing one makes Windows authenticate to a share named by whatever
-/// printed the line — an NTLM leak from output an agent controls. Percent
-/// escapes are decoded, and `file:///C:/…` keeps its drive letter.
+/// The path a `file://` URL names — a path, never a [UrlTarget]. **A host is
+/// refused**: revealing a UNC share an agent printed is an NTLM leak.
 String? _fileUrlPath(String text) {
   if (!text.toLowerCase().startsWith('file://')) return null;
   final uri = Uri.tryParse(text);
@@ -452,10 +406,8 @@ String? _fileUrlPath(String text) {
 /// still on the front.
 final RegExp _driveRooted = RegExp(r'^/[A-Za-z]:');
 
-/// [text] if it is an absolute http(s) URL, and null otherwise. A host is
-/// required, so a truncated `http://` does not become a clickable nothing; a
-/// *dotted* host is not, because `http://localhost:3000` and a bare IP are what
-/// the dev servers an agent starts print.
+/// [text] if it is an absolute http(s) URL. A host is required, but not a
+/// *dotted* one — `http://localhost:3000` is what dev servers print.
 String? httpUrlOf(String text) {
   final uri = Uri.tryParse(text);
   if (uri == null) return null;

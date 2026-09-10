@@ -61,10 +61,8 @@ class CommandRunOutcome {
   final CommandRunEnd end;
   final CommandOutputText output;
 
-  /// The exit code, or `null` when nobody reported one. `null` means *unknown*,
-  /// never *zero*: an interrupted command completes with no code, and calling
-  /// that success would be a lie a caller acts on. Which of the two reporters
-  /// answered is in [end] rather than here.
+  /// The exit code, or `null` — which means *unknown*, never *zero*: an
+  /// interrupted command completes with no code, and zero would be a lie.
   final int? exitCode;
 
   final Duration? duration;
@@ -77,13 +75,8 @@ class CommandRunOutcome {
   bool get finished => end == CommandRunEnd.finished;
 }
 
-/// The text one command printed: the buffer between its `C` and its `D`.
-///
-/// Both ends matter. The `D` marker anchors to the line the **next prompt** is
-/// about to be drawn on, so taking whole lines would hand back that prompt and,
-/// a keystroke later, whatever the user typed next. A missing
-/// [CommandBlock.endRef] is not an error — it is a command that is still
-/// running, and then the answer is everything printed so far.
+/// The text one command printed: the buffer between its `C` and its `D`. The
+/// `D` anchors to the *next* prompt's line, so whole lines would hand it back.
 CommandOutputText readCommandOutput(
   Terminal terminal,
   CommandBlock block, {
@@ -162,13 +155,8 @@ String _rowText(Terminal terminal, int y, {required int from, int? to}) {
   return out.toString().trimRight();
 }
 
-/// Waits for the *one* command a caller is about to type into a pane.
-///
-/// A PTY is a byte stream with no notion of "this command finished, here is its
-/// status"; OSC 133 is that notion, and this is the seam that turns it into a
-/// single round trip: begin the watch, type, await. It only ever **reads** the
-/// terminal, and it never polls — the markers arrive on the PTY's own
-/// callback.
+/// Waits for the *one* command a caller is about to type into a pane. It only
+/// **reads** the terminal, and never polls: the markers arrive on a callback.
 class CommandRunWatch {
   CommandRunWatch._(this._instance, this._recorder, this._maxOutputLines) {
     // Whatever is running *now* is not what the caller is about to type. Its
@@ -180,10 +168,8 @@ class CommandRunWatch {
     _instance.liveness.addListener(_onLiveness);
   }
 
-  /// Starts watching [instance], or returns `null` when it has no shell
-  /// integration and therefore no way to report an end. Call **before** typing:
-  /// a fast command can finish inside the same turn the keystroke was written
-  /// in.
+  /// Starts watching [instance], or `null` when it has no shell integration.
+  /// Call **before** typing: a fast command finishes inside the same turn.
   static CommandRunWatch? begin(
     TerminalInstance instance, {
     int maxOutputLines = kDefaultCommandOutputLines,
@@ -284,9 +270,8 @@ class CommandRunWatch {
               maxLines: _maxOutputLines,
             )
           : CommandOutputText.unscoped,
-      // No `D` marker is coming, but the pane itself may know what its process
-      // died with. Only for [CommandRunEnd.paneExited]: a timed-out command is
-      // still running and its pane has no code to give. Null stays null.
+      // No `D` is coming, but the pane may know what its process died with.
+      // Only for [CommandRunEnd.paneExited]: a timed-out command still runs.
       exitCode: end == CommandRunEnd.paneExited ? _instance.exitCode : null,
       markersSeen: _tracker.latest != null,
     );

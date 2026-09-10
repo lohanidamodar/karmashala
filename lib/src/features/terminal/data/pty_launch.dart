@@ -6,11 +6,8 @@ import '../domain/shell_integration.dart';
 import '../domain/wsl_shell_integration.dart';
 import '../domain/terminal_profile.dart';
 
-/// A concrete process launch for a host ConPTY: which executable, its
-/// arguments, and the host working directory.
-///
-/// Deliberately not a [ShellCommand] and with no route back to one, which is
-/// what makes double-wrapping impossible rather than merely discouraged.
+/// A concrete process launch for a host ConPTY. Deliberately not a
+/// [ShellCommand] and with no route back, so double-wrapping cannot compile.
 class PtyLaunch {
   const PtyLaunch({
     required this.executable,
@@ -70,13 +67,7 @@ class PtyLaunch {
 }
 
 /// Builds the ConPTY launch for [profile], in the shell context it will open
-/// into.
-///
-/// A WSL profile goes through `cmd.exe /c wsl.exe -d <distro>` (see
-/// [throughCommandPrompt]) and takes its directory from `--cd`, which accepts a
-/// Windows path; a POSIX [context] opens the login shell instead. With
-/// [shellIntegration] false every launch is byte-identical to what shipped
-/// before shell integration existed.
+/// into — a WSL profile takes its directory from `--cd`, not the host process.
 PtyLaunch ptyLaunchFor(
   TerminalProfile profile, {
   LaunchContext? context,
@@ -97,11 +88,8 @@ PtyLaunch ptyLaunchFor(
         environment: environment,
       );
     case ShellContextKind.powerShell:
-      // Still spawned directly, and still *nested* because of it: the
-      // duplicate token [throughCommandPrompt] describes binds to PowerShell's
-      // positional `-Command`, so two powershell.exe processes start. It works
-      // — the inner shell is the one the user types into — so it is left as it
-      // shipped.
+      // Still spawned directly and still *nested* because of it: the duplicate
+      // token binds to PowerShell's positional `-Command`. Left as it shipped.
       return PtyLaunch(
         executable: 'powershell.exe',
         arguments: [
@@ -129,11 +117,8 @@ PtyLaunch ptyLaunchFor(
         environment: environment,
       );
     case ShellContextKind.wsl:
-      // Through `cmd.exe /c` for the reason [throughCommandPrompt] documents:
-      // spawned directly the line becomes `wsl.exe wsl.exe -d <distro> …`, and
-      // `wsl.exe` reads that second token as the command to run inside the
-      // distro — so the pane reached its shell only by having the login shell
-      // exec a PE back out through interop, which dies when interop is off.
+      // Through `cmd.exe /c`: spawned directly, `wsl.exe` reads the duplicated
+      // token as the command to run, and the pane dies when interop is off.
       final distro = target.wslDistribution ?? '';
       // Integrated, the pane's first command is the bootstrap, carried by the
       // same payload every agent launch already crosses on.
@@ -159,13 +144,8 @@ PtyLaunch ptyLaunchFor(
   }
 }
 
-/// [environment] plus the `WSLENV` that makes it cross into a distribution: a
-/// Win32 variable reaches a WSL child **only** if `WSLENV` names it.
-///
-/// `/u` on every name, never `/p` — a value that merely looks like a path would
-/// be rewritten on the way in, silently. The names (not the values) are
-/// readable inside the distro as `$WSLENV`. Returns [environment] unchanged
-/// when it is empty.
+/// [environment] plus the `WSLENV` a Win32 variable must be named in to cross
+/// into a distribution. `/u`, never `/p`, which rewrites path-like values.
 Map<String, String> withWslEnv(Map<String, String> environment) {
   if (environment.isEmpty) return environment;
   return {
@@ -174,13 +154,8 @@ Map<String, String> withWslEnv(Map<String, String> environment) {
   };
 }
 
-/// One Windows command line, handed to `cmd.exe /c` so that `cmd` re-parses it.
-///
-/// **Every** ConPTY child is spawned as `<exe> <exe> <args…>` — `flutter_pty`
-/// 0.4.2 writes the executable and then all of `argv`, which already starts
-/// with it — and `cmd.exe` is the only wrapper that survives that, because it
-/// discards the stray leading token and restores the quoting `build_command`
-/// throws away. The price is `cmd`'s own `%NAME%` expansion.
+/// One Windows command line handed to `cmd.exe /c`, the only wrapper that
+/// survives `flutter_pty` spawning every child as `<exe> <exe> <args…>`.
 PtyLaunch throughCommandPrompt(
   List<String> parts, {
   String? workingDirectory,
@@ -192,14 +167,9 @@ PtyLaunch throughCommandPrompt(
   environment: environment,
 );
 
-/// Builds the ConPTY launch that runs an agent CLI in a pane, for the context
-/// the command is actually going into.
-///
-/// The session id and its derived port base are stamped into the child's
-/// *environment* rather than passed as arguments, because they have to reach a
-/// grandchild — the MCP bridge the agent spawns. [environment] is the user's
-/// own variables, layered **under** that plumbing so a user variable can never
-/// displace it.
+/// Builds the ConPTY launch that runs an agent CLI in a pane. The session id
+/// rides in the *environment*, because it has to reach a grandchild — the MCP
+/// bridge the agent spawns.
 PtyLaunch agentPtyLaunchFor(
   AgentPaneLaunch launch, {
   LaunchContext? context,
@@ -243,11 +213,8 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
       );
     case ShellContextKind.windowsNative:
     case ShellContextKind.powerShell:
-      // **PowerShell is the Windows-native shell for an agent**, not
-      // `cmd.exe`, so a pane, its "copy command" line and an external terminal
-      // all speak one shell. `-EncodedCommand` is what survives `flutter_pty`'s
-      // unquoted `<exe> <argv…>` concatenation — one base64 token has nothing
-      // to split — and it keeps `cmd`'s `%NAME%` expansion away from a prompt.
+      // PowerShell, not `cmd.exe`, so the pane and the copied line speak one
+      // shell — and `-EncodedCommand` is one token `flutter_pty` cannot split.
       final script =
           '& ${command.parts.map(quotePowerShellArgument).join(' ')}';
       return PtyLaunch(
@@ -270,14 +237,8 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         environment: command.environment,
       );
     case ShellContextKind.wsl:
-      // **Through `cmd.exe /c`, carrying a base64 payload the distro's login
-      // shell decodes.** `wsl.exe … -- <command>` is not an argv hand-off: WSL
-      // runs the command-line *tail* through the login shell, so a line quoted
-      // for Windows is parsed a second time under POSIX rules — a multi-line
-      // prompt died as `zsh:1: unmatched` quote, and `$(…)` in a prompt really
-      // executed. [encodedPosixShellCommand] is the POSIX `-EncodedCommand`:
-      // its alphabet has nothing either parser rewrites. `--cd` stays on the
-      // `cmd` line because `wsl.exe` is what translates a Windows path.
+      // `wsl.exe … -- <command>` hands its tail to the login shell, which
+      // parses a Windows-quoted line a second time under POSIX rules.
       return throughCommandPrompt(
         [
           'wsl.exe',
@@ -297,15 +258,8 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
   }
 }
 
-/// The same context decision, for a command handed to an **external** terminal
-/// rather than a ConPTY.
-///
-/// Only the environment crossing belongs here; nothing is quoted for the
-/// terminal's own shell, because those paths deliver argv properly. The WSL
-/// crossing is not one of them — `wsl.exe … -- <command>` hands its tail to the
-/// login shell — so the command goes through [encodedPosixShellCommand] here
-/// too, and every consumer renders that token with Windows quoting, which is
-/// exactly the double quote it needs.
+/// The same context decision for an **external** terminal, not a ConPTY. Only
+/// the WSL crossing needs wrapping, because it hands its tail to a login shell.
 List<String> wrapForExternalTerminal(
   ShellCommand command,
   LaunchContext context,
@@ -329,12 +283,8 @@ List<String> wrapForExternalTerminal(
 String quotePowerShellArgument(String value) =>
     "'${value.replaceAll("'", "''")}'";
 
-/// Quotes one argument for a **POSIX** shell — `sh`, `bash`, `zsh`.
-///
-/// Single quotes, the one POSIX construct with no exceptions inside them, so
-/// everything arrives byte for byte. It cannot defend against the *first*
-/// parser — `cmd.exe` still expands `%NAME%` and still stops at a newline —
-/// which is why the WSL path wraps its output in [encodedPosixShellCommand].
+/// Quotes one argument for a **POSIX** shell. Single quotes, so everything
+/// arrives byte for byte; it cannot defend against `cmd.exe`, the first parser.
 String quotePosixShellArgument(String value) =>
     "'${value.replaceAll("'", r"'\''")}'";
 
@@ -344,28 +294,15 @@ String quotePosixShellArgument(String value) =>
 String posixShellCommand(List<String> parts) =>
     'exec ${parts.map(quotePosixShellArgument).join(' ')}';
 
-/// [parts] as two argv tokens that carry it into a POSIX shell across a Windows
-/// command line without either parser touching it.
-///
-/// The tokens are `eval` and `$(echo '<base64>'|base64 -d)`. The second **has
-/// to arrive double-quoted**, and does: it contains spaces, so every Windows
-/// renderer wraps it in `"…"`, which is the shell's *weak* quote — unquoted it
-/// would be split on IFS. It asks only `base64 -d` of the distribution, and
-/// costs a quarter of the usable prompt length against `cmd`'s 8191-char
-/// limit.
+/// [parts] as two argv tokens that cross a Windows command line untouched: the
+/// second contains spaces, so it arrives double-quoted and survives IFS.
 List<String> encodedPosixShellCommand(List<String> parts) {
   final blob = base64Encode(utf8.encode(posixShellCommand(parts)));
   return ['eval', '\$(echo \'$blob\'|base64 -d)'];
 }
 
-/// Quotes one argument for a command line `cmd.exe` will re-parse, by
-/// `CommandLineToArgvW`'s rules.
-///
-/// It deliberately does not escape `%` (there is no reliable escape for it on a
-/// `/c` line) and does not quote a value only because it contains
-/// `& | < > ^ ( )`, so a single-token `a&b` would start a second command.
-/// Neither reaches a user's prompt any more: both agent paths encode instead,
-/// and what is left on this line is paths and flags the app supplies itself.
+/// Quotes one argument for a command line `cmd.exe` re-parses. It escapes
+/// neither `%` nor `& | < > ^ ( )`, so only app-supplied text may reach it.
 String quoteWindowsCommandArgument(String value) {
   if (value.isNotEmpty && !value.contains(RegExp(r'[ \t"]'))) return value;
 

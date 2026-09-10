@@ -6,14 +6,8 @@ const kAnsiPaletteSize = 16;
 
 final _hexColor = RegExp(r'^#?(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$');
 
-/// Normalises a colour from a theme file to `#rrggbb`, or `null` if it is not
-/// one.
-///
-/// Accepts 3- or 6-digit hex with or without a leading `#`, and tolerates the
-/// value still being wrapped in quotes (Ghostty's `palette = 0="#000000"` is a
-/// real spelling a naive parser drops). Named colours, `rgb:aa/bb/cc` and
-/// 8-digit hex are rejected: a terminal cell colour has no alpha channel, and
-/// dropping it silently would render a theme wrong rather than refuse it.
+/// Normalises a theme colour to `#rrggbb`, or `null`. 8-digit hex is rejected:
+/// a cell has no alpha, and dropping it silently would render a theme wrong.
 String? normalizeHexColor(String? value) {
   if (value == null) return null;
   var text = value.trim();
@@ -32,9 +26,7 @@ String? normalizeHexColor(String? value) {
 }
 
 /// A colour theme read from an external terminal, as a **sparse** set of
-/// overrides. Every field is optional on purpose: a partial or malformed file
-/// contributes whatever it did carry, which is what makes [applyTo] safe to
-/// call with a half-read theme.
+/// overrides — which is what makes [applyTo] safe on a half-read file.
 class TerminalPalette {
   const TerminalPalette({
     this.background,

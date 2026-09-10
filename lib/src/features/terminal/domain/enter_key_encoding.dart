@@ -1,12 +1,5 @@
-/// Makes `Shift+Enter` and `Ctrl+Enter` distinguishable from plain `Enter`.
-///
-/// The vendored package encodes **every** modified `Enter` as the same bare
-/// carriage return plain `Enter` is, so Claude Code's "newline instead of
-/// submit" chords do nothing. This answers `ESC CR` for a non-`Ctrl` modifier —
-/// what Claude Code binds `Shift+Enter` to — and CSI-u when `Ctrl` is held,
-/// unconditionally, and leaves plain `Enter` alone. Only a **press** is
-/// encoded: xterm2 forwards releases too, and without that guard every chord
-/// fired twice per keystroke.
+/// Makes `Shift+Enter` and `Ctrl+Enter` distinguishable from plain `Enter`,
+/// which the package encodes alike. Only a **press**: a release fired twice.
 library;
 
 import 'package:xterm2/core.dart';
@@ -14,12 +7,8 @@ import 'package:xterm2/core.dart';
 /// `ESC` followed by carriage return: the meta-prefixed `Enter`.
 const kEscapeEnter = '\x1b\r';
 
-/// `Ctrl+E` — *end of line* — written between a typed message and its Return.
-///
-/// An agent composer with no bracketed paste to read reads characters arriving
-/// with no gap as a paste, and folds a Return inside that run into a newline.
-/// This is the smallest input that is not a character, and every composer
-/// already treats it as "the caret is at the end", which it is.
+/// `Ctrl+E` — *end of line* — written between a typed message and its Return,
+/// so a composer reading the run as a paste does not fold the Return in.
 const kEndOfLineKey = '\x05';
 
 /// The input handler the app installs on every terminal.

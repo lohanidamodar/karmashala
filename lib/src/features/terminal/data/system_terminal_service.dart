@@ -260,10 +260,8 @@ class SystemTerminalService {
     );
   }
 
-  /// Opens Terminal.app or iTerm by handing it a script to run: neither takes a
-  /// command on its command line — `open -a Terminal foo bar` opens *files*
-  /// called foo and bar — so the command goes into an executable `.command`
-  /// file, which deletes itself once it has run.
+  /// Opens Terminal.app or iTerm by handing it a script: neither takes a command
+  /// on its command line — `open -a Terminal foo` opens a *file* called foo.
   Future<void> _launchMacApp(
     SystemTerminal terminal,
     List<String> command,
@@ -366,13 +364,8 @@ class SystemTerminalService {
   String _quoteCmd(String value) => '"${value.replaceAll('"', '""')}"';
 }
 
-/// The agent CLI flags for [selection], read from the agent registry so
-/// terminal launches honour the same per-agent permission setting as the in-app
-/// adapters.
-///
-/// An agent the registry does not know gets **no** permission flag: guessing one
-/// would mean passing a flag invented for a different CLI to a binary we know
-/// nothing about (design principle 5).
+/// The agent CLI flags for [selection], from the registry. An agent it does not
+/// know gets **none**: another CLI's flag may mean something else (principle 5).
 List<String> permissionArgsFor(
   String cli,
   PermissionSelection? selection, {
@@ -383,17 +376,8 @@ List<String> permissionArgsFor(
   return support.argumentsFor(selection);
 }
 
-/// The arguments that continue [cli]'s conversation [externalId] **in a
-/// terminal**, read from the agent registry.
-///
-/// [AgentLaunchSpec.interactiveResume] and not `resume`: this is the TTY
-/// convention, which differs for Codex (`codex resume <id>` in a terminal vs
-/// `codex --resume <id>` in app-server mode).
-///
-/// An agent the registry has never heard of, or one that declares no resume
-/// convention, gets **nothing** — never another agent's flag, because a command
-/// line with no resume arguments does not fail: it starts a new conversation
-/// wearing the old session's name. Callers must ask [resumeRefusalFor] first.
+/// The TTY arguments continuing [cli]'s [externalId], from
+/// [AgentLaunchSpec.interactiveResume]; **nothing** silently starts a new one.
 List<String> resumeArgsFor(
   String cli,
   String? externalId, {
@@ -404,12 +388,7 @@ List<String> resumeArgsFor(
           const <String>[];
 
 /// Why [cli] must not be handed a command line claiming to continue
-/// [externalId], or `null` when it can be.
-///
-/// The one place the refusal is worded, for every surface that builds such a
-/// command. Returns `null` when no conversation is named at all: a
-/// fresh-session command claims nothing, so there is nothing to be wrong
-/// about.
+/// [externalId], or `null` — including when no conversation is named at all.
 String? resumeRefusalFor(
   AgentRegistry registry,
   String cli,
@@ -425,14 +404,8 @@ String? resumeRefusalFor(
       'instead, where the agent is launched from its own registry entry.';
 }
 
-/// The second way a resume can quietly become a fresh conversation: it is run
-/// in a directory the conversation was not written in, by an agent nobody has
-/// checked can find it from there. `null` when there is nothing to say.
-///
-/// Deliberately **not** part of [resumeRefusalFor], which is a certainty: this
-/// is only a possibility, and refusing on it would make an unmounted drive mean
-/// "you can never open this session again". Either directory being null means
-/// "we do not know", which says nothing.
+/// A resume run in a directory the conversation was not written in. A caveat,
+/// never a refusal: an unmounted drive must not mean the session is gone.
 String? resumeDirectoryCaveatFor(
   AgentRegistry registry,
   String cli,
@@ -452,12 +425,8 @@ String? resumeDirectoryCaveatFor(
       '$externalId.';
 }
 
-/// Whether the two directories are both known and different.
-///
-/// Compared as written, with trailing separators trimmed and no case folding:
-/// folding `/work` onto `/Work` would call two directories one. Paths rather
-/// than an agent's own directory key — Claude's key is a lossy dash-encoding,
-/// so two directories can share one bucket and a move would be missed.
+/// Whether the two directories are both known and different. No case folding,
+/// and paths rather than an agent's own lossy directory key.
 bool _directoryMoved(String? recorded, String? launch) {
   if (recorded == null || launch == null) return false;
   final a = _withoutTrailingSeparators(recorded);
@@ -473,15 +442,8 @@ String _withoutTrailingSeparators(String path) {
   return path.substring(0, end);
 }
 
-/// A single shell-pasteable command, **spelled for the shell [environment]
-/// actually opens**: PowerShell for a Windows-native session, POSIX `sh` for
-/// WSL, SSH and a local Mac or Linux host. NOT wsl-wrapped — the user pastes it
-/// into whichever shell the session lives in.
-///
-/// [environment] is required rather than defaulted, because one syntax for every
-/// environment is the defect it closes: **Windows PowerShell 5.1 rejects `&&`
-/// outright**, so a Windows session's copied `cd <cwd> && …` was broken on the
-/// shell most Windows machines open by default.
+/// A single shell-pasteable command, spelled for the shell [environment] opens:
+/// **Windows PowerShell 5.1 rejects `&&`**, so one syntax for all was broken.
 String shellCommandLine({
   required String agentExecutable,
   required String cli,

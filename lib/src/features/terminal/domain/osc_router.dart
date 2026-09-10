@@ -1,12 +1,5 @@
-/// Fan-out for a terminal's operating-system commands.
-///
-/// xterm gives a `Terminal` exactly **one** `onPrivateOSC` slot, and two things
-/// need the stream — the OSC 133 recorder and the OSC 7 directory — so whoever
-/// grabbed it last used to silence the other. The slot now belongs to the pane.
-///
-/// A sequence reaches here only through the parser's `unknownOSC` fallthrough,
-/// which a `case` on the number never takes: **777 is one of those numbers**,
-/// so no `notify` payload ever arrives — see `osc_777_notify_test.dart`.
+/// Fan-out for a terminal's OSC sequences: xterm gives a `Terminal` exactly
+/// **one** `onPrivateOSC` slot, so whoever took it used to silence the rest.
 library;
 
 /// What xterm hands to `onPrivateOSC`: the OSC number, and everything after it

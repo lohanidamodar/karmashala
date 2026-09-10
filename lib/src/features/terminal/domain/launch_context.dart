@@ -74,11 +74,8 @@ class LaunchContext {
   /// Whether a command handed to this context needs a wrapper in front of it.
   bool get needsWrapper => kind != ShellContextKind.posix;
 
-  /// The context an agent pane's command is going into. [hostIsWindows] is
-  /// `Platform.isWindows` at the one place it is read: off Windows we are
-  /// already inside a POSIX shell — inside the named distribution itself when
-  /// the launch names one — so the `wsl.exe` wrapper is neither available nor
-  /// wanted.
+  /// The context an agent pane's command is going into. Off Windows we are
+  /// already inside a POSIX shell, so no `wsl.exe` wrapper is available.
   factory LaunchContext.forAgent(
     AgentPaneLaunch launch, {
     required bool hostIsWindows,
@@ -163,13 +160,8 @@ class LaunchContext {
       '${wslDistribution == null ? '' : ', $wslDistribution'})';
 }
 
-/// A command in the words of the environment it will run in: the executable,
-/// its arguments and its working directory exactly as the *destination* shell
-/// sees them, before any wrapper.
-///
-/// Half of what makes wrapping structurally single: the wrapping functions
-/// consume a [ShellCommand] and produce something with no route back to being
-/// one, so wrapping twice is not a mistake you can make and still compile.
+/// A command in the words of the environment it will run in, before any
+/// wrapper. Wrapping consumes one and returns something with no route back.
 class ShellCommand {
   const ShellCommand({
     required this.executable,

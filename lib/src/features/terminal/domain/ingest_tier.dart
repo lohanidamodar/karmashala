@@ -1,19 +1,8 @@
-/// How much of the UI isolate a pane's output is entitled to, by how visible
-/// the pane is.
-///
-/// Every live pane used to be drained and VT-parsed at frame cadence whether or
-/// not anyone could see it: with 100 panes all producing output, one frame's
-/// ingestion took 62 ms against a 16.7 ms budget, linear in the number of
-/// panes, and armed 100 watchdog timers per frame. Painting only the active tab
-/// does not help, because the cost is on the *producer* side.
-///
-/// The tiers are set by `TerminalSessionsController` from the only thing that
-/// decides them — where the pane is in the layout — never by the pane itself.
+/// How much of the UI isolate a pane's output is entitled to, by how visible it
+/// is: 100 panes at frame cadence cost 62 ms against a 16.7 ms budget.
 enum IngestTier {
-  /// In the active tab: the user is looking at it. Today's path exactly, with a
-  /// reserved share of the frame budget that no number of background panes can
-  /// take — a per-pane watchdog cannot protect it, having no idea what the
-  /// other ninety-nine are doing.
+  /// In the active tab: the user is looking at it, with a reserved share of the
+  /// frame no number of background panes can take.
   hot,
 
   /// Open in another tab: it must stay correct, but nobody is watching it draw.
@@ -21,13 +10,7 @@ enum IngestTier {
   /// hidden pane put together is bounded rather than multiplied.
   warm,
 
-  /// Detached — running with no tab at all.
-  ///
-  /// Its scrollback is not parsed: output goes into a bounded raw spool and is
-  /// replayed only when the session is brought back, so a cold pane costs no
-  /// buffer, no timer and no frame. Its *screen* is another matter —
-  /// `terminalTailLines` reads the bottom of the grid to tell whether an agent
-  /// is waiting for approval — so it is redrawn at most once a second, out of
-  /// the same shared pool a warm pane draws on. See `ColdScreen`.
+  /// Detached — running with no tab at all. Its scrollback is spooled unparsed,
+  /// but its *screen* is still redrawn, at most once a second.
   cold,
 }

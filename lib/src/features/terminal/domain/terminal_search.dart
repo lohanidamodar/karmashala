@@ -7,10 +7,8 @@ import 'terminal_search_query.dart';
 /// the match total is still reported and navigation still works.
 const int kMaxSearchHighlights = 500;
 
-/// One buffer line flattened for searching, with the mapping back to cells.
-/// `BufferLine.getText()` skips empty cells and the trailing half of a
-/// double-width glyph, so an index into it is *not* a cell column — a highlight
-/// drawn there would drift left by every gap and wide glyph before it.
+/// One buffer line flattened for searching, with the mapping back to cells:
+/// `BufferLine.getText()` skips cells, so its indices are not columns.
 class TerminalLineText {
   const TerminalLineText({
     required this.text,
@@ -35,9 +33,7 @@ class TerminalLineText {
 }
 
 /// Flattens [line] into searchable text plus its cell mapping. [trimTrailing]
-/// cuts the empty tail so a query cannot match into it; link scanning turns it
-/// off for every row but the last of a wrapped run, because joining two rows
-/// across a trimmed gap would invent a token that is not on screen.
+/// is off for a wrapped run's inner rows, or a join invents a token.
 TerminalLineText lineTextOf(BufferLine line, {bool trimTrailing = true}) {
   final buffer = StringBuffer();
   final cells = <int>[];
@@ -84,14 +80,8 @@ class ScrollbackMatch {
   String toString() => 'ScrollbackMatch($line, $startColumn..$endColumn)';
 }
 
-/// Reads lines from [firstLine] through [lineAt], reporting every hit.
-///
-/// A line *accessor* rather than a list, because this is the loop the terminal's
-/// find cost is measured in: a caller with 100 panes must not materialise 100
-/// line lists to ask a question about one. Returns the number of lines actually
-/// read — the unit `terminal_search_cost_test.dart` asserts on — and
-/// [matchBudget] stops the scan, so a query like `.` over a full scrollback
-/// costs the budget rather than the buffer.
+/// Reads lines from [firstLine] through [lineAt], reporting every hit. An
+/// accessor, not a list: 100 panes must not materialise 100 line lists.
 int scanLines({
   required TerminalSearchQuery query,
   required int lineCount,

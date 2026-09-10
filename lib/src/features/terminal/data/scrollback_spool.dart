@@ -1,22 +1,11 @@
 import 'package:flutter/foundation.dart';
 
-/// Most bytes a detached pane's spool holds before the oldest are dropped.
-/// 256 KiB is roughly two hundred screens of a 120×40 terminal, and small
-/// enough that a hundred detached sessions cost 25 MB rather than the ~6 GB a
-/// hundred full parsed buffers would (7 MB of RSS per noisy live pane).
+/// Most bytes a detached pane's spool holds before the oldest are dropped: a
+/// hundred sessions cost 25 MB rather than the ~6 GB of parsed buffers.
 const int kScrollbackSpoolMaxBytes = 256 * 1024;
 
-/// Raw PTY bytes held for a pane that is not being parsed.
-///
-/// A detached session still has a process behind it, and something has to read
-/// the pipe or the child blocks on a full OS buffer — but *parsing* it means
-/// keeping a 10 000-line `Terminal` alive for a pane with no tab. So the bytes
-/// are kept exactly as they arrived, undecoded, and replayed into a terminal
-/// only if the session is brought back.
-///
-/// **Bounded, dropping the oldest** — the same contract the live scrollback
-/// already has, moved to before the parse. [droppedBytes] says whether it
-/// happened, so a replay can admit to being truncated.
+/// Raw PTY bytes held for a pane that is not being parsed: something must read
+/// the pipe, but parsing means a 10 000-line `Terminal` for a pane with no tab.
 class ScrollbackSpool {
   ScrollbackSpool({this.maxBytes = kScrollbackSpoolMaxBytes});
 
@@ -42,8 +31,7 @@ class ScrollbackSpool {
   }
 
   /// Everything held, in order, leaving the spool empty. [droppedBytes] is
-  /// *not* reset: whether history was lost is a property of what is being
-  /// replayed, and the caller reads it. Use [reset] to forget both.
+  /// *not* reset, because it describes what is being replayed.
   Uint8List drain() => take(_length);
 
   /// The first [maxBytes] held, in order, leaving the rest queued — for a

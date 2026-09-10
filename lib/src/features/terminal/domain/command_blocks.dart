@@ -30,11 +30,8 @@ int? exitCodeFromOsc(List<String> args) {
   return int.tryParse(args[1]);
 }
 
-/// A reference to a line in the terminal buffer that survives the buffer moving
-/// underneath it, and reports `null` once that line is evicted from scrollback.
-///
-/// A narrow interface rather than xterm's `CellAnchor`, so the model stays
-/// pure: production supplies an anchor-backed one, tests a plain holder.
+/// A reference to a buffer line that survives the buffer moving, and reports
+/// `null` once it is evicted. Narrow, so the model stays free of xterm.
 abstract class TerminalLineRef {
   /// The line's current absolute index, or `null` if it no longer exists.
   int? get line;
@@ -106,13 +103,8 @@ class CommandBlock {
       : endedAt!.difference(startedAt!);
 }
 
-/// Consumes a stream of [ShellMarker]s and produces completed [CommandBlock]s.
-///
-/// A block is only real once `C` has been seen — Enter on an empty line emits
-/// `A … D` with no `C`. A `D` with nothing pending is dropped, because
-/// integration can begin part-way through a session. A fresh `A` closes a block
-/// that had started running with an unknown exit code, and discards one that
-/// never started.
+/// Consumes [ShellMarker]s and produces completed [CommandBlock]s. A block is
+/// real only once `C` has been seen — an empty Enter emits `A … D` without one.
 class CommandBlockTracker {
   CommandBlockTracker({this.maxBlocks = 200});
 
@@ -135,9 +127,8 @@ class CommandBlockTracker {
   CommandBlock? get latest =>
       _pending ?? (_blocks.isEmpty ? null : _blocks.last);
 
-  /// Called with each block the moment it completes, in completion order. This
-  /// is what lets `terminal_run` wait for a command instead of polling the
-  /// screen and guessing. Listeners **observe**: nothing here may edit a block.
+  /// Called with each block the moment it completes, in completion order —
+  /// what lets `terminal_run` wait rather than poll. Listeners **observe**.
   void addCompletionListener(void Function(CommandBlock block) listener) =>
       _completionListeners.add(listener);
 

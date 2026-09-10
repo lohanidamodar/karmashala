@@ -23,38 +23,19 @@ typedef WatchdogCanceller = void Function(Object handle);
 typedef MonotonicClock = Duration Function();
 
 /// How long the coalescer must have been quiet before the next bytes are
-/// treated as interactive and flushed straight through.
-///
-/// One frame. Below it, output is arriving faster than the screen refreshes;
-/// above it the terminal was idle, which at a prompt means an echo of a
-/// keystroke.
+/// flushed straight through. One frame: above it, a prompt's bytes are an echo.
 const kCoalescerIdleThreshold = Duration(milliseconds: 16);
 
-/// How long a **hidden** pane waits before draining on a timer.
-///
-/// A hidden pane schedules no frames, so the watchdog is its only clock. At the
-/// hot cadence 100 panes armed 6,000 timers over 60 frames; nobody is watching
-/// these draw, so a sixth of the rate removes five sixths of the timers.
+/// How long a **hidden** pane waits before draining on a timer — its only
+/// clock. A sixth of the hot cadence removed five sixths of 6,000 timers.
 const kHiddenCoalescerWatchdog = Duration(milliseconds: 100);
 
-/// Most bytes a pane may hold undecoded before the oldest are dropped.
-///
-/// A warm pane draws from a shared pool, so one producing faster than the pool
-/// refills would queue without bound — a hundred of them is how a throttle
-/// becomes a memory leak. **The known cost:** dropped bytes can cut an escape
-/// sequence, leaving a full-screen program in a hidden tab drawing against a
-/// state the parser no longer agrees with until its next full repaint.
+/// Most bytes a pane may hold undecoded before the oldest are dropped, so a
+/// throttled pane cannot leak. A dropped escape can desync a hidden TUI.
 const kMaxPendingBytes = 512 * 1024;
 
-/// Buffers raw PTY bytes and hands them to the terminal at most once per frame.
-///
-/// `flutter_pty` reads 1 KB at a time, so a busy shell produced hundreds of
-/// decodes and `notifyListeners()` a second on the UI isolate. Bytes — not
-/// strings — are buffered, so a multi-byte character split across two reads
-/// survives. Bytes arriving after [idleThreshold] of quiet are written straight
-/// through, because `addPostFrameCallback` does not *schedule* a frame: every
-/// echoed character otherwise paid a watchdog timer plus a frame it had
-/// missed.
+/// Buffers raw PTY bytes into one write per frame — except after
+/// [idleThreshold] of quiet, since `addPostFrameCallback` schedules no frame.
 class PtyOutputCoalescer {
   PtyOutputCoalescer({
     required this.onData,
@@ -135,11 +116,8 @@ class PtyOutputCoalescer {
   final MonotonicClock _clock;
   late Duration _lastFlushAt;
 
-  /// Queued PTY chunks, oldest first.
-  ///
-  /// A [ListQueue], not a [List]: both [flush] and [_trimPending] consume from
-  /// the head, and `removeAt(0)` on a list shifts every remaining element,
-  /// which made draining n chunks O(n²) — 32% of the app's CPU under a flood.
+  /// Queued PTY chunks, oldest first. A [ListQueue], not a [List]:
+  /// `removeAt(0)` made draining O(n²) — 32% of the app's CPU under a flood.
   final _pending = ListQueue<Uint8List>();
   final _decoded = StringBuffer();
   late final ByteConversionSink _decoderSink;
@@ -257,12 +235,8 @@ class PtyOutputCoalescer {
     if (_pending.isNotEmpty) _schedule();
   }
 
-  /// Hands back everything queued but not yet decoded, leaving the queue empty.
-  ///
-  /// Used when a pane goes cold, so going cold costs no flush. A multi-byte
-  /// character split across this boundary can be mangled — the streaming
-  /// decoder's partial state stays here — which the replay tolerates with
-  /// `allowMalformed`.
+  /// Hands back everything queued but not yet decoded, so going cold costs no
+  /// flush. A character split across this boundary can be mangled.
   Uint8List takePending() {
     if (_pending.isEmpty) return Uint8List(0);
     final out = Uint8List(_pendingBytes);

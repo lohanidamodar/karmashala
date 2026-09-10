@@ -1,22 +1,9 @@
-/// OSC 133 injection for a WSL pane's own shell.
-///
-/// Pure, like `shell_integration.dart`: it produces the text of the scripts and
-/// nothing else — nothing here goes near the owner's `~/.bashrc` or `~/.zshrc`,
-/// which is precisely what the rcfile mechanism exists for.
-///
-/// **The scripts carry almost no comments of their own, deliberately.** Every
-/// byte is base64'd onto a `cmd.exe` command line that stops at 8191
-/// characters, and an apostrophe in a comment costs four.
+/// OSC 133 injection for a WSL pane's own shell, as pure script text. The
+/// scripts carry no comments: every byte is base64'd onto an 8191-char line.
 library;
 
-/// The shell-side bootstrap a WSL pane runs before it becomes a shell.
-///
-/// It writes its own rc file inside the distribution, because a probe from the
-/// launch path could not answer both questions and `bash --rcfile` pointed at
-/// an unreadable file starts a shell with **no user configuration at all**.
-/// Every path that does not end in a working rc file ends in the plain login
-/// shell, and the `mktemp -d` directory removes itself, so nothing is left in
-/// `/tmp` and no fixed path exists for anyone to pre-create.
+/// The bootstrap a WSL pane runs before it becomes a shell. It writes its own
+/// rc file: `bash --rcfile` on an unreadable one loses the user's whole config.
 String wslIntegrationBootstrap() =>
     '''
 __s=\${SHELL:-}
@@ -57,17 +44,8 @@ rm -rf -- "\$__d"
 exec "\$__s" -l
 ''';
 
-/// The bash rcfile, handed to `bash --rcfile`.
-///
-/// **`--rcfile` applies only to an interactive shell that is not a login
-/// shell**, and a WSL pane is one — which is why the script first reads what a
-/// login shell would have, in its order. The rest is traps: `PS0` (not a
-/// `DEBUG` trap) expands in a subshell, so an empty Enter emits no `C`;
-/// `__k133_precmd` is prepended so `$?` is read before the user's hook; `B` is
-/// re-appended each prompt, since starship rewrites `PS1`; `PROMPT_COMMAND` is
-/// `eval`'d rather than spliced, because `foo;;bar` is a syntax error; and no
-/// readline brackets in `PS0`, where bash printed eight stray control bytes per
-/// command.
+/// The bash rcfile. **`--rcfile` applies only to an interactive shell that is
+/// not a login shell**, and a WSL pane is one — hence the explicit sourcing.
 String bashIntegrationRcFile() => r'''
 # Karmashala OSC 133 shell integration. Read once, then deleted.
 if [ -r /etc/profile ]; then . /etc/profile; fi
@@ -104,13 +82,8 @@ rm -rf -- "${__K133_RC:-}"
 unset __K133_RC
 ''';
 
-/// `$ZDOTDIR/.zshenv` for a zsh pane.
-///
-/// zsh resolves `ZDOTDIR` afresh for **each** startup file, so pointing it at a
-/// directory holding only a `.zshrc` would silently drop the user's `.zshenv`
-/// and `.zprofile`. All three are mirrored instead, with `ZDOTDIR` handed back
-/// to the user's own directory while their file is sourced and taken again
-/// afterwards — so a `.zshenv` that *moves* it is followed, not overruled.
+/// `$ZDOTDIR/.zshenv` for a zsh pane. zsh resolves `ZDOTDIR` afresh for **each**
+/// startup file, so all three are mirrored or the user's own are dropped.
 String zshIntegrationZshenv() => _zshMirror('.zshenv');
 
 /// `$ZDOTDIR/.zprofile` for a zsh pane. See [zshIntegrationZshenv].
@@ -124,13 +97,8 @@ __K133_ZU=\$ZDOTDIR
 ZDOTDIR=\$__K133_ZD
 ''';
 
-/// `$ZDOTDIR/.zshrc` for a zsh pane: the user's, then the hooks, then out of
-/// the way.
-///
-/// `precmd`/`preexec` rather than `PROMPT_COMMAND`/`PS0`, and **`$?` is safe
-/// wherever the hook sits**: zsh restores the last status around every one of
-/// them. The last three lines hand `ZDOTDIR` back, because zsh reads `.zlogin`
-/// from whatever it says *then* — so the rest of startup is the user's own.
+/// `$ZDOTDIR/.zshrc` for a zsh pane. `ZDOTDIR` is handed back at the end,
+/// because zsh reads `.zlogin` from whatever it says *then*.
 String zshIntegrationZshrc() => r'''
 # Karmashala OSC 133 shell integration. Read once, then deleted.
 ZDOTDIR=$__K133_ZU

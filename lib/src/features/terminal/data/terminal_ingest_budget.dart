@@ -5,12 +5,8 @@ import '../domain/ingest_tier.dart';
 /// before there was a budget: N = 1 is the same code path, same numbers.
 const int kIngestHotReserveBytes = 256 * 1024;
 
-/// Bytes **every hidden pane put together** may decode per refill — warm panes
-/// draining their queues and cold panes redrawing their screens alike.
-///
-/// The old design gave each pane its own 256 KiB flush cap, so a synchronised
-/// round of a hundred panes could offer 25 MiB of VT parsing to one frame. One
-/// shared pool makes the cost of the background constant in the number.
+/// Bytes **every hidden pane put together** may decode per refill. Per-pane
+/// caps let a hundred panes offer 25 MiB of VT parsing to one frame.
 const int kIngestWarmPoolBytes = 64 * 1024;
 
 /// How often the pool is refilled — one frame at 60 Hz.
@@ -20,12 +16,8 @@ const Duration kIngestRefillInterval = Duration(milliseconds: 16);
 /// exactly rather than by waiting.
 typedef IngestClock = Duration Function();
 
-/// One frame's worth of VT parsing, shared by every pane in the app.
-///
-/// **One global budget, not a watchdog per pane**: independent per-pane limits
-/// cannot provide fairness and cannot protect the active pane, because no pane
-/// knows what the others are doing. The reserve is not taken from the pool —
-/// the visible pane is what the user is waiting on, and there is one of it.
+/// One frame's worth of VT parsing, shared by every pane. **One global budget,
+/// not a watchdog per pane**: no pane knows what the other ninety-nine do.
 class TerminalIngestBudget {
   TerminalIngestBudget({
     this.hotReserveBytes = kIngestHotReserveBytes,
@@ -77,10 +69,8 @@ class TerminalIngestBudget {
       // pool: the user is waiting on this one.
       IngestTier.hot => wanted < hotReserveBytes ? wanted : hotReserveBytes,
       IngestTier.warm => _takeFromPool(wanted),
-      // A cold pane parses only enough to keep its *screen* readable to the
-      // status sources (see `ColdScreen`), at most once a second. That is
-      // background work exactly as a warm pane's parse is, so it comes out of
-      // the same pool rather than a second one.
+      // A cold pane parses only enough to keep its screen readable, and that is
+      // background work like any other, so it comes out of the same pool.
       IngestTier.cold => _takeFromPool(wanted),
     };
     granted[tier] = granted[tier]! + allowed;

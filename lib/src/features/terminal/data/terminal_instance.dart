@@ -80,35 +80,24 @@ abstract class TerminalInstance {
   void dispose();
 }
 
-/// A [TerminalInstance] whose teardown outlives its `dispose()`.
-///
-/// [dispose] stays synchronous because panes are closed from build callbacks,
-/// but ending a real pane on Windows means spawning `taskkill /PID <pid> /T /F`;
-/// dropping that future on quit orphaned whatever ran inside the pane.
+/// A [TerminalInstance] whose teardown outlives its `dispose()` — which stays
+/// synchronous, so dropping this future on quit orphaned the pane's process.
 abstract interface class ReapableTerminalInstance {
   /// Completes once the process tree behind this pane is gone. Already complete
   /// before [TerminalInstance.dispose] is called, so awaiting it is always safe.
   Future<void> get reaped;
 }
 
-/// A [TerminalInstance] holding a pseudoconsole of its own, for one property:
-/// whether tearing this pane down also releases the console behind it.
-///
-/// Worth doing while the app runs — a long session otherwise strands a
-/// descriptor and a reader thread per closed pane — and worth nothing when the
-/// process is ending, so the quit path says so and the pane skips it.
+/// A [TerminalInstance] holding a pseudoconsole of its own. Releasing it is
+/// worth doing while the app runs and worth nothing when the process is ending.
 abstract interface class PseudoConsoleOwner {
-  /// Leave the pseudoconsole to the OS when this pane is disposed.
-  ///
-  /// One-way, and per pane rather than global: set by the shutdown that is
-  /// about to end the process.
+  /// Leave the pseudoconsole to the OS when this pane is disposed. One-way, and
+  /// per pane: set by the shutdown that is about to end the process.
   void keepPseudoConsoleOnDispose();
 }
 
 /// A [TerminalInstance] whose output ingestion answers to how visible it is.
-///
-/// The controller sets this from the only thing that decides it — where the
-/// pane is in the layout. A pane never chooses its own tier.
+/// The controller sets the tier from the layout; a pane never chooses its own.
 abstract interface class TieredTerminalInstance {
   /// How visible this pane is now.
   void setIngestTier(IngestTier tier);
@@ -117,34 +106,24 @@ abstract interface class TieredTerminalInstance {
   IngestTier get ingestTier;
 }
 
-/// A [TerminalInstance] that gives its scrollback back while it is cold.
-///
-/// While a pane is parked its parsed buffer holds only the screen, and the
-/// history above it lives here as encoded text — so the controller stores this
-/// verbatim rather than re-encoding a buffer that no longer holds it.
+/// A [TerminalInstance] that gives its scrollback back while it is cold: the
+/// history lives here as encoded text, and the controller stores it verbatim.
 abstract interface class ParkableTerminalInstance {
   /// The encoded window held in place of a parsed buffer, or `null` when this
   /// pane's scrollback is live.
   String? get parkedScrollback;
 }
 
-/// A [TerminalInstance] whose parsed buffer can be handed to the pane that
-/// replaces it.
-///
-/// The old pane's buffer already holds that history, parsed; the round trip
-/// through the codec to rebuild it is 10-25 ms of main-isolate work. `null` for
-/// any pane whose history is text rather than a buffer.
+/// A [TerminalInstance] whose parsed buffer can be handed to its replacement,
+/// saving a 10-25 ms codec round trip. `null` when the history is only text.
 abstract interface class AdoptableTerminalInstance {
   /// The buffer holding this pane's history, or `null` when there is none to
   /// hand over.
   Terminal? get adoptableBuffer;
 }
 
-/// A [TerminalInstance] whose output can be taped for a recording.
-///
-/// The tap is on the bytes arriving from the process, upstream of
-/// [TieredTerminalInstance]: a cold pane's bytes never reach `terminal.write`,
-/// so recording downstream would stop whenever the user looked elsewhere.
+/// A [TerminalInstance] whose output can be taped. The tap is upstream of the
+/// ingest tier: a cold pane's bytes never reach `terminal.write` at all.
 abstract interface class RecordableTerminalInstance {
   /// Starts copying this pane's output into [recorder]. Replaces any recorder
   /// already attached.
@@ -157,10 +136,8 @@ abstract interface class RecordableTerminalInstance {
   CastRecorder? get recorder;
 }
 
-/// A [ValueListenable] that holds one value and never notifies.
-///
-/// What [TerminalInstance.directory] is for a pane whose shell can never report
-/// one. Allocated once per instance, so add/removeListener reach one object.
+/// A [ValueListenable] that holds one value and never notifies — what
+/// [TerminalInstance.directory] is for a pane whose shell cannot report one.
 class UnchangingValue<T> implements ValueListenable<T> {
   const UnchangingValue(this.value);
 
@@ -174,11 +151,8 @@ class UnchangingValue<T> implements ValueListenable<T> {
   void removeListener(VoidCallback listener) {}
 }
 
-/// A pane's working directory: the one it launched in, then whatever the shell
-/// reports with OSC 7.
-///
-/// A [ValueNotifier] on purpose — it drops a write of the value it already
-/// holds, which is the whole of the "one republish per `cd`" rule.
+/// A pane's working directory: where it launched, then whatever OSC 7 says. A
+/// [ValueNotifier], so a shell re-emitting the same path costs nothing.
 class WorkingDirectoryTracker {
   WorkingDirectoryTracker(String? launchedIn, {String? hostname})
     : _hostname = hostname ?? localHostname,
@@ -231,10 +205,7 @@ typedef TerminalInstanceFactory =
     });
 
 /// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
-/// [Terminal]: output is decoded into the buffer, keystrokes encoded back.
-///
-/// The one deliberate exception to the `CommandRunner` rule (architecture
-/// constraint 6): an interactive terminal needs a pseudo-terminal.
+/// [Terminal] — the one deliberate exception to the `CommandRunner` rule.
 class PtyTerminalInstance
     implements
         TerminalInstance,
@@ -385,12 +356,8 @@ class PtyTerminalInstance
   @override
   int? get greetingLines => _greetingLines;
 
-  /// Records the greeting the first time the user **submits a line**.
-  ///
-  /// Keyed on a carriage return rather than the first byte out of the terminal,
-  /// because the terminal answers for itself: a focus report arrives ~8 ms in
-  /// with the buffer still empty. Counted before the bytes are forwarded, so a
-  /// paste has not been echoed yet.
+  /// Records the greeting the first time the user **submits a line** — keyed on
+  /// a carriage return, because the terminal answers ~8 ms in on its own.
   void _recordGreeting(String data) {
     if (_greetingLines != null || !data.contains('\r')) return;
     _greetingLines = nonBlankLineCount(terminal);
@@ -419,11 +386,7 @@ class PtyTerminalInstance
   String? get parkedScrollback => _cold.parkedScrollback;
 
   /// This pane's buffer, once its process has gone and while the buffer really
-  /// is the history.
-  ///
-  /// Not while running (a live pane's buffer is not anybody else's to take),
-  /// not while parked, and not on the alternate buffer — a TUI's scratch space,
-  /// which would restart the pane showing a stale frame.
+  /// is the history: not while running, parked, or on the alternate buffer.
   @override
   Terminal? get adoptableBuffer =>
       _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
@@ -508,11 +471,8 @@ class PtyTerminalInstance
     _coalescer.dispose();
     focusNode.dispose();
     scrollController.dispose();
-    // Ask the process to exit before destroying it: a bare kill never lets a
-    // build, dev server or ssh session flush or run its exit handlers. Kept
-    // rather than dropped because quitting has to wait for it (see [reaped]);
-    // the pty is released after the reap, so the shutdown still has a live pty
-    // to ask for `exitCode`, and not at all on quit (see [PseudoConsoleOwner]).
+    // Ask the process to exit before destroying it, so a build or ssh session
+    // can flush. Quitting waits for it; the pty is released after the reap.
     _reap = closePaneProcess(
       kill: _pty.kill,
       exitCode: _pty.exitCode,
@@ -539,10 +499,8 @@ class PtyTerminalInstance
   void keepPseudoConsoleOnDispose() => _keepPseudoConsole = true;
 }
 
-/// Writes [scrollback] into [terminal] followed by a dim marker, so the user can
-/// see where replayed history ends and the live process begins.
-///
-/// Does nothing when there is nothing to restore.
+/// Writes [scrollback] into [terminal] followed by a dim marker, so replayed
+/// history is visibly separate. Does nothing when there is nothing to restore.
 void writeRestoredScrollback(Terminal terminal, String? scrollback) {
   if (scrollback == null || scrollback.isEmpty) return;
   terminal.write(scrollback);
@@ -550,10 +508,7 @@ void writeRestoredScrollback(Terminal terminal, String? scrollback) {
 }
 
 /// Writes the dim marker that says where replayed history ends and the live
-/// process begins.
-///
-/// Its own function because a pane that **adopted** the previous one's buffer
-/// has the history already and needs only this.
+/// process begins. Its own function because an adopted buffer needs only this.
 void writeRestoreMarker(Terminal terminal) {
   final at = DateTime.now();
   final stamp =
@@ -567,11 +522,8 @@ void writeRestoreMarker(Terminal terminal) {
 
 String _two(int value) => value.toString().padLeft(2, '0');
 
-/// Builds the environment for a Windows PTY child.
-///
-/// Normally just the host environment — but a launch from a WSL/Unix shell
-/// leaks a POSIX `PATH`, `SHELL` and `WSL*` vars that break `wsl.exe` and
-/// `powershell.exe`, so those are dropped and a clean Windows `Path` rebuilt.
+/// Builds the environment for a Windows PTY child: the host's, minus the POSIX
+/// `PATH`/`SHELL`/`WSL*` that leak from a WSL launch and break `wsl.exe`.
 Map<String, String> _ptyEnvironment([Map<String, String> extra = const {}]) {
   final env = Map<String, String>.of(Platform.environment);
 
@@ -695,24 +647,15 @@ class _Constant<T> implements ValueListenable<T> {
   void removeListener(VoidCallback listener) {}
 }
 
-/// The grid the app last laid a restored pane out at, shared by all of them.
-///
-/// Nothing stored says how wide a pane was, so without a hint a
-/// [DormantTerminalInstance] parses at xterm's default 80 columns and the
-/// workbench reflows every line of it in the same frame. So the first restored
-/// pane laid out reports its grid and the rest parse into it; a wrong hint
-/// costs exactly what no hint costs and cannot change what is drawn.
+/// The grid the app last laid a restored pane out at, shared by all of them —
+/// without it a pane parses at 80 columns and is reflowed in the same frame.
 class TerminalGridHint {
   /// Null until the workbench has laid a restored pane out.
   ({int columns, int rows})? grid;
 }
 
 /// A [TerminalInstance] rebuilt from a stored record with **no process behind
-/// it**: the pane the user left, replayed, waiting to be started again.
-///
-/// Spawning a shell for every stored pane would make dead history
-/// indistinguishable from a live terminal and would re-execute its recorded
-/// launch command; `shouldRestartOnLaunch` picks the few that do restart.
+/// it**: starting one would re-execute the launch command it recorded.
 class DormantTerminalInstance
     implements TerminalInstance, AdoptableTerminalInstance {
   DormantTerminalInstance({
@@ -844,12 +787,8 @@ bool shellIntegrationApplies({
     shellIntegration &&
     shellSupportsIntegration(profile.shell);
 
-/// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the
-/// profile and spawns a [PtyTerminalInstance], degrading to an
-/// [ErrorTerminalInstance] whose buffer shows the failure.
-///
-/// [environmentOverlay] is the user's own environment variables, resolved
-/// **once here** and never on the keystroke path.
+/// The production [TerminalInstanceFactory]: spawns a [PtyTerminalInstance],
+/// degrading to an [ErrorTerminalInstance] whose buffer shows the failure.
 TerminalInstance createPtyTerminalInstance({
   required String id,
   required TerminalProfile profile,

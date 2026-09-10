@@ -1,10 +1,5 @@
-/// A pane the workbench draws itself, with no process behind it.
-///
-/// A **document** is an ordinary [PaneLayout] leaf holding one of the app's own
-/// surfaces — which is how Settings became a tab you can leave open beside the
-/// pane the setting is about. **The id is the whole model**, exactly as
-/// `empty:` is for an empty group: a prefixed pane id survives being written to
-/// disk, so nothing parallel has to be kept in step with the layout.
+/// A pane the workbench draws itself, with no process behind it. **The id is
+/// the whole model**: a prefixed pane id survives being written to disk.
 library;
 
 /// The prefix every document pane id carries.

@@ -1,25 +1,11 @@
 import 'package:agent_cli/descriptors.dart';
 
-/// The environment variable an agent running in one of our panes is told its
-/// Karmashala session id through.
-///
-/// It is how a session an agent creates finds its parent: the MCP bridge is
-/// spawned as a child of the agent CLI, inherits this and forwards it with
-/// every tool call, so the parent chain is a property of the process tree we
-/// built rather than of an argument the model writes — which is what the
-/// recursion cap rests on.
+/// The variable an agent is told its Karmashala session id through — inherited
+/// by the MCP bridge it spawns, so the parent chain is the process tree's.
 const String kSessionIdEnvironmentVariable = 'KARMASHALA_SESSION_ID';
 
-/// The environment variable carrying a **port base** derived from that session
-/// id, so two sessions running the same repository's scripts at once do not
-/// both bind 8080.
-///
-/// It is a **namespace, not a lock**: nothing here reserves a port, checks
-/// whether one is free, or notices a collision — a repository's own scripts opt
-/// in by reading the variable. What it buys is that N *different* sessions
-/// almost always get N different numbers, deterministically, and that the
-/// number survives a restart because it is a function of the id and nothing
-/// else.
+/// A **port base** derived from that session id, so two sessions do not both
+/// bind 8080. A **namespace, not a lock**: nothing reserves or checks a port.
 const String kSessionPortBaseEnvironmentVariable = 'KARMASHALA_PORT_BASE';
 
 /// The lowest port [sessionPortBase] will hand out. 20000 sits below **both**
@@ -35,17 +21,8 @@ const int kSessionPortsPerSession = 10;
 /// How many distinct bases exist: `(32760 - 20000) / 10`.
 const int kSessionPortBaseSlots = 1276;
 
-/// A deterministic port base for [sessionId], in
-/// `[kSessionPortBaseFloor, 32760)` and always a multiple of
-/// [kSessionPortsPerSession].
-///
-/// **It can collide, and is not allowed to pretend otherwise**: with 1276
-/// slots, ten sessions running at once have roughly a 3.5% chance that some two
-/// share a base. That is the price of being a pure function of the id, which is
-/// what makes the number survive a restart and a session resumed tomorrow.
-///
-/// The hash is written out rather than taken from `sessionId.hashCode`: Dart
-/// does not promise that is stable across runs or versions.
+/// A deterministic port base for [sessionId], hashed here rather than with
+/// `sessionId.hashCode`, which Dart does not promise is stable across runs.
 int sessionPortBase(String sessionId) {
   // FNV-1a, 32-bit, masked at every step so it stays inside a JS-safe integer
   // on web as well as native.
@@ -58,13 +35,8 @@ int sessionPortBase(String sessionId) {
       (hash % kSessionPortBaseSlots) * kSessionPortsPerSession;
 }
 
-/// A pane that runs an agent CLI interactively rather than a shell.
-///
-/// The executable and arguments are resolved from the agent's registry
-/// descriptor and its installation, and nothing here knows which agent it is
-/// beyond [agentId]. [executable], [arguments] and [workingDirectory] are all
-/// expressed in the **target** environment — Linux-side values wrapped in
-/// `wsl.exe` when [wslDistribution] is set, Windows-side otherwise.
+/// A pane that runs an agent CLI rather than a shell. [executable] and
+/// [workingDirectory] are in the **target** environment, not the host's.
 class AgentPaneLaunch {
   const AgentPaneLaunch({
     required this.agentId,
@@ -88,10 +60,8 @@ class AgentPaneLaunch {
   /// does today, which is what makes it safe to store.
   final List<String> arguments;
 
-  /// The **volatile** arguments: the flags pointing this agent at the app's own
-  /// MCP endpoint. Rebuilt at every launch and never stored — every value in
-  /// them dies with the app process that minted them, and a restored pane that
-  /// replayed yesterday's made the agent refuse to start at all.
+  /// The **volatile** arguments: this run's MCP flags. Never stored — a
+  /// restored pane that replayed yesterday's made the agent refuse to start.
   final List<String> mcpArguments;
 
   /// The command line as it is actually run: the volatile flags, then the
@@ -117,9 +87,7 @@ class AgentPaneLaunch {
   final String? title;
 
   /// The profile id a pane running this launch is stored under. Deliberately
-  /// not resolvable through [terminalProfileFromId]: an agent pane is restored
-  /// from its recorded launch, and a synthetic id that *did* resolve would
-  /// silently come back as PowerShell.
+  /// unresolvable, or a restored agent pane would come back as PowerShell.
   String get profileId => 'agent:$agentId';
 
   /// Whether [profileId] names an agent pane rather than a shell profile.
@@ -153,10 +121,8 @@ class AgentPaneLaunch {
     if (title != null) 'title': title,
   };
 
-  /// Rebuilds a launch from stored JSON, or `null` when the record is not one
-  /// this code wrote. Forgiving on purpose: a pane that cannot be read back is
-  /// dropped, never thrown on. Always comes back with [mcpArguments] empty —
-  /// the pane is armed again when it starts, from the server running then.
+  /// Rebuilds a launch from stored JSON, or `null` when the record is not ours.
+  /// [mcpArguments] always comes back empty; the pane is armed again at start.
   static AgentPaneLaunch? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final agentId = raw['agentId'];

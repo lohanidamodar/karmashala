@@ -13,20 +13,12 @@ import 'terminal_ingest_budget.dart';
 /// could act on, longer would let an approval prompt sit unnoticed.
 const Duration kColdScreenRefreshInterval = Duration(seconds: 1);
 
-/// Bytes a cold pane holds for its screen before the oldest are dropped.
-/// Several screens' worth, and deliberately far smaller than
-/// [kScrollbackSpoolMaxBytes]: the spool has to replay what the user missed,
-/// this only has to draw the last screen of it.
+/// Bytes a cold pane holds for its screen before the oldest are dropped — far
+/// smaller than the spool, which has to replay rather than redraw.
 const int kColdScreenPendingMaxBytes = 32 * 1024;
 
-/// Keeps a detached pane's *screen* current while its scrollback stays parked.
-///
-/// `terminalTailLines` reads the bottom of the grid to tell whether an agent is
-/// waiting for approval, and a session with no tab is exactly the one nobody is
-/// watching — left alone, its status froze when it was detached. The cost is
-/// kept to the screen: one parse per [kColdScreenRefreshInterval] at most, out
-/// of the shared pool, driven by bytes arriving rather than by a timer. It
-/// refreshes whatever buffer the pane draws into, the alternate one included.
+/// Keeps a detached pane's *screen* current while its scrollback stays parked —
+/// a session with no tab is exactly the one whose approval prompt nobody sees.
 class ColdScreen {
   ColdScreen({
     required this.terminal,
@@ -79,9 +71,8 @@ class ColdScreen {
     _refresh(now, force: false);
   }
 
-  /// Writes text the app generated itself, now, whatever the interval says.
-  /// "[process exited with code 1]" is the case that cannot wait: nothing
-  /// further is ever going to arrive to carry it. It skips the budget too.
+  /// Writes text the app generated itself, now, whatever the interval says:
+  /// nothing further is ever going to arrive to carry it.
   void write(String text) {
     if (text.isEmpty) return;
     _pending.add(const Utf8Encoder().convert(text));
@@ -97,12 +88,8 @@ class ColdScreen {
     _refreshedAt = null;
   }
 
-  /// Draws everything still queued, now, and forgets the interval.
-  ///
-  /// The other half of [reset]: a pane the park **declined** has no replay to
-  /// put the detached output back, so what the interval and the budget were
-  /// still holding has to be drawn here or never. One parse per reattach,
-  /// bounded by [kColdScreenPendingMaxBytes].
+  /// Draws everything still queued, now. A pane the park **declined** has no
+  /// replay, so what the budget was holding is drawn here or never.
   void flush() {
     _refresh(_clock(), force: true);
     reset();
@@ -129,10 +116,8 @@ class ColdScreen {
     _trimToScreen();
   }
 
-  /// Gives the scrollback back again, for the same reason [ScrollbackPark] took
-  /// it: a refresh may redraw the screen, never rebuild the buffer parking
-  /// released. A pane the park **declined** is skipped entirely — nothing was
-  /// released, so this buffer holds the only copy of that pane's history.
+  /// Gives the scrollback back, for the reason [ScrollbackPark] took it. A pane
+  /// the park **declined** is skipped: this buffer is its only copy.
   void _trimToScreen() {
     if (!park.isParked || terminal.isUsingAltBuffer) return;
     final lines = terminal.mainBuffer.lines;
@@ -141,14 +126,8 @@ class ColdScreen {
   }
 }
 
-/// A detached pane's ingest: where its bytes go while nobody can see it, and
-/// how it comes back with none of them drawn twice.
-///
-/// A **parked** pane has its buffer rebuilt on reattach, so what [ColdScreen]
-/// drew is erased and the spool replays over the top. A **declined** pane — one
-/// a full-screen program owned — had nothing taken and nothing cleared, so what
-/// the refresh drew stands, and it is never spooled at all. That is why [spool]
-/// is fed behind a condition: a pane doing both would draw every byte twice.
+/// A detached pane's ingest, arranged so nothing is drawn twice: a **parked**
+/// pane replays its spool, a **declined** one keeps what the refresh drew.
 class ColdIngest {
   ColdIngest({
     required this.terminal,
@@ -185,10 +164,8 @@ class ColdIngest {
   /// Bytes held for a replay. Diagnostics, and what the tests assert on.
   int get spooledBytes => spool.length;
 
-  /// Goes cold, carrying [pending] — whatever the coalescer had queued and
-  /// never parsed — into whichever queue this pane turns out to use. Returns
-  /// whether scrollback lines were actually released, which decides whether the
-  /// command blocks anchored to them are dropped.
+  /// Goes cold, carrying [pending] into whichever queue this pane uses. Returns
+  /// whether lines were released, which decides if command blocks are dropped.
   bool detach(Uint8List pending) {
     final released = park.park();
     // The queue goes to the screen as well as the spool: if the process then
@@ -206,10 +183,8 @@ class ColdIngest {
     screen.add(bytes);
   }
 
-  /// Queues text the app generated itself. In the spool it belongs among the
-  /// process output it arrived with, rather than above history that came before
-  /// it; on the screen it skips the interval, because nothing further is ever
-  /// going to arrive to carry it.
+  /// Queues text the app generated itself. On the screen it skips the interval,
+  /// because nothing further is ever going to arrive to carry it.
   void emit(String text) {
     if (park.isParked) spool.add(const Utf8Encoder().convert(text));
     screen.write(text);
@@ -223,13 +198,8 @@ class ColdIngest {
       screen.flush();
       return;
     }
-    // A program may have taken the screen while this pane was cold, and
-    // `unpark` writes with `terminal.write`, which goes to whichever buffer is
-    // *in front* — left alone the parked snapshot lands on the program's screen
-    // and the pane's history is silently gone. `?47` rather than `?1049` for
-    // the round trip because it switches buffers and clears neither
-    // (parser.dart:985); `?1048` saves and restores the cursor across it, so
-    // the program's next write lands where it left off.
+    // `unpark` writes to whichever buffer is *in front*, so a TUI would swallow
+    // the snapshot: `?47` switches without clearing (parser.dart:985).
     final onAltScreen = terminal.isUsingAltBuffer;
     if (onAltScreen) terminal.write('\x1b[?1048h\x1b[?47l');
     // Before the replay, not after: what the screen refresh drew is about to be

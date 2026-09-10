@@ -26,10 +26,8 @@ import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
 
-/// What a pane prints when its remote process ends. One spelling for both
-/// routes out of this pane — the session host's `Exited` frame and dartssh2's
-/// own `session.done` — because **a code nobody collected is unknown, never a
-/// zero** (§19), and the tmux path used to read a missing status as `?? 0`.
+/// What a pane prints when its remote process ends — one spelling for both
+/// routes, because **a code nobody collected is unknown, never a zero** (§19).
 String remoteExitNotice(int? exitCode, {String? reason}) {
   if (exitCode != null) {
     return '\r\n\x1b[90m[remote process exited with code $exitCode]\x1b[0m\r\n';
@@ -39,15 +37,8 @@ String remoteExitNotice(int? exitCode, {String? reason}) {
       '\x1b[0m\r\n';
 }
 
-/// A [TerminalInstance] backed by a remote interactive session over SSH.
-///
-/// Two paths, and which one is used is a *measurement* — [hostDeployment],
-/// taken by [HostDeployer] — not a setting. With a `karmashala_host` deployed
-/// the pane runs `karmashala_host attach` on an exec channel and the child's
-/// bytes arrive untouched, so OSC 133, OSC 8 and alternate-screen content
-/// survive and sessions outlive the pane. **tmux**, the fallback, is itself a
-/// terminal emulator, so the renderer gets tmux's *redraw* of the agent and
-/// every one of those signals is lost; the pane says which one it got.
+/// A [TerminalInstance] backed by a remote SSH session. With the session host
+/// the child's bytes arrive untouched; tmux redraws them and loses every mark.
 class SshTerminalInstance
     implements
         TerminalInstance,
@@ -137,11 +128,8 @@ class SshTerminalInstance
   final SshHost host;
   final SshConnection connection;
 
-  /// This machine's session host: the reading, the channel, and the event that
-  /// says the connection came back. Null means nobody has looked, which is not
-  /// a negative answer — the pane takes the tmux path without claiming the host
-  /// is unavailable. A [HostSessionAccess] rather than an SSH type, so the
-  /// local stage can supply a socket-backed one.
+  /// This machine's session host, or null when nobody has looked — which is not
+  /// a negative answer: the pane takes the tmux path without claiming anything.
   final HostSessionAccess? hostAccess;
 
   final AppLogger _logger;
@@ -306,10 +294,8 @@ class SshTerminalInstance
         session.done.then((_) {
           _exited = true;
           if (_disposed) return;
-          // Never a zero: dartssh2 reports no status at all for a peer that
-          // was signalled, and reading that as success is the mistake §19
-          // exists to prevent. Through the same notice the host path prints, so
-          // the two cannot drift.
+          // Never a zero: dartssh2 reports no status for a signalled peer, and
+          // reading that as success is the mistake §19 exists to prevent.
           _exitCode = session.exitCode;
           _emit(remoteExitNotice(session.exitCode));
           _liveness.value = PaneLiveness.exited;
@@ -373,12 +359,8 @@ class SshTerminalInstance
     return true;
   }
 
-  /// Whether this pane's session is already living under tmux on that machine,
-  /// in which case it stays there whatever the session host can do.
-  ///
-  /// The two carry the *same* name, so a pane that took the host path while
-  /// tmux held it would open a second, empty session beside a running agent.
-  /// There is no migration: the child belongs to whichever one spawned it.
+  /// Whether this pane's session is already under tmux, in which case it stays
+  /// there: both carry the same name, so the host path would open an empty one.
   Future<bool> _keepsItsTmuxSession(HostSessionAccess access) async {
     final name = _hostSessionId();
     final bool? existing;
@@ -451,10 +433,8 @@ class SshTerminalInstance
       // it would be refused.
       final attachment = await _attachOrOpen(link, width, height, resumeFrom);
       if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
-        // The replay about to arrive is the more accurate of the two records —
-        // the session's own bytes rather than a re-encoding of a buffer — so
-        // the stored copy goes. Erase display *and* scrollback: a plain clear
-        // leaves the history one scroll away.
+        // The replay is the more accurate record, so the stored copy goes.
+        // Erase scrollback as well: a plain clear leaves it one scroll away.
         terminal.write('\x1b[H\x1b[2J\x1b[3J');
         _hasStoredHistory = false;
       }
@@ -548,10 +528,8 @@ class SshTerminalInstance
     }
   }
 
-  /// The app's own id, not one the host invents: the same pane must find the
-  /// same session after a reconnect. Literally [sshTmuxSessionName], because
-  /// [_keepsItsTmuxSession] rests on the two names being one string — a session
-  /// cannot be in both places, so the name has to identify it in either.
+  /// The app's own id, not one the host invents: literally [sshTmuxSessionName],
+  /// because a session cannot be in both places under two names.
   String _hostSessionId() =>
       sshTmuxSessionName(paneId: id, hostId: host.id, agentSessionId: agentLaunch?.sessionId);
 

@@ -9,13 +9,8 @@ import 'dart:io';
 /// enough that closing a tab still feels immediate.
 const kProcessGracePeriod = Duration(seconds: 2);
 
-/// How long the tree kill may be waited for before a pane's teardown stops
-/// holding the isolate for it.
-///
-/// The same number as `AppLifecycle`'s terminal-processes slice, deliberately:
-/// the reap runs *inside* that step, and a kill still being waited on after the
-/// step was abandoned is what a quit that never finished looked like. The wait
-/// is what is abandoned, never the kill.
+/// How long the tree kill may be waited for. The same number as `AppLifecycle`'s
+/// terminal slice: the wait is abandoned when that step is, never the kill.
 const kProcessTreeKillBound = Duration(milliseconds: 2500);
 
 /// Whether this platform has a signal that asks a process to exit rather than
@@ -26,10 +21,8 @@ bool get platformSupportsGracefulSignal => !Platform.isWindows;
 /// Ends the process tree rooted at [pid]. Injected so tests never spawn one.
 typedef ProcessTreeKiller = Future<void> Function(int pid);
 
-/// What was **observed** by the time [shutdownProcess] stopped waiting.
-///
-/// Four values because none of them claims more than was seen: a tree kill that
-/// came back is not the same evidence as the pane's own process going.
+/// What was **observed** by the time [shutdownProcess] stopped waiting. Four
+/// values, because a kill returning is not the pane's process being seen to go.
 enum ProcessShutdownOutcome {
   /// The process was already known to have gone before teardown began, so no
   /// tree kill was attempted.
@@ -55,14 +48,8 @@ enum ProcessShutdownOutcome {
       this == ProcessShutdownOutcome.alreadyGone;
 }
 
-/// Force-kills [pid] **and its descendants**.
-///
-/// Terminating a Windows process orphans its children, so a bare kill leaves
-/// running exactly what the user asked to be rid of — and `flutter_pty`'s
-/// duplicated argv makes the pid it hands back an outer wrapper rather than the
-/// shell itself. Never throws. **It is the whole cost of quitting**:
-/// `taskkill.exe` takes about a second to start up and walk the process table,
-/// and nothing short of a job object at launch would be faster.
+/// Force-kills [pid] **and its descendants** — a Windows process orphans its
+/// children. Never throws, and it is the whole cost of quitting (~1 s).
 Future<void> killWindowsProcessTree(int pid) async {
   try {
     await Process.run('taskkill.exe', ['/PID', '$pid', '/T', '/F']);
@@ -71,11 +58,8 @@ Future<void> killWindowsProcessTree(int pid) async {
   }
 }
 
-/// Shuts a process down politely, then forcibly if it does not co-operate.
-///
-/// A bare kill is wrong for anything long-running — a build, a dev server, a
-/// database client mid-write — because the process never gets to flush or run
-/// its exit handlers. Never throws: tearing down a pane must not fail.
+/// Shuts a process down politely, then forcibly. A bare kill never lets a build
+/// or a database client flush. Never throws: tearing down a pane must not fail.
 Future<ProcessShutdownOutcome> shutdownProcess({
   required bool Function(ProcessSignal) kill,
   required Future<int> exitCode,
@@ -100,11 +84,8 @@ Future<ProcessShutdownOutcome> shutdownProcess({
       return ProcessShutdownOutcome.alreadyGone;
     }
 
-    // **Waited on the pane's process going, not on `taskkill.exe` coming
-    // back.** Nearly a second of the kill is `taskkill` walking the process
-    // table and the kill lands near the end of that, so whichever of the two
-    // arrives first is the answer: the pane's own exit *is* the tree kill
-    // having worked.
+    // Waited on the pane's exit, not on `taskkill.exe` returning: the kill
+    // lands near the end of its second, and the exit *is* the evidence.
     final tree = (killTree ?? killWindowsProcessTree)(pid)
         // Never a failed teardown, and never an unhandled error after
         // [exited] has already won the race below.
@@ -161,9 +142,8 @@ class PaneCloseReport {
   /// What was observed of the pane's own process tree.
   final ProcessShutdownOutcome outcome;
 
-  /// Whether the pseudoconsole was released, or left to the OS. False exactly
-  /// when the shutdown that is about to end the process asked this pane to keep
-  /// it — see `PseudoConsoleOwner`. Never a failure.
+  /// Whether the pseudoconsole was released, or left to the OS — false exactly
+  /// when the shutdown about to end the process asked this pane to keep it.
   final bool consoleReleased;
 
   /// The pane's log line, in the words the incident is remembered by.
@@ -180,14 +160,8 @@ class PaneCloseReport {
   }
 }
 
-/// Ends the process behind a pane and then lets go of its pseudoconsole: kill
-/// the tree, wait for the pane's own exit or the kill's return whichever comes
-/// first (bounded by [treeKillBound]), then release the console. Never throws.
-///
-/// **Nothing here waits on a process from the platform thread** — while
-/// `Pty.destroy` was synchronous, closing a WSL pane whose Linux side kept
-/// running hung the app's main thread. [keepPseudoConsole] is read **after**
-/// the reap, because the quit can arrive while a pane close is in flight.
+/// Ends the process behind a pane, then releases its pseudoconsole. Nothing
+/// here waits from the platform thread: that hung the main thread on WSL.
 Future<PaneCloseReport> closePaneProcess({
   required bool Function(ProcessSignal) kill,
   required Future<int> exitCode,
