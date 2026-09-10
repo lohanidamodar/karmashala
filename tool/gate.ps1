@@ -26,10 +26,10 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the nine — `core`, `media`,
-  `agent_cli`, `browser`, `devices`, `remote`, `git`, `flutter_apps` and
-  `terminal_core` — is extracted and cut over: the app holds no copy of any of
-  them.
+  A key of the map below. Every one of the ten — `core`, `media`,
+  `agent_cli`, `browser`, `devices`, `remote`, `session`, `git`,
+  `flutter_apps` and `terminal_core` — is extracted and cut over: the app
+  holds no copy of any of them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -70,7 +70,7 @@ if (-not (Test-Path $gateDir)) { New-Item -ItemType Directory -Path $gateDir | O
 
 # Which package owns which app suites. `pkg` is the workspace member; `app` is
 # the mirror folder(s) plus any golden whose import closure reaches the package.
-# All nine are extracted and cut over, so every mapping here is a real seam:
+# All ten are extracted and cut over, so every mapping here is a real seam:
 # no key names a folder the app still keeps a second copy of. `flutter = $true`
 # marks a member whose own half needs `flutter test` rather than `dart test`.
 $map = [ordered]@{
@@ -174,6 +174,21 @@ $map = [ordered]@{
              'test/features/mcp/tool_schemas_golden_test.dart',
              'test/features/sessions/session_launch_golden_test.dart')
     owns = @('lib/src/features/terminal', 'test/features/terminal')
+  }
+  session = @{
+    pkg  = 'packages/karmashala_session'
+    # `test/features/sessions` whole: what is left in it is the app's half —
+    # the launcher and its policies, the DAOs, the providers, the chat and
+    # transcript views and the panels — plus the session launches golden,
+    # which sits inside it. Three goldens outside it reach the package: the
+    # workbench tree (the shell lays out session rows), the tool schemas (the
+    # session, decision and workspace tools are served over its types) and the
+    # bound frames (the phone is sent `Session` and `SessionStatus`).
+    app  = @('test/features/sessions',
+             'test/app/shell/workbench_tree_golden_test.dart',
+             'test/features/mcp/tool_schemas_golden_test.dart',
+             'test/features/remote/bound_frames_golden_test.dart')
+    owns = @('lib/src/features/sessions', 'test/features/sessions')
   }
   remote = @{
     pkg  = 'packages/karmashala_remote'
