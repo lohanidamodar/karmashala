@@ -29,6 +29,9 @@ installs claim the same version name.
 - **The phone can search**, over the snapshot it already holds, and shows
   running sessions in a group above the projects with the reading's age; each
   session says when it was last active.
+- **Sessions are ordered by when they were last active** in the sidebar, Quick
+  Open and on the phone, each saying "active 3m ago". A session nothing has
+  seen sorts last rather than claiming a time.
 
 ---
 
