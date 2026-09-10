@@ -7,18 +7,9 @@ import '../application/session_selection.dart';
 import 'bulk_delete_dialog.dart';
 import 'explorer_row.dart';
 
-/// The strip that appears between the Explorer's search box and its tree while
-/// selection mode is on.
-///
-/// It carries the two things a mode needs to be honest about: how many rows are
-/// ticked — including the ones scrolled away, collapsed or filtered out of
-/// sight — and the way back out. *Done* is beside the destructive verb rather
-/// than only in the toolbar because leaving has to be as cheap as the click
-/// that entered, and because a click in this mode no longer opens a session.
-///
-/// Its own `ConsumerWidget` so that the count is watched here and nowhere else:
-/// the panel above it watches only whether the mode is on, so ticking a row
-/// rebuilds this strip and the one row, and no other row on the tree.
+/// The strip between the search box and the tree while selection mode is on:
+/// the count, including rows out of sight, and the way out. Its own
+/// `ConsumerWidget` so ticking a row rebuilds this strip and that row only.
 class SessionSelectionBar extends ConsumerWidget {
   const SessionSelectionBar({super.key});
 
@@ -37,8 +28,7 @@ class SessionSelectionBar extends ConsumerWidget {
     }
 
     // Two verbs and a count in a pane that clamps to 200px: at Material's
-    // default 16px of button padding they want nine pixels more than the row
-    // has. The strip is chrome at [Chrome.control] height, not a form.
+    // default 16px of button padding they want nine pixels more than the row has.
     ButtonStyle verb([Color? foreground]) => TextButton.styleFrom(
       foregroundColor: foreground,
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
@@ -82,9 +72,8 @@ class SessionSelectionBar extends ConsumerWidget {
               ),
               TextButton(
                 onPressed: count == 0 ? null : delete,
-                // Through `styleFrom`, not a `copyWith` of one: a flat
-                // `WidgetStatePropertyAll` would keep the destructive red on
-                // the button while it is disabled at nothing selected.
+                // Through `styleFrom`, not a `copyWith`: a flat
+                // `WidgetStatePropertyAll` keeps the red on a disabled button.
                 style: verb(theme.colorScheme.error),
                 child: const Text('Delete'),
               ),

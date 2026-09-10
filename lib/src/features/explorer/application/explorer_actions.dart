@@ -57,27 +57,17 @@ class ExplorerResult {
       outcome == ExplorerOutcome.failed || outcome == ExplorerOutcome.blocked;
 }
 
-/// One-click open and one-click start, for every row in the Explorer.
-///
-/// This exists so the tree does not make launch decisions in a `build()`, and so
-/// a card, a `+` button and a context-menu item cannot answer "is it already
-/// running?" three different ways. Every decision below is delegated:
-/// [SessionLauncher.reveal] owns reattaching, [resumeActionFor] owns the choice
-/// between reattach / resume / blocked, and [SessionLauncher.launch] owns
-/// creating anything.
+/// One-click open and one-click start, for every row in the Explorer, so the
+/// tree makes no launch decision in a `build()` and a card, a `+` and a menu
+/// item cannot answer "is it already running?" three different ways.
 class ExplorerActions {
   ExplorerActions(this._ref);
 
   final Ref _ref;
 
-  /// Opens a native session: reattach if we are still running it, otherwise
-  /// resume the conversation, otherwise just select it.
-  ///
-  /// **A session in a worktree resumes in that worktree.** Until Loop 54 added
-  /// [SessionLaunchRequest.existingWorktree] there was no way to say so, and
-  /// every resume path — this one, and the MCP `open_session` tool — put the
-  /// agent back in the repository root: a different directory, on a different
-  /// branch, from the work being resumed.
+  /// Opens a native session: reattach if we still run it, else resume the
+  /// conversation, else just select it. A session in a worktree resumes *in*
+  /// that worktree — the repository root is a different branch.
   Future<ExplorerResult> openNative(String sessionId) async {
     final dao = _ref.read(sessionDaoProvider);
     final session = dao.getById(sessionId);
@@ -94,10 +84,8 @@ class ExplorerActions {
       return const ExplorerResult(ExplorerOutcome.reattached);
     }
 
-    // A previous resume of this same conversation left a second row behind (a
-    // resume mints one — see the loop report), and that row's pane may well be
-    // the live one. Reveal it rather than stacking a third process on the
-    // conversation, which is what clicking the older card would otherwise do.
+    // A previous resume of this conversation left a second row behind and its
+    // pane may be the live one; revealing it beats a third process.
     final twin = _liveTwinOf(session);
     if (twin != null && launcher.reveal(twin.id)) {
       return ExplorerResult(
@@ -109,11 +97,9 @@ class ExplorerActions {
     var externalId = session.externalSessionId;
     String? continueNotice;
     if (externalId == null || externalId.isEmpty) {
-      // The CLI never told us its id — but for an agent whose store records
-      // which conversation each directory last used, that is not the end of it.
-      // `planAntigravityResume` reads the entry and either names what it would
-      // continue or refuses for a reason of its own; `null` means the question
-      // does not apply to this agent.
+      // The CLI never told us its id, but an agent whose store records which
+      // conversation each directory last used can still answer. Null means the
+      // question does not apply to this agent.
       final plan = await _ref.read(antigravityResumePlannerProvider)(session);
       final resolved = plan == null ? null : conversationIn(plan);
       if (plan is AntigravityResumeRefused) {
@@ -123,12 +109,8 @@ class ExplorerActions {
       }
       if (resolved == null) {
         // Nothing to resume: starting the agent here would be a *new*
-        // conversation wearing this row's title. The menu's "Copy resume
-        // command" is the honest way out, and the row is selected so its
-        // transcript is on screen.
-        //
-        // With a *reason*, because silence is indistinguishable from a dead
-        // click. The words are the ones `resumeSession` already uses.
+        // conversation wearing this row's title. Said with a reason, because
+        // silence is indistinguishable from a dead click.
         return const ExplorerResult(
           ExplorerOutcome.selected,
           message:
@@ -137,9 +119,8 @@ class ExplorerActions {
               'sessions capture their id automatically.',
         );
       }
-      // Written before the launch, not after: `SessionLauncher` reuses the row
-      // that already holds the conversation, so without this the click would
-      // mint a *second* row and leave this one a phantom for ever.
+      // Written before the launch: `SessionLauncher` reuses the row that holds
+      // the conversation, so otherwise the click mints a second, phantom row.
       _ref
           .read(sessionDaoProvider)
           .updateExternalSessionId(sessionId, resolved);
@@ -183,10 +164,8 @@ class ExplorerActions {
           ),
         );
       case ResumeAction.reattach:
-        // Unreachable in practice — every way `hostedLive` can be true is a
-        // pane the two reveals above would have brought back. Kept because the
-        // one thing this branch must never do is fall through to a launch: a
-        // conversation we are certain we hold is the double-writer case.
+        // Unreachable in practice, and kept because the one thing this branch
+        // must never do is fall through to a launch: that is a double writer.
         return const ExplorerResult(
           ExplorerOutcome.selected,
           message: 'That conversation is already running here.',
@@ -207,13 +186,9 @@ class ExplorerActions {
         ),
       );
       _ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
-      // A session whose recorded directory has gone — an unmounted drive, a
-      // stopped distro — is resumed at the repository root instead. That is a
-      // different conversation to the agent, whose store is keyed by
-      // directory, so the one thing this must not do is happen quietly.
-      // Both notices matter and neither replaces the other: one says which
-      // conversation is being continued, the other that it is being continued
-      // somewhere other than where it ran.
+      // A session whose recorded directory has gone resumes at the repository
+      // root — a different conversation to an agent whose store is keyed by
+      // directory, so it must not happen quietly. Both notices matter.
       final notices = [?continueNotice, ?launched.workingDirectoryNotice];
       return ExplorerResult(
         ExplorerOutcome.resumed,
@@ -224,25 +199,9 @@ class ExplorerActions {
     }
   }
 
-  /// Resumes the session whose **restored** pane is [paneId].
-  ///
-  /// The terminal's own way in, for the button on a dormant agent pane's status
-  /// bar. It is deliberately [openNative] and not a second implementation: the
-  /// pane says which session it is holding history for, and every question
-  /// after that — is one of our processes already on this conversation, did a
-  /// previous resume leave a twin row, will this agent share a conversation at
-  /// all, is there a CLI id to resume in the first place — has exactly one
-  /// answer in this app and it is the one above.
-  ///
-  /// **Nothing is started here.** `SessionLauncher` looks for a pane still
-  /// marked `PaneLiveness.restored` and runs its newly built `--resume` in it,
-  /// so this pane is the one the launch is about to claim; giving it a process
-  /// first would take it away from the resume and leave two terminals for one
-  /// session. See `shouldResumeRatherThanRestart`.
-  ///
-  /// A pane with no session behind it is not an error worth a dialog — an agent
-  /// pane opened outside a session row has nothing to resume, and saying so is
-  /// the whole answer.
+  /// Resumes the session whose **restored** pane is [paneId] — the terminal's
+  /// way in, deliberately [openNative] and not a second implementation.
+  /// Nothing is started here: the launch claims this very pane.
   Future<ExplorerResult> resumeRestoredPane(String paneId) async {
     final sessionId = _ref
         .read(terminalSessionsControllerProvider.notifier)
@@ -260,29 +219,9 @@ class ExplorerActions {
     return openNative(sessionId);
   }
 
-  /// Resumes every pane holding restored agent history, one pane per frame.
-  ///
-  /// The answer to *"give me an easy button to resume all active tabs"*, and
-  /// the reason it is not a `for` loop over [resumeRestoredPane]:
-  ///
-  /// * **A frame between panes.** Four resumes back to back are one unbroken
-  ///   block of main-isolate work and the window is frozen for the sum of it.
-  ///   See [frameYieldProvider] for why the wait is a frame and not a guessed
-  ///   delay.
-  /// * **One layout save for all of them.** Each resume ends in a full
-  ///   structural write; [TerminalSessionsController.withOneLayoutSave] holds
-  ///   them and writes once at the end, the way [closeTabs] does for a bulk
-  ///   close.
-  ///
-  /// The pane list is taken **once**, before anything starts: each resume
-  /// claims the pane it was offered, so re-asking mid-loop would only be able
-  /// to disagree with itself.
-  ///
-  /// Refusals are counted rather than thrown. One session that cannot be
-  /// resumed is not a reason to leave the other three dormant, and it is not
-  /// something the user can act on in the middle of a bulk verb — but it is
-  /// something they must be told about at the end, or the button silently did
-  /// less than it said.
+  /// Resumes every pane holding restored agent history, one pane per frame:
+  /// back-to-back resumes freeze the window for the sum of them. One layout
+  /// write for all of them, and refusals are counted rather than thrown.
   Future<({int resumed, int refused, String? message})>
   resumeAllRestoredPanes() async {
     final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
@@ -318,9 +257,8 @@ class ExplorerActions {
     });
   }
 
-  /// Opens an imported CLI session: reattach when we are already running that
-  /// conversation, otherwise resume it in place (which replaces the imported
-  /// row with a live one — [SessionActions.resumeImported] owns that).
+  /// Opens an imported CLI session: reattach when we already run that
+  /// conversation, else resume in place ([SessionActions.resumeImported]).
   Future<ExplorerResult> openImported(ImportedSession session) async {
     selectImported(session);
     final launcher = _ref.read(sessionLauncherProvider);
@@ -346,18 +284,9 @@ class ExplorerActions {
     }
   }
 
-  /// Starts a session in [repository], or in [existingWorktree] when a worktree
-  /// row asked for it.
-  ///
-  /// [installation] is the "…with" choice; omitted, the configured default agent
-  /// for the repository's environment is used, which is what makes `+` a single
-  /// click rather than a dialog.
-  ///
-  /// **A worktree with no `repositories` row of its own is startable now.** Loop
-  /// 57 could only offer `+` where the workspace happened to have a row at that
-  /// exact path, because a session needs a repository id and there was no way to
-  /// say "this id, but run over there". [existingWorktree] is that way: the
-  /// owning repository supplies the id and the worktree supplies the directory.
+  /// Starts a session in [repository], or in [existingWorktree]; [installation]
+  /// omitted means the environment's default agent. A worktree needs no
+  /// `repositories` row: the owning repository supplies the id.
   Future<ExplorerResult> startSession({
     required Repository repository,
     EnvironmentPath? existingWorktree,
@@ -422,15 +351,8 @@ class ExplorerActions {
   }
 
   /// Another of our rows for the same CLI conversation whose pane is live.
-  ///
-  /// `SessionLauncher.runningSessionWithExternalId` asks the DAO for *a* row
-  /// with that external id and takes the first of them; once a resume has
-  /// produced a second row (it mints one — see the loop report) the first is the
-  /// dead one, so that check comes back empty and the click launches a third
-  /// process. Scanning every row costs one query on a click and cannot be fooled
-  /// that way — and it is deliberately not scoped to the repository, because a
-  /// resume that joined an existing worktree can land the twin on a different
-  /// repository row from the one clicked.
+  /// `runningSessionWithExternalId` takes the *first* row with that id, which
+  /// after a resume is the dead one; scanning every row cannot be fooled.
   Session? _liveTwinOf(Session session) {
     final externalId = session.externalSessionId;
     if (externalId == null || externalId.isEmpty) return null;
@@ -443,9 +365,8 @@ class ExplorerActions {
     return null;
   }
 
-  /// The user-facing half of an error. A [StateError]'s message is already
-  /// written for a human; anything else is shown as it stands rather than
-  /// swallowed.
+  /// The user-facing half of an error: a [StateError]'s message is already
+  /// written for a human, anything else is shown as it stands.
   String _say(Object error) => switch (error) {
     StateError() => error.message,
     SessionAlreadyRunning() => error.toString(),

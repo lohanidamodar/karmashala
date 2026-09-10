@@ -4,25 +4,17 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
 import '../domain/explorer_section.dart';
 
-/// Data access for saved Explorer sections (schema v29).
-///
-/// What is stored is the **definition** and never the membership of a rule
-/// section: a rule's answer changes when a check goes red, and a copy of it in
-/// SQLite would be a second answer that disagrees with the live one. Only the
-/// hand-filled groups have rows in `explorer_section_members`, because there
-/// the list *is* the definition. See the v29 migration.
+/// Data access for saved Explorer sections (schema v29). What is stored is the
+/// *definition*, never a rule section's membership — a copy in SQLite would be
+/// a second answer that disagrees with the live one.
 class ExplorerSectionDao {
   ExplorerSectionDao(this._db);
 
   final AppDatabase _db;
 
-  /// Every section, in sidebar order — which is also priority order; see
-  /// [assignSections].
-  ///
-  /// Two statements whatever the workspace holds: the sections, then every
-  /// member row in one sweep. Read per-section it would be one statement per
-  /// group, and this is called on every mutation of a list the user is looking
-  /// at.
+  /// Every section, in sidebar order — which is also priority order. Two
+  /// statements whatever the workspace holds; per-section it would be one a
+  /// group, on every mutation of a list the user is looking at.
   List<ExplorerSection> getAll() {
     final members = <String, Set<String>>{};
     for (final row in _db.query(
@@ -44,9 +36,8 @@ class ExplorerSectionDao {
         row['pattern'] as String?,
       );
       // A row whose `kind` this build does not know is skipped rather than
-      // guessed at. It is what a downgrade looks like — a newer build wrote a
-      // rule this one has no code for — and drawing it as a manual group would
-      // silently strip the rule the moment the user renamed it.
+      // guessed at: that is a downgrade, and drawing it as a manual group would
+      // strip the rule the moment the user renamed it.
       if (rule == null) continue;
       sections.add(
         ExplorerSection(
@@ -105,21 +96,17 @@ class ExplorerSectionDao {
     });
   }
 
-  /// The one write a collapse toggle makes.
-  ///
-  /// Its own statement rather than a full [update], because folding a section
-  /// shut is the most frequent write this table takes and it must not rewrite
-  /// a hand-filled group's whole member list to record one bit.
+  /// The one write a collapse toggle makes. Its own statement because folding a
+  /// section shut is this table's most frequent write and must not rewrite a
+  /// hand-filled group's whole member list to record one bit.
   void setCollapsed(String id, bool collapsed) => _db.execute(
     'UPDATE explorer_sections SET collapsed = ? WHERE id = ?;',
     [collapsed ? 1 : 0, id],
   );
 
   /// Renumbers the sections to the order [ids] gives, in one transaction.
-  ///
-  /// Ids this table does not hold are ignored, and sections [ids] does not
-  /// name keep the position they had — so a reorder racing a delete renumbers
-  /// what is there rather than throwing.
+  /// Unknown ids are ignored and unnamed sections keep their position, so a
+  /// reorder racing a delete renumbers what is there rather than throwing.
   void reorder(List<String> ids) {
     _db.transaction(() {
       for (var i = 0; i < ids.length; i++) {

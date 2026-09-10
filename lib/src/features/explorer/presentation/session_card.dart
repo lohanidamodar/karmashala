@@ -7,13 +7,8 @@ import '../../sessions/domain/session_lineage.dart';
 import '../application/session_diff_stat.dart';
 import 'explorer_row.dart';
 
-/// A coarse age for a card's corner: `3m`, `22m`, `7h 59m`, `2d 4h`.
-///
-/// Deliberately not [describeAge]'s "3m ago" — a card corner has room for a
-/// number and no room for a preposition, and the column position already says
-/// what the number means. It keeps that function's honesty about resolution:
-/// under a minute is "now", never "0m", because a card that counts seconds
-/// looks live when it is not.
+/// A coarse age for a card's corner: `3m`, `22m`, `7h 59m`, `2d 4h`. Under a
+/// minute is "now", never "0m" — a card that counts seconds looks live.
 String compactAge(Duration age) {
   if (age.isNegative || age.inMinutes < 1) return 'now';
   if (age.inHours < 1) return '${age.inMinutes}m';
@@ -25,23 +20,9 @@ String compactAge(Duration age) {
   return hours == 0 ? '${age.inDays}d' : '${age.inDays}d ${hours}h';
 }
 
-/// A session, drawn as a three-line card.
-///
-/// The old row was a `ListTile` with a title and a subtitle that Loop 46 kept
-/// having to squeeze more into — the status, the worktree flag, the whereabouts
-/// and a "last seen" age all shared half a row and were ellipsised out of
-/// existence at the pane widths people actually use.
-///
-/// Three lines, each answering one question, is MonoCode's shape and it is the
-/// right one:
-///
-/// * **who and when** — the agent, and how long since anything happened;
-/// * **what** — the title, and nothing competing with it;
-/// * **where** — the branch, what we know about the process, and what it has
-///   produced.
-///
-/// Every line's right-hand slot holds exactly one fact, so the eye can read
-/// down the right edge for age, then for progress.
+/// A session, drawn as a three-line card: who and when, what, where. Every
+/// line's right-hand slot holds exactly one fact, so the eye can read down the
+/// right edge for age and then for progress.
 class SessionCard extends StatelessWidget {
   const SessionCard({
     required this.depth,
@@ -88,9 +69,8 @@ class SessionCard extends StatelessWidget {
   /// evidence to age — which is rendered as nothing, never as `0m`.
   final String? age;
 
-  /// What the age actually means, when it is weaker than it looks — an
-  /// imported conversation's file mtime says when the agent last *wrote*, not
-  /// whether anything still has it open.
+  /// What the age actually means when it is weaker than it looks — a file
+  /// mtime says when the agent last *wrote*, not that anything still has it.
   final String? ageTooltip;
 
   final String title;
@@ -98,18 +78,12 @@ class SessionCard extends StatelessWidget {
   /// Line three: the branch this session works on, when known.
   final String? branch;
 
-  /// Line three, first: **which sub-directory of the project** this agent is
-  /// actually working in, when it is not the project root.
-  ///
-  /// The owner's question, in their own words: *"if there are multiple
-  /// subfolders with multiple repositories, do we know which each session is
-  /// working on?"* On a hub — a project folder holding a dozen clones — the
-  /// repository name alone does not answer it, and it is the first thing on the
-  /// line because it is the fact that identifies the work.
+  /// Line three, first: which sub-directory of the project this agent works
+  /// in. On a hub of a dozen clones the repository name does not identify it.
   final String? subPath;
 
-  /// Line three: Loop 46's whereabouts clause — "opened in an external
-  /// terminal", "open in another process", "last seen 2h ago".
+  /// Line three: the whereabouts clause — "opened in an external terminal",
+  /// "open in another process", "last seen 2h ago".
   final String? whereabouts;
   final String? whereaboutsTooltip;
 
@@ -117,16 +91,8 @@ class SessionCard extends StatelessWidget {
   final SessionDiffStat? stat;
 
   /// Whether git has been asked about this checkout and has not answered yet.
-  ///
-  /// **§19's rule, on a row.** A row's git probes now wait for the frame that
-  /// drew the row to finish before they spawn anything, so an empty line three
-  /// is the *ordinary* state for the first moments of every launch — and it
-  /// looked exactly like a checkout with no branch, which is a claim. An
-  /// ellipsis where the branch will be says "not measured yet" in the one place
-  /// the user is already looking, and the tooltip says it in words.
-  ///
-  /// It also holds the space, so the common case — a real checkout, which
-  /// always has a branch to name — does not shift when the answer lands.
+  /// An empty line three is the ordinary state early in a launch and looks like
+  /// a checkout with no branch, which is a claim; the ellipsis holds the space.
   final bool statPending;
 
   /// Whether this session runs in its own worktree — the one structural fact
@@ -139,48 +105,32 @@ class SessionCard extends StatelessWidget {
   final SessionLink? link;
 
   /// The parent's title, when that session is drawn directly above this card.
-  /// Null means "it came from somewhere not on screen", and the glyph's tooltip
-  /// says exactly that rather than naming a session the user cannot see.
+  /// Null means "from somewhere not on screen", which is what the tooltip says.
   final String? parentTitle;
 
-  /// The parent chain could not be walked to a root.
-  ///
-  /// Loop 54's rule: a chain that loops, or is longer than the guard allows, is
-  /// **unknown** — drawing it as a tree with a plausible root would be the one
-  /// lie a lineage view must not tell. The card says so in words on line three
-  /// and sits at the top of its row rather than under a parent.
+  /// The parent chain could not be walked to a root. A chain that loops or is
+  /// too long is *unknown*: drawing a plausible root would be a lie.
   final bool lineageBroken;
 
   final VoidCallback onTap;
-  /// Called when the menu opens, and not before — see `RowMenuItemBuilder`.
-  /// A hundred cards used to build a hundred menus per frame for the one
-  /// that might be opened.
+  /// Called when the menu opens, and not before — see `RowMenuItemBuilder`. A
+  /// hundred cards used to build a hundred menus per frame.
   final RowMenuItemBuilder menuItemsBuilder;
   final ValueChanged<String> onMenu;
 
-  /// Whether the row has an overflow menu at all.
-  ///
-  /// The Explorer does, and reserves its slot on every card — though on a
-  /// pointer surface the button itself only appears under the pointer or the
-  /// keyboard; see [ExplorerRow]. The companion has no verbs to put in one — a
-  /// phone can open a session and nothing else — and an empty menu button is a
-  /// target that does nothing.
+  /// Whether the row has an overflow menu at all. The companion has no verbs
+  /// to put in one, and an empty menu button is a target that does nothing.
   final bool showMenu;
 
-  /// Whether the Explorer is asking which rows to act on.
-  ///
-  /// Draws the tick box, and makes [onTap] mean *tick* rather than *open* —
-  /// the trade taken for a mode discoverable from a toolbar button instead of
-  /// hidden behind a Ctrl-click nobody guesses at. The card decides none of
-  /// that; it is told, so one place owns what a click means.
+  /// Whether the Explorer is asking which rows to act on: draws the tick box
+  /// and makes [onTap] mean *tick*. The card is told, never decides.
   final bool selecting;
 
   /// Whether this row is in the selection. Ignored unless [selecting].
   final bool ticked;
 
-  /// The glyph for a link kind. Three shapes for three genuinely different
-  /// facts: an agent delegated this, the user moved it to another provider, the
-  /// user branched it.
+  /// The glyph for a link kind — three shapes for three different facts: an
+  /// agent delegated this, the user moved it, the user branched it.
   static IconData linkIcon(SessionLink link) => switch (link) {
     SessionLink.spawn => AppIcons.arrowBendDownRight,
     SessionLink.handoff => AppIcons.paperPlaneRight,
@@ -197,8 +147,6 @@ class SessionCard extends StatelessWidget {
 
     // The tile, the indent, the selection rule, the right-click and the
     // keyboard menu all belong to every row kind alike; see [ExplorerRow].
-    // Enter on a focused card does what a click does, so the tree is navigable
-    // without the mouse.
     return ExplorerRow(
       kind: ExplorerRowKind.session,
       depth: depth,
@@ -214,9 +162,8 @@ class SessionCard extends StatelessWidget {
             _line1(context, muted, density),
             SizedBox(height: density.lineGap),
             _line2(theme, density),
-            // A worktree session draws its third line even before git has
-            // answered: the glyph that says "this has its own checkout" is a
-            // persisted fact, and it must not blink into existence.
+            // A worktree session draws line three before git answers: the glyph
+            // is a persisted fact and must not blink into existence.
             if (worktree ||
                 branch != null ||
                 statPending ||
@@ -243,9 +190,8 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  /// The tick, sized by density rather than by [ExplorerRow.slotOf]: a
-  /// checkbox has Material's own hit area, and squeezing it into the menu
-  /// button's slot would overflow it instead of shrinking it.
+  /// The tick, sized by density rather than by [ExplorerRow.slotOf]: a checkbox
+  /// has Material's own hit area and would overflow the menu button's slot.
   Widget _tickBox(UiDensity density) => Checkbox(
     value: ticked,
     // Named so Narrator says which row it is on. The row itself is not a
@@ -264,10 +210,8 @@ class SessionCard extends StatelessWidget {
 
   Widget _line1(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
-    // The left group is one Expanded child rather than a Flexible label beside
-    // a Spacer: two flex children split the free space evenly, which truncated
-    // "Claude Code · running" to "Claude Code · run…" with half the row empty.
-    // Caught by looking at the running app, not by a test.
+    // One Expanded child rather than a Flexible label beside a Spacer: two flex
+    // children split the free space evenly and truncated the label mid-word.
     return Row(
       children: [
         Expanded(
@@ -346,8 +290,7 @@ class SessionCard extends StatelessWidget {
         child: Text(
           title,
           // A phone gives a long title a second line rather than ellipsising
-          // the only thing that identifies the session; a dense pane cannot
-          // afford one.
+          // the only thing that identifies the session; a dense pane cannot.
           maxLines: density.isTouch ? 2 : 1,
           overflow: TextOverflow.ellipsis,
           style: density.title(theme),
@@ -364,9 +307,8 @@ class SessionCard extends StatelessWidget {
 
   Widget _line3(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
-    // The ellipsis stands in for the branch and only for the branch: once we
-    // have a branch name we have measured the checkout, so the two are never
-    // both on the line.
+    // The ellipsis stands in for the branch and only for the branch: a branch
+    // name means the checkout was measured, so the two never share the line.
     final unmeasured = statPending && branch == null;
     final where = [
       ?subPath,

@@ -13,25 +13,8 @@ import '../../sessions/domain/unkept_promise.dart';
 import '../application/unresumable_sessions.dart';
 
 /// The rows that name a conversation their agent does not have — listed, then
-/// removed or restarted.
-///
-/// **Why a review and not a button.** The ask was "a quick button that will
-/// remove all those", and a button alone could not be honest: the only way to
-/// know a row is dead is to ask the CLI, the answer is sometimes *unknown* (an
-/// unreachable WSL share, a store in a format nobody reads), and a session
-/// started a minute ago is indistinguishable from a dead one until the agent
-/// writes its transcript. So the reading is shown before it is acted on: what
-/// it found, what it could not judge, and how old it is. §19's rules, applied
-/// to housekeeping.
-///
-/// **Two verbs, because they are worth different things.** Removing is quick
-/// and irreversible. Restarting keeps the row — its title, its age, its
-/// lineage, its place in the tree — and simply makes the promise again, which
-/// for a session the user still recognises is the better answer. Neither is the
-/// other's fallback.
-///
-/// **Sized to the viewport**, not to the desktop: the panel is 560px of list at
-/// 1440x900 and fills a 390x844 phone without either dimension overflowing.
+/// removed or restarted. A reading, not a button: the answer is sometimes
+/// *unknown*. Removing is irreversible; restarting keeps the row.
 class UnresumableSessionsDialog extends ConsumerStatefulWidget {
   const UnresumableSessionsDialog({super.key});
 
@@ -93,21 +76,9 @@ class _UnresumableSessionsDialogState
     final review = ref.watch(unresumableSessionsProvider);
     final controller = ref.read(unresumableSessionsProvider.notifier);
     final ticked = _ticked(review);
-    // **Width is chosen, height is not.**
-    //
-    // Material insets a dialog by 40px a side, so 560 is comfortable on a
-    // desktop and a 390px phone gets what it has. Height had a matching
-    // `min(viewport.height - 220, 420)` and that was a bug the window matrix
-    // caught: 220 is a guess about the title and the button row, and at
-    // 720x560 with Windows' text at 1.3x those grow past it. The content's
-    // `Expanded` then got a negative height, the list never laid out, and
-    // every control inside it silently left the Tab ring — a panel you could
-    // not reach the checkboxes of, reported as a focus finding rather than as
-    // the layout error it was.
-    //
-    // So the height is the dialog's own: `Column(mainAxisSize: min)` with the
-    // list `Flexible` and shrink-wrapping takes exactly what the rows need, up
-    // to whatever `Dialog` allows for this viewport, and scrolls beyond that.
+    // Width is chosen, height is not. Height was `min(viewport.height - 220,
+    // 420)`; at 720x560 with text at 1.3x, `Expanded` got a negative height,
+    // the list never laid out, and its controls left the Tab ring.
     final width = math.min(MediaQuery.sizeOf(context).width - 80, 560.0);
 
     return AlertDialog(
@@ -309,10 +280,8 @@ class _Body extends StatelessWidget {
   }
 }
 
-/// An empty or not-yet-run state, given a height of its own.
-///
-/// The rows are what size this panel; with none, a bare `Center` inside the
-/// content's `Flexible` collapses and the message disappears.
+/// An empty or not-yet-run state, given a height of its own: the rows are what
+/// size this panel, and a bare `Center` in the `Flexible` collapses.
 class _Placeholder extends StatelessWidget {
   const _Placeholder({required this.child});
 
@@ -353,19 +322,9 @@ class _Row extends StatelessWidget {
     return RevealOnFocus(
       child: ListTile(
         contentPadding: EdgeInsets.zero,
-        // Two lines and two stops, deliberately.
-        //
-        // The first version put the restart verb in the subtitle as a text
-        // button and gave the tile its own `onTap` as well. Both were wrong at
-        // 720x560 with Windows' text turned up to 1.3x, and the window matrix
-        // said so: three focus stops per row where two do the same thing, and a
-        // tile tall enough that two rows and a section header overflowed the
-        // panel into a scroll — after which Tab's `ensureVisible` moved the list
-        // under the traversal and the ring revisited a stop it had already had.
-        //
-        // So the checkbox is the only thing that ticks the row, and the verb is
-        // a trailing glyph inside the tile's own box: shorter, one stop, and it
-        // still reads at 390px.
+        // Two lines and two stops: the restart verb as a subtitle button plus a
+        // tappable tile was three stops a row and tall enough to overflow into
+        // a scroll, after which `ensureVisible` made Tab revisit a stop.
         leading: tick == null
             ? Icon(
                 AppIcons.warningCircle,
@@ -386,17 +345,9 @@ class _Row extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        // The row's own way out, and the one that keeps it. Named for what it
-        // does to *this* session rather than "new session", which is the advice
-        // `resumeMissingConversationMessage` already gives and which loses the
-        // row.
-        //
-        // **Absent on a row nothing could judge**, which is the same rule as the
-        // missing checkbox and matters more. An `unknown` verdict means the
-        // store was unreachable, so the conversation may well be there and
-        // resumable once the distribution is running — and starting a second one
-        // over the row would abandon it. A row we cannot speak for is offered
-        // neither verb.
+        // Named for what it does to *this* session, and absent on a row nothing
+        // could judge: `unknown` means the store was unreachable, so the
+        // conversation may be there and starting a second would abandon it.
         trailing: onRestart == null
             ? null
             : IconButton(

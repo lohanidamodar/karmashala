@@ -31,25 +31,9 @@ import '../application/session_selection.dart';
 import 'section_membership_dialog.dart';
 import 'session_card.dart';
 
-/// **The two rows that stand for a session, wherever the app draws one.**
-///
-/// They were private to `explorer_panel.dart` until sections arrived, and that
-/// was fine while the Explorer had exactly one list. It now has two — the
-/// project tree, and the saved sections above it — and a session drawn in a
-/// section has to be the same object as the same session drawn under its
-/// project: the same menu, the same badge, the same three lines, the same
-/// meaning for a click. A second row widget would have started identical and
-/// drifted, and the drift would have shown up as two different answers to
-/// "what does the pin item do here".
-///
-/// They also carry every dialog and terminal-hand-off a row's menu can reach,
-/// for the same reason: those are what the menu items *are*, and splitting the
-/// menu from what it does would put half a row in each of two files.
-///
-/// Both watch inside their own `build`, which is the distinction the Explorer's
-/// old checkout rows got wrong — a `ConsumerWidget` pays for its watches when
-/// it is *inflated*, so a list that builds five hundred of these and shows
-/// thirty pays for thirty. See the class comment on `ExplorerPanel`.
+/// The two rows that stand for a session, wherever the app draws one: the tree
+/// and the sections must be the same object. Both watch inside their own
+/// `build`, so a list of five hundred that shows thirty pays for thirty.
 
 class NativeSessionRow extends ConsumerWidget {
   const NativeSessionRow({
@@ -73,9 +57,8 @@ class NativeSessionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // `.select` on the one fact each row draws, never the whole value: the
-    // Explorer inflates one of these per visible row, and opening a session or
-    // ticking a box must move that row alone. See [sessionSelectionProvider].
+    // `.select` on the one fact each row draws, never the whole value: opening
+    // a session or ticking a box must move that row alone.
     final selected = ref.watch(
       selectedSessionIdProvider.select((id) => id == session.id),
     );
@@ -109,9 +92,8 @@ class NativeSessionRow extends ConsumerWidget {
       }
     }
 
-    // One click opens the session: a pane of ours that is still running comes
-    // back, a stopped conversation is resumed — in its own worktree when it has
-    // one — and an agent that will not share says so in plain words.
+    // One click opens the session: a live pane of ours comes back, a stopped
+    // conversation resumes in its own worktree, a refusal is said in words.
     Future<void> open() async {
       final messenger = ScaffoldMessenger.of(context);
       final result = await ref
@@ -122,13 +104,11 @@ class NativeSessionRow extends ConsumerWidget {
       messenger.showSnackBar(SnackBar(content: Text(message)));
     }
 
-    // What we can honestly say about where this session's process is, before
-    // the user clicks anything. Three separately-weighted facts, none of which
-    // is allowed to become a confident "active": see [SessionWhereabouts].
+    // What we can honestly say about where this process is before the user
+    // clicks. None of it may become a confident "active".
     final whereabouts = ref.watch(sessionWhereaboutsProvider(session.id));
-    // **When this session was last active**, through the one definition every
-    // session list orders by. Never the time of our last poll: ageing a poll
-    // would make a week-old transcript look live.
+    // The one definition every session list orders by. Never the time of our
+    // last poll: ageing a poll makes a week-old transcript look live.
     final now = ref.read(clockProvider).nowUtc();
     final lastActive = newestLastActive(agentEvidenceAt: whereabouts.lastSeen);
     // The corner still dates a session we hold no reading for, from the one
@@ -139,19 +119,12 @@ class NativeSessionRow extends ConsumerWidget {
         .getById(session.agentInstallationId)
         ?.agentId;
     final (statusIcon, statusColor) = _status(session.status, context);
-    // A watch of a list the user maintains by hand — five entries, not five
-    // hundred — so this costs a rebuild when they add a section and nothing
-    // otherwise.
+    // A list the user maintains by hand — five entries, not five hundred — so
+    // this costs a rebuild when they add a section and nothing otherwise.
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
-    // Asynchronous by construction: the card renders without it and fills in
-    // when git answers. Keyed by session, deduplicated by checkout.
-    //
-    // `.value` rather than `asData?.value`, for the reason
-    // `sessionDeliveryActionsProvider` gives: a refresh is an `AsyncLoading`
-    // carrying the value it already had, and reading it as null redrew the row
-    // as though the app had never measured the checkout. Every workspace
-    // mutation is such a refresh, so that was a branch chip blinking out
-    // whenever an agent started or stopped.
+    // Asynchronous by construction, and `.value` rather than `asData?.value`:
+    // a refresh is an `AsyncLoading` carrying the previous value, and reading
+    // it as null blinked the branch chip out on every workspace mutation.
     final delivery = ref.watch(sessionDiffStatProvider(session.id));
     final stat = delivery.value;
 
@@ -169,16 +142,12 @@ class NativeSessionRow extends ConsumerWidget {
         // running it says so in words instead — see `SessionStatus.labelWhen`.
         session.status.labelWhen(hostedLive: whereabouts.hostedLive),
       ].join('  ·  '),
-      // Two different things, deliberately both shown: the badge is what the
-      // agent is doing *now* (from a hook, its transcript, or its screen) and
-      // the word beside its name is the session's own lifecycle. A session can
-      // be `running` and its agent idle, waiting for you to type.
+      // Both shown deliberately: the badge is what the agent is doing *now*,
+      // the word beside its name is the session's own lifecycle.
       badge: AgentStatusBadge(sessionId: session.id),
       age: compactAge(now.difference(since)),
-      // The corner has room for a number, not for how much to trust it — see
-      // [compactAge]. The words survive on hover, in `describeAge`'s wording so
-      // they match Quick Open and the phone, and they keep the distinction
-      // between evidence the agent produced and the row's own birthday.
+      // The corner has room for a number, not for how much to trust it; the
+      // words survive on hover, in `describeAge`'s wording.
       ageTooltip: switch (lastActive.label(now)) {
         final label? => _capitalised(label),
         _ => 'Created ${describeAge(now.difference(session.createdAt))} — '
@@ -197,35 +166,28 @@ class NativeSessionRow extends ConsumerWidget {
       lineageBroken: lineageBroken,
       selecting: selecting,
       ticked: ticked,
-      // In selection mode a plain click ticks. That is the whole trade the
-      // checkbox mode makes, and it is why leaving the mode is one click away
-      // in two places — the toolbar toggle and the bar's Done.
+      // In selection mode a plain click ticks — the whole trade the mode makes,
+      // which is why leaving it is one click away in two places.
       onTap: selecting
           ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
           : open,
       menuItemsBuilder: () => [
-        // Moving a session to another agent, or branching it, belongs on the
-        // session — not only on the delivery strip, which is the one place it
-        // used to live and is only reachable while a session is on screen.
+        // Moving a session to another agent belongs on the session, not only on
+        // the delivery strip, which needs the session already on screen.
         DesktopMenuItem(
           value: 'continue-with',
           label: 'Continue with…',
           icon: AppIcons.gitBranch,
         ),
-        // The other place a recap can be asked for, and the one that matters
-        // for the session this feature exists for: the row you come back to a
-        // day later and have not opened yet. It spends a turn, so it is an
-        // entry the user picks and never something the row does on its own.
+        // The row you come back to a day later and have not opened. It spends a
+        // turn, so it is picked, never done by the row itself.
         DesktopMenuItem(
           value: 'recap',
           label: 'Recap',
           icon: AppIcons.article,
         ),
-        // One entry, not one per installed terminal. Three of the eight items
-        // in this menu used to be external-terminal openers, which is a lot of
-        // room for something the owner does not reach for; the default
-        // terminal is the answer in almost every case, and the rest is a
-        // setting rather than a menu.
+        // One entry, not one per installed terminal: three of eight items here
+        // used to be external openers. The rest is a setting.
         if (terminals.isNotEmpty)
           DesktopMenuItem(
             value: 'terminal:${terminals.first.id}',
@@ -238,19 +200,16 @@ class NativeSessionRow extends ConsumerWidget {
           label: pinned ? 'Unpin' : 'Pin to top',
           icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
         ),
-        // Beside "Pin to top" because they are the same kind of act — putting
-        // this row somewhere by hand — and because that adjacency is what
-        // stops "Pin" from being read as a third way into a section. Drawn
-        // only when there is a hand-filled section to add to.
+        // Beside "Pin to top" because they are the same kind of act, which is
+        // what stops Pin being read as a third way into a section.
         if (hasSections)
           DesktopMenuItem(
             value: 'sections',
             label: 'Add to section…',
             icon: AppIcons.folder,
           ),
-        // Every session gets this, including one whose agent keeps no record
-        // of its own — that case is *why* the dialog exists, and hiding the
-        // entry would leave the only agent that needs git with no way to ask.
+        // Every session gets this, including one whose agent keeps no record of
+        // its own — that case is *why* the dialog exists.
         DesktopMenuItem(
           value: 'changed-files',
           label: 'Files changed…',
@@ -288,10 +247,8 @@ class NativeSessionRow extends ConsumerWidget {
           case 'recap':
             await requestSessionRecap(context, ref, session.id);
           case 'continue-with':
-            // The dialog owns every decision here — which agent, handoff or
-            // fork, and what permission mode the session lands in — and it
-            // launches nothing until the user has seen the packet. So this is
-            // a route to it, not a second place that reasons about any of it.
+            // The dialog owns every decision and launches nothing until the
+            // user has seen the packet; this is a route to it, not a second one.
             await ContinueWithDialog.show(context, session.id);
           case 'pin':
             ref
@@ -315,14 +272,9 @@ class NativeSessionRow extends ConsumerWidget {
     );
   }
 
-  /// The session's lifecycle, as a glyph and a semantic colour. Returned as a
-  /// record rather than a widget because the card draws it at its own size.
-  ///
-  /// [SessionStatus.unknown] gets its own arm rather than falling into the
-  /// default: the same question mark and the same neutral that
-  /// `agentStatusAppearance` gives `AgentActivityStatus.unknown`, because it is
-  /// the same admission about the same session. A row that has lost its process
-  /// must not be able to look like one that never started.
+  /// The session's lifecycle as a glyph and a semantic colour, a record so the
+  /// card sizes it. [SessionStatus.unknown] gets its own arm: a row that lost
+  /// its process must not look like one that never started.
   (IconData, Color) _status(SessionStatus status, BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final semantic = SemanticColors.of(context);
@@ -367,9 +319,8 @@ class ImportedSessionRow extends ConsumerWidget {
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
     final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
-    // The CLI store file's own mtime — the strongest "last seen" anywhere in the
-    // app, because it is the agent's own writing rather than anything we
-    // inferred. Aged rather than stated, so a row can never claim to be live.
+    // The CLI store file's own mtime — the agent's own writing rather than
+    // anything we inferred. Aged, so a row can never claim to be live.
     final now = ref.read(clockProvider).nowUtc();
     final lastActive = newestLastActive(storeModifiedAt: session.updatedAt);
     final lastSeen = lastActive.at == null
@@ -446,9 +397,6 @@ class ImportedSessionRow extends ConsumerWidget {
       menuItemsBuilder: () => [
         DesktopMenuItem(
           value: 'resume',
-          // "in app" was distinguishing it from the three external-terminal
-          // openers below it. With those collapsed to one, the qualifier is
-          // noise: resuming is what this app does.
           label: 'Resume',
           icon: AppIcons.play,
         ),
@@ -643,7 +591,6 @@ Future<bool?> _confirmDelete(BuildContext context, String title) {
 }
 
 /// The shared age clause as a tooltip opens: "active 3m ago" -> "Active 3m
-/// ago". The words are [SessionLastActive.label]'s so every surface says the
-/// same thing; only the sentence case is this one's.
+/// ago". The words are [SessionLastActive.label]'s; only the case is this one's.
 String _capitalised(String text) =>
     text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);

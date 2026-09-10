@@ -6,17 +6,9 @@ import '../../../app/widgets/desktop_dialog.dart';
 import '../application/explorer_sections.dart';
 import '../domain/explorer_section.dart';
 
-/// Which hand-filled sections one session is in.
-///
-/// **Only the manual ones are listed**, and the Pinned section is not among
-/// them even though its membership is also explicit: pinning has its own verb
-/// on the same menu ("Pin to top"), writing to the same
-/// `Settings.pinnedSessionIds` the pin glyph reads. Offering it twice, in two
-/// shapes, is how the two would eventually disagree.
-///
-/// Rule sections are absent because there is nothing here to decide: a session
-/// is in "Checks failing" when its checks are failing, and a checkbox that
-/// could not be honoured would be a lie with a tick in it.
+/// Which hand-filled sections one session is in. Only the manual ones: pinning
+/// has its own verb on the same menu, and rule sections have nothing to decide —
+/// a checkbox that could not be honoured would be a lie with a tick in it.
 class SectionMembershipDialog extends ConsumerWidget {
   const SectionMembershipDialog({required this.sessionId, super.key});
 
@@ -31,10 +23,8 @@ class SectionMembershipDialog extends ConsumerWidget {
     builder: (context) => SectionMembershipDialog(sessionId: sessionId),
   );
 
-  /// Whether this dialog has anything to offer for [ref]'s workspace.
-  ///
-  /// The row menus ask before drawing the entry: a menu item that opens an
-  /// empty dialog teaches the user that the menu is not to be trusted.
+  /// Whether this dialog has anything to offer. The row menus ask before
+  /// drawing the entry: one that opens an empty dialog teaches distrust.
   static bool hasManualSections(WidgetRef ref) => ref
       .watch(explorerSectionsProvider)
       .any((section) => section.rule.kind == SectionRuleKind.manual);

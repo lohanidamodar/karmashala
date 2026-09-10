@@ -5,13 +5,9 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 
-/// **What the Explorer has ticked, and whether it is asking.**
-///
-/// Keyed by session id and by nothing else. The tree refreshes on a poll and
-/// re-sorts on every touch, so a row is a fresh widget at a fresh position
-/// several times a minute; a selection held by index or by position would
-/// silently follow the wrong rows across a refresh, and a refresh that moves
-/// the selection is worse than one that clears it.
+/// What the Explorer has ticked, and whether it is asking. Keyed by session id
+/// and nothing else: the tree re-sorts several times a minute, and a selection
+/// held by position would silently follow the wrong rows.
 @immutable
 class SessionSelection {
   const SessionSelection({this.active = false, this.ids = const {}});
@@ -23,13 +19,9 @@ class SessionSelection {
   /// plain click ticks a row instead of opening it.
   final bool active;
 
-  /// The ticked rows, native and imported alike.
-  ///
-  /// One set for both kinds, because a session id identifies a row uniquely
-  /// whichever table it came from, and the delete routes each id by looking it
-  /// up rather than by remembering which list drew it. That is also what makes
-  /// [prune] possible: "does this still exist" is one question, asked of two
-  /// DAOs.
+  /// The ticked rows, native and imported alike. One set, because an id
+  /// identifies a row whichever table it came from — which is also what makes
+  /// [prune] one question asked of two DAOs.
   final Set<String> ids;
 
   bool contains(String id) => ids.contains(id);
@@ -46,9 +38,8 @@ class SessionSelection {
 class SessionSelectionController extends Notifier<SessionSelection> {
   @override
   SessionSelection build() {
-    // A ticked row that leaves the workspace drops out of the selection, so a
-    // delete can never name a phantom. See [prune] for why membership rather
-    // than visibility is the test.
+    // A ticked row that leaves the workspace drops out, so a delete can never
+    // name a phantom. See [prune] for why membership, not visibility.
     ref.listen(
       sessionSignalsProvider.select(
         (signals) => signals.forKinds(const {SessionChangeKind.membership}),
@@ -58,14 +49,9 @@ class SessionSelectionController extends Notifier<SessionSelection> {
     return SessionSelection.none;
   }
 
-  /// Enters selection mode with **nothing ticked**.
-  ///
-  /// Deliberately does not preselect whatever row was singly selected. That row
-  /// is what the user is *reading* — the transcript open in the right pane —
-  /// not something they chose to act on, so carrying it in would make the first
-  /// thing a bulk Delete offers to remove the session in front of them, and
-  /// would make the user's first tick a *de*selection. The mode starts empty,
-  /// so every tick in it is deliberate.
+  /// Enters selection mode with **nothing ticked** — the singly selected row is
+  /// what the user is *reading*, so carrying it in would make the first thing a
+  /// bulk Delete offers the session in front of them.
   void enter() {
     if (!state.active) state = const SessionSelection(active: true);
   }
@@ -82,17 +68,9 @@ class SessionSelectionController extends Notifier<SessionSelection> {
     state = state.copyWith(ids: ids);
   }
 
-  /// Drops ticked ids whose session has left the workspace.
-  ///
-  /// **Membership, not visibility.** A row scrolled off, inside a collapsed
-  /// project, or filtered out by the search box is still a session the user
-  /// ticked and still perfectly deletable — dropping those would make the
-  /// search field a destructive control over the selection. A row that has
-  /// actually gone (deleted here, deleted elsewhere, its project removed) is
-  /// dropped, because there is nothing left for the delete to name.
-  ///
-  /// Cheap when nothing is ticked, which is almost always: it reads no DAO at
-  /// all until there is something to check.
+  /// Drops ticked ids whose session has left the workspace — membership, not
+  /// visibility: a row scrolled off or filtered out is still deletable, and
+  /// dropping those would make the search field a destructive control.
   void prune() {
     if (state.ids.isEmpty) return;
     final sessions = ref.read(sessionDaoProvider);
@@ -106,10 +84,8 @@ class SessionSelectionController extends Notifier<SessionSelection> {
 }
 
 /// **Watch this narrowly.** The Explorer inflates one `ConsumerWidget` per
-/// visible row, and this provider changes on every tick; a row that watched the
-/// whole value would rebuild all thirty rows to tick one. Every reader here
-/// uses `.select` on the single fact it draws — `active`, `count`, or its own
-/// membership — so Riverpod compares a `bool` or an `int` and stops.
+/// visible row and this changes on every tick, so every reader `.select`s the
+/// single fact it draws — `active`, `count`, or its own membership.
 final sessionSelectionProvider =
     NotifierProvider<SessionSelectionController, SessionSelection>(
       SessionSelectionController.new,

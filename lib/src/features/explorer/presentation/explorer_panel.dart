@@ -57,9 +57,8 @@ import '../../sessions/domain/session.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 
-/// The prefix a "put this project in a context" menu value carries, so one
-/// `startsWith` tells them from the row's other verbs — the shape `new-with:`
-/// already uses for agents.
+/// Prefix on a "put this project in a context" menu value, so one `startsWith`
+/// tells it from the row's other verbs — the shape `new-with:` uses for agents.
 const _contextAction = 'context:';
 
 /// The two choices in that list that are not a context id. Neither can collide
@@ -67,50 +66,16 @@ const _contextAction = 'context:';
 const _noContext = 'none';
 const _newContext = 'new';
 
-/// What a project row's menu needs, read once by [ExplorerPanel]'s build.
-///
-/// Project menus are built **eagerly**, one per row, so anything resolved
-/// inside the row loop is resolved once per project. That is not hypothetical:
-/// `_agentMenuItems` asked the database which agents were installed *per row*,
-/// so drawing 31 projects issued 31 identical queries on every rebuild of a
-/// pane that rebuilds whenever a session moves. [installations] is that answer,
-/// memoised per environment — two queries on the owner's machine, not
-/// thirty-one — and the contexts beside it are one in-memory list and one pass
-/// over the project rows already in memory.
+/// What a project row's menu needs, resolved once by [ExplorerPanel]'s build:
+/// menus are built eagerly per row, so a per-row DAO read is one query a row.
 typedef _RowMenuFacts = ({
   List<Workspace> workspaces,
   Map<String, int> counts,
   Map<String, List<AgentInstallation>> installations,
 });
 
-/// The unified left pane: **Project → Session**, and deliberately nothing else.
-///
-/// Loop 58 made this Project → Repository → Worktree → Session, to answer
-/// *which of these twelve clones is that agent working in?* It answered it in
-/// the wrong place. A `project_rescan` of the owner's hub recorded **69**
-/// checkouts — a dozen sibling clones and ~25 `wt-*` worktrees — and the tree
-/// dutifully drew a row for each, every row watching a per-checkout git
-/// provider: **six git subprocesses per recorded checkout**, 414 of them to
-/// draw thirteen visible rows, repeated on every workspace mutation, each on a
-/// WSL path reached over 9p at 1.19 ms a stat. That is the freeze the owner
-/// reported. `test/features/explorer/checkout_scale_cost_test.dart` is the
-/// measurement.
-///
-/// The question was good; the surface was wrong. *Which checkout is this agent
-/// in* is a question about the session you are looking at, so it is answered
-/// where that session is already the subject — the right sidebar's Changes,
-/// GitHub and Repository surfaces, from [projectCheckoutsProvider]. The
-/// Explorer lists sessions, and a session's own card still carries the
-/// sub-path it works in.
-///
-/// **What it costs to open a project.** Two indexed DAO reads. No git at all:
-/// there is no longer a row here that describes a checkout, so there is
-/// nothing here to ask git about. What a session card costs is charged when
-/// that card is *inflated*, because [NativeSessionRow] and
-/// [ImportedSessionRow] are `ConsumerWidget`s that watch inside their own
-/// `build` — which is the distinction the old checkout rows got wrong, since
-/// they watched during the panel's own build and so paid for every row the
-/// list would never show.
+/// The unified left pane: Project → Session, and deliberately nothing else;
+/// checkout rows were removed for their git cost (`checkout_scale_cost_test`).
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
 
@@ -216,14 +181,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere();
   }
 
-  /// Opens [path] in the host's file manager and says why when it cannot.
-  ///
-  /// [RevealInFileManager.reveal] reports its two real failures — no file
-  /// manager, and a path with no host spelling — as a [RevealOutcome] rather
-  /// than a throw, so a `catch` here would never fire and the click would be
-  /// silent. The menu entry is hidden on rows that cannot be revealed
-  /// ([_pathMenuItems]); this covers the ones that fail anyway, such as a file
-  /// manager that will not start.
+  /// Opens [path] in the host's file manager. [RevealInFileManager.reveal]
+  /// reports its failures as a [RevealOutcome], never a throw, so no `catch`.
   Future<void> _reveal(EnvironmentPath path) async {
     final outcome = await ref.read(revealInFileManagerProvider).reveal(path);
     if (!outcome.ok) _say(outcome.error!);
@@ -250,16 +209,12 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (repos.length == 1) {
       ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
     }
-    // **Nothing is scanned here.** Expanding used to start a full walk of every
-    // CLI store — and `select` above started a second — so the spinner was up
-    // and the frame pipeline starved for as long as it took, every single time.
-    // The import runs once after the first frame and on demand from this row's
-    // "Refresh CLI sessions"; `explorer_expand_scan_cost_test.dart` pins the
-    // zero.
+    // Nothing is scanned here: expanding used to start a full walk of every CLI
+    // store. `explorer_expand_scan_cost_test.dart` pins the zero.
   }
 
-  /// Starts a session in one click. [installation] is the "…with" choice; left
-  /// out, the configured default agent for that environment is used.
+  /// Starts a session in one click; [installation] left out means the
+  /// configured default agent for that environment.
   Future<void> _startSession({
     required Repository repository,
     EnvironmentPath? existingWorktree,
@@ -276,29 +231,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (message != null) _say(message);
   }
 
-  /// Where a session started *at the project* runs: the first checkout the
-  /// picker would offer — parents before worktrees, and whatever the followed
-  /// session is working in first of all — falling back to any row at all for a
-  /// project git has not classified yet.
-  ///
-  /// One rule, so the `+` and the dialog beside it cannot land in two different
-  /// clones of the same project.
+  /// Where a session started *at the project* runs — the first checkout the
+  /// picker would offer, so the `+` and the dialog cannot pick different clones.
   Repository? _defaultCheckoutOf(Project project) =>
       ref.read(checkoutsInProjectProvider(project.id)).firstOrNull ??
       ref.read(repositoryDaoProvider).getByProject(project.id).firstOrNull;
 
-  /// The `+` on a project row: **starts** a session, with no dialog at all.
-  ///
-  /// The owner's words: *"the plus icon on a project in the Explorer should
-  /// start a new session with defaults, without dialogs"*. The defaults are
-  /// [SessionDefaults] — the same ones the dialog opens on — so the two doors
-  /// cannot start different agents.
-  ///
-  /// **When the defaults are not enough, the dialog opens instead.** No
-  /// checkout to run in, or no agent installed where it would run: this button
-  /// spends tokens and runs an agent, so it must never guess at something
-  /// nobody asked for, and the dialog is where the missing piece is named and
-  /// can be filled in.
+  /// The `+` on a project row: starts a session with [SessionDefaults] and no
+  /// dialog — unless a piece is missing, when the dialog opens to name it.
   Future<void> _startWithDefaults(Project project) async {
     final repository = _defaultCheckoutOf(project);
     final defaults = repository == null
@@ -327,10 +267,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     setState(() => _expandedProjects.add(project.id));
     final repo = repository ?? _defaultCheckoutOf(project);
     if (repo == null) {
-      // Still a refusal, and deliberately: the dialog opens on the app's
-      // current selection, so opening it here would point it at whichever
-      // *other* project was last selected — a worse answer than a sentence
-      // naming the real problem.
+        // Still a refusal: the dialog opens on the current selection, so opening
+        // it here would point it at whichever other project was last selected.
       _say('This project has no Git repositories to run in.');
       return;
     }
@@ -346,9 +284,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         .togglePinnedProject(project.id);
   }
 
-  /// Opens the project's root folder in the configured code editor. When
-  /// [chooseSubfolder] is set, a directory picker (rooted at the project) lets
-  /// the user open a sub-folder instead.
+  /// With [chooseSubfolder], a picker rooted at the project chooses a
+  /// sub-folder to open instead of the project root.
   Future<void> _openProjectInEditor(
     Project project, {
     bool chooseSubfolder = false,
@@ -479,21 +416,15 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       settingsControllerProvider.select((s) => s.hideEmptySections),
     );
     final agentFilter = ref.watch(explorerAgentFilterProvider);
-    // Watched only under the condition the sections are actually drawn under,
-    // because watching it is what pays for the empty filter — see
-    // [explorerSectionLayoutProvider]. A search narrows the tree to the
-    // projects you named, and a set of saved groups above two results is the
-    // answer to a question nobody asked, so neither the groups nor their
-    // filter exist while the box has something in it.
+    // Watched only under the condition the sections are drawn under: watching it
+    // is what pays for the empty filter — see [explorerSectionLayoutProvider].
     final layout = query.isEmpty && projects.isNotEmpty
         ? ref.watch(explorerSectionLayoutProvider)
         : null;
 
     final syncing = ref.watch(sessionSyncingProvider) > 0;
-    // Only whether the mode is on, never the ticked set: this panel builds
-    // every row of every expanded project, so watching the selection itself
-    // would rebuild the whole tree to tick one box. The count is the bar's
-    // business and membership is each row's own — see [sessionSelectionProvider].
+    // Only whether the mode is on, never the ticked set: this panel builds every
+    // row of every expanded project, so watching membership would rebuild it all.
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),
     );
@@ -512,17 +443,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     } else {
       body = ListView(
         // The same gap the rows put between themselves, above the first and
-        // below the last, so the column has one rhythm from end to end.
+        // below the last.
         padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
         children: [
-          // Above the tree, and spliced into the *same* list rather than
-          // wrapped in a column of their own, so the sliver goes on inflating
-          // only what is on screen — see [explorerSectionNodes].
-          //
-          // Hidden while the search box has something in it: that box means
-          // "show me the projects called this", and a full set of saved groups
-          // sitting above the two results it found is the answer to a question
-          // nobody asked.
+          // Spliced into the *same* list rather than wrapped in a column, so the
+          // sliver goes on inflating only what is on screen.
           if (query.isEmpty) ...explorerSectionNodes(ref),
           for (final project in projects) ..._projectNodes(project, menuFacts),
         ],
@@ -545,16 +470,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-            // **One funnel, for everything the Explorer is holding back.**
-            // Two view controls that both hide rows would be two things to
-            // find and two stories about why a session is not on screen, so
-            // the agent filter moved into the affordance the empty-section
-            // filter had already established rather than growing a second one
-            // beside it. The glyph fills while a narrowing is in force and the
-            // tooltip names both halves — which agents are off the list, and
-            // how many sections were folded away — because a control that
-            // hides rows and says nothing is how a user concludes a session is
-            // gone.
+            // One funnel for everything the Explorer holds back: two hiding
+            // controls would be two stories about why a session is off screen.
             if (projects.isNotEmpty)
               _ExplorerFilterButton(
                 filter: agentFilter,
@@ -563,10 +480,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 sectionsOnScreen: layout != null,
               ),
             IconButton(
-              // The mode's only entrance, and one of its two exits. A toggle
-              // rather than a modifier key: Ctrl-click is invisible until somebody
-              // tells you about it, and the price of making it visible is that a
-              // click means "tick" while the mode is on.
+              // A toggle rather than Ctrl-click, which is invisible until
+              // somebody tells you about it.
               tooltip: selecting ? 'Leave selection' : 'Select sessions',
               isSelected: selecting,
               icon: Icon(selecting ? AppIcons.x : AppIcons.check),
@@ -575,10 +490,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             ),
             IconButton(
               tooltip: 'Detect CLI sessions',
-              // Not `globe`, which is the Browser surface's glyph (Loop 56 found
-              // the collision and left it here). Finding conversations an agent
-              // already wrote is history, and the imported cards use this glyph for
-              // exactly that.
+              // Not `globe`, which is the Browser surface's glyph; imported
+              // cards already use this one for "an agent already wrote this".
               icon: const Icon(AppIcons.clockCounterClockwise),
               onPressed: _showDetected,
             ),
@@ -629,8 +542,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   // --- rows ------------------------------------------------------------------
 
   /// The rows for one project: its card, then (when expanded) its tree.
-  ///
-  /// [contexts] is read once by [build] rather than per row — see there.
   List<Widget> _projectNodes(Project project, _RowMenuFacts menu) {
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
     final pinned = ref.watch(
@@ -639,9 +550,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final expanded = _expandedProjects.contains(project.id);
     final missing =
         ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
-    // Sessions are counted from the database; changed files are whatever the
-    // per-checkout providers have already answered, so a header never starts a
-    // second wave of git.
+    // Sessions come from the database; changed files are whatever the
+    // per-checkout providers already answered, so no header starts a git wave.
     final summary = ref.watch(projectSummaryProvider(project.id));
     final envDao = ref.watch(executionEnvironmentDaoProvider);
     final env = envDao.getById(project.environmentId);
@@ -699,9 +609,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ),
           DesktopMenuItem(
             value: 'refresh',
-            // The reading's age, beside the control that re-takes it — §19.
-            // Built when the menu opens (`RowMenuItemBuilder`), so it is the
-            // age now and not the age when the row was drawn.
+            // The reading's age, built when the menu opens, so it is the age
+            // now and not the age when the row was drawn.
             label: 'Refresh CLI sessions${_checkedSuffix(project.id)}',
             icon: AppIcons.arrowsClockwise,
           ),
@@ -781,13 +690,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       rows.add(
         _TreeHint(
           depth: 1,
-          // Never "no sessions yet" over sessions the user's own filter took
-          // away: that sentence invites them to start work they already have.
-          // A project emptied by the filter says so, and says how much.
+          // Never "no sessions yet" over sessions the filter took away: that
+          // invites the user to start work they already have.
           message: visible.hidden == 0
-              // "No sessions yet" is a claim about the CLI stores, and before
-              // the first-frame import lands nobody has read them. §19: say
-              // what was observed, never more.
+              // Before the first-frame import lands nobody has read the CLI
+              // stores, so "no sessions yet" would be a claim about nothing.
               ? ref.watch(cliSessionsCheckedProvider).forProject(project.id) ==
                         null
                     ? 'No sessions yet — the CLI stores have not been checked.'
@@ -798,10 +705,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       return rows;
     }
     rows.addAll(_sessionCards(project, sessions, depth: 1));
-    // Said where the rows are missing rather than only in the header, and only
-    // while a narrowing is actually in force: a partly-filtered list looks
-    // exactly like a shorter one, and this is the sentence that tells the two
-    // apart.
+    // Said where the rows are missing, and only while a narrowing is in force:
+    // a partly-filtered list looks exactly like a shorter one.
     if (visible.hidden > 0) {
       rows.add(
         _TreeHint(
@@ -821,13 +726,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     required int depth,
   }) {
     if (sessions.isEmpty) return const [];
-    // Where each of this project's repositories lives, read **once**. The two
-    // `_subPathFor*` helpers used to ask the DAO per row, and this list is
-    // built for every session in the project — only the cards on screen are
-    // *inflated* — so an Explorer rebuild cost one query per session: 403 of
-    // them at 400 sessions, on every session switch, because a switch moves
-    // placement and this tree watches it. Measured in
-    // `session_switch_cost_test.dart`.
+    // Read once: the `_subPathFor*` helpers used to ask the DAO per row, one
+    // query a session on every session switch — `session_switch_cost_test`.
     final repositoryPaths = <String, EnvironmentPath>{
       for (final repository
           in ref.read(repositoryDaoProvider).getByProject(project.id))
@@ -836,10 +736,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final pinnedIds = ref
         .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
         .toSet();
-    // The one reading every session list orders by, read once for the whole
-    // row. Costs a map lookup per session — the status registry already holds
-    // these — so it is affordable at the 400 sessions
-    // `session_switch_cost_test` counts.
+    // The one reading every session list orders by, read once for the row; the
+    // status registry already holds these, so it is a map lookup per session.
     final lastActiveOf = ref.read(sessionLastActiveProvider);
     final forest = buildSessionForest(
       sessions.native,
@@ -847,12 +745,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       lastActive: lastActiveOf.call,
     );
 
-    // Pinned first, then most recently **active** — applied to the *top* of
-    // each lineage so a child never floats above the session it came from.
-    //
-    // Re-read on rebuild, never on a timer: the order settles when something
-    // the Explorer already watches changes, which is what keeps a list the user
-    // is reading from resorting itself under the cursor.
+    // Pinned first, then most recently active, applied to the *top* of each
+    // lineage so a child never floats above the session it came from.
     final entries =
         <({SessionActivityOrder order, bool pinned, List<Widget> rows})>[
           for (final node in forest)
@@ -930,20 +824,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
   // --- contexts ---------------------------------------------------------------
 
-  /// Which context this project is in, offered as the list of contexts it could
-  /// be in instead.
-  ///
-  /// **Moving is one gesture, not two.** Every choice — including *No context* —
-  /// is a row in the same list, so changing a project's context is one click on
-  /// the answer rather than "remove from this one" followed by "add to that
-  /// one". [WorkspacesController.assign] is a single `UPDATE`, so there is no
-  /// moment in between where the project belongs nowhere.
-  ///
-  /// **Leaving a context never leaves the workspace.** *No context* unassigns
-  /// and stops; the row above it, "Remove from workspace", is the destructive
-  /// one and stays where it is, in the destructive block, drawn in the error
-  /// colour. Two verbs that sound alike are kept apart by what they say and by
-  /// where they sit.
+  /// Which context this project is in, offered as the list it could be in
+  /// instead — one click to move, and *No context* never leaves the workspace.
   List<PopupMenuEntry<String>> _contextMenuItems(
     Project project,
     _RowMenuFacts menu,
@@ -1011,13 +893,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
   // --- shared menu fragments --------------------------------------------------
 
-  /// `New session with <agent>` for every agent installed where the row lives.
-  ///
-  /// Only offered when there is a choice to make: with one installation the `+`
-  /// already uses it, and a menu item that repeats a button teaches nothing.
-  ///
-  /// [installations] is the answer for this row's environment, read once for
-  /// the whole list — see [_RowMenuFacts]. It used to be one query per row.
+  /// `New session with <agent>`, offered only when there is a choice: with one
+  /// installation the `+` already uses it.
   List<PopupMenuEntry<String>> _agentMenuItems(
     List<AgentInstallation>? installations,
   ) {
@@ -1047,11 +924,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         .firstOrNull;
   }
 
-  /// The path items a folder row carries. "Copy path" always works — it is
-  /// text. "Open in File Explorer" is offered only where the host can actually
-  /// reach [path]: an SSH-owned row has no local spelling at all, and an entry
-  /// that always fails is worse than no entry. [RevealInFileManager.canReveal]
-  /// starts no process, so asking it while building a menu is free.
+  /// "Open in File Explorer" is offered only where the host can reach [path] —
+  /// an SSH-owned row has no local spelling and the entry would always fail.
   List<PopupMenuEntry<String>> _pathMenuItems(EnvironmentPath path) => [
     const DesktopMenuDivider(),
     if (ref.read(revealInFileManagerProvider).canReveal(path))
@@ -1069,9 +943,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
   // --- paths ------------------------------------------------------------------
 
-  /// [repositoryPaths] is this project's repositories, already read — see
-  /// [_sessionCards]. A row whose repository is not in it belongs to another
-  /// project and has no sub-path *here*, which is the same answer the DAO gave.
+  /// [repositoryPaths] is this project's repositories, already read. A row
+  /// whose repository is absent belongs to another project and has no sub-path.
   String? _subPathForNative(
     Project project,
     Session session,
@@ -1091,15 +964,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   }
 }
 
-/// The pane header's action row, sized for the pane the Explorer actually
-/// clamps to.
-///
-/// Material gives an `IconButton` a 48px square, and the Explorer's minimum
-/// width is 200: four of them plus the sync spinner want 227px of that row, so
-/// the header wore yellow stripes the moment anyone dragged the pane in. The
-/// header is only [Chrome.tabStrip] tall anyway, so the 48dp square was never
-/// honoured here vertically either — this makes the width agree with the
-/// height that was already imposed.
+/// The pane header's action row, clamped to 30px slots: Material's 48px
+/// IconButton squares overflow the Explorer's 200px minimum width.
 class _HeaderActions extends StatelessWidget {
   const _HeaderActions({required this.children});
 
@@ -1121,32 +987,10 @@ class _HeaderActions extends StatelessWidget {
   );
 }
 
-/// A non-interactive hint shown under an expanded, empty node.
-/// `1 session` / `3 sessions` — a count that reads as a sentence.
 String _sessionCount(int n) => '$n session${n == 1 ? '' : 's'}';
 
-/// **Everything the Explorer is hiding, behind one glyph.**
-///
-/// The empty-section filter shipped as a bare toggle here. It grew into a menu
-/// rather than acquiring a neighbour because a second hiding control would have
-/// been a second thing to find and a second explanation for the same
-/// observation — "a session I know I have is not on this list". One funnel now
-/// answers it, and both narrowings are ticked in the same list.
-///
-/// **The agent rows toggle**, so a set is reachable: tick Codex for Codex only,
-/// tick Claude Code as well for the two of them, untick the last one to come
-/// back to everything. Selecting closes the menu — that is what a
-/// [PopupMenuButton] does, and inventing a menu that does not would trade a
-/// second click for a control that behaves like nothing else in the app.
-///
-/// **The glyph fills while the agent filter is narrowing**, and only then.
-/// Hiding empty sections is on by default and hides nothing a user chose to
-/// look at, so marking it would make the mark meaningless; a chosen narrowing
-/// is exactly the state that must be legible before anyone hovers. Shape rather
-/// than colour, and the tooltip says the same thing in words — see
-/// [agentFilterTooltip], which names the agents that are off the list rather
-/// than counting the rows, because counting them means sweeping projects nobody
-/// has opened.
+/// Everything the Explorer is hiding, behind one glyph. The icon fills only
+/// while the agent filter narrows — hiding empty sections is on by default.
 class _ExplorerFilterButton extends ConsumerWidget {
   const _ExplorerFilterButton({
     required this.filter,
@@ -1204,16 +1048,13 @@ class _ExplorerFilterButton extends ConsumerWidget {
             selected: filter.agentIds.contains(id),
           ),
         // Offered only where it can act: with a search narrowing the tree the
-        // sections are not drawn, and a tick over a surface that is not on
-        // screen is a control the user cannot check the effect of.
+        // sections are not drawn.
         if (sectionsOnScreen) ...[
           const PopupMenuDivider(),
           DesktopMenuItem(
             value: _emptySections,
-            // The wording the toggle had, kept: a section folded away for
-            // holding nothing is invisible, so this row is the only place a
-            // user learns "Checks failing" exists at all, and it says how many
-            // it is holding back rather than merely offering a switch.
+            // A section folded away for holding nothing is invisible, so this
+            // row is the only place a user learns it exists.
             label: !hidingEmptySections
                 ? 'Hide empty sections'
                 : hidden == 0

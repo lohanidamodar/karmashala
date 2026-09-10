@@ -7,26 +7,9 @@ import '../application/session_diff_stat.dart';
 import 'explorer_row.dart';
 import 'session_card.dart';
 
-/// A project, drawn to the same standard as the session cards beneath it.
-///
-/// The old header was a `ListTile` whose title row carried the name *and* the
-/// full path, so on a hub project the name was squeezed to nothing by a path
-/// nobody was reading. The card takes the session card's shape instead — a
-/// strong first line and a muted second — because a project and a session are
-/// the same kind of object to the eye scanning the pane:
-///
-/// ```
-/// ▾ 📁 popupbits          ● 2   6 sessions · 3 changed · 1 needs you  📌 + ⋮
-///      C:\Users\me\projects\popupbits
-/// ```
-///
-/// * **line 1** — disclosure, folder, the name, then everything the project is
-///   worth opening *for*: how many agents are running, the aggregate, and how
-///   much of it is waiting on the user. Counts that mean something are drawn in
-///   semantic colour; the neutral aggregate is grey, so a stuck agent does not
-///   read like a word.
-/// * **line 2** — the path, muted, and the only place a missing folder is
-///   reported. It is the line that gives way first.
+/// A project, drawn to the same standard as the session cards beneath it: line
+/// one is the name and what the project is worth opening for, line two the
+/// path, muted, and the only place a missing folder is reported.
 class ProjectCard extends StatelessWidget {
   const ProjectCard({
     required this.name,
@@ -55,13 +38,11 @@ class ProjectCard extends StatelessWidget {
   final String? environmentBadge;
   final ProjectSummary summary;
 
-  /// Opens the project. Null draws the same card as a plain header — the
-  /// companion uses it that way above a single project's sessions, where
-  /// there is nothing to navigate to.
+  /// Opens the project. Null draws the same card as a plain header, which is
+  /// how the companion uses it above a single project's sessions.
   final VoidCallback? onTap;
 
-  /// Starts a session in this project. Null where the surface has no such verb
-  /// — the companion can read a desktop's projects, not start work in them —
+  /// Starts a session in this project. Null where the surface has no such verb,
   /// and the button is then not drawn rather than drawn dead.
   final VoidCallback? onNewSession;
 
@@ -78,14 +59,9 @@ class ProjectCard extends StatelessWidget {
   /// word of aggregate is worth less than the row it would squeeze.
   static const aggregateWidth = 260.0;
 
-  /// And the narrowest that has room for the semantic badges *as well*.
-  ///
-  /// Two thresholds rather than one because the name is the row's only flexible
-  /// child: everything to its right is measured, so the facts have to be dropped
-  /// by the layout rather than squeezed by it. With the aggregate, the badges
-  /// and three buttons all drawn, a 294px pane overflowed by 60px — the same
-  /// failure Loop 50 §7 found by looking at the running app, and the reason
-  /// there is a widget test at this exact width now.
+  /// And the narrowest with room for the semantic badges *as well*. Two
+  /// thresholds because the name is the row's only flexible child: with all of
+  /// it drawn, a 294px pane overflowed by 60px.
   static const badgeWidth = 350.0;
 
   @override
@@ -128,13 +104,8 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
-  /// The same facts, stacked.
-  ///
-  /// A 390px phone cannot fit a name, an aggregate, a badge and a chevron on
-  /// one row without ellipsising the name to nothing — the row's whole reason
-  /// for existing. So the name keeps line one with the drill-in chevron, the
-  /// counts take line two, and the path takes line three. Nothing is dropped
-  /// and nothing new is invented: it is the desktop's own content, unstacked.
+  /// The same facts, stacked. A 390px phone cannot fit name, aggregate, badge
+  /// and chevron on one row without ellipsising the name to nothing.
   Widget _touchBody(
     BuildContext context,
     TextStyle? muted,
@@ -183,8 +154,7 @@ class ProjectCard extends StatelessWidget {
                 onSelected: onMenu,
               ),
             const SizedBox(width: Insets.xs),
-            // The affordance a phone reads as "this opens": the same caret the
-            // desktop uses for a collapsed project, on the edge a thumb
+            // The affordance a phone reads as "this opens", on the edge a thumb
             // travels towards.
             Icon(
               AppIcons.caretRight,
@@ -263,10 +233,9 @@ class ProjectCard extends StatelessWidget {
           color: missing ? scheme.error : scheme.onSurfaceVariant,
         ),
         SizedBox(width: density.glyphGap),
-        // Two measured children sharing the row, so neither can push the other
-        // off the end: the name gives way first and the aggregate ellipsises
-        // rather than overflowing. Fixed-width facts beside an `Expanded` name
-        // is what overflowed a 294px pane by 60 — see [badgeWidth].
+        // Two measured children sharing the row, so neither pushes the other
+        // off the end. Fixed-width facts beside an `Expanded` name is what
+        // overflowed a 294px pane by 60 — see [badgeWidth].
         Expanded(
           flex: 2,
           child: Text(
@@ -315,15 +284,9 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
-  /// The aggregate and the attention clause as **one** run of text.
-  ///
-  /// One widget, two colours: the neutral counts stay grey and "1 needs you" is
-  /// drawn in the attention colour, because a count that means something must
-  /// not read like a word. Keeping it as a single [Text] also means it
-  /// ellipsises as a unit instead of the clause after it falling off the row —
-  /// and that the app's one attention phrase appears here as part of a longer
-  /// sentence rather than as a second widget saying exactly what the status bar
-  /// says.
+  /// The aggregate and the attention clause as **one** run of text: two colours
+  /// in one widget, so a count that means something does not read like a word,
+  /// and the whole run ellipsises as a unit.
   Widget _aggregate(
     String label,
     TextStyle? muted,
@@ -352,9 +315,8 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
-  /// The path, hanging under the **name** rather than under the caret: the two
-  /// glyphs and their gaps, measured, so the two lines share a left edge at any
-  /// density instead of at one hand-tuned width.
+  /// The path hangs under the **name**, not the caret: the two glyphs and their
+  /// gaps, measured, so the lines share a left edge at any density.
   Widget _line2(BuildContext context, TextStyle? muted, UiDensity density) =>
       Padding(
         padding: EdgeInsets.only(left: density.icon * 2 + 2 + density.glyphGap),

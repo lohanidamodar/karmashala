@@ -5,13 +5,9 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../application/bulk_session_delete.dart';
 
-/// Asks before deleting a ticked set of sessions.
-///
-/// Returns null when the user backs out, otherwise **whether to also delete the
-/// agents' transcripts** — unticked by default, exactly as the single-session
-/// delete offers it, because a transcript is the one thing here that nothing
-/// can put back. There is no second destructive verb beside it: a set assembled
-/// in a few clicks is the wrong place to put "Delete" and "End" side by side.
+/// Asks before deleting a ticked set of sessions. Returns null when the user
+/// backs out, otherwise whether to also delete the agents' transcripts —
+/// unticked by default, since a transcript is the one thing nothing puts back.
 Future<bool?> confirmBulkSessionDelete(
   BuildContext context,
   BulkDeleteTargets targets,
@@ -40,9 +36,8 @@ Future<bool?> confirmBulkSessionDelete(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Named, not just counted: a selection can hold rows that are
-                // scrolled away or filtered out of sight, and this is where the
-                // user finds out what is actually in it.
+                // Named, not just counted: a selection can hold rows scrolled
+                // away or filtered out, and this is where the user sees them.
                 Text('Removes $names from Karmashala.'),
                 const SizedBox(height: Insets.md),
                 CheckboxListTile(
