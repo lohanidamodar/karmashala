@@ -64,7 +64,10 @@ extension SessionStartVerbs on SessionLauncher {
 
   /// The body of [SessionLauncher.launch], which stays on the class: two test
   /// doubles subclass it, and an extension member cannot be overridden.
-  Future<SessionLaunchResult> _launch(SessionLaunchRequest request) async {
+  Future<SessionLaunchResult> _launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) async {
     // Refused on the shape of the request alone: the reuse below silently
     // prefers the resume, so falling through hands the user the other thing.
     if (request.restartSessionId != null &&
@@ -306,6 +309,7 @@ extension SessionStartVerbs on SessionLauncher {
           firstMessage,
           systemPromptFilePath,
           workingDirectoryNotice,
+          externalTerminal: externalTerminal,
         ),
       };
       _publish(_whatALaunchMoved(request, id, reused: reused != null));

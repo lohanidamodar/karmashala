@@ -478,8 +478,8 @@ class SessionActions {
             purpose: SessionPurpose.newSession,
             surface: SessionSurface.external,
             permissionOverride: permissionMode,
-            externalTerminal: terminal,
           ),
+          externalTerminal: terminal,
         );
     return launched.session;
   }

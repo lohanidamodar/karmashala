@@ -2,7 +2,6 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
-import '../../terminal/data/system_terminal_service.dart';
 import 'session_lineage.dart';
 
 /// Where a session's process actually lives — a **runtime** distinction: how it
@@ -73,7 +72,6 @@ class SessionLaunchRequest {
     this.permissionOverride,
     this.modelOverride,
     this.view,
-    this.externalTerminal,
     this.targetPaneId,
   });
 
@@ -135,10 +133,6 @@ class SessionLaunchRequest {
 
   /// Forced rendering, or `null` to take the agent's default.
   final SessionView? view;
-
-  /// Which external terminal to launch into, for [SessionSurface.external].
-  /// `null` takes the configured default; the parameter exists for the dialog.
-  final SystemTerminal? externalTerminal;
 
   /// An empty terminal region this in-app launch should occupy. Null, stale or
   /// already filled fall back to a new tab rather than failing the launch.

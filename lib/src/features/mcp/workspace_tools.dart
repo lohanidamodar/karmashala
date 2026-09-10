@@ -1,5 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../explorer/application/checkout.dart';
 import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';
 import '../projects/application/projects_controller.dart';
@@ -87,6 +88,7 @@ class WorkspaceControlTools {
                 repository.path,
                 excluding: '',
                 among: rows,
+                pathsMatch: samePath,
               ))
                 <String, Object?>{
                   'sessionId': session.id,

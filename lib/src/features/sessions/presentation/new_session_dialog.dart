@@ -99,9 +99,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   ? SessionSurface.external
                   : SessionSurface.pane,
               useWorktree: _useWorktree,
-              externalTerminal: _terminal,
               targetPaneId: widget.targetPaneId,
             ),
+            externalTerminal: _terminal,
           );
       // Now — and only now — the app follows, by the rule the Explorer uses
       // when a row is clicked. Only when the project differs: selecting scans.

@@ -94,15 +94,16 @@ extension SessionSurfaceStarters on SessionLauncher {
     bool assignsOwnId,
     String? firstMessage,
     String? systemPromptFilePath,
-    String? workingDirectoryNotice,
-  ) async {
+    String? workingDirectoryNotice, {
+    SystemTerminal? externalTerminal,
+  }) async {
     // The same resolver as the pane path, so the two surfaces cannot drift.
     final environment = _ref
         .read(environmentResolverProvider)
         .resolveFor(workingDirectory)
         .require;
     final terminal =
-        request.externalTerminal ??
+        externalTerminal ??
         await _ref.read(defaultSystemTerminalProvider.future);
     if (terminal == null) {
       throw StateError('No external terminal is configured.');

@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fixtures.dart';
@@ -40,7 +41,10 @@ class _CountingLauncher extends SessionLauncher {
   int launches = 0;
 
   @override
-  Future<SessionLaunchResult> launch(SessionLaunchRequest request) async {
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) async {
     launches++;
     // Stands in for creating a worktree on `/mnt/c`: the part of a launch that
     // outlasts the caller's patience.

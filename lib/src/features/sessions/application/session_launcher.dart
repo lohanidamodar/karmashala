@@ -108,8 +108,12 @@ class SessionLauncher {
 
   /// Creates the session row and starts it on the requested surface. The body
   /// is `_launch`, because two test doubles override this by subclassing.
-  Future<SessionLaunchResult> launch(SessionLaunchRequest request) =>
-      _launch(request);
+  /// [externalTerminal] is a value, not part of the request: the record of what
+  /// a session is knows nothing about the emulators installed on this machine.
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) => _launch(request, externalTerminal: externalTerminal);
 
   /// Where a depth walk reads from. Exposed so the MCP surface can check the
   /// cap before doing any work it would have to undo.

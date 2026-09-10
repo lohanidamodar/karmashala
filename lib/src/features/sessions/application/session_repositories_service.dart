@@ -75,7 +75,12 @@ class SessionRepositoriesService {
           : CheckoutIsolation.shared,
       sharedWith: isolated
           ? const []
-          : sessionsWorkingIn(directory, excluding: session.id, among: others),
+          : sessionsWorkingIn(
+              directory,
+              excluding: session.id,
+              among: others,
+              pathsMatch: samePath,
+            ),
     );
   }
 

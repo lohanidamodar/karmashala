@@ -133,8 +133,8 @@ Future<String> launch(
           title: 'Work',
           purpose: SessionPurpose.newSession,
           surface: surface,
-          externalTerminal: _fixedTerminal,
         ),
+        externalTerminal: _fixedTerminal,
       );
   return launched.session.id;
 }

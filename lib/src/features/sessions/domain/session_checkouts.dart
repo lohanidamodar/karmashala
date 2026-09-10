@@ -1,5 +1,4 @@
 import 'package:agent_cli/process.dart';
-import '../../explorer/application/checkout.dart';
 import 'session.dart';
 
 /// Whether a directory a session works in belongs to that session alone —
@@ -61,17 +60,19 @@ class SessionCheckout {
 }
 
 /// The sessions among [among] recorded in [directory], excluding [excluding].
-/// [samePath], not `==`: one tree reaches this app spelled three ways.
+/// [pathsMatch], not `==`: one tree reaches this app spelled three ways, and
+/// the caller owns that spelling rule.
 List<Session> sessionsWorkingIn(
   EnvironmentPath directory, {
   required String excluding,
   required Iterable<Session> among,
+  required bool Function(String, String) pathsMatch,
 }) => [
   for (final candidate in among)
     if (candidate.id != excluding && !candidate.isArchived)
       if (candidate.workingDirectory ?? candidate.worktree
           case final recorded?)
         if (recorded.environmentId == directory.environmentId &&
-            samePath(recorded.path, directory.path))
+            pathsMatch(recorded.path, directory.path))
           candidate,
 ];

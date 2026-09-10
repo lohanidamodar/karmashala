@@ -194,8 +194,8 @@ void main() {
           title: 'Work',
           purpose: SessionPurpose.newSession,
           surface: SessionSurface.external,
-          externalTerminal: terminal,
         ),
+        externalTerminal: terminal,
       );
 
       expect(

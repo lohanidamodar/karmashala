@@ -449,9 +449,9 @@ void main() {
                   ? SessionPurpose.existingSession
                   : SessionPurpose.newSession,
               surface: SessionSurface.external,
-              externalTerminal: _terminal,
               resumeExternalSessionId: resuming ? conversation : null,
             ),
+            externalTerminal: _terminal,
           );
           external.add({
             'agent': agentId,

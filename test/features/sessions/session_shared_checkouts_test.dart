@@ -6,6 +6,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/mcp/workspace_tools.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -278,6 +279,7 @@ void main() {
             EnvironmentPath(environmentId: 'windows', path: path),
             excluding: '',
             among: SessionDao(db).getAll(),
+            pathsMatch: samePath,
           ),
           isEmpty,
         );
@@ -389,6 +391,7 @@ void main() {
           ),
           excluding: '',
           among: SessionDao(h.db).getAll(),
+          pathsMatch: samePath,
         ),
         isEmpty,
       );
