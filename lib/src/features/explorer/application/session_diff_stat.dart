@@ -5,10 +5,10 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'checkout.dart';
 
 /// How much work a session has produced, in the terms a row can show — a

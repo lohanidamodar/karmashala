@@ -9,7 +9,7 @@ import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../sessions/domain/session_resume.dart';
+import 'package:karmashala_session/resume.dart';
 import '../../agents/presentation/usage_chip.dart';
 
 /// What the selected accounts have left, beside the button that spends it. It

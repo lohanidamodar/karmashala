@@ -1,5 +1,5 @@
-import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:test/test.dart';
 
 void main() {
   const plain = SessionAttribution(

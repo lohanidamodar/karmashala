@@ -22,9 +22,7 @@ import '../application/delivery_update_service.dart';
 import '../application/session_archive_service.dart';
 import '../application/session_handoff_service.dart';
 import '../application/session_providers.dart';
-import '../domain/delivery_action.dart';
-import '../domain/delivery_stage.dart';
-import '../domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
 

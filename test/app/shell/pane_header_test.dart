@@ -30,7 +30,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';

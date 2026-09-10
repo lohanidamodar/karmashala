@@ -1,5 +1,5 @@
-import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:test/test.dart';
 
 SessionLineageNode _node(String id, {SessionLink? link}) =>
     SessionLineageNode(sessionId: id, title: 'Session $id', link: link);

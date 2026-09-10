@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/row_menu.dart';
-import '../../sessions/domain/session_lineage.dart';
+import 'package:karmashala_session/lineage.dart';
 import '../application/session_diff_stat.dart';
 import 'explorer_row.dart';
 

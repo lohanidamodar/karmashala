@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/session_event.dart';
+import 'package:karmashala_session/events.dart';
 
 /// Data-access for the **append-only** session event log. No update or delete
 /// (ADR 0003); [append] assigns the next per-session sequence atomically.

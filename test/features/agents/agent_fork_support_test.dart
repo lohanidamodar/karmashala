@@ -1,5 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 AgentDescriptor _descriptor(String id) => AgentRegistry.builtIn.byId(id)!;

@@ -1,10 +1,9 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import 'package:agent_cli/process.dart';
-import '../domain/session.dart';
-import '../domain/session_launch.dart';
-import '../domain/session_lineage.dart';
-import '../domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/lineage.dart';
 
 /// Data-access for [Session] rows. Hand-written SQL, no codegen.
 class SessionDao {

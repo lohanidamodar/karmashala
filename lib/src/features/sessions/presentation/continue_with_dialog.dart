@@ -6,8 +6,8 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/permission_mode_picker.dart';
 import '../application/session_handoff_service.dart';
-import '../domain/handoff_packet.dart';
-import '../domain/session_fork.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/launch.dart';
 
 /// What offering "Continue with…" promises, wherever it is offered from. The
 /// row is a shorter path *to* a confirmation, never a way past one.

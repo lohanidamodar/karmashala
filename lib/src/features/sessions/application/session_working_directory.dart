@@ -6,7 +6,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import 'session_providers.dart';
 
 /// The directory a session's agent actually runs in: what it recorded, then its

@@ -25,16 +25,10 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/session_repository_dao.dart';
-import '../domain/session.dart';
-import '../domain/session_attribution.dart';
-import '../domain/session_depth.dart';
-import '../domain/session_launch.dart';
-import '../domain/session_lineage.dart';
-import '../domain/session_naming.dart';
-import '../domain/session_model.dart';
-import '../domain/session_permission.dart';
-import '../domain/session_resume.dart';
-import '../domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/resume.dart';
 import 'decision_recorder.dart';
 import 'handoff_packet_files.dart';
 import 'session_launch_arguments.dart';
@@ -108,8 +102,12 @@ class SessionLauncher {
 
   /// Creates the session row and starts it on the requested surface. The body
   /// is `_launch`, because two test doubles override this by subclassing.
-  Future<SessionLaunchResult> launch(SessionLaunchRequest request) =>
-      _launch(request);
+  /// [externalTerminal] is a value, not part of the request: the record of what
+  /// a session is knows nothing about the emulators installed on this machine.
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) => _launch(request, externalTerminal: externalTerminal);
 
   /// Where a depth walk reads from. Exposed so the MCP surface can check the
   /// cap before doing any work it would have to undo.

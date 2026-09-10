@@ -10,7 +10,7 @@ import '../../explorer/application/session_context.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_plan_providers.dart';
 import '../application/session_ui_providers.dart';
-import '../domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 
 /// Which session's plan the panel describes: the one **on screen**. One
 /// session, not four — every pane at once is four transcript parses per tick.

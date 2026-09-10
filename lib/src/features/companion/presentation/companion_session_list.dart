@@ -9,7 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';

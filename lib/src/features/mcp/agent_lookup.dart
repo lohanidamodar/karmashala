@@ -4,7 +4,7 @@ import '../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import '../sessions/application/session_launcher.dart';
-import '../sessions/domain/session_launch.dart';
+import 'package:karmashala_session/launch.dart';
 
 /// The registry's id for a CLI name a caller wrote, or null when nothing
 /// matches it.

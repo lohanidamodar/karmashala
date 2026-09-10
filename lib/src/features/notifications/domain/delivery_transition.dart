@@ -1,4 +1,4 @@
-import '../../sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import 'watched_session.dart';
 
 /// One session's delivery state, and what it was the last time it was read —

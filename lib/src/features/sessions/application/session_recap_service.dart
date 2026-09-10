@@ -8,7 +8,7 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/application/session_model_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
-import '../domain/session_recap.dart';
+import 'package:karmashala_session/transcript.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';

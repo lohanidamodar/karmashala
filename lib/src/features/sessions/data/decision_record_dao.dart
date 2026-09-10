@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/decision_record.dart';
+import 'package:karmashala_session/events.dart';
 
 /// Data-access for the **append-only** decision record (schema v23). No update
 /// and no delete; a second identical decision appends a second row.

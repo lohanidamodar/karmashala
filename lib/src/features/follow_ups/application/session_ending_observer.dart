@@ -4,7 +4,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import '../../terminal/application/pane_exit_signal.dart';
 import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';

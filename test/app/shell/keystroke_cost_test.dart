@@ -27,8 +27,7 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala/src/features/sessions/presentation/activity_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';

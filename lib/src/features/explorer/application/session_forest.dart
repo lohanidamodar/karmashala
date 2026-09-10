@@ -1,6 +1,6 @@
-import '../../sessions/domain/session.dart';
-import '../../sessions/domain/session_last_active.dart';
-import '../../sessions/domain/session_lineage.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/resume.dart';
+import 'package:karmashala_session/lineage.dart';
 
 /// One session as the tree draws it, with the sessions that came from it
 /// hanging underneath.

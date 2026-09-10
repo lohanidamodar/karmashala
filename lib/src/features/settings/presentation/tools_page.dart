@@ -21,7 +21,7 @@ import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
     show healthColor, healthIcon;
 import '../../mcp/control_server_status.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../projects/application/projects_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../application/settings_controller.dart';

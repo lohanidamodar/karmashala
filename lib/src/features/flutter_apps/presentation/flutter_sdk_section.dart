@@ -7,7 +7,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../../core/util/file_picking.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:agent_cli/process.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/flutter_sdk_readings.dart';

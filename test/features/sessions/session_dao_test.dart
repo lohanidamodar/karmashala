@@ -5,8 +5,8 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

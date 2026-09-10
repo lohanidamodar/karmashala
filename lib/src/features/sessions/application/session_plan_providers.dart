@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import '../domain/session_launch.dart';
+import 'package:karmashala_session/launch.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';

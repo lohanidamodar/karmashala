@@ -1,5 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 
 /// How a session stopped — **not one event**, and the difference is the whole
 /// feature. Five values: losing sight of a session is its own state.

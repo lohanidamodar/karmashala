@@ -1,0 +1,33 @@
+name: karmashala_session
+description: >-
+  What a session is, as values: the record and its lifecycle states, what a
+  launch asks for and runs under, the resume rules and whereabouts, lineage
+  and handoff, the event and decision vocabulary, the transcript readings, and
+  the delivery ladder. Not the providers, the launcher or any UI. Pure Dart, so
+  it runs under `dart test` without a `flutter_tester` or a `sqlite3.dll`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `EnvironmentPath` for the directories a session works in, the descriptors a
+  # launch and a resume read, `AgentInstallation` for what a launch runs, and
+  # `AgentStatusReport` for the newest evidence of activity.
+  agent_cli:
+    path: ../agent_cli
+  # `Repository` for what a launch is against, and the diff, branch and
+  # pull-request values the delivery ladder is computed from.
+  karmashala_git:
+    path: ../karmashala_git
+  # Splitting the file paths a transcript scanner finds.
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

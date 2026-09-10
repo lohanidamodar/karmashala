@@ -6,8 +6,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/session_changed_files_providers.dart';
-import '../domain/session_changed_files.dart';
-import '../domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_session/resume.dart' show describeAge;
 
 /// What one session changed, on demand. **Nothing polls it** — a reading costs
 /// a call or a transcript pass — and its age is on screen for the same reason.

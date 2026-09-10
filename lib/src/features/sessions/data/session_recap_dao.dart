@@ -1,6 +1,6 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../domain/session_recap.dart';
+import 'package:karmashala_session/transcript.dart';
 
 /// Data-access for the recap one session was asked for (schema v48). [write]
 /// replaces the row: a recap is a reading, and a stale one is a second answer.

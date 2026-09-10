@@ -4,7 +4,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../domain/session_resume.dart';
+import 'package:karmashala_session/resume.dart';
 import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_resume_providers.dart';

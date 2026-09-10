@@ -6,7 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart' show compactAge;
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';

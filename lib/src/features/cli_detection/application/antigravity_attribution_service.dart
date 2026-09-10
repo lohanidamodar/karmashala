@@ -5,7 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../sessions/data/session_dao.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 
 /// How many lines of a pane's scrollback to read looking for `agy`'s own resume
 /// hint — printed as the CLI exits, so it sits at the bottom of a dead pane.

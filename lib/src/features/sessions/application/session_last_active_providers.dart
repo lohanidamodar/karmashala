@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/session_last_active.dart';
+import 'package:karmashala_session/resume.dart';
 import 'session_status_providers.dart';
 
 /// The newest reading the app holds about session [openId], with

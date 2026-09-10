@@ -10,9 +10,13 @@ extension SessionPolicyVerbs on SessionLauncher {
     SessionPurpose purpose, {
     String? sessionMode,
   }) {
+    final defaults = _ref
+        .read(settingsControllerProvider)
+        .permissionsFor(agentId);
     final stored = resolveSessionPermission(
       sessionMode: sessionMode,
-      defaults: _ref.read(settingsControllerProvider).permissionsFor(agentId),
+      newSessionDefault: defaults.newSessions,
+      existingSessionDefault: defaults.existingSessions,
       purpose: purpose,
     ).stored;
     final support = _ref.read(agentRegistryProvider).byId(agentId)?.launch.permission;
@@ -48,11 +52,13 @@ extension SessionPolicyVerbs on SessionLauncher {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
+    final defaults = _ref
+        .read(settingsControllerProvider)
+        .permissionsFor(installation.agentId);
     final resolved = resolveSessionPermission(
       sessionMode: session.permissionMode,
-      defaults: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId),
+      newSessionDefault: defaults.newSessions,
+      existingSessionDefault: defaults.existingSessions,
       purpose: SessionPurpose.existingSession,
     );
     final descriptor = _ref

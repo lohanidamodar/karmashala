@@ -8,7 +8,7 @@ import '../../agents/data/agent_hook_receiver.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../cli_detection/data/imported_session_dao.dart';
 import '../../sessions/data/session_dao.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/watched_session.dart';
 

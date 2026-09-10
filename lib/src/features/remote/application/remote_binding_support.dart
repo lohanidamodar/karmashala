@@ -14,7 +14,7 @@ import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/session_diff_stat.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 
 /// Whether a session's working folder is gone from disk, answered synchronously
 /// because `sessions.list` is. **False also means "could not tell"**.

@@ -26,8 +26,7 @@ import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_last_active_providers.dart';
-import '../../sessions/domain/session_last_active.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_git/repositories.dart';
@@ -53,7 +52,7 @@ import '../../workspaces/presentation/workspace_scope_bar.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_defaults.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 

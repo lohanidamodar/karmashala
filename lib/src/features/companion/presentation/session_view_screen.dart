@@ -7,7 +7,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/id_generator_provider.dart';
 import 'package:karmashala_remote/remote.dart';
-import '../../sessions/domain/delivery_stage.dart';
+import 'package:karmashala_session/delivery.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_activity_strip.dart';

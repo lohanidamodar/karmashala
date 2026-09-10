@@ -64,10 +64,9 @@ import 'package:karmashala/src/features/sessions/application/handoff_packet_file
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -449,9 +448,9 @@ void main() {
                   ? SessionPurpose.existingSession
                   : SessionPurpose.newSession,
               surface: SessionSurface.external,
-              externalTerminal: _terminal,
               resumeExternalSessionId: resuming ? conversation : null,
             ),
+            externalTerminal: _terminal,
           );
           external.add({
             'agent': agentId,

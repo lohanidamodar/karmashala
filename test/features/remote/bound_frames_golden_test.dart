@@ -61,11 +61,10 @@ import 'package:karmashala/src/features/sessions/application/session_chat_source
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_event.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
-import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/launch.dart';
 
 import '../../support/fakes.dart';
 import '../terminal/fake_instance.dart';

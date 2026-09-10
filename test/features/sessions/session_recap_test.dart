@@ -21,9 +21,8 @@ import 'package:karmashala/src/features/sessions/application/session_chat_view_p
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_recap_service.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session_chat_view.dart';
-import 'package:karmashala/src/features/sessions/domain/session_recap.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/transcript.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_recap_card.dart';
 
 import '../terminal/fake_instance.dart';

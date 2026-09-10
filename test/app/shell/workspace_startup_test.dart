@@ -15,10 +15,10 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
-import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';

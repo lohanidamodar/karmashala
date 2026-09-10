@@ -2,7 +2,7 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
-import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -12,7 +12,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/domain/session_launch.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 

@@ -23,6 +23,7 @@ workspace:
   - packages/karmashala_git
   - packages/karmashala_media
   - packages/karmashala_remote
+  - packages/karmashala_session
   - packages/karmashala_terminal_core
   - packages/local_ipc
 
@@ -61,6 +62,12 @@ dependencies:
     path: packages/karmashala_flutter_apps
   karmashala_remote:
     path: packages/karmashala_remote
+  # What a session is, as values: the record and its states, what a launch asks
+  # for, the resume rules, lineage and handoff, the event and decision
+  # vocabulary, the transcript readings and the delivery ladder. Pure Dart
+  # (docs/PACKAGE_SPLIT_2.md, Revision 2).
+  karmashala_session:
+    path: packages/karmashala_session
   # What a terminal is, as values: profiles and launch contexts, the pane and
   # workspace geometry, the grid vocabulary, OSC shell integration and the cast
   # format. A Flutter package — `xterm2`'s buffer types are its vocabulary

@@ -6,6 +6,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
 import 'package:karmashala/src/features/mcp/workspace_tools.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -14,9 +15,7 @@ import 'package:karmashala/src/features/sessions/application/session_repositorie
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_checkouts.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
@@ -278,6 +277,7 @@ void main() {
             EnvironmentPath(environmentId: 'windows', path: path),
             excluding: '',
             among: SessionDao(db).getAll(),
+            pathsMatch: samePath,
           ),
           isEmpty,
         );
@@ -389,6 +389,7 @@ void main() {
           ),
           excluding: '',
           among: SessionDao(h.db).getAll(),
+          pathsMatch: samePath,
         ),
         isEmpty,
       );
