@@ -23,6 +23,9 @@ installs claim the same version name.
   A session that already lives in tmux keeps attaching there; new sessions
   take the host, which carries command blocks, links, exit codes, selection
   and the context menu intact.
+- **Install… in the device pane has a typed-path field**, and the file picker
+  quiets the device stream while it is up. The stream was measured and is not
+  what freezes the window; the field is the way out either way.
 
 ---
 
