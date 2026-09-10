@@ -1,24 +1,12 @@
-/// Small helpers for converting between Dart values and their SQLite column
-/// representations. SQLite has no native boolean or date types, so booleans are
-/// stored as `0`/`1` integers and timestamps as ISO-8601 UTC strings.
+/// Conversions between Dart values and their SQLite columns: SQLite has no
+/// boolean or date type, so those are `0`/`1` integers and ISO-8601 UTC text.
 library;
 
 /// Serializes a [DateTime] to an ISO-8601 string in UTC for storage.
 String isoFromDate(DateTime value) => value.toUtc().toIso8601String();
 
-/// Parses a stored ISO-8601 string back into a UTC [DateTime].
-///
-/// Hand-parsed rather than handed to [DateTime.parse], because this runs on
-/// every date column of every row of every read — and the polling loops read
-/// the session tables about once a second. Profiled during a terminal flood it
-/// was **8% of the app's CPU** on its own, second only to the terminal itself.
-///
-/// The fast path only accepts the exact shape [isoFromDate] writes: a UTC
-/// instant ending in `Z`, with a `-` at index 4 and a `T` at index 10. Anything
-/// else — a row written by another tool, a format that changes later — falls
-/// through to the general parser, so this can only ever be faster, never
-/// stricter. Measured at 5x on an M1 across a thousand stored timestamps, each
-/// verified equal to what [DateTime.parse] returns.
+/// Parses a stored ISO-8601 string back into a UTC [DateTime]. Hand-parsed —
+/// it was 8% of CPU under a terminal flood — falling back to [DateTime.parse].
 DateTime dateFromIso(Object? value) {
   final text = value! as String;
   if (text.length >= 20 &&

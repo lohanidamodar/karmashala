@@ -3,12 +3,8 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import 'app_database.dart';
 
-/// Provides the application [AppDatabase].
-///
-/// The concrete instance is created during bootstrap and supplied via a
-/// `ProviderScope` override (see `main.dart`). Tests override it with an
-/// in-memory database. It deliberately throws if read without an override so a
-/// missing wiring fails loudly rather than silently opening a stray database.
+/// Provides the application [AppDatabase], created at bootstrap and supplied
+/// by a `ProviderScope` override. Throws without one, so wiring fails loudly.
 final databaseProvider = Provider<AppDatabase>((ref) {
   throw UnimplementedError(
     'databaseProvider must be overridden with an AppDatabase instance.',
@@ -22,23 +18,19 @@ class MetadataKeys {
   static const schemaVersion = 'schema_version';
   static const firstRunAt = 'first_run_at';
 
-  /// Set once the first automatic agent discovery has completed successfully.
-  /// Absence means discovery has never run, which triggers a one-time probe on
-  /// startup (see `main.dart`).
+  /// Set once the first automatic agent discovery has completed; absence
+  /// triggers a one-time probe on startup.
   static const agentsDiscoveredAt = 'agents_discovered_at';
   static const environmentHealthOnboarding = 'environment_health_onboarding';
 
-  /// Set once the conversation index has caught up with the conversations the
-  /// workspace already had. Its presence is what makes the backfill a one-off
-  /// rather than a sweep — see `ConversationIndexBackfill`.
+  /// Set once the conversation index has caught up with what the workspace
+  /// already had, which makes the backfill a one-off rather than a sweep.
   static const conversationIndexBackfilledAt =
       'conversation_index_backfilled_at';
 }
 
-/// Records baseline application metadata on startup.
-///
-/// Writes the persisted schema version and, on first ever run, a first-run
-/// timestamp. Returns the bootstrap result for logging/inspection.
+/// Records baseline application metadata on startup: the persisted schema
+/// version and, on first ever run, a first-run timestamp.
 MetadataBootstrap bootstrapMetadata(AppDatabase db, {AppLogger? logger}) {
   final existingFirstRun = db.readMetadata(MetadataKeys.firstRunAt);
   final isFirstRun = existingFirstRun == null;

@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
-/// Paints a QR code with a plain [CustomPainter] — the `qr` package is the
-/// pure-Dart encoder behind qr_flutter, without dragging a widget package in.
-///
-/// Deliberately black-on-white in both themes: a camera wants contrast, and an
-/// inverted QR is the one thing many scanners refuse. `Colors.black`/`white`
-/// are the structural exceptions the token guard allows.
+/// Paints a QR code with a plain [CustomPainter]. Black-on-white in both
+/// themes deliberately: many scanners refuse an inverted QR.
 class QrPainter extends CustomPainter {
   QrPainter(String data)
     : _image = QrImage(

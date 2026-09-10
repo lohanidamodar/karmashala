@@ -2,109 +2,12 @@ import 'dart:convert';
 
 import 'package:sqlite3/sqlite3.dart';
 
-/// A single schema migration step: SQL applied to move the database **to** the
-/// keyed version. Steps are hand-written (no code generation) and must be
-/// idempotent at the DDL level (`IF NOT EXISTS`) so re-runs are safe.
+/// SQL applied to move the database to the keyed version. Hand-written and
+/// idempotent at the DDL level (`IF NOT EXISTS`), so a re-run is safe.
 typedef MigrationStep = void Function(Database db);
 
-/// Ordered schema migrations, keyed by the target `user_version`.
-///
-/// The database applies every step whose version is greater than the stored
-/// `PRAGMA user_version`, in ascending order, inside a transaction each. The
-/// highest key here is the current [AppDatabase.schemaVersion].
-///
-/// * **v1** — Loop 0: the `app_metadata` key/value table.
-/// * **v2** — Loop 1: the core domain schema (environments, projects,
-///   repositories, agent installations, sessions, and the append-only
-///   session-event log).
-/// * **v7** — Loop 29: the terminal layout (tabs, their pane split trees and
-///   each pane's persisted scrollback).
-/// * **v8** — Loop 37: SSH as an execution environment (saved hosts, trusted
-///   host keys, and the `ssh_host_id` link on `execution_environments`).
-/// * **v10** — Loop 41: agents hosted in terminal panes — a pane records the
-///   agent command it ran, and a session records which pane it lives in and
-///   which session (if any) asked for it.
-/// * **v11** — Loop 49: a session carries its own permission mode, so the
-///   composer control has somewhere to write and the resolver has one place to
-///   read.
-/// * **v17** — Loop 60: when a session's worktree was archived away. Nothing
-///   else about the session is removed with it.
-/// * **v18** — Loop 70: companion devices paired with this host
-///   (`paired_devices`), for the mobile-companion remote access feature.
-/// * **v19** — Loop 80: which relay each paired device was paired through
-///   (`paired_devices.relay_url`), so the host can serve local-relay and
-///   hosted-relay devices side by side.
-/// * **v20** — G3 step 1: who produced a verdict — the session behind a
-///   `verification_runs` row and behind a `fanout_candidates` verdict — so a
-///   self-graded pass can be told from an independently checked one.
-/// * **v21** — Notes: an idea the user chose to keep out of a conversation
-///   instead of acting on it, with the session and message it was taken from.
-/// * **v22** — T10 follow-up: the directory a session's agent actually runs
-///   in, which an adopted session knew and threw away.
-/// * **v23** — G1: a session's append-only decision record — the constraints,
-///   rejected approaches, approvals, verdicts and marked checkpoints that a
-///   handoff packet was carrying a transcript instead of.
-/// * **v24** — Index the pane hosting a session so switching terminal tabs does
-///   not scan every historical session row.
-/// * **v25** — G2: what a session left behind when it ended, so a crash or an
-///   unfinished check is still waiting in the morning rather than scrolling
-///   past at 14:32.
-/// * **v26** — whether each stored terminal pane had a process behind it when
-///   it was written, so a restart can put back what was running.
-/// * **v28** — the model picker: a session carries its own model id, the way
-///   it has carried its own permission mode since v11.
-/// * **v29** — saved Explorer sections: live, rule-based groups over state the
-///   app already polls, plus the manual groups and the built-in Pinned one.
-/// * **v30** — review comments as durable, addressable threads, anchored to a
-///   file's *content* rather than to a row of whatever diff was on screen.
-/// * **v31** — workspaces: the level *above* project, so ~31 projects across
-///   four unrelated contexts can be narrowed to the one being worked in.
-/// * **v32** — what a context is *for*, in the user's own words: the one thing
-///   a bare name in a picker cannot carry.
-/// * **v33** — saved command snippets: the commands the user keeps, each
-///   optionally tagged with the shell it is written for, so a WSL one-liner is
-///   never offered in a PowerShell pane.
-/// * **v34** — todos, and the project a todo or a note is filed under. Both
-///   nullable: filed under nothing is an ordinary todo, not an unfinished one.
-/// * **v35** — a session's permission mode in **its agent's own vocabulary**:
-///   `ask`/`acceptEdits`/`bypass` become a canonical selection over that
-///   agent's declared axes, because a shared three-value enum cannot say that
-///   Claude Code has six modes or that Codex's sandbox and approval policy are
-///   two separate dimensions.
-/// * **v39** — whether a human chose an installation's executable path, so the
-///   startup path repair can fix a broken one whoever set it and still never
-///   overwrite a working hand-set one.
-/// * **v40** — *when* an installation's version was last read from the binary,
-///   so a recorded version is a dated reading rather than a bare number that
-///   cannot be told apart from a current one.
-/// * **v41** — the conversation index: FTS5 over every conversation's visible
-///   turns, plus the per-conversation watermark that keeps a re-index off a
-///   transcript that has not moved.
-/// * **v42** — what a repository wants done to a worktree the moment git makes
-///   one: a command to run in a visible pane, gitignored paths to copy in, and
-///   the recorded verdict of the last setup so a failure is attached to that
-///   worktree rather than lost.
-/// * **v43** — scheduled automations and the preconditions that gate them: an
-///   agent run a person armed in advance, every occurrence of it (including
-///   the ones nobody was here for), and the per-checkout verification the gate
-///   refuses without.
-/// * **v44** — what repository a checkout *is*, as distinct from where it is:
-///   a nullable canonical id derived from `origin`.
-/// * **v45** — named terminal presets: the *shape* of a workbench — its tabs,
-///   their regions and splits, and each pane's profile and directory — with
-///   nothing running in it, so opening one starts fresh panes rather than
-///   resurrecting old ones.
-/// * **v46** — what an automation's project checks actually said: one verdict
-///   row per check per occurrence, and the moment the run's checks were looked
-///   at, so "nothing has re-run this yet" and "this checkout has no check"
-///   stay different answers.
-/// * **v47** — what a companion says about itself when it registers for
-///   notifications: its kind, whether it is on screen, and the session it is
-///   showing. Read only to route a push, never to decide whether a frame is
-///   carried.
-/// * **v48** — the recap one session was asked for: what the CLI wrote, which
-///   CLI and model wrote it, and how many turns it had read. One row per
-///   session, replaced whenever a person asks again.
+/// Ordered schema migrations, keyed by the target `user_version`. Every step
+/// above the stored `PRAGMA user_version` runs in order, one transaction each.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -156,24 +59,8 @@ final Map<int, MigrationStep> schemaMigrations = {
   48: _migrateToV48,
 };
 
-/// Was this pane running when its row was written?
-///
-/// The owner: *"if there were active panes on last close start all those panes
-/// on active tab"*. The store could not answer that. Every pane came back
-/// [PaneLiveness.restored] — replayed history with a Start button — because a
-/// row recorded a pane's *shape* (profile, directory, scrollback, launch) and
-/// never whether anything was running in it, so "put back what was running" and
-/// "re-run week-old history" were the same statement.
-///
-/// One column separates them, and it is the pane's, not the tab's: a split can
-/// hold a live shell beside a pane whose process exited an hour ago, and only
-/// the first should come back.
-///
-/// `DEFAULT 0` is the honest reading of every row written before this: those
-/// rows never claimed anything was running, and inventing a claim for them
-/// would spawn a shell per pane on the first launch after an upgrade.
-/// `terminal_panes_backup` gets it too — a backup with a column missing is a
-/// backup that cannot be restored by the same code that reads the live table.
+/// Was this pane running when its row was written? `DEFAULT 0` is the honest
+/// reading of older rows: inventing a claim would spawn a shell per pane.
 void _migrateToV26(Database db) {
   db.execute(
     'ALTER TABLE terminal_panes ADD COLUMN was_live INTEGER NOT NULL '
@@ -185,27 +72,8 @@ void _migrateToV26(Database db) {
   );
 }
 
-/// What a session left behind when it ended.
-///
-/// **Raises nothing for what is already there, and has to say so out loud.**
-/// The observer's durable signal is the session's own row, which goes on saying
-/// `failed` forever — so without the second statement below, the first sweep
-/// after an upgrade would present a workspace's whole history as things that
-/// just happened. That is a wall of notices about work the user finished with
-/// weeks ago, and the fastest possible way to teach somebody to ignore the
-/// list.
-///
-/// The baseline is written as **already-closed** rows: never raised, never
-/// shown, and marked [FollowUpReason.predatesTheFeature] so anyone reading the
-/// table can see exactly what they are. A closed row with no resolution is
-/// "not recorded", which is what this is — nobody decided anything about these,
-/// they simply predate the question. Follow-ups begin from the first ending
-/// this build actually observes.
-///
-/// No foreign key on `session_id`, matching `verification_runs`: a notice about
-/// a session must not be able to take that session's row with it, and a session
-/// deleted out from under a follow-up is something the reader resolves rather
-/// than a constraint violation.
+/// What a session left behind when it ended. The baseline is written as
+/// already-closed rows, so an upgrade does not raise a workspace's whole past.
 void _migrateToV25(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS session_follow_ups (
@@ -219,18 +87,13 @@ void _migrateToV25(Database db) {
       resolution TEXT
     );
   ''');
-  // At most one *open* follow-up per session, enforced here rather than in the
-  // DAO because the writer is a poll: it re-reads the same ended rows on every
-  // session-revision bump, and without this the list would grow by an identical
-  // row per bump. Resolved rows are exempt — the same session ending twice over
-  // a week is two things to come back to, and only the later one is still open.
+  // At most one *open* follow-up per session: the writer is a poll and would
+  // otherwise add an identical row on every session-revision bump.
   db.execute(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_follow_ups_open '
     'ON session_follow_ups (session_id) WHERE resolved_at IS NULL;',
   );
 
-  // The status names are the ending names — `endingOfStatus` maps them one to
-  // one — so the mark this writes is exactly the one the service looks for.
   final now = DateTime.now().toUtc().toIso8601String();
   db.execute(
     'INSERT INTO session_follow_ups '
@@ -248,48 +111,8 @@ void _migrateToV24(Database db) {
 }
 
 void _migrateToV23(Database db) {
-  // The decision record (G1): what a session decided, as opposed to what it
-  // said.
-  //
-  // `HandoffPacket` carries a quoted tail of the conversation and a count of
-  // the turns it dropped, and the dropped ones are disproportionately
-  // load-bearing — a decision is made once and thereafter assumed, so "the
-  // isolate pool deadlocked on Windows" is forty turns back inside
-  // `omittedTurns`. This table is where such a thing is written down *once*,
-  // at the moment it is decided, so a later reader does not have to find it in
-  // a transcript that no longer includes it.
-  //
-  // **Append-only, and only by explicit acts.** Nothing here is derived from
-  // prose. A row exists because somebody answered an approval prompt, finished
-  // a verification run, labelled a checkpoint, or called `decision_record` —
-  // and the DAO offers no update and no delete, so the record of what was
-  // decided cannot be quietly revised into what is convenient now. That is the
-  // same argument `handoff_packet.dart` makes at length about the recap: there
-  // is no model in this path, and a paraphrase's errors are invisible to the
-  // reader who most needs them.
-  //
-  // `sequence` is 1-based within a session and unique, which is what makes the
-  // chain a chain: two writers cannot both claim position 4, and a gap is
-  // visible rather than silently closed.
-  //
-  // `summary` is the decision **in the words of whoever made it** — an agent's
-  // own sentence, or the agent's own description of what a keystroke does. Not
-  // a gist of it.
-  //
-  // `origin_kind`/`origin_id` are the pointer back to the act. The id is
-  // nullable because some acts leave no row of their own: an approval prompt
-  // lives on the agent's screen and is gone when it is answered, so the honest
-  // pointer names the act without pretending there is a record to open.
-  // Deliberately **not** a foreign key, like `notes.source_session_id` and
-  // `verification_runs.session_id`: a decision has to outlive the run or
-  // checkpoint that produced it, and a row whose origin has been pruned still
-  // says everything it said before.
-  //
-  // `decided_by` is words, not an id — "the user", or the agent's display
-  // name at the time. The packet attributes every line it renders, and the
-  // reader needs a name they recognise rather than a key to resolve;
-  // `recorded_by_session_id` is beside it for the case where the resolution
-  // still matters.
+  // The decision record: what a session decided, as opposed to what it said.
+  // Append-only by explicit acts — the DAO offers no update and no delete.
   db.execute('''
     CREATE TABLE IF NOT EXISTS session_decisions (
       id                     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,40 +133,13 @@ void _migrateToV23(Database db) {
     'ON session_decisions (session_id, sequence);',
   );
 
-  // Deliberately **not** backfilled, for the same reason v20 was not.
-  //
-  // There is nothing to recover. Every existing session has checkpoints saying
-  // a turn happened and possibly verification runs saying a check was made,
-  // and neither is a decision: a turn checkpoint records that time passed, and
-  // a run this session may well have graded itself records a claim. Turning
-  // either into a decision row would put a sentence in the user's mouth for
-  // every session that already exists. An empty record reads as "not
-  // recorded", which is exactly what it is.
+  // Deliberately not backfilled: a turn checkpoint or a self-graded run is not
+  // a decision, and converting one would put a sentence in the user's mouth.
 }
 
 void _migrateToV22(Database db) {
-  // Where a session's agent is actually running (T10 follow-up).
-  //
-  // Two columns rather than one, matching `worktree_*`: a path divorced from
-  // the environment that owns it is not a location (constraints 7 & 8), so a
-  // WSL session records a WSL path against its WSL environment and nothing
-  // translates it implicitly on the way back out.
-  //
-  // Deliberately **not** `worktree`, which the schema already has and which
-  // means something narrower and more dangerous: `SessionLauncher` reads a
-  // non-null `worktree` as "this session runs in a git worktree" and sets
-  // `use_worktree` from it, and `SessionArchiveService` hands it to
-  // `WorktreeService.remove` — `git worktree remove`, which deletes the
-  // directory. An ordinary cwd stored there would eventually offer to delete
-  // the user's own checkout.
-  //
-  // Nullable and undefaulted, like `permission_mode` in v11 and for the same
-  // reason: a row written before this column existed has an **unknown**
-  // directory, not the repository root. Backfilling the root would assert that
-  // every one of those sessions started there, and the sessions this column
-  // exists for — the ones adopted out of a terminal pane — are exactly the ones
-  // most likely to have started somewhere else. Readers fall back to the
-  // repository root themselves, which is a fallback rather than a claim.
+  // Where a session's agent actually runs. Deliberately not `worktree`, which
+  // `SessionArchiveService` hands to `git worktree remove` — that deletes it.
   db.execute(
     'ALTER TABLE sessions ADD COLUMN working_directory_environment_id TEXT;',
   );
@@ -351,27 +147,8 @@ void _migrateToV22(Database db) {
 }
 
 void _migrateToV21(Database db) {
-  // Notes: a thought the user chose to keep instead of acting on it.
-  //
-  // `body` is **quoted text, never a summary**. A note is made by tapping the
-  // affordance under a message, and what it stores is that message's own words;
-  // the same argument `HandoffPacket` makes at length applies here for the same
-  // reason — a paraphrase's errors are invisible to the reader who most needs
-  // them, and the reader here is the agent the note is later sent back to.
-  // Editing is the user's, deliberately, and `updated_at` says when they did.
-  //
-  // `source_session_id` is **not** a foreign key, like
-  // `verification_runs.session_id` and for the same reason: a note is a
-  // deferred instruction that has to outlive the conversation it came from.
-  // Deleting a finished session must not delete the idea it produced, and a
-  // note whose session is gone still says everything it said before — its own
-  // text — with an origin that no longer resolves.
-  //
-  // `source_message_ordinal` is the message's index in the transcript that was
-  // on screen, which is stable because transcripts are append-only. It is a
-  // pointer back to the moment, not an identity: the id it would want does not
-  // exist for a PTY-hosted session, whose transcript is the agent's own file
-  // and has no row of ours to name.
+  // Notes: a thought the user kept instead of acting on it. `body` is quoted
+  // text, never a summary; `source_session_id` is no FK — a note outlives it.
   db.execute('''
     CREATE TABLE IF NOT EXISTS notes (
       id                     TEXT PRIMARY KEY,
@@ -396,18 +173,8 @@ void _migrateToV21(Database db) {
 }
 
 void _migrateToV20(Database db) {
-  // Who produced the verdict (G3 step 1).
-  //
-  // `verification_runs.session_id` already says whose *work* a run is about.
-  // Nothing said who graded it, and in practice the agent calling
-  // `verification_start`/`verification_finish` is the agent that wrote the
-  // code — a self-graded exam with a very good transcript. Recording the
-  // producer is what lets a surface derive `producer == subject` and say so.
-  //
-  // Two columns rather than one shared table: fan-out stores a *copy* of the
-  // verdict precisely so an old comparison still reads after the run behind it
-  // is pruned, and a copied verdict that loses its attribution on the way is
-  // the thing this migration exists to prevent.
+  // Who produced the verdict, so a surface can derive `producer == subject` and
+  // say out loud that an agent graded its own work.
   db.execute(
     'ALTER TABLE verification_runs ADD COLUMN produced_by_session_id TEXT;',
   );
@@ -416,29 +183,17 @@ void _migrateToV20(Database db) {
     'ADD COLUMN verdict_producer_session_id TEXT;',
   );
 
-  // Deliberately **not** backfilled, unlike v16's `parent_link_kind`.
-  //
-  // There the backfill was a fact: one writer, one possible value. Here there
-  // is no fact to recover. Copying `session_id` across would assert that every
-  // historical verdict was self-reported, and leaving it to be read as
-  // independent would assert the opposite; both invent a producer nobody
-  // recorded. Null means "not recorded", and the domain keeps that as its own
-  // third state rather than collapsing it into either neighbour.
+  // Deliberately not backfilled: null means "not recorded", and either default
+  // would invent a producer nobody wrote down.
 }
 
 void _migrateToV19(Database db) {
-  // Which relay this device's frames travel through (Loop 80): the literal
-  // hosted relay URL, or the sentinel `'local'` for the relay embedded in this
-  // app. The sentinel, not the LAN URL of the moment: the machine's IP and the
-  // relay's port both move, while "my own relay" stays the same fact — the
-  // host resolves it to the live embedded relay at serve time.
+  // Which relay this device's frames travel through: a hosted URL, or the
+  // sentinel `'local'` — the machine's IP moves, "my own relay" does not.
   db.execute('ALTER TABLE paired_devices ADD COLUMN relay_url TEXT;');
 
-  // Backfill from the relay the app was configured to use when the column
-  // arrived: every pre-v19 pairing went through that one relay, because
-  // serving two at once is what this migration exists to enable. Absent or
-  // unreadable settings mean the defaults: hosted mode, PopupBits relay
-  // (the literal below is `kDefaultRelayUrl`, unimportable from core).
+  // Every pre-v19 pairing went through the one configured relay; absent or
+  // unreadable settings mean the hosted default.
   var relayUrl = 'wss://relay.popupbits.com';
   final settingsRows = db.select(
     "SELECT value FROM app_metadata WHERE key = 'settings.v1';",
@@ -468,22 +223,8 @@ void _migrateToV19(Database db) {
 }
 
 void _migrateToV18(Database db) {
-  // Phones paired with this desktop host (Loop 70, mobile companion).
-  //
-  // `device_key` is the 32-byte symmetric key from the pairing key schedule,
-  // stored as lowercase hex. Revoking a device **empties** the key rather than
-  // only flagging the row — a revoked row must be unable to seal or open
-  // another frame, and a key that is gone cannot leak later. The row itself
-  // stays so the settings list can show what was revoked and when.
-  //
-  // `generation` is the rendezvous generation counter from the Loop-64 key
-  // schedule: the one number persisted per device. Both the rotating
-  // rendezvous id and the per-direction sealing keys derive from it, so there
-  // are deliberately no sequence-number columns here — sequences live and die
-  // with a generation.
-  //
-  // `push_token`/`push_platform` are what `notifications.register` persists;
-  // actual push delivery is a later loop.
+  // Phones paired with this host. Revoking *empties* `device_key` rather than
+  // only flagging the row: a key that is gone cannot leak later.
   db.execute('''
     CREATE TABLE IF NOT EXISTS paired_devices (
       id            TEXT PRIMARY KEY,
@@ -501,17 +242,12 @@ void _migrateToV18(Database db) {
 }
 
 void _migrateToV8(Database db) {
-  // SSH as a third kind of execution environment (Loop 37). An `ssh` row in
-  // `execution_environments` points at the `ssh_hosts` row that says where it
-  // is and how to log in.
+  // SSH as a third kind of execution environment: an `ssh` row points at the
+  // `ssh_hosts` row that says where it is.
   db.execute('ALTER TABLE execution_environments ADD COLUMN ssh_host_id TEXT;');
 
-  // Saved remote hosts. Deliberately **not** a credential store: no password,
-  // no passphrase and no key material is written here. `private_key_path` is
-  // where the key file lives, paired with the environment that owns that path
-  // (principle 2) — the key itself is read at connect time and never copied
-  // into the database. Passwords and passphrases are prompted per connection
-  // and held in memory only.
+  // Saved remote hosts. Deliberately not a credential store: no password,
+  // passphrase or key material here, only where the key file lives.
   db.execute('''
     CREATE TABLE IF NOT EXISTS ssh_hosts (
       id                         TEXT PRIMARY KEY,
@@ -528,11 +264,8 @@ void _migrateToV8(Database db) {
     );
   ''');
 
-  // Trusted host keys — our known_hosts. One row per `host:port`: the presented
-  // fingerprint must equal the stored one, and a mismatch is the MITM signal, so
-  // the primary key is deliberately the address and not the address plus key
-  // type. Re-trusting a legitimately rebuilt host means deleting the row, which
-  // is an explicit user action.
+  // Trusted host keys — our known_hosts, one row per `host:port`. A mismatch is
+  // the MITM signal, so the key is the address alone, not address plus key type.
   db.execute('''
     CREATE TABLE IF NOT EXISTS ssh_known_hosts (
       host        TEXT NOT NULL,
@@ -546,11 +279,8 @@ void _migrateToV8(Database db) {
 }
 
 void _migrateToV7(Database db) {
-  // The terminal layout (Loop 29): which tabs were open, how each tab's panes
-  // were split, and each pane's scrollback, so the terminal comes back after a
-  // restart. `layout` is the pane tree as JSON (see PaneLayout.toJson);
-  // `scrollback` is the rendered buffer re-emitted as text + SGR runs, capped
-  // per pane — inert replayed content, never a command to re-run.
+  // The terminal layout: tabs, pane split trees and per-pane scrollback.
+  // `scrollback` is inert replayed text + SGR runs, never a command to re-run.
   db.execute('''
     CREATE TABLE IF NOT EXISTS terminal_tabs (
       id              TEXT PRIMARY KEY,
@@ -592,14 +322,8 @@ void _migrateToV1(Database db) {
 }
 
 void _migrateToV6(Database db) {
-  // Saved Claude Code accounts (Loop 22): OAuth token snapshots captured from a
-  // Claude installation so the user can switch the logged-in account without
-  // re-authenticating. `claude_ai_oauth` and `oauth_account` hold the two JSON
-  // blobs Claude Code persists (the token bundle from `.credentials.json` and
-  // the identity record from `.claude.json`); the other columns are denormalized
-  // copies for display. Uniqueness is by (email, organization_uuid) so the same
-  // email in two orgs stays distinct while re-capturing the same account
-  // updates in place.
+  // Saved Claude Code accounts: the two JSON blobs Claude Code persists, plus
+  // denormalised display copies. Unique by (email, organization_uuid).
   db.execute('''
     CREATE TABLE IF NOT EXISTS claude_accounts (
       id                TEXT PRIMARY KEY,
@@ -618,9 +342,8 @@ void _migrateToV6(Database db) {
 }
 
 void _migrateToV5(Database db) {
-  // The CLI's own identity for a native session. This is deliberately distinct
-  // from the app's row id and is required to resume the same conversation in an
-  // external terminal.
+  // The CLI's own identity for a native session, distinct from our row id and
+  // required to resume the same conversation in an external terminal.
   db.execute('ALTER TABLE sessions ADD COLUMN external_session_id TEXT;');
 }
 
@@ -729,9 +452,8 @@ void _migrateToV2(Database db) {
 }
 
 void _migrateToV3(Database db) {
-  // A session may span multiple repositories within its project (Loop 13). The
-  // `sessions.repository_id` column remains the primary repository; this link
-  // table records every repository a session is associated with.
+  // A session may span multiple repositories; `sessions.repository_id` stays the
+  // primary one and this table records every one.
   db.execute('''
     CREATE TABLE IF NOT EXISTS session_repositories (
       session_id    TEXT NOT NULL,
@@ -750,10 +472,8 @@ void _migrateToV3(Database db) {
 }
 
 void _migrateToV4(Database db) {
-  // Sessions imported from a CLI store (Claude Code / Codex) — a read-only
-  // history that lives beside native engine sessions (Loop 20). Kept in its own
-  // table so the native `sessions` schema/FKs are untouched. `UNIQUE(source,
-  // external_id)` makes re-imports idempotent (duplicates ignored).
+  // Sessions imported from a CLI store, kept in their own table so the native
+  // schema is untouched. `UNIQUE(source, external_id)` makes re-imports idempotent.
   db.execute('''
     CREATE TABLE IF NOT EXISTS imported_sessions (
       id             TEXT PRIMARY KEY,
@@ -779,50 +499,28 @@ void _migrateToV4(Database db) {
 }
 
 void _migrateToV9(Database db) {
-  // Keep-alive (Loop 38): closing a tab no longer kills the process behind it,
-  // so a session can be running with no tab showing it. Those are stored in the
-  // same table as a single-pane row with `detached = 1`, which keeps their
-  // scrollback on exactly the same persistence path as a tab's — the alternative
-  // was the one kind of session whose history quietly vanished on quit.
-  //
-  // They never come back *as* tabs: on load they are listed as background
-  // sessions the user can reopen or end.
+  // Keep-alive: a process whose tab was closed is stored as a single-pane row
+  // with `detached = 1`, so its scrollback survives quit exactly like a tab's.
   db.execute(
     'ALTER TABLE terminal_tabs ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;',
   );
 }
 
 void _migrateToV10(Database db) {
-  // Agents in a PTY (Loop 41).
-  //
-  // `launch_command` lets a pane be restored as the agent it was rather than as
-  // the shell profile it never had. It is deliberately on the *pane*, not on a
-  // session: the dormant restore path re-executes nothing, so recording a
-  // command here can only be read by `startPane`, which is the user explicitly
-  // asking for it.
+  // `launch_command` restores a pane as the agent it was. It is on the pane,
+  // not the session: only `startPane` reads it, and that is the user asking.
   db.execute('ALTER TABLE terminal_panes ADD COLUMN launch_command TEXT;');
 
-  // `parent_session_id` is the *only* record of agent-spawn depth. The depth
-  // itself is walked from this chain and never stored: a stored number is a
-  // second source of truth that will eventually disagree with the chain it
-  // claims to describe. Deliberately not a foreign key — deleting a parent must
-  // orphan its children, not cascade away sessions the user still has open.
+  // The *only* record of agent-spawn depth; depth is walked, never stored. Not
+  // an FK — deleting a parent must orphan its children, not cascade them away.
   db.execute('ALTER TABLE sessions ADD COLUMN parent_session_id TEXT;');
 
-  // The terminal pane a session runs in, for sessions hosted in a PTY rather
-  // than driven through a protocol adapter. Null for chat sessions and for
-  // sessions launched into an external terminal, which we do not own a pane for.
+  // The terminal pane a session runs in. Null for chat sessions and for ones
+  // launched into an external terminal, whose pane we do not own.
   db.execute('ALTER TABLE sessions ADD COLUMN pane_id TEXT;');
 
-  // Where the process lives, and how the session is drawn. Two columns because
-  // they are two questions: `surface` is a runtime fact (we own the PTY, or
-  // somebody else's terminal window does) and `view` is a rendering the user can
-  // flip without starting or stopping anything.
-  //
-  // Rows written before this migration were driven by a protocol adapter with no
-  // terminal of any kind, so `external` is the closest true answer for them — we
-  // do not own a process for them either — and `chat` is what they were actually
-  // showing. Neither default claims a pane that does not exist.
+  // Two columns because they are two questions: `surface` is a runtime fact,
+  // `view` is a rendering the user can flip without starting anything.
   db.execute(
     "ALTER TABLE sessions ADD COLUMN surface TEXT NOT NULL DEFAULT 'external';",
   );
@@ -837,28 +535,14 @@ void _migrateToV10(Database db) {
 }
 
 void _migrateToV11(Database db) {
-  // Per-session permission mode (Loop 49).
-  //
-  // Until now the mode was resolved at launch from the per-agent setting and
-  // then thrown away with the local that held it, so nothing could say what a
-  // running session was actually running under — which is exactly what a
-  // control claiming to show the *effective* mode has to answer.
-  //
-  // Nullable with no default, and null is a real answer: "written before this
-  // column existed, ask the settings". Every row created from here on is
-  // stamped at launch, so null never means "unknown" for a new session. A
-  // `NOT NULL DEFAULT 'ask'` would have been a lie for the old rows, half of
-  // which were launched under a different mode entirely.
+  // Per-session permission mode. Nullable with no default, and null is a real
+  // answer: "written before this column existed, ask the settings".
   db.execute('ALTER TABLE sessions ADD COLUMN permission_mode TEXT;');
 }
 
 void _migrateToV12(Database db) {
-  // Persistent fan-out comparisons (Loop 52).
-  //
-  // A fan-out used to live entirely in one dialog: closing it lost the prompt,
-  // which agents ran it and which one won. These two tables are the record, and
-  // they are written to be readable *after* the thing they describe is gone —
-  // the winner merged, the losers' worktrees removed.
+  // Persistent fan-out comparisons, written to still read after the thing they
+  // describe is gone — the winner merged, the losers' worktrees removed.
   db.execute("""
     CREATE TABLE IF NOT EXISTS fanout_comparisons (
       id                  TEXT PRIMARY KEY,
@@ -878,18 +562,8 @@ void _migrateToV12(Database db) {
     'ON fanout_comparisons (repository_id, created_at);',
   );
 
-  // `session_id` is deliberately **not** a foreign key. A candidate is a
-  // historical fact about a comparison; deleting the session must orphan the
-  // link, not erase the row that says this agent ran and what it produced. The
-  // same reasoning as `sessions.parent_session_id` in v10.
-  //
-  // `agent_id` is copied rather than joined through `installation_id` for the
-  // same reason: an installation can be removed when an agent is uninstalled,
-  // and the record must still name who wrote the diff.
-  //
-  // `worktree_removed` plus the `files_changed`/`insertions`/`deletions`/
-  // `commits` columns are what makes a discarded loser still legible: the
-  // directory is gone, the last thing it showed is not.
+  // `session_id` is deliberately no FK, and `agent_id` is copied rather than
+  // joined: the row must still name who wrote the diff once either is removed.
   db.execute("""
     CREATE TABLE IF NOT EXISTS fanout_candidates (
       id                      TEXT PRIMARY KEY,
@@ -929,18 +603,8 @@ void _migrateToV12(Database db) {
 }
 
 void _migrateToV13(Database db) {
-  // The layout-loss guard (Loop 53).
-  //
-  // `saveLayout` is a destructive full replace, so the one save that can
-  // never be taken back is the one that writes nothing over something. Loop 48
-  // watched that happen once in ten real runs and could not find the trigger.
-  //
-  // These two tables are a shadow copy taken *inside* that save's transaction,
-  // just before the delete: whatever the store held is still on disk afterwards.
-  // Deliberately plain mirrors — no foreign key, no cascade, no index. A backup
-  // that participates in the live schema's referential integrity is a backup
-  // that the next cascade can take with it, which is precisely the failure it
-  // exists to survive.
+  // The layout-loss guard: a shadow copy taken inside `saveLayout`'s own
+  // transaction, just before its delete. No FK and no cascade, deliberately.
   db.execute('''
     CREATE TABLE IF NOT EXISTS terminal_tabs_backup (
       id              TEXT PRIMARY KEY,
@@ -969,18 +633,8 @@ void _migrateToV13(Database db) {
 }
 
 void _migrateToV14(Database db) {
-  // Session checkpoints (Loop 53): what the working tree looked like when a
-  // turn ended, so it can be put back.
-  //
-  // The *content* is not here. A checkpoint is a git tree and the commit that
-  // anchors it, both in the repository's own object store, reachable from
-  // `refs/karmashala/checkpoints/<session>` so `git gc` keeps them. This table
-  // is the index over them: which session, in which order, against which repo,
-  // and what a reader can be shown without shelling out to git.
-  //
-  // Deliberately no foreign key to `sessions`. A checkpoint is a recovery
-  // record for work in a *repository*; losing the way back to that work because
-  // the session row it was captured under went away is the wrong failure.
+  // The index over checkpoints — the content is a git tree kept reachable from
+  // `refs/karmashala/checkpoints/<session>`. No FK: it outlives its session.
   db.execute('''
     CREATE TABLE IF NOT EXISTS session_checkpoints (
       id                TEXT PRIMARY KEY,
@@ -1017,18 +671,8 @@ void _migrateToV14(Database db) {
 }
 
 void _migrateToV15(Database db) {
-  // Verification runs (Loop 51): a recorded attempt to prove a change works,
-  // against a page or a device, with a verdict an agent can hand to a human.
-  //
-  // `session_id` is deliberately **not** a foreign key. Evidence has to outlive
-  // the session that produced it — archiving or deleting a session must not
-  // delete the proof that its change worked — and `sessions` belongs to another
-  // part of the app, so this stays a plain reference resolved by lookup.
-  //
-  // `artifact_directory` is where the run's files are. **No image or log bytes
-  // are stored in SQLite**; every artifact row points at a file under that
-  // directory, which is what keeps the database small and the exported report's
-  // relative links working when the folder is copied somewhere else.
+  // Verification runs. `session_id` is no FK — evidence outlives the session —
+  // and no image or log bytes live here, only a directory that points at them.
   db.execute('''
     CREATE TABLE IF NOT EXISTS verification_runs (
       id                 TEXT PRIMARY KEY,
@@ -1050,9 +694,8 @@ void _migrateToV15(Database db) {
     'ON verification_runs (session_id);',
   );
 
-  // The actions taken, in order. `ordinal` is the run-local sequence number and
-  // the step's identity, so an artifact can point back at the action that
-  // produced it without a second surrogate key.
+  // The actions taken, in order. `ordinal` is the step's identity, so an
+  // artifact points back at it without a second surrogate key.
   db.execute('''
     CREATE TABLE IF NOT EXISTS verification_steps (
       run_id  TEXT NOT NULL,
@@ -1087,28 +730,12 @@ void _migrateToV15(Database db) {
 }
 
 void _migrateToV16(Database db) {
-  // Why a session has a parent (Loop 54).
-  //
-  // `parent_session_id` arrived in v10 with exactly one way to acquire one: an
-  // agent calling `open_new_session` over MCP. Handoff and fork are two more,
-  // and they are not the same relationship — "an agent delegated this", "the
-  // user moved this to another provider" and "the user branched this" read
-  // completely differently in a sidebar, and the rows themselves cannot be told
-  // apart afterwards. Two sessions in one repository with one naming the other
-  // look identical whichever of the three produced them.
-  //
-  // Nullable, and null is a real answer for a *pre-v16* row: "we did not record
-  // it". Unlike depth, this is not derivable from the chain, so there is no
-  // second source of truth to disagree with — a link kind is a fact about the
-  // moment of creation, and nothing else keeps it.
+  // Why a session has a parent: spawn, handoff and fork read completely
+  // differently, and the rows cannot be told apart afterwards.
   db.execute('ALTER TABLE sessions ADD COLUMN parent_link_kind TEXT;');
 
-  // Backfilled, unusually for this schema, and only because the backfill is a
-  // *fact* rather than a default. Every existing parented row was written by
-  // `LauncherControlServer._openNewSession` — the sole writer of
-  // `parent_session_id` in the app before this migration — so `spawn` is what
-  // those rows actually are, not the safest guess about them. Rows with no
-  // parent are left null, because there is no relationship to name.
+  // Backfilled, unusually, because it is a fact rather than a default:
+  // `_openNewSession` was the sole writer of `parent_session_id` before this.
   db.execute(
     "UPDATE sessions SET parent_link_kind = 'spawn' "
     'WHERE parent_session_id IS NOT NULL AND parent_link_kind IS NULL;',
@@ -1116,111 +743,27 @@ void _migrateToV16(Database db) {
 }
 
 void _migrateToV17(Database db) {
-  // When this session's worktree was archived away (Loop 60).
-  //
-  // Archiving removes **one directory** and nothing else. The transcript, the
-  // review notes, the checkpoints and the session row itself all stay exactly
-  // where they were, which is the whole point: a user who cleans up a finished
-  // task must not lose the record of how it was done. This column is the only
-  // thing that changes in the database, and it is a timestamp rather than a
-  // flag so the row also says *when*.
-  //
-  // Deliberately not a `SessionStatus` value. Status is what the agent process
-  // is doing — running, failed, cancelled — and an archived session keeps
-  // whichever of those it ended on; overloading the same column would destroy
-  // the record of how the work finished in order to record that its directory
-  // was tidied.
+  // When this session's worktree was archived away. One directory goes; the
+  // transcript, notes, checkpoints and ending status all stay.
   db.execute('ALTER TABLE sessions ADD COLUMN archived_at TEXT;');
 }
 
-/// A session's title is the user's only once they have typed one.
-///
-/// The rename sync could not tell a CLI-set title from a user-set one after a
-/// restart: it remembered what it had written **in memory only**, so on the next
-/// start every row's title looked like the user's and no further `/rename` was
-/// ever copied in. The owner hit exactly that — `/rename` landed in the store
-/// (1,034 title records in that one file, the last of them the new name) and
-/// the sidebar went on showing the old one.
-///
-/// Recording the one event that makes a title the user's is what survives a
-/// restart. `DEFAULT 0` deliberately hands existing rows back to their CLI: the
-/// column cannot say what happened before it existed, and the failure it fixes
-/// is the one the owner is actually having. A row the user renames in the app
-/// is marked from that moment and never taken again.
+/// A session's title is the user's only once they have typed one. `DEFAULT 0`
+/// hands existing rows back to their CLI, which is all the column can know.
 void _migrateToV27(Database db) {
   db.execute(
     'ALTER TABLE sessions ADD COLUMN title_by_user INTEGER NOT NULL DEFAULT 0;',
   );
 }
 
-/// A session carries its own model, so the model chip has somewhere to write
-/// and the launcher has one place to read.
-///
-/// Nullable and undefaulted, exactly like `permission_mode` in v11 and for the
-/// same reason: null is a **value** here, not a missing one. It means "nobody
-/// chose a model for this session", which is what every row written before this
-/// column is truthfully in — and the state a user must be able to go back to
-/// once they have picked. Defaulting existing rows to any model id would be a
-/// claim about what they ran under that nothing in the database can support.
+/// A session carries its own model. Nullable and undefaulted like
+/// `permission_mode`: null means "nobody chose", a state the user can return to.
 void _migrateToV28(Database db) {
   db.execute('ALTER TABLE sessions ADD COLUMN model_id TEXT;');
 }
 
-/// Review comments as **durable, addressable threads**, anchored to content.
-///
-/// ## What this replaces, and why it was a correctness bug
-///
-/// `DiffAnnotationsController` held review comments in a `Notifier` — no rows,
-/// no replies, no status — and keyed each one by `(repositoryId, path,
-/// diffIndex)`, where `diffIndex` was the **row number of a line inside the
-/// unified diff currently on screen**. That number belongs to a rendering, not
-/// to the code. It moves when a hunk grows, when another hunk appears above it,
-/// when git coalesces two hunks that drift within three context lines of each
-/// other, and when the file is staged. So the instant the agent edited the file
-/// a comment was attached to — the entire point of writing the comment — the
-/// comment silently began pointing at different lines, and said nothing about
-/// it. The controller also cleared every annotation on send, which is the only
-/// reason the mis-anchoring was survivable: comments never lived long enough
-/// for anybody to notice they had drifted.
-///
-/// ## Why the anchor is a blob sha
-///
-/// `blob_sha` is `git hash-object` of the file's bytes at the moment the thread
-/// was opened, and `start_line`/`end_line` are line numbers **in that
-/// content**. Together they are a claim that can be *checked*: ask git for the
-/// file's current hash, and either it is the same bytes — in which case the
-/// range still means what it meant — or it is not, and the thread is
-/// **detached** and is rendered saying so. Nothing re-anchors by matching the
-/// excerpt against the new file, and that is the deliberate part. Fuzzy
-/// re-anchoring is right most of the time, and a pointer that is right most of
-/// the time is the same failure `diff_index` had: the reader cannot tell which
-/// case they are holding, so they cannot trust any of them.
-///
-/// `start_line` is nullable because a **file-level** comment is a real review
-/// comment ("this file should not exist") and not a degraded line comment. Null
-/// there means "about the file", never "about line 0".
-///
-/// `anchor_excerpt` is the text the author was looking at, kept verbatim. It is
-/// evidence for the human reading a detached thread, and it is never fed back
-/// into locating the line.
-///
-/// ## Why comments are their own table
-///
-/// Because a thread accepts replies, including from an agent, and the opening
-/// comment and a reply are the same thing said at different times — a `body`
-/// column plus a `replies` blob would have made the first message special for
-/// no reason anybody could later explain. `sequence` is 1-based and unique per
-/// thread, the same chain discipline `session_decisions` uses, so two writers
-/// cannot both claim position 4 and a reply cannot silently overwrite one.
-///
-/// Comments cascade from their thread: a comment with no thread has no anchor
-/// and no subject, so it is not a record of anything. The thread cascades from
-/// its repository, matching `notes`, for the same reason — the path in the
-/// anchor is only resolvable inside a checkout this app still knows about.
-///
-/// Nothing is back-filled, because there is nothing to back-fill: the
-/// annotations this replaces were never written to disk in any version of the
-/// schema.
+/// Review comments as durable threads anchored to a `blob_sha` plus a line
+/// range, so a stale thread renders as detached rather than silently re-anchored.
 void _migrateToV30(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS review_threads (
@@ -1238,10 +781,8 @@ void _migrateToV30(Database db) {
       FOREIGN KEY (repository_id) REFERENCES repositories (id) ON DELETE CASCADE
     );
   ''');
-  // The one query the diff view runs per render: every thread on a repository,
-  // grouped in memory by path. Indexed on the pair rather than on
-  // `repository_id` alone so a single file's threads are also a range scan for
-  // the MCP tools, which ask by path.
+  // Every thread on a repository, grouped in memory by path. Indexed on the
+  // pair, so one file's threads are a range scan for the MCP tools that ask by path.
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_review_threads_repo_path '
     'ON review_threads (repository_id, file_path);',
@@ -1265,53 +806,8 @@ void _migrateToV30(Database db) {
   );
 }
 
-/// Saved Explorer sections: live groups over facts the app already has.
-///
-/// **Two tables, and the split is the design.** `explorer_sections` holds what
-/// the user *said* — a name, a rule, where it sits — and is the only thing
-/// persisted. What is *in* a section is never written down for a rule section,
-/// because it is not a fact about the section: it is what the rule says right
-/// now about state that changes every couple of minutes. Storing membership
-/// would create a second answer that goes stale the moment a check turns red,
-/// and the app would then have to decide which of the two to draw.
-/// `explorer_section_members` exists only for the groups the user fills by
-/// hand, where the list *is* the definition.
-///
-/// **Position is priority.** A session can satisfy three rules at once, and the
-/// order of these rows is what decides where it is drawn — see
-/// `assignSections`. That is why `position` is stored rather than derived from
-/// a name or an insertion order: the user rearranges it, and rearranging it has
-/// to mean something.
-///
-/// **Pinned is a row like the others, and is not.** It is seeded here with
-/// `kind = 'pinned'` at position 0 so that everything downstream — ordering,
-/// priority, the collapse toggle — has one code path instead of a special case
-/// bolted beside it. What makes it built-in is that the UI refuses to rename,
-/// re-rule, reorder or delete it, and that its membership is read from
-/// `Settings.pinnedSessionIds` rather than from the members table. There is one
-/// pin store in this app and it is the one the pin glyph on every row already
-/// writes; a second would let a row show a filled pin while sitting outside the
-/// Pinned section.
-///
-/// **No foreign key from a member to a session**, matching `verification_runs`
-/// and `session_follow_ups`: a group is the user's list, and a session deleted
-/// out from under it is a stale entry the reader drops, not a constraint
-/// violation that fails the delete.
-///
-/// **The three seeded rule sections are a suggestion, not a claim.** They are
-/// written once, here, and never re-seeded: a user who deletes "Checks failing"
-/// has deleted it. They are written **collapsed**, which is not cosmetic — a
-/// collapsed section matches nothing and builds no rows, so a workspace that
-/// upgrades into this feature and never opens one pays exactly nothing for it.
-/// The order they are seeded in is the severity order a fixed priority table
-/// would have imposed (a red build, then an agent holding the user up, then
-/// work that died), which is the point: the default behaviour is the sensible
-/// one, and it is expressed as something the user can drag.
-///
-/// `release/*` and "PR open" are deliberately **not** seeded. The first is
-/// specific to a workspace's own branch naming and guessing at it would be
-/// noise; the second is broad enough that on a busy repository it is the whole
-/// session list wearing a hat. Both are one dialog away.
+/// Saved Explorer sections: live groups over facts the app already has. Two
+/// tables — what the user said, and the membership derived from it.
 void _migrateToV29(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS explorer_sections (
@@ -1332,10 +828,8 @@ void _migrateToV29(Database db) {
     );
   ''');
 
-  // `INSERT OR IGNORE` rather than a plain insert: the step is required to be
-  // idempotent at the DDL level (see [MigrationStep]), and a seed that threw on
-  // a re-run would be the one statement in this file that could not be applied
-  // twice.
+  // `INSERT OR IGNORE`: the step must stay idempotent, and a seed that threw on
+  // a re-run would be the one statement here that could not be applied twice.
   const seed = [
     ('section-pinned', 'Pinned', 'pinned', 0),
     ('section-checks-failing', 'Checks failing', 'checksFailing', 1),
@@ -1352,36 +846,8 @@ void _migrateToV29(Database db) {
   }
 }
 
-/// Workspaces: the grouping level *above* project.
-///
-/// **Additive and only additive.** The owner's live database holds ~31
-/// projects and thousands of sessions, and this upgrade must be something it
-/// can survive while the app is open on it: one new table, one nullable
-/// column, no data movement and no `DELETE`, `DROP` or `UPDATE` of any
-/// existing row. Every project on the far side of it is *unassigned*, which is
-/// the correct answer — nothing here knows which context a project belongs to,
-/// and guessing would file 31 things wrong at once.
-///
-/// **Unassigned is first-class, not a hole.** `workspace_id` is nullable and
-/// stays nullable: a project with no workspace is an ordinary project that
-/// shows under "All", never a row waiting to be fixed. That is also why the
-/// foreign key is `ON DELETE SET NULL` rather than `CASCADE` — deleting a
-/// workspace must lose the *grouping*, never the projects grouped by it. A
-/// cascade here would turn "I do not want these four buckets any more" into
-/// "delete 31 projects and their sessions", which is the single worst thing
-/// this table could do.
-///
-/// **Names are unique, case-insensitively.** The whole feature is a picker,
-/// and two rows both called "Personal" in a picker are two answers to a
-/// question with one answer. Enforced in the schema rather than in the
-/// controller because the controller is not the only writer — the suggestion
-/// path writes here too.
-///
-/// **No index on `projects.workspace_id`.** The filter never queries by it:
-/// the project list is already read whole (~31 rows, `ProjectDao.getAll`) and
-/// narrowed in memory, so an index would be paid for on every write and read
-/// by nothing. The one scan it *would* serve is the `SET NULL` fan-out when a
-/// workspace is deleted, over those same 31 rows, once.
+/// Workspaces: the grouping level above project. Additive and only additive —
+/// the owner's live database holds ~31 projects and thousands of sessions.
 void _migrateToV31(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS workspaces (
@@ -1402,48 +868,14 @@ void _migrateToV31(Database db) {
   );
 }
 
-/// What a context is *for*, in the user's own words.
-///
-/// A name is enough to pick a context and not enough to remember one: "Appwrite"
-/// is either the projects that run against the owner's own Appwrite or the ones
-/// that use the SDK, and only the person who made it knows which. One nullable
-/// column carries that sentence to every picker of contexts — the scope bar, the
-/// project's own right-click menu, the palette.
-///
-/// **Nullable, and staying nullable.** Nobody is going to write a sentence
-/// before they are allowed to group two projects, so a context without a
-/// description is complete rather than half-filled-in, and every surface falls
-/// back to something it can say for free (how many projects are in it).
-///
-/// **Additive, like v31.** No table is rewritten and no row is touched: the
-/// live database upgrades with every context intact and every description
-/// empty, which is exactly what it knows.
+/// What a context is *for*, in the user's own words: a name is enough to pick
+/// a context and not enough to remember one.
 void _migrateToV32(Database db) {
   db.execute('ALTER TABLE workspaces ADD COLUMN description TEXT;');
 }
 
-/// Saved command snippets: the commands the user keeps instead of retyping.
-///
-/// **One table, no foreign keys, nothing seeded.** A snippet belongs to the
-/// person, not to a project, a repository or a session — the whole point is
-/// that the same `flutter test --exclude-tags=live-ssh` is reachable from every
-/// pane in the app — so there is nothing here to reference and nothing to
-/// cascade. And nothing is seeded: a starter library is a guess about somebody
-/// else's commands, and a palette that opens full of commands the user never
-/// wrote is a palette they learn to ignore.
-///
-/// **`shell` is nullable, and nullable is the common case.** It names the shell
-/// the snippet is written for (`powerShell`, `commandPrompt`, `wsl`, `posix`),
-/// and NULL means "fits any pane". Stored as the enum's own name rather than an
-/// integer so a row is readable in `sqlite3` and so an unrecognised tag stays
-/// legible instead of becoming an out-of-range ordinal; `CommandSnippet`
-/// compares it as a string, which is what makes an unknown tag match *no* pane
-/// rather than every pane.
-///
-/// **`submit` is `NOT NULL DEFAULT 0`.** The default is the safe act — type the
-/// command at the prompt and stop — and a column that defaults to running
-/// somebody's saved `rm -rf` is the one mistake this schema could make that no
-/// later code could undo.
+/// Saved command snippets. One table, no foreign keys, nothing seeded: a
+/// snippet belongs to the person, not to a project, repository or session.
 void _migrateToV33(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS command_snippets (
@@ -1458,54 +890,8 @@ void _migrateToV33(Database db) {
   ''');
 }
 
-/// Todos, and the project a todo or a note is filed under.
-///
-/// **Six columns, and not one of them is a feature.** The ask was for *simple*
-/// todos, so what is here is identity, the line of text, whether it is done,
-/// the association that was asked for, the order that was asked for, and when
-/// it was written. No due date, no priority, no label, no assignee, no
-/// recurrence — every one of those is a box to fill in before the list works,
-/// and a todo list nobody has to learn beats a task manager nobody opens.
-///
-/// **`done_at` rather than a `done` flag.** It is the same boolean — null is
-/// open — and it also answers "when did I finish that", which a `0` cannot and
-/// which nothing else in the row records. A flag would throw the fact away and
-/// save nothing.
-///
-/// **`position` earns its column because the request named it**: "a line of
-/// text, done or not, ordered". Ordering by `created_at` would be *an* order
-/// but not the user's, and the row that most needs to move to the top is
-/// exactly the one that has sat there longest. Dense integers, renumbered on a
-/// move, rather than fractional indices: the list is tens of rows, the
-/// renumber is one transaction, and float midpoints exhaust their precision in
-/// a way that is silent when it happens.
-///
-/// **`project_id` is nullable on both tables and stays nullable.** A todo filed
-/// under nothing is an ordinary todo, not a row waiting to be fixed — the same
-/// argument v31 makes for `projects.workspace_id`, and the foreign key is
-/// `ON DELETE SET NULL` for the same reason it is there. Deleting a project
-/// must lose the *filing*, never the writing: a project is deleted when the
-/// work is over, and "the work is over" is exactly when the leftover note
-/// saying what went wrong is worth the most. A cascade would turn "I am done
-/// with this checkout" into "and delete everything I wrote about it".
-///
-/// **Why a foreign key here when `notes.source_session_id` deliberately has
-/// none.** Those columns record where a note *came from*, and what they name
-/// may never have been a row of ours — an imported CLI session, a transcript we
-/// only read. `project_id` records where the user *filed* it, and a project is
-/// a row this app creates and deletes. A dangling origin is honest history
-/// ("from a session that is gone"); a dangling filing is a menu entry that
-/// draws a blank.
-///
-/// **The one `UPDATE`, and why it is not the data movement v31 refused.** Every
-/// note captured from a session already records that session's repository, and
-/// a repository belongs to exactly one project — so the project a note was
-/// written in is a fact *this database already holds*, not the guess v31 would
-/// have had to make about thirty-one projects. The statement writes only into
-/// the column created two statements above it, so there is nothing it can
-/// overwrite: one `ALTER TABLE` ago that column did not exist. Without it every
-/// real note the owner has would land unfiled on the day the filter shipped,
-/// and the feature would look broken by its own first impression.
+/// Todos, and the project a todo or a note is filed under. Both nullable:
+/// filed under nothing is an ordinary todo, not an unfinished one.
 void _migrateToV34(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS todos (
@@ -1517,9 +903,8 @@ void _migrateToV34(Database db) {
       created_at TEXT NOT NULL
     );
   ''');
-  // The list is read whole and split in memory, so this index serves exactly
-  // one query: the `SET NULL` fan-out when a project is deleted. That is
-  // enough — without it, deleting a project scans every todo ever written.
+  // Serves exactly one query — the `SET NULL` fan-out when a project is
+  // deleted, which without it scans every todo ever written.
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_todos_project ON todos (project_id);',
   );
@@ -1541,46 +926,10 @@ void _migrateToV34(Database db) {
   ''');
 }
 
-/// Per-agent permission modes: a session records the mode in **its agent's own
-/// vocabulary** instead of a shared three-value enum.
-///
-/// The column keeps its name and its type. What changes is what the string
-/// means: `ask` / `acceptEdits` / `bypass` become a canonical selection over
-/// that agent's declared axes — `mode=manual` for Claude Code,
-/// `approval=on-request;sandbox=workspace-write` for Codex. A NULL is left
-/// NULL: it means "this session never chose" and still does.
-///
-/// **The rewrite is argument-preserving for two of the three agents.** Claude
-/// Code and Antigravity map one-for-one onto the flags they already sent, so no
-/// migrated session's command line changes by a character:
-///
-///   ask         -> --permission-mode manual     / (no flag)
-///   acceptEdits -> --permission-mode acceptEdits / --mode accept-edits
-///   bypass      -> --permission-mode bypassPermissions
-///                                                / --dangerously-skip-permissions
-///
-/// **Codex's `ask` is the one cell that changes, by one added flag.** It used
-/// to send `--ask-for-approval on-request` and no `--sandbox` at all, which the
-/// descriptor itself documented as *not* an ask-every-time. It now sends
-/// `--sandbox workspace-write --ask-for-approval on-request` — the same
-/// approval policy, plus an explicit sandbox that matches Codex's own default.
-///
-/// **The caveat, for whoever finds this next:** a user whose
-/// `~/.codex/config.toml` sets a different `sandbox_mode` was previously having
-/// that honoured, because we passed no `--sandbox`. After this they get
-/// `workspace-write` from the command line, which wins. That is deliberate —
-/// the alternative was declaring a "Codex's own default" value whose
-/// permissiveness we cannot state — but it is a real behaviour change for that
-/// user, and the fix if it ever matters is a declared sandbox value that passes
-/// no flag, once somebody has established what it permits.
-///
-/// Nothing is dropped, renamed or deleted: one `UPDATE` over one text column,
-/// safe to run with the app open.
+/// Per-agent permission modes: a session records the mode in its agent's own
+/// vocabulary instead of a shared three-value enum. Column name and type stay.
 void _migrateToV35(Database db) {
-  // (agent id, legacy value, canonical selection). The selections are the
-  // canonical form `AgentPermissionSupport.normalise` produces — axis ids in
-  // alphabetical order, and a superseded axis reset to its default, which is
-  // why Codex's bypass still names `approval=on-request`.
+  // (agent id, legacy value, canonical selection).
   const rewrites = [
     ('claudeCode', 'ask', 'mode=manual'),
     ('claudeCode', 'acceptEdits', 'mode=acceptEdits'),
@@ -1602,12 +951,8 @@ void _migrateToV35(Database db) {
   }
 }
 
-/// Index the CLI conversation a session records.
-///
-/// `sessions.external_session_id` is the lookup used once per detected CLI
-/// conversation by import and adoption. Including the stable ordering columns
-/// lets SQLite answer both the filter and `created_at DESC, id DESC` without
-/// scanning the session table or building a temporary sort.
+/// Index the CLI conversation a session records — the lookup import and
+/// adoption run once per detected conversation.
 void _migrateToV36(Database db) {
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sessions_external '
@@ -1615,10 +960,8 @@ void _migrateToV36(Database db) {
   );
 }
 
-/// Index the installation a session ran under.
-///
-/// This serves the re-detection guard, installation repoint, and the foreign
-/// key check SQLite performs when an installation is removed.
+/// Index the installation a session ran under: re-detection, repoint, and the
+/// foreign key check SQLite runs when an installation is removed.
 void _migrateToV37(Database db) {
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sessions_installation '
@@ -1626,20 +969,8 @@ void _migrateToV37(Database db) {
   );
 }
 
-/// Saved Codex OAuth identities.
-///
-/// The complete token bundle is retained because a refresh token, account id
-/// and access token are one credential. Nothing is logged or split into
-/// independently stale columns; the display fields are denormalized only.
-///
-/// **Its own version, and that is not cosmetic.** This table was first written
-/// into `_migrateToV36` on a branch, beside the index that version already
-/// carried on `main`. A version number is not a label — it is compared against
-/// the stored `PRAGMA user_version`, and only steps *greater* than it run. A
-/// database that had already taken `main`'s v36 therefore stands at 36, skips
-/// it forever, and never sees this table at all: the app would then query
-/// `codex_accounts` on a database that has none. Two branches may not spend the
-/// same number on different work.
+/// Saved Codex OAuth identities. The whole token bundle is kept because
+/// refresh token, account id and access token are one credential.
 void _migrateToV38(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS codex_accounts (
@@ -1654,22 +985,8 @@ void _migrateToV38(Database db) {
   ''');
 }
 
-/// Whether a human chose an installation's executable path.
-///
-/// The same distinction `sessions.title_by_user` draws, for the same reason: a
-/// sweep must not overwrite an explicit choice, and *"the path differs from
-/// what discovery would find"* is not a usable test for one — it cannot be
-/// recovered after a restart, and inferring it that way was a real bug when the
-/// title sync tried it. So it is recorded.
-///
-/// The rule it enables, in two halves:
-///
-/// * a **broken** path is repaired whoever set it — a stale path helps nobody;
-/// * a **working** hand-set path is never replaced by a sweep, even when
-///   discovery would now pick a different one.
-///
-/// Defaults to 0, so every row that already exists is what it in fact is:
-/// found by discovery, and free to be moved by it.
+/// Whether a human chose an installation's executable path, so a sweep can fix
+/// a broken one without ever overwriting an explicit choice.
 void _migrateToV39(Database db) {
   final columns = db
       .select('PRAGMA table_info(agent_installations);')
@@ -1681,19 +998,8 @@ void _migrateToV39(Database db) {
   );
 }
 
-/// When an installation's version was last read from the binary.
-///
-/// The version column was written by discovery and never revisited:
-/// `discoverUnprobed` skips any pair that already has a row, so only a manual
-/// "Detect agents" reached the update. The app reported Claude Code 2.1.252 for
-/// a binary answering 2.1.260 and nothing on screen could say which of the two
-/// it was — a bare number reads exactly like a current one.
-///
-/// **Nullable, and left null for every existing row.** Backfilling it from
-/// `created_at` would invent a reading time for a number whose age nobody
-/// recorded, which is the §19 mistake in a migration: an unknown is never a
-/// zero. A null here means "we have a number and no idea when it was read", and
-/// that is what gets rendered.
+/// When an installation's version was last read from the binary, so a recorded
+/// version is a dated reading rather than a bare number.
 void _migrateToV40(Database db) {
   final columns = db
       .select('PRAGMA table_info(agent_installations);')
@@ -1704,35 +1010,8 @@ void _migrateToV40(Database db) {
   );
 }
 
-/// Full-text search over every conversation's **visible** turns.
-///
-/// Three objects, and the split between them is the whole design.
-///
-/// * `conversation_turns` — an ordinary table holding the content, indexed by
-///   `session_id`. That index is what makes re-indexing one conversation an
-///   indexed delete instead of a walk over every turn in the store; a plain
-///   FTS5 table with the same four columns would have had to scan its own
-///   content for the same delete, which is the per-trigger full-store cost this
-///   feature is refused over.
-/// * `conversation_turns_fts` — external-content FTS5 over `text` alone. The
-///   other columns are deliberately not tokenised: `role` holds `user` and
-///   `agent`, and a search for the word "user" that returned every user turn is
-///   noise rather than a feature.
-/// * `conversation_index_state` — one row per conversation, recording the
-///   transcript it was read from and the mtime and size it had. A trigger whose
-///   watermark still matches costs one SELECT and reads no file.
-///
-/// `session_id` is the **CLI's own conversation id** — `DetectedSession.sessionId`,
-/// `sessions.external_session_id`, `imported_sessions.external_id` — never our
-/// own row id, because one conversation is a live session row today and
-/// read-only history tomorrow and the index has to survive that move. It is
-/// unique only within its CLI's store, which is why `cli` sits beside it, the
-/// same pair `imported_sessions(source, external_id)` is unique on.
-///
-/// FTS5 is a compile-time option. It is present in the library this app loads
-/// (`ENABLE_FTS5`, SQLite 3.53.2, checked by `fts5_availability_test.dart`), and
-/// that test exists so a dependency bump that dropped it fails on the gate
-/// rather than inside this statement on somebody's machine.
+/// Full-text search over every conversation's *visible* turns, plus the
+/// per-conversation watermark that keeps a re-index off an unmoved transcript.
 void _migrateToV41(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS conversation_turns (
@@ -1756,9 +1035,7 @@ void _migrateToV41(Database db) {
     );
   ''');
   // The three triggers FTS5 documents for external content. The update one is
-  // here even though a re-index is a delete followed by an insert: without it
-  // the first caller that ever writes an UPDATE leaves the index silently
-  // describing the old text, and nothing would fail until a search missed.
+  // here so the first UPDATE cannot leave the index describing the old text.
   db.execute('''
     CREATE TRIGGER IF NOT EXISTS conversation_turns_ai
     AFTER INSERT ON conversation_turns BEGIN
@@ -1782,9 +1059,8 @@ void _migrateToV41(Database db) {
       VALUES (new.id, new.text);
     END;
   ''');
-  // `modified_at` and `size` are nullable together: a transcript we read
-  // without being able to stat it is indexed, and simply has no watermark to
-  // skip on next time. An unknown is not a zero (§19).
+  // `modified_at` and `size` are nullable together: a transcript read without a
+  // stat is indexed and has no watermark. An unknown is not a zero (§19).
   db.execute('''
     CREATE TABLE IF NOT EXISTS conversation_index_state (
       session_id TEXT PRIMARY KEY,
@@ -1799,36 +1075,7 @@ void _migrateToV41(Database db) {
 }
 
 /// Worktree setup: what a repository wants done to a worktree git has just
-/// made, and what happened the last time it was done.
-///
-/// **Two tables because they are two different kinds of fact.** The setting is
-/// the user's intent and belongs to the checkout; the report is a measurement
-/// of one worktree and belongs to that directory. Folding the second into the
-/// first would overwrite one worktree's verdict with the next one's.
-///
-/// **In the database rather than in a checked-in file**, which is the decision
-/// the backlog took for us: *"the file format is the expensive half and the one
-/// we would most likely get wrong first."* A `.karmashala/setup.yaml` would
-/// also have to be versioned, validated and reconciled with a branch that
-/// changed it, none of which buys anything until somebody wants the setting to
-/// travel with the repository.
-///
-/// `command` is a **JSON argv array**, not a command line. That is what
-/// `AgentPaneLaunch` takes and what `wrapForPty` quotes — once — for whichever
-/// shell the pane opens into. Storing a line would put a second parser between
-/// the setting and the shell that finally reads it.
-///
-/// `ON DELETE CASCADE` on both: a setting for a checkout that has been retired
-/// is configuration for a directory nobody can reach, and a verdict about a
-/// worktree of it is history about a place that is gone. Neither is the kind of
-/// record `RepositoryDao.delete`'s own doc argues for keeping — those are
-/// transcripts of work, and this is a build recipe.
-///
-/// `ran_at` is `NOT NULL` and rendered with `describeAge`: a verdict with no
-/// age is a confident statement about a moment nobody can identify (§19). The
-/// per-path sentences and the command's exit code live inside `detail` rather
-/// than in columns of their own, because nothing queries them — `verdict` is
-/// the only field a surface filters on, and it is a column for that reason.
+/// made, and the recorded verdict of the last time it was done.
 void _migrateToV42(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS worktree_setup (
@@ -1854,44 +1101,7 @@ void _migrateToV42(Database db) {
 }
 
 /// Scheduled automations, their occurrences, and the preconditions that gate
-/// them.
-///
-/// **Four tables, one feature: the gate is the feature.** An automation is
-/// authorisation given in advance, and it only holds because the app refuses to
-/// fire when the preconditions for unsupervised work are absent. Two of these
-/// tables are the automation; the other two are what "verification is mandatory
-/// when nobody is watching" reads, and without them that rule would be a
-/// comment.
-///
-/// **`automations` has no `armed_by`, deliberately.** Arming is a human action
-/// in the UI and nowhere else — no MCP tool serves it, and a test asserts that
-/// no served tool name begins with `automation`. A column naming who armed a
-/// row would be a claim the schema cannot keep the day something else can write
-/// it; the absence is the statement.
-///
-/// `cron` and `fires_at` are the two schedule kinds and **exactly one is set**.
-/// Folding a one-shot into a cron expression loses the fact that it is over
-/// once it has fired, which is what lets it be caught up rather than silently
-/// rolled to tomorrow.
-///
-/// `agent_installation_id` is a plain column with **no foreign key**, unlike
-/// `repository_id`. Uninstalling an agent must not delete the automations armed
-/// on it: the row is what the user goes back to, and the gate already refuses a
-/// fire whose installation is gone, in words. A retired *checkout* is the other
-/// case, and cascades for `worktree_setup`'s reason — an automation for a
-/// directory nobody can reach is configuration, not history.
-///
-/// `automation_runs.scheduled_for` is separate from `fired_at` because a
-/// `missed` row is written long after the occurrence it is about; the first is
-/// when it was due, the second when we noticed. `commits_made` is nullable and
-/// **never backfilled to zero** — a count nobody took and a run that committed
-/// nothing are different facts (§19).
-///
-/// `project_verification` holds one row per checkout and **defaults to off by
-/// absence**: no row means verification was never turned on, which is the
-/// refusal the gate wants rather than a permissive silence. `project_checks`
-/// stores argv as JSON, like `worktree_setup.command` and for the same reason
-/// — a line would need a second parser between the setting and the shell.
+/// them. The gate is the feature.
 void _migrateToV43(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS automations (
@@ -1955,32 +1165,8 @@ void _migrateToV43(Database db) {
   );
 }
 
-/// **What repository a checkout is**, as distinct from where it is.
-///
-/// `repositories` was `(id, project_id, name, environment_id, path,
-/// created_at)` — a location with no canonical key — so nothing could tell two
-/// checkouts of one repository apart from two unrelated repositories. On the
-/// owner's machine that is sixty-nine rows standing for a handful of actual
-/// repositories, and the difference was unrepresentable.
-///
-/// `TEXT` and **nullable**, which is the whole contract. It is derived from
-/// `origin` ([canonicalRepositoryId]) and there are three ordinary ways for a
-/// row not to have one: a `git init` with no remote, a local or `file://`
-/// remote, and a row nothing has read `origin` for yet. So it is filled in when
-/// the app happens to learn a checkout's origin — never on a sweep and never on
-/// a tick — and every reader has to degrade to path-only behaviour when it is
-/// null.
-///
-/// **Not `UNIQUE` and not an identity of its own.** Two rows sharing it is the
-/// normal case and the point: a clone and each of its worktrees all carry the
-/// same string. `id` stays the row's identity, which is what every session,
-/// checkpoint and fanout row already references.
-///
-/// **v44, renumbered on the merge.** It was written as v43 and the
-/// automations branch landed that number first, which is exactly the case
-/// the v36 note above describes: a version is compared against the stored
-/// `user_version`, never read as a label, so whichever branch merges second
-/// moves.
+/// What repository a checkout *is*, as distinct from where it is: a nullable
+/// canonical id derived from `origin`.
 void _migrateToV44(Database db) {
   final columns = db
       .select('PRAGMA table_info(repositories);')
@@ -1990,17 +1176,8 @@ void _migrateToV44(Database db) {
   db.execute('ALTER TABLE repositories ADD COLUMN canonical_id TEXT;');
 }
 
-/// A named workbench shape the user can reopen.
-///
-/// One `shape` column holding the whole document rather than a row per tab and
-/// a row per pane, for the reason `kTerminalWorkspaceKey` gives about the split
-/// tree beside it: the shape *is* a document, and half of one written across N
-/// rows is a shape that cannot be read back. A table rather than a metadata key
-/// because presets are a list the user names, adds to and deletes from.
-///
-/// **v45, renumbered on the merge**, for the reason the note above gives one
-/// number earlier: it was written as v44 and the canonical repository id
-/// landed that number first.
+/// A named workbench shape the user can reopen. One `shape` column holds the
+/// whole document rather than a row per tab and a row per pane.
 void _migrateToV45(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS terminal_presets (
@@ -2013,30 +1190,8 @@ void _migrateToV45(Database db) {
   ''');
 }
 
-/// The verdicts an automation's project checks left on one occurrence.
-///
-/// **A row per check, and a timestamp on the run saying the checks were looked
-/// at.** The two are not the same fact and collapsing them would lose the one
-/// that matters: no rows and no timestamp is *"nothing has re-run this yet"*,
-/// while no rows *with* a timestamp is *"this checkout has no check
-/// configured"*. A schema that could only say "no verdicts" would read the
-/// second as the first — an unknown reported as a zero (§19).
-///
-/// `check_id` is a plain column with **no foreign key**: deleting a check must
-/// not rewrite what last night's run found, the same reason
-/// `automations.agent_installation_id` is not one. `name` and `command` are
-/// copied onto the row for that too — a verdict has to still say what it ran
-/// after the check it came from is edited or gone.
-///
-/// `verification_run_id` points at the `verification_runs` row
-/// `VerificationService.recordCommandCheck` wrote, and is **null when nothing
-/// ran** — a check whose environment could not be reached is a verdict with no
-/// command behind it.
-///
-/// **v46, renumbered twice on the way in**, for the reason v44 above gives:
-/// the number is compared against the stored `user_version` and never read as
-/// a label, so whichever branch merges second moves — twice here, because two
-/// did.
+/// The verdicts an automation's project checks left on one occurrence: a row
+/// per check, plus a timestamp saying the checks were looked at at all.
 void _migrateToV46(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS automation_run_checks (
@@ -2060,22 +1215,8 @@ void _migrateToV46(Database db) {
   db.execute('ALTER TABLE automation_runs ADD COLUMN checks_observed_at TEXT;');
 }
 
-/// A companion's presence, as it last described itself.
-///
-/// **Four nullable columns and no defaults**, because every one of them has to
-/// be able to say *nothing was said*: an old companion sends none of these
-/// fields, and a row that answered "foreground" for it would be a claim
-/// invented by this schema (§19). `presence_at` is the reading's own age and is
-/// never backfilled from `created_at` — an unknown reading time is not a
-/// reading time.
-///
-/// Written by `notifications.register` beside the push token, and read in
-/// exactly one place: `PushFanout`, which spends presence to decide whether a
-/// phone that can already hear the news needs a push as well. Nothing on the
-/// delivery path reads it, which is the invariant
-/// `presence_is_not_delivery_test.dart` exists to hold.
-///
-/// **v47, renumbered with v46 above it** and for the same reason.
+/// A companion's presence, as it last described itself. Four nullable columns
+/// and no defaults, because each has to be able to say *nothing was said*.
 void _migrateToV47(Database db) {
   final columns = db
       .select('PRAGMA table_info(paired_devices);')
@@ -2087,32 +1228,8 @@ void _migrateToV47(Database db) {
   db.execute('ALTER TABLE paired_devices ADD COLUMN presence_at TEXT;');
 }
 
-/// The recap a person asked a session's own CLI to write.
-///
-/// **One row per session, replaced on each request.** A recap is a reading of a
-/// conversation at a moment, and two of them are not a history worth keeping:
-/// the older one describes a session that no longer exists, and offering it
-/// beside the newer would be two answers to one question. Asking again costs a
-/// turn of the owner's quota, so the row that survives is the one they paid
-/// for most recently.
-///
-/// Every column is what makes the stored text readable later rather than
-/// merely present:
-///
-/// * `written_at` is the reading's own age (§19). The card renders it, and a
-///   recap with no time on it would be a claim about a session with nothing
-///   saying how stale it is.
-/// * `agent_id` and `model` are **who wrote it**. The same conversation
-///   recapped by Codex and by Claude Code are two different readings, and a
-///   model is the other half of that. `model` is nullable and never
-///   backfilled: a CLI that was not told which model to use ran its own
-///   default, and naming a model we did not ask for would be invented.
-/// * `turn_count` is what it had read. It is the whole of "the session has
-///   moved since", counted rather than timed — a session can sit for a day
-///   without moving, and a minute is enough to make a recap wrong.
-///
-/// `ON DELETE CASCADE`: the recap is about this session and is meaningless
-/// without it.
+/// The recap a person asked a session's own CLI to write. One row per session,
+/// replaced on each request.
 void _migrateToV48(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS session_recaps (
