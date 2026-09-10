@@ -4,17 +4,13 @@ import '../domain/decision_record.dart';
 
 /// Data-access for the **append-only** decision record (schema v23).
 ///
-/// The surface is deliberately three methods: [append] and two reads. There is
-/// no update and no delete, and that is the feature rather than an omission —
-/// the record's whole value is that what was decided cannot later be quietly
-/// revised into what is convenient now. `SessionEventDao` makes the same
-/// argument about the event log (ADR 0003); this one matters more, because a
-/// decision is read by an agent that was not there and has no way to check it.
+/// [append] and two reads, with no update and no delete: the record's value is
+/// that what was decided cannot later be quietly revised into what is
+/// convenient now, and it is read by an agent that was not there and has no way
+/// to check it.
 ///
-/// A second write of an identical decision therefore appends a **second row**.
-/// It does not find and rewrite the first: two people deciding the same thing
-/// twice is two acts, and collapsing them would silently discard when it was
-/// re-affirmed.
+/// A second write of an identical decision appends a **second row** rather than
+/// rewriting the first — deciding the same thing twice is two acts.
 class DecisionRecordDao {
   DecisionRecordDao(this._db);
 
@@ -58,9 +54,7 @@ class DecisionRecordDao {
     });
   }
 
-  /// Every decision recorded for [sessionId], **oldest first**.
-  ///
-  /// Oldest first because decisions accumulate into a position: the early ones
+  /// Every decision recorded for [sessionId], **oldest first**: the early ones
   /// are the constraints everything since was built on, and reading them in
   /// reverse would present the conclusions before the rules they follow from.
   List<DecisionRecord> forSession(String sessionId) {

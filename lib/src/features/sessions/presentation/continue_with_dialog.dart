@@ -11,35 +11,20 @@ import '../domain/session_fork.dart';
 
 /// What offering "Continue with…" promises, wherever it is offered from.
 ///
-/// One sentence in one place, because three surfaces now open this dialog — the
-/// Explorer's menu, the delivery strip and the attention inbox's follow-up row
-/// — and the promise is the only thing that makes putting it on a row
-/// defensible at all. The row is a shorter path *to* a confirmation, never a
-/// way past one; a surface that quietly dropped this clause would be offering
-/// something different from what it opens.
+/// One sentence in one place, because three surfaces open this dialog and the
+/// promise is what makes putting it on a row defensible: the row is a shorter
+/// path *to* a confirmation, never a way past one.
 const String kContinueWithPromise =
     'Nothing is launched until you have seen what the next agent will be told.';
 
 /// "Continue with…" — move a session to another agent, or branch it.
 ///
-/// The dialog exists to make one thing true: **nothing is launched until the
-/// user has seen what the next agent will be told.** A handoff spends the
-/// receiving agent's first turn on this document, and the moment before launch
-/// is the only one at which a missing instruction or a wrong recap costs
-/// nothing. So the packet is built and previewed here, and the button that
-/// starts it is the same one that dismisses the preview.
-///
-/// It also states, before the launch and not after it, the two things that
-/// silently differ between agents:
-///
-/// * what the session's **permission mode** becomes on the way over (Loop 49's
-///   fidelity, applied across a provider boundary), and
-/// * whether a fork is the CLI's own or a written substitute for one.
-///
-/// The mode is offered as a choice rather than only reported, because the
-/// answer is a property of the *pair*: the agent the user is picking decides
-/// which modes exist at all, so this is the first moment the question can be
-/// asked properly, and the last one before it is answered by a launch.
+/// It exists to make one thing true: **nothing is launched until the user has
+/// seen what the next agent will be told.** A handoff spends the receiving
+/// agent's first turn on that document. It also states, before the launch, the
+/// two things that silently differ between agents: what the permission mode
+/// becomes on the way over — offered as a choice, since the modes on offer are
+/// the target's — and whether a fork is the CLI's own or a written substitute.
 class ContinueWithDialog extends ConsumerStatefulWidget {
   const ContinueWithDialog({required this.sessionId, super.key});
 
@@ -64,11 +49,10 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   _Mode _mode = _Mode.handoff;
   String? _targetInstallationId;
 
-  /// The mode the user picked, or null while the session's own is being
-  /// carried. Kept as the raw pick rather than as the resolved mode, because
-  /// the resolution depends on the agent and the agent is still changeable:
-  /// [resolveContinuationPermission] is re-run on every build and again by the
-  /// service at launch, from this one value, so the two cannot disagree.
+  /// The mode the user picked, or null while the session's own is carried. Kept
+  /// as the raw pick rather than the resolved mode, because resolution depends
+  /// on the agent and the agent is still changeable:
+  /// [resolveContinuationPermission] re-runs from this one value.
   PermissionSelection? _chosenMode;
 
   bool _newWorktree = false;
@@ -78,9 +62,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
 
   /// Whether to ask the source session to write its own brief first.
   ///
-  /// **Off by default**, and that is the decision rather than an oversight: it
-  /// spends a turn of the source agent's quota, and running out of that quota
-  /// is one of the reasons people hand off at all.
+  /// **Off by default**, and that is a decision: it spends a turn of the source
+  /// agent's quota, and running out of that quota is one reason people hand off.
   bool _askSource = false;
 
   /// What the source agent answered, kept so the preview and the launch spend
@@ -100,10 +83,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   ];
 
   /// The source agent's brief, asked for at most once whatever happens next.
-  ///
   /// Never throws into the caller: a handoff must not be blocked on an agent
-  /// that does not answer, so every failure becomes the sentence the packet
-  /// prints instead.
+  /// that does not answer, so a failure becomes the sentence the packet prints.
   Future<HandoffSourceBrief?> _briefFromSource() async {
     if (!_askSource) return null;
     final held = _sourceBrief;
@@ -198,9 +179,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
       : _selected(targets);
 
   /// What [target] will run under, given whatever has been picked so far.
-  ///
   /// `target.permission.requested` is the source session's own mode, so the
-  /// dialog needs nothing else to ask this question of any target in the list.
+  /// dialog needs nothing else to ask this of any target in the list.
   ContinuationPermission _permissionFor(HandoffTarget target) =>
       resolveContinuationPermission(
         sessionRisk: target.permission.requested,
@@ -411,11 +391,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
 }
 
 /// The agent picker, with each target's permission consequence beside it.
-///
 /// A target that cannot receive the packet is **listed and disabled**, with the
-/// reason, rather than hidden — the same rule the permission chip follows, for
-/// the same reason: a missing option leaves the user hunting for it, while a
-/// disabled one with a sentence beside it answers the question.
+/// reason, rather than hidden: a missing option leaves the user hunting for it.
 class _TargetPicker extends StatelessWidget {
   const _TargetPicker({
     required this.targets,
@@ -428,8 +405,8 @@ class _TargetPicker extends StatelessWidget {
   final HandoffTarget? selected;
 
   /// Each row's permission sentence, resolved against the mode picked so far
-  /// rather than against the session's alone — otherwise the rows would answer
-  /// "what happens if I go here" for a mode the user has already changed.
+  /// rather than the session's alone — otherwise the rows would answer "what
+  /// happens if I go here" for a mode the user has already changed.
   final ContinuationPermission Function(HandoffTarget) permissionFor;
 
   final ValueChanged<HandoffTarget> onChanged;
@@ -499,10 +476,8 @@ class _TargetPicker extends StatelessWidget {
 }
 
 /// The mode the next session will run under, and where that answer came from.
-///
-/// It sits under the agent it belongs to, because the two questions are one
-/// question: the modes on offer are the chosen agent's, and choosing a
-/// different agent re-answers both.
+/// It sits under the agent it belongs to because the two are one question: the
+/// modes on offer are the chosen agent's, and changing agent re-answers both.
 class _PermissionRow extends StatelessWidget {
   const _PermissionRow({
     required this.permission,
@@ -514,9 +489,9 @@ class _PermissionRow extends StatelessWidget {
 
   final ContinuationPermission permission;
 
-  /// The target agent, so the picker can draw *its* axes. The dialog re-runs
-  /// this whenever the agent changes, which is what keeps a pick made for one
-  /// CLI from being shown against another's vocabulary.
+  /// The target agent, so the picker can draw *its* axes. Re-run whenever the
+  /// agent changes, which keeps a pick made for one CLI from being shown
+  /// against another's vocabulary.
   final AgentDescriptor? descriptor;
 
   /// Whether the mode on offer is the Settings default rather than anything
@@ -528,11 +503,9 @@ class _PermissionRow extends StatelessWidget {
   final ValueChanged<PermissionSelection> onChanged;
 
   /// Where this mode came from, in the one case [ContinuationPermission] cannot
-  /// know about: nobody chose it, here or upstream.
-  ///
-  /// "Carried from this session" would be the wrong sentence — it presents a
-  /// default as a decision, and hides that the new session keeps following the
-  /// setting and moves when it does.
+  /// know about: nobody chose it, here or upstream. "Carried from this session"
+  /// would present a default as a decision, and hide that the new session keeps
+  /// following the setting.
   String get _explanation => followsDefault && !permission.wasChosen
       ? 'Following the $agentName default in Settings, as this session does. '
             'It changes when that setting does. ${permission.carried.summary}'

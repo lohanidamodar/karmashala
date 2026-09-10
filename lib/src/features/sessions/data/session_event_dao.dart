@@ -4,20 +4,16 @@ import '../domain/session_event.dart';
 
 /// Data-access for the **append-only** session event log.
 ///
-/// This DAO deliberately exposes no update or delete of events: the log is
-/// append-only by design (ADR 0003). [append] assigns the next per-session
-/// sequence number atomically and returns the stored event with its assigned
-/// [SessionEvent.seq] and database [SessionEvent.id].
+/// Deliberately exposes no update or delete (ADR 0003). [append] assigns the
+/// next per-session sequence number atomically.
 class SessionEventDao {
   SessionEventDao(this._db);
 
   final AppDatabase _db;
 
   /// Appends an event to its session's log, assigning the next sequence number.
-  ///
-  /// The `seq` and `createdAt` of the input [event] are ignored for sequencing
-  /// purposes: `seq` is computed here, and `createdAt` is taken from the event
-  /// (callers stamp it). Returns the persisted event.
+  /// The input's `seq` is ignored — it is computed here — while `createdAt` is
+  /// taken from the event, which callers stamp.
   SessionEvent append(SessionEvent event) {
     return _db.transaction(() {
       final maxRows = _db.query(

@@ -8,39 +8,19 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/session_activity_providers.dart';
 
-/// How often the elapsed times are redrawn.
-///
-/// One second, because the numbers are seconds. The tick is a `setState` on
-/// this widget alone — it never touches the transcript above it — and it exists
-/// only while there is something to count, so a quiet session pays nothing.
+/// How often the elapsed times are redrawn. One second, because the numbers are
+/// seconds. The tick is a `setState` on this widget alone and exists only while
+/// there is something to count, so a quiet session pays nothing.
 const Duration kActivityTickInterval = Duration(seconds: 1);
 
-/// **What this session is doing right now**, pinned above the composer.
+/// **What this session is doing right now**, pinned above the composer: the
+/// calls the agent has issued and not yet answered, and how long each has been
+/// out. **Summary and elapsed, and nothing else** — the reader keeps a bounded
+/// *head* of each result, so there is no live output to stream here.
 ///
-/// The chat view had no at-a-glance answer to that question: in-flight work was
-/// visible only if you scrolled to the bottom of the transcript and noticed a
-/// tool row with no result under it. This is that same fact, held still.
-///
-/// It shows the calls the agent has issued and not yet answered — the summary
-/// the transcript already prints, which for a shell call is the command itself,
-/// plus how long each has been out. **Summary and elapsed, and nothing else**:
-/// the reader keeps a bounded *head* of each result rather than a tail, so
-/// there is no live output to stream here and pretending otherwise would mean
-/// inventing one. A subagent is marked as one, because it is the one call that
-/// is another agent rather than a tool.
-///
-/// It draws nothing at all when nothing is outstanding — no empty box, no
-/// reserved row — because that is the common case and it must cost the reader
-/// nothing. It does draw one quiet line when the session is working and there
-/// is **no record here that can say what on**: that is the one empty answer
-/// which would otherwise read as "working on nothing", and §19 will not have a
-/// reading that could not be taken presenting itself as a reading of zero.
-///
-/// What decides all of that is [sessionActivityFrom]; this widget adds the
-/// clock.
-///
-/// Conversation only. A terminal pane already shows the CLI printing, and a
-/// second copy of it beside the first is noise.
+/// It draws nothing when nothing is outstanding, but does draw one quiet line
+/// when the session is working and no record can say what on: that empty answer
+/// would otherwise read as "working on nothing". Conversation only.
 class ActivityStrip extends ConsumerStatefulWidget {
   const ActivityStrip({required this.sessionId, super.key});
 
@@ -76,17 +56,13 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
 
   @override
   Widget build(BuildContext context) {
-    // **Nothing ticks for a surface nobody can see.** `WorkbenchView` keeps a
-    // conversation that has been asked for mounted behind the terminal so the
-    // toggle preserves its scroll position — and the strip went on calling
-    // `setState` once a second underneath it, rebuilding and laying itself out
-    // under every keystroke the user typed into the terminal in front of it.
+    // **Nothing ticks for a surface nobody can see.** A conversation kept
+    // mounted behind the terminal went on calling `setState` once a second,
+    // relaying itself out under every keystroke typed in front of it.
     //
     // `Visibility.of`, not `TickerMode.of`: an `IndexedStack` wraps its
     // unselected children in a `_VisibilityScope` and an `ExcludeFocus` and
-    // nothing else — painting and hit-testing are the render object's job — so
-    // the ticker is still enabled down here and only this asks the question
-    // that was actually answered. Counted in
+    // nothing else, so the ticker is still enabled down here. Counted in
     // `test/app/shell/keystroke_cost_test.dart`.
     final visible = Visibility.of(context);
     final now = ref.read(clockProvider).nowUtc();
@@ -151,11 +127,9 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
           child: Row(
             children: [
               // The app's own "working" glyph and colour, so this and the
-              // status badge at the top of the view cannot describe the same
-              // session in two different visual languages. A subagent gets its
-              // own mark — it is the one call that is another agent — and it
-              // keeps it when it is one of several, which is when the summary
-              // has already been collapsed to a count.
+              // status badge at the top of the view cannot describe one session
+              // in two visual languages. A subagent gets its own mark — the one
+              // call that is another agent — and keeps it when it is one of many.
               Icon(
                 subagents > 0 ? AppIcons.robot : AppIcons.circleHalf,
                 size: Chrome.iconSmall,
@@ -186,7 +160,6 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
 }
 
 /// The one line for a session that is working with nothing to say what on.
-///
 /// Neutral rather than "working"-coloured, and no elapsed time: this is an
 /// admission, not a reading, and it must not look like one.
 class _BlindSpotLine extends StatelessWidget {
@@ -259,13 +232,10 @@ String describeRunningMix(int total, int subagents) {
 String _plural(String word, int count) => count == 1 ? word : '${word}s';
 
 /// How long a call has been out, in the smallest form that stays readable.
-///
-/// **It reaches hours, and it has to.** The old ceiling retired a call at
-/// thirty minutes, so this never had to render one — and that ceiling was
-/// wrong: the longest unanswered tool window in the owner's Claude Code store
-/// is a `Bash` call at 514.8 minutes, which now reads `8h 34m`. A number that
-/// large is a real reading here, because what says a call is running is the
-/// session's own live status and not this arithmetic.
+/// **It reaches hours, and it has to**: the longest unanswered tool window in
+/// the owner's Claude Code store is a `Bash` call at 514.8 minutes, which now
+/// reads `8h 34m`. What says a call is running is the session's own live
+/// status, not this arithmetic.
 String formatElapsed(Duration elapsed) {
   final seconds = elapsed.inSeconds;
   if (seconds < 60) return '${seconds}s';

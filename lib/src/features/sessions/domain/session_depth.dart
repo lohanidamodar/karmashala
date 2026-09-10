@@ -5,38 +5,12 @@ typedef ParentLookup = String? Function(String sessionId);
 /// How far down a spawn chain a session sits, and whether another level is
 /// allowed.
 ///
-/// ## Why the depth is walked and never stored
-///
-/// dray caps spawn depth at 2 — a spawned session may spawn, its children may
-/// not — and derives it by walking `parent_session_id` rather than reading a
-/// number:
-///
-/// > *"Walked off `parent_session_id` rather than stored as a number, so there
-/// > is no depth field free to disagree with the chain it describes."*
-///
-/// A stored depth is a second source of truth. It is written once, at creation,
-/// from whatever the caller believed at the time, and nothing ever revisits it —
-/// so a re-parented session, a restored row, or a bug in one creation path
-/// leaves a number that outlives the chain it claims to summarise, and the cap
-/// silently stops meaning what it says. The chain itself cannot drift from
-/// itself.
-///
-/// The cost is real and accepted: one row read per level, on a path that is
-/// already creating a session and launching a process.
-///
-/// ## The cycle guard
-///
-/// A parent chain should be acyclic by construction — a session's parent always
-/// exists before it does. [maxWalk] does not trust that, because the failure it
-/// prevents is not a wrong answer but a **hang**: a cycle would spin this loop
-/// forever inside the caller's turn. dray's comment is the whole argument:
-///
-/// > *"Cheap insurance: a cycle here would hang the caller's turn rather than
-/// > fail it."*
-///
-/// So a walk that runs past [maxWalk] links is reported as
-/// [SessionDepthOutcome.cycle] — which the caller must treat as a refusal, not
-/// as depth 0.
+/// **Walked, never stored**: a stored depth is written once from what the
+/// caller believed, so a re-parented session leaves a number that outlives the
+/// chain it claims to summarise. [maxWalk] guards a chain that should be
+/// acyclic by construction, because the failure it prevents is a **hang**; a
+/// walk past it is [SessionDepthOutcome.cycle], which the caller must treat as
+/// a refusal and not as depth 0.
 class SessionDepth {
   const SessionDepth._(this.outcome, this.depth);
 
@@ -47,13 +21,9 @@ class SessionDepth {
   /// Meaningless unless [outcome] is [SessionDepthOutcome.ok].
   final int depth;
 
-  /// The deepest a spawned session may itself spawn from.
-  ///
-  /// 2, matching dray: a session started by the user (depth 0) may spawn
-  /// (children at depth 1), those children may spawn (depth 2), and a depth-2
-  /// session may not. One level of fan-out beyond the first is enough to be
-  /// useful and bounded; beyond that a runaway costs tokens and machine load
-  /// faster than anyone notices.
+  /// The deepest a spawned session may itself spawn from: 2. A user's session
+  /// (depth 0) may spawn, those children may spawn, and a depth-2 session may
+  /// not — beyond that a runaway costs tokens faster than anyone notices.
   static const int maxDepth = 2;
 
   /// Links to follow before declaring the chain broken rather than long.

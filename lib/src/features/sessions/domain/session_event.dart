@@ -1,10 +1,8 @@
 /// A single, immutable record in a session's **append-only** event log.
 ///
-/// Events are the normalized representation of everything that happens in a
-/// session (agent output, tool calls, status changes, …). They are never
-/// updated or deleted in normal operation; new state is expressed by appending
-/// new events. Agent-specific protocol details are translated into these events
-/// by an `AgentAdapter` (later loops) — this type is protocol-agnostic.
+/// The normalized, protocol-agnostic representation of everything that happens
+/// in a session. Never updated or deleted in normal operation; new state is
+/// expressed by appending.
 class SessionEvent {
   const SessionEvent({
     required this.sessionId,
@@ -24,8 +22,7 @@ class SessionEvent {
   final int seq;
 
   /// Normalized event type, e.g. `session.started`, `message.agent`,
-  /// `tool.call`. Free-form here; conventions are defined where events are
-  /// produced (Loop 6+).
+  /// `tool.call`. Free-form here; conventions live where events are produced.
   final String type;
 
   /// Event body, serialized as a JSON string. Opaque to the store.

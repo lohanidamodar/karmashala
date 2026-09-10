@@ -12,12 +12,9 @@ import '../application/session_ui_providers.dart';
 import '../domain/decision_record.dart';
 import '../domain/session_resume.dart' show describeAge;
 
-/// Which session's decision record the panel is describing.
-///
-/// The session **on screen**, not the one last clicked in the Explorer — the
-/// same rule [planPanelSessionIdProvider] and [checkpointsPanelSessionIdProvider]
-/// follow, and for the same reason: switching terminal tabs changes whose
-/// record you are reading.
+/// Which session's decision record the panel is describing: the session **on
+/// screen**, not the one last clicked in the Explorer — switching terminal tabs
+/// changes whose record you are reading.
 final decisionsPanelSessionIdProvider = Provider<String?>(
   (ref) =>
       ref.watch(activePaneSessionIdProvider) ??
@@ -27,26 +24,11 @@ final decisionsPanelSessionIdProvider = Provider<String?>(
 /// **What this session has settled**, in the words it was settled in.
 ///
 /// The record is what `handoff_packet.dart` puts *ahead* of the quoted
-/// transcript, so it is the part of a session that survives being handed over —
-/// and until now the only writers were four acts and the only reader was the
-/// packet. A person could neither see what the next agent would be told nor add
-/// the constraint they had just imposed out loud.
-///
-/// Two properties it inherits from the record and must not soften:
-///
-/// * **Empty is "not recorded", never "nothing was decided".** An empty record
-///   is a gap in the *writing down*, and reading it the other way would tell
-///   somebody they are starting from an unconstrained position. The placeholder
-///   below says so in the same words the packet does.
-/// * **Append-only.** There is no edit and no delete here because there is none
-///   in [DecisionRecordDao]; a reversal is a new row, and the original stays
-///   standing so a reader can see it was reversed.
-///
-/// Oldest first, like the packet: the early rows are the constraints the later
-/// ones follow from. Every row carries the age of its own writing (§19) —
-/// nothing polls, so the list is read when the panel opens and again when a
-/// decision is appended, and a row with no age would be a claim about a moment
-/// this panel cannot see.
+/// transcript, so it is the part of a session that survives being handed over.
+/// Two properties it must not soften: **empty is "not recorded", never "nothing
+/// was decided"**, and it is **append-only** — a reversal is a new row and the
+/// original stays standing. Oldest first, and every row carries the age of its
+/// own writing, because nothing polls.
 class DecisionRecordPanel extends ConsumerWidget {
   const DecisionRecordPanel({super.key});
 
@@ -195,9 +177,8 @@ class _DecisionRow extends StatelessWidget {
   }
 
   /// Who, when and from what — each part saying "not recorded" rather than
-  /// disappearing, exactly as the packet's own attribution line does. An
-  /// omitted author reads as an unattributed fact, which is how a constraint an
-  /// agent invented gets mistaken for one the user imposed.
+  /// disappearing, as the packet's attribution line does. An omitted author
+  /// reads as an unattributed fact.
   static String _attribution(DecisionRecord decision, DateTime now) {
     final origin = decision.originId == null
         ? decision.origin.label
@@ -208,25 +189,20 @@ class _DecisionRow extends StatelessWidget {
   }
 }
 
-/// The kinds a person may write here, and nothing else.
-///
-/// A verdict with no verification run behind it and a marked checkpoint with no
-/// checkpoint would both name a record that does not exist — the argument
-/// `DecisionControlTools` makes about an agent, which does not stop being true
-/// because the writer is a person. An approval *is* offered, unlike the tool's
-/// list, because the user granting one is the user's own statement.
+/// The kinds a person may write here, and nothing else. A verdict with no
+/// verification run behind it would name a record that does not exist. An
+/// approval *is* offered, unlike the tool's list, because the user granting one
+/// is the user's own statement.
 const List<DecisionKind> kHandWritableKinds = <DecisionKind>[
   DecisionKind.constraintAccepted,
   DecisionKind.approachRejected,
   DecisionKind.approvalGranted,
 ];
 
-/// Asks for a decision and appends it through [DecisionRecorder].
-///
-/// The same recorder every other act goes through, so a hand-written row is
-/// stamped by the same clock, refused for a blank summary by the same guard,
-/// and lands in the packet indistinguishably from one an agent wrote — except
-/// for its origin, which says a person wrote it.
+/// Asks for a decision and appends it through [DecisionRecorder] — the same
+/// recorder every other act goes through, so a hand-written row is stamped by
+/// the same clock and lands in the packet indistinguishably, except for its
+/// origin.
 Future<void> recordDecisionDialog(
   BuildContext context,
   WidgetRef ref,

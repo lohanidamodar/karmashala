@@ -32,10 +32,8 @@ class SessionRepositoriesBar extends ConsumerWidget {
     final service = ref.read(sessionRepositoriesServiceProvider);
     // Which of these chips is this session's own tree and which is a checkout
     // it shares. A worktree session is isolated in exactly one repository — its
-    // primary — and every other chip on this row points at a directory any
-    // other session can be standing in. Saying so is the whole of
-    // `SessionRepositoriesService.checkoutsFor`'s reason for existing: the
-    // sharing is deliberate, and it used to be invisible.
+    // primary — and every other chip points at a directory any other session
+    // can be standing in. The sharing is deliberate and used to be invisible.
     final checkouts = {
       for (final checkout in service.checkoutsFor(sessionId))
         checkout.repositoryId: checkout,

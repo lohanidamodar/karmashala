@@ -8,11 +8,8 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/session_notice.dart';
 
 /// Draws whatever one session currently has to say, inside that session's own
-/// bar.
-///
-/// It takes the room it needs and gives it back: nothing is laid out for it
-/// while there is no notice, so the bar does not carry an empty strip around
-/// waiting for one.
+/// bar. It takes the room it needs and gives it back, so the bar does not carry
+/// an empty strip around waiting for a notice.
 class SessionNoticeLine extends ConsumerStatefulWidget {
   const SessionNoticeLine({required this.sessionId, super.key});
 
@@ -33,9 +30,8 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
   }
 
   /// Starts the clock over whenever a different notice arrives, and stops it
-  /// when the last one goes. The clock lives here rather than in the notifier
-  /// so it cannot outlive what it is timing: a bar that is disposed — the pane
-  /// closed, the session switched away from — takes its timer with it.
+  /// when the last one goes. The clock lives here so it cannot outlive what it
+  /// is timing: a disposed bar takes its timer with it.
   void _watchClock(SessionNotice? notice) {
     if (identical(notice, _showing)) return;
     _showing = notice;
@@ -91,11 +87,9 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                   color: accent,
                 ),
                 const SizedBox(width: Insets.sm),
-                // Wraps rather than ellipsises. These messages exist to name a
-                // cost the user cannot see coming — what a restart ends, what
-                // the next message re-sends — and a cost cut off at one line
-                // is worse than not saying it, because the sentence still
-                // looks complete.
+                // Wraps rather than ellipsises: these messages name a cost the
+                // user cannot see coming, and a cost cut off at one line is
+                // worse than not saying it, because it still looks complete.
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 1),
@@ -112,9 +106,8 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                   TextButton(
                     onPressed: () {
                       // Cleared here rather than by the action, so every future
-                      // action gets this for free: the offer is gone the moment
-                      // it is taken, and whatever it does next posts its own
-                      // outcome over the top.
+                      // action gets it free: the offer is gone the moment it is
+                      // taken, and whatever it does next posts its own outcome.
                       ref
                           .read(sessionNoticesProvider.notifier)
                           .dismiss(sessionId);

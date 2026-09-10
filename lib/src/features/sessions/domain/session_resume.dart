@@ -3,11 +3,10 @@ import 'session_launch.dart';
 
 /// What "open this conversation again" should actually do.
 ///
-/// Resume is not a read. The CLI takes a **writer** on the conversation, so
-/// "resume it again" is a request to start a second process against a record
-/// something else may be holding — and the agents disagree about whether that is
-/// allowed (`AgentLaunchSpec.allowsConcurrentResume`). Naming the three answers
-/// is what stops every call site inventing its own.
+/// Resume is not a read: the CLI takes a **writer** on the conversation, and
+/// the agents disagree about whether a second one is allowed
+/// (`AgentLaunchSpec.allowsConcurrentResume`). Naming the three answers is what
+/// stops every call site inventing its own.
 enum ResumeAction {
   /// A pane of ours is already running it. Bring that pane back: nothing is
   /// spawned, nothing is lost, and no agent can object.
@@ -23,27 +22,16 @@ enum ResumeAction {
 
 /// Chooses between them.
 ///
-/// Deliberately a pure function of four booleans rather than a method on a
-/// session: the same decision is made for a native session, an imported CLI
-/// session and an MCP `open_session` call, and it must come out the same way in
-/// all three.
+/// A pure function rather than a method on a session: a native session, an
+/// imported one and an MCP `open_session` must come out the same way.
 ///
-/// Order matters.
-///
-/// * [weHostItLive] wins over everything a caller that *can* reattach could do,
-///   including for an agent that would have permitted a second process, because
-///   reattaching is strictly better than spawning: it is instant, it keeps the
-///   scrollback, and it cannot fail.
-/// * [canReattach] is false for a caller handing the conversation somewhere we
-///   do not own — an external terminal window. Reopening our own tab is not what
-///   was asked for there, so a pane of ours becomes just another holder and the
-///   agent's capability decides. This is the case the owner cares about: a
-///   second Windows Terminal on a live Claude Code conversation is allowed,
-///   the same thing on Codex is not.
-/// * [allowsConcurrentResume] then settles it. It is false by default for
-///   agents nobody has tested, so an unknown agent is treated as single-writer.
-/// * [heldByAnotherProcess] is only ever *certain* knowledge — an agent's own
-///   refusal, seen on its screen. It is never inferred from a record.
+/// Order matters. [weHostItLive] wins wherever a caller *can* reattach, because
+/// reattaching is instant, keeps the scrollback and cannot fail. [canReattach]
+/// is false when the conversation is handed to a terminal we do not own, so the
+/// agent's capability decides — a second Windows Terminal on a live Claude Code
+/// conversation is allowed, the same on Codex is not. [allowsConcurrentResume]
+/// defaults to false, and [heldByAnotherProcess] is only ever a refusal seen on
+/// the agent's own screen.
 ResumeAction resumeActionFor({
   required bool weHostItLive,
   required bool allowsConcurrentResume,
@@ -58,23 +46,15 @@ ResumeAction resumeActionFor({
 
 /// What we can honestly say about where a session's process is.
 ///
-/// Separate facts rather than one confident "active" flag, because they
-/// are not equally strong and the UI must not present them as if they were:
+/// Separate facts rather than one confident "active" flag, because they are not
+/// equally strong: [hostedLive], [refusedResume] and [conversationMissing] are
+/// **certain**, while [external] only records where it was *started* — a window
+/// we launched an hour ago may have closed since — so it earns a note, never a
+/// claim.
 ///
-/// * [hostedLive] is **certain** — we own the process and can see it.
-/// * [refusedResume] is **certain** — the agent itself told us another process
-///   holds the conversation. It is the only proof we ever get about a process
-///   we do not own.
-/// * [conversationMissing] is **certain** — the agent itself told us it has no
-///   record of the conversation at all.
-/// * [external] is only a record of **where it was started**. A terminal window
-///   we launched an hour ago may have been closed since, and we have no way to
-///   know. It earns a note, never a claim.
-///
-/// There is deliberately no process-handle probing or lock-file inspection here.
-/// Those are platform-specific, fragile, and reverse-engineer another tool's
-/// internals to answer a question the persisted record already answers well
-/// enough.
+/// Deliberately no process-handle probing or lock-file inspection: those are
+/// platform-specific, fragile, and reverse-engineer another tool's internals to
+/// answer a question the persisted record already answers well enough.
 class SessionWhereabouts {
   const SessionWhereabouts({
     this.hostedLive = false,
@@ -99,44 +79,30 @@ class SessionWhereabouts {
   /// An agent was asked to resume it and answered that it has no record of the
   /// conversation, and we saw *that* on the pane's own screen.
   ///
-  /// **Certain**, like [refusedResume], and for the same reason: it is the
-  /// agent's own words about its own store. It is the honest end of a resume
-  /// the store probe could not predict — see `AgentMissingConversationRules`.
+  /// **Certain**, like [refusedResume]: the agent's own words about its own
+  /// store — see `AgentMissingConversationRules`.
   final bool conversationMissing;
 
   /// The agent refused a **command-line value we chose for it** and exited
   /// before starting, and we read the refusal off the pane. Null when it said
   /// no such thing.
   ///
-  /// **Certain**, like the two above, and the odd one out among them: those are
-  /// facts about the user's conversations, this is a fact about Karmashala
-  /// being wrong. A permission mode is declared from the newest CLI that has
-  /// been read, and mode support belongs to the *installation* — so a machine
-  /// whose Codex is older or newer than that one gets a flag it will not take,
-  /// and used to get a pane that flashed the raw `error: invalid value …` and
-  /// died. See `AgentRejectedValueRules`.
+  /// The odd one out among the certain facts: this is a fact about Karmashala
+  /// being wrong. Modes are declared from the newest CLI that has been read,
+  /// but mode support belongs to the *installation*, so an older or newer Codex
+  /// gets a flag it will not take. See `AgentRejectedValueRules`.
   final RejectedValue? rejectedValue;
 
   /// When the newest evidence about this session was **produced** — not when we
-  /// last looked. Today that is the modification time of the agent's own
-  /// transcript, which is the only timestamp that means anything once our pane
-  /// has gone.
-  ///
-  /// Null when we have no such evidence at all, which is a real answer and is
-  /// rendered as one: an age we cannot compute is never rendered as "0m".
+  /// last looked; today the modification time of the agent's own transcript,
+  /// the only timestamp that means anything once our pane has gone. Null is a
+  /// real answer: an age we cannot compute is never rendered as "0m".
   final DateTime? lastSeen;
 
-  /// Whether a second process is *known* to hold the conversation.
-  ///
-  /// [conversationMissing] deliberately does not count here: an agent that has
-  /// no record of a conversation is telling us the opposite of "somebody else
-  /// is writing to it", and folding the two together would block a resume that
-  /// should instead be explained.
-  ///
-  /// Only the agent's own refusal counts. [external] deliberately does not:
-  /// treating "we launched a window once" as "it is running now" would put a
-  /// confidently wrong badge on every finished external session, and a user who
-  /// catches an indicator lying once stops reading it.
+  /// Whether a second process is *known* to hold the conversation — only the
+  /// agent's own refusal counts. [conversationMissing] is the opposite claim,
+  /// and [external] would put a confidently wrong badge on every finished
+  /// external session.
   bool get knownHeldElsewhere => refusedResume;
 
   /// One clause for a session row's subtitle, or null when there is nothing
@@ -144,8 +110,7 @@ class SessionWhereabouts {
   String? get note {
     if (hostedLive) return 'running here';
     // Ahead of the two resume answers because it happened earlier than either
-    // could: the CLI exited while reading its command line, so it never got as
-    // far as having an opinion about the conversation.
+    // could: the CLI exited while reading its command line.
     final rejected = rejectedValue;
     if (rejected != null) {
       return "would not start — no '${rejected.value}' in this build";
@@ -179,12 +144,9 @@ class SessionWhereabouts {
 
 }
 
-/// A coarse, deliberately unexciting rendering of an age.
-///
-/// Rounded down and capped at days, because the point of the number is to tell
-/// the user how much to trust the claim beside it, not to be a clock. "just now"
-/// covers the first minute rather than counting seconds, which would make a
-/// static row look live.
+/// A coarse, deliberately unexciting rendering of an age. Rounded down and
+/// capped at days: the number says how much to trust the claim beside it, and
+/// counting seconds would make a static row look live.
 String describeAge(Duration age) {
   if (age.isNegative || age.inMinutes < 1) return 'just now';
   if (age.inHours < 1) return '${age.inMinutes}m ago';
@@ -193,10 +155,8 @@ String describeAge(Duration age) {
 }
 
 /// The plain-words refusal shown instead of the agent's own JSON-RPC error.
-///
-/// The user does not need to know what `-32600` is; they need to know that the
-/// conversation is open somewhere else, why that stops us, and what they can do
-/// instead.
+/// The user does not need to know what `-32600` is; they need to know the
+/// conversation is open somewhere else, why that stops us, and what to do.
 String resumeBlockedMessage(String agentName) =>
     '$agentName will not resume a conversation that another process is already '
     'writing to — two writers would corrupt its transcript. Close it wherever '
@@ -208,17 +168,12 @@ String resumeConflictPaneMessage(String agentName) =>
 
 /// The plain words for a resume of a conversation that was never written.
 ///
-/// A session whose agent takes a `--session-id` gets one of *our* ids at
-/// launch, and the row records it immediately. That id is a **promise**: it
-/// says what the conversation will be called once the CLI writes it. A launch
-/// that failed, or a session nothing was ever said in, leaves the promise
-/// unkept — the row names a conversation that does not exist, and the agent
-/// answers a later resume with its own version of "no conversation found",
-/// which reaches the user as a pane that flashes an error and exits.
-///
-/// Three things this has to say, in this order: that there is nothing to
-/// resume, *why* there is nothing (so it does not read as data loss), and what
-/// to do instead.
+/// A `--session-id` agent gets one of *our* ids at launch and the row records
+/// it immediately, as a **promise** about what the conversation will be called.
+/// A failed launch, or a session nothing was ever said in, leaves it unkept,
+/// and a later resume reaches the user as a pane that flashes an error and
+/// exits. So this says three things in order: that there is nothing to resume,
+/// why (so it does not read as data loss), and what to do instead.
 String resumeMissingConversationMessage(String agentName) =>
     '$agentName has no record of this conversation, so there is nothing to '
     'resume. The session reserved its id when it started but the agent never '
@@ -228,17 +183,12 @@ String resumeMissingConversationMessage(String agentName) =>
 
 /// The plain words for a launch the CLI refused while reading its command line.
 ///
-/// Shown instead of the agent's own `error: invalid value 'untrusted' for
-/// '--ask-for-approval &lt;APPROVAL_POLICY&gt;'`, which is accurate, complete
-/// and still leaves the reader with an investigation: it names a flag they
-/// never typed, for a mode they picked from a list this app drew.
-///
-/// So the sentence says the three things that turn it back into a decision:
-/// which of *their* choices was refused, what this installation has instead,
-/// and that the disagreement is between the app's list and their binary rather
-/// than anything they did. The values are quoted from the CLI's own refusal —
-/// it names the whole valid set, which is what makes a readable message
-/// possible at all.
+/// The agent's own `error: invalid value …` is accurate and still leaves the
+/// reader with an investigation: it names a flag they never typed, for a mode
+/// they picked from a list this app drew. So the sentence says which of *their*
+/// choices was refused, what this installation has instead, and that the
+/// disagreement is between the app's list and their binary. The values are
+/// quoted from the CLI's own refusal, which names the whole valid set.
 String rejectedValueMessage(RejectedValue rejected) =>
     "This installation of the agent has no '${rejected.value}' for "
     "'${rejected.flag}', so it refused the command line and stopped before "
@@ -247,14 +197,13 @@ String rejectedValueMessage(RejectedValue rejected) =>
     'agree — choose one of the modes above and the session will start. Nothing '
     'was lost: the agent exited before it opened anything.';
 
-/// The same refusal in one sentence, for a session's own notice bar and for the
-/// log line beside it.
+/// The same refusal in one sentence, for a session's own notice bar and the log
+/// line beside it.
 ///
-/// [rejectedValueMessage] is the tooltip: it has room to explain that the app's
-/// list and the binary disagree. A notice has room for the fact, so this says
-/// only the two things nothing else on screen can tell the reader — which of
-/// their values this build refused, and what it has instead — and names the CLI
-/// so the disagreement reads as a property of *that* installation.
+/// [rejectedValueMessage] is the tooltip and has room to explain that the app's
+/// list and the binary disagree; a notice has room for the fact, so this says
+/// only which of their values this build refused and what it has instead,
+/// naming the CLI so it reads as a property of that installation.
 String rejectedValueNotice(String agentName, RejectedValue rejected) =>
     "This $agentName does not have '${rejected.value}' for "
     "'${rejected.flag}'; it has ${rejected.alternativesLabel}. It refused the "

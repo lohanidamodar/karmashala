@@ -13,33 +13,17 @@ import '../application/session_signals.dart';
 /// The composer's permission control: the mode this session will run under, and
 /// a menu of the modes its agent can actually be put into.
 ///
-/// Three rules, each of which is the fix for something:
+/// It shows the *effective* mode, resolved by the same `SessionLauncher` call
+/// the launcher makes; only modes the descriptor can express are selectable;
+/// and a session following the Settings default says so and can go back, which
+/// is what stops the first pick being irreversible. Changing it never touches
+/// the running process — the policy is read off the command line at startup —
+/// so the chip offers a restart and never performs one without saying what it
+/// costs.
 ///
-/// * **It shows the *effective* mode**, resolved by `SessionLauncher` — the same
-///   call the launcher makes. The chip cannot drift from the command line
-///   because there is no second resolution to drift from.
-/// * **Only modes the descriptor can express are selectable** (Loop 31 §4,
-///   option C). The rest are listed, disabled, and say why. The user cannot ask
-///   for something that would be silently dropped.
-/// * **A session following the default says so, and can go back to it.** The
-///   resolved mode drawn bare would read as this session's own decision, when
-///   in fact it tracks the Settings default and moves when that moves — two
-///   states that must not look alike. The menu's first row is the way back,
-///   without which the first pick would be irreversible.
-/// * **Changing it does not touch the running process.** Every agent here reads
-///   its permission policy off the command line at startup, so the chip says the
-///   change applies on the next launch instead of implying the live agent has
-///   been re-governed. What it *does* offer is a restart — a second process
-///   under the new flags, on the same conversation — and it never performs one
-///   without saying what a restart costs: the turn in flight, and the tokens
-///   the next message spends re-sending the conversation.
-/// One row of the permission menu: a value to set on one axis, or the Settings
-/// default to hand the whole session back to.
-///
-/// A type of its own rather than a nullable selection because
-/// `PopupMenuButton` reads a null selection as a *dismissal* and never calls
-/// `onSelected` for it — so "follow the default" written as a null value would
-/// have looked right and done nothing.
+/// One row of the permission menu: a value on one axis, or the Settings
+/// default. A type of its own rather than a nullable selection because
+/// `PopupMenuButton` reads a null selection as a *dismissal*.
 @immutable
 class PermissionChoice {
   const PermissionChoice(this.axisId, this.valueId);
@@ -69,9 +53,8 @@ class PermissionModeChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The row is what the mode lives on, so a write has to be able to redraw
-    // this — and only a write to *this* row does. `setPermissionMode`
-    // publishes `SessionChange.reconfigured` against the same id.
+    // The row is what the mode lives on, and only a write to *this* row redraws
+    // it: `setPermissionMode` publishes `reconfigured` against the same id.
     ref.watchSession(sessionId);
     final launcher = ref.read(sessionLauncherProvider);
     final effective = launcher.effectivePermissionFor(sessionId);
@@ -89,8 +72,7 @@ class PermissionModeChip extends ConsumerWidget {
     );
 
     // Colour carries meaning only: an agent we cannot govern and a selection
-    // that bypasses everything are both things the user should notice, and
-    // nothing else is tinted.
+    // that bypasses everything. Nothing else is tinted.
     final dangerous = known && support.isDangerous(effective.selection);
     final foreground = !known || dangerous
         ? scheme.error
@@ -115,11 +97,9 @@ class PermissionModeChip extends ConsumerWidget {
             agentName,
           ),
       itemBuilder: (context) => [
-        // First, and its own row: handing the session back to the Settings
-        // default is where every session starts and the only state that follows
-        // a later change to that setting. It names what the default resolves to
-        // *today*, because "follow the default" is not an answer to "what will
-        // this run under" — and that is the question the menu was opened with.
+        // First, and its own row: the default is where every session starts and
+        // the only state that follows a later change to that setting. It names
+        // what it resolves to *today* — the question the menu was opened with.
         DesktopMenuDetailItem<PermissionChoice>(
           value: PermissionChoice.followDefault,
           selected: effective.inherited,
@@ -140,9 +120,8 @@ class PermissionModeChip extends ConsumerWidget {
           )
         else
           for (final axis in axes) ...[
-            // Only when there is more than one. Codex has two — a sandbox and
-            // an approval policy — and a flat list would imply they are one
-            // question with seven answers rather than two with three and four.
+            // Only when there is more than one: a flat list would imply Codex's
+            // sandbox and approval policy are one question with seven answers.
             if (axes.length > 1) DesktopMenuHeader<PermissionChoice>(axis.label),
             for (final option in axis.options)
               DesktopMenuDetailItem<PermissionChoice>(
@@ -168,11 +147,9 @@ class PermissionModeChip extends ConsumerWidget {
             horizontal: Insets.sm,
             vertical: 3,
           ),
-          // The composer bar has exactly one flexible cell — the delivery strip
-          // — and this is not it, so an unbounded chip pushes the whole row
-          // into overflow at the minimum window with Windows' largest text
-          // step. A third of the window is the most this control may take;
-          // past that it gives up the tail of a qualifier rather than the row.
+          // The composer bar's one flexible cell is the delivery strip, not
+          // this, so an unbounded chip overflows the row at the minimum window.
+          // A third of the width; past that it gives up a qualifier's tail.
           constraints: BoxConstraints(
             maxWidth: MediaQuery.sizeOf(context).width / 3,
           ),
@@ -194,9 +171,7 @@ class PermissionModeChip extends ConsumerWidget {
               ),
               const SizedBox(width: Insets.xs),
               // The mode's own name is what the chip is for, so it gives up its
-              // tail before the row does. Codex's two axes make this longer
-              // than the three short words it used to hold ("Workspace · On
-              // request"), which is why it is Flexible rather than rigid.
+              // tail before the row does. Codex's two axes make it long.
               Flexible(
                 child: Text(
                   label,
@@ -212,9 +187,8 @@ class PermissionModeChip extends ConsumerWidget {
               for (final qualifier in [
                 if (effective.inherited) 'default',
                 // A mode this build does not name, substituted down to the
-                // agent's default. Said on the face of the chip rather than
-                // only on hover: the user set something else, and the control
-                // must not show the substitute as if it were their choice.
+                // agent's default. Said on the face rather than only on hover:
+                // the user set something else.
                 if (effective.unrecognised) 'unrecognised',
               ]) ...[
                 const SizedBox(width: Insets.xs),
@@ -250,8 +224,7 @@ class PermissionModeChip extends ConsumerWidget {
       return unknownAgentReason(agentName);
     }
     // "Following" rather than "inherited": inheriting sounds like something
-    // that happened once, and the whole point of this state is that it is live
-    // — change the setting and this session changes with it.
+    // that happened once, and the point of this state is that it is live.
     final origin = inherited
         ? 'Following the $agentName default in Settings, so it changes when '
               'that setting does.'
@@ -291,18 +264,14 @@ class PermissionModeChip extends ConsumerWidget {
     final label = selection == null || support == null
         ? ''
         : describeSelection(support, selection);
-    // The session's own bar rather than `ScaffoldMessenger`. Everything said
-    // below is true of this session and false of the others open beside it, and
-    // a snackbar says it across the bottom of the window with nothing naming
-    // which session it means — while covering the status bar to do it.
+    // The session's own bar rather than `ScaffoldMessenger`: everything below
+    // is true of this session and false of the others open beside it.
     final notices = ref.read(sessionNoticesProvider.notifier);
     final running = launcher.livePaneFor(sessionId) != null;
 
     // Asked **before** the row is written, so Cancel leaves the session exactly
-    // as the user found it — the mode unchanged and the agent still running.
-    // Writing first and offering to undo would be a different promise: the
-    // session would already be recorded as bypassing prompts, and the next
-    // resume from anywhere else in the app would honour it.
+    // as the user found it. Writing first and offering to undo would already
+    // have recorded a session that bypasses prompts, and a resume would honour it.
     if (dangerous) {
       final confirmed = await _confirmDangerous(
         context,
@@ -323,9 +292,8 @@ class PermissionModeChip extends ConsumerWidget {
       return;
     }
 
-    // Only claim what happened. A live agent was started with the old flags and
-    // there is no documented way to re-govern any of these CLIs mid-session, so
-    // saying anything else here would be the lie this control exists to remove.
+    // Only claim what happened: a live agent was started with the old flags and
+    // there is no documented way to re-govern any of these CLIs mid-session.
     final what = selection == null
         ? 'Following the $agentName default in Settings'
         : label;
@@ -334,18 +302,16 @@ class PermissionModeChip extends ConsumerWidget {
       SessionNotice(
         message: running
             // Names both costs on the face of the message rather than behind
-            // the button, because the action is one tap and the user has no
-            // dialog to read them in. The token cost is the one nobody
-            // expects: `--resume` reloads the transcript locally for nothing,
-            // and then the next message carries all of it to the model.
+            // Names both costs on the face of the message: the token one is the
+            // one nobody expects — `--resume` reloads the transcript locally
+            // for nothing, then the next message carries all of it to the model.
             ? '$what — applies the next time this session is '
                   'launched or resumed, not to the agent running now. '
                   'Restarting ends the agent running now, and the next '
                   'message re-sends the conversation as context.'
             : '$what — applies when this session next runs.',
-        // Only when something is running. With nothing to end, "applies when
-        // this session next runs" is already true and a restart button would be
-        // offering to solve a problem the user does not have.
+        // Only when something is running. With nothing to end, a restart button
+        // offers to solve a problem the user does not have.
         action: running
             ? SessionNoticeAction(
                 label: 'Restart to apply',
@@ -359,16 +325,11 @@ class PermissionModeChip extends ConsumerWidget {
   /// Runs the restart and reports either outcome.
   ///
   /// Takes the notices and the launcher rather than a [BuildContext] and a
-  /// [WidgetRef] because both of its callers outlive the widget: one awaits a
-  /// dialog, the other is a bar action the user may press seconds later, by
-  /// which time the composer may have been rebuilt for another session. Both
-  /// read from the root container, so they stay valid either way — and the
-  /// outcome still lands in the right session's bar, which is the one thing a
-  /// captured `BuildContext` could not promise.
+  /// [WidgetRef] because both callers outlive the widget; both read from the
+  /// root container, so the outcome still lands in the right session's bar.
   ///
-  /// [savedLabel] is what was already written to the row. A failed restart must
-  /// still say the choice was kept, or the user is left believing the whole
-  /// action was rejected and picks the mode again.
+  /// [savedLabel] is what was already written to the row: a failed restart must
+  /// still say the choice was kept, or the user picks the mode again.
   Future<void> _restart(
     SessionNotices notices,
     SessionLauncher launcher, {
@@ -397,25 +358,12 @@ class PermissionModeChip extends ConsumerWidget {
   /// Confirms a mode that removes the prompts, naming every consequence of
   /// saying yes.
   ///
-  /// Three of them when [restarts], and the second and third are the ones the
-  /// user cannot see coming:
-  ///
-  /// * bypass itself, which is the reason the mode is marked
-  ///   `AgentPermissionSupport.isDangerous` and is the only one the chip's colour
-  ///   already hints at;
-  /// * the restart, because the flags are only read at startup — an agent
-  ///   part-way through a turn is killed with that turn, and the resume picks
-  ///   up from the last exchange the CLI wrote rather than from where it had
-  ///   actually got to;
-  /// * the tokens. Resuming reads the transcript off disk and costs nothing,
-  ///   but the next message sends the accumulated conversation to the model as
-  ///   input. Prompt caching discounts a prefix that is still warm; its TTL is
-  ///   minutes, so a restart after a pause pays in full, and the longer the
-  ///   session the larger that bill.
-  ///
-  /// With nothing running only the first applies, and the other two are left
-  /// out rather than softened — a warning about ending an agent that is not
-  /// there teaches the user to click through the next one.
+  /// Three of them when [restarts], and the last two are the ones the user
+  /// cannot see coming: the restart, because the flags are only read at startup
+  /// so a turn in flight is lost; and the tokens, because the next message
+  /// re-sends the accumulated conversation and prompt caching's TTL is minutes.
+  /// With nothing running only bypass applies, and the other two are left out
+  /// rather than softened.
   Future<bool?> _confirmDangerous(
     BuildContext context, {
     required String label,
@@ -428,9 +376,8 @@ class PermissionModeChip extends ConsumerWidget {
       builder: (context) {
         final theme = Theme.of(context);
         return AlertDialog(
-          // Three paragraphs do not fit an 800x600 window, let alone a phone,
-          // and a warning the user cannot read to the end is worse than none:
-          // the cost they scroll to is the one this dialog was added for.
+          // Three paragraphs do not fit an 800x600 window, and a warning the
+          // user cannot read to the end is worse than none.
           scrollable: true,
           title: DesktopDialogTitle(
             icon: AppIcons.warning,
@@ -450,10 +397,9 @@ class PermissionModeChip extends ConsumerWidget {
                   'without asking. You will not be prompted, and nothing here '
                   'can stop a command the agent has already decided to run.',
                 ),
-                // The agent's own words for what was picked. For Codex this is
-                // the pair — a sandbox and an approval policy that are each
-                // unremarkable and together leave nothing in the way — and the
-                // user has no other way to see that is what they chose.
+                // The agent's own words for what was picked. For Codex that is
+                // the pair — each unremarkable, together leaving nothing in the
+                // way — which the user has no other way to see.
                 if (detail.isNotEmpty) ...[
                   const SizedBox(height: Insets.md),
                   Text(detail),

@@ -8,24 +8,13 @@ import '../domain/transcript_path_link.dart';
 import 'markdown_message.dart';
 import 'transcript_image_preview.dart';
 
-/// The body of a transcript row that is a tool call.
+/// The body of a transcript row that is a tool call: what makes *this* call
+/// different from the last one — the command, the file, the picture. The tool's
+/// name is not repeated here; it is the row's eyebrow.
 ///
-/// Replaces the old body, which was the literal string `tool: Bash` printed
-/// under a `TOOL` eyebrow — the same two words twice, and identical for every
-/// command the agent ever ran. What a row shows now is what makes *this* call
-/// different from the last one: the command, the file, the picture.
-///
-/// The tool's name is not repeated here: it is the row's eyebrow, drawn by
-/// `_ChatMessageTile`.
-///
-/// ## The command is printed once, in both states
-///
-/// The owner's report was "when commands are run, and when expanded, it feels
-/// like the command is printed twice". A command too long for one line has to
-/// go somewhere, and the obvious place — a full copy underneath the truncated
-/// head — is exactly the thing being complained about. So expanding *replaces*
-/// the head rather than adding to it, and the widget test asserts that the
-/// whole command matches exactly one widget in either state.
+/// The command is printed once in **both** states: expanding *replaces* the
+/// truncated head rather than adding a full copy underneath it, which is what
+/// "the command is printed twice" was. A widget test holds the two in step.
 class ToolActivityBody extends StatefulWidget {
   const ToolActivityBody({
     required this.activity,
@@ -41,9 +30,8 @@ class ToolActivityBody extends StatefulWidget {
   final String? Function(String path)? resolveHostPath;
 
   /// Where a file path in the subject goes when it is clicked. The subject is
-  /// where most paths in a transcript actually are — the file a `Read` touched,
-  /// the directory a `Bash` ran in — so it is linkified on the same rule the
-  /// prose is. Null leaves it plain text.
+  /// where most paths in a transcript actually are, so it is linkified on the
+  /// same rule the prose is. Null leaves it plain text.
   final PathLinkCallback? onPathTap;
 
   @override
@@ -51,7 +39,6 @@ class ToolActivityBody extends StatefulWidget {
 }
 
 /// How much of a result is shown before the reader has to ask for the rest.
-///
 /// Three lines is what a `git status` or a failing assertion needs; anything
 /// longer is a log, and a log unrolled into a conversation buries it.
 const int kInlineOutputLines = 3;
@@ -135,11 +122,9 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
 
 /// What the tool answered.
 ///
-/// The owner's third report was that command results were not visible at all —
-/// Claude Code writes every one of them into the next `user` entry and the
-/// reader dropped them. They are shown here in the same recessed panel
-/// `MarkdownMessage` gives a fenced code block, so a result reads as part of
-/// the conversation rather than as a panel bolted onto it.
+/// Claude Code writes every result into the next `user` entry and the reader
+/// used to drop them. Shown in the same recessed panel `MarkdownMessage` gives
+/// a fenced code block, so a result reads as part of the conversation.
 class _OutputPanel extends StatelessWidget {
   const _OutputPanel({
     required this.activity,
@@ -209,8 +194,7 @@ class _OutputPanel extends StatelessWidget {
                 child: SingleChildScrollView(
                   child: SingleChildScrollView(
                     // Rendered terminal output: re-flowing it would break the
-                    // columns it was drawn with, so it scrolls sideways
-                    // instead — the same choice `ApprovalRequestCard` makes.
+                    // columns it was drawn with, so it scrolls sideways.
                     scrollDirection: Axis.horizontal,
                     child: SelectableText(output, style: mono),
                   ),
@@ -251,12 +235,10 @@ class _OutputPanel extends StatelessWidget {
   }
 }
 
-/// The one control that turns the head of something into the whole of it.
-///
-/// A labelled button rather than a bare caret: the reader has to be able to
-/// tell that there *is* more, and how much, without hovering. Named for the
-/// semantics tree too — a tooltip is a mouse's affordance, and
-/// `test/support/window_matrix.dart` requires every control to carry a name.
+/// The one control that turns the head of something into the whole of it. A
+/// labelled button rather than a bare caret, so the reader can tell there *is*
+/// more and how much without hovering — and named for the semantics tree, which
+/// `test/support/window_matrix.dart` requires of every control.
 class _MoreToggle extends StatelessWidget {
   const _MoreToggle({
     required this.expanded,
@@ -307,10 +289,9 @@ class _MoreToggle extends StatelessWidget {
 /// A tool subject with the file paths in it made clickable.
 ///
 /// Spans rather than a rewritten string: a subject is a command or a file name,
-/// not markdown, so there is no parser to hang links on — and rewriting it
-/// would change the text the reader copies. Detection is
-/// [kTranscriptPathPattern] and nothing else, so a row costs one regex pass
-/// over one line and never a `stat`.
+/// not markdown, and rewriting it would change the text the reader copies.
+/// Detection is [kTranscriptPathPattern] and nothing else, so a row costs one
+/// regex pass over one line and never a `stat`.
 class _PathLinkText extends StatefulWidget {
   const _PathLinkText(
     this.text, {

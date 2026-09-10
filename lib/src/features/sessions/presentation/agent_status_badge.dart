@@ -8,14 +8,11 @@ import '../application/session_status_providers.dart';
 
 /// Icon, colour and words for one [AgentActivityStatus].
 ///
-/// The words are not decoration. `unknown` is a real state — most agents sit
-/// there until hooks are installed — and a badge that showed only a grey dot
-/// would be indistinguishable from a badge that failed to load. Colour is never
-/// the only carrier: every state has its own glyph and its own label.
-///
-/// Agent status is the app's clearest case of colour meaning something, so it
-/// draws from [SemanticColors] rather than the neutral scheme — the accent is
-/// reserved for selection and must never read as "this agent is busy".
+/// The words are not decoration: `unknown` is a real state, and a badge that
+/// showed only a grey dot would be indistinguishable from one that failed to
+/// load. Colour is never the only carrier, and it draws from [SemanticColors]
+/// rather than the neutral scheme — the accent is reserved for selection and
+/// must never read as "this agent is busy".
 ({IconData icon, String label, Color Function(SemanticColors) colour})
 agentStatusAppearance(AgentActivityStatus status) => switch (status) {
   AgentActivityStatus.working => (

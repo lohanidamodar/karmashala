@@ -34,9 +34,8 @@ class MessageComposer extends StatefulWidget {
   final String hintText;
   final bool enabled;
 
-  /// Controls shown in a row beneath the text box — the permission mode, and
-  /// whatever the model/effort chips become. A slot rather than a widget this
-  /// class builds, so the composer keeps knowing nothing about sessions.
+  /// Controls shown in a row beneath the text box. A slot rather than a widget
+  /// this class builds, so the composer keeps knowing nothing about sessions.
   final List<Widget> chips;
 
   /// The text box's controller, when the caller needs to put something in it —
@@ -61,15 +60,13 @@ class _MessageComposerState extends State<MessageComposer> {
     _focusNode.addListener(_onFocusChange);
   }
 
-  /// Focus decides the card's border colour, and changes once per click rather
-  /// than once per character — so this one may rebuild the composer.
+  /// Focus decides the card's border colour and changes once per click, so this
+  /// one may rebuild the composer.
   ///
-  /// **There is deliberately no listener on [_input].** One existed, and it
-  /// called `setState` for every keystroke so the send button could recolour:
-  /// the whole composer subtree — the card, the field's wrapper, the toolbar's
-  /// `LayoutBuilder`, both buttons, the chip row — rebuilt per character, in
-  /// the widget the user types into most. [_SendButton] listens to the
-  /// controller itself instead, so a character now rebuilds one button.
+  /// **There is deliberately no listener on [_input].** One existed and called
+  /// `setState` for every keystroke, rebuilding the whole composer subtree in
+  /// the widget the user types into most; [_SendButton] listens instead, so a
+  /// character now rebuilds one button.
   void _onFocusChange() {
     if (mounted) setState(() {});
   }
@@ -221,13 +218,9 @@ class _MessageComposerState extends State<MessageComposer> {
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(Radii.lg),
-                  // The accent border is the whole focus signal. It used to
-                  // also grow from 1.0 to 1.5 and light a `primary` glow: the
-                  // width change relaid the composer out — and so nudged the
-                  // transcript — every time the box took or lost focus, and
-                  // the glow was a second mechanism saying the one thing the
-                  // colour already says. `inputDecorationTheme` marks focus
-                  // the same way, so every field in the app now agrees.
+                  // The accent border is the whole focus signal. The 1.0→1.5
+                  // width it also grew relaid the composer out — and so nudged
+                  // the transcript — every time the box took or lost focus.
                   border: Border.all(
                     color: _focusNode.hasFocus
                         ? scheme.primary
@@ -248,13 +241,10 @@ class _MessageComposerState extends State<MessageComposer> {
                         controller: _input,
                         focusNode: _focusNode,
                         enabled: canType,
-                        // **Three lines at rest, not one.** The composer is
-                        // where the whole session is written, and a one-line
-                        // strip under a 94px stack of chrome was the owner's
-                        // "message enter prompt field is very small": the
-                        // glyphs got 19 of the composer's 113 logical pixels.
-                        // Three lines is what a paragraph of instruction
-                        // needs before it starts scrolling under itself.
+                        // **Three lines at rest, not one.** The glyphs got 19
+                        // of the composer's 113 logical pixels; three lines is
+                        // what a paragraph of instruction needs before it
+                        // starts scrolling under itself.
                         minLines: 3,
                         maxLines: 12,
                         textInputAction: TextInputAction.newline,
@@ -263,10 +253,8 @@ class _MessageComposerState extends State<MessageComposer> {
                           isDense: true,
                           // `filled` is on in the app's theme, and with no
                           // border to bound it the fill painted a hard-edged
-                          // `surfaceContainerLowest` rectangle *inside* this
-                          // rounded card — a second surface behind the text,
-                          // white-on-grey in light mode. The card is the
-                          // surface; the field draws none of its own.
+                          // rectangle *inside* this rounded card. The card is
+                          // the surface; the field draws none of its own.
                           filled: false,
                           border: InputBorder.none,
                           // The wrapper above already spends `Insets.sm`
@@ -300,11 +288,9 @@ class _MessageComposerState extends State<MessageComposer> {
 
   /// The thumbnails, and the one line explaining where the files went.
   ///
-  /// The note used to sit *below* the card and be drawn always — one
-  /// `labelSmall` line plus its padding, 31 of the composer's 113 logical
-  /// pixels, for a sentence that is true only when something is attached and
-  /// that overflowed its row by 138px at 390 wide. It now costs nothing until
-  /// there is an attachment to explain, and sits beside the thing it explains.
+  /// The note used to sit below the card and be drawn always — 31 of the
+  /// composer's 113 logical pixels, and it overflowed its row by 138px at 390
+  /// wide — for a sentence that is true only when something is attached.
   Widget _attachmentStrip(ThemeData theme) => Padding(
     padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 0),
     child: Column(
@@ -337,10 +323,8 @@ class _MessageComposerState extends State<MessageComposer> {
   /// Attach, the session's chips, and send.
   ///
   /// Two arrangements, because at a pane's narrowest the three cannot share a
-  /// row: the chips take the row to themselves and the buttons keep the one
-  /// above. The threshold is named rather than inlined — it is the width the
-  /// two buttons plus one chip need, and nothing else in the app branches on
-  /// it (CLAUDE.md §6 forbids *scattered* raw widths, not a local measure).
+  /// row: the chips take the row to themselves. The threshold is the width the
+  /// two buttons plus one chip need, and nothing else branches on it.
   static const _toolbarRowMinWidth = 380.0;
 
   Widget _toolbar(bool canType) => LayoutBuilder(
@@ -354,17 +338,12 @@ class _MessageComposerState extends State<MessageComposer> {
       final attach = IconButton(
         tooltip: 'Attach image (or paste with Ctrl+V)',
         onPressed: canType ? _attach : null,
-        // A pointer surface's control height, the same row as the title bar's
-        // buttons.
-        //
-        // `VisualDensity.compact` is already the app-wide default, so
-        // restating it on the widget only subtracted its 8px a second time,
-        // and left both of the composer's buttons **18 logical pixels tall**
-        // — the primary action of the surface, two pixels off the 16x16 the
-        // transcript's deliberately low-emphasis copy button measures. Note
-        // that `minimumSize` alone does not fix it: `effectiveConstraints`
-        // subtracts the density adjustment from the minimum, which is exactly
-        // how `iconButtonTheme`'s 26 became 18. The density has to be named.
+        // A pointer surface's control height. `VisualDensity.compact` is
+        // already the app-wide default, so restating it subtracted its 8px a
+        // second time and left both composer buttons 18 logical pixels tall.
+        // `minimumSize` alone does not fix it: `effectiveConstraints` subtracts
+        // the density adjustment from the minimum, so the density has to be
+        // named.
         style: IconButton.styleFrom(
           visualDensity: VisualDensity.standard,
           minimumSize: const Size.square(Chrome.control),
@@ -415,11 +394,8 @@ class _MessageComposerState extends State<MessageComposer> {
 }
 
 /// Send, and the one thing in the composer that knows what has been typed.
-///
-/// Scoped to its own widget so that a keystroke rebuilds a 26px button rather
-/// than the composer around it: the accent fill is only earned once there is
-/// something to send, and that is the sole reason anything here watches the
-/// controller. See `_MessageComposerState._onFocusChange`.
+/// Its own widget so a keystroke rebuilds a 26px button rather than the
+/// composer around it — see `_MessageComposerState._onFocusChange`.
 class _SendButton extends StatelessWidget {
   const _SendButton({
     required this.input,
@@ -446,12 +422,9 @@ class _SendButton extends StatelessWidget {
             (value.text.trim().isNotEmpty || attachments.isNotEmpty);
         return IconButton.filled(
           // Named, because it is icon-only and Narrator reads the semantics
-          // tree rather than a hover: without this the most important control
-          // in the composer announced as "button". The chord is in the label
-          // for the same reason the toolbar puts chords in tooltips — it is
-          // the faster way to send, and now the only place that says so, the
-          // permanent "Enter to send · Shift + Enter for new line" strip
-          // under the box having been the composer's largest single spend.
+          // tree rather than a hover. The chord is in the label because it is
+          // the faster way to send and now the only place that says so — the
+          // permanent hint strip under the box was the composer's largest spend.
           tooltip: busy
               ? 'Sending…'
               : 'Send (Enter) · Shift + Enter for a new line',

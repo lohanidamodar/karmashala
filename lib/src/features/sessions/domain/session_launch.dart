@@ -5,11 +5,9 @@ import 'package:karmashala_git/repositories.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import 'session_lineage.dart';
 
-/// Where a session's process actually lives.
-///
-/// This is a **runtime** distinction, not a rendering one: `pane` means we own
-/// the process, `external` means somebody else's terminal window does. How an
-/// in-app session is *drawn* is [SessionView], which is orthogonal.
+/// Where a session's process actually lives — a **runtime** distinction, not a
+/// rendering one: `pane` means we own the process, `external` means somebody
+/// else's terminal window does. How it is *drawn* is [SessionView].
 enum SessionSurface {
   /// A PTY pane inside the app. Every in-app agent session runs here.
   pane,
@@ -18,10 +16,8 @@ enum SessionSurface {
   external,
 }
 
-/// How an in-app session is rendered. A view, never a second kind of session.
-///
-/// Both views are over the same session record, the same PTY and the same
-/// lifecycle. Switching between them starts and stops nothing.
+/// How an in-app session is rendered. A view, never a second kind of session:
+/// same record, same PTY, same lifecycle. Switching starts and stops nothing.
 enum SessionView {
   /// Structured chat, reconstructed from the agent's own transcript.
   chat,
@@ -35,25 +31,13 @@ enum SessionView {
 /// **The prior**: whether this agent's store *format* is one we read, before
 /// anybody has looked at a particular session.
 ///
-/// A capability query over the registry, deliberately not a branch on whether
-/// the agent has a hand-written protocol adapter. The runtime is the same
-/// either way — a PTY — so an agent without a chat view is not a different kind
-/// of session, it is the same session with one of its two renderings
-/// unavailable.
-///
-/// **It is no longer the answer, and must not be used as one.** On 2026-09-09
-/// the imported-session path started reading Antigravity's own JSONL
-/// transcripts, which exist for every conversation on the WSL install here and
-/// for none on the Windows one — so a per-format verdict is wrong in one
-/// direction or the other for that agent, whichever way it is set. What a
-/// surface asks is [SessionChatView], the per-session reading, and this is the
-/// prior it carries until something has been looked at. The one place the prior
-/// still stands on its own is a format this list *accepts*: those are readable
-/// for every session, and whether one has written its file yet is measured
-/// downstream by the conversation itself.
-///
-/// [defaultViewFor] is the other honest use: choosing an opening view before a
-/// session exists, where there is nothing per-session to read.
+/// **It is no longer the answer, and must not be used as one.** Antigravity's
+/// own JSONL transcripts exist for every conversation on the WSL install here
+/// and for none on the Windows one, so a per-format verdict is wrong in one
+/// direction or the other. What a surface asks is [SessionChatView], the
+/// per-session reading; this is the prior it carries until something has been
+/// looked at, and [defaultViewFor] — choosing an opening view before a session
+/// exists — is the other honest use.
 bool agentSupportsChatView(AgentDescriptor? descriptor) {
   final format = descriptor?.store?.format;
   return format == AgentStoreFormat.claudeJsonl ||
@@ -65,12 +49,9 @@ bool agentSupportsChatView(AgentDescriptor? descriptor) {
 SessionView defaultViewFor(AgentDescriptor? descriptor) =>
     agentSupportsChatView(descriptor) ? SessionView.chat : SessionView.terminal;
 
-/// Why a permission mode is being resolved.
-///
-/// Loop 33's audit found permission mode resolved in eight places with three
-/// different answers — the sharpest being a *new* session started under the
-/// "existing sessions" preference. This enum is the fix: callers say what they
-/// are doing, and exactly one place turns that into a selection.
+/// Why a permission mode is being resolved. Callers say what they are doing and
+/// exactly one place turns that into a selection — the fix for permission mode
+/// being resolved in eight places with three different answers.
 enum SessionPurpose {
   /// A conversation that does not exist yet, whatever it is seeded with.
   newSession,
@@ -79,12 +60,8 @@ enum SessionPurpose {
   existingSession,
 }
 
-/// Everything one session-creation entry point has to decide, stated once.
-///
-/// Every field that used to be resolved differently per call site is here, so
-/// the divergence has somewhere to have been removed *to*. A caller that does
-/// not care leaves a default; a caller that cares says so, in the same words as
-/// every other caller.
+/// Everything one session-creation entry point has to decide, stated once, so
+/// the per-call-site divergence has somewhere to have been removed *to*.
 class SessionLaunchRequest {
   const SessionLaunchRequest({
     required this.repository,
@@ -122,37 +99,21 @@ class SessionLaunchRequest {
   /// Create a **new** worktree for this session.
   final bool useWorktree;
 
-  /// Run in a worktree that already exists, rather than creating one.
-  ///
-  /// This is what "the handoff continues in the same worktree and on the same
-  /// branch" needs, and it could not be said before: [useWorktree] means
-  /// *create one*, and leaving it false put the new session in the repository
-  /// root — a different directory on a different branch from the work being
-  /// handed over, which is the one thing a handoff must not do.
-  ///
-  /// Mutually exclusive with [useWorktree]; the launcher refuses both.
+  /// Run in a worktree that already exists, rather than creating one — what a
+  /// handoff continuing on the same branch needs. [useWorktree] means *create
+  /// one*, and leaving it false put the new session in the repository root, on
+  /// a different branch from the work being handed over. Mutually exclusive
+  /// with it; the launcher refuses both.
   final EnvironmentPath? existingWorktree;
 
-  /// Run in this directory rather than the repository root, without claiming
-  /// it is a worktree.
+  /// Run in this directory rather than the repository root, without claiming it
+  /// is a worktree — what a handoff, a fork and a resume of an adopted session
+  /// all need.
   ///
-  /// What a handoff, a fork and a resume of an adopted session all need: the
-  /// work is in a subdirectory, and starting at the repository root would put
-  /// the agent in a tree that is not the one it was working in.
-  ///
-  /// It used to say that this also protects the *conversation* — "Claude Code
-  /// and Codex key their conversation stores by working directory, so starting
-  /// at the root can silently open a new conversation". That was checked and is
-  /// not true of either: Codex's store is date-keyed with the cwd inside the
-  /// file, and Claude Code's resume falls back past its cwd-keyed bucket to a
-  /// git-worktree sweep and then a scan of every bucket for the id. See
-  /// [AgentResumeLocality], which is where that claim now lives, per agent,
-  /// with its evidence — and where an unverified agent still gets the cautious
-  /// answer this comment assumed for everybody.
-  ///
-  /// [existingWorktree] wins when both are set, because it is the stronger
-  /// statement — it says the directory is a worktree as well as where to run —
-  /// and the two can only ever name the same place.
+  /// It does *not* also protect the conversation: neither Codex nor Claude Code
+  /// keys its store strictly by cwd. That claim now lives per agent, with its
+  /// evidence, on [AgentResumeLocality]. [existingWorktree] wins when both are
+  /// set, being the stronger statement about the same place.
   final EnvironmentPath? workingDirectory;
 
   final List<Repository> additionalRepositories;
@@ -162,59 +123,39 @@ class SessionLaunchRequest {
 
   /// A workspace row to **start a fresh conversation in**, keeping the row.
   ///
-  /// The other end of `SessionConversationMissing`. A row whose agent takes
-  /// `--session-id` records the promised conversation id at launch, and a launch
-  /// that failed — or a session nothing was ever said in — leaves that promise
-  /// unkept: the row names a conversation the CLI does not have, and every
-  /// resume of it is refused. `resumeMissingConversationMessage` already told
-  /// the user to "start a new session in this repository", which is right and
-  /// throws away the row they were looking at: its title, its age, its place in
-  /// a lineage.
+  /// The other end of `SessionConversationMissing`: a row whose promised
+  /// conversation id the CLI never wrote refuses every resume, and starting
+  /// over elsewhere throws away that row's title, age and place in a lineage.
+  /// Deliberately **not** a resume — there is nothing to resume — so
+  /// [resumeExternalSessionId] must be null and the launcher refuses both.
   ///
-  /// This is that advice as an action. It is deliberately **not** a resume —
-  /// there is nothing to resume, which is the entire problem — so
-  /// [resumeExternalSessionId] must be null and the launcher refuses both
-  /// together. The row is reused exactly as a resume reuses one, and because
-  /// the promised id *is* the row's own id, the promise is simply made again to
-  /// a CLI that can keep it. Nothing about the row changes but its status.
-  ///
-  /// Ignored when it names no reusable row (archived, in another repository, on
-  /// another installation, or one a pane of ours is running), which falls back
-  /// to the ordinary create rather than failing.
+  /// Ignored when it names no reusable row (archived, another repository or
+  /// installation, or one a pane of ours is running), falling back to create.
   final String? restartSessionId;
 
   /// Sent as soon as the session is up. One code path, guarded once.
   final String? firstMessage;
 
   /// Extra system prompt for this session, as **text** — the handoff packet's
-  /// way in for a CLI that takes a file of one.
-  ///
-  /// The text and not a path, because the file is named by the session it
-  /// belongs to and only [SessionLauncher.launch] knows that id. It writes the
-  /// file, spells the path the way the agent's own environment names it, and
-  /// passes the flag; an agent that takes no such file, an environment with no
-  /// name for the path, and a write that failed all fall back to the opening
-  /// prompt, which is what carried the packet before this existed.
+  /// way in for a CLI that takes a file of one. Text and not a path because the
+  /// file is named by the session it belongs to, which only
+  /// [SessionLauncher.launch] knows; an agent with no such flag, an environment
+  /// with no name for the path and a failed write all fall back to the prompt.
   final String? systemPromptFile;
 
   /// The session this one came from, when it came from one. Never supplied by
   /// the model directly — see `SessionDepth`.
   final String? parentSessionId;
 
-  /// Why [parentSessionId] is set. Defaults to null and is read as
-  /// [SessionLink.spawn] by the launcher when a parent is named without one,
-  /// which keeps the MCP spawn path — the only caller that predates this field
-  /// — meaning exactly what it always meant.
+  /// Why [parentSessionId] is set. Null is read as [SessionLink.spawn] by the
+  /// launcher when a parent is named without one, which keeps the MCP spawn
+  /// path — the only caller that predates this field — meaning what it did.
   final SessionLink? parentLink;
 
   /// The CLI's own id for a conversation to **fork**, when the agent forks
-  /// natively.
-  ///
-  /// Separate from [resumeExternalSessionId] because the two produce different
-  /// command lines and must never both be honoured: `codex fork <id>` and
-  /// `codex resume <id>` are two subcommands, and Claude's fork is its resume
-  /// plus a flag. A request carrying both would be asking for one conversation
-  /// to be continued and branched at once, which is not a thing.
+  /// natively. Separate from [resumeExternalSessionId] because the two produce
+  /// different command lines and must never both be honoured — continuing and
+  /// branching one conversation at once is not a thing.
   final String? forkExternalSessionId;
 
   /// Escape hatch for a caller that genuinely knows better than the setting.
@@ -223,12 +164,9 @@ class SessionLaunchRequest {
   final PermissionSelection? permissionOverride;
 
   /// The model this launch should record and run under, or null to leave the
-  /// session's own choice — and, failing that, the default — alone.
-  ///
-  /// Parallel to [permissionOverride] and read the same way: null does not mean
-  /// "no model", it means "this caller is not deciding". A resume that passed a
-  /// resolved value here would overwrite the choice the model chip made, which
-  /// is precisely the bug `Session.permissionMode` documents having had.
+  /// session's own choice — and, failing that, the default — alone. Null does
+  /// not mean "no model", it means "this caller is not deciding"; a resolved
+  /// value here would overwrite the choice the model chip made.
   final String? modelOverride;
 
   /// Forced rendering, or `null` to take the agent's default.
@@ -239,12 +177,9 @@ class SessionLaunchRequest {
   /// should do — the parameter exists for the dialog, where the user picked one.
   final SystemTerminal? externalTerminal;
 
-  /// An empty terminal region this in-app launch should occupy.
-  ///
-  /// Null keeps the ordinary behaviour of opening a new workbench tab. A
-  /// stale or already-filled id also falls back to a new tab: the session must
-  /// not fail merely because its destination disappeared while a dialog was
-  /// open. External launches ignore this because their process has no in-app
-  /// pane.
+  /// An empty terminal region this in-app launch should occupy. Null, stale or
+  /// already filled all fall back to a new workbench tab: the session must not
+  /// fail merely because its destination disappeared while a dialog was open.
+  /// External launches ignore it — their process has no in-app pane.
   final String? targetPaneId;
 }

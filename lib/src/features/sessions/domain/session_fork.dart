@@ -3,19 +3,11 @@ import 'package:agent_cli/descriptors.dart';
 /// What forking *this* session would actually do.
 ///
 /// The registry says what an **agent** can do ([AgentForkSupport]); this says
-/// what can be done for one **session**, which is a different question with one
-/// extra input: whether we know the CLI's own id for the conversation.
-///
-/// That input is not a detail. Codex will not accept a session id at launch, so
-/// a native Codex row's `external_session_id` is null until something discovers
-/// it — the gap Loop 46 §6 investigated and deliberately left open rather than
-/// closing it with a guess. A fork needs to name the conversation being forked,
-/// and `codex fork` with no id opens an interactive picker that chooses by
-/// recency in a directory. Passing that off as "the fork worked" would forge the
-/// one thing the user cares about: *which* conversation they branched.
-///
-/// So a capability of `native` is necessary and not sufficient, and the
-/// degraded case is not an error — it is a handoff, named as one.
+/// what can be done for one **session**, with one extra input: whether we know
+/// the CLI's own id for the conversation. Codex will not accept a session id at
+/// launch, and `codex fork` with no id opens a picker that chooses by recency —
+/// forging the one thing the user cares about. So `native` is necessary and not
+/// sufficient, and the degraded case is a handoff, named as one.
 enum SessionForkKind {
   /// The CLI forks it, from its own record. History is shared exactly.
   native,
@@ -74,12 +66,9 @@ class SessionForkPlan {
           SessionForkKind.native,
           // The second sentence is the weaker of two paths, named. A CLI's own
           // in-session branch switches the *running process* into a copy and
-          // takes everything that process is holding with it; this starts a
-          // second process from outside and can only hand it the
-          // conversation. Deliberately says what is true of any CLI by
-          // construction rather than listing one CLI's grants, subagents and
-          // links — that list is a claim about a particular agent, and this
-          // sentence is shown for all of them.
+          // takes everything it is holding; this starts a second process from
+          // outside and can only hand it the conversation. Says what is true of
+          // any CLI rather than listing one CLI's grants and links.
           '$agentName forks this itself. The new session starts with the whole '
           'conversation and then diverges; this one is left exactly as it '
           'is.\n\n'
@@ -100,12 +89,10 @@ class SessionForkPlan {
           'saying it.',
         );
       case AgentForkStyle.unsupported:
-        // The default, and therefore also the answer for an agent nobody has
-        // checked. It is deliberately a refusal rather than an inferred
-        // handoff: whether a packet can be built and delivered depends on
-        // whether the agent has a readable store *and* takes an opening prompt,
-        // and quietly assuming both for an unexamined CLI is how a fork ends up
-        // launching a blank session that has been told nothing.
+        // The default, and therefore the answer for an agent nobody has
+        // checked. Deliberately a refusal rather than an inferred handoff:
+        // quietly assuming a readable store *and* an opening prompt for an
+        // unexamined CLI is how a fork launches a blank session told nothing.
         return SessionForkPlan._(
           SessionForkKind.refused,
           'Karmashala has no verified way to fork a $agentName conversation, '

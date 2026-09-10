@@ -43,12 +43,10 @@ class SessionChangedFile {
   String toString() => 'SessionChangedFile(${kind.name} $display)';
 }
 
-/// Which source answered, and whether it had anything to say.
-///
-/// Six members rather than an empty list and a flag, because "this session
-/// changed no files", "we could not read this session's record" and "this agent
-/// keeps no record, so only git can answer" are three different sentences and
-/// collapsing them is the failure this whole reading exists to avoid (§19).
+/// Which source answered, and whether it had anything to say. Six members
+/// rather than an empty list and a flag, because "changed no files", "could not
+/// read this session's record" and "this agent keeps no record" are three
+/// different sentences.
 enum SessionChangedFilesOutcome {
   /// A list, out of the agent's own record of its own run.
   fromAgentRecord,
@@ -70,11 +68,9 @@ enum SessionChangedFilesOutcome {
   unknownSession,
 }
 
-/// Why the agent's own record did not answer.
-///
-/// Orthogonal to [SessionChangedFilesOutcome]: git can answer perfectly well
-/// while this says the agent keeps no record, and that pair is the ordinary
-/// Antigravity session.
+/// Why the agent's own record did not answer. Orthogonal to
+/// [SessionChangedFilesOutcome]: git can answer perfectly well while this says
+/// the agent keeps no record, which is the ordinary Antigravity session.
 enum SessionRecordGap {
   /// It did answer.
   none,
@@ -92,9 +88,7 @@ enum SessionRecordGap {
 }
 
 /// What one session changed, where the answer came from, and when it was taken.
-///
-/// A plain value so every sentence below can be asserted without pumping a
-/// frame — the bargain `SessionStatsView` makes for the same reason.
+/// A plain value, so every sentence below can be asserted without a frame.
 class SessionChangedFilesReport {
   const SessionChangedFilesReport({
     required this.outcome,

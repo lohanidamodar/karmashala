@@ -13,15 +13,11 @@ import '../application/session_stats_providers.dart';
 /// What one session has cost, in counts, on demand.
 ///
 /// **Counts only, never money.** A dollar figure needs a price table compiled
-/// into the app, and a price table drifts the moment a model is repriced — the
-/// known weakness of every open-source usage monitor. Real quota already lives
-/// elsewhere in the app; this is the work the session did.
+/// into the app, and one drifts the moment a model is repriced.
 ///
-/// Every number here is **computed from the agent's own store**, and the dialog
-/// says so. Nothing is typed into the user's live session to obtain it: both
-/// agents that keep a readable transcript also record their usage in it, so the
-/// route that would have written a slash command into a running pane turned out
-/// to have nobody left to serve — see `SessionStatsService`.
+/// Every number is **computed from the agent's own store**, and the dialog says
+/// so. Nothing is typed into the user's live session to obtain it — see
+/// `SessionStatsService`.
 class SessionStatsDialog extends ConsumerWidget {
   const SessionStatsDialog({required this.sessionId, super.key});
 
@@ -90,9 +86,9 @@ class _Body extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Two sections, one scroll, never a tab strip: the whole point is
-        // seeing both at once, and each carries its own provenance because
-        // they come from different books and can honestly disagree.
+        // Two sections, one scroll, never a tab strip: the point is seeing both
+        // at once, and each carries its own provenance because they come from
+        // different books and can honestly disagree.
         _SessionSection(view: view),
         _LifetimeSection(view: view),
         const SizedBox(height: Insets.md),
@@ -231,9 +227,9 @@ class _LifetimeSection extends StatelessWidget {
         ),
         _StatRow('First activity', formatStatMoment(lifetime.firstActivityAt)),
         _StatRow('Last activity', formatStatMoment(lifetime.lastActivityAt)),
-        // The source's own caveat, in its own words: what these numbers count
-        // is not what the section above counts, and saying so here is cheaper
-        // than a bug report about the two disagreeing.
+        // The source's own caveat, in its own words: what these numbers count is
+        // not what the section above counts, and saying so here is cheaper than
+        // a bug report about the two disagreeing.
         if (lifetime.note case final note?) ...[
           const SizedBox(height: Insets.xs),
           Text(
@@ -330,11 +326,10 @@ class _StatRow extends StatelessWidget {
 
 /// The composer's stats control.
 ///
-/// Lives in [MessageComposer]'s `chips` slot rather than the status bar: the
-/// question is about *this* session, and the composer is the one row on screen
-/// that is already about this session and nothing else. It hides itself for an
-/// agent whose store records nothing — an affordance that can only ever say
-/// "there is nothing here" is worse than no affordance.
+/// In [MessageComposer]'s `chips` slot rather than the status bar: the question
+/// is about *this* session. It hides itself for an agent whose store records
+/// nothing — an affordance that can only say "there is nothing here" is worse
+/// than none.
 class SessionStatsButton extends ConsumerWidget {
   const SessionStatsButton({required this.sessionId, super.key});
 
@@ -388,11 +383,9 @@ class SessionStatsButton extends ConsumerWidget {
     );
   }
 
-  /// Whether this session's agent keeps a store with counts in it.
-  ///
-  /// Read here rather than awaited, so an agent that has nothing to show never
-  /// draws a control that opens onto an apology. The dialog still explains the
-  /// case, for anyone who reaches it another way.
+  /// Whether this session's agent keeps a store with counts in it. Read rather
+  /// than awaited, so an agent with nothing to show never draws a control that
+  /// opens onto an apology.
   bool _recordsStats(WidgetRef ref) {
     final session = ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return false;
@@ -407,10 +400,9 @@ class SessionStatsButton extends ConsumerWidget {
   }
 }
 
-/// What is printed where a route could not supply a number.
-///
-/// A word, not a zero: "0 tool calls" and "we were never told" are different
-/// claims and only one of them is true.
+/// What is printed where a route could not supply a number. A word, not a zero:
+/// "0 tool calls" and "we were never told" are different claims and only one of
+/// them is true.
 const String kStatNotRecorded = 'not recorded';
 
 /// Where the numbers came from, in the dialog's own words.
@@ -452,8 +444,7 @@ String sessionStatsExplanation(
 ///
 /// The staleness sentence is not hedging: on this machine Claude Code's cache
 /// says one session while thirty-eight sit in the store beside it, so an
-/// unlabelled all-time total can be *smaller* than the single session shown
-/// above it. Saying that here is cheaper than a bug report about it.
+/// unlabelled all-time total can be *smaller* than the single session above it.
 String lifetimeStatsProvenance(LifetimeStats lifetime, String agentName) {
   final agent = agentName.isEmpty ? 'The agent' : agentName;
   switch (lifetime.source) {

@@ -27,11 +27,10 @@ TextStyle pathLinkStyle(ColorScheme scheme) => TextStyle(
 /// Renders an agent/user message as Markdown — selectable prose with fenced
 /// code blocks syntax-highlighted — so the chat reads like a real CLI session.
 ///
-/// File paths in the prose become links when [onPathTap] is given. That is done
-/// with a markdown *inline syntax* rather than by rewriting the text: a
-/// preprocessed string would put links inside fenced code blocks and inside
-/// links the author already wrote, and there would be no way to tell afterwards
-/// which was which.
+/// File paths become links when [onPathTap] is given, through a markdown
+/// *inline syntax* rather than by rewriting the text: a preprocessed string
+/// would put links inside fenced blocks and inside links the author wrote, with
+/// no way to tell afterwards which was which.
 class MarkdownMessage extends StatelessWidget {
   const MarkdownMessage(this.data, {this.onPathTap, super.key});
 
@@ -46,10 +45,9 @@ class MarkdownMessage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    // The retired ink-purple and parchment survived here as raw hex, which is
-    // why the by-name greps for the old palette missed them. Code sits one step
-    // *behind* the message it is in: lowest under a dark surface, low under a
-    // light one, which is where the scheme already puts a recessed panel.
+    // Code sits one step *behind* the message it is in: lowest under a dark
+    // surface, low under a light one, which is where the scheme already puts a
+    // recessed panel.
     final codeBg = dark
         ? scheme.surfaceContainerLowest
         : scheme.surfaceContainerLow;
@@ -88,22 +86,18 @@ class MarkdownMessage extends StatelessWidget {
   }
 }
 
-/// The one instance, built once for the life of the process.
-///
-/// A syntax allocated per message or per build would recompile
-/// [kTranscriptPathPattern] every time a row was drawn, on a list that
-/// re-renders on a two-second poll.
+/// The one instance, built once for the life of the process. A syntax allocated
+/// per message would recompile [kTranscriptPathPattern] every time a row was
+/// drawn, on a list that re-renders on a two-second poll.
 final List<md.InlineSyntax> kPathLinkSyntaxes = <md.InlineSyntax>[
   _PathLinkSyntax(),
 ];
 
 /// Turns a path-shaped token into an ordinary markdown link.
 ///
-/// It runs **before** markdown's own syntaxes (user syntaxes are evaluated
-/// first), which is what protects the two things that must render unchanged:
-/// a fenced block never reaches the inline parser at all, and an inline code
-/// span is consumed whole at its opening backtick, where this pattern cannot
-/// match.
+/// It runs **before** markdown's own syntaxes, which is what protects the two
+/// things that must render unchanged: a fenced block never reaches the inline
+/// parser, and an inline code span is consumed whole at its opening backtick.
 class _PathLinkSyntax extends md.InlineSyntax {
   _PathLinkSyntax() : super(kTranscriptPathPattern.pattern);
 

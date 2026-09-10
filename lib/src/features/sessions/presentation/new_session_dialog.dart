@@ -21,21 +21,11 @@ import 'session_destination_picker.dart';
 /// Creates a session **where you say**: pick a project and a checkout inside
 /// it, an agent, a title, and whether to run in a dedicated Git worktree.
 ///
-/// It used to create a session for whatever the app happened to be pointed at,
-/// which meant starting one somewhere else cost a trip to the Explorer to move
-/// the selection first — and left it moved afterwards.
-/// [SessionDestinationPicker] is that trip, folded into the dialog.
-///
-/// **Choosing a destination here does not move the app's selection.** Opening
-/// this dialog, browsing the projects in it and pressing Cancel leaves
-/// everything exactly as it was: saying *"start one over there"* is not the
-/// same as saying *"I work over there now"*, and relocating the Explorer under
-/// a user who was only looking would be a worse bug than the friction being
-/// fixed. **Pressing Start does move it**, because by then it is no longer a
-/// guess: the app follows the session it just created to where it runs, exactly
-/// as clicking that session's row would — otherwise the pane in front of you
-/// and the Changes, GitHub and Repository panels beside it would be describing
-/// two different checkouts.
+/// **Choosing a destination here does not move the app's selection.** Browsing
+/// and pressing Cancel leaves everything as it was — "start one over there" is
+/// not "I work over there now". **Pressing Start does move it**, because by
+/// then it is no longer a guess: otherwise the pane in front of you and the
+/// panels beside it would describe two different checkouts.
 class NewSessionDialog extends ConsumerStatefulWidget {
   const NewSessionDialog({this.targetPaneId, super.key});
 
@@ -101,10 +91,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         setState(() => _error = 'Choose a terminal to launch in.');
         return;
       }
-      // One call for both branches. In-app and external are now the same
-      // creation path with a different surface, so the title, the worktree
-      // choice and the permission mode mean the same thing in both — the title
-      // field used to be drawn over the external branch and quietly discarded.
+      // One call for both branches. In-app and external are the same creation
+      // path with a different surface, so the title, the worktree choice and
+      // the permission mode mean the same thing in both.
       final launched = await ref
           .read(sessionLauncherProvider)
           .launch(
@@ -123,8 +112,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           );
       // Now — and only now — the app follows. `selectNative` is the same rule
       // the Explorer uses when a session row is clicked; the project is set
-      // beside it, and only when it differs, because selecting one starts a
-      // CLI-store scan.
+      // beside it, and only when it differs, because selecting one scans.
       if (ref.read(selectedProjectIdProvider) != repo.projectId) {
         ref.read(selectedProjectIdProvider.notifier).select(repo.projectId);
       }
@@ -201,17 +189,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   @override
   Widget build(BuildContext context) {
     // `??=`, so the picker's own choice is never overwritten — but still
-    // watched, so a project added from the empty state below (or a selection
-    // that moves behind the dialog before anything is chosen) is picked up.
+    // watched, so a project added from the empty state below is picked up.
     _destination ??= ref.watch(defaultSessionDestinationProvider);
     final destination = _destination;
     final checkout = destination?.checkout;
 
     // Only the agents installed **where the session will run**. An agent
     // discovered on Windows is a Windows executable path, and launching it
-    // against a WSL checkout would put a path the distribution cannot resolve
-    // on its command line. This is the same list the Explorer's "…with" menu
-    // offers for a row.
+    // against a WSL checkout would put an unresolvable path on its command line.
     final installations = checkout == null
         ? const <AgentInstallation>[]
         : [
@@ -280,16 +265,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   else
                     DropdownButtonFormField<AgentInstallation>(
                       // Keyed by environment for the reason the checkout
-                      // dropdown is keyed by project: the items change with the
-                      // destination, and a `FormField` holding the old value
-                      // would assert rather than merely look wrong.
+                      // dropdown is keyed by project: a `FormField` holding the
+                      // old value would assert rather than merely look wrong.
                       key: ValueKey(
                         'agent-in-${checkout?.path.environmentId ?? ''}',
                       ),
                       initialValue: _installation,
                       // Expanded and ellipsised: the label carries an id, an
-                      // environment and a version, which is wider than the field
-                      // once the user scales text up.
+                      // environment and a version, which is wider than the
+                      // field once the user scales text up.
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Agent'),
                       items: [
@@ -332,10 +316,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                         setState(() => _external = s.first),
                   ),
                   if (_external) _terminalPicker(),
-                  // Offered for both surfaces now: the worktree is created
-                  // before the agent starts, so where the agent's window
-                  // happens to be makes no difference to it. It used to be
-                  // reachable from one path of nine.
+                  // Offered for both surfaces: the worktree is created before
+                  // the agent starts, so where its window happens to be makes
+                  // no difference. It used to be reachable from one path of nine.
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _useWorktree,
