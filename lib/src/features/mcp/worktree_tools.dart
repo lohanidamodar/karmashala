@@ -14,7 +14,7 @@ import '../sessions/application/delivery_providers.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_ui_providers.dart';
-import '../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 
 /// Making a git worktree and taking one away. Removing is not the mirror of
 /// creating: [_remove] refuses unless the branch is merged **and** pushed.

@@ -17,9 +17,8 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:logging/logging.dart';
 
 import '../../support/fake_codex_app_server.dart';

@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/sessions/domain/session_depth.dart';
+import 'package:karmashala_session/lineage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A parent chain as a map, so a test can build any shape including broken ones.

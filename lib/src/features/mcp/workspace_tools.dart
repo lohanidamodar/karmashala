@@ -8,7 +8,7 @@ import '../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/delivery_providers.dart';
 import '../sessions/application/session_providers.dart';
-import '../sessions/domain/session_checkouts.dart';
+import 'package:karmashala_session/session.dart';
 
 /// Where the work is: the checkouts under a project, and what one of them owes.
 /// Every session runs in a checkout, where `list_projects` stops at the project.

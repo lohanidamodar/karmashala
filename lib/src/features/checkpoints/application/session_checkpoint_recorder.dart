@@ -6,7 +6,7 @@ import '../../sessions/application/decision_recorder.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import '../domain/checkpoint.dart';
 import 'checkpoint_providers.dart';
 

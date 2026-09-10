@@ -9,7 +9,7 @@ import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
 import '../sessions/application/session_wait.dart';
-import '../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/terminal_grid_text.dart';

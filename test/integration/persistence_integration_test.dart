@@ -5,7 +5,7 @@ import 'package:karmashala/src/features/environments/application/environment_pro
 import 'package:karmashala/src/features/projects/application/project_providers.dart';
 import 'package:karmashala/src/features/repositories/application/repository_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

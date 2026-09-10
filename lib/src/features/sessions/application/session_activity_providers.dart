@@ -3,10 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import '../domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
-import '../domain/session_launch.dart';
-import '../domain/session_status.dart';
+import 'package:karmashala_session/launch.dart';
 import 'session_chat_source.dart';
 import 'session_chat_view_providers.dart';
 import 'session_providers.dart';

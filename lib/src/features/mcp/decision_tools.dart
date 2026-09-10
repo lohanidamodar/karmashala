@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../sessions/application/decision_recorder.dart';
-import '../sessions/domain/decision_record.dart';
+import 'package:karmashala_session/events.dart';
 import '../verification/domain/verification_run.dart';
 
 /// `decision_record`: an agent writing down a decision, deliberately, because a

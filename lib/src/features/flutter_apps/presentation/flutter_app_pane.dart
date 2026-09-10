@@ -10,7 +10,7 @@ import '../../explorer/application/session_context.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';

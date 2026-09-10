@@ -3,8 +3,7 @@ import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../data/session_dao.dart';
 import '../data/session_repository_dao.dart';
-import '../domain/session.dart';
-import '../domain/session_checkouts.dart';
+import 'package:karmashala_session/session.dart';
 
 /// Raised when a repository cannot be attached to a session.
 class SessionRepositoryException implements Exception {

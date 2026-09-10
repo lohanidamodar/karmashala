@@ -19,11 +19,9 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
-import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:flutter/material.dart';

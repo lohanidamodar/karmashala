@@ -8,7 +8,7 @@ import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/row_menu.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_handoff_service.dart';
-import '../../sessions/domain/session_resume.dart';
+import 'package:karmashala_session/resume.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../application/attention_inbox.dart';
 import '../domain/inbox_item.dart';

@@ -1,4 +1,4 @@
-import '../../sessions/domain/handoff_packet.dart';
+import 'package:karmashala_session/lineage.dart';
 
 /// The document a review session is handed as its first message: the diff and
 /// the claim. A null renders as a sentence admitting it, never as an omission.

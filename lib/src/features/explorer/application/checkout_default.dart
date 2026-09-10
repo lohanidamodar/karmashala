@@ -6,7 +6,7 @@ import '../../repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import 'checkout.dart';
 
 /// The checkout the scoped surfaces describe when the user has not picked one:

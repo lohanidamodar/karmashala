@@ -1,6 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_git/github.dart';
-import '../../sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import 'delivery_transition.dart';
 import 'agent_status_transition.dart';
 import 'notification_settings.dart';

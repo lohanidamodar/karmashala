@@ -9,7 +9,7 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_path_repair_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import 'agent_label.dart';
 import 'settings_section.dart';
 

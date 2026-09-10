@@ -9,7 +9,7 @@ library;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/sessions/domain/session_last_active.dart';
+import 'package:karmashala_session/resume.dart';
 
 void main() {
   final t9 = DateTime.utc(2026, 8, 31, 9);

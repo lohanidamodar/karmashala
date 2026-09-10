@@ -2,7 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/domain/session_delivery.dart';
+import 'package:karmashala_session/delivery.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/delivery_transition.dart';
 import '../domain/inbox_item.dart';

@@ -6,7 +6,7 @@ import 'package:highlight/highlight.dart' show highlight, Node;
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../app/theme/design_tokens.dart';
-import '../domain/transcript_path_link.dart';
+import 'package:karmashala_session/transcript.dart';
 
 /// What tells a link this app made out of a bare path from one the author
 /// wrote. Carried in the element's `title`, which nothing else here uses.

@@ -15,7 +15,7 @@ import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
-import '../domain/session_launch.dart';
+import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
 
 /// Creates a session **where you say**. Browsing and cancelling leaves the

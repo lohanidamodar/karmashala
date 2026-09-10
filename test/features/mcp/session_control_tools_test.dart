@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_wait.dart';
-import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

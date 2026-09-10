@@ -8,7 +8,7 @@ import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import 'checkout.dart';
 
 /// One linked worktree of a repository, as the Explorer draws it.

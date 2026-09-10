@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../domain/decision_record.dart';
+import 'package:karmashala_session/events.dart';
 import 'session_decision_providers.dart';
 import 'session_providers.dart';
 

@@ -9,10 +9,8 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
-import 'package:karmashala/src/features/sessions/domain/delivery_stage.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

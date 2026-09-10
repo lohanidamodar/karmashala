@@ -4,8 +4,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../sessions/data/session_dao.dart';
-import '../../sessions/domain/session.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/read.dart';
 import 'detected_project_merger.dart';
 

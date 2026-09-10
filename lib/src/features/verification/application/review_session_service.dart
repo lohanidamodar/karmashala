@@ -10,10 +10,9 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../../sessions/domain/handoff_packet.dart';
-import '../../sessions/domain/session.dart';
-import '../../sessions/domain/session_launch.dart';
-import '../../sessions/domain/session_lineage.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
 import '../domain/review_brief.dart';
 
 /// One installation that could check another session's work. Shaped like

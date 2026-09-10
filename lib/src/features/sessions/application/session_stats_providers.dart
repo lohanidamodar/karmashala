@@ -9,7 +9,7 @@ import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
-import '../domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import 'session_signals.dart';
 
 /// Why a session has no stats to show. Named rather than collapsed into an

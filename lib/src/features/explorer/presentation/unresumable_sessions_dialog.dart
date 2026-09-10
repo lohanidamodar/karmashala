@@ -8,8 +8,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/widgets/reveal_on_focus.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
-import '../../sessions/domain/unkept_promise.dart';
+import 'package:karmashala_session/resume.dart';
 import '../application/unresumable_sessions.dart';
 
 /// The rows that name a conversation their agent does not have — listed, then

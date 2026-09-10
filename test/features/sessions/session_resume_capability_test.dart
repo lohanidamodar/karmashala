@@ -1,6 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/sessions/domain/session_last_active.dart';
-import 'package:karmashala/src/features/sessions/domain/session_resume.dart';
+import 'package:karmashala_session/resume.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The decision matrix, as a table.

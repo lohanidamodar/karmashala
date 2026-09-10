@@ -20,7 +20,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
-import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 
 import '../../support/fakes.dart';

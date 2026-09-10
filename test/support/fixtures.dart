@@ -3,9 +3,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala_git/repositories.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_event.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/events.dart';
 
 /// Fixed timestamp used across tests for determinism.
 final testTime = DateTime.utc(2026, 1, 2, 3, 4, 5);

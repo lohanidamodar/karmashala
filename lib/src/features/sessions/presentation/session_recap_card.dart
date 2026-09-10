@@ -8,8 +8,8 @@ import 'package:agent_cli/descriptors.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_providers.dart';
 import '../application/session_recap_service.dart';
-import '../domain/session_recap.dart';
-import '../domain/session_resume.dart';
+import 'package:karmashala_session/transcript.dart';
+import 'package:karmashala_session/resume.dart';
 
 /// The sessions a recap is being written for right now. Not persisted: an app
 /// that closed mid-recap spent the turn, and a restored spinner waits forever.

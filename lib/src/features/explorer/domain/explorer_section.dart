@@ -1,6 +1,6 @@
 import 'package:karmashala_git/github.dart';
-import '../../sessions/domain/delivery_stage.dart';
-import '../../sessions/domain/session_status.dart';
+import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_session/session.dart';
 
 /// What a rule may ask about one session — only facts the app has already
 /// read for another reason, so nothing here costs a git, `gh` or SQLite call.

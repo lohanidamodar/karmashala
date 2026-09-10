@@ -1,4 +1,4 @@
-// Copied verbatim from lib/src/features/sessions/domain/session_resume.dart; see PACKAGE_SPLIT.md on consolidation.
+// Copied verbatim from packages/karmashala_session/lib/src/session_resume.dart; see PACKAGE_SPLIT.md on consolidation.
 /// A coarse, deliberately unexciting rendering of an age.
 ///
 /// Rounded down and capped at days, because the point of the number is to tell

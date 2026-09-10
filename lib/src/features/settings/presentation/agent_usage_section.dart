@@ -9,7 +9,7 @@ import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
-import '../../sessions/domain/session_resume.dart';
+import 'package:karmashala_session/resume.dart';
 import 'agent_label.dart';
 import 'settings_section.dart';
 

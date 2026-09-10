@@ -15,9 +15,9 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
-import '../../sessions/domain/session.dart';
-import '../../sessions/domain/session_launch.dart';
-import '../../sessions/domain/session_resume.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/resume.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 
 /// What clicking a card or a `+` actually did.

@@ -9,8 +9,8 @@ import '../../explorer/application/session_context.dart';
 import '../application/decision_recorder.dart';
 import '../application/session_decision_providers.dart';
 import '../application/session_ui_providers.dart';
-import '../domain/decision_record.dart';
-import '../domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/events.dart';
+import 'package:karmashala_session/resume.dart' show describeAge;
 
 /// Which session's decision record the panel is describing: the session **on
 /// screen**, not the one last clicked in the Explorer.

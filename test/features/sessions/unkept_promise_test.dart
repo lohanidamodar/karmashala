@@ -1,9 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/read.dart';
-import 'package:karmashala/src/features/sessions/domain/session.dart';
-import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
-import 'package:karmashala/src/features/sessions/domain/unkept_promise.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/resume.dart';
 
 import '../../support/fixtures.dart';
 

@@ -19,9 +19,9 @@ import 'package:karmashala/src/features/sessions/application/session_handoff_ser
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/handoff_packet.dart';
-import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/continue_with_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

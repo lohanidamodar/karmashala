@@ -8,7 +8,7 @@ import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/notification_request.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 
 /// The rows one bulk delete is about, resolved *before* the confirmation so it
 /// can name them, and held as objects so deleting the rows keeps the inputs.

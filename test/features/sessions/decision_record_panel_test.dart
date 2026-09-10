@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_decision_providers.dart';
 import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/decision_record.dart';
+import 'package:karmashala_session/events.dart';
 import 'package:karmashala/src/features/sessions/presentation/decision_record_panel.dart';
 
 import '../../support/fakes.dart';

@@ -6,9 +6,9 @@ import '../../cli_detection/application/conversation_presence_sweep.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/domain/session.dart';
-import '../../sessions/domain/session_launch.dart';
-import '../../sessions/domain/unkept_promise.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/resume.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'bulk_session_delete.dart';
 

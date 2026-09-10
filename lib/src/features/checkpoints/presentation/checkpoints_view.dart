@@ -8,7 +8,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/session_context.dart';
 import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../../sessions/domain/session_resume.dart' show describeAge;
+import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/checkpoint_providers.dart';
 import '../application/checkpoint_service.dart';
 import '../application/session_checkpoint_recorder.dart';

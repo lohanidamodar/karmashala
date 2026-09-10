@@ -2,8 +2,8 @@
 /// separate types so a caller can fail its own *turn* with the explanation.
 library;
 
-import '../domain/session_depth.dart';
-import '../domain/session_resume.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/resume.dart';
 
 /// Raised when the recursion cap or the cycle guard refuses a launch. Its own
 /// type so the MCP surface can fail the caller's *turn* with the explanation.

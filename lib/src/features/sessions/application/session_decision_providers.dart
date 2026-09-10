@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../domain/decision_record.dart';
+import 'package:karmashala_session/events.dart';
 import 'session_providers.dart';
 
 /// Bumped whenever a decision is appended, so the panel refreshes without

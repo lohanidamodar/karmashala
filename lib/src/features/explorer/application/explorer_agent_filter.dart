@@ -4,7 +4,7 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
-import '../../sessions/domain/session.dart';
+import 'package:karmashala_session/session.dart';
 import '../../settings/application/settings_controller.dart';
 import '../domain/agent_filter.dart';
 import 'project_tree.dart';

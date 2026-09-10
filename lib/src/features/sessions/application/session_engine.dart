@@ -11,10 +11,8 @@ import 'package:agent_cli/descriptors.dart';
 import '../data/session_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_repository_dao.dart';
-import '../domain/session.dart';
-import '../domain/session_event.dart';
-import '../domain/session_naming.dart';
-import '../domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session/events.dart';
 
 /// Resolves the [AgentAdapter] for an `AgentDescriptor.id`. Agents with a
 /// protocol adapter get theirs; anything else gets the generic one.

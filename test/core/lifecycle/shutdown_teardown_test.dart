@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/sessions/application/session_engine_prov
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
-import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_providers.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_connection_pool.dart';
