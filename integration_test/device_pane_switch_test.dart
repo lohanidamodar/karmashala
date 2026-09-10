@@ -16,7 +16,7 @@
 import 'dart:io';
 
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
-import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
 import 'package:karmashala/src/features/devices/presentation/device_stream_status.dart';
 import 'package:flutter/material.dart';

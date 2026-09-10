@@ -361,6 +361,18 @@ flutter analyze
 flutter test --exclude-tags=live-ssh,live-wsl
 ```
 
+**Name every directory when you analyze by path**, or one of them rots
+unwatched:
+
+```bash
+dart.exe analyze --no-fatal-warnings lib test tool integration_test packages host
+```
+
+`integration_test/` is in no gate — `flutter test` does not run it — so nothing
+but the analyzer ever compiles it. Three of its files carried 72 errors for a
+day in September 2026 because every analyze command in flight listed
+`lib test packages host` and left it out.
+
 For UI changes, also run the app where practical:
 
 ```bash
