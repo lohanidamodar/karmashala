@@ -110,8 +110,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     }
 
     // The only branch that opens a *native* picker — hence `pickOneDirectory`,
-    // which announces itself and flushes the log before the isolate is taken.
-    final dir = await pickOneDirectory(what: 'a project folder');
+    // which announces itself and gives the dialog a local folder to open in.
+    final dir = await pickOneDirectory(
+      what: 'a project folder',
+      startNear: _folderController.text,
+    );
     if (dir == null || !mounted) return;
     setState(() {
       _folderController.text = dir;

@@ -78,7 +78,10 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
   }
 
   Future<void> _browseForKey() async {
-    final file = await pickOneFile(what: 'an SSH private key');
+    final file = await pickOneFile(
+      what: 'an SSH private key',
+      startNear: _keyPath.text,
+    );
     if (file == null || !mounted) return;
     setState(() {
       _keyPath.text = file.path;

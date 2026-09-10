@@ -85,6 +85,7 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
 
   Future<XFile?> _browse() => pickOneFile(
     what: 'a build to install',
+    startNear: _buildPath.text,
     acceptedTypeGroups: const [
       // Both platforms' artifacts in one group: the driver refuses the wrong
       // one by name, which is a better message than a picker that hid it.

@@ -145,6 +145,7 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
   Future<void> _browse() async {
     final file = await pickOneFile(
       what: 'a terminal program',
+      startNear: _path.text,
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Executables', extensions: ['exe']),
       ],
@@ -263,6 +264,7 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
   Future<void> _browse() async {
     final file = await pickOneFile(
       what: 'an editor program',
+      startNear: _path.text,
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Executables', extensions: ['exe']),
       ],

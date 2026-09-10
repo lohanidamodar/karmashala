@@ -130,6 +130,9 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     // A directory to save into, not a save dialog: `file_selector`'s save
     // sheet is the one piece of this not dependable on every desktop.
     final directory = await pickOneDirectory(
+      // Nothing here knows a folder on this computer worth suggesting; the
+      // fallback chain picks one that exists rather than the shell's own MRU.
+      startNear: null,
       what: 'where to save ${entry.name}',
       confirmButtonText: 'Save here',
     );
@@ -154,7 +157,10 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final driver = _driver;
     final path = _path;
     if (driver == null || path == null) return;
-    final file = await pickOneFile(what: 'a file to copy to the device');
+    final file = await pickOneFile(
+      startNear: null,
+      what: 'a file to copy to the device',
+    );
     if (file == null || !mounted) return;
     setState(() => _busy = 'Copying ${file.name} to the device…');
     try {

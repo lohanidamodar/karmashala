@@ -126,6 +126,13 @@ class _MessageComposerState extends State<MessageComposer> {
     if (mounted) setState(() => _attachments.add(_Attachment(file, bytes)));
   }
 
+  /// The user's pictures, when there is such a folder; the picker falls back
+  /// to somewhere local either way.
+  String? _pictures() {
+    final home = Platform.environment['USERPROFILE'];
+    return home == null || home.isEmpty ? null : '$home\\Pictures';
+  }
+
   Future<void> _attach() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -138,6 +145,9 @@ class _MessageComposerState extends State<MessageComposer> {
       // Otherwise let the user pick an image file.
       final file = await pickOneFile(
         what: 'an image to attach',
+        // The composer knows nothing about sessions, so the nearest useful
+        // place is the user's own pictures.
+        startNear: _pictures(),
         acceptedTypeGroups: const [
           XTypeGroup(
             label: 'Images',

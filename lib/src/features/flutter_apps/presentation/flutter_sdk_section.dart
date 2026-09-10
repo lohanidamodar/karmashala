@@ -85,7 +85,10 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
   /// Browse is the convenience; the field is the way out, and the only order
   /// that works here — a WSL or SSH path is spelled for *that* machine.
   Future<void> _browse() async {
-    final file = await pickOneFile(what: 'the flutter executable');
+    final file = await pickOneFile(
+      what: 'the flutter executable',
+      startNear: _path.text,
+    );
     if (file == null) return;
     _path.text = file.path;
     _save(file.path);
