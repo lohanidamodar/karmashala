@@ -6,7 +6,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
-import '../../../core/util/clock_provider.dart';
+import 'companion_runtime.dart';
 
 /// A list of sessions as the phone received it, with the instant it arrived —
 /// one fact, since rows with no reading time cannot be shown honestly.
@@ -110,7 +110,7 @@ final companionLinkSinceProvider = StreamProvider<DateTime?>(
 /// subscription: `watchSessions` is a `Stream.multi`, so a second is a frame.
 final companionSessionsSnapshotProvider =
     StreamProvider<CompanionSessionsSnapshot>((ref) {
-      final clock = ref.watch(clockProvider);
+      final clock = ref.watch(companionClockProvider);
       return ref
           .watch(companionGatewayProvider)
           .watchSessions()

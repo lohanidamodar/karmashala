@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
@@ -38,7 +38,7 @@ class CompanionSessionList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final now = ref.read(clockProvider).nowUtc();
+    final now = ref.read(companionClockProvider).nowUtc();
     final scheme = Theme.of(context).colorScheme;
     final offset = header == null ? 0 : 1;
     return ListView.separated(

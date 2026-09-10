@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/file_picking.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
 
@@ -111,10 +112,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
     final show = widget.pickFile;
     final file = show != null
         ? await show(groups)
-        : await pickOneFile(
-            what: 'a file to send to the desktop',
-            acceptedTypeGroups: groups,
-          );
+        : await _pickAttachment(groups);
     if (file == null) return;
     final name = file.name;
     final suffix = name.contains('.')
@@ -387,5 +385,19 @@ class _AttachedRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+final _log = Logger('companion.picker');
+
+/// The phone's own picker. The desktop's `pickOneFile` first quiets terminals
+/// and PTYs, which a phone does not have; this is the call and a log line.
+Future<XFile?> _pickAttachment(List<XTypeGroup> accepted) async {
+  _log.info('opening the file picker for a file to send to the desktop');
+  try {
+    return await openFile(acceptedTypeGroups: accepted);
+  } on Object catch (error, stack) {
+    _log.warning('the file picker was refused', error, stack);
+    return null;
   }
 }

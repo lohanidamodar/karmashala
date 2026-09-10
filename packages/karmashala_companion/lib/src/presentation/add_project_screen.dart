@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/id_generator_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -29,7 +29,7 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
   bool _busy = false;
   String? _error;
 
-  String _newRequestId() => ref.read(idGeneratorProvider).newId();
+  String _newRequestId() => ref.read(companionIdGeneratorProvider).newId();
 
   @override
   void initState() {

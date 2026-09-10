@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/companion_runtime.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
@@ -48,7 +48,7 @@ class RunningSessionsGroup extends ConsumerWidget {
     if (sessions.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final now = ref.read(clockProvider).nowUtc();
+    final now = ref.read(companionClockProvider).nowUtc();
     // The age of the snapshot membership came from, not of this frame
     // (CLAUDE.md §19).
     final age = companionSnapshotAge(

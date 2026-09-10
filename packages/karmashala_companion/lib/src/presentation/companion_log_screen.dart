@@ -6,7 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
-import '../../../core/logging/diagnostics_providers.dart';
+import '../application/companion_runtime.dart';
 import 'companion_chrome.dart';
 
 /// The companion's own log, on the phone that produced it — Copy is the real
@@ -31,7 +31,7 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
   /// mostly link chatter.
   bool _problemsOnly = true;
 
-  List<LogEntry> _read() => ref.read(diagnosticsProvider).buffer.snapshot();
+  List<LogEntry> _read() => ref.read(companionDiagnosticsProvider).buffer.snapshot();
 
   List<LogEntry> get _visible => _problemsOnly
       ? [
@@ -62,7 +62,7 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final visible = _visible;
-    final dropped = ref.read(diagnosticsProvider).buffer.dropped;
+    final dropped = ref.read(companionDiagnosticsProvider).buffer.dropped;
 
     return Scaffold(
       appBar: companionAppBar(

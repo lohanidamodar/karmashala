@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
@@ -172,7 +172,7 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
     searched: 'project names and paths, and session titles and agents',
     age: companionSnapshotAge(
       ref.watch(companionSessionsReceivedAtProvider),
-      ref.read(clockProvider).nowUtc(),
+      ref.read(companionClockProvider).nowUtc(),
     ),
     onClear: _clearQuery,
   );

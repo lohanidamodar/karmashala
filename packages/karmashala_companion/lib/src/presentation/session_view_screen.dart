@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/id_generator_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/delivery.dart';
 import '../application/companion_providers.dart';
@@ -56,7 +56,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     unawaited(_gateway.reportFocusedSession(widget.sessionId));
   }
 
-  String _newRequestId() => ref.read(idGeneratorProvider).newId();
+  String _newRequestId() => ref.read(companionIdGeneratorProvider).newId();
 
   @override
   void dispose() {

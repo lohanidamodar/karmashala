@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_ui/rows.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -164,7 +164,7 @@ class _ConnectionRow extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final density = UiDensity.of(context);
-    final now = ref.read(clockProvider).nowUtc();
+    final now = ref.read(companionClockProvider).nowUtc();
     final at = connection.lastConnectedAt;
 
     // The badge already says "Active", so this line says something else.

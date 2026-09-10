@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/id_generator_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../application/companion_providers.dart';
@@ -43,7 +43,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   bool _starting = false;
   String? _failure;
 
-  String _newKey() => ref.read(idGeneratorProvider).newId();
+  String _newKey() => ref.read(companionIdGeneratorProvider).newId();
 
   @override
   void dispose() {

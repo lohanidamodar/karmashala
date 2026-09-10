@@ -18,6 +18,7 @@ workspace:
   - packages/agent_cli
   - packages/karmashala_agent_reporting
   - packages/karmashala_browser
+  - packages/karmashala_companion
   - packages/karmashala_core
   - packages/karmashala_devices
   - packages/karmashala_flutter_apps
@@ -42,6 +43,11 @@ dependencies:
   # it. No dependencies of its own; the app hands it the process.
   karmashala_browser:
     path: packages/karmashala_browser
+  # The phone: the companion's own application layer and every screen it
+  # draws. The desktop build reaches it only through `lib/src/app/companion`,
+  # which `KARMASHALA_MODE=companion` is the only entry to.
+  karmashala_companion:
+    path: packages/karmashala_companion
   # The Flutter-free core: logging, small utilities and path probing. A
   # workspace member, so this path resolves to the copy in the tree
   # (docs/PACKAGE_SPLIT.md §5).

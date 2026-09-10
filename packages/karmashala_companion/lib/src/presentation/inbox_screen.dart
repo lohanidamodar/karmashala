@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_session/resume.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -22,7 +22,7 @@ class InboxScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.watch(companionSessionsProvider);
     final waiting = ref.watch(companionInboxProvider);
-    final now = ref.read(clockProvider).nowUtc();
+    final now = ref.read(companionClockProvider).nowUtc();
     final scheme = Theme.of(context).colorScheme;
 
     return companionAsync(

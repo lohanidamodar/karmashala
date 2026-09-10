@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
-import '../../../core/util/clock_provider.dart';
+import '../application/companion_runtime.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/companion_providers.dart';
@@ -34,7 +34,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
     final since = ref.watch(companionLinkSinceProvider).asData?.value;
     final age = since == null
         ? null
-        : ref.read(clockProvider).nowUtc().difference(since);
+        : ref.read(companionClockProvider).nowUtc().difference(since);
 
     // §19: every reading carries its age, worded for its state, and a state
     // nothing has stamped admits that rather than reading "just now".
