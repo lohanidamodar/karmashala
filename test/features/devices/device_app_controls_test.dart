@@ -48,7 +48,12 @@ void main() {
   late FakeCommandRunner runner;
   late MovableClock clock;
 
+  /// How many times the widget reached for the host's dialog. The typed-path
+  /// tests are about this being zero.
+  var picks = 0;
+
   setUp(() {
+    picks = 0;
     clock = MovableClock(testTime);
     runner = FakeCommandRunner(
       responder: (request) => request.arguments.contains('devices')
@@ -95,7 +100,10 @@ void main() {
               device: _device,
               // Never the host's dialog: on Windows it runs on this isolate's
               // own thread, so a test that reached it would hang the run.
-              pickFile: () async => picked,
+              pickFile: () async {
+                picks += 1;
+                return picked;
+              },
             ),
           ),
         ),
@@ -139,6 +147,79 @@ void main() {
     expect(find.textContaining('just now'), findsOneWidget);
   });
 
+  testWidgets('a typed path installs, and no dialog is opened', (
+    tester,
+  ) async {
+    // The rule `core/util/file_picking.dart` states: every Browse surface also
+    // accepts a typed path, because on Windows a picker that never appears
+    // leaves nothing to press. This was the last surface without one.
+    await pump(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('device-install-path')),
+      r'C:\builds\app-release.apk',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Install'));
+    await tester.pumpAndSettle();
+
+    expect(lastArgv(), [
+      '-s',
+      _serial,
+      'install',
+      '-r',
+      '-t',
+      r'C:\builds\app-release.apk',
+    ]);
+    expect(picks, 0, reason: 'a typed path must not open the host dialog');
+  });
+
+  testWidgets('the label keeps its ellipsis only while a dialog is coming', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Install…'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('device-install-path')),
+      r'C:\builds\app.apk',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Install…'), findsNothing);
+    expect(find.text('Install'), findsOneWidget);
+  });
+
+  testWidgets("Explorer's quoted path installs as typed", (tester) async {
+    await pump(tester);
+
+    // What **Copy as path** puts on the clipboard, verbatim.
+    await tester.enterText(
+      find.byKey(const Key('device-install-path')),
+      '"C:\\builds\\app.apk"',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Install'));
+    await tester.pumpAndSettle();
+
+    expect(lastArgv()?.last, r'C:\builds\app.apk');
+    expect(picks, 0);
+  });
+
+  testWidgets('Enter in the path field installs it', (tester) async {
+    await pump(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('device-install-path')),
+      r'C:\builds\app.apk',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(lastArgv(), contains('install'));
+    expect(picks, 0);
+  });
+
   testWidgets('a dismissed picker installs nothing', (tester) async {
     await pump(tester);
 
@@ -153,7 +234,10 @@ void main() {
   ) async {
     await pump(tester);
 
-    await tester.enterText(find.byType(TextField), 'com.example.app');
+    await tester.enterText(
+      find.byKey(const Key('device-app-id')),
+      'com.example.app',
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Launch this app'));
