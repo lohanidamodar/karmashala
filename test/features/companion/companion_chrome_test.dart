@@ -135,8 +135,16 @@ void main() {
       // at the end of a full list.
       final gateway = FakeCompanionGateway.paired(
         sessions: [
+          // Idle on purpose: running sessions are pinned above the index
+          // (running_sessions_group.dart) and twenty of them would be the
+          // whole viewport, and this test is about the last project row.
           for (var i = 0; i < 20; i++)
-            summary('s$i', project: 'project-$i', projectId: 'p$i'),
+            summary(
+              's$i',
+              project: 'project-$i',
+              projectId: 'p$i',
+              status: CompanionSessionStatus.idle,
+            ),
         ],
       );
       await pumpPhone(

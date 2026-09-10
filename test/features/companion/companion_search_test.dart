@@ -42,6 +42,10 @@ class _MovableClock implements Clock {
 List<Override> _at(Clock clock) => [clockProvider.overrideWithValue(clock)];
 
 /// Three projects on one desktop, each with work in it.
+///
+/// Idle throughout: the pinned running group is `running_sessions_group.dart`'s
+/// to prove, and a group of session rows above the index would make every
+/// `find.text('<project>')` here ambiguous for a reason that is not search.
 FakeCompanionGateway _threeProjects() => FakeCompanionGateway.paired(
   sessions: [
     summary(
@@ -50,6 +54,7 @@ FakeCompanionGateway _threeProjects() => FakeCompanionGateway.paired(
       project: 'popupbits',
       projectId: 'p1',
       projectPath: '/w/popupbits',
+      status: CompanionSessionStatus.idle,
     ),
     summary(
       's2',
@@ -58,6 +63,7 @@ FakeCompanionGateway _threeProjects() => FakeCompanionGateway.paired(
       projectId: 'p1',
       projectPath: '/w/popupbits',
       agentLabel: 'Codex  ·  running',
+      status: CompanionSessionStatus.idle,
     ),
     summary(
       's3',
@@ -65,6 +71,7 @@ FakeCompanionGateway _threeProjects() => FakeCompanionGateway.paired(
       project: 'karmashala',
       projectId: 'p2',
       projectPath: '/w/karmashala',
+      status: CompanionSessionStatus.idle,
     ),
     summary(
       's4',
@@ -72,6 +79,7 @@ FakeCompanionGateway _threeProjects() => FakeCompanionGateway.paired(
       project: 'meronepali',
       projectId: 'p3',
       projectPath: '/src/nepali',
+      status: CompanionSessionStatus.idle,
     ),
   ],
 );

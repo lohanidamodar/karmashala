@@ -69,11 +69,17 @@ class CompanionSessionRow extends StatelessWidget {
   const CompanionSessionRow({
     required this.session,
     required this.now,
+    this.showProject = false,
     super.key,
   });
 
   final CompanionSessionSummary session;
   final DateTime now;
+
+  /// Names the row's project on the whereabouts line. Off inside a project's
+  /// own list, where every row would repeat the app bar; on where a list
+  /// crosses projects and the name is the only thing placing the row.
+  final bool showProject;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +87,7 @@ class CompanionSessionRow extends StatelessWidget {
     // The desktop's own clauses, appended to line three rather than replacing
     // it: an archived or folder-less session is still listed, and says why.
     final notes = [
+      if (showProject && session.projectName.isNotEmpty) session.projectName,
       if (session.folderMissing) 'folder missing',
       if (session.archived) 'archived',
       ?session.whereabouts,

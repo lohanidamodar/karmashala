@@ -15,6 +15,7 @@ import 'companion_states.dart';
 import 'add_project_screen.dart';
 import 'project_group.dart';
 import 'project_sessions_screen.dart';
+import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
 /// The phone's first tab: **the host's projects**, one per row, each opening
@@ -154,14 +155,35 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
         if (groups.length == 1 && groups.single.sessions.isNotEmpty) {
           final only = shown.firstOrNull;
           if (only == null || only.sessions.isEmpty) return _noMatch();
+          // Lifted out of the list rather than copied above it: one screen,
+          // one row per session.
+          final split = partitionByRunning(only.sessions);
           return CompanionSessionList(
-            sessions: only.sessions,
-            header: ProjectHeaderCard(group: only),
+            sessions: split.rest,
+            header: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ProjectHeaderCard(group: only),
+                RunningSessionsGroup(sessions: split.running),
+              ],
+            ),
             bottomInset: companionFabGutter,
           );
         }
         if (shown.isEmpty) return _noMatch();
-        return _projectIndex(context, shown);
+        // The index lists projects, so there is nothing here to lift: the
+        // running sessions are pinned above a list they are not already in,
+        // and each says which project it belongs to.
+        final running = [
+          for (final group in shown) ...partitionByRunning(group.sessions).running,
+        ];
+        return _projectIndex(
+          context,
+          shown,
+          header: running.isEmpty
+              ? null
+              : RunningSessionsGroup(sessions: running, showProject: true),
+        );
       },
     );
   }

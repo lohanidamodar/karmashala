@@ -14,6 +14,7 @@ import 'companion_session_list.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
 import 'project_group.dart';
+import 'running_sessions_group.dart';
 import 'start_session_screen.dart';
 
 /// One project's sessions, under that project's own name.
@@ -226,7 +227,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
                           ),
                         )
                       : _noMatch(group))
-                : CompanionSessionList(sessions: group.sessions),
+                : _list(group.sessions),
           ),
         ],
       );
@@ -265,6 +266,19 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
       );
     }
     return const CompanionSkeletonList();
+  }
+
+  /// This project's sessions, the running ones lifted to the top under their
+  /// own header. Lifted rather than copied: a session appears once on a
+  /// screen, and within each part the host's order is untouched.
+  Widget _list(List<CompanionSessionSummary> sessions) {
+    final split = partitionByRunning(sessions);
+    return CompanionSessionList(
+      sessions: split.rest,
+      header: split.running.isEmpty
+          ? null
+          : RunningSessionsGroup(sessions: split.running),
+    );
   }
 
   /// Nothing in this project matched — over the two fields a session is known
